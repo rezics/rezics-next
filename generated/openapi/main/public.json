@@ -505780,6 +505780,2149 @@
         }
       }
     },
+    "/v1/work-imports": {
+      "post": {
+        "operationId": "postV1Work-imports",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "input": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "classifications": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "expectedDecisionHead": {
+                              "type": "null"
+                            },
+                            "expectedSenseHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "enum": [
+                                "accepted",
+                                "rejected"
+                              ],
+                              "type": "string"
+                            },
+                            "sense": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "sense",
+                            "expectedSenseHead",
+                            "expectedDecisionHead",
+                            "outcome"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "credits": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "agent": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "expectedAgentHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "agent",
+                            "role"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "type": "null"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "work-catalogue-import-v1",
+                        "type": "string"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedWorkHead",
+                      "title",
+                      "language",
+                      "evidence",
+                      "aliases",
+                      "semanticTypes",
+                      "credits",
+                      "classifications"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "input"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "input": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "classifications": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "expectedDecisionHead": {
+                              "type": "null"
+                            },
+                            "expectedSenseHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "enum": [
+                                "accepted",
+                                "rejected"
+                              ],
+                              "type": "string"
+                            },
+                            "sense": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "sense",
+                            "expectedSenseHead",
+                            "expectedDecisionHead",
+                            "outcome"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "credits": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "agent": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "expectedAgentHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "agent",
+                            "role"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "type": "null"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "work-catalogue-import-v1",
+                        "type": "string"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedWorkHead",
+                      "title",
+                      "language",
+                      "evidence",
+                      "aliases",
+                      "semanticTypes",
+                      "credits",
+                      "classifications"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "input"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "input": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "aliases": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 500,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "classifications": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "expectedDecisionHead": {
+                              "type": "null"
+                            },
+                            "expectedSenseHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "outcome": {
+                              "enum": [
+                                "accepted",
+                                "rejected"
+                              ],
+                              "type": "string"
+                            },
+                            "sense": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "sense",
+                            "expectedSenseHead",
+                            "expectedDecisionHead",
+                            "outcome"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "credits": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "agent": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "expectedAgentHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "role": {
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "agent",
+                            "role"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "description": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 4000,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "evidence": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "type": "null"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "type": "string"
+                      },
+                      "localizedTitle": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "language": {
+                            "maxLength": 35,
+                            "minLength": 2,
+                            "type": "string"
+                          },
+                          "value": {
+                            "maxLength": 500,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "work-catalogue-import-v1",
+                        "type": "string"
+                      },
+                      "semanticTypes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 3,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "title": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "expectedWorkHead",
+                      "title",
+                      "language",
+                      "evidence",
+                      "aliases",
+                      "semanticTypes",
+                      "credits",
+                      "classifications"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "input"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "key": {
+                      "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "properties": {
+                        "admissionId": {
+                          "type": "string"
+                        },
+                        "authorityEpoch": {
+                          "type": "string"
+                        },
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "mainRevision": {
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        },
+                        "work": {
+                          "type": "string"
+                        },
+                        "workRevision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "receipt",
+                        "admissionId",
+                        "requestDigest",
+                        "authorityEpoch",
+                        "scope",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "enum": [
+                        "succeeded",
+                        "denied",
+                        "invalid",
+                        "conflict",
+                        "pending"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "key": {
+                      "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "properties": {
+                        "admissionId": {
+                          "type": "string"
+                        },
+                        "authorityEpoch": {
+                          "type": "string"
+                        },
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "mainRevision": {
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        },
+                        "work": {
+                          "type": "string"
+                        },
+                        "workRevision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "receipt",
+                        "admissionId",
+                        "requestDigest",
+                        "authorityEpoch",
+                        "scope",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "enum": [
+                        "succeeded",
+                        "denied",
+                        "invalid",
+                        "conflict",
+                        "pending"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "key": {
+                      "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                      "type": "string"
+                    },
+                    "receipt": {
+                      "properties": {
+                        "admissionId": {
+                          "type": "string"
+                        },
+                        "authorityEpoch": {
+                          "type": "string"
+                        },
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "mainRevision": {
+                          "type": "string"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "requestDigest": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        },
+                        "work": {
+                          "type": "string"
+                        },
+                        "workRevision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "outcome",
+                        "receipt",
+                        "admissionId",
+                        "requestDigest",
+                        "authorityEpoch",
+                        "scope",
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "enum": [
+                        "succeeded",
+                        "denied",
+                        "invalid",
+                        "conflict",
+                        "pending"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/work-imports/bulk": {
+      "post": {
+        "operationId": "postV1Work-importsBulk",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "items": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "input": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "aliases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "maxLength": 35,
+                                    "minLength": 2,
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "classifications": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "expectedDecisionHead": {
+                                    "type": "null"
+                                  },
+                                  "expectedSenseHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "outcome": {
+                                    "enum": [
+                                      "accepted",
+                                      "rejected"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "sense": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sense",
+                                  "expectedSenseHead",
+                                  "expectedDecisionHead",
+                                  "outcome"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "credits": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "agent": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "expectedAgentHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "author",
+                                      "translator",
+                                      "editor"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "agent",
+                                  "role"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "description": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 4000,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "evidence": {
+                              "maxLength": 2000,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "expectedWorkHead": {
+                              "type": "null"
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "localizedTitle": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "work-catalogue-import-v1",
+                              "type": "string"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "title": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "expectedWorkHead",
+                            "title",
+                            "language",
+                            "evidence",
+                            "aliases",
+                            "semanticTypes",
+                            "credits",
+                            "classifications"
+                          ],
+                          "type": "object"
+                        },
+                        "key": {
+                          "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "input"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 128,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "items"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "items": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "input": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "aliases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "maxLength": 35,
+                                    "minLength": 2,
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "classifications": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "expectedDecisionHead": {
+                                    "type": "null"
+                                  },
+                                  "expectedSenseHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "outcome": {
+                                    "enum": [
+                                      "accepted",
+                                      "rejected"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "sense": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sense",
+                                  "expectedSenseHead",
+                                  "expectedDecisionHead",
+                                  "outcome"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "credits": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "agent": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "expectedAgentHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "author",
+                                      "translator",
+                                      "editor"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "agent",
+                                  "role"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "description": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 4000,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "evidence": {
+                              "maxLength": 2000,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "expectedWorkHead": {
+                              "type": "null"
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "localizedTitle": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "work-catalogue-import-v1",
+                              "type": "string"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "title": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "expectedWorkHead",
+                            "title",
+                            "language",
+                            "evidence",
+                            "aliases",
+                            "semanticTypes",
+                            "credits",
+                            "classifications"
+                          ],
+                          "type": "object"
+                        },
+                        "key": {
+                          "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "input"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 128,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "items"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "items": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "input": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "aliases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "maxLength": 35,
+                                    "minLength": 2,
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "maxLength": 500,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "classifications": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "expectedDecisionHead": {
+                                    "type": "null"
+                                  },
+                                  "expectedSenseHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "outcome": {
+                                    "enum": [
+                                      "accepted",
+                                      "rejected"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "sense": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sense",
+                                  "expectedSenseHead",
+                                  "expectedDecisionHead",
+                                  "outcome"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "credits": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "agent": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "expectedAgentHead": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "role": {
+                                    "enum": [
+                                      "author",
+                                      "translator",
+                                      "editor"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "agent",
+                                  "role"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 8,
+                              "type": "array"
+                            },
+                            "description": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 4000,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "evidence": {
+                              "maxLength": 2000,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "expectedWorkHead": {
+                              "type": "null"
+                            },
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "localizedTitle": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "language": {
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maxLength": 500,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "work-catalogue-import-v1",
+                              "type": "string"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "maxItems": 3,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "title": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                              "type": "string"
+                            },
+                            "work": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "expectedWorkHead",
+                            "title",
+                            "language",
+                            "evidence",
+                            "aliases",
+                            "semanticTypes",
+                            "credits",
+                            "classifications"
+                          ],
+                          "type": "object"
+                        },
+                        "key": {
+                          "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "input"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 128,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "items"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "key": {
+                            "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                            "type": "string"
+                          },
+                          "receipt": {
+                            "properties": {
+                              "admissionId": {
+                                "type": "string"
+                              },
+                              "authorityEpoch": {
+                                "type": "string"
+                              },
+                              "dataEpoch": {
+                                "type": "string"
+                              },
+                              "mainRevision": {
+                                "type": "string"
+                              },
+                              "mainVersion": {
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "succeeded",
+                                  "cancelled"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "type": "string"
+                              },
+                              "requestDigest": {
+                                "type": "string"
+                              },
+                              "scope": {
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "type": "string"
+                              },
+                              "work": {
+                                "type": "string"
+                              },
+                              "workRevision": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "outcome",
+                              "receipt",
+                              "admissionId",
+                              "requestDigest",
+                              "authorityEpoch",
+                              "scope",
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "replayed": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "enum": [
+                              "succeeded",
+                              "denied",
+                              "invalid",
+                              "conflict",
+                              "pending"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "partial": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "complete",
+                    "partial"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/work-maintainer-changes": {
       "post": {
         "operationId": "postV1Work-maintainer-changes",
