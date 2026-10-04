@@ -180,6 +180,7 @@ function shardLines(tiers: { name: Tier; shards?: ShardRecord[] }[], isolation: 
   const lines = tiers.filter(tier => tier.shards?.length).flatMap(tier => [
     `- ${tier.name} projects: ${tier.shards!.map(shard => `${shard.project}${shard.isolation ? ' (isolated)' : ''} `
       + `${shard.files.length} files ${seconds(shard.elapsedMs)} ${shard.status}`
+      + (shard.resourceClass ? ` [${shard.resourceClass}, ${seconds(shard.budgetMs)} budget]` : '')
       + `${shard.stage === 'test' ? '' : ` at ${shard.stage}`}`).join('; ')}`]);
   for (const item of isolation) {
     lines.push(`- Isolation ${item.tier}: ${item.file} failed after ${item.afterFiles} other files in ${item.afterProject}; `
@@ -257,6 +258,8 @@ export interface ShardRecord {
   stage: 'stack' | 'bootstrap' | 'test';
   elapsedMs?: number;
   isolation?: boolean;
+  resourceClass?: import('./resource-classes.ts').QaResourceClass;
+  budgetMs?: number;
   startupMs?: number;
   bootstrapMs?: number;
   cleanupMs?: number;

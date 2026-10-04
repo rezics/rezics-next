@@ -1,3 +1,9 @@
+import {
+  integrationResourceClasses,
+  qaResourceClasses,
+  type QaResourceClass,
+} from './resource-classes.ts';
+
 export type QaStackMode = 'test' | 'scale';
 
 /** Leave 60 seconds for smoke/shutdown within the complete preparation ceiling.
@@ -12,12 +18,11 @@ export function scalePreparationBudgetMs(startedAt: number, now = Date.now()): n
 
 /** These recipes grow a command-created catalogue; ordinary integration shards
  * retain tmpfs. Opt-in recipes still choose scale storage before their test starts. */
-export const scaleIntegrationFiles: ReadonlySet<string> = new Set([
-  'tests/qa/integration/g-1038-catalogue-scale.test.ts',
-  'tests/qa/integration/g-1031-catalogue-write.test.ts',
-  'tests/qa/integration/g-1035-catalogue-write.test.ts',
-  'tests/qa/integration/g-1032-catalogue-preparation.test.ts',
-]);
+export const scaleIntegrationFiles: ReadonlySet<string> = new Set(
+  [...integrationResourceClasses]
+    .filter(([, name]) => name === 'catalogue-disk')
+    .map(([file]) => file),
+);
 
 /** A single scale setting selects disk storage and its JVM/container allocation.
  * TDB2's copy-on-write files on tmpfs count against the container memory limit. */
@@ -27,15 +32,31 @@ export function qaStackMode(env: NodeJS.ProcessEnv): QaStackMode {
   return mode;
 }
 
-export function qaStackEnvironment(env: NodeJS.ProcessEnv,
-  mode: QaStackMode = qaStackMode(env)): NodeJS.ProcessEnv {
+export function qaStackEnvironment(
+  env: NodeJS.ProcessEnv,
+  mode: QaStackMode = qaStackMode(env),
+  resourceClass?: QaResourceClass,
+): NodeJS.ProcessEnv {
+  const allocation =
+    qaResourceClasses[
+      resourceClass && resourceClass !== 'ordinary'
+        ? resourceClass
+        : mode === 'scale'
+          ? 'catalogue-disk'
+          : 'ordinary'
+    ];
+  const override = env.REZICS_QA_FUSEKI_MEMORY_LIMIT;
+  if (resourceClass && resourceClass !== 'ordinary' && override && override !== '0') {
+    const match = /^(\d+(?:\.\d+)?)([bkmg])?$/i.exec(override);
+    const units: Record<string, number> = { b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 };
+    const bytes = match ? Number(match[1]) * units[match[2]?.toLowerCase() ?? 'b']! : NaN;
+    if (!Number.isFinite(bytes) || bytes < 7 * 1024 ** 3)
+      throw new Error(`${resourceClass} requires at least 7 GiB of Fuseki memory`);
+  }
   return {
     ...env,
     REZICS_QA_STACK_MODE: mode,
-    REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_QA_FUSEKI_MEMORY_LIMIT ?? (mode === 'scale' ? '7g' : '2g'),
-    REZICS_FUSEKI_JVM_ARGS:
-      env.REZICS_QA_FUSEKI_JVM_ARGS ?? (mode === 'scale'
-        ? '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m'
-        : '-Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m'),
+    REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_QA_FUSEKI_MEMORY_LIMIT ?? allocation.memory,
+    REZICS_FUSEKI_JVM_ARGS: env.REZICS_QA_FUSEKI_JVM_ARGS ?? allocation.jvmArgs,
   };
 }

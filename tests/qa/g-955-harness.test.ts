@@ -21,6 +21,7 @@ import {
 } from '../../scripts/qa/core.ts';
 import { completeFileResults, lastStartedTestFile } from '../../scripts/qa/file-results.ts';
 import { planIntegrationShards } from '../../scripts/qa/integration-shards.ts';
+import { integrationResourceClasses } from '../../scripts/qa/resource-classes.ts';
 import {
   integrationOwnerResetStatements,
   resetIntegrationState,
@@ -37,15 +38,14 @@ const suite = (file: string) =>
 test('G-955: integration balances all files onto bounded reusable stacks and preserves fresh-state boundaries', () => {
   const dedicated = new Set([
     ...commandOnlyIntegrationFiles,
+    ...integrationResourceClasses.keys(),
     ...scaleIntegrationFiles,
     'tests/qa/integration/g-854-large-library.test.ts',
     'tests/qa/integration/g-852-zones.test.ts',
     'tests/qa/integration/g-556-ranked-large.test.ts',
     'tests/qa/integration/g-939-discovery.test.ts',
   ]);
-  const fresh = [...isolatedIntegrationFiles]
-    .filter((file) => !dedicated.has(file))
-    .slice(0, 15);
+  const fresh = [...isolatedIntegrationFiles].filter((file) => !dedicated.has(file)).slice(0, 15);
   const estimates = new Map([
     ...Array.from({ length: 24 }, (_, index) => [`shared-${index}.test.ts`, 30_000] as const),
     ...fresh.map((file) => [file, 20_000] as const),
@@ -66,7 +66,13 @@ test('G-955: integration balances all files onto bounded reusable stacks and pre
     .map((shard) => shard.files.reduce((sum, file) => sum + estimates.get(file)!, 0));
   expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(30_000);
   expect(plan.slice(6)).toEqual(
-    [...dedicated].sort().map((file) => ({ files: [file], batches: [[file]] })),
+    [...dedicated]
+      .sort()
+      .map((file) => ({
+        files: [file],
+        batches: [[file]],
+        resourceClass: integrationResourceClasses.get(file) ?? 'ordinary',
+      })),
   );
 });
 
@@ -195,13 +201,23 @@ test('G-955: failed-only diagnosis reruns unexecuted files without an invented t
 });
 
 test('G-955: a killed last file and files with only skipped cases cannot look completed', () => {
-  const output = 'a.test.ts:\n(pass) one [1ms]\n\nb.test.ts:\n(pass) earlier case [1ms]\nbun timed out';
+  const output =
+    'a.test.ts:\n(pass) one [1ms]\n\nb.test.ts:\n(pass) earlier case [1ms]\nbun timed out';
   expect(lastStartedTestFile(output)).toBe('b.test.ts');
-  const result = completeFileResults(suite('a.test.ts') + suite('b.test.ts'), ['a.test.ts', 'b.test.ts'],
-    'integration', { interrupted: true, incompleteFiles: [lastStartedTestFile(output)!] });
+  const result = completeFileResults(
+    suite('a.test.ts') + suite('b.test.ts'),
+    ['a.test.ts', 'b.test.ts'],
+    'integration',
+    { interrupted: true, incompleteFiles: [lastStartedTestFile(output)!] },
+  );
   expect(result.missing).toEqual(['b.test.ts']);
-  expect(parseJUnit(result.xml, 'integration').filter(test => test.file === 'b.test.ts').some(test => test.failed)).toBe(true);
-  const skipped = '<testsuite file="a.test.ts"><testcase name="pending" file="a.test.ts"><skipped /></testcase></testsuite>';
+  expect(
+    parseJUnit(result.xml, 'integration')
+      .filter((test) => test.file === 'b.test.ts')
+      .some((test) => test.failed),
+  ).toBe(true);
+  const skipped =
+    '<testsuite file="a.test.ts"><testcase name="pending" file="a.test.ts"><skipped /></testcase></testsuite>';
   expect(completeFileResults(skipped, ['a.test.ts'], 'integration').missing).toEqual(['a.test.ts']);
 });
 
@@ -240,7 +256,16 @@ test('G-955: source hashing streams beyond the former 64 MiB limit and hashes qu
     expect(sourceIdentity(directory).fingerprint).not.toBe(one.fingerprint);
     writeFileSync(join(directory, '?? original'), 'tracked rename');
     git(['add', '?? original']);
-    git(['-c', 'user.name=QA fixture', '-c', 'user.email=qa@example.test', 'commit', '--quiet', '-m', 'rename fixture']);
+    git([
+      '-c',
+      'user.name=QA fixture',
+      '-c',
+      'user.email=qa@example.test',
+      'commit',
+      '--quiet',
+      '-m',
+      'rename fixture',
+    ]);
     git(['mv', '?? original', 'renamed.txt']);
     expect(sourceIdentity(directory).clean).toBe(false);
     expect(readdirSync(join(directory, '.temp'))).toEqual([]);
@@ -349,9 +374,9 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
   expect(override.REZICS_FUSEKI_MEMORY_LIMIT).toBe('3g');
   expect(override.REZICS_FUSEKI_JVM_ARGS).toBe('-Xmx1g');
   const compose = readFileSync(join(root, 'infra/dev/compose.qa.yaml'), 'utf8');
-  expect(compose).toContain('mem_limit: ${REZICS_QA_FUSEKI_MEMORY_LIMIT:-2g}');
+  expect(compose).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}');
   expect(compose).toContain(
-    'JVM_ARGS: ${REZICS_QA_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}',
+    'JVM_ARGS: ${REZICS_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}',
   );
   expect(existsSync(join(root, '.temp'))).toBe(true);
 });
