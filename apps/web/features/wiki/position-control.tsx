@@ -2,9 +2,13 @@
 
 import { buttonVariants } from '@rezics/ui/button';
 import { EntityPicker, type EntityPickerLoad } from '@rezics/ui/entity-picker';
-import { useRouter } from 'next/navigation';
 import { localizedPath } from '../../i18n/locale.ts';
-import type { PositionPickerItem } from './position-picker.ts';
+import {
+  positionPickerPage,
+  readReadingPositionPage,
+  type PositionPickerItem,
+} from './position-picker.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezics/ui/sheet';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneText } from '@rezics/zone-sdk';
@@ -49,7 +53,18 @@ export interface PositionControlProps {
   /** The story has more positions than `options` lists. */
   more: boolean;
   locale?: UiLocale;
+  /** JSON reads cannot commit a page payload at the position we are leaving. */
+  search?: {
+    work: string;
+    position?: string;
+    actingSubject?: string;
+    here: string;
+    current: string | null;
+  };
+  /** Loader override for component previews; routed pages pass `search`. */
   load?: EntityPickerLoad<PositionPickerItem>;
+  /** Navigation adapter for embedded previews; the app uses document navigation. */
+  navigate?: (href: string) => void;
 }
 
 const row =
@@ -77,10 +92,33 @@ export function PositionControl({
   everything,
   more,
   locale = 'en',
-  load,
+  search,
+  load: providedLoad,
+  navigate = (href) => window.location.assign(href),
 }: PositionControlProps) {
+  const load: EntityPickerLoad<PositionPickerItem> | undefined =
+    providedLoad ??
+    (search
+      ? async ({ q, cursor }) =>
+          positionPickerPage(
+            await readReadingPositionPage(
+              browserMainApi(undefined, { anonymous: !search.actingSubject }),
+              {
+                work: search.work,
+                position: search.position,
+                actingSubject: search.actingSubject,
+                q,
+                cursor: cursor ?? undefined,
+                limit: 50,
+                language: locale,
+              },
+            ),
+            search.here,
+            locale,
+            search.current,
+          )
+      : undefined);
   const [open, setOpen] = useState(false);
-  const router = useRouter();
   const words = browseMessages[locale];
   // Tests and scripts wait for this before they press the trigger: the server-rendered button does nothing until then.
   const [hydrated, setHydrated] = useState(false);
@@ -96,6 +134,7 @@ export function PositionControl({
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 sm:px-6 lg:px-10">
         <Sheet open={open} onOpenChange={(details) => setOpen(details.open)}>
           <SheetTrigger
+            disabled={!hydrated}
             data-hydrated={hydrated ? 'true' : undefined}
             className={cn(
               buttonVariants({ variant: 'outline', size: 'sm' }),
@@ -120,6 +159,8 @@ export function PositionControl({
                 <li>
                   <LocalizedLink
                     href={progress.href}
+                    documentNavigation
+                    prefetch={false}
                     className={row}
                     aria-current={progress.current}
                     onClick={close}
@@ -147,6 +188,8 @@ export function PositionControl({
                       <li key={option.id}>
                         <LocalizedLink
                           href={option.href}
+                          documentNavigation
+                          prefetch={false}
                           className={row}
                           aria-current={option.current}
                           onClick={close}
@@ -165,6 +208,8 @@ export function PositionControl({
                 <li>
                   <LocalizedLink
                     href={everything.href}
+                    documentNavigation
+                    prefetch={false}
                     className={row}
                     aria-current={everything.current}
                     onClick={close}
@@ -208,7 +253,9 @@ export function PositionControl({
                       const item = next[0]?.item;
                       if (!item) return;
                       close();
-                      router.push(localizedPath(item.href, locale));
+                      // All choices use the browser's navigation owner: a newer
+                      // choice replaces the previous document request immediately.
+                      navigate(localizedPath(item.href, locale));
                     }}
                   />
                 </div>
@@ -225,6 +272,8 @@ export function PositionControl({
             </span>
             <LocalizedLink
               href={everything.href}
+              documentNavigation
+              prefetch={false}
               data-position-everything=""
               className="rounded-sm text-sm underline underline-offset-4 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
