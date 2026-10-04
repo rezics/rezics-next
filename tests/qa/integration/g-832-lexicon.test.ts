@@ -518,7 +518,7 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
     if (shared.every(item => item !== null)) {
       for (const receipt of data) await f.grant(`semantic:read:${receipt.component}`, 'semantic.read');
     }
-    expect(data).toHaveLength(15);
+    expect(data).toHaveLength(relationLexiconSeed.length);
     for (const language of uiLocales) {
       const batch = await f.json<Batch>(
         await f.call(
@@ -534,9 +534,13 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
       expect(batch.items).toHaveLength(data.length);
       for (const item of batch.items) {
         expect(item.status).toBe('available');
-        expect(item.renderings).toHaveLength(2);
+        const seed = relationLexiconSeed.find(entry => entry.key === data.find(
+          receipt => receipt.component === item.definition)!.key)!;
+        expect(item.renderings).toHaveLength(2 + (seed.extraRoles?.length ?? 0));
         for (const rendering of item.renderings)
-          for (const projection of rendering.projections) {
+          // Roles beyond the labelled pair carry no presentation; their absence is explicit.
+          for (const projection of rendering.projections.filter(entry =>
+            seed.roles.includes(entry.fromRole as never) && seed.roles.includes(entry.toRole as never))) {
             expect(projection.labels !== null || projection.fallback !== null).toBe(true);
             expect(
               projection.fallback?.crossedScript

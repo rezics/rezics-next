@@ -179,14 +179,14 @@ test('G-832: every bootstrap definition renders both directions in all UI locale
     native(),
     'g-832',
   );
-  expect(seeded).toHaveLength(15);
+  expect(seeded).toHaveLength(relationLexiconSeed.length);
   const saved = JSON.parse(await readFile(relationLexiconSeedMapPath('g-832'), 'utf8'));
   expect(saved).toEqual({
     profile: 'relation-lexicon-seed-map-v1',
     namespace: 'g-832',
     definitions: seeded,
   });
-  expect(writes).toHaveLength(15 + 15 * 8 * 2);
+  expect(writes).toHaveLength(relationLexiconSeed.length * (1 + 8 * 2));
   expect(new Set(writes.map((item) => item.key)).size).toBe(writes.length);
   for (const definition of seeded) {
     const rows = writes

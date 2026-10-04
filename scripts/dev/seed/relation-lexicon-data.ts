@@ -8,7 +8,14 @@ export type LexiconSeedLabel = readonly [
 ];
 export interface LexiconSeedDefinition {
   key: string;
+  /** The two labelled roles; each direction of labels runs between them. */
   roles: readonly [string, string];
+  /** Required singleton roles beyond the labelled pair. */
+  extraRoles?: readonly string[];
+  /** Role keys of the star constraint, repeated into the definition state. */
+  star?: { leaf: string; hub: string };
+  /** `false` leaves the relation open to any relation editor instead of a Work's editor. */
+  workAuthority?: false;
   editorRecordable?: boolean;
   writePath?: 'derivation' | 'relation';
   labels: readonly LexiconSeedLabel[];
@@ -336,4 +343,81 @@ export const relationLexiconSeed = [
       ],
     ],
   },
+  {
+    key: 'variant-of',
+    workAuthority: false,
+    roles: ['hub', 'variant'],
+    extraRoles: ['kind'],
+    star: { leaf: 'variant', hub: 'hub' },
+    labels: [
+      ['en', 'Variant', 'Variants', 'Variant of', 'Variants of'],
+      ['zh-Hant', '變體', '變體', '變體本體', '變體本體'],
+      ['zh-Hans', '变体', '变体', '变体本体', '变体本体'],
+      ['ja', 'バリアント', 'バリアント', 'バリアント元', 'バリアント元'],
+      ['ko', '변형', '변형', '변형 원본', '변형 원본'],
+      ['de', 'Variante', 'Varianten', 'Variante von', 'Varianten von'],
+      ['fr', 'Variante', 'Variantes', 'Variante de', 'Variantes de'],
+      ['es', 'Variante', 'Variantes', 'Variante de', 'Variantes de'],
+    ],
+  },
+  {
+    key: 'holds-title',
+    workAuthority: false,
+    roles: ['title', 'holder'],
+    labels: [
+      ['en', 'Holder', 'Holders', 'Title held', 'Titles held'],
+      ['zh-Hant', '持有者', '持有者', '所持稱號', '所持稱號'],
+      ['zh-Hans', '持有者', '持有者', '所持称号', '所持称号'],
+      ['ja', '保持者', '保持者', '保持する称号', '保持する称号'],
+      ['ko', '보유자', '보유자', '보유 칭호', '보유 칭호'],
+      ['de', 'Titelträger', 'Titelträger', 'Getragener Titel', 'Getragene Titel'],
+      ['fr', 'Titulaire', 'Titulaires', 'Titre porté', 'Titres portés'],
+      ['es', 'Titular', 'Titulares', 'Título que ostenta', 'Títulos que ostenta'],
+    ],
+  },
+  {
+    key: 'represents',
+    workAuthority: false,
+    roles: ['character', 'unit'],
+    labels: [
+      ['en', 'Unit', 'Units', 'Represents', 'Represents'],
+      ['zh-Hant', '單位', '單位', '代表角色', '代表角色'],
+      ['zh-Hans', '单位', '单位', '代表角色', '代表角色'],
+      ['ja', 'ユニット', 'ユニット', '代表キャラクター', '代表キャラクター'],
+      ['ko', '유닛', '유닛', '대표 캐릭터', '대표 캐릭터'],
+      ['de', 'Einheit', 'Einheiten', 'Stellt dar', 'Stellt dar'],
+      ['fr', 'Unité', 'Unités', 'Représente', 'Représente'],
+      ['es', 'Unidad', 'Unidades', 'Representa', 'Representa'],
+    ],
+  },
+  {
+    key: 'in-continuity',
+    roles: ['continuity', 'work'],
+    labels: [
+      ['en', 'Work', 'Works', 'In continuity', 'In continuities'],
+      ['zh-Hant', '作品', '作品', '所屬連續性', '所屬連續性'],
+      ['zh-Hans', '作品', '作品', '所属连续性', '所属连续性'],
+      ['ja', '作品', '作品', '所属する連続性', '所属する連続性'],
+      ['ko', '작품', '작품', '소속 연속성', '소속 연속성'],
+      ['de', 'Werk', 'Werke', 'In Kontinuität', 'In Kontinuitäten'],
+      ['fr', 'Œuvre', 'Œuvres', 'Dans la continuité', 'Dans les continuités'],
+      ['es', 'Obra', 'Obras', 'En la continuidad', 'En las continuidades'],
+    ],
+  },
 ] as const satisfies readonly LexiconSeedDefinition[];
+
+/** Concepts named by the `kind` role of `variant-of`; they are Concepts, so a kind is data, not a new type. */
+export const variantKindConcepts = [
+  { key: 'persona', labels: [
+    { language: 'en', value: 'Persona' }, { language: 'zh-Hant', value: '化身' },
+    { language: 'zh-Hans', value: '化身' }, { language: 'ja', value: 'ペルソナ' },
+    { language: 'ko', value: '페르소나' }, { language: 'de', value: 'Persona' },
+    { language: 'fr', value: 'Persona' }, { language: 'es', value: 'Persona' },
+  ] },
+  { key: 'counterpart', labels: [
+    { language: 'en', value: 'Counterpart' }, { language: 'zh-Hant', value: '對應者' },
+    { language: 'zh-Hans', value: '对应者' }, { language: 'ja', value: '対応者' },
+    { language: 'ko', value: '대응 인물' }, { language: 'de', value: 'Gegenstück' },
+    { language: 'fr', value: 'Homologue' }, { language: 'es', value: 'Contraparte' },
+  ] },
+] as const;

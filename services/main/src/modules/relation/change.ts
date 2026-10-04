@@ -7,18 +7,19 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
   readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable, sealComponentState,
   sealSemanticRejection, sendSemanticWrite, validationsFor, type SemanticAdmission,
   type SemanticTerminal } from '../semantic/command.ts';
-import { checkedStoredState, term, type RelationRole } from '../semantic/change.ts';
+import { checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
 import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
-import { checkedApplicability, checkedParticipations, InvalidRelationOccurrence, RELATION_LIMITS,
-  type Participation, type RelationRoleDefinition } from './schema.ts';
+import { checkedApplicability, checkedParticipations, InvalidRelationOccurrence, PARTICIPATION_FORMAT_V2,
+  RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition } from './schema.ts';
 
 export const RELATION_CHANGE_FAMILY = 'relation-change';
 
 export interface RelationInput {
   /** Exact relation DefinitionRef: a `semantic-definition-v1` revision. */
   definition: string;
-  participations: { role: string; participant: unknown; position?: number }[];
+  participations: { role: string; participant: unknown; position?: number;
+    creditedName?: { lexical: string; language: string } }[];
   applicability?: string[];
   lifecycle?: Lifecycle;
   evidence?: string;
@@ -50,6 +51,8 @@ export interface ExactDefinition extends EditorRecording {
   roleKeys: Record<string, string>;
   notation?: string;
   workSubjectRole?: string;
+  /** Role keys of the star constraint, when the definition declares one. */
+  star?: RelationStar;
 }
 
 export const roleIri = (definition: string, key: string): string => `${definition}/role/${key}`;
@@ -92,6 +95,7 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
     ...(state.writePath === undefined ? {} : { writePath: state.writePath }),
     ...(state.notation ? { notation: state.notation } : {}),
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
+    ...(state.star ? { star: state.star } : {}),
     roles: state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
       minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered })),
     roleKeys: Object.fromEntries(state.roles.map(role => [roleIri(definition, role.key), role.key])) };
@@ -108,6 +112,7 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
     if (participations.length + externals > RELATION_LIMITS.participants + 32) {
       throw new InvalidRelationOccurrence('occurrence footprint exceeds the command bound');
     }
+    if (definition.star) checkedStarParticipants(definition, participations);
     const key = (item: Participation) => JSON.stringify([item.role, item.position ?? -1, item.participant]);
     return { ...(input.evidence === undefined ? {} : { evidence: input.evidence }), definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
       applicability: checkedApplicability(input.applicability ?? []),
@@ -118,12 +123,59 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
   }
 }
 
+export class StarViolation extends SemanticChangeRejected {
+  constructor(message: string) { super('star-violation', message); }
+}
+
+function starRoles(definition: ExactDefinition) {
+  const star = definition.star!;
+  return { leaf: roleIri(definition.definition, star.leaf), hub: roleIri(definition.definition, star.hub) };
+}
+
+/** Star members are identities: only native Resources can be compared across occurrences, and one
+ * Resource cannot be leaf and hub of the same occurrence. */
+function checkedStarParticipants(definition: ExactDefinition, participations: readonly Participation[]) {
+  const roles = starRoles(definition);
+  const members = (role: string) => participations.filter(item => item.role === role);
+  const all = [...members(roles.leaf), ...members(roles.hub)];
+  if (all.some(item => item.participant.kind !== 'resource')) {
+    throw new InvalidRelationOccurrence('star roles take native resources');
+  }
+  const hubs = new Set(members(roles.hub).map(item => JSON.stringify(item.participant)));
+  if (members(roles.leaf).some(item => hubs.has(JSON.stringify(item.participant)))) {
+    throw new StarViolation('a participant cannot be both leaf and hub of one occurrence');
+  }
+}
+
+/**
+ * Observed star conflict for a new active occurrence: another active occurrence of the same definition in
+ * which a leaf already holds the leaf or hub role, or a hub already holds the leaf role. Retired occurrences
+ * hold nothing. The same pattern guards the write and, restated, seals the typed refusal.
+ */
+function starConflict(definition: ExactDefinition, occurrence: string, state: OccurrenceState): string {
+  const roles = starRoles(definition);
+  const refs = (role: string) => state.participations.flatMap(item =>
+    item.role === role && item.participant.kind === 'resource' ? [item.participant.ref] : []);
+  const pairs = [...refs(roles.leaf).flatMap(ref => [[roles.leaf, ref], [roles.hub, ref]]),
+    ...refs(roles.hub).map(ref => [roles.leaf, ref])];
+  if (!pairs.length) return '';
+  return `{ VALUES (?conflictRole ?conflictParticipant) { ${pairs.map(([role, ref]) =>
+      `(${iri(role!)} ${iri(ref!)})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?other a rv:RelationOccurrence ; rv:occurrenceHead ?otherHead }
+    GRAPH ${iri(GRAPHS.revisions)} { ?otherHead rv:lifecycle rv:Active ; rv:relationDefinition ?otherDefinition ;
+      rv:participation ?otherParticipation .
+      ?otherDefinition rv:component ${iri(definition.definition)} .
+      ?otherParticipation rv:role ?conflictRole ; rv:participant ?conflictParticipant }
+    FILTER(?other != ${iri(occurrence)}) }`;
+}
+
 export function relationChangeDigest(occurrence: string | undefined, expectedHead: string | null,
   state: OccurrenceState): string {
   return hash(JSON.stringify({ family: 'relation-change-v1', occurrence: occurrence ?? null, expectedHead,
     ...(state.evidence === undefined ? {} : { evidence: state.evidence }), definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
-    participations: state.participations.map(({ role, participant, position }) =>
-      ({ role, participant, ...(position === undefined ? {} : { position }) })) }));
+    participations: state.participations.map(({ role, participant, position, creditedName }) =>
+      ({ role, participant, ...(position === undefined ? {} : { position }),
+        ...(creditedName ? { creditedName } : {}) })) }));
 }
 
 function checkedOccurrenceState(state: Record<string, unknown>): OccurrenceState {
@@ -213,9 +265,12 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
   const resources = [...new Set(state.participations.flatMap(item =>
     item.participant.kind === 'resource' ? [item.participant.ref] : []))];
   const active = state.lifecycle === 'active';
+  const conflict = active && definition.star ? starConflict(definition, occurrence, exact) : '';
   const validations = [
     ...await validationsFor(env, 'relation-occurrence-v1', [{ role: 'occurrence', focus: [occurrence] },
-      { role: 'revision', focus: [revision] }, { role: 'participation', focus: participations.map(item => item.iri) }]),
+      { role: 'revision', focus: [revision] }]),
+    ...await validationsFor(env, 'relation-occurrence-v2',
+      [{ role: 'participation', focus: participations.map(item => item.iri) }]),
     ...nodes.length ? await validationsFor(env, 'value-exact-v1',
       [{ role: 'external-reference', focus: nodes.map(node => node[0]!) }]) : [],
   ];
@@ -233,8 +288,11 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
           rv:modelRevision ${iri(PROFILES.relation)} ; rv:shapeRevision ${iri(PROFILES.relation)} ;
           rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${participations.map(item => `${iri(item.iri)} a rv:RelationParticipation ; rv:occurrence ${iri(occurrence)} ;
-          rv:role ${iri(item.role)} ; rv:participant ${item.object}
-          ${item.position === undefined ? '' : `; <https://schema.org/position> ${item.position}`} .`).join('\n')}
+          rv:role ${iri(item.role)} ; rv:participant ${item.object} ;
+          <${RELATION_TERMS.format}> <${PARTICIPATION_FORMAT_V2}>
+          ${item.position === undefined ? '' : `; <https://schema.org/position> ${item.position}`}
+          ${item.creditedName ? `; <${RELATION_TERMS.creditedName}> ${semanticValueRdf({ kind: 'language-string',
+            ...item.creditedName }, () => '').object}` : ''} .`).join('\n')}
         ${nodes.map(node => node.slice(1).join('\n')).join('\n')} }`,
     where: `GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} a rv:ModelGeneration }
       GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(generation)} }
@@ -245,6 +303,7 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
       ${intent.admission.scope.startsWith('work:edit:') ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(intent.admission.scope.slice('work:edit:'.length))} a <https://schema.org/CreativeWork> }` : ''}
       ${resources.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
+      ${conflict ? `FILTER NOT EXISTS ${conflict}` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(occurrence)} ; rv:revision ${iri(revision)} ;
       ${current ? `rv:expectedHead ${iri(current.head)} ;` : ''}`,
@@ -265,6 +324,11 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
     const missing = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
       `FILTER (${resources.map(ref => `NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?t } }`).join(' || ')})`);
     if (missing) return checkedResult(missing, intent, false);
+  }
+  if (conflict) {
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'star-violation',
+      `FILTER EXISTS ${conflict}`);
+    if (refused) return checkedResult(refused, intent, false);
   }
   throw new PendingActivation('relation change guard did not match');
 }

@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { relationStar } from './lexicon.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readCurrentOccurrence, readExactDefinition, readExactOccurrence } from '../modules/relation/change.ts';
 import { admittedRelationChange, canReadSemantic, referenceReader, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
@@ -19,12 +20,14 @@ const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String
 const relationWrite = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.String(),
   revision: t.String(), predecessor: t.Nullable(t.String()), receipt: t.String(), sourcePosition: position,
   replayed: t.Boolean() });
+const creditedName = t.Object({ lexical: t.String({ minLength: 1, maxLength: 200 }),
+  language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false });
 const relationRead = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.String(),
   revision: t.String(), predecessor: t.Nullable(t.String()), lifecycle: t.String(),
   definition: t.Object({ revision: t.String(), definition: t.String(), lifecycle: t.String(),
-    roles: t.Array(t.Unknown()) }),
+    roles: t.Array(t.Unknown()), star: t.Nullable(relationStar) }),
   participations: t.Array(t.Object({ participation: t.String(), role: t.String(), participant: t.Unknown(),
-    position: t.Optional(t.Integer()), availability: t.String() })),
+    position: t.Optional(t.Integer()), creditedName: t.Optional(creditedName), availability: t.String() })),
   applicability: t.Array(t.String()), sourcePosition: position });
 
 export const openApiOperations = {
@@ -52,13 +55,15 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
       definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
-        roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })) },
+        roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })),
+        star: definition.star ?? null },
       participations: await Promise.all(read.state.participations.map(async item => {
         const availability = item.participant.kind === 'external' ? 'external'
           : await canRead(item.participant.ref) && (await boundary.visible([item.participant.ref])).has(item.participant.ref) ? 'available' : 'unavailable';
         return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
           participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
-          ...(item.position === undefined ? {} : { position: item.position }), availability };
+          ...(item.position === undefined ? {} : { position: item.position }),
+          ...(item.creditedName ? { creditedName: item.creditedName } : {}), availability };
       })),
       applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
     });
@@ -68,7 +73,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       body: t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.Optional(native),
         expectedHead: t.Nullable(native), definition: native,
         participations: t.Array(t.Object({ role: t.String({ maxLength: 32 }), participant: t.Record(t.String(), t.Unknown()),
-          position: t.Optional(t.Integer()) }, { additionalProperties: false }), { maxItems: 64 }),
+          position: t.Optional(t.Integer()), creditedName: t.Optional(creditedName) },
+          { additionalProperties: false }), { maxItems: 64 }),
         evidence: t.Optional(t.String({ maxLength: 2048 })),
         applicability: t.Optional(t.Array(native, { maxItems: 8 })),
         lifecycle: t.Optional(t.Union([t.Literal('active'), t.Literal('retired')])), actingSubject: native },

@@ -7,6 +7,7 @@ import {
 } from '../relation/change.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable } from '../semantic/command.ts';
+import type { CreditedName } from '../relation/schema.ts';
 import type { ReferenceCheck } from '../semantic/read.ts';
 import type { SemanticValue } from '../semantic/value.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -18,6 +19,8 @@ export interface RelationBinding {
   role: string;
   participant: SemanticValue | { kind: 'unavailable-reference' };
   position?: number;
+  /** The name credited in this occurrence, when one was recorded. */
+  creditedName?: CreditedName;
 }
 export type RelationRenderSubject =
   | { definition: string; revision?: string }
@@ -54,6 +57,7 @@ export interface RelationProjection {
     type: SemanticValue['kind'] | 'unavailable-reference';
     value: RelationBinding['participant'];
     position?: number;
+    creditedName?: CreditedName;
   }[];
 }
 export interface RelationRendering {
@@ -149,6 +153,7 @@ export function selectedProjection(
         type: item.participant.kind,
         value: item.participant,
         ...(item.position === undefined ? {} : { position: item.position }),
+        ...(item.creditedName ? { creditedName: item.creditedName } : {}),
       })),
   };
 }
@@ -242,6 +247,7 @@ export async function renderRelation(
               ? { kind: 'unavailable-reference' }
               : item.participant,
           ...(item.position === undefined ? {} : { position: item.position }),
+          ...(item.creditedName ? { creditedName: item.creditedName } : {}),
         });
     }
   }

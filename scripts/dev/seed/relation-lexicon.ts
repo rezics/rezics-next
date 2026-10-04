@@ -1,4 +1,4 @@
-import { relationLexiconSeed, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, variantKindConcepts, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
@@ -70,8 +70,10 @@ export async function seedRelationLexicon(
           notation: definition.key,
           ...(definition.editorRecordable === undefined ? {} : { editorRecordable: definition.editorRecordable }),
           ...(definition.writePath === undefined ? {} : { writePath: definition.writePath }),
-          workSubjectRole: definition.roles.includes('work') ? 'work' : definition.roles[1],
-          roles: definition.roles.map((role) => ({
+          ...(definition.workAuthority === false ? {}
+            : { workSubjectRole: definition.roles.includes('work') ? 'work' : definition.roles[1] }),
+          ...(definition.star ? { star: definition.star } : {}),
+          roles: [...definition.roles, ...definition.extraRoles ?? []].map((role) => ({
             key: role,
             minParticipants: 1,
             maxParticipants: 1,
@@ -138,4 +140,28 @@ export async function seedRelationLexicon(
     }
   }
   return definitions;
+}
+
+/**
+ * Create the Concepts the `kind` role of `variant-of` refers to, in one scheme through the public
+ * vocabulary API. A replay under the same namespace returns the same Concepts.
+ */
+export async function seedVariantKindConcepts(
+  client: Pick<SeedLexiconClient, 'post'>,
+  actingSubject: string,
+  namespace: string,
+): Promise<Record<(typeof variantKindConcepts)[number]['key'], string>> {
+  const concepts: Record<string, string> = {};
+  let scheme: { id: string; expectedHead: string } | null = null;
+  for (const kind of variantKindConcepts) {
+    const created: { scheme: string; schemeHead: string; concept: string } = await client.post(
+      '/v1/classification-vocabulary',
+      { profile: 'classification-proposition-v2', scheme, labels: kind.labels, alternativeLabels: [],
+        broader: [], narrower: [], actingSubject },
+      `${namespace}:variant-kind:v1:${kind.key}`,
+    );
+    concepts[kind.key] = created.concept;
+    scheme = { id: created.scheme, expectedHead: created.schemeHead };
+  }
+  return concepts as Record<(typeof variantKindConcepts)[number]['key'], string>;
 }

@@ -18,6 +18,20 @@ controller, grant or catalogue-role proof as a Work edit. This requires Access's
 `represented_work_admission_proof` CHECK to admit those actions under `work:edit:`;
 migration 972 preserves all installed branches and widens that Work editor branch.
 
+A participation may carry the name credited in that occurrence (`creditedName`, one
+language-tagged string; [decision 51](../../../../docs/contracts/semantic-model.md#identities-variants-and-projections)).
+New participations are written under `relation-occurrence-v2`, whose `rv:participationFormat`
+marker routes them to the v2 shape; participations written before it have no marker or name and
+keep their v1 shape. The name belongs to the occurrence and never renames the participant.
+
+A definition may declare `star: { leaf, hub }` over two of its role keys. The relation command
+refuses (`star_violation`, sealed under the same receipt, so a retry returns it) an active
+occurrence in which a leaf already holds the leaf role in another active occurrence of that
+definition, a hub holds the leaf role, or a leaf holds the hub role, in the same guarded write that
+inserts the occurrence; retiring an occurrence frees its participants. Star roles take native
+Resources only, because an external reference has no identity to compare. The constraint is
+metadata of the exact definition revision the occurrence is written under.
+
 `GET /v1/resources/{id}/relations` uses `traversal.ts`: current occurrences,
 effective derivations in either direction, native author credits mapped onto the
 lexicon view, and containment from selected Collection placements. It asserts no

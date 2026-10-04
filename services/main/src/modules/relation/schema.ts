@@ -19,17 +19,27 @@ export const RELATION_TERMS = {
   role: `${RV}role`,
   participant: `${RV}participant`,
   back: `${RV}occurrence`,
+  format: `${RV}participationFormat`,
+  creditedName: `${RV}creditedName`,
 } as const;
 
-export const RELATION_LIMITS = { participants: 64, applicability: 8, position: 1023 } as const;
+/** Marks a participation that routes to the `relation-occurrence-v2` shape. */
+export const PARTICIPATION_FORMAT_V2 = `${RV}CreditedNameV2`;
+
+export const RELATION_LIMITS = { participants: 64, applicability: 8, position: 1023, creditedName: 200 } as const;
 
 export type Participant = Extract<SemanticValue, { kind: 'resource' } | { kind: 'external' }>;
+
+/** The name credited to the participant in one occurrence; the participant keeps its own names. */
+export interface CreditedName { lexical: string; language: string }
 
 export interface Participation {
   /** Role IRI declared by the exact relation definition revision. */
   role: string;
   participant: Participant;
   position?: number;
+  /** Absent on v1 occurrences. */
+  creditedName?: CreditedName;
 }
 
 /** Current occurrence envelope in the current graph. */
@@ -66,6 +76,25 @@ export interface RelationRoleDefinition {
 
 export class InvalidRelationOccurrence extends Error {}
 
+function checkedCreditedName(value: unknown): CreditedName {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some(key => key !== 'lexical' && key !== 'language')) {
+    throw new InvalidRelationOccurrence('credited name must be a language-tagged string');
+  }
+  const row = value as Record<string, unknown>;
+  let checked: SemanticValue;
+  try {
+    checked = checkedSemanticValue({ kind: 'language-string', lexical: row.lexical, language: row.language });
+  } catch {
+    throw new InvalidRelationOccurrence('credited name must be a language-tagged string');
+  }
+  if (checked.kind !== 'language-string' || !checked.lexical.trim()
+    || checked.lexical.length > RELATION_LIMITS.creditedName) {
+    throw new InvalidRelationOccurrence('credited name is outside the admitted bound');
+  }
+  return { lexical: checked.lexical, language: checked.language };
+}
+
 /**
  * Validate participations against the definition's roles. A repeated
  * (role, participant) pair in one occurrence is rejected; repetition across
@@ -81,7 +110,7 @@ export function checkedParticipations(roles: readonly RelationRoleDefinition[],
   const counts = new Map<string, number>();
   const checked = participations.map(item => {
     if (!item || typeof item !== 'object' || Array.isArray(item)
-      || Object.keys(item).some(key => !['role', 'participant', 'position'].includes(key))) {
+      || Object.keys(item).some(key => !['role', 'participant', 'position', 'creditedName'].includes(key))) {
       throw new InvalidRelationOccurrence('participation has unsupported fields');
     }
     const row = item as Record<string, unknown>;
@@ -96,11 +125,13 @@ export function checkedParticipations(roles: readonly RelationRoleDefinition[],
       || (position as number) < 0 || (position as number) > RELATION_LIMITS.position))) {
       throw new InvalidRelationOccurrence('participation position does not match the role order');
     }
+    const creditedName = row.creditedName === undefined ? undefined : checkedCreditedName(row.creditedName);
     const key = JSON.stringify([role.role, participant]);
     if (seen.has(key)) throw new InvalidRelationOccurrence('participant repeats within one role');
     seen.add(key);
     counts.set(role.role, (counts.get(role.role) ?? 0) + 1);
-    return { role: role.role, participant, ...(position === undefined ? {} : { position: position as number }) };
+    return { role: role.role, participant, ...(position === undefined ? {} : { position: position as number }),
+      ...(creditedName ? { creditedName } : {}) };
   });
   for (const role of roles) {
     const count = counts.get(role.role) ?? 0;

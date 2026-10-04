@@ -191,6 +191,7 @@ async function resolveCandidate(
         role: meaning.roleKeys[item.role]!,
         participant: item.participant,
         ...(item.position === undefined ? {} : { position: item.position }),
+        ...(item.creditedName ? { creditedName: item.creditedName } : {}),
       })),
     };
   }

@@ -88,10 +88,13 @@ const read = t.Object({
   modelGeneration: t.String(),
   sourcePosition: position,
 });
+export const relationStar = t.Object({ leaf: t.String(), hub: t.String() });
+const creditedName = t.Object({ lexical: t.String(), language: t.String() });
 const binding = t.Object({
   role: t.String(),
   participant: t.Unknown(),
   position: t.Optional(t.Integer()),
+  creditedName: t.Optional(creditedName),
 });
 export const relationRenderingSchema = t.Object({
   profile: t.Literal('relation-rendering-v1'),
@@ -145,6 +148,7 @@ export const relationRenderingSchema = t.Object({
           type: t.String(),
           value: t.Unknown(),
           position: t.Optional(t.Integer()),
+          creditedName: t.Optional(creditedName),
         }),
       ),
     }),
@@ -252,7 +256,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
         definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
-        workSubjectRole: t.Nullable(t.String()), editorRecordable: t.Boolean(),
+        workSubjectRole: t.Nullable(t.String()), star: t.Nullable(relationStar), editorRecordable: t.Boolean(),
         writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])) }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
@@ -265,7 +269,8 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return Response.json({ profile: 'relation-definition-key-v1', key: params.key,
           definition: meaning.definition, revision: meaning.revision, lifecycle: meaning.lifecycle,
           roles: meaning.roles.map(role => ({ ...role, key: meaning.roleKeys[role.role] })),
-          workSubjectRole: meaning.workSubjectRole ?? null, ...editorRecording(meaning) }, { headers: { 'cache-control': 'no-store' } });
+          workSubjectRole: meaning.workSubjectRole ?? null, star: meaning.star ?? null,
+          ...editorRecording(meaning) }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .post(

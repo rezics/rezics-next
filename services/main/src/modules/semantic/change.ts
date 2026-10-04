@@ -51,6 +51,18 @@ function checkedSubjectRole(value: unknown, roles: RelationRole[]): string {
   }
   return value as string;
 }
+/** Star constraint on a relation definition: role keys, both singleton-capable roles of the definition. */
+export interface RelationStar { leaf: string; hub: string }
+
+function checkedStar(value: unknown, roles: RelationRole[]): RelationStar {
+  const row = value as Record<string, unknown>;
+  if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).length !== 2
+    || typeof row.leaf !== 'string' || typeof row.hub !== 'string' || row.leaf === row.hub
+    || !roles.some(role => role.key === row.leaf) || !roles.some(role => role.key === row.hub)) {
+    fail('invalid', 'star names two distinct roles of the definition');
+  }
+  return { leaf: row.leaf as string, hub: row.hub as string };
+}
 export interface DefinitionState extends EditorRecording {
   component: 'definition';
   kind: DefinitionKind;
@@ -61,6 +73,8 @@ export interface DefinitionState extends EditorRecording {
   notation?: string;
   /** One role supplies the Work whose editor may assert this relation. */
   workSubjectRole?: string;
+  /** A leaf holds its role in at most one active occurrence; a hub never holds the leaf role. */
+  star?: RelationStar;
 }
 
 export type ComponentState = ResourceState | DefinitionState;
@@ -144,7 +158,7 @@ export function checkedComponentState(input: unknown): ComponentInput {
       properties: checked.sort((a, b) => keyOf(a).localeCompare(keyOf(b))), lifecycle: lifecycle as Lifecycle };
   }
   if (row.component === 'definition') {
-    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole', 'editorRecordable', 'writePath'].includes(key))) {
+    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole', 'star', 'editorRecordable', 'writePath'].includes(key))) {
       fail('invalid', 'definition state has unsupported fields');
     }
     if (!DEFINITION_KINDS.includes(row.kind as DefinitionKind)) fail('invalid', 'definition kind is invalid');
@@ -175,7 +189,8 @@ export function checkedComponentState(input: unknown): ComponentInput {
     return { component: 'definition', kind: row.kind as DefinitionKind, lifecycle: lifecycle as Lifecycle,
       successor: successor as string | null, roles: checkedRoles, ...checkedEditorRecording(row),
       ...(row.notation === undefined ? {} : { notation: checkedDefinitionKey(row.notation) }),
-      ...(row.workSubjectRole === undefined ? {} : { workSubjectRole: checkedSubjectRole(row.workSubjectRole, checkedRoles) }) };
+      ...(row.workSubjectRole === undefined ? {} : { workSubjectRole: checkedSubjectRole(row.workSubjectRole, checkedRoles) }),
+      ...(row.star === undefined ? {} : { star: checkedStar(row.star, checkedRoles) }) };
   }
   return fail('invalid', 'component is invalid');
 }

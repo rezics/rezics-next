@@ -20,11 +20,12 @@ import { ModelGenerationChanged } from './generation-guard.ts';
 export type SemanticAdmission = Pick<RegisteredAdmission,
   'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
 
-export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference' | 'generation-changed';
+export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference' | 'generation-changed'
+  | 'star-violation';
 
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
-    | 'unavailable-reference' | 'retired-definition' | 'too-large', message: string) { super(message); }
+    | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large', message: string) { super(message); }
 }
 export class StaleSemanticHead extends Error {}
 export class SemanticTargetUnavailable extends Error {}
@@ -47,6 +48,7 @@ export interface SemanticTerminal {
 const REASONS: Record<string, SemanticRejection> = {
   [`${RV}StaleHead`]: 'stale-head', [`${RV}RetiredDefinition`]: 'retired-definition',
   [`${RV}UnavailableReference`]: 'unavailable-reference', [`${RV}GenerationChanged`]: 'generation-changed',
+  [`${RV}StarViolation`]: 'star-violation',
 };
 const REASON_TERMS = Object.fromEntries(Object.entries(REASONS).map(([term, reason]) =>
   [reason, `rv:${term.slice(RV.length)}`])) as
@@ -105,6 +107,9 @@ export function checkedSemanticTerminal(terminal: SemanticTerminal, admission: P
     }
     if (terminal.reason === 'unavailable-reference') {
       throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+    }
+    if (terminal.reason === 'star-violation') {
+      throw new SemanticChangeRejected('star-violation', 'the occurrence breaks its definition\'s star constraint');
     }
     if (terminal.reason === 'invalid-profile') throw new CommandRejected({ status: 'invalid' });
     throw new CancelledActivation('semantic admission was cancelled before dispatch');
