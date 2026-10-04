@@ -468,7 +468,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
           datatype: `${XSD}string`,
           language: null,
         },
-        applicability: ['https://example.org/qualifier'],
+        applicability: [sao.volume1.work],
         interpretation: { kind: 'selected' },
         evidence: ['https://example.org/source'],
         actingSubject: f.actor,
@@ -573,7 +573,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
           seen.add(item.statement);
           if (item.statement === spoken.statement)
             expect(item).toMatchObject({
-              qualifiers: { applicability: ['https://example.org/qualifier'] },
+              qualifiers: { applicability: [sao.volume1.work] },
               sources: ['https://example.org/source'],
             });
         }

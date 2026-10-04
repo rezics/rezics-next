@@ -30,14 +30,15 @@ export const PROJECTION_COST = {
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 export type ProjectionRefusal = 'invalid' | 'subject-unavailable' | 'subject-is-projection'
-  | 'frame-unavailable' | 'frame-not-coordinate' | 'frame-dimension-repeated';
+  | 'frame-unavailable' | 'frame-not-coordinate' | 'frame-slot-repeated' | 'frame-work-mismatch';
 const refusals: Record<ProjectionRefusal, { status: 400 | 404 | 422; code: string }> = {
   invalid: { status: 400, code: 'invalid_projection' },
   'subject-unavailable': { status: 404, code: 'projection_subject_unavailable' },
   'subject-is-projection': { status: 422, code: 'projection_of_projection' },
   'frame-unavailable': { status: 404, code: 'projection_frame_unavailable' },
   'frame-not-coordinate': { status: 422, code: 'projection_frame_not_coordinate' },
-  'frame-dimension-repeated': { status: 422, code: 'projection_frame_dimension_repeated' },
+  'frame-slot-repeated': { status: 422, code: 'projection_frame_slot_repeated' },
+  'frame-work-mismatch': { status: 422, code: 'projection_frame_work_mismatch' },
 };
 /** A refused request; an unreadable and an absent subject or frame are indistinguishable. */
 export class ProjectionRefused extends Error {

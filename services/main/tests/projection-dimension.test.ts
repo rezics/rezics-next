@@ -1,12 +1,15 @@
 import { expect, test } from 'bun:test';
-import { covers, coordinateOf, dimensionOf, type Coordinate } from '../src/modules/projection/dimension.ts';
+import { coordinateOf, dimensionOf, dimensionOfTypes, frameWork, FrameRefused, normalizeFrame, slotOf,
+  type Coordinate } from '../src/modules/projection/dimension.ts';
 import type { Base } from '../src/modules/target/contract.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const rv = (name: string) => `https://rezics.com/vocab/${name}`;
-const railgun = id(1), episode3 = id(2), canon = id(3), legends = id(4), season2 = id(5), battle = id(6);
+const railgun = id(1), episode3 = id(2), canon = id(3), legends = id(4), battle = id(6);
+const otherWork = id(7), release = id(10), realization = id(11);
 const at = (dimension: Coordinate['dimension'], iri: string, work: string | null = null): Coordinate =>
   ({ iri, dimension, work });
+const refusal = (frame: Coordinate[]) => { try { normalizeFrame(frame); } catch (error) { return error instanceof FrameRefused ? error.reason : error; } };
 
 test('structural grains map to their own dimension, whatever descriptive types they also carry', () => {
   const dimension = (base: Base, types: string[] = []) => dimensionOf({ base, types });
@@ -40,43 +43,50 @@ test('a target becomes a typed coordinate carrying the Work that owns a position
   expect(coordinateOf({ resource: id(9), base: 'resource', types: [rv('GameUnit')], work: null })).toBeNull();
 });
 
-test('values in one dimension combine with OR', () => {
-  const frame = [at('continuity', legends)];
-  expect(covers([at('continuity', canon), at('continuity', legends)], frame)).toBe(true);
-  expect(covers([at('continuity', canon)], frame)).toBe(false);
+test('a Work or position is one slot and a release or realization another; the four kinds stay distinct', () => {
+  expect(['work', 'position', 'release', 'realization', 'continuity', 'event'].map(dimension => slotOf(dimension as Coordinate['dimension'])))
+    .toEqual(['structure', 'structure', 'edition', 'edition', 'continuity', 'event']);
 });
 
-test('dimensions combine with AND, and an unnamed dimension leaves the frame unconstrained', () => {
-  const frame = [at('continuity', canon), at('position', episode3, railgun)];
-  expect(covers([at('continuity', canon), at('position', episode3, railgun)], frame)).toBe(true);
-  expect(covers([at('continuity', canon), at('position', id(7), railgun)], frame)).toBe(false);
-  expect(covers([at('continuity', legends), at('position', episode3, railgun)], frame)).toBe(false);
-  expect(covers([at('continuity', canon)], frame)).toBe(true);
-  expect(covers([], frame)).toBe(true);
-  expect(covers([], [])).toBe(true);
+test('a frame keeps one coordinate per slot and drops a Work that a position, release or realization implies', () => {
+  const work = at('work', railgun, railgun), position = at('position', episode3, railgun);
+  expect(normalizeFrame([work, position])).toEqual([position]);
+  expect(normalizeFrame([position, work])).toEqual([position]);
+  expect(normalizeFrame([work, at('release', release, railgun)])).toEqual([at('release', release, railgun)]);
+  expect(normalizeFrame([work, at('realization', realization, railgun), at('continuity', canon)]))
+    .toEqual([at('realization', realization, railgun), at('continuity', canon)]);
+  // A position and a release of the same Work are different slots: both stay.
+  expect(normalizeFrame([position, at('release', release, railgun)])).toEqual([position, at('release', release, railgun)]);
+  // Nothing implies a Work frame, a continuity or an event: they stay as given.
+  expect(normalizeFrame([work])).toEqual([work]);
+  expect(normalizeFrame([work, at('continuity', canon), at('event', battle)])).toHaveLength(3);
+  expect(frameWork([position, at('continuity', canon)])).toBe(railgun);
+  expect(frameWork([at('continuity', canon)])).toBeNull();
 });
 
-test('applicability naming a dimension the frame lacks does not cover it', () => {
-  expect(covers([at('continuity', canon)], [at('position', episode3, railgun)])).toBe(false);
-  expect(covers([at('event', battle)], [])).toBe(false);
+test('coordinates that disagree about their Work, or fill one slot twice, are refused', () => {
+  const work = at('work', railgun, railgun);
+  expect(refusal([work, at('position', episode3, otherWork)])).toBe('work-mismatch');
+  expect(refusal([work, at('release', release, otherWork)])).toBe('work-mismatch');
+  expect(refusal([at('position', episode3, railgun), at('release', release, otherWork)])).toBe('work-mismatch');
+  expect(refusal([at('release', release, railgun), at('realization', realization, otherWork)])).toBe('slot-repeated');
+  expect(refusal([work, at('work', otherWork, otherWork)])).toBe('slot-repeated');
+  expect(refusal([at('position', episode3, railgun), at('position', id(8), railgun)])).toBe('slot-repeated');
+  expect(refusal([at('release', release, railgun), at('realization', realization, railgun)])).toBe('slot-repeated');
+  expect(refusal([at('continuity', canon), at('continuity', legends)])).toBe('slot-repeated');
+  expect(refusal([at('event', battle), at('event', id(9))])).toBe('slot-repeated');
 });
 
-test('a position frame is covered by applicability naming its Work, and only by its own Work', () => {
-  const frame = [at('position', episode3, railgun)];
-  expect(covers([at('work', railgun)], frame)).toBe(true);
-  expect(covers([at('work', id(8)), at('work', railgun)], frame)).toBe(true);
-  expect(covers([at('work', id(8))], frame)).toBe(false);
-  expect(covers([at('work', railgun), at('position', episode3, railgun)], frame)).toBe(true);
-  // Containment goes one way: a Work frame is not inside one of its positions.
-  expect(covers([at('position', episode3, railgun)], [at('work', railgun)])).toBe(false);
-  // A position of unknown Work is covered only by itself.
-  expect(covers([at('work', railgun)], [at('position', episode3, null)])).toBe(false);
-  // Release and realization have no containment: they match only exactly.
-  expect(covers([at('work', railgun)], [at('release', id(10), railgun)])).toBe(false);
-  expect(covers([at('release', id(10))], [at('release', id(10), railgun)])).toBe(true);
-  expect(covers([at('work', railgun)], [at('work', railgun), at('continuity', season2)])).toBe(true);
-});
-
-test('a frame names at most one coordinate per dimension', () => {
-  expect(() => covers([], [at('continuity', canon), at('continuity', legends)])).toThrow(RangeError);
+test('a Resource known only by its types has a dimension when structural owner types or the registry give one', () => {
+  expect(dimensionOfTypes(['https://schema.org/CreativeWork', 'https://schema.org/Event'])).toBe('work');
+  expect(dimensionOfTypes([rv('FixedRelease')])).toBe('release');
+  expect(dimensionOfTypes(['https://schema.org/ListItem'])).toBe('position');
+  expect(dimensionOfTypes([rv('TextContribution')])).toBe('realization');
+  expect(dimensionOfTypes([rv('NarrativeContinuity'), rv('Character')])).toBe('continuity');
+  expect(dimensionOfTypes(['https://schema.org/Event'])).toBe('event');
+  // Two structural owners, a Projection and a type without a dimension are not coordinates.
+  expect(dimensionOfTypes(['https://schema.org/CreativeWork', 'https://schema.org/ListItem'])).toBeNull();
+  expect(dimensionOfTypes([rv('Projection')])).toBeNull();
+  expect(dimensionOfTypes([rv('Realm')])).toBeNull();
+  expect(dimensionOfTypes([])).toBeNull();
 });

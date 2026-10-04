@@ -147,12 +147,15 @@ spoiling (VNDB).
 
 **Projections.** A Projection names a subject within a frame: exactly one
 `projectionOf`, any Resource, and one or more frame coordinates, at most one
-per dimension. Its identity is a UUIDv7, unique per subject and sorted frame
+per slot. Its identity is a UUIDv7, unique per subject and sorted frame
 set, and the API creates it on first use (get-or-create) when a rating, review,
 discussion, page or imported per-match record needs an anchor; nothing mints one
 per fact. Frame dimensions describe the subject only: continuity; Work and
 structure position (volume, chapter, episode, scene); release or realization;
-in-story time; form; event, match or map; game version. A narrative continuity
+in-story time; form; event, match or map; game version. Each of these is one
+slot: a Work and one of its own positions share one, and the API drops the Work
+that a position, release or realization implies and refuses coordinates of
+different Works, so "X in F" has one identity. A narrative continuity
 (Canon, Legends, Earth-616) is its own type, distinct from the Work continuity
 that scopes progress and Main Versions. Realms, Contexts,
 populations, speakers, spoiler levels, raters' languages and the times of

@@ -24,10 +24,12 @@ export function dimensionOf(target: Pick<ResolvedTarget, 'base' | 'types'>): Fra
 export interface Coordinate {
   iri: string;
   dimension: FrameDimension;
-  /** The Work a position lies in; Structure ownership is the only containment a frame uses. */
+  /** The Work a Work, position, release or realization lies in; Structure ownership is the only containment a frame uses. */
   work?: string | null;
   /** Disclosed active in-continuity memberships, loaded once for the request's Works. */
   continuities?: readonly string[];
+  /** The Structure groups a position lies in, nearest first, loaded once for the request's position. */
+  ancestors?: readonly string[];
 }
 
 /** A target as a typed coordinate; null when its type has no dimension. */
@@ -36,42 +38,63 @@ export function coordinateOf(target: Pick<ResolvedTarget, 'resource' | 'base' | 
   return dimension ? { iri: target.resource, dimension, work: target.work } : null;
 }
 
-/** Whether a Statement's or relation occurrence's applicability holds throughout a frame.
- * Values in one dimension combine with OR (true in Canon or in Legends); dimensions combine with
- * AND (in continuity C and in chapter 3). A dimension the applicability does not name leaves the
- * frame unconstrained, so empty applicability covers every frame; a dimension it names needs the
- * frame to hold a coordinate there. A position frame is also covered by applicability naming its Work. */
-export function covers(applicability: readonly Coordinate[], frames: readonly Coordinate[]): boolean {
-  const frame = new Map<FrameDimension, Coordinate>();
-  for (const coordinate of frames) {
-    if (frame.has(coordinate.dimension)) throw new RangeError('A frame has at most one coordinate per dimension');
-    frame.set(coordinate.dimension, coordinate);
-  }
-  const named = new Map<FrameDimension, Set<string>>();
-  for (const { dimension, iri } of applicability) named.set(dimension, (named.get(dimension) ?? new Set()).add(iri));
-  return [...named].every(([dimension, values]) => {
-    const exact = frame.get(dimension);
-    if (exact && values.has(exact.iri)) return true;
-    const position = frame.get('position');
-    if (dimension === 'work' && !!position?.work && values.has(position.work)) return true;
-    return dimension === 'continuity' && !exact && [frame.get('work'), position]
-      .some(coordinate => coordinate?.continuities?.some(continuity => values.has(continuity)));
-  });
+/** What one "X in F" holds once. Decision 51 lists a Work or Structure position as one slot and a release or
+ * realization as another; the four coordinate kinds stay distinct because acceptance policies persist them. */
+export type FrameSlot = 'structure' | 'edition' | Exclude<FrameDimension, 'work' | 'position' | 'release' | 'realization'>;
+
+export function slotOf(dimension: FrameDimension): FrameSlot {
+  return dimension === 'work' || dimension === 'position' ? 'structure'
+    : dimension === 'release' || dimension === 'realization' ? 'edition' : dimension;
 }
 
-/** More constrained dimensions first, then exact coordinates before inherited coverage.
- * Alternatives in one dimension never inflate specificity. */
-export function specificity(applicability: readonly Coordinate[], frames: readonly Coordinate[]) {
-  const dimensions = new Set(applicability.map(coordinate => coordinate.dimension)).size;
-  const exact = new Set(applicability.filter(coordinate => frames.some(frame =>
-    frame.dimension === coordinate.dimension && frame.iri === coordinate.iri)).map(coordinate => coordinate.dimension)).size;
-  return { dimensions, exact, score: dimensions * 16 + exact };
+/** A frame whose coordinates cannot name one "X in F". */
+export class FrameRefused extends Error {
+  constructor(readonly reason: 'slot-repeated' | 'work-mismatch') {
+    super(reason === 'slot-repeated' ? 'A frame has at most one coordinate per slot'
+      : 'A frame names more than one Work');
+  }
+}
+
+/** The Work a coordinate lies in: a Work is its own. */
+const workOf = (coordinate: Coordinate) => coordinate.dimension === 'work' ? coordinate.iri : coordinate.work ?? null;
+
+/** The one Work a normalized frame lies in, when any of its coordinates names one. */
+export const frameWork = (frames: readonly Coordinate[]): string | null => frames.flatMap(frame => workOf(frame) ?? [])[0] ?? null;
+
+/** The one canonical coordinate set of a frame, so every "X in F" has one identity. A slot holds one coordinate,
+ * except that a Work may accompany its own position; every coordinate must lie in the same Work; and a Work that a
+ * position, release or realization already implies is dropped. */
+export function normalizeFrame(coordinates: readonly Coordinate[]): Coordinate[] {
+  const slots = new Map<FrameSlot, Coordinate[]>();
+  for (const coordinate of coordinates) {
+    const slot = slotOf(coordinate.dimension);
+    slots.set(slot, [...slots.get(slot) ?? [], coordinate]);
+  }
+  for (const [slot, held] of slots) {
+    const workWithPosition = slot === 'structure' && held.length === 2
+      && held.some(coordinate => coordinate.dimension === 'work') && held.some(coordinate => coordinate.dimension === 'position');
+    if (held.length > 1 && !workWithPosition) throw new FrameRefused('slot-repeated');
+  }
+  if (new Set(coordinates.flatMap(coordinate => workOf(coordinate) ?? [])).size > 1) throw new FrameRefused('work-mismatch');
+  const implied = coordinates.some(coordinate => coordinate.dimension !== 'work' && workOf(coordinate));
+  return coordinates.filter(coordinate => !(implied && coordinate.dimension === 'work'));
 }
 
 /** Structural owner types take precedence over descriptive dimensions, as dimensionOf does. */
-export const coordinateTypes: readonly (readonly [string, FrameDimension])[] = [
+export const structuralCoordinateTypes: readonly (readonly [string, FrameDimension])[] = [
   ['https://schema.org/CreativeWork', 'work'], [`https://rezics.com/vocab/TextContribution`, 'realization'],
   [`https://rezics.com/vocab/Realization`, 'realization'], [`https://rezics.com/vocab/Release`, 'release'],
   [`https://rezics.com/vocab/FixedRelease`, 'release'], ['https://schema.org/ListItem', 'position'],
+];
+export const coordinateTypes: readonly (readonly [string, FrameDimension])[] = [
+  ...structuralCoordinateTypes,
   ...[...descriptiveDimensions].map(([type, dimension]) => [type, dimension] as const),
 ];
+
+/** The dimension of a Resource known only by its types, as a write that names applicability by IRI has it:
+ * structural owner types first, then the registry, as dimensionOf does with a target's grain. */
+export function dimensionOfTypes(types: readonly string[]): FrameDimension | null {
+  const structural = new Set(structuralCoordinateTypes.flatMap(([type, dimension]) => types.includes(type) ? [dimension] : []));
+  if (structural.size) return structural.size === 1 ? [...structural][0]! : null;
+  return dimensionOf({ base: 'resource', types: [...types] });
+}

@@ -41,6 +41,12 @@ export const SUBJECT_STATEMENT_COST = {
   disclosurePasses: 2,
   wikiEvidenceQueriesPerBatch: 1,
   responseBytes: 512 * 1024,
+  /** A framed page orders by specificity. Each candidate query evaluates coverage for every active accepted Statement
+   * of the subject, applies the keyset bound after it and keeps the top `candidates`, so a page costs what that
+   * subject holds and no other subject's Statements add to it. Profiled in tests/qa/integration/frame-filter.test.ts:
+   * 0.13 ms per Statement on the first page, 2.1 s at 16,000 Statements, 15 ms for a 40-Statement subject in the
+   * same graph, which reaches the 10 s read deadline near 75,000 Statements of one subject. */
+  framedOrderingMsPerThousandStatements: 130,
 } as const;
 type Page = Static<typeof subjectStatementPage>;
 type Item = Page['groups'][number]['items'][number];

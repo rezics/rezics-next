@@ -177,10 +177,10 @@ test('every validation refusal is typed, and an unreadable Resource is refused l
   const space = await json<{ realm: string }>(await owner.send('POST', '/v1/spaces', { profile: 'space-realm-v1',
     name: 'Frames', capabilities: ['realm'], actingSubject: owner.actor }), 201);
   await refused(await project(owner, subject, [space.realm]), 422, 'projection_frame_not_coordinate');
-  // At most one frame per dimension: two continuities, two Works.
-  await refused(await project(owner, subject, [resources.canon!, resources.legends!]), 422, 'projection_frame_dimension_repeated');
+  // At most one frame per slot: two continuities, two Works.
+  await refused(await project(owner, subject, [resources.canon!, resources.legends!]), 422, 'projection_frame_slot_repeated');
   const otherWork = await stack.publicWork(owner.actor);
-  await refused(await project(owner, subject, [work.work, otherWork.work]), 422, 'projection_frame_dimension_repeated');
+  await refused(await project(owner, subject, [work.work, otherWork.work]), 422, 'projection_frame_slot_repeated');
   const absentFrame = await problem(await project(owner, subject, [id()]), 404);
   expect(absentFrame.code).toBe('projection_frame_unavailable');
   const unreadableFrame = await problem(await project(outsider, subject, [resources.secret!]), 404);

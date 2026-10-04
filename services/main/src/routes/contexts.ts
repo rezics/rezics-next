@@ -24,7 +24,7 @@ import { CONTEXT_RULE_DEPENDENCY_FAMILY, CONTEXT_RULE_FAMILY, changeContextRule,
   registerRuleDependencies, ruleContextBasis, staleRuleDependencies } from '../modules/context/rule.ts';
 import { FiniteRuleRejected } from '../modules/semantic/finite-rule.ts';
 import { ReasoningInputRejected, ReasoningProfileRejected } from '../modules/semantic/reasoning.ts';
-import { StatementProjectionRefused } from '../modules/statement/projection.ts';
+import { StatementApplicabilityRefused } from '../modules/statement/projection.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
@@ -258,7 +258,7 @@ const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
       context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
 
 function contextError(error: unknown): Response {
-  if (error instanceof StatementProjectionRefused) return problem(422, error.code, error.message);
+  if (error instanceof StatementApplicabilityRefused) return problem(422, error.code, error.message);
   if (error instanceof FiniteRuleRejected || error instanceof ReasoningInputRejected
     || error instanceof ReasoningProfileRejected) {
     return problem(422, 'rule_profile_rejected', 'Selected rule or fact is outside the admitted profile');

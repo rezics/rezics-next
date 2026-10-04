@@ -31,6 +31,10 @@ export const RELATION_PAGE_COST = {
   graphCalls: 512,
   graphBytes: 8 * 1024 * 1024,
   deadlineMs: 10_000,
+  // A framed scan orders by specificity: its candidate query evaluates coverage for every relation occurrence
+  // incident to the resource before `scanLimit` keeps the top rows, so a scan costs what the resource holds, as a
+  // framed Statement page does (SUBJECT_STATEMENT_COST.framedOrderingMsPerThousandStatements, profiled for
+  // Statements; relations are not profiled separately).
 } as const;
 export interface RelationPageEntry {
   relation: string;
