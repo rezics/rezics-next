@@ -7,11 +7,12 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import { CATALOGUE_IMPORT_SCOPE } from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { seedQueryCatalogue, QUERY_CATALOGUE_SCALES } from '../../../scripts/load/corpus-query.ts';
+import { scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.ts';
 
 /** Explicit preparation probe: never silently substitute a storage-seeded
  * catalogue or call extrapolated scales measured. Full preparation/restore has
  * a 600s ceiling; the integration runner leaves 120s for stack/cleanup. */
-test.skipIf(Bun.env.G1032_CATALOGUE !== '1')(
+test(
   'G1032: public command preparation reaches the first 1000-Work catalogue scale',
   async () => {
     const started = performance.now();
@@ -19,13 +20,14 @@ test.skipIf(Bun.env.G1032_CATALOGUE !== '1')(
     const { stack, author } = home;
     let completed = 0,
       commands = 0;
-    const deadline = AbortSignal.timeout(360_000);
+    const buildDeadlineMs = scalePreparationBudgetMs(Number(Bun.env.REZICS_QA_PREPARATION_STARTED_AT));
+    const deadline = AbortSignal.timeout(buildDeadlineMs);
     const evidence: Record<string, unknown> = {
       requestedScales: QUERY_CATALOGUE_SCALES,
-      buildDeadlineMs: 360_000,
+      buildDeadlineMs,
       totalPreparationDeadlineMs: 600_000,
-      workers: 2,
-      preparation: 'public Work authoring/publication/selection and classification APIs',
+      batchSize: 128,
+      preparation: 'public bulk catalogue import and classification vocabulary APIs',
       backup: null,
       restore: null,
     };

@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { projectName } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
+import { qaResourceHeapBytes, type QaResourceClass } from '../../../scripts/qa/resource-classes.ts';
 
 /** Test-only JDK attach diagnostics. No application health endpoint or runtime
  * instrumentation; attach uses the pinned build JDK in the QA PID namespace. */
-export async function fusekiMemoryProbe() {
+export async function fusekiMemoryProbe(resourceClass: QaResourceClass) {
   const env = loadDockerEnvironment();
   const run = async (args: string[]) => {
     const child = Bun.spawn(['docker', ...args], { env, stdout: 'pipe', stderr: 'pipe' });
@@ -26,7 +27,9 @@ export async function fusekiMemoryProbe() {
     '--user', '10001:10001', '-e', 'JAVA_TOOL_OPTIONS=-Xms16m -Xmx64m', image, 'jcmd', pid, command]);
   const flags = await jcmd('VM.flags');
   const heapMax = Number(flags.match(/-XX:MaxHeapSize=(\d+)/)?.[1]);
-  if (heapMax !== 512 * 1024 ** 2) throw new Error('QA Fuseki must use its default 512 MiB heap');
+  const expectedHeap = qaResourceHeapBytes(resourceClass);
+  if (heapMax !== expectedHeap)
+    throw new Error(`QA Fuseki ${resourceClass} heap: ${heapMax} bytes, expected ${expectedHeap}`);
   return async (collect = false) => {
     if (collect) await jcmd('GC.run');
     const info = await jcmd('GC.heap_info');
