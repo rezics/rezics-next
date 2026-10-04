@@ -4,6 +4,14 @@ import { runWorkProfileChild } from '../support/work-profile-child.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
 import { assertWorkCostAtScales, type WorkProfile } from '../support/work-profile.ts';
 
+// Keep this qualification in the ranking file's large-stack allocation. These
+// files run in this Bun process and retain a real shared administrator/graph.
+if (process.env.G1034_SHARED_SHARD_PROBE === '1') {
+  if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
+  await import('./g-571-screen.test.ts');
+  await import('./agent-profile.test.ts');
+}
+
 test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history', async () => {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
   const started = performance.now();
@@ -12,6 +20,7 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
     timeoutMs: Math.max(1, 590_000 - (performance.now() - started)),
   });
   const measured = JSON.parse(readFileSync(resultPath, 'utf8')) as {
+    ownerDatabases: Record<string, string>;
     profiles: {
       size: number;
       operation: string;
@@ -20,6 +29,15 @@ test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 rea
       profile: WorkProfile;
     }[];
   };
+  // The immutable administrator and recovery fence must never use shard owners.
+  for (const [owner, url] of [
+    ['access', process.env.ACCESS_DATABASE_URL],
+    ['content', process.env.CONTENT_DATABASE_URL],
+    ['relay', process.env.ACCOUNT_RELAY_DATABASE_URL],
+  ] as const) {
+    expect(measured.ownerDatabases[owner]).toBeString();
+    expect(measured.ownerDatabases[owner]).not.toBe(new URL(url!).pathname.slice(1));
+  }
   expect(measured.profiles).toHaveLength(24);
   for (const operation of ['best', 'top'])
     for (const viewer of ['anonymous', 'member'])

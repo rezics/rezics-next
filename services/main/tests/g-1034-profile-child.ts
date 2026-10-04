@@ -26,31 +26,26 @@ const { workRead } = await import('../src/modules/work/read-session.ts');
 const { bestKey } = await import('../src/modules/feed/ranking.ts');
 const { REALM_RANK_COST, realmRankSeek } = await import('../src/modules/rankings/realm-threads.ts');
 const { GRAPHS, iri, lit } = await import('../src/modules/work/activate.ts');
-const home = await startHomeStack('g-1034-realm-rank', { projectionStart: 'current' });
-const { stack } = home;
-const rules = new GovernanceRules(stack.accessPool);
-const realmAdmin = new AccessRealmManagement(stack.accessPool);
-const app = createMainApp(stack.fuseki, {
-  ...home.deps,
-  realmAdmin,
-  governance: {
-    rules,
-    store: new GovernanceStore(
-      stack.accessPool,
-      {
-        capture: async () => {
-          throw new Error('Evidence outside this test');
-        },
-      },
-      { current: async () => null },
-      rules,
-    ),
-  },
+const { cloneOwners, requireQa } =
+  await import('../../../tests/qa/integration/recommendation-support.ts');
+// The administrator is an immutable singleton, and recovery tests fence Access.
+// Own all SQL state while retaining the shard's graph and its current position.
+const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+Object.assign(process.env, {
+  ACCESS_DATABASE_URL: owners.urls.access,
+  CONTENT_DATABASE_URL: owners.urls.content,
+  ACCOUNT_RELAY_DATABASE_URL: owners.urls.relay,
 });
-const api = workProfileCorpusApi('http://main.local', home.author.token, {
-  fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+const home = await startHomeStack(`g-1034-realm-rank-${randomUUID()}`, {
+  projectionStart: 'current',
+}).catch(async (error) => {
+  await owners.close();
+  await shutdownTelemetry();
+  await sink.stop();
+  throw error;
 });
 const evidence: Record<string, unknown>[] = [];
+const ownerDatabases: Record<string, string> = {};
 const profiles: {
   size: number;
   operation: string;
@@ -58,31 +53,62 @@ const profiles: {
   temperature: string;
   profile: Awaited<ReturnType<typeof profileRequest>>['profile'];
 }[] = [];
-const started = performance.now();
-const project = async () => {
-  // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
-  // Resume the same durable job rather than resetting/replaying any prefix.
-  for (let wave = 0; wave < 4; wave++) {
-    try {
-      await home.project();
-      return;
-    } catch (error) {
-      if (!(error instanceof Error) || !error.message.includes('Home projection exceeded'))
-        throw error;
-      const pending = (
-        await stack.accessPool.query(
-          `SELECT kind,resource,after_key FROM access.realm_thread_dirty
-        WHERE data_epoch=$1 ORDER BY kind,resource LIMIT 4`,
-          [stack.env.lineage.dataEpoch],
-        )
-      ).rows;
-      console.log(JSON.stringify({ projectionWave: wave, pending }));
-      if (performance.now() - started > 550_000) throw error;
-    }
-  }
-  throw new Error('Realm scale projection exceeded 1600 resumable ticks');
-};
 try {
+  const { stack } = home;
+  for (const [owner, pool] of [
+    ['access', stack.accessPool],
+    ['content', stack.contentPool],
+    ['relay', home.relay],
+  ] as const)
+    ownerDatabases[owner] = (
+      await pool.query<{ database: string }>('SELECT current_database() AS database')
+    ).rows[0]!.database;
+  const rules = new GovernanceRules(stack.accessPool);
+  const realmAdmin = new AccessRealmManagement(stack.accessPool);
+  const app = createMainApp(stack.fuseki, {
+    ...home.deps,
+    realmAdmin,
+    governance: {
+      rules,
+      store: new GovernanceStore(
+        stack.accessPool,
+        {
+          capture: async () => {
+            throw new Error('Evidence outside this test');
+          },
+        },
+        { current: async () => null },
+        rules,
+      ),
+    },
+  });
+  const api = workProfileCorpusApi('http://main.local', home.author.token, {
+    fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+  });
+  const started = performance.now();
+  const project = async () => {
+    // The scale snapshot exceeds Home's small-fixture 400-tick helper bound.
+    // Resume the same durable job rather than resetting/replaying any prefix.
+    for (let wave = 0; wave < 4; wave++) {
+      try {
+        await home.project();
+        return;
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes('Home projection exceeded'))
+          throw error;
+        const pending = (
+          await stack.accessPool.query(
+            `SELECT kind,resource,after_key FROM access.realm_thread_dirty
+        WHERE data_epoch=$1 ORDER BY kind,resource LIMIT 4`,
+            [stack.env.lineage.dataEpoch],
+          )
+        ).rows;
+        console.log(JSON.stringify({ projectionWave: wave, pending }));
+        if (performance.now() - started > 550_000) throw error;
+      }
+    }
+    throw new Error('Realm scale projection exceeded 1600 resumable ticks');
+  };
   await stack.accessPool.query(
     `INSERT INTO access.platform_administrator(principal_id,role,receipt,request_digest,idempotency_key)
     VALUES($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
@@ -352,18 +378,16 @@ try {
   const epoch = stack.env.lineage.dataEpoch;
   // A real private membership episode: older posts precede its immutable cut.
   // The cut's admitted-score index is built once, then votes/replies mirror it.
-  const privateCreated = (
-    await api.command<{ realm: string; space: string }>('g1034:private', {
-      method: 'POST',
-      path: '/v1/spaces',
-      body: {
-        profile: 'space-realm-v1',
-        name: 'Private ranking',
-        capabilities: ['realm'],
-        actingSubject: actor,
-      },
-    })
-  );
+  const privateCreated = await api.command<{ realm: string; space: string }>('g1034:private', {
+    method: 'POST',
+    path: '/v1/spaces',
+    body: {
+      profile: 'space-realm-v1',
+      name: 'Private ranking',
+      capabilities: ['realm'],
+      actingSubject: actor,
+    },
+  });
   const privateRealm = privateCreated.realm;
   for (const [scope, action] of [
     [`review:decide:${privateRealm}`, 'review.decide'],
@@ -404,20 +428,37 @@ try {
     VALUES('realm',$1,1,'g1034-terms') ON CONFLICT DO NOTHING`,
     [privateRealm],
   );
-  const membershipPolicy = (await stack.accessPool.query<{ revision: string; terms_revision: string }>(
-    `SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`,[privateRealm])).rows[0]!;
+  const membershipPolicy = (
+    await stack.accessPool.query<{ revision: string; terms_revision: string }>(
+      `SELECT revision::text,terms_revision FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`,
+      [privateRealm],
+    )
+  ).rows[0]!;
   const consent = randomUUID(),
     membership = randomUUID();
   await stack.accessPool.query(
     `INSERT INTO access.private_membership_consent(id,principal_id,principal_epoch,kind,
     owner_subject,policy_revision,terms_revision,next_generation,expires_at)
     SELECT $1,id,enforcement_epoch,'realm',$3,$4::bigint,$5,1,now()+interval '5 minutes' FROM access.principal WHERE id=$2`,
-    [consent, home.reader.principalId, privateRealm,membershipPolicy.revision,membershipPolicy.terms_revision],
+    [
+      consent,
+      home.reader.principalId,
+      privateRealm,
+      membershipPolicy.revision,
+      membershipPolicy.terms_revision,
+    ],
   );
   await stack.accessPool.query(
     `INSERT INTO access.private_membership(id,kind,owner_subject,principal_id,state,generation,
     policy_revision,terms_revision,consent_reference) VALUES($1,'realm',$2,$3,'joined',1,$5::bigint,$6,$4)`,
-    [membership, privateRealm, home.reader.principalId, consent,membershipPolicy.revision,membershipPolicy.terms_revision],
+    [
+      membership,
+      privateRealm,
+      home.reader.principalId,
+      consent,
+      membershipPolicy.revision,
+      membershipPolicy.terms_revision,
+    ],
   );
   await stack.accessPool.query(
     `INSERT INTO access.realm_history_admission(kind,membership_id,generation,data_epoch,sequence)
@@ -517,8 +558,11 @@ try {
       winner,
       'An older high-score thread must beat every newer cohort',
     );
-    if (size>=1000) assert(raw.filter(row=>row.occurred_at>oracle[0]!.occurred_at).length>256,
-      'The winner must be outside the former newest-256 cohort');
+    if (size >= 1000)
+      assert(
+        raw.filter((row) => row.occurred_at > oracle[0]!.occurred_at).length > 256,
+        'The winner must be outside the former newest-256 cohort',
+      );
     for (const sort of ['best', 'top'] as const) {
       for (const viewer of ['anonymous', 'member'])
         for (const temperature of ['first', 'warm']) {
@@ -647,12 +691,20 @@ try {
     new Request(`http://main.local${root}/threads?sort=top&window=all&limit=1`),
   );
   const cursor = ((await firstPage.json()) as { nextCursor: string }).nextCursor;
-  const voter = workProfileCorpusApi('http://main.local',home.reader.token,
-    { fetch: ((input,init)=>app.handle(new Request(input,init))) as typeof fetch });
-  const voted = await voter.command<{ score: number }>('g1034:vote',{ method: 'POST',
-    path: `/v1/feed/${opening.placement.slice(-36)}/vote`,body: { profile: 'feed-vote-command-v1',
-      actingSubject: reader,value: 1,expectedRevision: null } });
-  assert.equal(voted.score,1000001);
+  const voter = workProfileCorpusApi('http://main.local', home.reader.token, {
+    fetch: ((input, init) => app.handle(new Request(input, init))) as typeof fetch,
+  });
+  const voted = await voter.command<{ score: number }>('g1034:vote', {
+    method: 'POST',
+    path: `/v1/feed/${opening.placement.slice(-36)}/vote`,
+    body: {
+      profile: 'feed-vote-command-v1',
+      actingSubject: reader,
+      value: 1,
+      expectedRevision: null,
+    },
+  });
+  assert.equal(voted.score, 1000001);
   await Promise.all([
     stack.accessPool.query(
       'UPDATE access.feed_item SET score=score+1 WHERE data_epoch=$1 AND id=$2',
@@ -690,14 +742,21 @@ try {
     1,
   );
   let parent = child;
-  for (let depth=0;depth<40;depth++) parent = await post(`g1034:deep:${depth}`,parent);
+  for (let depth = 0; depth < 40; depth++) parent = await post(`g1034:deep:${depth}`, parent);
   await project();
-  const deep = (await stack.accessPool.query<{ thread: string; active: boolean }>(`
+  const deep = (
+    await stack.accessPool.query<{ thread: string; active: boolean }>(
+      `
     SELECT thread,active FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3`,
-  [epoch,realm,parent.reply])).rows[0]!;
-  assert.deepEqual(deep,{ thread: opening.reply,active: true });
-  assert.equal((await app.handle(new Request(`http://main.local${root}/threads?sort=best&limit=2`))).status,200,
-    'A deep reply must not make every Realm ranking unavailable');
+      [epoch, realm, parent.reply],
+    )
+  ).rows[0]!;
+  assert.deepEqual(deep, { thread: opening.reply, active: true });
+  assert.equal(
+    (await app.handle(new Request(`http://main.local${root}/threads?sort=best&limit=2`))).status,
+    200,
+    'A deep reply must not make every Realm ranking unavailable',
+  );
   // A revoked approval is removed by the Content event replay, and retained text is still fenced live.
   await api.command('g1034:revoke', {
     method: 'POST',
@@ -737,7 +796,10 @@ try {
   assert.equal(denied.status, 200);
   assert.deepEqual(((await denied.json()) as { items: unknown[] }).items, []);
   await stack.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id');
-  assert.equal((await app.handle(new Request(`http://main.local${root}/threads?sort=best&limit=2`))).status,503);
+  assert.equal(
+    (await app.handle(new Request(`http://main.local${root}/threads?sort=best&limit=2`))).status,
+    503,
+  );
   await stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
   evidence.push({
     outcomes: [
@@ -755,9 +817,16 @@ try {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
     process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1034.json',
-    JSON.stringify({ evidence, profiles }, null, 2) + '\n',
+    JSON.stringify({ evidence, profiles, ownerDatabases }, null, 2) + '\n',
   );
-  await home.stop();
-  await shutdownTelemetry();
-  await sink.stop();
+  try {
+    await home.stop();
+  } finally {
+    try {
+      await owners.close();
+    } finally {
+      await shutdownTelemetry();
+      await sink.stop();
+    }
+  }
 }
