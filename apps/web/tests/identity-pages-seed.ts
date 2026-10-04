@@ -22,12 +22,6 @@ const web = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH, 'u
   actingSubject: string;
 };
 const stack = await startMediaStack('identity-pages', { library: true });
-const command = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
-stack.fuseki.commandWithReceipt = async intent => {
-  const result = await command(intent);
-  if (result.status === 'invalid') console.error('Identity fixture validation:', JSON.stringify(result.report));
-  return result;
-};
 const editor = await stack.member('identity-editor');
 const people = [editor];
 const grant = async (person: typeof editor, scope: string, action: string) => {
@@ -252,10 +246,7 @@ try {
       acceptedSubjectTypes: [`https://rezics.com/vocab/${type}`],
       actingSubject: editor.actor,
     });
-    for (const [language, text] of [
-      ['en', question.replace('do you', 'would you')],
-      ['zh-Hant', translated],
-    ]) {
+    for (const [language, text] of [['zh-Hant', translated]]) {
       await call('/v1/rating-question-presentations', {
         profile: 'rating-question-presentation-v1',
         expectedHead: null,

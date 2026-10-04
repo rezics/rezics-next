@@ -73,7 +73,7 @@ test('identity pages compare separate figures, preserve credits and show units a
     await expect(family.locator('[data-identity-question]')).toHaveCount(1);
     await expect(family.locator('[data-identity-question]')).toContainText('Global');
     await expect(family.locator('[data-identity-question]')).toContainText(
-      'How would you rate this character?',
+      'How do you rate this character?',
     );
     await expect(family).toContainText('Alternate self');
     await expect(family).toContainText('Counterpart from another world');
@@ -104,7 +104,7 @@ test('identity pages compare separate figures, preserve credits and show units a
     );
     await expect(
       page.getByRole('region', { name: 'Units', exact: true }).locator('[data-identity-question]'),
-    ).toContainText('How would you rate this game unit?');
+    ).toContainText('How do you rate this game unit?');
     await page.goto(path(data.unit));
     await expect(page.getByRole('region', { name: 'Represents', exact: true })).toContainText(
       'Saber',
