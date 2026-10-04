@@ -35,11 +35,15 @@ export const baseSections = {
   realization: ['statements', 'relations', 'discussion'],
   occurrence: ['statements', 'relations', 'discussion'],
   resource: ['statements', 'relations', 'discussion'],
+  // The projection page view declares its sections when it exists.
+  projection: [],
 } as const satisfies Record<Base, readonly SectionId[]>;
 
 export function pageRegistry(target: Pick<ResolvedTarget, 'base' | 'types'>) {
   const registryBase =
-    target.base === 'work' || target.base === 'resource' ? target.base : 'record';
+    target.base === 'work' || target.base === 'resource' || target.base === 'projection'
+      ? target.base
+      : 'record';
   const entries = admittedTypes.filter(
     (entry) => entry.base === registryBase && !entry.default && target.types.includes(entry.type),
   );

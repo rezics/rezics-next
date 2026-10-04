@@ -38,7 +38,7 @@ const summaryReference = new RegExp(SUMMARY_REFERENCE_PATTERN);
 export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
   | 'agent' | 'zone'
   | 'character' | 'context' | 'role' | 'relation-definition'
-  | 'release' | 'occurrence' | 'realization' | 'resource' | 'collection';
+  | 'release' | 'occurrence' | 'realization' | 'resource' | 'collection' | 'projection';
 
 /** Entry axes and owners without a supported exact revision path have no target base. */
 export const summaryBases = { work: 'work', 'main-version': null, space: null,
@@ -46,6 +46,7 @@ export const summaryBases = { work: 'work', 'main-version': null, space: null,
   realm: null, concept: null, character: 'resource', context: 'resource',
   role: 'resource', 'relation-definition': null, release: 'release',
   occurrence: 'occurrence', realization: 'realization', resource: 'resource', collection: null,
+  projection: 'projection',
 } as const satisfies Record<ResourceType, Base | null>;
 
 export interface SummaryReader {
@@ -70,6 +71,8 @@ export interface SummaryReader {
 }
 
 export interface SummaryInput {
+  /** Internal: the parts of a projection are read as ordinary summaries, never as projections themselves. */
+  projectionPart?: true;
   /** Internal single-hop disclosure for G-506, which owns its own traversal. */
   resolveMerges?: boolean;
   channel?: DisclosureChannel;
@@ -87,13 +90,15 @@ export type AvatarDescriptor =
     crop: string | null; basis: { policy: string; context: string } }
   | { kind: 'fallback'; policy: string; key: string; resourceType: ResourceType };
 
-export type ResourceSummary =
-  | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
-    base: Base | null; work: string | null;
-    address: CanonicalAddress;
-    name: DisplayName & { context?: string; preferenceRevision?: string };
-    avatar: AvatarDescriptor; resolution?: MergedIdentity }
-  | { reference: string; status: 'unavailable' };
+export type AvailableSummary = { reference: string; status: 'available'; type: ResourceType;
+  disclosure: 'public' | 'restricted'; base: Base | null; work: string | null;
+  address: CanonicalAddress;
+  name: DisplayName & { context?: string; preferenceRevision?: string };
+  avatar: AvatarDescriptor; resolution?: MergedIdentity;
+  /** A projection's subject and frames as their own summaries, in frame order; clients format them, the server concatenates no labels. */
+  parts?: { subject: PartSummary; frames: PartSummary[] } };
+export type PartSummary = Omit<AvailableSummary, 'resolution' | 'parts'>;
+export type ResourceSummary = AvailableSummary | { reference: string; status: 'unavailable' };
 
 export interface SummaryBatch {
   summaries: ResourceSummary[];
@@ -111,7 +116,9 @@ export type SummaryMedia = {
 
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string>; localizedName?: LocalizedText;
-  profileAvatarSelections?: Set<string> }
+  profileAvatarSelections?: Set<string>;
+  /** The subject and sorted frames a projection names. */
+  projection?: { subject: string; frames: Set<string> } }
 
 /** Current profile payloads for a bounded Realm summary batch, one graph call. */
 async function realmProfileNames(env: WorkActivationEnvironment, realms: readonly string[]) {
@@ -202,7 +209,8 @@ async function readSemanticResourceNames(env: WorkActivationEnvironment,
 const typePriority: readonly ResourceType[] = [
   'agent', 'zone',
   'work', 'main-version', 'release', 'occurrence', 'realization',
-  'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition', 'collection', 'resource',
+  'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition', 'collection', 'projection',
+  'resource',
 ];
 
 /** Requested exact tag, then its primary subtag, then English, then the lowest tag. */
@@ -237,7 +245,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -277,6 +285,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Role ; rv:semanticHead ?semanticHead . BIND("role" AS ?type) }
           UNION { ?r a rv:SemanticDefinition ; rv:definitionKind rv:RelationDefinition ;
             rv:definitionHead ?definitionHead . BIND("relation-definition" AS ?type) }
+          UNION { ?r a rv:Projection ; rv:projectionOf ?projectionSubject ; rv:frame ?projectionFrame ;
+            rv:projectionHead ?projectionHead . BIND("projection" AS ?type) }
           UNION { ?r rv:semanticHead ?semanticHead . BIND("resource" AS ?type) }
         } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} {
@@ -308,7 +318,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:protectionHead ?protection } }, false)
           || EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:ErasedRevision } }
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r ?headPredicate ?resourceHead .
-            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead } }
+            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead rv:projectionHead } }
             GRAPH ${iri(GRAPHS.revisions)} { ?resourceHead a rv:ErasedRevision } }
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:structure ?erasedStructure .
             ?erasedStructure rv:structureHead ?structureRevision }
@@ -336,6 +346,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   }
   const rows = new Map<string, GraphRow>();
   const redirects = new Map<string, string>();
+  const ambiguous = new Set<string>();
   // Keep protection/erasure flags until all rows are collected: dropping only
   // the Work row could let its descriptive semantic component revive the identity.
   const erased = new Set(bindings.filter(binding => binding.erased?.value === 'true')
@@ -362,6 +373,12 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     // Agent provisioning records a plain display name. Keep its language
     // unknown rather than discarding the public profile or guessing a tag.
     if (label && (tag || row.type === 'agent')) row.labels.set(tag?.toLowerCase() ?? '', label.value);
+    if (row.type === 'projection' && binding.projectionSubject && binding.projectionFrame) {
+      row.projection ??= { subject: binding.projectionSubject.value, frames: new Set() };
+      // A projection names one subject; a second one is corrupt state, never a partial answer.
+      if (row.projection.subject !== binding.projectionSubject.value) { ambiguous.add(reference); continue; }
+      row.projection.frames.add(binding.projectionFrame.value);
+    }
     if (row.type === 'agent' && binding.profileAvatarSelection) {
       row.profileAvatarSelections ??= new Set();
       row.profileAvatarSelections.add(binding.profileAvatarSelection.value);
@@ -378,7 +395,46 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     }
     rows.set(reference, row);
   }
+  for (const reference of ambiguous) rows.delete(reference);
   return { rows, redirects, generation: `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
+}
+
+const partOf = ({ resolution: _resolution, parts: _parts, ...part }: AvailableSummary): PartSummary => part;
+
+/** A projection is available when its subject and every frame are, to the same reader; it is public
+ * only when all of them are, so its disclosure is the most restrictive of its parts. The parts are
+ * ordinary summaries read in pages of MAX_SUMMARY_BATCH: at most one more page per 64 distinct
+ * parts (nine per projection at most), on the same graph generation, and the name is the subject's. */
+async function readProjectionSummaries(env: WorkActivationEnvironment, reader: SummaryReader, input: SummaryInput,
+  projections: ReadonlyMap<string, GraphRow>, generation: string, cost: SummaryBatch['cost']) {
+  const result = new Map<string, AvailableSummary>();
+  if (!projections.size) return result;
+  const references = [...new Set([...projections.values()].flatMap(row => [row.projection!.subject, ...row.projection!.frames]))];
+  const parts = new Map<string, AvailableSummary>();
+  for (let offset = 0; offset < references.length; offset += MAX_SUMMARY_BATCH) {
+    const page = await readSummaryPage(env, undefined, reader, { ...input,
+      resources: references.slice(offset, offset + MAX_SUMMARY_BATCH), includeCollections: true,
+      projectionPart: true });
+    if (page.generation.graph !== generation) throw new MediaUnavailable('Projection parts graph moved');
+    for (const summary of page.summaries) {
+      if (summary.status === 'available' && summary.type !== 'projection') parts.set(summary.reference, summary);
+    }
+    for (const key of ['graphQueries', 'mediaQueries', 'accessChecks', 'accessQueries'] as const) {
+      cost[key] += page.cost[key];
+    }
+  }
+  for (const [reference, row] of projections) {
+    const subject = parts.get(row.projection!.subject);
+    const frames = [...row.projection!.frames].sort().map(frame => parts.get(frame));
+    if (!subject || frames.some(frame => !frame)) continue;
+    const available = frames as AvailableSummary[];
+    result.set(reference, { reference, status: 'available', type: 'projection', base: 'projection', work: null,
+      address: identityCanonical('projection', reference, subject.name.value),
+      disclosure: [subject, ...available].every(part => part.disclosure === 'public') ? 'public' : 'restricted',
+      name: subject.name, avatar: fallbackAvatar('projection', reference),
+      parts: { subject: partOf(subject), frames: available.map(partOf) } });
+  }
+  return result;
 }
 
 /** Resource summaries for at most 64 references. The Work path costs one graph
@@ -414,9 +470,15 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();
   const pages = new Map<string, GraphRow>();
+  const projections = new Map<string, GraphRow>();
   for (const reference of unique) {
     const row = graph.rows.get(reference);
     if (!row) continue;
+    if (row.type === 'projection') {
+      // Its disclosure is wholly its parts': a projection of one nested in another does not exist.
+      if (!input.projectionPart && row.projection?.frames.size) projections.set(reference, row);
+      continue;
+    }
     if (row.type === 'collection' && !input.includeCollections) continue;
     if (['realm', 'context', 'character', 'role', 'relation-definition', 'resource', 'collection'].includes(row.type)) {
       special.set(reference, row);
@@ -618,7 +680,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     const assetIndex = assetIndexes.get(reference);
     if (assetIndex !== undefined && decisions[assetIndex] !== 'visible') avatars.delete(reference);
   }
+  const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost);
   const summaries = input.resources.map((reference): ResourceSummary => {
+    const projection = projectionSummaries.get(reference);
+    if (projection) return projection;
     const row = readable.get(reference);
     if (!row) return { reference, status: 'unavailable' };
     const selectedContext = contextBatch.selectedNames.has(reference)

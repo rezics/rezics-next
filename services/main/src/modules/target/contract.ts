@@ -5,7 +5,7 @@ import { readId } from '../work/read-contract.ts';
 /** Clients name one admitted resource; its owner supplies the grain. */
 export const targetRef = readId;
 export const targetBase = t.Union([t.Literal('work'), t.Literal('realization'),
-  t.Literal('release'), t.Literal('occurrence'), t.Literal('resource')]);
+  t.Literal('release'), t.Literal('occurrence'), t.Literal('resource'), t.Literal('projection')]);
 export type Base = Static<typeof targetBase>;
 
 /** Includes structural owner types alongside up to 32 semantic component types. */
@@ -21,7 +21,9 @@ export type ResolvedTarget = Static<typeof resolvedTarget>;
 
 export type Capability = 'review' | 'rating' | 'discussion' | 'collection-member'
   | 'library-status' | 'progress' | 'continuity' | 'spoiler-boundary' | 'suitability' | 'session' | 'report';
-const allBases = ['work', 'realization', 'release', 'occurrence', 'resource'] as const;
+/** A projection is one subject within a frame: it takes the capabilities a reader or community
+ * attaches to a subject, never the ones that need a Work, a position or a session. */
+const allBases = ['work', 'realization', 'release', 'occurrence', 'resource', 'projection'] as const;
 export const capabilityBases = {
   report: allBases, review: allBases, rating: allBases, discussion: allBases,
   'collection-member': allBases, 'library-status': ['work'], progress: ['occurrence'],

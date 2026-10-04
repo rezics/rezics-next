@@ -13,7 +13,7 @@ const resourceType = t.Union([t.Literal('work'), t.Literal('main-version'), t.Li
   t.Literal('agent'), t.Literal('zone'),
   t.Literal('concept'), t.Literal('character'), t.Literal('context'), t.Literal('role'),
   t.Literal('relation-definition'), t.Literal('release'), t.Literal('occurrence'), t.Literal('realization'),
-  t.Literal('resource'), t.Literal('collection')]);
+  t.Literal('resource'), t.Literal('collection'), t.Literal('projection')]);
 const name = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   basis: displayLanguageBasis,
@@ -31,15 +31,21 @@ const avatar = t.Union([
       { additionalProperties: false }) }, { additionalProperties: false }),
 ]);
 
+const availableSummary = { reference: t.String(), status: t.Literal('available'), type: resourceType,
+  base: t.Nullable(targetBase), work: t.Nullable(targetRef),
+  address: canonicalAddress,
+  disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar };
+/** One part of a projection: an available summary that has no parts or resolution of its own. */
+const summaryPart = t.Object(availableSummary, { additionalProperties: false });
+
 /** Unavailable entries carry only the requested reference; no name or media basis can escape. */
 export const resourceSummary = t.Union([
   t.Object({ reference: t.String(), status: t.Literal('unavailable') },
     { additionalProperties: false }),
-  t.Object({ reference: t.String(), status: t.Literal('available'), type: resourceType,
-    base: t.Nullable(targetBase), work: t.Nullable(targetRef),
-    address: canonicalAddress,
-    disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar,
-    resolution: t.Optional(mergedIdentity) },
+  t.Object({ ...availableSummary, resolution: t.Optional(mergedIdentity),
+    /** A projection's subject and frames, each a summary; its own name is the subject's. */
+    parts: t.Optional(t.Object({ subject: summaryPart, frames: t.Array(summaryPart, { minItems: 1, maxItems: 8 }) },
+      { additionalProperties: false })) },
   { additionalProperties: false }),
 ]);
 

@@ -69,6 +69,7 @@ test('G-629: base × registry presentation matrix admits only bound sections and
     realization: ['statements', 'relations', 'discussion'],
     occurrence: ['statements', 'relations', 'discussion'],
     resource: ['statements', 'relations', 'discussion'],
+    projection: [],
   };
   for (const base of Object.keys(expected) as Base[]) {
     for (const entry of [
@@ -92,7 +93,7 @@ test('G-629: base × registry presentation matrix admits only bound sections and
       expect(
         sections.every((section) => section.actions.length === 0 && section.count === undefined),
       ).toBe(true);
-      const registryBase = base === 'work' || base === 'resource' ? base : 'record';
+      const registryBase = base === 'work' || base === 'resource' || base === 'projection' ? base : 'record';
       if (entry.base !== registryBase || entry.type.endsWith('/Unregistered'))
         expect(registry.default).toBe(true);
       if (entry.type.endsWith('/Unregistered')) expect(registry.presentation).toBe('default');
@@ -175,7 +176,8 @@ test('G-629: every advertised section href matches a GET mounted by Main', () =>
   const mounted = new Set(
     app.routes.filter((route) => route.method === 'GET').map((route) => route.path),
   );
-  for (const base of Object.keys(baseSections) as Base[]) {
+  // A projection has no Statements of its own; its page view reads its subject's.
+  for (const base of (Object.keys(baseSections) as Base[]).filter((base) => base !== 'projection')) {
     for (const entry of admittedTypes) {
       const sections = pageSections(target(base, [entry.type]), mounted);
       expect(sections.some((section) => section.id === 'statements')).toBe(true);

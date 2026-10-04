@@ -13,6 +13,8 @@ import type { RatingLink, ReviewRow } from './store.ts';
 export async function reviewTarget(session: TargetReadSession, context: string, work: string):
   Promise<{ mainVersion: string | null; realm: string | null; generic: boolean }> {
   const [target] = await resolveTargets(session, [work], 'review');
+  // Reviews admit a projection when its owner binds a Context grain for one.
+  if (target!.base === 'projection') throw new TargetNotBound();
   if (target!.base !== 'work') {
     const rows = await session.query(`SELECT ?grain WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`, 2);

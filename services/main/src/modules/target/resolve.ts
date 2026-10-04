@@ -121,10 +121,12 @@ const revisionPatterns = {
     ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?r .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removedBy } }`,
   resource: `GRAPH ${iri(GRAPHS.current)} { ?r rv:semanticHead ?revision }`,
+  projection: `GRAPH ${iri(GRAPHS.current)} { ?r a rv:Projection ; rv:projectionHead ?revision }
+    GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ProjectionRevision ; rv:component ?r }`,
 } satisfies Record<Base, string>;
 
 const requiresWork = { work: true, realization: true, release: true, occurrence: true,
-  resource: false } satisfies Record<Base, boolean>;
+  resource: false, projection: false } satisfies Record<Base, boolean>;
 
 /** Command identity proof: no names, bodies, media or audience admission. Call
  * only from a command owner that establishes its own authority before exposing
@@ -144,8 +146,9 @@ export async function resolveCommandTarget(session: TargetReadSession, resource:
     // Structural grains keep their owner even when they also have semantic facts.
     resource: `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r a ?structural .
       VALUES ?structural { schema:CreativeWork rv:MainVersion rv:TextContribution
-        rv:Realization rv:Release schema:ListItem } } }
+        rv:Realization rv:Release schema:ListItem rv:Projection } } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } }`,
+    projection: '',
   } satisfies Record<Base, string>;
   // Only revision-bearing grains can be checked for erasure. MainVersion has
   // no capability revision; an unrelated erased revision cannot hide its grain.

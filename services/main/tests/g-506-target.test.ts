@@ -61,16 +61,15 @@ function fixture(records: Array<{ resource: string; type: ResourceType; work?: s
 }
 
 test('G-506: shared schemas preserve exact grains and every capability has an explicit binding', () => {
-  const bases = { work: true, realization: true, release: true, occurrence: true, resource: true } satisfies Record<Base, boolean>;
-  expect(Object.keys(bases).sort()).toEqual(['occurrence', 'realization', 'release', 'resource', 'work']);
-  expect(capabilityBases).toEqual({ report: ['work', 'realization', 'release', 'occurrence', 'resource'],
-    review: ['work', 'realization', 'release', 'occurrence', 'resource'],
-    rating: ['work', 'realization', 'release', 'occurrence', 'resource'],
-    discussion: ['work', 'realization', 'release', 'occurrence', 'resource'],
-    'collection-member': ['work', 'realization', 'release', 'occurrence', 'resource'],
+  const bases = { work: true, realization: true, release: true, occurrence: true, resource: true,
+    projection: true } satisfies Record<Base, boolean>;
+  expect(Object.keys(bases).sort()).toEqual(['occurrence', 'projection', 'realization', 'release', 'resource', 'work']);
+  const social = ['work', 'realization', 'release', 'occurrence', 'resource', 'projection'] as const;
+  expect(capabilityBases).toEqual({ report: social, review: social, rating: social, discussion: social,
+    'collection-member': social,
     'library-status': ['work'], progress: ['occurrence'], continuity: ['work', 'realization', 'occurrence'],
     'spoiler-boundary': ['occurrence'],
-    suitability: ['work', 'realization', 'release', 'occurrence', 'resource'],
+    suitability: social,
     session: ['work', 'realization', 'release', 'occurrence'] });
   expect(capabilityPath(id(1), 'discussion')).toBe('/v1/resources/00000000-0000-4000-8000-000000000001/discussion');
   expect(Value.Check(targetRef, id(1))).toBe(true);

@@ -19,7 +19,7 @@ test('G-564: every closed category has a process and every admitted base support
   expect(reportCategory.anyOf.map(item => String(item.const)).sort()).toEqual(Object.keys(categoryProcesses).sort());
   expect(Value.Check(publicReportInput, { profile: 'public-report-v1', category: 'invented', target,
     statement: 'Reported context', contentLanguage: 'sw-KE' })).toBe(false);
-  expect(capabilityBases.report).toEqual(['work', 'realization', 'release', 'occurrence', 'resource']);
+  expect(capabilityBases.report).toEqual(['work', 'realization', 'release', 'occurrence', 'resource', 'projection']);
   expect(Object.entries(categoryProcesses).filter(([, item]) => item.urgent).map(([key]) => key))
     .toEqual(['child_exploitation', 'ncii', 'credible_threat']);
 });
