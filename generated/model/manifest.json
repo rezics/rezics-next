@@ -373,6 +373,22 @@
       "file": "shapes/poll-snapshot-v1.ttl"
     },
     {
+      "id": "post-v1",
+      "sha256": "531cd404aaefe72e62e35aa34fc896e3254eb2052f5bc385fc312f7f84430b33",
+      "file": "shapes/post-v1.ttl",
+      "binding": {
+        "required": [
+          "post",
+          "publisher",
+          "revision"
+        ],
+        "optional": [],
+        "roles": [
+          "post"
+        ]
+      }
+    },
+    {
       "id": "projection-v1",
       "sha256": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
       "file": "shapes/projection-v1.ttl",
@@ -2814,6 +2830,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/Post",
+      "routes": [
+        {
+          "profile": "post-v1",
+          "shape": "https://rezics.com/definition/post-v1/post-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/PresentationRevision",
       "routes": [
         {
@@ -3756,6 +3782,10 @@
       "profile": "work-derivation-v2"
     },
     {
+      "type": "https://rezics.com/vocab/Post",
+      "profile": "post-v1"
+    },
+    {
       "type": "https://rezics.com/vocab/PresentationRevision",
       "profile": "definition-presentation-v1"
     },
@@ -3870,6 +3900,7 @@
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
     "contexts/poll-snapshot-v1.jsonld": "9fb3fab241d6162821eee026cd8678198c5c819be32ac318a4eb00fce78a23f7",
+    "contexts/post-v1.jsonld": "6314b40fc5ff7bb83550d322e2eb11a304cf6714e5ebbf50ce89ed8f1b17fa71",
     "contexts/projection-v1.jsonld": "e982171326068e040b95e5d269483b3acc276e9e246df7e4853a55a36459e8be",
     "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
@@ -4001,6 +4032,7 @@
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
+    "shapes/post-v1.ttl": "531cd404aaefe72e62e35aa34fc896e3254eb2052f5bc385fc312f7f84430b33",
     "shapes/projection-v1.ttl": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
     "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
@@ -4087,9 +4119,9 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "2bceaa57c7f69d290ea4558f7589462f322bc3417eb94b322caffd97ddbeeda4",
-    "packages/model/src/generated/profiles.ts": "053d5033b039f30d63a352517c2a9db91d279f0f6c202e56b4e2f1508217fdf3",
-    "packages/model/src/generated/schemas.ts": "2c48fb5872c33b8571d07e1ea6d37d2e00368d6a1f6e14e1421f1f0549233142",
-    "packages/model/src/generated/vocabulary.ts": "9a04207bd4285b095479952ba8350e2157ec466df52613adf8bc162eaa9546f0"
+    "packages/model/src/generated/arbitraries.ts": "012c0687c01279492e99850ea4192cd868edd80c747ee441582eaae4b82b3276",
+    "packages/model/src/generated/profiles.ts": "833bbca10f8928a0ffac3cfa32f75040f5d9e02bbbd3df24b7a7f7a666ebc0ee",
+    "packages/model/src/generated/schemas.ts": "fe59207c091ac17ba5427152578808d038a1fdf5a09d8f1c44806868c670f493",
+    "packages/model/src/generated/vocabulary.ts": "a71f9a9d8b93f988e7bca6067d995bd4661d897311f753422386e8cb33385d47"
   }
 }
