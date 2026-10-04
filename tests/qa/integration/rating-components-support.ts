@@ -68,12 +68,10 @@ export async function startRatingStack(label: string) {
     return created.component;
   };
   await owner.grant(`rating:context:${realm}`, 'rating.context.create');
-  const context = async (body: Record<string, unknown> = {}) => await json<{ context: string;
-      contextRevision: string; displayThreshold: number;
-    profile: string ;
-    }>(await call(owner, 'POST', '/v1/rating-contexts', { profile: 'realm-target-rating-context-v3', realm,
+  const context = async (body: Record<string, unknown> = {}) => json<{ context: string; contextRevision: string;
+    displayThreshold: number; profile: string }>(await call(owner, 'POST', '/v1/rating-contexts', { profile: 'realm-target-rating-context-v3', realm,
     question: `How good is this character? ${randomUUID().slice(0, 8)}`, language: 'en', targetGrain: 'resource',
-    actingSubject: owner.actor, ...body }), 201));
+    actingSubject: owner.actor, ...body }), 201);
   const granted = new Set<string>();
   /** Writes one standing rating through the API and returns its receipt. */
   const rate = async (rater: Person, contextId: string, target: string, value: number | null,

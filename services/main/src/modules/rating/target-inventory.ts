@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { readTargetRatingSnapshot, checkRatingAggregateFence, }
+import { readTargetRatingSnapshot, checkRatingAggregateFence }
   from '../access/rating-aggregate-inventory.ts';
 
 /** Access owner boundary of target aggregates: sealed components, and for one

@@ -10,16 +10,12 @@ afterAll(async () => { await r?.stop(); });
 
 interface Member { target: string; status: string; reason?: string; mean?: number | null; meanDisplay?: string; meetsThreshold?: boolean;
   lastAdmissionId?: string | null;
-  components?: { population: number; count: number; withdrawnCount: number; sum: number; histogram: number[] ;
-  } ;
-}
+  components?: { population: number; count: number; withdrawnCount: number; sum: number; histogram: number[] } }
 interface Rollup { profile: string; context: string; formula: string; displayThreshold: number; memberCount: number;
   coverage: { members: number; available: number; meetingThreshold: number }; value: number | null; valueWithheld: string | null;
   members: Member[]; scale: { min: number; max: number }; scope: { grain: string; question: string };
-  rank: null | { formula: string; minimumRatings: number; status: string; prior: { mean: number; weight: number} | null;
-    items: { position: number; target: string; count: number; mean: number; score: number }[] ;
-  } ;
-}
+  rank: null | { formula: string; minimumRatings: number; status: string; prior: { mean: number; weight: number } | null;
+    items: { position: number; target: string; count: number; mean: number; score: number }[] } }
 
 const rollup = (body: Record<string, unknown>, status = 200, reader: Person | null = r.owner) =>
   r.call(reader, 'POST', '/v1/rating-rollups', { profile: 'rating-rollup-v1', actingSubject: reader?.actor, ...body })
