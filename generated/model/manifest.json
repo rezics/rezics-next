@@ -452,6 +452,24 @@
       }
     },
     {
+      "id": "rating-question-presentation-v2",
+      "sha256": "627c0879d09b1e05286536be5830f582e9a6a4cabc4620c1adf3a9ee0b84134e",
+      "file": "shapes/rating-question-presentation-v2.ttl",
+      "binding": {
+        "required": [
+          "presentation",
+          "revision",
+          "context",
+          "language"
+        ],
+        "optional": [],
+        "roles": [
+          "presentation",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "realization-v1",
       "sha256": "34b07501a3152ca77550605d2839ced63cc8ffbdfaa5671ee1900d796047ca21",
       "file": "shapes/realization-v1.ttl",
@@ -2950,6 +2968,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/RatingQuestionPresentationV2",
+      "routes": [
+        {
+          "profile": "rating-question-presentation-v2",
+          "shape": "https://rezics.com/definition/rating-question-presentation-v2/presentation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/RatingQuestionPresentationV2Revision",
+      "routes": [
+        {
+          "profile": "rating-question-presentation-v2",
+          "shape": "https://rezics.com/definition/rating-question-presentation-v2/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/Realization",
       "routes": [
         {
@@ -3806,6 +3844,14 @@
       "profile": "rating-question-presentation-v1"
     },
     {
+      "type": "https://rezics.com/vocab/RatingQuestionPresentationV2",
+      "profile": "rating-question-presentation-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/RatingQuestionPresentationV2Revision",
+      "profile": "rating-question-presentation-v2"
+    },
+    {
       "type": "https://rezics.com/vocab/RealizationRevision",
       "profile": "realization-v1"
     },
@@ -3906,6 +3952,7 @@
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
     "contexts/rating-question-presentation-v1.jsonld": "29b38288e29e6d870f2945852b183411729bc9582a138a486113280d3fa85a27",
+    "contexts/rating-question-presentation-v2.jsonld": "6860db347e886f9903ed7f914a19245f09db78e1e4a59cf133889f34ea6b6f0e",
     "contexts/realization-v1.jsonld": "ad402caa9be6ae9baaf9288b9ef3e15c750211895a2e8d2de51c337cfe68e8c1",
     "contexts/realm-daily-rating-context-v1.jsonld": "b4d79423893c066890f16fdb5cebe11704379e52161390afed5963ac45bce57c",
     "contexts/realm-daily-rating-observation-v1.jsonld": "c2e924c91bc13a87cd94baf3db8aa9b9871bd525b5b475f7598ab27b52a59850",
@@ -4038,6 +4085,7 @@
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
     "shapes/rating-question-presentation-v1.ttl": "24eaf5f83260d123b17352236a947f08367d7ecc4d5df681f44825d457d28767",
+    "shapes/rating-question-presentation-v2.ttl": "627c0879d09b1e05286536be5830f582e9a6a4cabc4620c1adf3a9ee0b84134e",
     "shapes/realization-v1.ttl": "34b07501a3152ca77550605d2839ced63cc8ffbdfaa5671ee1900d796047ca21",
     "shapes/realm-daily-rating-context-v1.ttl": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
     "shapes/realm-daily-rating-observation-v1.ttl": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
@@ -4119,9 +4167,9 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "012c0687c01279492e99850ea4192cd868edd80c747ee441582eaae4b82b3276",
-    "packages/model/src/generated/profiles.ts": "833bbca10f8928a0ffac3cfa32f75040f5d9e02bbbd3df24b7a7f7a666ebc0ee",
-    "packages/model/src/generated/schemas.ts": "fe59207c091ac17ba5427152578808d038a1fdf5a09d8f1c44806868c670f493",
-    "packages/model/src/generated/vocabulary.ts": "a71f9a9d8b93f988e7bca6067d995bd4661d897311f753422386e8cb33385d47"
+    "packages/model/src/generated/arbitraries.ts": "07c45b5eb24de1b73d452f68cda36bff6a079445b54a5895377be6ef84da2a49",
+    "packages/model/src/generated/profiles.ts": "1d15ad4a5d6fdee7b564befbbb7b1fbd17cde87693b61436ffa715f048eb89c6",
+    "packages/model/src/generated/schemas.ts": "d3d44678629fcf9b9294c8bd916495fa6b0e6f9299b05d507fae6ac6751efd94",
+    "packages/model/src/generated/vocabulary.ts": "f11ad5fbe721269fcdfd7c7e5dbb87bbf07889026282acb311d3eea2698a8d76"
   }
 }

@@ -399592,11 +399592,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -399703,11 +399704,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -399814,11 +399816,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -399924,7 +399927,8 @@
                                     "realm.settings.manage",
                                     "review.decide",
                                     "publication.adopt",
-                                    "rating.configure"
+                                    "rating.configure",
+                                    "rating.question-presentation.review"
                                   ],
                                   "type": "string"
                                 },
@@ -399940,7 +399944,8 @@
                                     "realm.settings.manage",
                                     "review.decide",
                                     "publication.adopt",
-                                    "rating.configure"
+                                    "rating.configure",
+                                    "rating.question-presentation.review"
                                   ],
                                   "type": "string"
                                 },
@@ -400029,7 +400034,8 @@
                                     "realm.settings.manage",
                                     "review.decide",
                                     "publication.adopt",
-                                    "rating.configure"
+                                    "rating.configure",
+                                    "rating.question-presentation.review"
                                   ],
                                   "type": "string"
                                 },
@@ -400045,7 +400051,8 @@
                                     "realm.settings.manage",
                                     "review.decide",
                                     "publication.adopt",
-                                    "rating.configure"
+                                    "rating.configure",
+                                    "rating.question-presentation.review"
                                   ],
                                   "type": "string"
                                 },
@@ -400475,11 +400482,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -400581,11 +400589,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -400687,11 +400696,12 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 8,
+                            "maxItems": 9,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -400786,7 +400796,8 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
@@ -400802,7 +400813,8 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },
@@ -401221,7 +401233,8 @@
                                 "realm.settings.manage",
                                 "review.decide",
                                 "publication.adopt",
-                                "rating.configure"
+                                "rating.configure",
+                                "rating.question-presentation.review"
                               ],
                               "type": "string"
                             },

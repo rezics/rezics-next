@@ -654,6 +654,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "rating-question-presentation-v2": {
+    "sha256": "627c0879d09b1e05286536be5830f582e9a6a4cabc4620c1adf3a9ee0b84134e",
+    "file": "shapes/rating-question-presentation-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/rating-question-presentation-v2/presentation-shape",
+      "https://rezics.com/definition/rating-question-presentation-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "presentation",
+      "revision"
+    ]
+  },
   "realization-v1": {
     "sha256": "34b07501a3152ca77550605d2839ced63cc8ffbdfaa5671ee1900d796047ca21",
     "file": "shapes/realization-v1.ttl",
