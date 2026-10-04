@@ -52,6 +52,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   // pg must load after telemetry installs its hooks. A static fixture import
   // reports a misleading zero SQL spans even while the direct meter sees work.
   const { startHomeStack, meterStatements } = await import('./feed-read-support.ts');
+  const { captureSql } = await import('./g-1051-sql-profile.ts');
   const { createMainApp } = await import('../../../services/main/src/app.ts');
   const { DiscoveryProjection } =
     await import('../../../services/main/src/modules/discovery/store.ts');
@@ -307,6 +308,11 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       await backfillPublicNames(stack.env);
       progress('name-backfill-ready');
       await refresh();
+    } else if (Bun.env.G1051_MATRIX_ONLY === '1') {
+      // New fixture principals invalidate the retained cut's Access source
+      // revision. Hold freshness constant across scales so the larger corpus
+      // cannot appear cheaper merely by omitting stale optional previews.
+      await refresh();
     }
     if (Bun.env.G1041_PREPARE_QUERY === '1') {
       if (!restored || !corpus)
@@ -342,6 +348,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     }
     const measured = async (name: string, query: ResourceListQuery, bearer?: string) => {
       const captured: string[] = [];
+      const capturedSql = captureSql();
       let candidates = 0,
         seekRows = 0,
         cardWorks = 0;
@@ -350,6 +357,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       const membership = projection.resourceMembership.bind(projection);
       const payloads = projection.resourceCardPayloads.bind(projection);
       const beforeSql = sql.count(),
+        beforeAsyncCommits = sql.asyncCommits(),
         beforeAccount = accountChecks,
         beforePrivate = privateReads;
       stack.fuseki.query = async (...args) => {
@@ -397,6 +405,9 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           seekRows,
           cardWorks,
           statements,
+          measurementStatements: 2 * (sql.asyncCommits() - beforeAsyncCommits),
+          sqlFamilies: capturedSql.snapshot().families,
+          sqlShapes: capturedSql.snapshot().shapes,
           accountChecks: accountChecks - beforeAccount,
           privateReads: privateReads - beforePrivate,
           ...Object.fromEntries(Object.entries(profile).filter(([key]) => key !== 'spans')),
@@ -413,7 +424,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         if (!baseline) {
           assertWorkCost(profile, {
             fusekiRequests: RESOURCE_LIST_COST.graphCalls,
-            postgresStatements: 160,
+            postgresStatements: RESOURCE_LIST_COST.postgresStatements,
             fusekiReceivedBytes: 1024 * 1024,
             fusekiSentBytes: 256 * 1024,
           });
@@ -421,7 +432,12 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           expect(candidates).toBeLessThanOrEqual(RESOURCE_LIST_COST.candidates);
           expect(seekRows).toBeLessThanOrEqual(3 * 65);
           expect(cardWorks).toBeLessThanOrEqual(query.limit ?? 20);
-          expect(statements).toBeLessThanOrEqual(160);
+          expect(statements).toBeLessThanOrEqual(RESOURCE_LIST_COST.postgresStatements);
+          // meterStatements proves asynchronous read commits write no tuples;
+          // its two pg_stat_xact probes per commit also appear in OTLP.
+          expect(profile.postgresStatements).toBe(
+            statements + 2 * (sql.asyncCommits() - beforeAsyncCommits),
+          );
           expect(captured.filter((text) => text.includes('SELECT ?r ?concept'))).toHaveLength(0);
           expect(
             captured.filter((text) => text.includes('SELECT DISTINCT ?r ?type WHERE')),
@@ -434,6 +450,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         }
         return result;
       } finally {
+        capturedSql.stop();
         stack.fuseki.query = native;
         projection.resourcePage = seek;
         projection.resourceMembership = membership;
@@ -441,7 +458,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       }
     };
     for (const bearer of [undefined, reader.token]) {
-      if (corpus) {
+      if (corpus && Bun.env.G1051_MATRIX_ONLY !== '1') {
         for (const sort of ['relevance', 'newest', 'updated'] as const) {
           const query = { ...base, q: 'Catalogue common', sort };
           const first = await measured(`catalogue-dense-${sort}-first`, query, bearer);
@@ -508,8 +525,47 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           );
         }
       }
-      const largePage = await measured('dense-64-card-page', { ...base, limit: 64 }, bearer);
-      expect(largePage.items).toHaveLength(64);
+      for (const sort of ['relevance', 'newest', 'updated'] as const) {
+        for (const filtered of [false, true]) {
+          const costs: unknown[] = [];
+          for (const limit of [1, 16, 64]) {
+            const query: ResourceListQuery = {
+              ...base,
+              sort,
+              limit,
+              ...(filtered
+                ? {
+                    filter: {
+                      all: [
+                        type,
+                        {
+                          facet: 'type',
+                          none: ['https://schema.org/Book'],
+                        },
+                      ],
+                    },
+                  }
+                : {}),
+            };
+            const page = await measured(
+              `page-size-${filtered ? 'exclude-type' : 'dense'}-${sort}-${limit}`,
+              query,
+              bearer,
+            );
+            expect(page.items).toHaveLength(limit);
+            if (Bun.env.G1051_MATRIX_ONLY === '1') expect(page.stale).toBe(false);
+            const cost = evidence.at(-1)!;
+            costs.push({ statements: cost.statements, families: cost.sqlFamilies });
+          }
+          // An absolute cap alone permits a statement per card. Every owner
+          // family must instead stay identical for 1, 16 and 64 delivered cards
+          // from the same eligible window. Sparse Concept/disclosure plans
+          // below may spend both fixed windows, irrespective of their page size.
+          expect(costs[1]).toEqual(costs[0]);
+          expect(costs[2]).toEqual(costs[0]);
+        }
+      }
+      if (Bun.env.G1051_MATRIX_ONLY === '1') continue;
       for (const sort of ['relevance', 'newest', 'updated'] as const) {
         const query = { ...base, sort };
         const first = await measured(`dense-${sort}-first-after-writes`, query, bearer);
@@ -586,6 +642,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         expect(result.items.some((item) => item.id === works[135]!.work)).toBe(false);
       }
     }
+    if (Bun.env.G1051_MATRIX_ONLY === '1') return;
     const beforeWrite = await measured('cursor-before-write', base, reader.token);
     await stack.publicWork(author.actor, ['en'], `${token} stale-new`);
     const stale = await measured('stale-projection', base, reader.token);

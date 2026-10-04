@@ -22,7 +22,8 @@ export const DEFAULT_PERSON_CHOICES: PersonChoices = { profileVisibility: 'publi
   hideReadingActivity: false, contentLanguages: [], spoilerPolicy: 'hide-unread' };
 /** One bounded settings row and at most 500 blocks; page admission checks at most 128 actors. */
 export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readingActors: 256, readStatements: 4,
-  writeStatements: 11, readerLanguageStatements: 2, languages: READING_LANGUAGE_LIMIT } as const;
+  writeStatements: 11, readerLanguageStatements: 2, publicProfiles: 64, publicProfileStatements: 1,
+  languages: READING_LANGUAGE_LIMIT } as const;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 interface Row { profile_visibility: PersonChoices['profileVisibility']; follow_policy: PersonChoices['followPolicy'];
   hide_reading_activity: boolean; content_languages: string[]; spoiler_policy: PersonChoices['spoilerPolicy'];
@@ -189,6 +190,46 @@ export class PersonPreferencesStore {
           AND hide_reading_activity = true`, [actors]);
       return new Set(rows.rows.map(row => row.agent_id));
     });
+  }
+
+  /** Public catalogue policy, independent of the caller's private grants.
+   * One primary-key probe per identity in one recovery-fenced statement; the
+   * Query caller repeats the batch after name hydration, never caches it.
+   * Missing preference/listing rows use their public/listed defaults, but a
+   * missing or inactive Agent can never inherit those defaults. */
+  async publicDiscoveryProfiles(agents: readonly string[]): Promise<Set<string>> {
+    if (
+      agents.length > PERSON_PREFERENCES_COST.publicProfiles ||
+      new Set(agents).size !== agents.length ||
+      agents.some((agent) => !agentPattern.test(agent))
+    ) {
+      throw new ControlInvalid('Public profile batch exceeds budget');
+    }
+    if (!agents.length) return new Set();
+    const rows = (
+      await this.pool.query<{ agent: string; open: boolean; visible: boolean }>(
+        `
+      WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE)
+      SELECT wanted.agent, fence.open, (s.id IS NOT NULL
+        AND COALESCE(p.profile_visibility,'public')='public'
+        AND COALESCE(l.listing,'listed')='listed') AS visible
+      FROM unnest($1::text[]) AS wanted(agent) CROSS JOIN fence
+      LEFT JOIN access.authority_subject s ON s.id=wanted.agent AND s.kind='agent' AND s.active
+      LEFT JOIN access.person_preferences p ON p.agent_id=s.id
+      LEFT JOIN access.agent_listing l ON l.agent_id=s.id`,
+        [agents],
+      )
+    ).rows;
+    if (
+      rows.length !== agents.length ||
+      new Set(rows.map((row) => row.agent)).size !== agents.length ||
+      rows.some(
+        (row) => row.open !== true || !agents.includes(row.agent) || typeof row.visible !== 'boolean',
+      )
+    ) {
+      throw new ControlUnavailable('Public profile recovery fence or result is unavailable');
+    }
+    return new Set(rows.filter((row) => row.visible).map((row) => row.agent));
   }
 
   async profileVisible(agent: string, principal: VerifiedPrincipal | null): Promise<boolean> {

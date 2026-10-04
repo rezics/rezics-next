@@ -135,6 +135,10 @@ export interface ResourceListPlan {
  * owners and retries share
  * a 32-call allocation. The allocation includes denied/cold/stale paths and
  * cannot grow on retry. WorkReadSession and the Query budget enforce it.
+ * SQL uses bounded owner batches, including public Agent policy before/after
+ * hydration. The 96-statement cost contract covers two admitted windows and
+ * optional previews; a page-size matrix also requires each SQL family to stay
+ * identical at 1, 16 and 64 cards within the same populated window.
  * Native postings visited and production Account internals remain unqualified. */
 export const RESOURCE_LIST_COST = {
   candidates: 128,
@@ -146,6 +150,7 @@ export const RESOURCE_LIST_COST = {
   rankedCandidateTextRechecks: 0,
   conceptResolutionReads: 1,
   graphCalls: 32,
+  postgresStatements: 96,
   deadlineMs: WORK_READ_COST.deadlineMs,
   graphBytes: WORK_READ_COST.graphBytes,
 } as const;
