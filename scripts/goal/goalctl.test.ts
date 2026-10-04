@@ -408,6 +408,118 @@ describe('goalctl Goals', () => {
   });
 });
 
+describe('goalctl reclaim', () => {
+  interface LedgerFile { tasks: Record<string, { paths: string[]; brief: string }> }
+
+  /** Two active Goals and an exited task whose brief can be replaced without a worktree. */
+  function repo(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'goalctl-reclaim-'));
+    spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir, encoding: 'utf8' });
+    mkdirSync(join(dir, 'docs/goals/alpha'), { recursive: true });
+    mkdirSync(join(dir, 'docs/goals/beta'), { recursive: true });
+    writeFileSync(join(dir, 'docs/goals/alpha/GOAL.md'),
+      '---\nareas: [services/main/src/modules/alpha/**]\n---\n# Alpha\n');
+    writeFileSync(join(dir, 'docs/goals/beta/GOAL.md'),
+      '---\nareas: [services/main/src/modules/beta/**]\n---\n# Beta\n');
+    const task = (id: string, goal: string, paths: string[], state: string) => ({
+      id, title: id, effort: 'high', engine: 'grok', cases: [], paths, migrations: [], shared: [],
+      depends: [], brief: join(dir, `${id}.md`), worktree: join(dir, 'absent-worktree'),
+      branch: `goal/${id.toLowerCase()}`, base: '0', state, attempts: [], goal,
+    });
+    const ledger = {
+      goals: {
+        alpha: { manager: 'alpha-manager', startedAt: '2026-10-05T00:00:00.000Z' },
+        beta: { manager: 'beta-manager', startedAt: '2026-10-05T00:00:00.000Z' },
+      },
+      tasks: {
+        'G-010': task('G-010', 'alpha', ['services/main/src/modules/alpha/read.ts'], 'exited'),
+        'G-011': task('G-011', 'beta', ['services/main/src/modules/beta/held.ts'], 'running'),
+      },
+    };
+    mkdirSync(join(dir, '.temp/goal-orchestration'), { recursive: true });
+    writeFileSync(join(dir, '.temp/goal-orchestration/ledger.json'), `${JSON.stringify(ledger, null, 2)}\n`);
+    return dir;
+  }
+
+  function writeBrief(dir: string, paths: string): string {
+    const path = join(dir, 'brief.md');
+    writeFileSync(path, ['---', 'id: G-010', 'title: Alpha work', 'effort: high', 'engine: grok', 'cases: []',
+      `paths: [${paths}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '', 'Outcome.', ''].join('\n'));
+    return path;
+  }
+
+  function run(dir: string, args: string[]) {
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha' };
+    delete env.GIT_DIR;
+    delete env.GIT_WORK_TREE;
+    delete env.GIT_COMMON_DIR;
+    delete env.GIT_INDEX_FILE;
+    return spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env });
+  }
+
+  function ledgerOf(dir: string): LedgerFile {
+    return JSON.parse(readFileSync(join(dir, '.temp/goal-orchestration/ledger.json'), 'utf8')) as LedgerFile;
+  }
+
+  test('refuses a path in another Goal\'s area without --allow-area', () => {
+    const dir = repo();
+    try {
+      const path = writeBrief(dir, 'services/main/src/modules/beta/read.ts');
+      const result = run(dir, ['reclaim', 'G-010', path]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'path services/main/src/modules/beta/read.ts lies in Goal beta\'s area services/main/src/modules/beta/**');
+      expect(ledgerOf(dir).tasks['G-010']!.paths).toEqual(['services/main/src/modules/alpha/read.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('accepts another Goal\'s area when --allow-area is set', () => {
+    const dir = repo();
+    try {
+      const path = writeBrief(dir, 'services/main/src/modules/beta/read.ts');
+      const result = run(dir, ['reclaim', 'G-010', path, '--allow-area']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('G-010 claims replaced');
+      const task = ledgerOf(dir).tasks['G-010']!;
+      expect(task.paths).toEqual(['services/main/src/modules/beta/read.ts']);
+      expect(task.brief).toBe(path);
+      expect(ledgerOf(dir).tasks['G-011']!.paths).toEqual(['services/main/src/modules/beta/held.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('still refuses a claim overlap with another open task when --allow-area is set', () => {
+    const dir = repo();
+    try {
+      const path = writeBrief(dir, 'services/main/src/modules/beta/held.ts');
+      const result = run(dir, ['reclaim', '--allow-area', 'G-010', path]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        'path services/main/src/modules/beta/held.ts overlaps G-011 services/main/src/modules/beta/held.ts');
+      expect(result.stderr).not.toContain('lies in Goal');
+      expect(ledgerOf(dir).tasks['G-010']!.paths).toEqual(['services/main/src/modules/alpha/read.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('still replaces a claim inside the task\'s own area without the flag', () => {
+    const dir = repo();
+    try {
+      const path = writeBrief(dir, 'services/main/src/modules/alpha/next.ts');
+      const result = run(dir, ['reclaim', 'G-010', path]);
+      expect(result.status).toBe(0);
+      expect(ledgerOf(dir).tasks['G-010']!.paths).toEqual(['services/main/src/modules/alpha/next.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('lists --allow-area beside reclaim in the usage text', () => {
+    const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts')], {
+      cwd: join(import.meta.dir, '../..'), encoding: 'utf8',
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
+    expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
+  });
+});
+
 describe('goalctl history gate', () => {
   test('refuses new task-named files and task IDs a file did not carry', () => {
     expect(historyIntroductions([

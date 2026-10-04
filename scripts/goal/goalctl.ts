@@ -1470,8 +1470,9 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
 }
 
 // Re-read an updated brief for an open task (for example a schema task continuing to its template) and
-// replace its claims after the same conflict checks as dispatch; the new brief is copied into the worktree.
-async function reclaimTask(id: string, briefPath: string): Promise<void> {
+// replace its claims after the same conflict checks as dispatch. `--allow-area` skips another Goal's
+// areas the same way; every other conflict still refuses. The new brief is copied into the worktree.
+async function reclaimTask(id: string, briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
   const brief = parseBrief(readFileSync(absolute, 'utf8'));
   const errors = validateBrief(brief);
@@ -1482,8 +1483,8 @@ async function reclaimTask(id: string, briefPath: string): Promise<void> {
     if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
-    const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
-      ...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger)))];
+    const conflicts = claimConflicts(brief, Object.values(ledger.tasks));
+    if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
       migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute });
@@ -1913,7 +1914,7 @@ async function main(argv: string[]): Promise<number> {
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
-    case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? ''); return 0;
+    case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {
       // Read-only: which open task claims a repository path (workers check before editing outside their claim).
       const path = positional[0] ?? '';
@@ -1939,7 +1940,7 @@ async function main(argv: string[]): Promise<number> {
     default:
       console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
-        + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e]'
+        + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh]`
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
