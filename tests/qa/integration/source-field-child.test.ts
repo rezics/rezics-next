@@ -7,6 +7,7 @@ import { sourceChildOccurrence } from '../../../services/main/src/modules/source
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { nativeChildSupportDigest } from '../../../services/main/src/modules/source/child-native-support.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 test('LIVE04: subject children retain native identity across reorder and require explicit reused-key correspondence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated integration tier');
@@ -43,9 +44,14 @@ test('LIVE04: subject children retain native identity across reorder and require
     const other = await h.json<typeof adopted>(await h.call('POST', path,
       input(first, 2, 'river')), 201);
     expect(other.support.child.child).not.toBe(adopted.support.child.child);
-    const concurrent = await Promise.all([randomUUID(), randomUUID()].map(key =>
-      h.call('POST', path, input(first, 1, 'mountain'), key)));
-    expect(concurrent.map(response => response.status).sort()).toEqual([201, 409]);
+    const concurrentCommands = [randomUUID(), randomUUID()].map((key) =>
+      h.call.bind(h, 'POST', path, input(first, 1, 'mountain'), key),
+    );
+    await assertCommandRace(
+      await Promise.all(concurrentCommands.map((send) => send())),
+      201,
+      (index) => concurrentCommands[index]!(),
+    );
     const refreshed = await h.propose('OL993602W', [author('/authors/OL1A')],
       'Subject Work', undefined, ['mountain', 'river', 'river']);
     const ambiguous = { ...input(refreshed, 1, 'river'), nativeOrdinal: 0,

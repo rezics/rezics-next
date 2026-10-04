@@ -25,6 +25,7 @@ import { ratingAccount } from '../support/rating-account.ts';
 
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `${ID}${randomUUID()}`;
@@ -252,9 +253,19 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       start: '2026-05-01', end: '2026-05-31', pageSize: 1,
       continuation: paged.continuation! })).rejects.toBeInstanceOf(EventQueryRestart);
 
-    const competing = await Promise.all(['2026-07', '2026-08'].map(lexical => post('/v1/events/observations',
-      makeBody(eventA, lexical, correction.observationRevision!))));
-    expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
+    const competingCommands = ['2026-07', '2026-08'].map((lexical) =>
+      post.bind(
+        null,
+        '/v1/events/observations',
+        makeBody(eventA, lexical, correction.observationRevision!),
+        randomUUID(),
+      ),
+    );
+    const competing = await assertCommandRace(
+      await Promise.all(competingCommands.map((send) => send())),
+      201,
+      (index) => competingCommands[index]!(),
+    );
     const winner = competing.find(response => response.status === 201)!;
     const winnerData = await winner.json() as { observationRevision: string };
 

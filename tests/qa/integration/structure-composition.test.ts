@@ -12,6 +12,7 @@ import { readCompositionSeal } from '../../../services/main/src/modules/structur
 import { readExportPlan } from '../../../services/main/src/modules/export/readers.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { progressRoutes } from '../../../services/main/src/routes/progress.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type Created = { structure: string; revision: string; receipt: string; replayed: boolean };
 type Changed = Created & { occurrences: string[]; cost: { pagesRead: number;
@@ -210,11 +211,27 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
       operations: [{ op: 'move', occurrence, parent, position: 'last' }],
     });
     // Two writers move one chapter into different volumes on one head; exactly one wins.
-    const races = await Promise.all([
-      f.call('POST', `${path}/changes`, reparent(changed.occurrences[1]!, firstGroup!, groups.revision)),
-      f.call('POST', `${path}/changes`, reparent(changed.occurrences[1]!, secondGroup!, groups.revision)),
-    ]);
-    expect(races.map(response => response.status).sort()).toEqual([200, 409]);
+    const racesCommands = [
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/changes`,
+        reparent(changed.occurrences[1]!, firstGroup!, groups.revision),
+        randomUUID(),
+      ),
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/changes`,
+        reparent(changed.occurrences[1]!, secondGroup!, groups.revision),
+        randomUUID(),
+      ),
+    ];
+    const races = await assertCommandRace(
+      await Promise.all(racesCommands.map((send) => send())),
+      200,
+      (index) => racesCommands[index]!(),
+    );
     const winner = races[0]!.status === 200 ? 0 : 1;
     const winnerResult = await races[winner]!.json() as Changed;
     // A Book nests one group level, so a group never moves into another (nor into itself).

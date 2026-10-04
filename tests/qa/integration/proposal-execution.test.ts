@@ -14,6 +14,7 @@ import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 import { seedManagedOrganization } from '../support/managed-organization.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => ID + randomUUID();
@@ -204,9 +205,15 @@ test('GOV23: adopted proposal executes one scoped roster effect and recovers the
     const competing = await seedProposal('access.org.roster.policy', nextDigest, nextState);
     const nextInput = { ...input, ...competing, effect: nextEffect,
       effectDigest: nextDigest, expectedTargetState: nextState };
-    const parallel = await Promise.all([post(account.tokenB, nextInput, 'competing-a'),
-      post(account.tokenB, nextInput, 'competing-b')]);
-    expect(parallel.map(value => value.status).sort()).toEqual([201, 409]);
+    const parallelCommands = [
+      post.bind(null, account.tokenB, nextInput, 'competing-a'),
+      post.bind(null, account.tokenB, nextInput, 'competing-b'),
+    ];
+    await assertCommandRace(
+      await Promise.all(parallelCommands.map((send) => send())),
+      201,
+      (index) => parallelCommands[index]!(),
+    );
     expect(await policyRevision()).toBe('3');
     expect((await pool.query(`SELECT count(*)::int AS n FROM access.org_roster_policy_history
       WHERE organization_subject = $1`, [fixture.org])).rows[0].n).toBe(2);

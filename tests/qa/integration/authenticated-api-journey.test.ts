@@ -23,6 +23,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce }
 import { relayContentProjectionOnce }
   from '../../../services/main/src/modules/content-publication/relay.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scope = 'openid work:create work:edit work:read comment:create space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
@@ -466,11 +467,15 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       context: { kind: 'realm-classification', id: realmB.realm },
       work: work.work, mainVersion: work.mainVersion, sense: proposition.sense,
       expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor };
-    const concurrentDecisions = await Promise.all([
-      send('/v1/classification-decisions', realmBDecision),
-      send('/v1/classification-decisions', realmBDecision),
-    ]);
-    expect(concurrentDecisions.map(response => response.status).sort()).toEqual([201, 409]);
+    const concurrentDecisionsCommands = [
+      send.bind(null, '/v1/classification-decisions', realmBDecision, true, randomUUID()),
+      send.bind(null, '/v1/classification-decisions', realmBDecision, true, randomUUID()),
+    ];
+    const concurrentDecisions = await assertCommandRace(
+      await Promise.all(concurrentDecisionsCommands.map((send) => send())),
+      201,
+      (index) => concurrentDecisionsCommands[index]!(),
+    );
     expect(await concurrentDecisions.find(response => response.status === 409)!.json())
       .toMatchObject({ code: 'stale_head' });
     const classified = async (realm: string) => post<{ total: number;

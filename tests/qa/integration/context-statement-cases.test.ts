@@ -16,6 +16,7 @@ import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean };
 type SelectionWrite = { selection: string; selectionRevision: string; replayed: boolean };
@@ -280,10 +281,25 @@ test('CTX01/MODEL13: shared Context selection preserves distinct Realm and perso
         selection: { context: sharedB.context, semanticRevision: sharedB.semanticRevision },
         expectedHead: adoptionB.selectionRevision, actingSubject: f.actorA }), 201);
     expect(changedB.selection).toBe(adoptionB.selection);
-    const race = await Promise.all([f.call('POST', realmBPath,
-      selectionBody(sharedA, changedB.selectionRevision)), f.call('POST', realmBPath,
-      { ...selectionBody(sharedA, changedB.selectionRevision), selection: null })]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [
+      f.call.bind(
+        f,
+        'POST',
+        realmBPath,
+        selectionBody(sharedA, changedB.selectionRevision),
+        randomUUID(),
+      ),
+      f.call.bind(
+        f,
+        'POST',
+        realmBPath,
+        { ...selectionBody(sharedA, changedB.selectionRevision), selection: null },
+        randomUUID(),
+      ),
+    ];
+    await assertCommandRace(await Promise.all(raceCommands.map((send) => send())), 201, (index) =>
+      raceCommands[index]!(),
+    );
     await f.revoke(realmBGrant);
     expect((await f.call('POST', realmBPath,
       selectionBody(sharedB, changedB.selectionRevision))).status).toBe(403);
@@ -553,9 +569,13 @@ test('CTX02/CTX03: exact Statement decisions inherit Global, suppress on local r
     const raceBody = (outcome: 'accepted' | 'withdrawn') => ({
       profile: 'statement-decision-v1', target, acceptance: acceptance(realmA.realm),
       expectedDecisionHead: rejected.decision, outcome, actingSubject: f.actorA });
-    const race = await Promise.all([f.call('POST', '/v1/statement-decisions', raceBody('accepted')),
-      f.call('POST', '/v1/statement-decisions', raceBody('withdrawn'))]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [
+      f.call.bind(f, 'POST', '/v1/statement-decisions', raceBody('accepted'), randomUUID()),
+      f.call.bind(f, 'POST', '/v1/statement-decisions', raceBody('withdrawn'), randomUUID()),
+    ];
+    await assertCommandRace(await Promise.all(raceCommands.map((send) => send())), 201, (index) =>
+      raceCommands[index]!(),
+    );
     const withdrawal = { profile: 'statement-v1', speaker: { kind: 'personal' },
       expectedHead: recorded.revision, actingSubject: f.actorA };
     const withdrawalPath = `/v1/statements/${recorded.statement.split('/').at(-1)}/withdrawals`;

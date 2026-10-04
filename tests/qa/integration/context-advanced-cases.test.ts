@@ -6,6 +6,7 @@ import { definitionStateRequest }
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean;
   sourcePosition: { dataEpoch: string; sequence: string } };
@@ -360,10 +361,27 @@ test('CTX08/CTX10: concurrent reparent has one winner; pinned consumers survive 
     const childPath = `/v1/contexts/${short(child.context)}`;
     const revise = (base: string) => ({ profile: 'context-v1', expectedSemanticHead: child.semanticRevision,
       base, entries: [], actingSubject: f.actorA });
-    const race = await Promise.all([f.call('POST', `${childPath}/semantic-revisions`,
-      revise(parentA.semanticRevision)), f.call('POST', `${childPath}/semantic-revisions`,
-      revise(parentB.semanticRevision))]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [
+      f.call.bind(
+        f,
+        'POST',
+        `${childPath}/semantic-revisions`,
+        revise(parentA.semanticRevision),
+        randomUUID(),
+      ),
+      f.call.bind(
+        f,
+        'POST',
+        `${childPath}/semantic-revisions`,
+        revise(parentB.semanticRevision),
+        randomUUID(),
+      ),
+    ];
+    const race = await assertCommandRace(
+      await Promise.all(raceCommands.map((send) => send())),
+      201,
+      (index) => raceCommands[index]!(),
+    );
     const winner = await f.json<ContextWrite>(race.find(response => response.status === 201)!, 201);
     const selfBase = await f.call('POST', `${childPath}/semantic-revisions`, {
       profile: 'context-v1', expectedSemanticHead: winner.semanticRevision,

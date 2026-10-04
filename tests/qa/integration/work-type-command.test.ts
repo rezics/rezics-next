@@ -10,6 +10,7 @@ import { startMediaStack } from './media-support.ts';
 import { projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
 import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const BOOK = 'https://schema.org/Book';
 const SKILL = 'https://rezics.com/vocab/SkillPackage';
@@ -97,10 +98,20 @@ test('G398: Open Library adoption states Book; a guarded Work type revision upda
     const searchTypes = await phraseWorkTypes(h.env, [{ work: generic.work, language: 'en' }],
       { dataEpoch: position.epoch!.value, sequence: position.sequence!.value });
     expect(searchTypes.get(generic.work)).toEqual([SKILL]);
-    const competing = await Promise.all([[BOOK], ['https://schema.org/DigitalDocument']]
-      .map(types => h.call('PUT', path, { ...body, expectedHead: changed.revision, types },
-        `type-${randomUUID()}`)));
-    expect(competing.map(response => response.status).sort()).toEqual([200, 409]);
+    const competingCommands = [[BOOK], ['https://schema.org/DigitalDocument']].map((types) =>
+      h.call.bind(
+        h,
+        'PUT',
+        path,
+        { ...body, expectedHead: changed.revision, types },
+        `type-${randomUUID()}`,
+      ),
+    );
+    await assertCommandRace(
+      await Promise.all(competingCommands.map((send) => send())),
+      200,
+      (index) => competingCommands[index]!(),
+    );
   } finally { await h.close(); }
 }, 180_000);
 

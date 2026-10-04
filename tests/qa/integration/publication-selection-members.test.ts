@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { memberFixture } from '../../../services/main/tests/member-reply-fixture.ts';
 import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { mainSelectionDigest, sealMainSelectionAdmission } from '../../../services/main/src/modules/work/select-main.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 test('G265: creator and added/transferred maintainers select without grants; stale, concurrent, replay and erased targets', async () => {
   const h = await memberFixture();
@@ -20,8 +21,15 @@ test('G265: creator and added/transferred maintainers select without grants; sta
     const second = await h.contribution('Another public contribution.');
     const next = { ...h.selection, contribution: second.contribution, publicationDecision: second.publicationDecision,
       expectedSelectionHead: selected.body.selection };
-    const raced = await Promise.all([h.post('/v1/publication-selections', next), h.post('/v1/publication-selections', next)]);
-    expect(raced.map(result => result.status).sort()).toEqual([201, 409]);
+    const racedCommands = [
+      h.post.bind(h, '/v1/publication-selections', next, randomUUID()),
+      h.post.bind(h, '/v1/publication-selections', next, randomUUID()),
+    ];
+    const raced = await assertCommandRace(
+      await Promise.all(racedCommands.map((send) => send())),
+      201,
+      (index) => racedCommands[index]!(),
+    );
     const add = { profile: 'work-maintainer-change-v1', work: h.work.work, actingSubject: h.actor,
       target: h.pen, action: 'add', expectedGeneration: '0' };
     const addKey = randomUUID();

@@ -20,6 +20,7 @@ import { readCompositionHeader } from '../../../services/main/src/modules/struct
 import { queryPublicMainPhrase } from '../../../services/main/src/modules/work/search-public.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-1009-fixture-guards.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 interface Work { work: string; mainVersion: string }
 interface Composition { structure: string; revision: string; receipt: string; replayed: boolean;
@@ -240,8 +241,13 @@ test('G-830: Index compositions retain local numbering, publication order, repla
     const a = await createWork('Season A', 'https://schema.org/DigitalDocument');
     const b = await createWork('Season B', 'https://schema.org/DigitalDocument');
     const ac = await create(a), bc = await create(b);
-    const racing = await Promise.all([change(ac, [part(ac, b, 'B')]), change(bc, [part(bc, a, 'A')])]);
-    expect(racing.map(response => response.status).sort()).toEqual([200, 409]);
+    const racingCommands = [
+      change.bind(null, ac, [part(ac, b, 'B')], randomUUID()),
+      change.bind(null, bc, [part(bc, a, 'A')], randomUUID()),
+    ];
+    await assertCommandRace(await Promise.all(racingCommands.map((send) => send())), 200, (index) =>
+      racingCommands[index]!(),
+    );
     const ancestors = await Promise.all(['Level one', 'Level two', 'Level three'].map(title => createWork(title)));
     const ancestorCompositions = [];
     for (const work of ancestors) ancestorCompositions.push(await create(work));

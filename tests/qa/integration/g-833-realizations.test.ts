@@ -8,6 +8,7 @@ import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/mo
 import { readReleaseReceipt } from '../../../services/main/src/modules/release/command.ts';
 import { readRealizationReceipt } from '../../../services/main/src/modules/realization/command.ts';
 import { ownerOutboxEventHandler } from '../../../services/main/src/modules/outbox/event-handlers.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const root = (work: string) => `/v1/works/${work.slice(-36)}`;
@@ -220,9 +221,23 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
     const pubCorrected = await json<WriteResult>(await saveRelease(editor, work.work, correctedPub, pubKey));
     expect(await json(await saveRelease(editor, work.work, correctedPub, pubKey)))
       .toMatchObject({ revision: pubCorrected.revision, receipt: pubCorrected.receipt, replayed: true });
-    const racing = await Promise.all([1, 2].map(value => saveRelease(editor, work.work,
-      { ...correctedPub, expectedHead: pubCorrected.revision, evidence: id(), publisher: `Racing ${value}` })));
-    expect(racing.map(response => response.status).sort()).toEqual([200, 409]);
+    const racingCommands = [1, 2].map((value) =>
+      saveRelease.bind(
+        null,
+        editor,
+        work.work,
+        {
+          ...correctedPub,
+          expectedHead: pubCorrected.revision,
+          evidence: id(),
+          publisher: `Racing ${value}`,
+        },
+        randomUUID(),
+      ),
+    );
+    await assertCommandRace(await Promise.all(racingCommands.map((send) => send())), 200, (index) =>
+      racingCommands[index]!(),
+    );
     expect(await json(await saveRelease(editor, work.work, correctedPub, pubKey)))
       .toMatchObject({ revision: pubCorrected.revision, receipt: pubCorrected.receipt, replayed: true });
 

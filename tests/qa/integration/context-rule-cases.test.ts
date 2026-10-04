@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const INPUT_A = 'https://rezics.com/example/has-feature';
 const INPUT_B = 'https://rezics.com/example/verified-feature';
@@ -131,11 +132,15 @@ test('CTX06: selected Realm rule conflict rejects before derivation and exact Co
     expect(incomplete).toMatchObject({ state: 'partial', exactCount: null, accepted: false });
     expect((await plan([selection(realmA.realm, first)], [input])).status).toBe(409);
     expect((await write(realmA.realm, INPUT_A, first.revision)).status).toBe(409);
-    const competing = await Promise.all([
-      write(realmA.realm, INPUT_A, partial.revision, randomUUID(), 2),
-      write(realmA.realm, INPUT_A, partial.revision, randomUUID(), 4),
-    ]);
-    expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
+    const competingCommands = [
+      write.bind(null, realmA.realm, INPUT_A, partial.revision, randomUUID(), 2),
+      write.bind(null, realmA.realm, INPUT_A, partial.revision, randomUUID(), 4),
+    ];
+    await assertCommandRace(
+      await Promise.all(competingCommands.map((send) => send())),
+      201,
+      (index) => competingCommands[index]!(),
+    );
     expect((await f.env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
       ${iri(source)} <${OUTPUT}> ${iri(object)} } }`)).boolean).toBe(false);
   } finally { await f.close(); }

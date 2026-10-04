@@ -10,6 +10,7 @@ import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbo
 import { identityHarness, iri, sha } from './source-identity-harness.ts';
 import { synopsisSlot } from '../../../services/main/src/modules/source/field-control-native.ts';
 import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/schema.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const short = (value: string) => value.split('/').at(-1)!;
 
@@ -345,9 +346,13 @@ test('LIVE04/LIVE05: one withdrawal route preserves native credits and independe
     const firstRetirement = { ...retirement, revision: creditA.support.credit.revision };
     expect((await h.call('POST', firstRetirementPath, {
       ...firstRetirement, expectedHead: iri(randomUUID()) })).status).toBe(409);
-    const race = await Promise.all([h.call('POST', firstRetirementPath, firstRetirement, randomUUID()),
-      h.call('POST', firstRetirementPath, firstRetirement, randomUUID())]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [
+      h.call.bind(h, 'POST', firstRetirementPath, firstRetirement, randomUUID()),
+      h.call.bind(h, 'POST', firstRetirementPath, firstRetirement, randomUUID()),
+    ];
+    await assertCommandRace(await Promise.all(raceCommands.map((send) => send())), 201, (index) =>
+      raceCommands[index]!(),
+    );
     expect((await nativeHead()).boolean).toBe(true);
   } finally { await h.close(); rmSync(directory, { recursive: true, force: true }); }
 }, 60_000);

@@ -19,6 +19,7 @@ import {
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type Write = SeedLexiconReceipt & {
   receipt: string;
@@ -242,11 +243,27 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
       200,
     );
 
-    const concurrent = await Promise.all([
-      change({ ...draft, noun: 'Fassung A' }, randomUUID(), de.component, drafted.revision),
-      change({ ...draft, noun: 'Fassung B' }, randomUUID(), de.component, drafted.revision),
-    ]);
-    expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+    const concurrentCommands = [
+      change.bind(
+        null,
+        { ...draft, noun: 'Fassung A' },
+        randomUUID(),
+        de.component,
+        drafted.revision,
+      ),
+      change.bind(
+        null,
+        { ...draft, noun: 'Fassung B' },
+        randomUUID(),
+        de.component,
+        drafted.revision,
+      ),
+    ];
+    await assertCommandRace(
+      await Promise.all(concurrentCommands.map((send) => send())),
+      200,
+      (index) => concurrentCommands[index]!(),
+    );
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
       grant,
     ]);
