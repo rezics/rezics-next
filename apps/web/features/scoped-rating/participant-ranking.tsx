@@ -63,7 +63,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
             <p>{t.rankingBasis}</p>
             <p data-ranking-eligibility>
               {t.rankingEligibility({ min: formatNumber(rank?.minimumRatings ?? 50, locale) })}
-              {rank?.prior ? ` ${t.rankingPrior({ mean: formatNumber(rank.prior.mean, locale, 1), ratings: t.ratingCount(rank.prior.ratings) })}` : ''}
+              {rank?.prior ? ` ${t.rankingPrior({ mean: formatNumber(rank.prior.mean, locale, 1), ratings: t.ratingCount(rank.prior.weight) })}` : ''}
             </p>
           </div>
           {rank?.status === 'unavailable' || !rank?.items.length

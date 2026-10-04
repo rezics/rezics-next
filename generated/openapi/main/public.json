@@ -355387,6 +355387,10 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "contextRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
                         "count": {
                           "minimum": 0,
                           "type": "integer"
@@ -355404,6 +355408,15 @@
                           "maxItems": 10,
                           "minItems": 10,
                           "type": "array"
+                        },
+                        "lastAdmissionId": {
+                          "~elyTyp": 7,
+                          "format": "uuid",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "mean": {
                           "~elyTyp": 7,
@@ -355600,6 +355613,8 @@
                         "realm",
                         "target",
                         "targetGrain",
+                        "contextRevision",
+                        "lastAdmissionId",
                         "scope",
                         "scale",
                         "cadence",
@@ -366539,6 +366554,10 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "contextRevision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
                     "coverage": {
                       "properties": {
                         "available": {
@@ -366620,6 +366639,15 @@
                                 ],
                                 "type": "object"
                               },
+                              "lastAdmissionId": {
+                                "~elyTyp": 7,
+                                "format": "uuid",
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "mean": {
                                 "~elyTyp": 7,
                                 "nullable": true,
@@ -366652,6 +366680,7 @@
                               "target",
                               "status",
                               "components",
+                              "lastAdmissionId",
                               "mean",
                               "meanDisplay",
                               "meetsThreshold"
@@ -366754,8 +366783,9 @@
                           "type": "array"
                         },
                         "minimumRatings": {
-                          "const": 50,
-                          "type": "number"
+                          "maximum": 1000,
+                          "minimum": 50,
+                          "type": "integer"
                         },
                         "prior": {
                           "~elyTyp": 7,
@@ -366764,14 +366794,6 @@
                             "mean": {
                               "type": "number"
                             },
-                            "ratings": {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
-                            "targets": {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
                             "weight": {
                               "minimum": 1,
                               "type": "integer"
@@ -366779,9 +366801,7 @@
                           },
                           "required": [
                             "mean",
-                            "weight",
-                            "ratings",
-                            "targets"
+                            "weight"
                           ],
                           "type": [
                             "object",
@@ -366912,6 +366932,7 @@
                     "profile",
                     "context",
                     "realm",
+                    "contextRevision",
                     "scope",
                     "scale",
                     "formula",

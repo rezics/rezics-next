@@ -150,7 +150,7 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
     const count = total(buckets);
     const meets = count >= THRESHOLD;
     return { target, status: 'available', components: { population: count, count, withdrawnCount: 0, sum: weightedSum(buckets), histogram: buckets },
-      mean: meets ? weightedSum(buckets) / count : null, meetsThreshold: meets,
+      lastAdmissionId: null, mean: meets ? weightedSum(buckets) / count : null, meetsThreshold: meets,
       meanDisplay: count === 0 ? 'no-data' : meets ? 'shown' : 'withheld-below-threshold' };
   }
 
@@ -170,13 +170,13 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       const votes = item.components.count;
       return { target: item.target, count: votes, mean, score: votes / (votes + weight) * mean + weight / (votes + weight) * pooled! };
     }).sort((a, b) => b.score - a.score).map((item, index) => ({ position: index + 1, ...item }));
-    return { profile: 'rating-rollup-v1', context, realm: iri('9001'),
+    return { profile: 'rating-rollup-v1', context, realm: iri('9001'), contextRevision: iri('9002'),
       scope: { question: 'How well written is this character here?', language: 'en', grain: 'projection', population: 'account-principal' },
       scale: { min: 1, max: 10, step: 1 }, formula, displayThreshold: THRESHOLD, memberCount: members.length,
       coverage: { members: counted.length, available: available.length, meetingThreshold: meeting.length },
       value, valueWithheld: withheld && available.length ? 'coverage-below-half' : null, members,
       rank: ranked ? { formula: 'bayesian-weighted-rating', minimumRatings: 50, status: items.length ? 'ranked' : 'unavailable',
-        prior: pooled === null ? null : { mean: pooled, weight, ratings, targets: available.length }, items } : null,
+        prior: pooled === null ? null : { mean: pooled, weight }, items } : null,
       sourcePosition };
   }
 
