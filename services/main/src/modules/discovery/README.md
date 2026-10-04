@@ -59,9 +59,10 @@ terminal receipt as well as the event, and rejects conflicting fields.
 
 [`versions.ts`](versions.ts) replaces only changed Work posting lists and affected
 term/Concept counters. Logical generations share a storage root with validity
-intervals; SQL functions resolve each generation's immutable version directly,
-without recursive generation chains or catalogue copies. Work updates use
-partial live-row indexes; cursor reads retain the original version. Concept
+intervals; reads bind the storage root and immutable version already loaded with
+their generation, without recursive generation chains or catalogue copies.
+Logical-id SQL adapters resolve those fields together for other SQL consumers.
+Work updates use partial live-row indexes; cursor reads retain the original version. Concept
 counts reduce distinct Concepts per Work, including tags beyond the three-card
 display limit. Cancelled staged deltas restore their older intervals before a
 later delta can reuse the root.
@@ -98,6 +99,25 @@ an expired or recovered basis requires a restart. These are retained projection
 rows, not retained authorization.
 
 ## Measurements and limits
+
+G-1064 (QA `20261004t151227-e4b207`) retained four graph calls/46 SQL statements
+for irrelevant events and eight/126 for a rating delta at 100, 1,000 and 10,000
+Works, with zero and 1,000 idle scopes. Both public and global-rating populations
+rebuilt in 1.92, 14.20 and 141.34 seconds; the largest run again used 352 ticks
+and 1,807 graph calls. The prior 10,000-Work measurement was 135.15 seconds.
+These are repeated measurements on the shared host, within the five-minute
+budget, rather than a claim that rebuild latency is identical between runs.
+
+The read regression (`discovery-history-seeks.test.ts`, QA
+`20261004t150839-f2576c`) captures actual owner statements over 20,000 Works and
+four physical versions, including retired and future rows. It checks 79 plans
+for pages, conditions, payloads, membership, counts, sections, cards and live
+delta probes. Condition membership stays correlated per drive row; Concept
+continuations seek the indexed negative-count/identity tuple, and popular terms
+order by numeric counts. The history fixture keeps its posting orders and
+counts fixed while versioning payloads; it does not qualify every distribution
+of rating changes. Card probes separately preserve an unbounded logical-read
+counterexample at 300 and 3,000 unrelated postings.
 
 G-1063 (QA `20261004t124611-ff1da1`) refreshed both the public and global-rating
 populations at 100, 1,000 and 10,000 Works in 1.90, 13.59 and 135.15 seconds,

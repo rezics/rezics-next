@@ -152,6 +152,15 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     await stack.accessPool.query(`UPDATE access.derived_generation SET finished_at = clock_timestamp() - interval '6 minutes'
       WHERE id = $1`, [page.generation]);
     expect((await get(`/v1/works?cursor=${page.nextCursor}`)).status).toBe(409);
+    // Cursor age and the persisted retirement deadline are separate fences.
+    // Updating ledger age alone must not accelerate physical cleanup.
+    expect((await stack.accessPool.query(`SELECT due_at > statement_timestamp() AS waiting
+      FROM access.discovery_retirement WHERE generation_id=$1`, [page.generation])).rows[0])
+      .toEqual({ waiting: true });
+    expect(await refresh.purge()).toBe(0);
+    await stack.accessPool.query(`UPDATE access.discovery_retirement SET due_at=clock_timestamp()-interval '1 second'
+      WHERE generation_id=$1`, [page.generation]);
     expect(await refresh.purge()).toBeGreaterThan(0);
+    expect((await get(`/v1/works?cursor=${page.nextCursor}`)).status).toBe(409);
   } finally { await stack.stop(); }
 }, 240_000);

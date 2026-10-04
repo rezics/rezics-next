@@ -73,9 +73,14 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     const deps = { environment: f.env, access: f.access, media: f.media, discovery: projection,
       account: { verify: async () => writer.principal }, relayPosition: position };
     const deferred = new DiscoveryRefreshWorker(deps, store, projection);
+    // Eligibility probes own the due basis. Global/background lanes decide
+    // scheduler priority independently of the oldest Realm's due timestamp.
+    const dueOnly = (basis: OwnedDiscoveryBasis) => f.accessPool.query(`UPDATE access.discovery_refresh
+      SET due_at=CASE WHEN scope_key=$1 THEN clock_timestamp()-interval '1 hour'
+        ELSE greatest(due_at,clock_timestamp()+interval '1 minute') END`, [discoveryScopeKey(basis)]);
     for (const [index, basis] of rejected.entries()) {
       const key = discoveryScopeKey(basis);
-      await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`, [key]);
+      await dueOnly(basis);
       const calls = f.fuseki.queries;
       expect(await deferred.tick()).toBe(index === 4 ? 'basis-invalid' : index === 5 ? 'inactive' : 'basis-unavailable');
       expect(f.fuseki.queries - calls).toBeLessThanOrEqual(DISCOVERY_REFRESH_COST.graphCalls);
@@ -86,6 +91,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     expect((await f.accessPool.query(`SELECT state FROM access.derived_generation WHERE id=$1`, [pending.generation_id])).rows[0].state)
       .toBe('building');
     // The next claim reaches public work without accelerating deferred bases.
+    await dueOnly(publicBasis);
     expect(await deferred.tick()).toBe('activated');
     expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
       WHERE family='discovery' AND scope_key=$1`, [discoveryScopeKey(publicBasis)])).rows).toHaveLength(1);
@@ -119,8 +125,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
       return inspect(job, (await position.read())!);
     };
     for (const seconds of [30, 60]) {
-      await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-        [discoveryScopeKey(publicBasis)]);
+      await dueOnly(publicBasis);
       expect(await deferred.tick()).toBe('retry');
       const delay = (await f.accessPool.query(`SELECT extract(epoch FROM due_at-clock_timestamp()) AS seconds
         FROM access.discovery_refresh WHERE scope_key=$1`, [discoveryScopeKey(publicBasis)])).rows[0].seconds;
@@ -135,15 +140,13 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(realms[0]!.realm)} a rv:Realm ;
         rv:realmState rv:Active ; rv:space ${iri(realms[0]!.space)} } }`);
-    await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-      [discoveryScopeKey(realmBases[0]!)]);
+    await dueOnly(realmBases[0]!);
     expect(await deferred.tick()).toBe('activated');
     expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
       WHERE family='discovery' AND scope_key=$1`, [discoveryScopeKey(realmBases[0]!)])).rows[0].active_generation)
       .toBe(pending.generation_id);
     store.inspect = inspect;
-    await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-      [discoveryScopeKey(publicBasis)]);
+    await dueOnly(publicBasis);
     expect(await deferred.tick()).toBe('current');
     expect((await f.accessPool.query(`SELECT attempts::text FROM access.discovery_refresh WHERE scope_key=$1`,
       [discoveryScopeKey(publicBasis)])).rows[0].attempts).toBe('0');
@@ -151,8 +154,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     // Even a fresh active generation must recheck Realm eligibility. A policy
     // disappearing without advancing the fixture's cut cannot bypass admission.
     await f.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[0]!.realm)} ?p ?o } }`);
-    await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-      [discoveryScopeKey(realmBases[0]!)]);
+    await dueOnly(realmBases[0]!);
     expect(await deferred.tick()).toBe('basis-unavailable');
 
     // An apparent missing Realm at a moving graph is not stable ineligibility:
@@ -168,8 +170,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
       return result;
     };
     try {
-      await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-        [discoveryScopeKey(realmBases[0]!)]);
+      await dueOnly(realmBases[0]!);
       expect(await deferred.tick()).toBe('retry');
       expect(inject).toBe(false);
       const job = (await f.accessPool.query(`SELECT last_outcome,due_at<clock_timestamp()+interval '1 second' AS short_retry
@@ -180,8 +181,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
       if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) break;
       if (i === 99) throw new Error('G1033 concurrent relay exceeded its fixture bound');
     }
-    await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 hour' WHERE scope_key=$1`,
-      [discoveryScopeKey(realmBases[0]!)]);
+    await dueOnly(realmBases[0]!);
     expect(await deferred.tick()).toBe('basis-unavailable');
 
     const meter = meteredPool(f.accessPool), bounded = new DiscoveryProjection(meter.pool);

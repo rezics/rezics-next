@@ -14,6 +14,7 @@ import { Value } from 'typebox/value';
 import { resourceListPage } from '../../../services/main/src/modules/query/resource-contract.ts';
 import { resourceWork } from '../../../apps/web/features/discover/resource-card.tsx';
 import { startMediaStack } from './media-support.ts';
+import { isolateCardRatingContext } from './discovery-rating-context-fixture.ts';
 import { digest } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 
 const native = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -37,6 +38,7 @@ function relationVisits(node: PlanNode): number {
 test('G1001: real Query cards show bounded ordered authors and Global ratings without scanning credit/rating degree', async () => {
   const prepared = performance.now();
   const f = await startMediaStack('g-1001-cards', { profileCredits: true, library: true });
+  const restoreContexts = await isolateCardRatingContext(f.fuseki);
   try {
     const [a, b, c] = await Promise.all(['Lin Mei', 'Jane Austen', '森圭'].map(name => f.member(name)));
     const work = await f.publicWork(a!.actor, ['en'], 'G1001 rainy library');
@@ -78,15 +80,21 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
         const step = await projection.beginStep(automaticDiscovery(null), row.generation_id, '');
         const result = await projectDiscoveryBatch(session, basis, '', { works: [work.work] });
         expect(result.complete).toBe(true);
-        // Background rows are installed only while the generation is building;
-        // ready rows remain immutable throughout the read measurements.
+        // Commit the real Work first: version replacement deletes every posting
+        // of its Work, including synthetic fanout installed before that batch.
+        await projection.commitBatch(automaticDiscovery(null), row.generation_id, step.lease, '',
+          { ...result, complete: false }, session.position);
         if (!context && degree) await f.accessPool.query(`INSERT INTO access.discovery_entry
           (generation_id, work, work_type, term, recent_order, rating_count, rating_sum, payload)
           SELECT $1,$2,'background','background-' || n,0,0,0,'{}'::jsonb
           FROM generate_series(1,$3::integer) n`, [row.generation_id, work.work, degree]);
-        await projection.commitBatch(automaticDiscovery(null), row.generation_id, step.lease, '', result, session.position);
-        const activated = await projection.activate(automaticDiscovery(null), row.generation_id, heads.get(context) ?? null,
-          session.position, { idempotencyKey: randomUUID(), requestDigest: digest({ generation: row.generation_id }) });
+        const finish = await projection.beginStep(automaticDiscovery(null), row.generation_id, result.after);
+        await projection.commitBatch(automaticDiscovery(null), row.generation_id, finish.lease, result.after,
+          { after: result.after, complete: true, items: [] }, session.position);
+        const activated = await projection.activate(automaticDiscovery(null), row.generation_id,
+          heads.get(context) ?? row.active_head, session.position,
+          { idempotencyKey: randomUUID(), requestDigest: digest({ generation: row.generation_id }) });
+        expect(activated.outcome).toBe('succeeded');
         heads.set(context, activated.headRevision);
         built.push(row.generation_id);
       }
@@ -114,7 +122,7 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
       expect(tile.rating).toEqual({ mean: 4, count: 2, max: 5 });
       const explained = await f.accessPool.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${discoveryResourceCardPayloadSql}`,
-        [source.generations, [work.work]],
+        [source.generations, source.generations, source.generations.map(() => '0'), [work.work]],
       );
       const plan = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
       expect(relationVisits(plan)).toBe(2);
@@ -145,7 +153,7 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
       source = await buildSource(degree);
       await f.accessPool.query('ANALYZE access.discovery_entry');
       const expensive = await f.accessPool.query<{ 'QUERY PLAN': { Plan: PlanNode }[] }>(
-        'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) SELECT count(*) FROM access.discovery_entry WHERE generation_id=ANY($1::uuid[])',
+        'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) SELECT count(*) FROM unnest($1::uuid[]) ids(id) CROSS JOIN LATERAL access.discovery_entries(ids.id)',
         [source.generations],
       );
       expect(relationVisits(expensive.rows[0]!['QUERY PLAN'][0]!.Plan)).toBeGreaterThanOrEqual(degree);
@@ -175,5 +183,5 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
     const privateAuthor = await json<{ result: { items: ResourceCard[] } }>(await request());
     expect(privateAuthor.result.items[0]!.work!.primaryCredits.map(credit => credit.displayName))
       .toEqual(['Lin Mei', '森圭']);
-  } finally { await f.stop(); }
+  } finally { await restoreContexts(); await f.stop(); }
 }, 600_000);

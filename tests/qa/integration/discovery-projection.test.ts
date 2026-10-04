@@ -11,6 +11,8 @@ import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { cloneOwners, requireQa } from './recommendation-support.ts';
+import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -26,10 +28,12 @@ interface Page { items: { id: string; rating: { mean: number; count: number; sum
   nextCursor: string | null; matches: { value: number; kind: string }; count: { value: number; kind: string; total: null } }
 const uuid = () => `https://rezics.com/id/${randomUUID()}`;
 
-// Run this file alone: its restore/Access invalidation probes deliberately fence
-// the entire dataset. tests/qa/integration is automatically registered by QA.
+// This probe owns its graph inventory and Access fences, including in a
+// sequential regression run after other files.
 test('Discovery projection: native scoped reads, durable builds, disclosure, cursor and source fences', async () => {
-  const stack = await startMediaStack('discovery');
+  const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+  const stack = await startMediaStack('discovery', { ownerUrls: owners.urls });
+  const restoreGraph = await isolateDiscoveryProbeGraph(stack.env);
   try {
     const a = await stack.member('a'), b = await stack.member('b'), outsider = await stack.member('outsider');
     await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
@@ -264,19 +268,19 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     const selectedKeys = Array.from({ length: DISCOVERY_SELECTED_TERM_COST.terms }, (_, index) =>
       `https://rezics.com/id/00000000-0000-4000-8000-${String(19981 + index).padStart(12, '0')}`);
     const selectedPlan = (await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySelectedTermsSql}`,
-      [planBuild.generation, selectedKeys])).rows[0]['QUERY PLAN'][0].Plan;
+      [planBuild.generation, '0', selectedKeys])).rows[0]['QUERY PLAN'][0].Plan;
     const countNodes = (node: Record<string, unknown>): Record<string, unknown>[] =>
       [node, ...((node.Plans ?? []) as Record<string, unknown>[]).flatMap(countNodes)];
     const selectedNodes = countNodes(selectedPlan);
     expect(selectedNodes.some(node => node['Index Name'] === 'discovery_term_count_pkey')).toBe(true);
     expect(selectedNodes.some(node => ['Sort', 'Seq Scan', 'Aggregate'].includes(String(node['Node Type'])))).toBe(false);
     expect(Math.max(...selectedNodes.map(node => Number(node['Actual Rows'] ?? 0)))).toBeLessThanOrEqual(20);
-    expect((await owner.selectedTerms({ ...selectedGeneration, generation_id: planBuild.generation }, selectedKeys)))
+    expect((await owner.selectedTerms({ ...selectedGeneration, generation_id: planBuild.generation, storage_generation: null, storage_version: '0' }, selectedKeys)))
       .toHaveLength(20);
     for (const sort of ['recent', 'top-rated'] as const) for (const type of ['', 'https://schema.org/Book']) {
       for (const filter of ['', term.sense]) for (const continued of [false, true]) {
       const explained = await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${discoverySeekSql(sort, continued)}`,
-        [planBuild.generation, type, filter, 21, ...(continued ? [sort === 'recent' ? '10000' : '-1',
+        [planBuild.generation, '0', type, filter, 21, ...(continued ? [sort === 'recent' ? '10000' : '-1',
           'https://rezics.com/id/00000000-0000-4000-8000-000000010000'] : [])]);
       const plan = explained.rows[0]['QUERY PLAN'][0].Plan;
       const nodes = (node: Record<string, unknown>): Record<string, unknown>[] =>
@@ -381,5 +385,5 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     await stack.publicWork(a.actor, ['en'], 'Discovery changed');
     expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
     expect((await call(`/v1/rating-contexts?cursor=${contexts.nextCursor}`)).status).toBe(409);
-  } finally { await stack.stop(); }
+  } finally { await restoreGraph(); await stack.stop(); await owners.close(); }
 }, 240_000);
