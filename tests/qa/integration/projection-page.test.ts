@@ -446,6 +446,18 @@ test('a position is covered by the Structure group above it and by its Work; a r
   expect(await relationsOn(inVolume)).toContain(grouped);
   expect(await relationsOn(inOtherVolume)).not.toContain(grouped);
   expect(await relationsOn(chapter)).not.toContain(grouped);
+  // The ancestor walk takes one query per level of the Structure above the position and nothing for other frames.
+  const query = stack.fuseki.query.bind(stack.fuseki);
+  let ancestorQueries = 0;
+  stack.fuseki.query = async (sparql, maximum) => {
+    if (sparql.includes('SELECT ?parent ?inner')) ancestorQueries++;
+    return query(sparql, maximum);
+  };
+  try {
+    await on(work.work, canon); expect(ancestorQueries).toBe(0);
+    await on(chapter); expect(ancestorQueries).toBe(1);
+    await on(inVolume); expect(ancestorQueries).toBe(3);
+  } finally { stack.fuseki.query = query; }
 }, 180_000);
 
 test('a Statement names only existing coordinates, and a caller cannot move a projection Statement out of its frame', async () => {
