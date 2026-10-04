@@ -155,9 +155,10 @@ describe('goalctl runtime policy', () => {
     expect(usageLevel(snap(50, 4 * 3600), now * 1000).level).toBe('restricted');
     expect(usageLevel(snap(96, 60), now * 1000).level).toBe('critical');
     // The weekly window stops new Claude work when it would pass the cap's margin before its reset:
-    // under the default 50% cap, 30% after 4 days projects about 53%.
-    expect(usageLevel(snap(10, 4 * 3600, 30), now * 1000)).toMatchObject({ level: 'restricted' });
-    expect(usageLevel(snap(10, 4 * 3600, 45), now * 1000)).toMatchObject({ level: 'critical' });
+    // under the default 100% cap, 60% after 4 days projects 105%; 30% projects about 53% and continues.
+    expect(usageLevel(snap(10, 4 * 3600, 60), now * 1000)).toMatchObject({ level: 'restricted' });
+    expect(usageLevel(snap(10, 4 * 3600, 30), now * 1000)).toMatchObject({ level: 'normal' });
+    expect(usageLevel(snap(10, 4 * 3600, 95), now * 1000)).toMatchObject({ level: 'critical' });
   });
 
   test('advises widening Claude work while the week would end unspent', () => {

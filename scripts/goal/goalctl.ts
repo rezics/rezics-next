@@ -376,10 +376,11 @@ const SEVEN_DAYS = 7 * 24 * 3600;
 export const PROJECTED_LIMIT = 95;
 export const CRITICAL_USED = 95;
 // The 7d window is spent up to WEEK_CAP, the share of the week the maintainer allows (2026-09-29: keep at
-// least half the week unused, so 50). Below WEEK_TARGET at reset the report advises widening Claude work.
+// least half the week unused; 2026-10-04: that limit is lifted, so the whole week). Below WEEK_TARGET at
+// reset the report advises widening Claude work.
 // New Claude work stops when the week would pass WEEK_PROJECTED_LIMIT before its reset or WEEK_CRITICAL_USED
 // is reached; the five points below the cap carry the manager to the reset.
-export const WEEK_CAP = Number(process.env.GOAL_CLAUDE_WEEK_CAP ?? 50);
+export const WEEK_CAP = Number(process.env.GOAL_CLAUDE_WEEK_CAP ?? 100);
 export const WEEK_TARGET = WEEK_CAP - 10;
 export const WEEK_PROJECTED_LIMIT = WEEK_CAP - 5;
 export const WEEK_CRITICAL_USED = WEEK_CAP - 5;

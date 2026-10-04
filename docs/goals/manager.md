@@ -61,9 +61,10 @@ Maintainer directions of 2026-09-27, revised 2026-09-29, 2026-09-30 and
    The frontend follows the same principle. Fold documents into code as work
    touches them, and make a final deletion pass at the end of the Goal
    (maintainer, 2026-09-30).
-3. **Use at most half the Claude week, keep every manager alive** (2026-09-29;
-   2026-10-04). Leave at least 50% of each Claude week unused (`goalctl`
-   enforces it through `WEEK_CAP`). Never let the usage window a manager draws
+3. **Spend the Claude week, keep every manager alive** (2026-09-29;
+   2026-10-04). The earlier limit of half the Claude week is lifted
+   (maintainer, 2026-10-04): use Claude as fully as is useful, above all before
+   its weekly reset (`WEEK_CAP` is 100). Never let the usage window a manager draws
    from run out: if it does, that Goal stops until the window resets. Managers
    alone stay well inside their windows; workers on the same account are what
    exhaust them, so `goalctl` stops new Claude dispatch before the 5-hour
@@ -163,7 +164,7 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   keep five or fewer, verify with `storybook:test` rather than a Storybook dev
   server, and run one dev server at a time.
 - **Claude 7d.** `goalctl status` projects the week at reset from the recent
-  burn rate against `WEEK_CAP` (50%). Ten points below the cap it prints
+  burn rate against `WEEK_CAP` (100%). Ten points below the cap it prints
   `widen`. New Claude dispatch stops when the week would pass five points below
   the cap before its reset, or at that level used, so the rest carries the
   manager to the reset.
