@@ -428311,11 +428311,6 @@
                     "projection": {
                       "additionalProperties": false,
                       "properties": {
-                        "discussion": {
-                          "items": {},
-                          "maxItems": 0,
-                          "type": "array"
-                        },
                         "frames": {
                           "items": {
                             "anyOf": [
@@ -429587,11 +429582,6 @@
                           },
                           "maxItems": 8,
                           "minItems": 1,
-                          "type": "array"
-                        },
-                        "ratings": {
-                          "items": {},
-                          "maxItems": 0,
                           "type": "array"
                         },
                         "relations": {
@@ -431473,11 +431463,6 @@
                           ],
                           "type": "object"
                         },
-                        "reviews": {
-                          "items": {},
-                          "maxItems": 0,
-                          "type": "array"
-                        },
                         "statements": {
                           "additionalProperties": false,
                           "properties": {
@@ -433209,10 +433194,7 @@
                         "subject",
                         "frames",
                         "statements",
-                        "relations",
-                        "ratings",
-                        "reviews",
-                        "discussion"
+                        "relations"
                       ],
                       "type": "object"
                     },
