@@ -154,6 +154,7 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1063-cost.test.ts',
   'tests/qa/integration/g-1056-occurrence-projection.test.ts',
   'tests/qa/integration/g-842-catalogue.test.ts',
+  'tests/qa/integration/discovery-rating-effects.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
