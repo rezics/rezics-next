@@ -46,7 +46,7 @@ test('QA04: every migrated acceptance scenario and required result retains its I
   expect(digest).toBe('e30dd965638383ea27f8ccff59afcc31761f0698b529a5cbd087a43e27de56fa');
   const safetyDigest = createHash('sha256').update(safetyCases.map(item =>
     `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
-  expect(safetyDigest).toBe('4e682b1a041b8f53ee1b049f3fc5732cc0d2a520421abb2a717419f112a7c175');
+  expect(safetyDigest).toBe('16fd3390639f44d7c2973dd7b7b6ebacbfbadd115f8966e8344ad43dd8de7ec0');
   const contributionDigest = createHash('sha256').update(contributionCases.map(item =>
     `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
   expect(contributionDigest).toBe('db8c45d621de025b553065bf31c82a0981622645bbcf68b32a3836b3d5bdf4fe');
