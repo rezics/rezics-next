@@ -88,6 +88,7 @@ export type WorkerName =
   | 'main.realm-policy.recovery'
   | 'main.library-import.retention'
   | 'main.library.backfill'
+  | 'main.post.backfill'
   | 'main.media.screen'
   | 'main.verification.correction'
   | 'main.notification.producer'
