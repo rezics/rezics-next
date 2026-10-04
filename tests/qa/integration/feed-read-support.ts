@@ -189,7 +189,7 @@ export async function startHomeStack(label: string, options: { projectionStart?:
     throw new Error('Home projection exceeded its fixture budget');
   };
   const stop = async () => { await relay.end(); await stack.stop(); };
-  return { stack, deps, app, call, json, provision, project, projectRelay, author, reader, stop };
+  return { stack, relay, deps, app, call, json, provision, project, projectRelay, author, reader, stop };
 }
 
 export type HomeStack = Awaited<ReturnType<typeof startHomeStack>>;

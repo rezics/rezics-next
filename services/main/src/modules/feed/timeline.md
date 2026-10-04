@@ -107,9 +107,16 @@ author changes queue the affected Work, delete/rewrite only its author keys in
 indexed history batches, and retain direct keys. The job seeks its saved item
 key and never rescans a completed prefix. Writes cost `O(H_work × A)` for the
 changed Work's history and at most three authors, independent of followers.
-Following New reports unavailable while its target projection is incomplete,
-including migration/restore backfill; it never calls an incomplete index caught
-up. Every selected activity still passes current graph, Content and Access
+Following New serves its bounded indexed subset while the target projection is
+incomplete, including migration/restore backfill. It reports `catching-up` and
+`projecting`, including an empty partial result, and never calls that index caught
+up. Its cursor includes the target revision; a backfill changes the population
+and requires a fresh first page. The closing cut checks that same revision:
+[PostgreSQL Read Committed](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED)
+gives each statement a snapshot, not a snapshot spanning graph and SQL reads.
+`/health/feed-ready` reports indexing until references, reviews and target/author
+history all reach the source cut. Both indexes receive one bounded worker turn
+so a Realm backfill cannot starve Home's target history. Every selected activity still passes current graph, Content and Access
 disclosure, so an index entry is not an authorization grant.
 
 ## Ranked populations

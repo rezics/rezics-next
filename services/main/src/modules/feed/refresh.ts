@@ -45,10 +45,12 @@ export class FeedRefreshWorker {
         await this.store.advance(checkpoint, relay.sequence, grouped, new Map(times.rows.map(row => [row.sequence, row.delivered_at])));
         return 'advanced';
       }
-      if (await this.store.projectRealmThreads(session,this.relay,checkpoint,relay.sequence)) return 'advanced';
-      if (!this.deps.reviews) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';
-      const events = await this.deps.reviews.eventsAfter(checkpoint.review_sequence);
-      if (!events.length) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';
+      // Both independent indexes get a bounded turn. A large Realm backfill
+      // must not starve Following's target/author backfill on a fresh or restored stack.
+      const targets = await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence);
+      const threads = await this.store.projectRealmThreads(session,this.relay,checkpoint,relay.sequence);
+      const events = await this.deps.reviews?.eventsAfter(checkpoint.review_sequence) ?? [];
+      if (!events.length) return targets || threads ? 'advanced' : 'current';
       const ids = [...new Set(events.slice(0, FEED_COST.refreshItems).filter(event => event.kind === 'created')
         .map(event => reviewActivityId(event.review)))];
       const admitted = new Map((await feedReviewSources(session, ids)).map(source => [source.id, source]));

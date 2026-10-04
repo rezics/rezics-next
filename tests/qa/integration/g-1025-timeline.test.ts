@@ -26,7 +26,9 @@ test('G1025: Following New applies follow/unfollow immediately and rebuilds only
     await authorApi.command('g1025:timeline:credit', { method: 'POST',path: `/v1/works/${work.work.slice(-36)}/agent-credits`,
       body: { profile: 'native-agent-credit-v1',credit: `https://rezics.com/id/${randomUUID()}`,agent: credited,role: 'author',
         expectedWorkHead: header.revision,actingSubject: author } });
-    expect((await home.call('GET',path,undefined,home.reader.token)).status).toBe(503);
+    const projecting = await read();
+    expect(projecting.items).toEqual([]);
+    expect(projecting.caughtUp.state).toBe('projecting');
     await home.project();
     const after = await read();
     expect(after.items).toEqual([expect.objectContaining({ target: expect.objectContaining({ work: work.work }),

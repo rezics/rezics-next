@@ -41,6 +41,12 @@ test('G-397 readers follow native and Open Library authors, hear of their new Wo
         GRAPH ${iri(GRAPHS.revisions)} { ${external.map(triples => triples.revision).join('\n')}
           ${iri(creditRevision)} a rv:NativeAgentCreditRevision, rv:RevisionAnchor ; rv:component ${iri(credit)} ;
             rv:work ${iri(story!.work)} ; rv:agent ${iri(credited)} ; schema:roleName "author" . } }`);
+      // These raw credit fixtures bypass the command outbox. Supply its exact
+      // Work invalidations before asking the real projector to update their history.
+      await stack.accessPool.query(`INSERT INTO access.feed_author_dirty(data_epoch,work)
+        SELECT $1,work FROM unnest($2::text[]) work ON CONFLICT(data_epoch,work) DO UPDATE SET after_id=''`,
+      [stack.env.lineage.dataEpoch, [discussed!.work, book!.work, novel!.work, story!.work]]);
+      await home.project();
 
       const follow = (followTarget: string, kind: string, following: boolean, expectedRevision: string | null,
         key = randomUUID()) => call('POST', '/v1/follows', { profile: 'follow-command-v1', target: followTarget, kind,

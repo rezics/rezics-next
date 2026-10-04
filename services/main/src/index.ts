@@ -579,6 +579,7 @@ const libraryBackfill = withWorkerTelemetry('main.library.backfill', () => prepa
   if (!libraryBackfillController.signal.aborted) console.warn('Library shelf backfill paused; restart to resume', error);
 });
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
+  realmReplyThreads: new RealmReplyThreadStore(contentPool, pool),
   // Without the review owner the worker never ingests review events, and Home reports catching-up for good.
   reviews: new ReaderReviews(pool),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;

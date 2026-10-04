@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { bootstrapWebAuth, upgradeWebClient } from '../../../scripts/dev/web-auth-bootstrap.ts';
+import { upgradeWebClient } from '../../../scripts/dev/web-auth-bootstrap.ts';
+import { joiningAuthFixture } from '../support/joining-auth.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import {
   AccountAssertionDenied,
@@ -59,10 +60,7 @@ for (const identity of ['provisioned', 'local-fixture'] as const)
         newcomer = await s.member('newcomer');
       let fixtureAgent: string | undefined;
       if (identity === 'local-fixture') {
-        const auth = await bootstrapWebAuth({
-          runId: Bun.env.REZICS_QA_RUN_ID!,
-          redirectUris: ['http://localhost:3000/auth/callback'],
-        });
+        const auth = await joiningAuthFixture(Bun.env.REZICS_QA_RUN_ID!);
         authDirectory = dirname(auth.publicConfigPath);
         const saved = JSON.parse(readFileSync(auth.privateConfigPath, 'utf8')) as {
           member: { id: string };
@@ -73,7 +71,7 @@ for (const identity of ['provisioned', 'local-fixture'] as const)
         newcomer.principal = { issuer: config.issuer, subject: saved.member.id };
         fixtureAgent = auth.actingSubject;
         // Existing stacks take the upgrade path even when OAuth is current.
-        expect(await upgradeWebClient({ runId: Bun.env.REZICS_QA_RUN_ID! })).toBe(false);
+        expect(await upgradeWebClient({ runId: Bun.env.REZICS_QA_RUN_ID!, fixtureName: auth.name })).toBe(false);
       }
       const people = [owner, newcomer];
       const app = createMainApp(s.fuseki, {
