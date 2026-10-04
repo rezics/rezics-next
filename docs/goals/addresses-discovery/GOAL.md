@@ -4,7 +4,6 @@
 areas:
   - services/main/src/modules/discovery/**
   - services/main/src/modules/feed/**
-  - services/main/src/modules/rating/**
   - services/main/src/modules/space/**
   - services/main/src/modules/address/**
   - services/main/src/modules/follows/**
