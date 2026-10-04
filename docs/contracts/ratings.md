@@ -40,7 +40,8 @@ questions never combine. Reviews and discussion take the same targets.
   override and which local data should recalibrate: a mean on a Resource from 5
   ratings (IMDb), on a projection from 10, with only the count and histogram
   below it; leaderboards use a Bayesian weighted rating whose prior and weight
-  come from the same RatingContext and are published, from 50 ratings
+  come from readable requested members of the same RatingContext and are
+  published as mean and weight, from max(50, the Context threshold) ratings
   ([Letterboxd](https://letterboxd.com/journal/the-score-new-weighted-average-ratings/));
   a derived roll-up shows when it covers at least half its members. Every score
   shows its count, histogram and population label.
@@ -57,11 +58,12 @@ or [Data Cube](https://www.w3.org/TR/vocab-data-cube/) observation.
   owner README); time-bucketed components and the other rating families still
   need them. Corrections invalidate affected buckets; a rebuild keeps the active
   generation until the replacement is complete. Expensive exact analytics, such
-  as reconstructing legacy targets recorded before components existed, should
-  be resumable jobs.
-- Seals within one RatingContext serialize on its admission scope gate; a
-  question rated by many people at once needs a per-target scope before launch
-  load.
+  as reconstructing legacy targets recorded before components existed, run as
+  resumable jobs; the target-rating owner now provides bounded reconstruction
+  with a retained cursor and idempotent retries.
+- Observation seals now serialize per (RatingContext, target), while retaining
+  the unchanged Context authority scope. Registration and claim still use the
+  short Context authority gate; launch contention remains to be qualified.
 - Joined rating search may combine qualified aggregates with graph/text
   conditions, while preserving the selected population. Raw-score joins must not
   silently change that population.

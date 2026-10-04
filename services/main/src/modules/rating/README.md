@@ -42,12 +42,10 @@ module. RATE01–09 are declared in `scripts/qa/cases/ratings-and-event-time.ts`
 `scripts/qa/coverage/rate*.ts` names the complete-case tests. The recorded
 backend run is named in `docs/plan/README.md#current-state`.
 
-Target ratings (release, realization, occurrence and resource grains) read from
+Target ratings (release, realization, occurrence, resource and projection grains) read from
 additive components, never from a walk of the raters. Access keeps the head
-count, rating count, sum and a 1–10 histogram per (RatingContext, target), and
-the same figures summed per Context in 16 shards keyed by a hash of the target,
-so a seal moves only its target's shard row and a ranking's prior sums sixteen
-rows. The seal that moves a head moves its target row and shard row in
+count, rating count, sum and a 1–10 histogram per (RatingContext, target).
+The seal that moves a head moves its target row in
 its own transaction (subtract the head's recorded value, add the new one;
 withdrawal subtracts only), and the sealed value must match the admitted request
 digest. Count and sum are what the histogram says, which the database checks.
@@ -56,8 +54,37 @@ manifests and must equal its components; a larger one is witnessed by its last
 sealed write, which must still be its observation's live head, so a graph that
 lost it or rolled back past it makes the read unavailable instead of wrong. Heads
 sealed before components existed have no recorded value (SQL cannot read the
-graph): they are counted as `unvalued`, a verified read of such a target records
-their values, and a target above 100 raters waits for its raters' next revisions.
+graph): they are counted as `unvalued` and remain unavailable until explicit
+reconstruction or their raters' next revisions record the values. Reads never
+repair inventory or take an exclusive observation gate.
+
+`task rating:reconstruct -- --env <apps.env> --context <IRI> --target <IRI>`
+runs one bounded batch, retains an atomic checkpoint under
+`.temp/rating-reconstruction/`, and resumes on the next invocation. `--batch-size`
+is 1–100 and `--batches` is 1–32. Each batch verifies the live heads, receipts,
+request digests and immutable manifests within the aggregate's byte budget and
+deadline. An indexed slot cursor skips already valued heads; revision CAS and the
+unvalued condition make lost-response retries idempotent. A recovery generation
+change rejects an in-progress cursor; after reconciliation use `--restart` to
+scan the remaining heads from the beginning. Missing or contradictory evidence
+fails the batch without moving its checkpoint.
+
+Authority remains `rating:observe:<Context>` for grants, closure, relay and
+Discover. Observation seals hold that authority fence `FOR SHARE` and serialize
+only on `(Context, target)`; reconstruction acquires the same target gate after
+holding the recovery fence `FOR SHARE`. Independent targets can seal together,
+while recovery closure waits for an in-flight reconstruction to commit. This
+uses PostgreSQL's [shared row lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
+and [indexed ordered pages](https://www.postgresql.org/docs/18/indexes-ordering.html);
+the selected database concurrency tests establish the composition, not launch
+capacity. Registration and claim still use the short Context authority gate.
+
+Aggregate evidence is the Context's `contextRevision` and the target components'
+`lastAdmissionId` (null for an unrated target). A roll-up returns the same Context
+revision and each available member's last admission. `sourcePosition` identifies
+the latest contributing admission, or the Context admission when no member has
+ratings; it is owner evidence rather than the dataset's current sequence.
+Unrelated writes therefore leave these responses unchanged.
 
 A Context shows a target's mean only from its display threshold, 5 ratings by
 default and 10 for the `projection` grain, and a `realm-target-rating-context-v3`
@@ -76,8 +103,14 @@ not exist, or has another grain is listed as unavailable with its reason and sti
 counts in the denominator. A member the Context does not accept is `not-accepted`,
 distinct from unavailable, and is left out of the value, that denominator and the
 ranking. A v1–v3 Context accepts every member its grain admits. A ranking uses a Bayesian weighted rating, `v/(v+m)·R + m/(v+m)·C`,
-whose prior mean C is the Context's own pooled mean and weight m its average
-ratings per target, never under the 50-rating listing minimum; both are returned.
+whose prior mean C pools only the readable, accepted, verified members named in
+that request and weight m is their average ratings per target, never under 50.
+Only the prior mean and weight are returned. A ranking lists members from
+`max(50, displayThreshold)` ratings, so its means and scores cannot bypass a
+Context's threshold. The prior is request-scoped: different selections can
+produce different scores. Using the same readable members avoids disclosing
+hidden targets through Context totals, and the unused sharded totals are removed
+by a forward migration.
 Different Contexts, questions, scales or populations are never combined, and no
 mean is ever an input.
 
