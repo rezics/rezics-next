@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
-  parseCodexUsage, pathsOverlap, prepareCompositionMerge, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
+  parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
   validateBrief } from './goalctl.ts';
 
 const brief = `---
@@ -49,10 +51,19 @@ describe('goalctl claims', () => {
     expect(migrationsBelowMain(['services/main/migrations/access/1010_x.sql', 'apps/web/a.ts'], main)).toEqual([]);
   });
 
-  test('Codex workers run on the fast service tier by default', () => {
-    const [, args] = launchCommand({ id: 'G-950', effort: 'high', session: '', prompt: 'p', engine: 'codex',
-      worktree: '/w' } as Parameters<typeof launchCommand>[0]);
-    expect(args.join(' ')).toContain('service_tier="fast"');
+  test('Codex workers run on the service tier the manager selects', () => {
+    const previous = process.env.GOAL_CODEX_SERVICE_TIER;
+    try {
+      for (const tier of ['fast', 'default']) {
+        process.env.GOAL_CODEX_SERVICE_TIER = tier;
+        const [, args] = launchCommand({ id: 'G-950', effort: 'high', session: '', prompt: 'p', engine: 'codex',
+          worktree: '/w' } as Parameters<typeof launchCommand>[0]);
+        expect(args.join(' ')).toContain(`service_tier="${tier}"`);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_CODEX_SERVICE_TIER;
+      else process.env.GOAL_CODEX_SERVICE_TIER = previous;
+    }
   });
 
   test('a brief may name a shared worktree; its brief file is per task', () => {
@@ -326,5 +337,23 @@ describe('goalctl composition merge', () => {
     expect(decision.error).toMatch(/:\d+:\d+:/);
     expect(decision.files[0]!.source).toContain('mountedReads: () => ReadonlySet<string>');
     expect(signatures(decision.files[0]!.source)).toEqual(signatures(source));
+  });
+});
+
+describe('goalctl close', () => {
+  test('keeps a removed worktree\'s .temp artifacts beside the task run records', () => {
+    const base = mkdtempSync(join(tmpdir(), 'goalctl-close-'));
+    try {
+      const worktree = join(base, 'wt'), runDir = join(base, 'runs', 'G-1');
+      mkdirSync(join(worktree, '.temp', 'g-1'), { recursive: true });
+      writeFileSync(join(worktree, '.temp', 'g-1', 'fix.patch'), 'patch');
+      const first = preserveWorktreeArtifacts(worktree, runDir)!;
+      expect(readFileSync(join(first, 'g-1', 'fix.patch'), 'utf8')).toBe('patch');
+      expect(existsSync(join(worktree, '.temp'))).toBe(false);
+      mkdirSync(join(worktree, '.temp'), { recursive: true });
+      const second = preserveWorktreeArtifacts(worktree, runDir)!;
+      expect(second).not.toBe(first);
+      expect(preserveWorktreeArtifacts(worktree, runDir)).toBeNull();
+    } finally { rmSync(base, { recursive: true, force: true }); }
   });
 });

@@ -379,8 +379,11 @@ export function launchCommand(options: { id: string; effort: string; session: st
     '--output-format', 'json']];
 }
 
-/** The manager switches Codex between `fast` and `default` by writing this state file (fast when absent). */
+/** The manager switches Codex between `fast` and `default` by writing this state file (fast when
+ * absent); `GOAL_CODEX_SERVICE_TIER` overrides it for one invocation. */
 function codexServiceTier(): string {
+  const override = process.env.GOAL_CODEX_SERVICE_TIER?.trim();
+  if (override) return override;
   const file = join(stateDir, 'codex-service-tier');
   return existsSync(file) ? readFileSync(file, 'utf8').trim() : 'fast';
 }
@@ -803,6 +806,18 @@ export function removeWorktreeStack(worktree: string): void {
   spawnSync('docker', ['compose', '-p', project, 'down', '-v'], { encoding: 'utf8', timeout: 180_000 });
 }
 
+/** Handoffs cite files under the worktree's `.temp` (profiles, corpus backups,
+ * prepared patches); keep them beside the task's run records when the worktree goes. */
+export function preserveWorktreeArtifacts(worktree: string, runDir: string): string | null {
+  const source = join(worktree, '.temp');
+  if (!existsSync(source)) return null;
+  mkdirSync(runDir, { recursive: true });
+  let target = join(runDir, 'worktree-temp');
+  if (existsSync(target)) target = `${target}-${Date.now()}`;
+  renameSync(source, target);
+  return target;
+}
+
 async function stopTask(id: string): Promise<void> {
   const attempt = lastAttempt(taskOf(readLedger(), id));
   const program = programOf(engineOf(attempt));
@@ -1178,6 +1193,7 @@ async function closeTask(id: string, outcome: string): Promise<void> {
       removeWorktreeStack(task.worktree);
       // Tasks may leave intentionally read-only artifacts (for example immutable release trees).
       spawnSync('chmod', ['-R', 'u+w', task.worktree]);
+      preserveWorktreeArtifacts(task.worktree, join(stateDir, 'runs', task.id));
       git(root, ['worktree', 'remove', '--force', task.worktree]);
     }
     if (task.state === 'merged' && !sharers.length) git(root, ['branch', '-d', task.branch], true);
