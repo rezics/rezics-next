@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "Autre soi",
+  otherWorldCounterpart: "Homologue d’un autre monde",
+  identityGlobal: "Global",
+  identityRealm: "Communauté",
   oneRatingUntilMean: "Encore 1 note pour afficher la moyenne.",
-  variantFamily: "Famille de variantes",
-  identityHub: "Personnage d’origine",
-  variantOf: "Variante de",
+  variantFamily: "Autres versions",
+  identityHub: "Entrée principale",
+  variantOf: "Entrée principale",
   units: "Unités",
   represents: "Personnages représentés",
   titlesHeld: "Titres portés",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "Impossible de charger les notes.",
   noRatingQuestion: "Aucune question de notation dans ce périmètre.",
   ratingsUntilMean: insert("Encore {{count}} notes pour afficher la moyenne.", { count: String }),
-  unknownVariantKind: "Type de variante non renseigné",
+  unknownVariantKind: "Autre version",
   titleContextUnavailable: "Le contexte dans lequel ce titre est porté n’a pas pu être affiché.",
   pageUnavailableTitle: 'Cette page ne peut pas être affichée pour le moment',
   pageUnavailableBody: 'REZICS n’a pas pu joindre cette fiche. Réessayez dans un instant.',

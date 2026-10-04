@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
+import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import {
@@ -81,6 +83,11 @@ const grantReader = async (ref: string) => {
 };
 
 try {
+  await new AccessPlatformAdministrators(stack.accessPool).designateFirst(
+    editor.principal.issuer,
+    editor.principal.subject,
+    () => {},
+  );
   await editor.grant('semantic:create:root', 'semantic.change');
   await editor.grant('relation:create:root', 'relation.change');
   await editor.grant('classification:define:global', 'classification.proposition.define');
@@ -108,7 +115,7 @@ try {
     await editor.grant(`semantic:read:${ref}`, 'semantic.read');
     await grantReader(ref);
   }
-  const resource = async (name: string, type: string) => {
+  const resource = async (name: string, type: string, visible = true) => {
     const result = await call<{ component: string }>('/v1/semantic/changes', {
       profile: 'semantic-change-v1',
       expectedHead: null,
@@ -125,7 +132,7 @@ try {
       },
     });
     await editor.grant(`semantic:read:${result.component}`, 'semantic.read');
-    await grantReader(result.component);
+    if (visible) await grantReader(result.component);
     return result.component;
   };
   const saber = await resource('Saber', 'Character');
@@ -134,6 +141,7 @@ try {
   const unit = await resource('Saber unit', 'GameUnit');
   const title = await resource('King of Knights', 'Title');
   const holder = await resource('Arthur', 'Character');
+  const hidden = await resource('Confidential identity', 'Character', false);
   const continuity = await resource('Fate/stay night', 'NarrativeContinuity');
   const otherContinuity = await resource('Fate/Prototype', 'NarrativeContinuity');
   const relation = async (
@@ -173,25 +181,67 @@ try {
     actingSubject: editor.actor,
   });
   await editor.grant(`rating:context:${realm}`, 'rating.context.create');
-  const { context } = await call<{ context: string }>('/v1/rating-contexts', {
-    profile: 'realm-target-rating-context-v2',
+  const { context: realmContext } = await call<{ context: string }>('/v1/rating-contexts', {
+    profile: 'realm-target-rating-context-v4',
     realm,
     language: 'en',
-    question: 'How do you rate this identity?',
+    question: 'How do you rate this character?',
+    acceptedSubjectTypes: ['https://rezics.com/vocab/Character'],
     targetGrain: 'resource',
     actingSubject: editor.actor,
   });
+  const globalQuestion = async (type: string, question: string, translated: string) => {
+    const { context } = await call<{ context: string }>('/v1/rating-contexts', {
+      profile: 'realm-target-rating-context-v4',
+      realm: GLOBAL_RATING_POPULATION_OWNER,
+      language: 'en',
+      question,
+      targetGrain: 'resource',
+      acceptedSubjectTypes: [`https://rezics.com/vocab/${type}`],
+      actingSubject: editor.actor,
+    });
+    for (const [language, text] of [
+      ['en', question.replace('do you', 'would you')],
+      ['zh-Hant', translated],
+    ]) {
+      await call('/v1/rating-question-presentations', {
+        profile: 'rating-question-presentation-v1',
+        expectedHead: null,
+        actingSubject: editor.actor,
+        state: {
+          context,
+          language,
+          question: text,
+          reviewStatus: 'reviewed',
+          source: 'https://example.test/identity-question',
+          licence: 'https://creativecommons.org/licenses/by/4.0/',
+        },
+      });
+    }
+    return context;
+  };
+  const context = await globalQuestion(
+    'Character',
+    'How do you rate this character?',
+    '你如何評價這個角色？',
+  );
+  const unitContext = await globalQuestion(
+    'GameUnit',
+    'How do you rate this game unit?',
+    '你如何評價這個遊戲單位？',
+  );
   for (let i = 0; i < 5; i++) {
     const person = await stack.member(`identity-rater-${i}`);
     people.push(person);
     await person.grant(`rating:observe:${context}`, 'rating.observation.set');
+    await person.grant(`rating:observe:${unitContext}`, 'rating.observation.set');
     for (const target of [saber, ...(i === 0 ? [alter, unit] : [])]) {
       await person.grant(`semantic:read:${target}`, 'semantic.read');
       await call(
         '/v1/rating-observations',
         {
           profile: 'realm-target-rating-observation-v1',
-          context,
+          context: target === unit ? unitContext : context,
           target,
           value: target === saber ? 8 : target === alter ? 9 : 6,
           expectedRevisionHead: null,
@@ -210,6 +260,10 @@ try {
       title,
       holder,
       realm,
+      hidden,
+      context,
+      unitContext,
+      realmContext,
       continuity,
       otherContinuity,
     }),

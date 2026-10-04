@@ -1,5 +1,5 @@
 import type { AvailableSummary, RelationEntry } from '../work-levels/types.ts';
-import type { Loaded, RatingRead } from '../work-page/types.ts';
+import type { Loaded, RatingRead, RatingContext } from '../work-page/types.ts';
 
 export const identityKeys = ['variant-of', 'represents', 'holds-title'] as const;
 export type IdentityKey = (typeof identityKeys)[number];
@@ -11,14 +11,20 @@ export interface IdentityMember {
   /** Keep each occurrence: the same holder can hold a title in several Works. */
   entry: RelationEntry | null;
   kind: AvailableSummary | null;
+  kindKey?: 'persona' | 'counterpart';
   hub: boolean;
-  ratings: Loaded<RatingRead>;
+  ratings: Loaded<RatingRead> | null;
   applicability: AvailableSummary[] | null;
 }
 export interface IdentitySectionData {
   kind: IdentitySectionKind;
   hub: AvailableSummary | null;
   members: IdentityMember[];
+  legend?: {
+    context: RatingContext;
+    scope: 'global' | 'realm';
+    realm: AvailableSummary['name'] | null;
+  };
   /** The next relation page, on the resource whose incidence list was read. */
   next: { resource: AvailableSummary; cursor: string } | null;
 }

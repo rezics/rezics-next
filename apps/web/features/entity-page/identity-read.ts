@@ -42,7 +42,7 @@ export const readIdentityRelations = cache(
   },
 );
 
-const definitionsOf = cache(async (): Promise<Loaded<IdentityDefinitions>> => {
+export const readIdentityDefinitions = cache(async (): Promise<Loaded<IdentityDefinitions>> => {
   const { main, actingSubject } = await reader();
   const definitions = new Map();
   for (const key of identityKeys) {
@@ -107,11 +107,12 @@ export async function readIdentitySections(
   const self = page.summary;
   const own = await readIdentityRelations(self.reference, cursors.relations, position);
   if (!own.ok) return own;
-  const definitions = await definitionsOf();
+  const definitions = await readIdentityDefinitions();
   if (!definitions.ok) return definitions;
   const entries = own.data.items;
   const sections: IdentitySectionData[] = [];
   const ratingReads = new Map<string, Promise<Loaded<RatingRead>>>();
+  const kindKeys = new Map<string, 'persona' | 'counterpart'>();
   const ratingsFor = (resource: string) => {
     let read = ratingReads.get(resource);
     if (!read) {
@@ -124,12 +125,14 @@ export async function readIdentitySections(
     summary: AvailableSummary,
     entry: RelationEntry | null,
     hub = false,
+    rated = true,
   ): Promise<IdentityMember> => ({
     summary,
     entry,
     hub,
     kind: entry ? bindingSummary(entry, 'kind', self) : null,
-    ratings: await ratingsFor(summary.reference),
+    kindKey: entry ? kindKeys.get(bindingSummary(entry, 'kind', self)?.reference ?? '') : undefined,
+    ratings: rated ? await ratingsFor(summary.reference) : null,
     applicability:
       entry && entry.rendering?.meaning.definition === definitions.data.get('holds-title')
         ? await titleApplicability(entry, position)
@@ -152,6 +155,33 @@ export async function readIdentitySections(
     }
     if (!family.ok) return family;
     const familyEntries = identityEntries(family.data.items, definitions.data, 'variant-of');
+    // Identify the seeded concepts by their authored English names; presentation uses reviewed UI wording.
+    // Unrecognised concepts retain their own localized label rather than being recategorized.
+    const kinds = [
+      ...new Set(
+        familyEntries.flatMap(
+          (entry) => bindingSummary(entry, 'kind', hubSummary ?? self)?.reference ?? [],
+        ),
+      ),
+    ];
+    if (kinds.length) {
+      const { main, actingSubject } = await reader();
+      const names = await settle(() =>
+        main.v1.resources.summaries.post({
+          profile: 'resource-summary-batch-v1',
+          resources: kinds,
+          language: 'en',
+          position,
+          ...(actingSubject ? { actingSubject } : {}),
+        }),
+      );
+      if (names.ok)
+        for (const kind of names.data.summaries) {
+          if (kind.status !== 'available') continue;
+          if (kind.name.value === 'Persona') kindKeys.set(kind.reference, 'persona');
+          if (kind.name.value === 'Counterpart') kindKeys.set(kind.reference, 'counterpart');
+        }
+    }
     const members = hubSummary && variants.length ? [await member(hubSummary, null, true)] : [];
     const seen = new Set(members.map((item) => item.summary.reference));
     for (const entry of familyEntries) {
@@ -181,12 +211,26 @@ export async function readIdentitySections(
     const members: IdentityMember[] = [];
     for (const entry of rows) {
       const summary = bindingSummary(entry, to, self);
-      if (summary) members.push(await member(summary, entry));
+      if (summary) members.push(await member(summary, entry, false, kind === 'units'));
     }
     sections.push({ kind, hub: null, members, next: continuation(self, own.data.next) });
   }
+  const realmNames = scope.scope === 'realm' ? await namesOf([scope.realm]) : null;
+  const realm = realmNames && scope.scope === 'realm' ? realmNames.get(scope.realm) : null;
+  for (const section of sections) {
+    const rated = section.members.find((item) => item.ratings?.ok && item.ratings.data.context);
+    if (rated?.ratings?.ok && rated.ratings.data.context)
+      section.legend = {
+        context: rated.ratings.data.context,
+        scope: scope.scope,
+        realm: realm?.status === 'available' ? realm.name : null,
+      };
+  }
   return {
     ok: true,
-    data: { sections, ...(sections.length ? { ratings: await ratingsFor(self.reference) } : {}) },
+    data: {
+      sections,
+      ...(is('Character') || is('GameUnit') ? { ratings: await ratingsFor(self.reference) } : {}),
+    },
   };
 }

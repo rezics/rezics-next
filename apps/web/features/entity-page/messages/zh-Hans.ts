@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "另一个自己",
+  otherWorldCounterpart: "其他世界的对应角色",
+  identityGlobal: "全站",
+  identityRealm: "社区",
   oneRatingUntilMean: "再有 1 个评分即可显示平均分。",
-  variantFamily: "变体家族",
-  identityHub: "本体",
-  variantOf: "变体本体",
+  variantFamily: "其他版本",
+  identityHub: "主要条目",
+  variantOf: "主要条目",
   units: "单位",
   represents: "代表角色",
   titlesHeld: "所持称号",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "无法加载评分。",
   noRatingQuestion: "此范围没有评分问题。",
   ratingsUntilMean: insert("再有 {{count}} 个评分即可显示平均分。", { count: String }),
-  unknownVariantKind: "尚未记录变体种类",
+  unknownVariantKind: "其他版本",
   titleContextUnavailable: "无法显示此称号在哪个背景中被持有。",
   pageUnavailableTitle: '暂时无法显示此页面',
   pageUnavailableBody: 'REZICS 无法读取这条记录，请稍后再试。',

@@ -17,12 +17,12 @@ type SearchParams = Record<string, string | string[] | undefined>;
  */
 export async function entityMetadata(ref: string, query: SearchParams, locale: UiLocale): Promise<Metadata> {
   const id = parseEntityRef(ref);
-  if (!id) return {};
+  if (!id) return { title: copyOf(locale).notFoundTitle, robots: { index: false } };
   const projection = await readEntityProjection(id, mainPosition(parsePosition(query)));
-  if (!projection.ok) return projection.failure === 'missing' ? { title: copyOf(locale).notFoundTitle }
+  if (!projection.ok) return projection.failure === 'missing' ? { title: copyOf(locale).notFoundTitle, robots: { index: false } }
     : { title: copyOf(locale).pageUnavailableTitle, robots: { index: false } };
   const { summary, target } = projection.data;
-  if (summary.status !== 'available') return { title: copyOf(locale).notFoundTitle };
+  if (summary.status !== 'available') return { title: copyOf(locale).notFoundTitle, robots: { index: false } };
   const origin = (await pageUrl())?.origin ?? null;
   const address = 'address' in summary ? summary.address as AddressTarget : id;
   const alternates = origin ? localeAlternates(origin, entityHref(address), locale) : null;

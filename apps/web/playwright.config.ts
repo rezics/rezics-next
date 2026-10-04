@@ -25,6 +25,7 @@ for (const name of chosen) if (!(name in available)) throw new Error(`Unknown RE
 export default defineConfig({
   testDir: './tests',
   testMatch: '*.e2e.ts',
+  grep: process.env.REZICS_E2E_GREP ? new RegExp(process.env.REZICS_E2E_GREP) : undefined,
   outputDir: '../../.temp/playwright/results',
   use: { baseURL: e2eBaseURL() },
   projects: chosen.map(name => ({ name, ...available[name as keyof typeof available] })),

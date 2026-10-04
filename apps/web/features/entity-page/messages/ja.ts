@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "もう一つの自分",
+  otherWorldCounterpart: "別世界の同一人物",
+  identityGlobal: "全体",
+  identityRealm: "コミュニティ",
   oneRatingUntilMean: "あと 1 件の評価で平均が表示されます。",
-  variantFamily: "バリアント一覧",
-  identityHub: "元のキャラクター",
-  variantOf: "バリアント元",
+  variantFamily: "別の姿",
+  identityHub: "基本の項目",
+  variantOf: "基本の項目",
   units: "ユニット",
   represents: "代表するキャラクター",
   titlesHeld: "保持する称号",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "評価を読み込めませんでした。",
   noRatingQuestion: "この範囲には評価の質問がありません。",
   ratingsUntilMean: insert("あと {{count}} 件の評価で平均が表示されます。", { count: String }),
-  unknownVariantKind: "バリアントの種類は未記録です",
+  unknownVariantKind: "別の姿",
   titleContextUnavailable: "この称号を保持する背景を表示できませんでした。",
   pageUnavailableTitle: '現在このページを表示できません',
   pageUnavailableBody: 'REZICS はこの記録を読み込めませんでした。しばらくしてからもう一度お試しください。',

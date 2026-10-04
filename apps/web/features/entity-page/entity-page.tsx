@@ -106,7 +106,8 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
           <StatementsSection section={section} cursor={cursors.statements} position={position} {...common} /></Suspense>;
         case 'relations': return <Suspense key={section.id} fallback={loading(section, t.relations)}>
-          <RelationsSection section={section} cursor={cursors.relations} position={position} {...common} /></Suspense>;
+          <RelationsSection section={section} cursor={cursors.relations} position={position}
+            hideIdentity={identitySections && page.target.base === 'resource'} {...common} /></Suspense>;
         case 'ratings': return <Suspense key={section.id} fallback={loading(section, messages.ratings)}>
           <RatingsSection section={section} registry={page.registry} {...common} /></Suspense>;
         case 'reviews': return <Suspense key={section.id} fallback={loading(section, messages.reviews)}>

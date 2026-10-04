@@ -95,7 +95,7 @@ export function AggregateScope({ aggregate, locale, t }: { aggregate: ReviewAggr
   if (!aggregate) return null;
   const mean = aggregate.mean === null ? null : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(aggregate.mean);
   const summary = aggregate.summary;
-  const withheld = summary && 'meanDisplay' in summary && summary.meanDisplay !== 'shown';
+  const withheld = summary && summary.count > 0 && 'meanDisplay' in summary && summary.meanDisplay !== 'shown';
   return <div data-review-aggregate data-aggregate-grain={aggregate.grain} data-aggregate-population={aggregate.population}
     data-aggregate-counted={idOf(aggregate.countedTarget)} data-aggregate-count={aggregate.count}
     className="grid gap-3 text-muted-foreground text-sm"><p className="flex flex-wrap gap-x-2 gap-y-0.5">

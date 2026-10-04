@@ -71,20 +71,37 @@ export function identityEntry(
   };
 }
 
-export type IdentityState = 'empty' | 'spoiler-hidden' | 'below-threshold' | 'populated';
-export function identityRatings(count: number, target = saber.reference): Loaded<RatingRead> {
+export type IdentityState = 'empty' | 'spoiler-hidden' | 'zero' | 'below-threshold' | 'populated';
+export function identityRatings(
+  count: number,
+  target = saber.reference,
+  forUnits = false,
+): Loaded<RatingRead> {
+  const question = forUnits ? 'How do you rate this game unit?' : 'How do you rate this character?';
   const context = {
-    context: iri('650'),
-    question: 'How do you rate this character?',
+    context: iri(forUnits ? '652' : '650'),
+    question,
     language: 'en',
     targetGrain: 'resource',
     scale: { min: 1, max: 10, step: 1 as const },
+    displayQuestion: {
+      value: question,
+      language: 'en',
+      direction: contentText(question, 'en').direction,
+      basis: 'requested' as const,
+      script: 'Latn',
+      reviewStatus: 'authored' as const,
+      presentation: null,
+      source: null,
+      licence: null,
+      fallback: null,
+    },
   };
   const summary: RatingSummary = {
     profile: 'target-rating-read-v1',
     target,
     targetGrain: 'resource',
-    scope: { kind: 'realm', realm: iri('651') },
+    scope: { kind: 'global', realm: null },
     context: context.context,
     status: 'available',
     aggregationScope: {
@@ -112,7 +129,7 @@ export function identityData(
   kind: IdentitySectionKind,
   state: IdentityState,
 ): Loaded<IdentityData> {
-  const count = state === 'below-threshold' ? 1 : 7;
+  const count = state === 'zero' ? 0 : state === 'below-threshold' ? 1 : 7;
   const member = (
     target: AvailableSummary,
     entry: RelationEntry | null,
@@ -122,7 +139,10 @@ export function identityData(
     entry,
     kind: null,
     hub: false,
-    ratings: identityRatings(count, target.reference),
+    ratings:
+      kind === 'family' || kind === 'units'
+        ? identityRatings(count, target.reference, kind === 'units')
+        : null,
     applicability: [],
     ...extra,
   });
@@ -132,10 +152,12 @@ export function identityData(
           member(saber, null, { hub: true }),
           member(alter, identityEntry('hub', 'variant', alter, persona), {
             kind: persona,
-            ratings: identityRatings(count + 1, alter.reference),
+            kindKey: 'persona',
+            ratings: identityRatings(state === 'zero' ? 0 : count + 1, alter.reference),
           }),
           member(counterpart, identityEntry('hub', 'variant', counterpart, counterpartKind), {
             kind: counterpartKind,
+            kindKey: 'counterpart',
             ratings: identityRatings(0, counterpart.reference),
           }),
         ]
@@ -168,6 +190,20 @@ export function identityData(
           kind,
           hub: kind === 'family' && state !== 'empty' && state !== 'spoiler-hidden' ? saber : null,
           members: state === 'empty' || state === 'spoiler-hidden' ? [] : members,
+          ...(kind === 'family' || kind === 'units'
+            ? {
+                legend: {
+                  context: (
+                    identityRatings(count, saber.reference, kind === 'units') as Extract<
+                      Loaded<RatingRead>,
+                      { ok: true }
+                    >
+                  ).data.context!,
+                  scope: 'global' as const,
+                  realm: null,
+                },
+              }
+            : {}),
           next: state === 'populated' ? { resource: saber, cursor: 'next-visible' } : null,
         },
       ],

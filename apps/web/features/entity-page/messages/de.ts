@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "Anderes Ich",
+  otherWorldCounterpart: "Gegenstück aus einer anderen Welt",
+  identityGlobal: "Global",
+  identityRealm: "Community",
   oneRatingUntilMean: "1 weitere Bewertung gibt den Durchschnitt frei.",
-  variantFamily: "Variantenfamilie",
-  identityHub: "Ursprungsfigur",
-  variantOf: "Variante von",
+  variantFamily: "Andere Versionen",
+  identityHub: "Haupteintrag",
+  variantOf: "Haupteintrag",
   units: "Einheiten",
   represents: "Dargestellte Figuren",
   titlesHeld: "Getragene Titel",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "Bewertungen konnten nicht geladen werden.",
   noRatingQuestion: "Keine Bewertungsfrage in diesem Bereich.",
   ratingsUntilMean: insert("{{count}} weitere Bewertungen geben den Durchschnitt frei.", { count: String }),
-  unknownVariantKind: "Variantenart nicht erfasst",
+  unknownVariantKind: "Andere Version",
   titleContextUnavailable: "Wo dieser Titel getragen wird, konnte nicht angezeigt werden.",
   pageUnavailableTitle: 'Diese Seite kann gerade nicht angezeigt werden',
   pageUnavailableBody: 'REZICS konnte diesen Eintrag nicht erreichen. Versuche es gleich noch einmal.',

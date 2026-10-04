@@ -12,10 +12,14 @@ import zhHant from './messages/zh-Hant.ts';
 // from the type registry, and relation labels from Main's lexicon; neither is
 // written here.
 const en = {
+  alternateSelf: "Alternate self",
+  otherWorldCounterpart: "Counterpart from another world",
+  identityGlobal: "Global",
+  identityRealm: "Community",
   oneRatingUntilMean: "1 more rating will reveal the average.",
-  variantFamily: "Variant family",
-  identityHub: "Hub",
-  variantOf: "Variant of",
+  variantFamily: "Other versions",
+  identityHub: "Main entry",
+  variantOf: "Main entry",
   units: "Units",
   represents: "Represents",
   titlesHeld: "Titles held",
@@ -30,7 +34,7 @@ const en = {
   identityRatingsUnavailable: "Ratings could not be loaded.",
   noRatingQuestion: "No rating question in this scope.",
   ratingsUntilMean: insert("{{count}} more ratings will reveal the average.", { count: String }),
-  unknownVariantKind: "Variant kind not recorded",
+  unknownVariantKind: "Other version",
   titleContextUnavailable: "Where this title is held could not be shown.",
   pageUnavailableTitle: 'This page can’t be shown right now',
   pageUnavailableBody: 'REZICS could not reach this record. Try again in a moment.',

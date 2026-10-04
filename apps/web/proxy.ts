@@ -31,6 +31,7 @@ import { serviceOrigin } from './features/api/origins.ts';
 import { mainReadHeaders } from './features/api/main-read.ts';
 import { serverRead } from './features/api/server-read.ts';
 import { SERVER_DEADLINE_HEADER, SERVER_READ_LIMITS } from './features/api/server-fetch.ts';
+import { mainPosition, parsePosition } from './features/wiki/position.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -49,8 +50,87 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       request.cookies.get(LOCALE_COOKIE)?.value,
       request.headers.get('accept-language'),
     );
+  const client = accountClient();
+  const outcome = await refreshSession(request.cookies, client ? { ...client, deadlineAt } : null);
+  const signedIn = Boolean(
+    request.cookies.get(ACCESS_COOKIE)?.value || request.cookies.get(REFRESH_COOKIE)?.value,
+  );
+  const sessionKey =
+    outcome.kind !== 'ended' &&
+    signedIn &&
+    !isSessionKey(request.cookies.get(SESSION_KEY_COOKIE)?.value)
+      ? crypto.randomUUID()
+      : null;
+  const renewedKey =
+    sessionKey ??
+    (outcome.kind === 'refreshed' ? request.cookies.get(SESSION_KEY_COOKIE)?.value : null);
+  const legacyAgent = outcome.kind !== 'ended' && Boolean(request.cookies.get(AGENT_COOKIE)?.value);
+  const cookies: SessionCookie[] =
+    outcome.kind === 'refreshed'
+      ? sessionCookies(request.url, outcome.tokens, outcome.user)
+      : outcome.kind === 'ended'
+        ? SESSION_COOKIES.map((name) => ({
+            name,
+            value: '',
+            options: cookieOptions(request.url, 0),
+          }))
+        : [];
+  if (renewedKey)
+    cookies.push({
+      name: SESSION_KEY_COOKIE,
+      value: renewedKey,
+      options: cookieOptions(request.url, REFRESH_LIFETIME_SECONDS),
+    });
+  if (legacyAgent)
+    cookies.push({ name: AGENT_COOKIE, value: '', options: cookieOptions(request.url, 0) });
+  const finish = (response: NextResponse) => {
+    for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
+    return response;
+  };
+  const access = cookies.find((cookie) => cookie.name === ACCESS_COOKIE);
+  const token = access ? access.value || undefined : request.cookies.get(ACCESS_COOKIE)?.value;
+  let resourceViewer: { token: string; actingSubject: string } | undefined;
+  const resourcePath = addressPath(pathname)?.lookup.scope === 'resource';
+  if (resourcePath && token) {
+    try {
+      const response = await serverRead(
+        `${serviceOrigin('MAIN_ORIGIN')}/v1/me/session-agent`,
+        {
+          headers: await mainReadHeaders(
+            {
+              authorization: `Bearer ${token}`,
+              'x-session-key': renewedKey ?? request.cookies.get(SESSION_KEY_COOKIE)?.value ?? '',
+            },
+            incoming,
+          ),
+          cache: 'no-store',
+        },
+        { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+      );
+      if (!response.ok)
+        return finish(
+          new NextResponse(null, {
+            status: 503,
+            headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'retry-after': '5' },
+          }),
+        );
+      const state = (await response.json()) as {
+        sessionAgent?: { eligible?: boolean; actingSubject?: string };
+      };
+      if (state.sessionAgent?.eligible && state.sessionAgent.actingSubject)
+        resourceViewer = { token, actingSubject: state.sessionAgent.actingSubject };
+    } catch {
+      return finish(
+        new NextResponse(null, {
+          status: 503,
+          headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'retry-after': '5' },
+        }),
+      );
+    }
+  }
   const pageRequest = request.method === 'GET' || request.method === 'HEAD';
   let spaceAddress: ResolvedAddress | undefined;
+  let resourceAddress: ResolvedAddress | undefined;
   let addressed = pageRequest
     ? await decideAddress(new URL(request.url), locale, async (lookup) => {
         const read = await readAddress(
@@ -58,16 +138,75 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
           displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
           undefined,
           incoming,
+          lookup.scope === 'resource' ? resourceViewer : undefined,
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
+        if (lookup.scope === 'resource' && read.kind === 'resolved') resourceAddress = read.data;
         return read;
       })
     : { kind: 'pass' as const };
   const path = pageRequest ? addressPath(pathname) : null;
-  // Work and resource pages own their localized not-found boundary and recheck the live
+  // An address hit can be cached; the owner checks live reading authority before any shell or metadata streams.
+  // Never call the owner after an address miss: enumeration is charged by that single resolver request.
+  if (path?.lookup.scope === 'resource' && resourceAddress && addressed.kind !== 'error') {
+    const query = new URLSearchParams(
+      resourceViewer ? { actingSubject: resourceViewer.actingSubject } : {},
+    );
+    const positions = request.nextUrl.searchParams.getAll('position');
+    const position = mainPosition(
+      parsePosition({ position: positions.length === 1 ? positions[0] : undefined }),
+    );
+    if (position) query.set('position', position);
+    try {
+      const response = await serverRead(
+        `${serviceOrigin('MAIN_ORIGIN')}/v1/resources/${resourceAddress.holder.slice(-36)}/page?${query}`,
+        {
+          headers: await mainReadHeaders(
+            {
+              'accept-language': locale,
+              ...(resourceViewer ? { authorization: `Bearer ${resourceViewer.token}` } : {}),
+            },
+            incoming,
+          ),
+          cache: 'no-store',
+        },
+        { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+      );
+      const denied = response.status === 404 || response.status === 403;
+      if (denied) {
+        // A formerly public cached hit may have become private. Revalidate through the charged resolver once.
+        const current = await readAddress(
+          path.lookup,
+          displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
+          undefined,
+          incoming,
+          resourceViewer,
+          true,
+        );
+        addressed =
+          current.kind === 'unavailable'
+            ? {
+                kind: 'error',
+                status: current.status ?? 503,
+                ...(current.retryAfter ? { retryAfter: current.retryAfter } : {}),
+              }
+            : current.kind === 'retired'
+              ? { kind: 'error', status: 410 }
+              : { kind: 'error', status: 404 };
+      } else if (!response.ok) addressed = { kind: 'error', status: 503 };
+      else {
+        const page = (await response.json()) as { summary?: { status?: string } };
+        if (page.summary?.status !== 'available') addressed = { kind: 'error', status: 404 };
+      }
+      if (!response.bodyUsed) await response.body?.cancel();
+    } catch {
+      addressed = { kind: 'error', status: 503 };
+    }
+  }
+  // Work pages own their localized not-found boundary and recheck the live
   // owner read. A missing/restricted address must reach it instead of returning
   // an empty middleware 404; unavailable and retired addresses keep their status.
-  if (path && ['work', 'resource'].includes(path.lookup.scope) && addressed.kind === 'error' && addressed.status === 404)
+  if (path?.lookup.scope === 'work' && addressed.kind === 'error' && addressed.status === 404)
     addressed = { kind: 'pass' };
   let discoveryHeaders: Record<string, string> = {};
   // Resolve denied Space reads through Main's limited landing page. A missing
@@ -119,19 +258,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       addressed.status,
     );
     for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
-    return response;
+    return finish(response);
   }
   if (addressed.kind === 'error')
-    return new NextResponse(null, {
-      status: addressed.status,
-      headers: {
-        'cache-control': 'no-store',
-        'x-robots-tag': 'noindex',
-        ...(addressed.status === 503 ? { 'retry-after': '5' } : {}),
-        ...(addressed.retryAfter ? { 'retry-after': addressed.retryAfter } : {}),
-        ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
-      },
-    });
+    return finish(
+      new NextResponse(null, {
+        status: addressed.status,
+        headers: {
+          'cache-control': 'no-store',
+          'x-robots-tag': 'noindex',
+          ...(addressed.status === 503 ? { 'retry-after': '5' } : {}),
+          ...(addressed.retryAfter ? { 'retry-after': addressed.retryAfter } : {}),
+          ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
+        },
+      }),
+    );
   if (
     (isPublicPagePath(pathname) || addressPath(pathname)) &&
     !pathLocale(pathname) &&
@@ -139,41 +280,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   ) {
     const destination = request.nextUrl.clone();
     destination.pathname = `/${locale}${pathname === '/' ? '' : pathname}`;
-    return NextResponse.redirect(destination);
+    return finish(NextResponse.redirect(destination));
   }
-  const client = accountClient();
-  const outcome = await refreshSession(request.cookies, client ? { ...client, deadlineAt } : null);
-  const signedIn = Boolean(
-    request.cookies.get(ACCESS_COOKIE)?.value || request.cookies.get(REFRESH_COOKIE)?.value,
-  );
-  const sessionKey =
-    outcome.kind !== 'ended' &&
-    signedIn &&
-    !isSessionKey(request.cookies.get(SESSION_KEY_COOKIE)?.value)
-      ? crypto.randomUUID()
-      : null;
-  const renewedKey =
-    sessionKey ??
-    (outcome.kind === 'refreshed' ? request.cookies.get(SESSION_KEY_COOKIE)?.value : null);
-  const legacyAgent = outcome.kind !== 'ended' && Boolean(request.cookies.get(AGENT_COOKIE)?.value);
-  const cookies: SessionCookie[] =
-    outcome.kind === 'refreshed'
-      ? sessionCookies(request.url, outcome.tokens, outcome.user)
-      : outcome.kind === 'ended'
-        ? SESSION_COOKIES.map((name) => ({
-            name,
-            value: '',
-            options: cookieOptions(request.url, 0),
-          }))
-        : [];
-  if (renewedKey)
-    cookies.push({
-      name: SESSION_KEY_COOKIE,
-      value: renewedKey,
-      options: cookieOptions(request.url, REFRESH_LIFETIME_SECONDS),
-    });
-  if (legacyAgent)
-    cookies.push({ name: AGENT_COOKIE, value: '', options: cookieOptions(request.url, 0) });
   const headers = incoming;
   headers.delete(ADDRESS_HEADER);
   // HTTP header values are bytes; native-script names need an ASCII envelope.
@@ -201,8 +309,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (policy) response.headers.set('content-security-policy', policy);
   // A case's private page keeps its credential in the address; no request it makes may carry that address on.
   if (isReportPath(pathname)) response.headers.set('referrer-policy', 'no-referrer');
-  for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
-  return response;
+  return finish(response);
 }
 
 export const config = {

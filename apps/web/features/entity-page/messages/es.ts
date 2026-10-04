@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "Otro yo",
+  otherWorldCounterpart: "Contraparte de otro mundo",
+  identityGlobal: "Global",
+  identityRealm: "Comunidad",
   oneRatingUntilMean: "1 valoración más mostrará la media.",
-  variantFamily: "Familia de variantes",
-  identityHub: "Personaje original",
-  variantOf: "Variante de",
+  variantFamily: "Otras versiones",
+  identityHub: "Entrada principal",
+  variantOf: "Entrada principal",
   units: "Unidades",
   represents: "Personajes representados",
   titlesHeld: "Títulos que ostenta",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "No se pudieron cargar las valoraciones.",
   noRatingQuestion: "No hay una pregunta de valoración en este ámbito.",
   ratingsUntilMean: insert("{{count}} valoraciones más mostrarán la media.", { count: String }),
-  unknownVariantKind: "Tipo de variante sin registrar",
+  unknownVariantKind: "Otra versión",
   titleContextUnavailable: "No se pudo mostrar el contexto en que se ostenta este título.",
   pageUnavailableTitle: 'Esta página no se puede mostrar ahora',
   pageUnavailableBody: 'REZICS no pudo acceder a este registro. Inténtalo de nuevo en un momento.',

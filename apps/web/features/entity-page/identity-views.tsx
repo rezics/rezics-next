@@ -1,10 +1,8 @@
 import type { UiLocale } from '../../i18n/define.ts';
+import { LocalizedText } from '@rezics/ui/localized-text';
 import Link from '../shell/localized-link.tsx';
-import { RatingInline } from '../catalogue/rating.tsx';
-import { RelationRows } from '../work-levels/connections.tsx';
-import { copyOf as levelsCopy } from '../work-levels/messages.ts';
+import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
 import { SummaryLink } from '../work-levels/names.tsx';
-import { relationRows } from '../work-levels/relation-rows.ts';
 import type { AvailableSummary } from '../work-levels/types.ts';
 import { Distribution } from '../work-page/ratings.tsx';
 import { Region, RegionFailure } from '../work-page/region.tsx';
@@ -44,24 +42,26 @@ function Figures({
   t: Copy;
   messages: WorkPageMessages;
 }) {
+  if (!member.ratings) return null;
   if (!member.ratings.ok)
     return (
       <p role="status" className="text-muted-foreground text-sm">
         {t.identityRatingsUnavailable}
       </p>
     );
-  const { summary, context } = member.ratings.data;
+  const { summary } = member.ratings.data;
   if (summary.status !== 'available' || !summary.scale)
     return <p className="text-muted-foreground text-sm">{t.noRatingQuestion}</p>;
+  if (!summary.count)
+    return (
+      <p data-identity-ratings className="text-muted-foreground text-sm">
+        {t.noRatings}
+      </p>
+    );
   const shown =
     summary.mean !== null && (!('meanDisplay' in summary) || summary.meanDisplay === 'shown');
   return (
-    <div className="grid gap-3" data-identity-ratings>
-      {context ? (
-        <p lang={context.language} dir="auto" className="text-muted-foreground text-xs">
-          {context.question}
-        </p>
-      ) : null}
+    <div className="grid gap-1.5" data-identity-ratings>
       <RatingInline
         rating={
           shown
@@ -74,8 +74,15 @@ function Figures({
               }
         }
         locale={locale}
+        countStyle="words"
+        disclosure={false}
       />
-      <Distribution summary={summary} locale={locale} messages={messages} />
+      <Distribution compact summary={summary} locale={locale} messages={messages} />
+      {!shown && 'displayThreshold' in summary ? (
+        <p className="text-muted-foreground text-xs">
+          {ratingsUntilMean(summary.count, summary.displayThreshold, locale)}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -96,71 +103,54 @@ function Member({
   avatarQuery?: string;
 }) {
   const href = summaryHref(hrefFor);
-  const rows = member.entry
-    ? relationRows([member.entry]).filter((row) =>
-        row.items.some(
-          (item) =>
-            item.target.kind === 'resource' && item.target.reference === member.summary.reference,
-        ),
-      )
-    : [];
   return (
     <li
       data-identity-member={member.summary.reference}
-      className="grid min-w-0 content-start gap-4 rounded-xl border border-border/70 p-4"
+      className="flex min-w-0 items-start gap-3 border-border/60 border-b py-3 last:border-b-0 md:rounded-xl md:border md:p-4 md:last:border-b"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <EntityAvatar
-          summary={member.summary}
-          avatarQuery={avatarQuery}
-          className="size-12! text-xl!"
-        />
-        <div className="grid min-w-0 gap-1">
-          {rows.length ? (
-            <RelationRows rows={rows} locale={locale} t={levelsCopy(locale)} hrefFor={href} />
-          ) : (
-            <SummaryLink
-              summary={member.summary}
-              unavailable={t.unavailable}
-              unnamed={t.unnamed}
-              hrefFor={href}
-            />
-          )}
+      <EntityAvatar
+        summary={member.summary}
+        avatarQuery={avatarQuery}
+        className="size-12! text-xl!"
+      />
+      <div className="grid min-w-0 flex-1 gap-2">
+        <div className="grid gap-0.5">
+          <SummaryLink
+            summary={member.summary}
+            unavailable={t.unavailable}
+            unnamed={t.unnamed}
+            hrefFor={href}
+          />
           {member.hub ? (
             <p className="text-muted-foreground text-xs">{t.identityHub}</p>
           ) : member.entry?.rendering?.viewingRole === 'hub' ? (
             <p data-variant-kind className="text-muted-foreground text-sm">
-              {member.kind ? (
+              {member.kindKey === 'persona'
+                ? t.alternateSelf
+                : member.kindKey === 'counterpart'
+                  ? t.otherWorldCounterpart
+                  : t.unknownVariantKind}
+            </p>
+          ) : null}
+        </div>
+        {member.applicability === null ? (
+          <p className="text-muted-foreground text-xs">{t.titleContextUnavailable}</p>
+        ) : member.applicability.length ? (
+          <ul data-title-context className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            {member.applicability.map((where) => (
+              <li key={where.reference}>
                 <SummaryLink
-                  summary={member.kind}
+                  summary={where}
                   unavailable={t.unavailable}
                   unnamed={t.unnamed}
                   hrefFor={href}
                 />
-              ) : (
-                t.unknownVariantKind
-              )}
-            </p>
-          ) : null}
-        </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <Figures member={member} locale={locale} t={t} messages={messages} />
       </div>
-      {member.applicability === null ? (
-        <p className="text-muted-foreground text-xs">{t.titleContextUnavailable}</p>
-      ) : member.applicability.length ? (
-        <ul data-title-context className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-          {member.applicability.map((where) => (
-            <li key={where.reference}>
-              <SummaryLink
-                summary={where}
-                unavailable={t.unavailable}
-                unnamed={t.unnamed}
-                hrefFor={href}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <Figures member={member} locale={locale} t={t} messages={messages} />
     </li>
   );
 }
@@ -215,8 +205,31 @@ function IdentitySection({
         </p>
       ) : null}
       <p className="text-muted-foreground text-xs">{t.visibleRelationsOnly}</p>
+      {section.legend && section.members.length ? (
+        <p
+          data-identity-question
+          className="flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-xs"
+        >
+          <span>
+            {section.legend.scope === 'global' ? (
+              t.identityGlobal
+            ) : section.legend.realm ? (
+              <LocalizedText text={section.legend.realm} />
+            ) : (
+              t.identityRealm
+            )}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span
+            lang={section.legend.context.displayQuestion.language}
+            dir={section.legend.context.displayQuestion.direction}
+          >
+            {section.legend.context.displayQuestion.value}
+          </span>
+        </p>
+      ) : null}
       {section.members.length ? (
-        <ul className="grid min-w-0 gap-4 md:grid-cols-2">
+        <ul className="grid min-w-0 md:auto-rows-fr md:grid-cols-2 md:gap-3">
           {section.members.map((member, index) => (
             <Member
               key={`${member.summary.reference}-${member.entry?.relation ?? index}`}

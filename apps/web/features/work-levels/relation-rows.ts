@@ -86,7 +86,8 @@ export function relationRows(entries: readonly RelationEntry[]): RelationRow[] {
       for (const argument of projection.arguments.filter(item => item.role === projection.toRole)) {
         group.items.push({ relation: entry.relation, target: participantTarget(argument.value, summaries),
           unresolvedSource: entry.sourceVersionStatus === 'unresolved', evidence: entry.evidence,
-          ...(argument.creditedName ? { creditedName: argument.creditedName } : {}) });
+          ...((rendering.viewingRole === 'work' || rendering.viewingRole === 'occurrence')
+            && projection.toRole === 'character' && argument.creditedName ? { creditedName: argument.creditedName } : {}) });
       }
       groups.set(key, group);
     }

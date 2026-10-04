@@ -134,6 +134,8 @@ export async function readAddress(
   languages: string,
   origin?: string,
   incoming?: Headers,
+  viewer?: { token: string; actingSubject: string },
+  fresh = false,
 ): Promise<AddressRead> {
   let cacheKey: string | undefined;
   try {
@@ -141,19 +143,24 @@ export async function readAddress(
       scope: lookup.scope,
       key: lookup.key,
       ...(lookup.route ? { route: lookup.route } : {}),
+      ...(viewer ? { actingSubject: viewer.actingSubject } : {}),
     });
     const url = `${origin ?? serviceOrigin('MAIN_ORIGIN')}/v1/addresses/resolve?${query}`;
     // Anonymous responses vary only by the lookup and public language request,
     // never by the ingress IP, session cookie or private preferences.
-    cacheKey = JSON.stringify([url, languages]);
-    const cached = publicAddresses.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
+    cacheKey = viewer ? undefined : JSON.stringify([url, languages]);
+    const cached = cacheKey && !fresh ? publicAddresses.get(cacheKey) : undefined;
+    if (cacheKey && cached && Date.now() < cached.expiresAt) {
       publicAddresses.delete(cacheKey);
       publicAddresses.set(cacheKey, cached);
       return { kind: 'resolved', data: structuredClone(cached.data) };
     }
     const headers = await mainReadHeaders(
-      { 'accept-language': languages, 'x-rezics-display-languages': languages },
+      {
+        'accept-language': languages,
+        'x-rezics-display-languages': languages,
+        ...(viewer ? { authorization: `Bearer ${viewer.token}` } : {}),
+      },
       incoming,
     );
     if (cached) headers.set('if-none-match', cached.headers.get('etag')!);
@@ -169,14 +176,14 @@ export async function readAddress(
     );
     // Any fresh non-hit invalidates the old hit, including a permission change
     // or outage. Expired data may supply a validator but is never a fallback.
-    publicAddresses.delete(cacheKey);
+    if (cacheKey) publicAddresses.delete(cacheKey);
     if (response.status === 304) {
       if (!cached) return { kind: 'unavailable' };
       const refreshed = new Headers(cached.headers);
       response.headers.forEach((value, name) => refreshed.set(name, value));
       if (!response.headers.has('date')) refreshed.delete('date');
       if (!response.headers.has('age')) refreshed.delete('age');
-      rememberAddress(cacheKey, cached.data, refreshed, startedAt);
+      if (cacheKey) rememberAddress(cacheKey, cached.data, refreshed, startedAt);
       return { kind: 'resolved', data: structuredClone(cached.data) };
     }
     if (response.status === 404 || response.status === 400 || response.status === 422)
@@ -193,7 +200,8 @@ export async function readAddress(
     if (!response.ok) return { kind: 'unavailable' };
     const data = resolvedAddress(await response.json());
     if (data?.scope !== lookup.scope) return { kind: 'unavailable' };
-    if (data.key === lookup.key) rememberAddress(cacheKey, data, response.headers, startedAt);
+    if (cacheKey && data.key === lookup.key)
+      rememberAddress(cacheKey, data, response.headers, startedAt);
     return { kind: 'resolved', data };
   } catch {
     if (cacheKey) publicAddresses.delete(cacheKey);

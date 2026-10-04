@@ -9,6 +9,7 @@ import { inSentence } from './messages.ts';
 import { readDiscussion, readRatings, readRelations, readReviews, readStatements } from './read.ts';
 import type { EntityProjection, EntitySection } from './types.ts';
 import { DiscussionView, RelationsView, type SectionProps, StatementsView } from './views.tsx';
+import { readIdentityDefinitions } from './identity-read.ts';
 
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
@@ -23,9 +24,18 @@ export async function StatementsSection({ section, cursor, position, ...rest }: 
 }
 
 
-export async function RelationsSection({ section, cursor, position, ...rest }: SectionProps
-  & { cursor: string | undefined; position?: string }) {
-  return <RelationsView page={await readRelations(section, cursor, position)} cursor={cursor} hrefFor={rest.hrefFor}
+export async function RelationsSection({ section, cursor, position, hideIdentity = false, ...rest }: SectionProps
+  & { cursor: string | undefined; position?: string; hideIdentity?: boolean }) {
+  let page = await readRelations(section, cursor, position);
+  if (hideIdentity && page.ok) {
+    const definitions = await readIdentityDefinitions();
+    if (definitions.ok) {
+      const own = new Set(definitions.data.values());
+      page = { ok: true, data: { ...page.data, items: page.data.items.filter(item => !item.rendering || !own.has(item.rendering.meaning.definition)) } };
+      if (!page.data.items.length && !page.data.next && !cursor) return null;
+    }
+  }
+  return <RelationsView page={page} cursor={cursor} hrefFor={rest.hrefFor}
     locale={rest.locale} t={rest.t} messages={rest.messages} />;
 }
 

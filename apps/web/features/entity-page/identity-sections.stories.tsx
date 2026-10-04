@@ -63,14 +63,24 @@ async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
     await expect(canvasElement.querySelector('[data-identity-hub]')).toBeNull();
   } else {
     await expect(canvasElement.querySelector('[data-identity-hub]')).toHaveTextContent('Saber');
-    await expect(canvas.getAllByText('Persona')).toHaveLength(1);
-    await expect(canvas.getAllByText('Counterpart')).toHaveLength(1);
+    await expect(canvas.getAllByText('Alternate self')).toHaveLength(1);
+    await expect(canvas.getAllByText('Counterpart from another world')).toHaveLength(1);
+    await expect(canvasElement.querySelector('[data-role-chip]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-credited-name]')).toBeNull();
+    await expect(canvasElement.querySelectorAll('[data-identity-question]')).toHaveLength(2);
+    await expect(canvasElement.querySelectorAll('[data-identity-ratings]')).toHaveLength(4);
     await expect(canvasElement.querySelectorAll('[data-title-context]')).toHaveLength(3);
     if (args.state === 'below-threshold') {
-      await expect(canvasElement.querySelectorAll('[data-rating-mean="withheld"]')).toHaveLength(9);
+      await expect(canvasElement.querySelectorAll('[data-rating-mean="withheld"]')).toHaveLength(3);
+      await expect(canvasElement.querySelectorAll('[data-rating-strip]')).toHaveLength(3);
       await expect(
         canvas.getAllByText('4 more ratings will reveal the average.').length,
       ).toBeGreaterThan(0);
+    }
+    if (args.state === 'zero') {
+      await expect(canvasElement.querySelector('[data-rating-strip]')).toBeNull();
+      await expect(canvasElement.querySelector('[data-rating-mean]')).toBeNull();
+      await expect(canvas.getAllByText('No ratings yet.')).toHaveLength(4);
     }
   }
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -106,6 +116,12 @@ export const PopulatedPhone: Story = {
 export const BelowThresholdDesktop: Story = { args: { state: 'below-threshold' }, play: checks };
 export const BelowThresholdPhone: Story = {
   args: { state: 'below-threshold', phone: true },
+  globals: { viewport: { value: 'phone' } },
+  play: checks,
+};
+export const ZeroDesktop: Story = { args: { state: 'zero' }, play: checks };
+export const ZeroPhone: Story = {
+  args: { state: 'zero', phone: true },
   globals: { viewport: { value: 'phone' } },
   play: checks,
 };

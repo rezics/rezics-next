@@ -5,16 +5,23 @@ import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { identityEntry, alter, persona, saber, identityRatings } from './identity-fixtures.ts';
+import {
+  identityEntry,
+  identityData,
+  alter,
+  persona,
+  saber,
+  identityRatings,
+} from './identity-fixtures.ts';
 import {
   bindingSummary,
   fromRole,
   identityEntries,
   resourceBinding,
 } from './identity-relations.ts';
-import { identityContinuation } from './identity-views.tsx';
-import { messages } from './messages.ts';
-import { parseEntityCursors } from './route.ts';
+import { identityContinuation, IdentitySectionsView } from './identity-views.tsx';
+import { messages, copyOf } from './messages.ts';
+import { parseEntityCursors, standaloneHrefFor } from './route.ts';
 import { resourceHref } from '../address/path.ts';
 
 describe('Identity relations', () => {
@@ -34,7 +41,9 @@ describe('Identity relations', () => {
     expect(entry.rendering!.viewingRole).toBe('variant');
     expect(viewed.rendering!.viewingRole).toBe('hub');
     const forward = identityEntry('hub', 'variant', alter, persona);
-    expect(relationRows([forward])[0]!.items[0]!.creditedName).toEqual({
+    expect(relationRows([forward])[0]!.items[0]!.creditedName).toBeUndefined();
+    const appearance = identityEntry('work', 'character', alter);
+    expect(relationRows([appearance])[0]!.items[0]!.creditedName).toEqual({
       lexical: 'Saber',
       language: 'en',
     });
@@ -59,6 +68,72 @@ describe('Identity relations', () => {
         null,
       ),
     ).toBe(`${path}?scope=realm&realm=r&position=chapter#identity-family`);
+  });
+});
+
+describe('Compact identity summaries', () => {
+  const draw = (
+    kind: Parameters<typeof identityData>[0],
+    state: Parameters<typeof identityData>[1],
+  ) =>
+    renderToStaticMarkup(
+      createElement(IdentitySectionsView, {
+        data: identityData(kind, state),
+        self: alter,
+        locale: 'en',
+        t: copyOf('en'),
+        messages: workMessages.en,
+        hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+      }),
+    );
+  test('family summaries use names, human kind labels and count units without credit pills or full histograms', () => {
+    const html = draw('family', 'populated');
+    expect(html).toContain('Alternate self');
+    expect(html).toContain('Counterpart from another world');
+    expect(html).toContain('Main entry');
+    expect(html).toContain('7 ratings');
+    expect(html).not.toContain('data-role-chip');
+    expect(html).not.toContain('data-credited-name');
+    expect(html).not.toContain('grid-cols-[3.75rem');
+    expect(html.match(/data-identity-question/g)).toHaveLength(1);
+  });
+  test('zero votes show no strip and no threshold arithmetic', () => {
+    const html = draw('family', 'zero');
+    expect(html.match(/No ratings yet\./g)).toHaveLength(3);
+    expect(html).not.toContain('data-rating-strip');
+    expect(html).not.toContain('more ratings');
+  });
+  test('holders, represented characters and held titles carry no ratings', () => {
+    for (const kind of ['holders', 'represents', 'titles'] as const) {
+      const html = draw(kind, 'populated');
+      expect(html).not.toContain('data-identity-ratings');
+      expect(html).not.toContain('data-identity-question');
+      expect(html).not.toContain('data-credited-name');
+    }
+  });
+  test('the legend uses the localized Context presentation rather than the authored question', () => {
+    const data = identityData('family', 'populated');
+    if (!data.ok) throw new Error('fixture unavailable');
+    const context = data.data.sections[0]!.legend!.context;
+    context.question = 'Authored model question';
+    context.displayQuestion = {
+      ...context.displayQuestion,
+      value: 'Question présentée',
+      language: 'fr',
+    };
+    const html = renderToStaticMarkup(
+      createElement(IdentitySectionsView, {
+        data,
+        self: alter,
+        locale: 'en',
+        t: copyOf('en'),
+        messages: workMessages.en,
+        hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+      }),
+    );
+    expect(html).not.toContain('Authored model question');
+    expect(html.match(/Question présentée/g)).toHaveLength(1);
+    expect(html).toContain('lang="fr"');
   });
 });
 

@@ -2,10 +2,14 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  alternateSelf: "또 다른 자신",
+  otherWorldCounterpart: "다른 세계의 같은 인물",
+  identityGlobal: "전체",
+  identityRealm: "커뮤니티",
   oneRatingUntilMean: "평가 1개가 더 모이면 평균을 표시합니다.",
-  variantFamily: "변형 모음",
-  identityHub: "원본 캐릭터",
-  variantOf: "변형 원본",
+  variantFamily: "다른 모습",
+  identityHub: "기본 항목",
+  variantOf: "기본 항목",
   units: "유닛",
   represents: "대표하는 캐릭터",
   titlesHeld: "보유 칭호",
@@ -20,7 +24,7 @@ export default {
   identityRatingsUnavailable: "평가를 불러오지 못했습니다.",
   noRatingQuestion: "이 범위에는 평가 질문이 없습니다.",
   ratingsUntilMean: insert("평가 {{count}}개가 더 모이면 평균을 표시합니다.", { count: String }),
-  unknownVariantKind: "변형 종류가 기록되지 않았습니다",
+  unknownVariantKind: "다른 모습",
   titleContextUnavailable: "이 칭호를 보유하는 배경을 표시하지 못했습니다.",
   pageUnavailableTitle: '지금은 이 페이지를 표시할 수 없습니다',
   pageUnavailableBody: 'REZICS가 이 기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
