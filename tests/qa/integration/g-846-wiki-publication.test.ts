@@ -31,8 +31,14 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
   const nativePublish = evidence.publish.bind(evidence);
   const nativeReveal = evidence.reveal.bind(evidence);
   let interruptRevelation = false;
+  let interruptedRecords: string[] = [];
+  const unrelatedRecords = [id(), id(), id()];
   evidence.reveal = async (...args) => {
-    if (interruptRevelation) { interruptRevelation = false; throw new Error('Position transaction interrupted'); }
+    if (interruptRevelation) {
+      interruptedRecords = [...args[3] ?? args[1].map(row => row.record)];
+      interruptRevelation = false;
+      throw new Error('Position transaction interrupted');
+    }
     return nativeReveal(...args);
   };
   let pausePublication: string | null = null;
@@ -205,6 +211,9 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     return { work,bundle,collections };
   };
   try {
+    // A shared shard may retain other wiki publications. This failure must
+    // leave both its own required records absent and those other records intact.
+    await f.contentPool.query('INSERT INTO wiki.revelation_record(record) SELECT unnest($1::text[])', [unrelatedRecords]);
     const shown = await setup(true), proposal = await proposalFor(shown.bundle);
     await json(await call('POST',path(proposal.proposal,'/reviews'),{ profile: 'editorial-proposal-review-v1',revision: 1,
       outcome: 'request_changes',message: 'Check the alias chapter',actingSubject: steward.actor },steward.token));
@@ -222,7 +231,10 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     const applyKey = randomUUID();
     await json(await decide(proposal.proposal,2,applyKey),202);
     expect(semanticWrites).toBe(beforePositionFailure);
-    expect((await f.contentPool.query('SELECT record FROM wiki.revelation_record')).rowCount).toBe(0);
+    expect(interruptedRecords).toHaveLength(3);
+    expect(await reading.required(interruptedRecords)).toEqual(new Set());
+    expect(await reading.lookup(interruptedRecords)).toEqual(new Map());
+    expect(await reading.required(unrelatedRecords)).toEqual(new Set(unrelatedRecords));
     loseEntity = 2;
     await json(await decide(proposal.proposal,2,applyKey),202);
     expect((await f.accessPool.query(`SELECT position FROM access.editorial_command_outcome o
@@ -411,5 +423,8 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
       .toEqual([{ outcome: 'cancelled' }]);
     expect(Number((await f.contentPool.query('SELECT sum(code_points)::text AS total FROM wiki.quotation WHERE work = $1',
       [hidden.work.work])).rows[0].total)).toBe(9950);
-  } finally { await f.stop(); }
+  } finally {
+    try { await f.contentPool.query('DELETE FROM wiki.revelation_record WHERE record = ANY($1::text[])', [unrelatedRecords]); }
+    finally { await f.stop(); }
+  }
 },120000);

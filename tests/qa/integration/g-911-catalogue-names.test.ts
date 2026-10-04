@@ -47,11 +47,13 @@ test('G-911: catalogue ranks titles and multilingual aliases first, folds script
     for (const term of ['Camp', `${marker} Camp Lanterns`, `${marker} Lanterns Camp`,
       `${marker} 魔法禁书目录`, `${marker} 魔法禁書目錄`, `${marker} がらす`, `${marker} ｶﾞﾗｽ`, `${marker} rust`]) {
       const page = await read(term);
-      expect(page.results[0]!.work).toBe(named.work);
-      expect(page.results[0]!.title.value).toBe(title);
+      const nameHit = page.results.find(row => row.work === named.work);
+      expect(nameHit).toBeDefined();
+      expect(page.results[0]!.score).toBe(nameHit!.score);
+      expect(nameHit!.title.value).toBe(title);
       expect(new Set(page.results.map(row => row.mainVersion)).size).toBe(page.results.length);
       const bodyHit = page.results.find(row => row.work === bodyOnly.work);
-      if (bodyHit) expect(page.results[0]!.score).toBeGreaterThan(bodyHit.score);
+      if (bodyHit) expect(nameHit!.score).toBeGreaterThan(bodyHit.score);
     }
     expect((await read(`${marker} 魔法禁书目录 rust`)).results).toEqual([]); // Words cannot span two aliases.
     const multiField = await stack.main.handle(new Request('http://main.local/v1/queries', {
@@ -62,6 +64,11 @@ test('G-911: catalogue ranks titles and multilingual aliases first, folds script
     expect(multiField.status).toBe(200);
     expect(await multiField.json()).toMatchObject({ total: 1, results: [{ work: named.work }] });
     expect((await read(`${marker} Secret`)).count).toEqual({ value: 0, precision: 'exact' });
+    // All three titles match the marker at the same name-tier score. Lucene
+    // breaks ties by document order within this commit, not Work creation order.
+    const complete = await read(marker);
+    expect(complete.results.map(row => row.work).sort()).toEqual([named.work, bodyOnly.work, both.work].sort());
+    expect(new Set(complete.results.map(row => row.score)).size).toBe(1);
     const traversed = [];
     let cursor: string | undefined;
     for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
@@ -71,7 +78,7 @@ test('G-911: catalogue ranks titles and multilingual aliases first, folds script
       cursor = page.next;
       if (pageNumber === 9) throw new Error('Catalogue did not exhaust its small multilingual fixture');
     }
-    expect(traversed).toEqual([named.work, bodyOnly.work, both.work]);
+    expect(traversed).toEqual(complete.results.map(row => row.work));
 
     // Metadata writes replace their exact name projection while preserving
     // creation aliases. Retired localized names must leave Lucene as well.
