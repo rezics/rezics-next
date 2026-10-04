@@ -360,6 +360,15 @@ test('G-955: retained small backups are reused and absent/incompatible backups a
   ).rejects.toThrow('owner load failed');
 });
 
+test('G-955: a file that drops owner schemas gets a fresh project, so later files keep migrated owners', () => {
+  const directory = join(root, 'tests/qa/integration');
+  for (const name of readdirSync(directory).filter((name) => name.endsWith('.test.ts'))) {
+    const source = readFileSync(join(directory, name), 'utf8');
+    if (/DROP SCHEMA/.test(source) && /'(access|relay|content|account)'/.test(source))
+      expect([name, isolatedIntegrationFiles.has(`tests/qa/integration/${name}`)]).toEqual([name, true]);
+  }
+});
+
 test('G-955: a file that imports a heavy integration file runs in that file\'s resource class', () => {
   const directory = join(root, 'tests/qa/integration');
   for (const name of readdirSync(directory).filter((name) => name.endsWith('.test.ts'))) {

@@ -145,6 +145,9 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1012-optional-hydration.test.ts',
   // Catalogue write/growth measurements own their initial population and disk-backed project.
   'tests/qa/integration/g-1031-catalogue-write.test.ts',
+  // These drop the project's owner schemas; G1023 rebuilds only up to 1029.
+  'tests/qa/integration/g-1023-alias-migration.test.ts',
+  'tests/qa/integration/g-991-owner-migrations.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
