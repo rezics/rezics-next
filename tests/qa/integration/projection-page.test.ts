@@ -345,7 +345,12 @@ test('projection pages retain the subject header, frame summaries and own judgme
     { headers: { authorization: `Bearer ${owner.token}` } })));
   const early = await page(chapter), all = await page('all');
   expect(Value.Check(entityPage, early)).toBe(true);
-  expect(early.projection).toMatchObject({ subject: { reference: scopedSubject }, ratings: [], reviews: [], discussion: [] });
+  expect(early.projection).toMatchObject({ subject: { reference: scopedSubject } });
+  // Judgments are not inlined: the page links the projection's own ratings, reviews and discussion reads.
+  expect(Object.keys(early.projection!).sort()).toEqual(['frames', 'relations', 'statements', 'subject']);
+  for (const id of ['ratings', 'reviews', 'discussion']) {
+    expect(early.sections.find(section => section.id === id)!.href).toBe(`/v1/resources/${short(scopedProjection)}/${id}`);
+  }
   expect(early.projection!.frames.map(frame => frame.reference).sort()).toEqual([canon, chapter].sort());
   expect(ids(early.projection!.statements)).not.toContain(record.statement);
   expect(ids(all.projection!.statements)).toContain(record.statement);

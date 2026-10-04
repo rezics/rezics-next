@@ -257,10 +257,18 @@ test('target resolution reports base projection with the report, review, rating,
     // A Resource keeps its own grain: the subject is not made a projection by having them.
     expect((await resolveCommandTarget(session, subject)).base).toBe('resource');
   });
-  // The page keeps the projection's own judgment inventories and scopes subject facts by its frames.
-  expect(await json(await stack.call('GET', `/v1/resources/${local(projection.id)}/page`))).toMatchObject({
-    target: { base: 'projection' }, projection: { ratings: [], reviews: [], discussion: [] },
-    sections: [{ id: 'statements' }, { id: 'relations' }, { id: 'ratings' }, { id: 'reviews' }, { id: 'discussion' }] });
+  // The page links the projection's own judgment reads instead of inlining them, and scopes subject facts by its frames.
+  const page = await json<{ target: { base: string }; projection: Record<string, unknown>; sections: { id: string; href: string }[] }>(
+    await stack.call('GET', `/v1/resources/${local(projection.id)}/page`));
+  expect(page.target.base).toBe('projection');
+  expect(Object.keys(page.projection).sort()).toEqual(['frames', 'relations', 'statements', 'subject']);
+  expect(page.sections.map(section => section.id)).toEqual(['statements', 'relations', 'ratings', 'reviews', 'discussion']);
+  for (const id of ['ratings', 'reviews', 'discussion']) {
+    expect(page.sections.find(section => section.id === id)!.href).toBe(`/v1/resources/${local(projection.id)}/${id}`);
+  }
+  // Nothing rates the projection yet, so its linked ratings read is empty; reviews and discussion are read in projection-sections.test.ts.
+  expect(await json(await stack.call('GET', page.sections.find(section => section.id === 'ratings')!.href)))
+    .toMatchObject({ target: projection.id, targetGrain: 'projection', status: 'no-context', count: 0, mean: null });
 }, 120_000);
 
 test('an identity reserved by a lost command is adopted by the next caller, and the key row stays append-only', async () => {
