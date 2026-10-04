@@ -19,6 +19,8 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { DISCLOSURE_COST, DisclosureStore, DisclosureUnavailable } from '../../../services/main/src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability/policy.ts';
 
 test('STUDIO draft heads and Work title language survive edits and stale retries', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -346,4 +348,48 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       { headers: { authorization: `Bearer ${f.account.tokenA}` } }))).status).toBe(200);
     expect(statements).toBeLessThanOrEqual(STUDIO_CHAPTER_COST.graphStatements);
   } finally { await f.close(); }
+}, 20_000);
+
+test('G1049 disclosure batches plan a singleton recovery fence without per-read JIT', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  let statement: { sql: string; args: unknown[] } | undefined;
+  const measuredPool = new Proxy(pool, { get(target, key) {
+    if (key === 'query') return (sql: string, args: unknown[]) => {
+      statement = { sql, args };
+      return target.query(sql, args);
+    };
+    const value = Reflect.get(target, key, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
+  const reader = new DisclosureStore(measuredPool);
+  const works = Array.from({ length: DISCLOSURE_COST.batch }, () => `https://rezics.com/id/${randomUUID()}`);
+  const targets = works.map(work => ({ owner: 'graph' as const, resource: work,
+    component: 'title' as const, work }));
+  type PlanNode = { 'Plan Rows': number; 'CTE Name'?: string; Plans?: PlanNode[] };
+  type Plan = { Plan: PlanNode; JIT?: unknown };
+  const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
+  try {
+    await pool.query(`INSERT INTO access.scope_gate (id, open) VALUES ($1, false)`, [`work:read:${works.at(-1)}`]);
+    for (const batch of [targets.slice(0, 1), targets]) {
+      for (const channel of ['summary', 'preview'] as const) {
+        const expected = batch.map(target => target.work === works.at(-1) ? 'tombstone' : 'visible');
+        expect(await reader.read(batch, ANONYMOUS_VIEWER, channel)).toEqual(
+          channel === 'preview' ? expected.map(value => value === 'tombstone' ? 'hidden' : value) : expected);
+        const selected = statement!;
+        const result = await pool.query<{ 'QUERY PLAN': Plan[] }>(
+          `EXPLAIN (ANALYZE, FORMAT JSON) ${selected.sql}`, selected.args);
+        const plan = result.rows[0]!['QUERY PLAN'][0]!;
+        // PostgreSQL chooses JIT from estimated cost, including before a fresh
+        // singleton owner has statistics: https://www.postgresql.org/docs/18/jit-decision.html
+        expect(plan.JIT).toBeUndefined();
+        expect(nodes(plan.Plan).find(node => node['CTE Name'] === 'fence')?.['Plan Rows']).toBe(1);
+      }
+    }
+    await expect(reader.read([...targets, targets[0]!], ANONYMOUS_VIEWER, 'summary'))
+      .rejects.toBeInstanceOf(DisclosureUnavailable);
+  } finally {
+    await pool.query('DELETE FROM access.scope_gate WHERE id = $1', [`work:read:${works.at(-1)}`]);
+    await pool.end();
+  }
 }, 20_000);
