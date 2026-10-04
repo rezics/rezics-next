@@ -40,7 +40,7 @@ export async function discardUnpublishedWorkObjects(input: {
   }
 
   const manifestValues = manifests.map(digest => `<urn:rezics:sha256:${digest}>`).join(' ');
-  if (input.objects && manifestValues) {
+  if (manifestValues) {
     const referenced = await input.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH <${REVISION_GRAPH}> {
         ?revision rv:manifest ?manifest .

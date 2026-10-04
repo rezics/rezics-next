@@ -179,6 +179,7 @@ export interface MainWorkDependencies {
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId'>
+    & Partial<Pick<AccessAdmissionRegistry, 'admitCatalogue' | 'recordCatalogueOutcomes'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canProtectMedia'|'canManageMedia'|'canActAsPlatformAdministrator'>>
     & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>

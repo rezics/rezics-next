@@ -91,13 +91,13 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
     const lostKey = randomUUID();
     expect((await home.json<CatalogueImportOutcome>(await single(base, lostKey), 201)).status).toBe('succeeded');
     stack.fuseki.catalogueBatch = nativeBatch;
-    const record = stack.access.recordGraphOutcome.bind(stack.access);
+    const record = stack.access.recordCatalogueOutcomes.bind(stack.access);
     let failOnce = true;
-    stack.access.recordGraphOutcome = async (...args) => { if (failOnce) { failOnce = false; throw new Error('lost Access outcome'); } return record(...args); };
+    stack.access.recordCatalogueOutcomes = async (...args) => { if (failOnce) { failOnce = false; throw new Error('lost Access outcome'); } return record(...args); };
     const uncertainKey = randomUUID();
     expect((await home.json<CatalogueImportOutcome>(await single(base, uncertainKey), 202)).status).toBe('pending');
     expect((await home.json<CatalogueImportOutcome>(await single(base, uncertainKey))).status).toBe('succeeded');
-    stack.access.recordGraphOutcome = record;
+    stack.access.recordCatalogueOutcomes = record;
     const raceKey = randomUUID(), race = await Promise.all([single(base, raceKey), single(base, raceKey)]);
     const raceRows = await Promise.all(race.map(async response => {
       expect([200, 201]).toContain(response.status);

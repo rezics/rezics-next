@@ -2,8 +2,9 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { CatalogueBulkEnvelope, CommandValidation } from '../../infrastructure/fuseki.ts';
+import { WorkFileStaging } from '../../infrastructure/work-file-staging.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
-import { AdmissionConflict, AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
+import { AdmissionConflict, type RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
 import { classificationDecisionSlotIri } from '../classification/decision.ts';
@@ -15,7 +16,7 @@ import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates, type StagedW
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { readWorkTerminalReceipt, workReceiptIri, type WorkTerminalReceipt } from './receipt.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
-  metadataWorkRequestDigest, prepareComponentWithCandidates, prepareWorkComponentWithCandidates, type WorkActivationEnvironment } from './activate.ts';
+  metadataWorkRequestDigest, normalizeWorkSemanticTypes, prepareComponentWithCandidates, prepareWorkComponentWithCandidates, type WorkActivationEnvironment } from './activate.ts';
 
 /** Creation-only catalogue capability. It includes initial attribution and global
  * curation; ordinary work:create:root permission never grants this scope. */
@@ -56,23 +57,29 @@ function checked(input: CatalogueImportInput): CatalogueImportInput {
   const normalize = (row: { value: string; language: string }) => {
     const tag = canonicalLanguage(row.language);
     if (!tag) throw new InvalidCatalogueImport('Invalid recorded language');
-    return { ...row, language: tag };
+    return { value: row.value, language: tag };
   };
   const tag = canonicalLanguage(input.language);
   if (!tag || new Set(input.credits.map(row => `${row.agent}\0${row.role}`)).size !== input.credits.length
     || new Set(input.classifications.map(row => row.sense)).size !== input.classifications.length)
     throw new InvalidCatalogueImport('Languages and credit/classification slots must be valid and unique');
-  const result = { ...input, language: tag, aliases: input.aliases.map(normalize),
+  const result: CatalogueImportInput = { profile: input.profile, ...(input.work ? { work: input.work } : {}),
+    expectedWorkHead: null, title: input.title, language: tag, evidence: input.evidence,
+    aliases: input.aliases.map(normalize),
     ...(input.localizedTitle ? { localizedTitle: normalize(input.localizedTitle) } : {}),
     ...(input.description ? { description: normalize(input.description) } : {}),
-    semanticTypes: [...input.semanticTypes].sort() };
+    semanticTypes: [...input.semanticTypes].sort(),
+    credits: input.credits.map(row => ({ agent: row.agent, role: row.role,
+      ...(row.expectedAgentHead ? { expectedAgentHead: row.expectedAgentHead } : {}) })),
+    classifications: input.classifications.map(row => ({ sense: row.sense, expectedSenseHead: row.expectedSenseHead,
+      expectedDecisionHead: null, outcome: row.outcome })) };
   // Apply the same title and semantic type policy as ordinary creation.
-  try { metadataWorkRequestDigest(result.title, result.semanticTypes, result.language, result); }
+  try { metadataWorkRequestDigest(result.title, result.semanticTypes, result.language, result, true); }
   catch (error) { throw new InvalidCatalogueImport(error instanceof Error ? error.message : 'Invalid Work metadata'); }
   return result;
 }
 export function catalogueImportDigest(input: CatalogueImportInput, actingSubject: string): string {
-  iri(actingSubject);
+  if (!Value.Check(native, actingSubject)) throw new InvalidCatalogueImport('Invalid acting Agent');
   return hash(JSON.stringify({ family: 'work-catalogue-import-v1', actingSubject, input: checked(input) }));
 }
 function identity(admission: string, kind: string): string {
@@ -86,14 +93,15 @@ function validation(profile: keyof typeof profileRegistry, role: string, focus: 
   return { profile, sha256: pin.sha256, shape, focus, graphs: [GRAPHS.current, GRAPHS.revisions],
     ...(binding ? { binding } : {}) };
 }
-async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmission, input: CatalogueImportInput, candidates: StagedWorkObjectCandidates[], agentHeads: Map<string, string>): Promise<CatalogueBulkEnvelope> {
+async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmission, input: CatalogueImportInput, candidates: StagedWorkObjectCandidates[], agentHeads: Map<string, string>, files?: WorkFileStaging): Promise<CatalogueBulkEnvelope> {
   const receipt = workReceiptIri(admission.id), work = input.work ?? identity(admission.id, 'work');
   const main = identity(admission.id, 'main'), revision = identity(admission.id, 'work-revision');
   const mainRevision = identity(admission.id, 'main-revision'), operation = identity(admission.id, 'operation');
   const manifest = async (component: string, state: object, profile = PROFILE) => {
     const staged = stagedWorkObjectCandidates();
     candidates.push(staged);
-    return env.workObjects ? prepareWorkComponentWithCandidates(env.workObjects, component, state, staged, profile)
+    return files ? files.component(component, state, staged, profile)
+      : env.workObjects ? prepareWorkComponentWithCandidates(env.workObjects, component, state, staged, profile)
       : prepareComponentWithCandidates(env.objectDirectory, component, state, staged, profile);
   };
   const workManifest = await manifest(work, { mainVersion: main, continuityProfile: CONTINUITY,
@@ -155,7 +163,7 @@ async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmi
   const receiptFields = `a rv:OperationReceipt ; rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ; rv:commandFamily "work-catalogue-import-v1" ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next`;
   const batch = `urn:rezics:outbox:${hash(receipt)}`, event = `urn:rezics:event:${hash(operation)}`;
   const names = [...input.aliases, ...(input.localizedTitle ? [input.localizedTitle] : [])];
-  return { receipt, digest: admission.requestDigest, deadlineMs: CATALOGUE_IMPORT_COST.deadlineMs, validations,
+  const envelope: CatalogueBulkEnvelope = { receipt, digest: admission.requestDigest, deadlineMs: CATALOGUE_IMPORT_COST.deadlineMs, validations,
     update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
@@ -191,6 +199,14 @@ async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmi
           ${iri(event)} a rv:AdmissionCancelledEvent ; rv:ordinal 0 ; rv:action "work.create" ; rv:receipt ${iri(receipt)} ; rv:admissionId ${lit(admission.id)} . }
       } WHERE { ${commonGuard} }`,
   };
+  try { normalizeWorkSemanticTypes(input.semanticTypes); }
+  catch {
+    // Retired types still replay a prior terminal receipt, but cannot create a
+    // new Work. This admitted failure has the same stable cancellation identity.
+    envelope.update = envelope.cancellation.replace('"candidate-failed"', '"invalid"');
+    envelope.validations = [];
+  }
+  return envelope;
 }
 
 async function terminalStatus(env: WorkActivationEnvironment, terminal: WorkTerminalReceipt): Promise<CatalogueImportOutcome['status']> {
@@ -211,64 +227,83 @@ export async function importCatalogueWorks(deps: MainWorkDependencies, request: 
     || items.some(item => !/^[A-Za-z0-9:_./-]{1,128}$/.test(item.key))
     || Buffer.byteLength(JSON.stringify(items)) > CATALOGUE_IMPORT_COST.requestBytes)
     throw new InvalidCatalogueImport('Invalid catalogue batch size, keys or bytes');
+  const admit = deps.access.admitCatalogue?.bind(deps.access), record = deps.access.recordCatalogueOutcomes?.bind(deps.access);
+  if (!admit || !record) throw new Error('Catalogue admission transaction is unavailable');
   await assertGraphAdmissionOpen(deps.environment.fuseki, deps.environment.lineage);
   const principal = await deps.account.verify(request,
     items.some(item => item.input.classifications.length > 0) ? ['work:create', 'classification:decide'] : ['work:create']);
   const outcomes: CatalogueImportOutcome[] = items.map(item => ({ key: item.key, status: 'pending' }));
   const prepared: { index: number; admission: RegisteredAdmission; envelope: CatalogueBulkEnvelope; candidates: StagedWorkObjectCandidates[] }[] = [];
-  const agentHeads = new Map<string, string>();
+  const admissions: { index: number; admission: RegisteredAdmission; input: CatalogueImportInput }[] = [];
+  const requests: { index: number; input: CatalogueImportInput; key: string; digest: string }[] = [];
   for (const [index, item] of items.entries()) {
-    try {
-      const input = checked(item.input), digest = catalogueImportDigest(input, actingSubject);
-      const registered = await deps.access.register({ principal, actingSubject, scope: CATALOGUE_IMPORT_SCOPE,
-        action: 'work.create', idempotencyKey: item.key, requestDigest: digest });
-      const existing = await readWorkTerminalReceipt(deps.environment.fuseki, registered.id);
-      if (existing) {
-        await deps.access.recordGraphOutcome(registered.id, existing);
-        outcomes[index] = { key: item.key, status: await terminalStatus(deps.environment, existing), receipt: existing, replayed: true };
-        continue;
-      }
-      if (!registered.dispatchEligible || registered.state === 'sealed') {
-        const terminal = await sealMetadataWorkAdmission(deps.environment, registered);
-        await deps.access.recordGraphOutcome(registered.id, terminal);
-        outcomes[index] = { key: item.key, status: 'conflict', receipt: terminal, replayed: registered.replayed };
-        continue;
-      }
-      const admission = await deps.access.claim(registered.id, digest, principal);
-      const candidates: StagedWorkObjectCandidates[] = [];
-      try { prepared.push({ index, admission, envelope: await prepare(deps.environment, admission, input, candidates, agentHeads), candidates }); }
-      catch (error) {
-        for (const staged of candidates) await discardUnpublishedWorkObjects({ fuseki: deps.environment.fuseki,
-          objects: deps.environment.workObjects, objectDirectory: deps.environment.objectDirectory, candidates: staged });
-        throw error;
-      }
-    } catch (error) {
-      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) outcomes[index]!.status = 'denied';
-      else if (error instanceof InvalidCatalogueImport) outcomes[index]!.status = 'invalid';
-      else if (error instanceof AdmissionConflict) outcomes[index]!.status = 'conflict';
-      else throw error;
+    try { const input = checked(item.input); requests.push({ index, input, key: item.key, digest: catalogueImportDigest(input, actingSubject) }); }
+    catch (error) { if (error instanceof InvalidCatalogueImport) outcomes[index]!.status = 'invalid'; else throw error; }
+  }
+  if (requests.length) {
+    const registered = await admit(principal, actingSubject, requests.map(({ key, digest }) => ({ key, digest })));
+    for (const [offset, result] of registered.entries()) {
+      const row = requests[offset]!;
+      if ('status' in result) outcomes[row.index]!.status = result.status;
+      else admissions.push({ index: row.index, admission: result.admission, input: row.input });
     }
   }
-
+  const terminals: { index: number; admission: RegisteredAdmission; terminal: WorkTerminalReceipt }[] = [];
+  const agentHeads = new Map<string, string>();
+  const files = !deps.environment.workObjects ? new WorkFileStaging(deps.environment.objectDirectory) : undefined;
+  const pendingPreparation: typeof admissions = [];
+  for (const { index, admission, input } of admissions) {
+    const existing = await readWorkTerminalReceipt(deps.environment.fuseki, admission.id);
+    if (existing) { terminals.push({ index, admission, terminal: existing }); continue; }
+    if (!admission.dispatchEligible || admission.state === 'sealed') {
+      terminals.push({ index, admission, terminal: await sealMetadataWorkAdmission(deps.environment, admission) });
+      continue;
+    }
+    pendingPreparation.push({ index, admission, input });
+  }
+  // Four preparations × two file syncs: bounded I/O can share the filesystem
+  // journal, while each payload is synced before the final directory fence.
+  for (let start = 0; start < pendingPreparation.length; start += 4) {
+    const results = await Promise.allSettled(pendingPreparation.slice(start, start + 4).map(async ({ index, admission, input }) => {
+    const candidates: StagedWorkObjectCandidates[] = [];
+    try { prepared.push({ index, admission, envelope: await prepare(deps.environment, admission, input, candidates, agentHeads, files), candidates }); }
+    catch (error) {
+      // Deterministic same-key objects may be shared with another in-flight
+      // writer. Only a durable cancellation makes their deletion safe.
+      throw error;
+    }
+    }));
+    const failures = results.filter(result => result.status === 'rejected');
+    if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Catalogue object preparation failed');
+  }
+  if (prepared.length) await files?.flush();
+  prepared.sort((left, right) => left.index - right.index);
   if (prepared.length) {
     try { await deps.environment.fuseki.catalogueBatch(prepared.map(row => row.envelope)); }
     catch { /* The shared commit can succeed before its response is lost. Read each receipt. */ }
   }
   for (const row of prepared) {
-    try {
-      const terminal = await readWorkTerminalReceipt(deps.environment.fuseki, row.admission.id);
-      if (!terminal) continue;
-      if (terminal.requestDigest !== row.admission.requestDigest || terminal.scope !== row.admission.scope
-        || terminal.admissionId !== row.admission.id || terminal.authorityEpoch !== row.admission.authorityEpoch)
-        throw new Error('Catalogue receipt differs from admission');
-      await deps.access.recordGraphOutcome(row.admission.id, terminal);
-      if (terminal.outcome === 'cancelled') for (const staged of row.candidates)
-        await discardUnpublishedWorkObjects({ fuseki: deps.environment.fuseki, objects: deps.environment.workObjects,
-          objectDirectory: deps.environment.objectDirectory, candidates: staged });
-      outcomes[row.index] = { key: items[row.index]!.key,
-        status: await terminalStatus(deps.environment, terminal),
-        receipt: terminal, replayed: row.admission.replayed };
-    } catch { /* An uncertain Access outcome is pending, never reported as success. */ }
+    const terminal = await readWorkTerminalReceipt(deps.environment.fuseki, row.admission.id);
+    if (terminal) terminals.push({ index: row.index, admission: row.admission, terminal });
   }
+  try {
+    // Access ambiguity keeps every affected item pending. The graph receipts
+    // remain authoritative and the same item keys reconcile all of them.
+    for (const { terminal, admission } of terminals) {
+      if (terminal.requestDigest !== admission.requestDigest || terminal.scope !== admission.scope
+        || terminal.admissionId !== admission.id || terminal.authorityEpoch !== admission.authorityEpoch)
+        throw new AdmissionConflict('Catalogue receipt differs from admission');
+    }
+    await record(terminals.map(row => row.terminal));
+    for (const row of terminals) {
+      outcomes[row.index] = { key: items[row.index]!.key, status: await terminalStatus(deps.environment, row.terminal),
+        receipt: row.terminal, replayed: row.admission.replayed };
+      if (row.terminal.outcome === 'cancelled') {
+        const staged = prepared.find(item => item.index === row.index);
+        if (staged) for (const candidates of staged.candidates) await discardUnpublishedWorkObjects({ fuseki: deps.environment.fuseki,
+          objects: deps.environment.workObjects, objectDirectory: deps.environment.objectDirectory, candidates });
+      }
+    }
+  } catch { /* No durable Access acknowledgement: retry every pending item. */ }
   return outcomes;
 }

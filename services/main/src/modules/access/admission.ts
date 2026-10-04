@@ -1323,6 +1323,54 @@ export class AccessAdmissionRegistry {
     }
   }
 
+  /** Explicit import scope only: one locked authority cut, per-item immutable
+   * admission/claim audit, then a separate atomic graph-proof acknowledgement.
+   * SQL runs server-side so a catalogue does not pay 40 network trips per Work. */
+  async admitCatalogue(principal: VerifiedPrincipal, actor: string,
+    items: readonly { key: string; digest: string }[]): Promise<({ admission: RegisteredAdmission } | { status: 'denied' | 'conflict' })[]> {
+    return this.catalogueTransaction(async client => {
+      await requireRecoveryOpen(client);
+      const result = await client.query<{ result: { principalId: string | null;
+        items: { admission?: AdmissionRow; dispatchEligible?: boolean; replayed?: boolean; status?: 'denied' | 'conflict' }[] } }>(
+        'SELECT access.catalogue_import_admit($1,$2,$3,$4::jsonb) AS result',
+        [principal.issuer, principal.subject, actor, JSON.stringify(items)]);
+      const body = result.rows[0]!.result;
+      if (!body.principalId) return items.map(() => ({ status: 'denied' as const }));
+      await requirePlatformParticipation(client, body.principalId);
+      return body.items.map(item => {
+        if (!item.admission) return { status: item.status! };
+        const row = item.admission;
+        return { admission: { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
+          authorityPath: row.authority_path, scope: row.scope_id, action: row.action, idempotencyKey: row.idempotency_key,
+          requestDigest: row.request_digest, authorityEpoch: String(row.authority_epoch),
+          registeredAt: new Date(String(row.registered_at)).toISOString(), expiresAt: new Date(String(row.expires_at)).toISOString(),
+          state: row.state as RegisteredAdmission['state'], dispatchEligible: item.dispatchEligible!, replayed: item.replayed! } };
+      });
+    });
+  }
+  async recordCatalogueOutcomes(proofs: readonly (GraphTerminalProof & { work?: string; mainVersion?: string })[]): Promise<void> {
+    await this.catalogueTransaction(async client => {
+      await requireRecoveryOpen(client);
+      await client.query('SELECT access.catalogue_import_outcomes($1::jsonb)', [JSON.stringify(proofs)]);
+    });
+  }
+
+  /** Bounded catalogue orchestration shares PostgreSQL durability, not an
+   * authority shortcut. Register, claim and terminal proof retain their normal
+   * fences. The caller stages objects and dispatches Jena only after commit. */
+  private async catalogueTransaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const result = await operation(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) { await rollback(client); throw error; }
+    finally { client.release(); }
+  }
+
   /** Gate-first claim linearizes dispatch against a strong scope closure. */
   async claim(admissionId: string, requestDigest: string,
     accountPrincipal?: VerifiedPrincipal): Promise<ClaimedAdmission> {

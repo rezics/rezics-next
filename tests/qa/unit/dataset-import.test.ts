@@ -98,6 +98,10 @@ function apiFixture() {
           workRevision: iri(id++),
           mainRevision: iri(id++),
         };
+      } else if (path === '/v1/work-imports/bulk') {
+        const items = (body as { items: { key: string; input: unknown }[] }).items;
+        receipt = { complete: true, partial: false, items: items.map(item => ({ key: item.key, status: 'succeeded',
+          receipt: { outcome: 'succeeded', work: iri(id++), mainVersion: iri(id++), workRevision: iri(id++), mainRevision: iri(id++) } })) };
       } else if (path === '/v1/semantic/changes/bulk') {
         expect(body).not.toHaveProperty('target');
         const states = (body as { items: { properties: unknown[] }[] }).items;
@@ -186,7 +190,7 @@ describe('independent public-API dataset import', () => {
       .body as { rawBytesBase64: string };
     const evidence = JSON.parse(Buffer.from(firstIntake.rawBytesBase64, 'base64').toString());
     expect(evidence.edges[0].data).toEqual({ spoiler: 2, order: 1 });
-    const creation = fixture.requests.find((call) => call.path === '/v1/works')!;
+    const creation = fixture.requests.find((call) => call.path === '/v1/work-imports/bulk')!;
     expect(creation.body).not.toHaveProperty('id');
     const semantic = fixture.requests.find((call) => call.path === '/v1/semantic/changes/bulk')!
       .body as { items: { properties: unknown[] }[] };
@@ -600,36 +604,23 @@ describe('independent public-API dataset import', () => {
     expect(projectionLanguage('mul')).toBe('und');
   });
 
-  test('retries moving read bases for catalogue lookups but never retries CAS writes on409', async () => {
-    const fixture = apiFixture(),
-      work = record('work', 'work');
-    work.title = 'Fate/stay night';
-    let readAttempts = 0;
-    const reads: DatasetApi = {
-      wait: async () => {},
-      request(method, path, body, key) {
-        if (path === '/v1/catalogue/candidates' && readAttempts++ < 2)
-          return Promise.resolve({ status: 409, body: { code: 'read_basis_changed' } });
-        return fixture.api.request(method, path, body, key);
-      },
-    };
-    await importDataset(root(), snapshot([work]), options(reads));
-    expect(readAttempts).toBeGreaterThanOrEqual(3);
-    let writeAttempts = 0;
-    const writes: DatasetApi = {
-      wait: async () => {},
-      request(method, path, body, key) {
-        if (path === '/v1/works') {
-          writeAttempts++;
-          return Promise.resolve({ status: 409, body: { code: 'reading_position_moved' } });
-        }
-        return fixture.api.request(method, path, body, key);
-      },
-    };
-    await expect(importDataset(root(), snapshot([work]), options(writes))).rejects.toThrow(
-      'HTTP 409',
-    );
-    expect(writeAttempts).toBe(1);
+  test('catalogue imports keep stable item keys and retain partial successes for retry', async () => {
+    const fixture = apiFixture(), directory = root(), works = [record('first','work'), record('second','work')];
+    let once = true;
+    const api: DatasetApi = { async request(method,path,body,key) {
+      const response = await fixture.api.request(method,path,body,key);
+      if (path === '/v1/work-imports/bulk' && once) {
+        once = false;
+        const result = structuredClone(response.body) as { items: { status: string; receipt?: unknown }[]; complete: boolean; partial: boolean };
+        result.items[1]!.status = 'pending'; delete result.items[1]!.receipt; result.complete = false; result.partial = true;
+        return { status: 200, body: result };
+      }
+      return response;
+    } };
+    await expect(importDataset(directory,snapshot(works),options(api))).rejects.toThrow('pending');
+    await importDataset(directory,snapshot(works),options(api));
+    const attempts = fixture.requests.filter(row => row.path === '/v1/work-imports/bulk');
+    expect(attempts).toHaveLength(2); expect(attempts[0]!.body).toEqual(attempts[1]!.body);
   });
 
   test('one context has one writer, distinct contexts stay independent and released locks are reusable', () => {
@@ -668,9 +659,11 @@ describe('independent public-API dataset import', () => {
     ];
     const imported = await importDataset(root(), source, options(fixture.api));
     const aRequest = fixture.requests.find(
-      (call) => call.path === '/v1/works' && (call.body as { title: string }).title === 'A',
+      (call) => call.path === '/v1/work-imports/bulk',
     )!;
-    const aIdentity = fixture.receipts.get(aRequest.key!)!.work;
+    const aItems = fixture.receipts.get(aRequest.key!)!.items as { receipt: { work: string } }[];
+    const aIndex = (aRequest.body as { items: { input: { title: string } }[] }).items.findIndex(item => item.input.title === 'A');
+    const aIdentity = aItems[aIndex]!.receipt.work;
     const semantic = fixture.requests.find((call) => call.path === '/v1/semantic/changes/bulk')!
       .body as { items: { properties: { predicate: string; value: { ref?: string } }[] }[] };
     const anchors = semantic.items[0]!.properties.filter(

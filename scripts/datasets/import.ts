@@ -762,6 +762,62 @@ export async function importDataset(
         );
         const workRecords = selected.filter((item) => item.native === 'work');
         let mappedWorks = workRecords.filter((record) => journal.native[record.key]).length;
+        // Reconcile every retained import group before choosing fresh chunks.
+        // Stable per-record keys make regrouped retries independent of batch size.
+        const registerCatalogueItems = (entry: JournalEntry) => {
+          const rows = entry.result?.items as { key: string; status: string; receipt?: Record<string, unknown> }[] | undefined;
+          if (!rows || !entry.itemKeys || rows.length !== entry.itemKeys.length)
+            throw new Error('Catalogue bulk result has incomplete ordered items');
+          for (const [index, label] of entry.itemKeys.entries()) {
+            const row = rows[index]!;
+            if (row.key !== `dataset:${sha256(`${context}:${label}`)}`) throw new Error('Catalogue result item key differs from request');
+            if (row.status !== 'succeeded' || !row.receipt) continue;
+            const record = byKey.get(label.slice('native:'.length));
+            if (!record) throw new Error('Catalogue result has no frozen source record');
+            nativeRecord(record, 'work', row.receipt, 'work');
+          }
+          if (rows.some(row => row.status === 'pending')) {
+            entry.result = undefined;
+            throw new Error('Catalogue import has pending items; rerun the same retained request');
+          }
+          if (rows.some(row => row.status !== 'succeeded'))
+            throw new Error('Catalogue import has rejected items; review the retained per-item outcomes');
+        };
+        for (const [label, entry] of Object.entries(journal.entries)) {
+          if (!label.startsWith('catalogue-bulk:')) continue;
+          try {
+            if (!entry.result) await command(label, 'POST', '/v1/work-imports/bulk');
+            registerCatalogueItems(entry);
+          } finally { saveEntry(label, entry); }
+        }
+        const freshWorks = workRecords.filter(record => !journal.native[record.key] && !journal.entries[`native:${record.key}`]);
+        const maximum = options.nativeBatchItems ?? nativeBatchSize();
+        for (let start = 0; start < freshWorks.length; start += maximum) {
+          const valid = freshWorks.slice(start, start + maximum).filter(record => {
+            const title = clean(record.title);
+            if (title && title.length <= 200) return true;
+            note(`${record.key}: title exceeds the native Work bound; complete source retained`);
+            return false;
+          });
+          if (!valid.length) continue;
+          const itemKeys = valid.map(record => `native:${record.key}`);
+          const label = `catalogue-bulk:${sha256(canonical(itemKeys))}`;
+          const items = valid.map(record => ({
+            key: `dataset:${sha256(`${context}:native:${record.key}`)}`,
+            input: { profile: 'work-catalogue-import-v1', expectedWorkHead: null,
+              title: clean(record.title), language: projectionLanguage(record.language),
+              evidence: `frozen-dataset:${snapshot.digest}:${record.key}`, aliases: [],
+              semanticTypes: record.semanticTypes ?? [], credits: [], classifications: [] },
+          }));
+          try {
+            await command(label, 'POST', '/v1/work-imports/bulk', { actingSubject, items }, itemKeys);
+            registerCatalogueItems(journal.entries[label]!);
+          } finally { saveEntry(label, journal.entries[label]!); }
+          mappedWorks += valid.length;
+          options.progress?.(`Mapped ${mappedWorks}/${workRecords.length} native Works`);
+        }
+        // Earlier journals retain their original candidate search/create request;
+        // an uncertain old command is never replaced by the new import operation.
         for (const record of workRecords) {
           if (journal.native[record.key]) continue;
           const title = clean(record.title),

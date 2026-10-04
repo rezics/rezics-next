@@ -113,7 +113,7 @@ describe('dedicated local dataset administrator bootstrap', () => {
     const grants = fixture.calls.filter((call) =>
       call.sql.startsWith('INSERT INTO access.permission_grant'),
     );
-    expect(grants).toHaveLength(4);
+    expect(grants).toHaveLength(DATASET_ADMIN_GRANTS.length);
     for (const grant of grants) expect(grant.values[1]).toBe(actor);
     expect(
       fixture.calls.some((call) => /^\s*(DELETE|UPDATE|TRUNCATE|DROP|ALTER)/.test(call.sql)),
