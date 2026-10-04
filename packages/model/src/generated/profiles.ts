@@ -924,6 +924,16 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "relation-occurrence-v2": {
+    "sha256": "b1dadb00f88e14bd2fbe61f6d753e3e261ac9a474d5db4e36caf0251feed9c67",
+    "file": "shapes/relation-occurrence-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/relation-occurrence-v2/participation-shape"
+    ],
+    "focusRoles": [
+      "participation"
+    ]
+  },
   "release-v1": {
     "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
     "file": "shapes/release-v1.ttl",

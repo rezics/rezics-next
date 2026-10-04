@@ -153167,6 +153167,21 @@
                               "bindings": {
                                 "items": {
                                   "properties": {
+                                    "creditedName": {
+                                      "properties": {
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "lexical": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "lexical",
+                                        "language"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "participant": {},
                                     "position": {
                                       "type": "integer"
@@ -153267,6 +153282,21 @@
                                     "arguments": {
                                       "items": {
                                         "properties": {
+                                          "creditedName": {
+                                            "properties": {
+                                              "language": {
+                                                "type": "string"
+                                              },
+                                              "lexical": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "lexical",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
                                           "position": {
                                             "type": "integer"
                                           },
@@ -153926,6 +153956,26 @@
                       "items": {},
                       "type": "array"
                     },
+                    "star": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "hub": {
+                          "type": "string"
+                        },
+                        "leaf": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "leaf",
+                        "hub"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "workSubjectRole": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -153955,6 +154005,7 @@
                     "lifecycle",
                     "roles",
                     "workSubjectRole",
+                    "star",
                     "editorRecordable",
                     "writePath"
                   ],
@@ -154270,6 +154321,21 @@
                                 "bindings": {
                                   "items": {
                                     "properties": {
+                                      "creditedName": {
+                                        "properties": {
+                                          "language": {
+                                            "type": "string"
+                                          },
+                                          "lexical": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "lexical",
+                                          "language"
+                                        ],
+                                        "type": "object"
+                                      },
                                       "participant": {},
                                       "position": {
                                         "type": "integer"
@@ -154370,6 +154436,21 @@
                                       "arguments": {
                                         "items": {
                                           "properties": {
+                                            "creditedName": {
+                                              "properties": {
+                                                "language": {
+                                                  "type": "string"
+                                                },
+                                                "lexical": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "lexical",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "position": {
                                               "type": "integer"
                                             },
@@ -415186,13 +415267,34 @@
                         "roles": {
                           "items": {},
                           "type": "array"
+                        },
+                        "star": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "hub": {
+                              "type": "string"
+                            },
+                            "leaf": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "leaf",
+                            "hub"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
                         "revision",
                         "definition",
                         "lifecycle",
-                        "roles"
+                        "roles",
+                        "star"
                       ],
                       "type": "object"
                     },
@@ -415207,6 +415309,26 @@
                         "properties": {
                           "availability": {
                             "type": "string"
+                          },
+                          "creditedName": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "language": {
+                                "maxLength": 35,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "lexical",
+                              "language"
+                            ],
+                            "type": "object"
                           },
                           "participant": {},
                           "participation": {
@@ -415607,13 +415729,34 @@
                         "roles": {
                           "items": {},
                           "type": "array"
+                        },
+                        "star": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "hub": {
+                              "type": "string"
+                            },
+                            "leaf": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "leaf",
+                            "hub"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
                         "revision",
                         "definition",
                         "lifecycle",
-                        "roles"
+                        "roles",
+                        "star"
                       ],
                       "type": "object"
                     },
@@ -415628,6 +415771,26 @@
                         "properties": {
                           "availability": {
                             "type": "string"
+                          },
+                          "creditedName": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "language": {
+                                "maxLength": 35,
+                                "minLength": 2,
+                                "type": "string"
+                              },
+                              "lexical": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "lexical",
+                              "language"
+                            ],
+                            "type": "object"
                           },
                           "participant": {},
                           "participation": {
@@ -416011,6 +416174,26 @@
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "creditedName": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lexical",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
                         "participant": {
                           "patternProperties": {
                             "^.*$": {}
@@ -416097,6 +416280,26 @@
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "creditedName": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lexical",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
                         "participant": {
                           "patternProperties": {
                             "^.*$": {}
@@ -416183,6 +416386,26 @@
                     "items": {
                       "additionalProperties": false,
                       "properties": {
+                        "creditedName": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 35,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 200,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "lexical",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
                         "participant": {
                           "patternProperties": {
                             "^.*$": {}
@@ -425899,6 +426122,21 @@
                               "bindings": {
                                 "items": {
                                   "properties": {
+                                    "creditedName": {
+                                      "properties": {
+                                        "language": {
+                                          "type": "string"
+                                        },
+                                        "lexical": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "lexical",
+                                        "language"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "participant": {},
                                     "position": {
                                       "type": "integer"
@@ -425999,6 +426237,21 @@
                                     "arguments": {
                                       "items": {
                                         "properties": {
+                                          "creditedName": {
+                                            "properties": {
+                                              "language": {
+                                                "type": "string"
+                                              },
+                                              "lexical": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "lexical",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
                                           "position": {
                                             "type": "integer"
                                           },
