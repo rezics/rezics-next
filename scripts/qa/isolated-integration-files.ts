@@ -3,6 +3,10 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // G-1044: these complete discovery populations and relay histories belong to each file.
+  'tests/qa/integration/g-1016-discovery-refresh.test.ts',
+  'tests/qa/integration/g-1029-discovery-ready.test.ts',
+  'tests/qa/integration/g-1033-discovery-refresh.test.ts',
   // G-1038 retains a command-created catalogue before independent restores.
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   // M6 replays reference suites that require fresh rating and catalogue inventories.
