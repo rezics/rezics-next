@@ -36,4 +36,4 @@ QA and cleanup details, see [installation](docs/operations/installation.md).
 
 - [Design](docs/README.md) and [current plan](docs/plan/README.md#current-state)
 - [Toolchain](docs/development/toolchain.md) and [test harness](docs/testing/test-harness.md)
-- [Development workflow](docs/development/README.md) and [current Goal](GOAL.md)
+- [Development workflow](docs/development/README.md) and [active Goals](GOAL.md)

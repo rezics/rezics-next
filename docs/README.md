@@ -26,9 +26,9 @@ Start with the [goal page](product/goal.md) and the
 [executable test harness](testing/test-harness.md). Main, Account, the web app and
 the Accounts site exist in part.
 
-For sustained implementation, use the root [Goal](../GOAL.md) and
+For sustained implementation, use the active [Goals](../GOAL.md) and
 [task reading routes](plan/README.md#task-reading-routes). The maintainer starts
-a Goal explicitly. Its manager follows the [manager charter](goals/manager.md)
+each Goal explicitly. Its manager follows the [manager charter](goals/manager.md)
 and runs worker processes, claims and integration waves through the
 [Goal program](goals/README.md); workers follow the [worker protocol](goals/worker.md).
 
@@ -41,11 +41,12 @@ and runs worker processes, claims and integration waves through the
 7. [Implementation blueprints](implementation/README.md): graph records, API/events,
    authorization bridge and recoverable package/vertical workflows.
 
-Lasting product decisions: [goal](product/goal.md), [platform thesis](product/platform-thesis.md),
+Lasting product decisions: [goal](product/goal.md), the numbered
+[decision index](product/decisions.md), [platform thesis](product/platform-thesis.md),
 [markets and growth](product/markets-and-growth.md), [URLs and SEO](product/urls-and-seo.md),
 and [trust and safety operations](operations/trust-and-safety.md). These pages
-retain intent and evidence independently of the active Goal; installed contracts
-remain in code and the contract owners linked by the Goal's decision index.
+retain intent and evidence independently of any Goal; installed contracts
+remain in code and the contract owners linked by the decision index.
 
 ## Document roles
 

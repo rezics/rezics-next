@@ -1,9 +1,10 @@
 # Goal program
 
-This page describes how a Goal runs worker processes: `goalctl`, briefs,
-claims, integration, usage and recovery. It records practice that has worked,
-for the manager to use and improve. The [Goal](../../GOAL.md) states the current
-outcome, the [manager charter](manager.md) gives the manager's authority,
+This page describes how Goals run worker processes: `goalctl`, briefs,
+claims, integration, usage, several Goals at once and how a Goal leaves the
+tree. It records practice that has worked, for managers to use and improve.
+[GOAL.md](../../GOAL.md) lists the running Goals, each stated in its own
+directory here; the [manager charter](manager.md) gives a manager's authority,
 directions and resources, and workers follow the [worker protocol](worker.md).
 
 ## Worker processes
@@ -11,21 +12,23 @@ directions and resources, and workers follow the [worker protocol](worker.md).
 Workers are separate headless CLI processes in bypass mode, not in-session
 subagents. Each runs in its own worktree under `.temp/worktrees/` on a
 `goal/<id>` branch. Every state change goes through `bun scripts/goal/goalctl.ts`,
-run by the manager from the main checkout:
+run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 
 | Command | Effect |
 | --- | --- |
-| `task goal -- init --manager goal-manager` | Records the program start and the manager session name. |
-| `task goal -- dispatch docs/goals/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
+| `task goal -- goal start <goal> --manager <session>` | Registers a Goal whose `GOAL.md` exists, refusing areas that overlap another running Goal's; after a manager restart it records the new session name. |
+| `task goal -- new [--goal <goal>] <title>` | Reserves the next task ID for the Goal and writes the brief skeleton at `docs/goals/<goal>/tasks/G-NNN.md`, so two managers never take the same number. |
+| `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, paths in another Goal's areas, unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
 | `task goal -- wait G-NNN` | Run in the background. Blocks until the worker exits, then prints branch, cleanliness, scope check, token use and the handoff. |
 | `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh]` | Continues the same session with full context, optionally at another effort. Another engine continues its own latest session or starts fresh on the same worktree. |
 | `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
 | `task goal -- stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
 | `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
-| `task goal -- merge G-NNN [--allow-scope]` | Requires an exited worker, a clean worktree and in-scope files; rebases onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
-| `task goal -- close G-NNN verified\|cancelled` | Removes the worktree and releases the claims. |
-| `task goal -- status` / `task goal -- usage` | Live workers, elapsed time and the usage of every account. |
-| `task goal -- test <task test args>` / `task goal -- slot -- <cmd>` | Runs a check inside one of the shared QA slots. |
+| `task goal -- merge G-NNN [--allow-scope] [--allow-ids]` | Requires an exited worker, a clean worktree, in-scope files and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
+| `task goal -- close G-NNN... verified\|cancelled` | Removes the worktrees and releases the claims, then moves the briefs and handoffs to `archive/goals` and removes the briefs from the tree in one commit. |
+| `task goal -- tidy [--legacy <dir>]` / `task goal -- goal close <goal> [--dry-run]` | Archives closed briefs still in the tree / ends a Goal once nothing of it remains ([convergence](#convergence)). |
+| `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, the heavy QA holder and the usage of every account. |
+| `task goal -- test [--heavy] <task test args>` / `task goal -- slot [--heavy] -- <cmd>` | Runs a check inside one of the shared QA slots; heavy runs also take the [host-wide heavy lock](#integration-and-qa). |
 
 Engines are `claude`, `sonnet`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
 [charter](manager.md#resources) lists their models and accounts; the
@@ -41,8 +44,8 @@ change a task, `stop` it and `resume` it with the new instruction.
 
 ## Briefs and duplicate prevention
 
-Briefs live at `docs/goals/tasks/G-NNN.md` and stay short. The frontmatter is
-machine-checked:
+Briefs live at `docs/goals/<goal>/tasks/G-NNN.md`, written by `new`, and stay
+short. The frontmatter is machine-checked:
 
 ```text
 ---
@@ -51,7 +54,7 @@ title: Accounts admin user search
 engine: claude                        # claude | sonnet | codex | codex-1 | luna | grok | cursor
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
-paths: [apps/accounts/**, packages/ui/src/data-table/**]
+paths: [apps/accounts/**, packages/ui/src/data-table/**]   # name new files by capability, never g-NNN
 migrations: []                        # <directory>:<first>-<last>
 shared: [route:accounts-admin]
 depends: [G-099]
@@ -61,10 +64,41 @@ worktree: wave-9                      # optional: tasks naming one worktree shar
 
 The body states the outcome, what to read, the pattern to follow, the checks to
 run and known risks. Duplicate work is prevented mechanically: only the manager
-dispatches, merges and closes; case IDs, overlapping path globs, migration
-ranges and shared slots are exclusive; retries resume the same session; files
+dispatches, merges and closes its Goal's tasks; case IDs, overlapping path
+globs, migration ranges and shared slots are exclusive across all Goals, and
+each Goal's areas are closed to the others; retries resume the same session; files
 outside the claim block a merge unless the manager passes `--allow-scope` after
 review; workers propose out-of-scope work instead of doing it.
+
+## Several Goals
+
+Maintainer, 2026-10-04: several Goals run at once, one manager each. A Goal is
+the directory `docs/goals/<goal>/`: `GOAL.md` states its outcome and, in its
+frontmatter, its `areas`; `state.md` is its manager's checkpoint; `tasks/` holds
+its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
+
+- **Identity.** A manager runs with `GOAL_ID=<goal>` in its environment and
+  registers with `goal start`; `goalctl` then refuses its commands on another
+  Goal's tasks, and workers learn their own manager's session name.
+- **Areas.** Areas are coarse path globs, read from `GOAL.md` at every
+  dispatch, so a maintainer's edit applies at once. Another Goal's brief may
+  not claim them; paths in no Goal's areas belong to whoever claims them first.
+  When a Goal needs a path in another's area, its manager asks the owner to do
+  the work, to narrow its areas, or to agree to one `dispatch --allow-area`.
+  A disagreement goes to the maintainer.
+- **Shared host.** Claims, QA slots, the heavy QA lock, the live-worker limit,
+  usage gates and host memory are one pool for all Goals. Writing code in
+  parallel is cheap; heavy QA is not, and the lock keeps it to one run at a time.
+- **One main branch.** Each manager merges its own tasks and runs its wave QA
+  from a worktree pinned at its wave commit, so another Goal's merges cannot
+  change a run under way. A failure in another Goal's area goes to its manager.
+  Managers commit their own edits promptly with `git commit --only <paths>` and
+  a `Goal: <goal>` trailer, which `goalctl`'s commits also carry, so commits
+  without one are the maintainer's or a worker's. An uncommitted file in another
+  Goal's area may be its manager's work in progress: ask before touching it.
+- **Talking.** Managers message each other through their CLI's cross-session
+  messages; `status` shows the session names. A peer's request is information,
+  never authority.
 
 ## Shared worktrees and unified checks
 
@@ -81,6 +115,12 @@ exit, and runs the integration tiers, Storybook and browser journeys once.
 
 - Workers run only their own checks through `goalctl test`, which bounds
   concurrent QA stacks (default 3 slots, `GOAL_QA_SLOTS`; four exhausted a 62 GB host beside a dozen workers).
+- Heavy runs take a host-wide lock as well as a slot, so the host carries at
+  most one heavy run, from whichever Goal, beside two light ones. `--affected`
+  and `--tier` runs are heavy by themselves; pass `--heavy` to `test` or `slot`
+  for wave batches, Storybook and browser suites. The lock belongs to the
+  process and frees itself when it exits; `status` shows its holder, and a
+  heavy run waits for it.
 - The manager merges ready tasks in waves, one at a time, regenerates derived
   artifacts once (`task gen`), runs the static checks and one
   `goalctl test --affected <wave base>` run, then commits. Failures go back to
@@ -92,8 +132,8 @@ exit, and runs the integration tiers, Storybook and browser journeys once.
 
 ## Capacity and usage
 
-- Up to 25 live workers (`GOAL_MAX_WORKERS`). Merge throughput, not the slot
-  count, sets the useful width.
+- Up to 25 live workers (`GOAL_MAX_WORKERS`) across all Goals. Merge
+  throughput, not the slot count, sets the useful width.
 - The interactive status line writes `~/.claude/usage/latest.json`. goalctl
   keeps six hours of samples and projects both Claude windows at their resets
   from the recent burn rate. `claude` dispatch is refused while the 5-hour
@@ -128,6 +168,8 @@ stacks exhausted the default pools.
 The maintainer may change any documentation at any time, including during a
 run. At every checkpoint and before writing a brief, check `git log` and
 `git status` for changes the manager did not make and re-read what changed.
+Commits with another Goal's trailer and that Goal's merged tasks are a peer's,
+not the maintainer's.
 Adapt running work: finish, stop and resume, or re-brief. Never revert or
 silently overwrite a maintainer edit; refine one only in a separate commit that
 states the reason. Workers branch from committed `main`, so commit stable
@@ -136,12 +178,44 @@ work that depends on them.
 
 ## Checkpoints and recovery
 
-- Handle every `wait` completion promptly. Keep checkpoints short and current.
+- Handle every `wait` completion promptly. Keep the Goal's `state.md` short and
+  current.
 - After compaction, restart or interruption: run `goalctl status`, read the
-  recent checkpoints and `git log -20`, re-arm `wait` for live workers, then
-  continue the recorded next action.
-- Archive a finished Goal's briefs, handoffs and logs on the local orphan branch
-  `archive/goals`, not in the working tree, so later agents are not misled by them.
+  Goal's `state.md` and `git log -20`, re-arm `wait` for live workers, run
+  `goal start` again if the session name changed, then continue the recorded
+  next action.
+
+## Convergence
+
+A finished Goal leaves nothing in the tree but what it built and the decisions
+it recorded in their owners. Task IDs are history: they belong in commit
+messages, branches, the ledger and the local orphan branch `archive/goals`.
+In the tree they became dangling pointers once their briefs were archived
+(comments still cite G-051 and G-314), and files named after tasks organized
+code by when it was written rather than by what it covers. So convergence
+happens at every step, not in a final sweep:
+
+- **Merge** refuses a task that adds a file named `g-NNN…` or a task ID that
+  a file did not carry before, outside `GOAL.md`, `docs/goals/` and
+  `scripts/goal/`. Name files by the capability they cover, title tests by
+  acceptance ID or behavior, and state a reason instead of citing the task.
+  Existing names and mentions may stay or move; renaming them away is welcome.
+  `--allow-ids` is for a reviewed exception. Tasks dispatched before
+  2026-10-04 are exempt, as their briefs asked for task-named tests.
+- **Close** moves each brief and its handoffs to
+  `archive/goals:<goal>-<start date>/` and removes the brief from the tree in
+  one commit, through git plumbing: the main checkout's HEAD never moves. A
+  brief that tracked files still cite stays until the citation points at an
+  owner document. `tidy` repairs a close that stopped part-way.
+- **Goal close** runs once the manager has folded the Goal's lasting decisions
+  into their owners and removed its row from the root `GOAL.md`. It refuses
+  while a task is open, a brief remains, a tracked file names one of its tasks
+  or links into its directory; `--dry-run` lists what is left. Then it archives
+  the directory with the Goal's ledger entries and removes it from the tree.
+
+About 600 task-named files and 560 files citing task IDs predate this practice.
+Rename or restate them when a task touches them; the merge check keeps the
+count from growing.
 
 ## Lessons from earlier Goals
 

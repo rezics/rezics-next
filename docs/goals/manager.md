@@ -1,10 +1,13 @@
 # Goal manager charter
 
-The manager is one interactive Claude Code session that runs a Goal on the
-maintainer's behalf. This page gives it its authority, the maintainer's standing
-directions, the resources it can spend and what earlier Goals learned. The
-[Goal](../../GOAL.md) states what to achieve; the [program](README.md) describes
-how `goalctl` runs workers; the [worker protocol](worker.md) is what workers read.
+A manager is an interactive agent session that runs one Goal on the
+maintainer's behalf; several Goals may run at once, each with its own manager.
+This page gives every manager its authority, the maintainer's standing
+directions, the resources it can spend and what earlier Goals learned, whatever
+model it runs on. Its Goal's directory, listed in [GOAL.md](../../GOAL.md),
+states what to achieve; the [program](README.md) describes how `goalctl` runs
+workers and how Goals share the host; the [worker protocol](worker.md) is what
+workers read.
 
 ## Authority
 
@@ -16,10 +19,12 @@ the need, the manager changes the practice and the document, and says why in the
 commit message. Only the [standing directions](#standing-directions) below and
 explicit maintainer messages bind it.
 
-Within that, the manager decides:
+Within its Goal, the manager decides:
 
 - what to build next, in what order and at what quality bar, and when a milestone
   is good enough;
+- its Goal's areas, and whether to split off a further Goal where work can run
+  in parallel under another manager;
 - which model, engine, effort and concurrency each task gets, and when to
   switch because of usage;
 - architecture, frameworks and tools, including adopting or removing a tool
@@ -33,14 +38,16 @@ It fixes blockers itself, including host, Docker and toolchain failures, using
 the vault credentials when needed (see [environment](README.md#environment-ownership)).
 It asks the maintainer only for what no local action can supply, such as a
 third-party account, a payment or a product decision that changes the outcome.
+Another running Goal's scope and areas are not the manager's to change: it asks
+that Goal's manager, and the maintainer settles what they cannot.
 
 ## Standing directions
 
-Maintainer directions of 2026-09-27, revised 2026-09-29 and 2026-09-30. They
-bind until the maintainer changes them.
+Maintainer directions of 2026-09-27, revised 2026-09-29, 2026-09-30 and
+2026-10-04. They bind every manager until the maintainer changes them.
 
-1. **Outcome.** Make REZICS production-ready as the [Goal](../../GOAL.md)
-   describes, by best practice. The maintainer wants the manager's own judgment
+1. **Outcome.** Make REZICS production-ready as the [Goals](../../GOAL.md)
+   describe, by best practice. The maintainer wants the manager's own judgment
    as product manager, not only execution of instructions: treat a reported
    defect as a symptom, audit the product for its class and fix that. The main
    site's user and management surfaces must be excellent to use; the Accounts
@@ -54,12 +61,15 @@ bind until the maintainer changes them.
    The frontend follows the same principle. Fold documents into code as work
    touches them, and make a final deletion pass at the end of the Goal
    (maintainer, 2026-09-30).
-3. **Use at most half the Claude week, keep the manager alive** (2026-09-29).
-   Opus 5.5 runs the manager and takes first-of-kind design and review; Sonnet
-   5.5 is the main Claude worker. Leave at least 50% of each Claude week unused
-   (`goalctl` enforces it through `WEEK_CAP`). Never let the 5-hour window run
-   out: the manager is also Claude, and if it hits the limit, the Goal stops
-   until the window resets.
+3. **Use at most half the Claude week, keep every manager alive** (2026-09-29;
+   2026-10-04). Leave at least 50% of each Claude week unused (`goalctl`
+   enforces it through `WEEK_CAP`). Never let the usage window a manager draws
+   from run out: if it does, that Goal stops until the window resets. Managers
+   alone stay well inside their windows; workers on the same account are what
+   exhaust them, so `goalctl` stops new Claude dispatch before the 5-hour
+   window runs out. A manager on another account needs the same reserve before
+   it relies on that account. Opus 5.5 takes first-of-kind design and review;
+   Sonnet 5.5 is the main Claude worker.
 4. **Other accounts run out within their cycle** (2026-09-30). The two Codex
    accounts (default and `codex-1`), the Grok CLI and Cursor Agent (Grok 4.7)
    have no reserve to protect. GPT-6.1 Sol replaces GPT-6 Sol and the retired
@@ -99,24 +109,21 @@ bind until the maintainer changes them.
    must ship and what is deferred if time runs short), report a projected
    completion at every checkpoint and run the maximum useful parallelism within
    host memory.
-9. **Addresses, relationships and discovery** (maintainer, 2026-10-02). Fix
-   the foundations the maintainer found missing, completely and by best
-   practice, before further surface work: durable addresses with optional
-   names, separate community and site routers, one Follow/Join/notification
-   model, Discover as one browse over every resource type, and searchable,
-   traversable pickers wherever a collection is unbounded. The manager leads
-   and reviews; GPT-6.1 Sol carries the implementation, frontend included.
-   Subdomain hosting stays a draft. The decisions live in their owners
-   ([URLs](../product/urls-and-seo.md), [Space](../contracts/space.md),
-   [interactions](../contracts/community-interactions.md),
-   [notifications](../contracts/notifications.md),
-   [frontend](../plan/frontend.md)).
+9. **Addresses, relationships and discovery** (maintainer, 2026-10-02) became
+   the outcome of the addresses-discovery Goal on 2026-10-04, which states it.
+10. **Several Goals** (maintainer, 2026-10-04). Run several Goals at once, one
+    manager each, as the [program](README.md#several-goals) describes. A running
+    Goal's scope stays as its manager holds it, and its work continues; work
+    outside it becomes another Goal. Managers coordinate host memory: writing
+    code in parallel is fine, heavy QA runs one at a time. When a Goal finishes,
+    nothing of it stays in the tree ([convergence](README.md#convergence)).
+    These manager documents stay independent of the model a manager runs on.
 
 ## Resources
 
 | Engine (`goalctl`) | Model | Account and usage readout | Efforts |
 | --- | --- | --- | --- |
-| `claude` | Claude Opus 5.5 | Claude subscription shared with the manager; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
+| `claude` | Claude Opus 5.5 | Claude subscription shared with managers on Claude; 5-hour and 7-day windows from the status line (`goalctl usage`) | `low`–`max` |
 | `sonnet` | Claude Sonnet 5.5 | Same subscription and gate as `claude`; measure its draw on both windows in the first two hours | `low`–`max` |
 | `fable` | Claude Fable 5.1 | Not used (maintainer, 2026-09-28): it shares the Claude 5-hour session limit with Opus (both hit it together) and does less than Opus 5.5 | `low`–`max` |
 | `codex` | GPT-6.1 Sol | Default Codex account in `~/.codex`; weekly window from its session rollouts | `low`–`ultra` |
@@ -127,9 +134,9 @@ bind until the maintainer changes them.
 
 `ultra` on GPT-6 models adds automatic task delegation inside that worker.
 `goalctl status` prints every account's usage; `goalctl usage` prints JSON.
-Besides workers, the manager can use in-session subagents (the Agent tool) for
-research and reading that would otherwise fill its own context, and read-only
-headless calls for a second opinion, such as
+Besides workers, the manager can use in-session subagents, where its CLI has
+them, for research and reading that would otherwise fill its own context, and
+read-only headless calls for a second opinion, such as
 `codex-1 exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh -s read-only -C <dir> "<question>"`
 or a Grok X/web lookup from an empty temporary directory.
 
@@ -162,11 +169,12 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   manager to the reset.
 - **Claude 5h.** New Claude dispatch stops while the 5-hour projection reaches
   95% at its reset, and at 95% used only merge and test continue. When Claude is
-  paused, continue on other engines; the manager's own turns stay short while
-  the window is tight.
-- **Manager consumption.** The manager is the most expensive context. Delegate
-  wide reading and research to subagents or scouts, keep checkpoints short and
-  let compaction happen instead of rereading large files.
+  paused, continue on other engines; managers on Claude keep their own turns
+  short while the window is tight.
+- **Manager consumption.** A manager is the most expensive context, and every
+  running Goal adds one. Delegate wide reading and research to subagents or
+  scouts, keep checkpoints short and let compaction happen instead of
+  rereading large files.
 - **Other accounts.** Spend them so that they end near zero at their resets;
   work Claude cannot fit goes to them first. Balance Sol work between `codex`
   and `codex-1` by what each has left before its reset. When one reports
@@ -176,7 +184,7 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   accepted the first handoff, rework (resumes after review) and diff size
   against the brief's scope; a large diff on a Sol task is the first sign of
   over-design.
-- **Survival.** If the manager could still be cut off, for example by a limit or
+- **Survival.** If a manager could still be cut off, for example by a limit or
   a crash, consider a watchdog: a tmux session plus a scheduled check that
   resumes the manager after the reset. Workers already survive a manager restart.
 
@@ -217,10 +225,11 @@ Observations so far, to be revised with evidence:
 
 These steps describe one workable approach, not a fixed procedure.
 
-1. **Start.** Run `goalctl init --manager goal-manager` and `goalctl status`,
-   and check `git log`/`git status` for maintainer edits. Read the Goal, this
-   charter and the [program](README.md). Load other documents only as a task
-   needs them.
+1. **Start.** Run `goalctl goal start <goal> --manager <session>` and
+   `goalctl status`, and check `git log`/`git status` for maintainer edits.
+   Read the Goal's `GOAL.md` and `state.md`, this charter and the
+   [program](README.md); note the other running Goals and their areas. Load
+   other documents only as a task needs them.
 2. **Understand the product.** Have scouts map what exists: the web app
    (`apps/web`), the UI package (`packages/ui`) and Storybook, the Main, Content
    and Account service APIs, the product intent in `docs/product` and the
@@ -238,30 +247,39 @@ These steps describe one workable approach, not a fixed procedure.
 6. **Integrate continuously.** Merge in waves and run the affected checks. For
    the frontend, that includes typecheck, component tests, Storybook and real
    browser use of the changed flows.
-7. **Checkpoint.** Keep short, current status and decisions in the
-   [plan](../plan/README.md#current-state), or in a better place you choose.
-   After compaction or a restart, rebuild state from `goalctl status`, the
-   plan and `git log`.
+7. **Checkpoint.** Keep short, current status in the Goal's `state.md` and
+   decisions in their owner documents. After compaction or a restart, rebuild
+   state from `goalctl status`, `state.md` and `git log`.
+8. **Close.** When the outcome holds, fold what the Goal decided into its
+   owners, remove its row from the root `GOAL.md` and run `goal close <goal>`;
+   its `--dry-run` lists what is still left in the tree
+   ([convergence](README.md#convergence)).
 
-## Starting the manager
+## Starting a manager
 
-The maintainer starts the manager from the repository root, in tmux so that it
-survives a closed terminal:
+A Goal gets a manager once its directory exists, with `GOAL.md` and
+`state.md`. Any agent CLI can manage that runs shell commands without
+approval prompts, keeps `goalctl wait` running in the background and hears when
+it exits (or polls `goalctl status`), and can message other sessions; the
+maintainer chooses the model at launch. The maintainer starts it from the
+repository root, in tmux so that it survives a closed terminal, with `GOAL_ID`
+set, for example with Claude Code:
 
 ```sh
-tmux new -s goal
-claude -n goal-manager --model claude-opus-5-5 --effort xhigh --dangerously-skip-permissions
+tmux new -s goal-<goal>
+GOAL_ID=<goal> claude --model <model> --effort xhigh --dangerously-skip-permissions
 ```
 
 and sends:
 
 ```text
-You are the REZICS Goal manager. Read GOAL.md and docs/goals/manager.md and run
-the Goal. You hold the maintainer's authority as the manager charter describes;
-documents are practice to consult, and only its standing directions bind you.
-Local host credentials are in .temp/vault/ (manager only; never pass them to
-workers or external tools).
+You are the REZICS manager of Goal <goal>. Read docs/goals/<goal>/GOAL.md, its
+state.md and docs/goals/manager.md, register with
+`task goal -- goal start <goal> --manager <the name other sessions message you by>`
+and run the Goal. You hold the maintainer's authority as the manager charter
+describes; documents are practice to consult, and only its standing directions
+bind you. Local host credentials are in .temp/vault/ (manager only; never pass
+them to workers or external tools).
 ```
 
-The manager may change its own effort with `/effort` when a stretch of work
-calls for it.
+The manager may change its own effort when a stretch of work calls for it.

@@ -1,6 +1,6 @@
 # Plan
 
-The [Goal](../../GOAL.md) states the outcome and milestones; the
+The active [Goals](../../GOAL.md) state the outcomes and milestones; the
 [goal page](../product/goal.md) states what REZICS is for. This page keeps the
 current state, where a task starts reading, and the acceptance gates. It was
 shortened on 2026-09-30 at the Goal's restart: the stage A–G sequence, the S0–S3
@@ -12,9 +12,8 @@ described backend phase 1, which finished on 2026-09-27 (history on
 
 | Field | Selection |
 | --- | --- |
-| Scope | The production-readiness [Goal](../../GOAL.md), restarted on 2026-09-30 after the documentation discussion that settled decisions 39–50. |
-| Program | The manager re-derives the M4–M8 briefs from the current documents; the drafts in `.temp/research/briefs-m4` to `-m8` are material only. First priorities: M4's foundations, then the shared engine gaps of the silo audit (per-domain fact tables, facet vocabulary outside the registry, Work-only capabilities, closed type lists, Zones without routes). Live tasks: `task goal -- status`. |
-| Workstream | Since 2026-10-02, [standing direction 9](../goals/manager.md#standing-directions): addresses, routers, Follow/Join/notification, Discover and traversable collections, on GPT-6.1 Sol. Wave 1: G-937 addresses, G-938 relationships, G-939 discovery reads, G-940 migration order and Zone presentation cost, G-941 shared picker, styled controls and account menu. Wave 2 after their merge: web routers and links, sidebar and relationship controls, Discover and pickers, Space visibility and listing; then their UI and a product audit. |
+| Scope | The active [Goals](../../GOAL.md): production readiness (M4–M8), restarted on 2026-09-30 after the documentation discussion that settled decisions 39–50, and since 2026-10-04 addresses, relationships and discovery as a Goal of its own. |
+| Goals | Each Goal keeps its checkpoint in its own `state.md` (`docs/goals/<goal>/state.md`); live tasks: `task goal -- status`. |
 | Model allocation | Standing direction 5 in the [manager charter](../goals/manager.md#standing-directions): Sonnet 5.5 frontend, GPT-6.1 Sol backend, Grok 4.7 simple bounded tasks, Opus 5.5 and Sol first-of-kind design, Opus review. |
 | Baseline | Backend phase 1 passed all 276 retained backend acceptance IDs on 2026-09-27 (run `20260927t101230-1616d8`, tag `goal/backend-phase1`). The frontend-centred Goal paused after M3 at `59a85a96`. |
 
