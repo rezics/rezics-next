@@ -876,6 +876,18 @@ export const profileRegistry = {
       "context"
     ]
   },
+  "realm-target-rating-context-v3": {
+    "sha256": "a4e4b5abebed81c9f29dae026a5c30be053f3cefe2be8429b188b03ac33a0668",
+    "file": "shapes/realm-target-rating-context-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-target-rating-context-v3/realm-shape",
+      "https://rezics.com/definition/realm-target-rating-context-v3/context-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context"
+    ]
+  },
   "realm-target-rating-observation-v1": {
     "sha256": "b7dfb94604e5346b92318a25a17225a063a45156a4517ba8c16269345a066809",
     "file": "shapes/realm-target-rating-observation-v1.ttl",
@@ -900,6 +912,22 @@ export const profileRegistry = {
       "https://rezics.com/definition/realm-target-rating-observation-v2/context-shape",
       "https://rezics.com/definition/realm-target-rating-observation-v2/observation-shape",
       "https://rezics.com/definition/realm-target-rating-observation-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "realm",
+      "context",
+      "observation",
+      "revision"
+    ]
+  },
+  "realm-target-rating-observation-v3": {
+    "sha256": "a7c66a9ccb59e5ea127a5b50f5b6213794a348e5bb716f70705ac11ece9c6273",
+    "file": "shapes/realm-target-rating-observation-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/realm-target-rating-observation-v3/realm-shape",
+      "https://rezics.com/definition/realm-target-rating-observation-v3/context-shape",
+      "https://rezics.com/definition/realm-target-rating-observation-v3/observation-shape",
+      "https://rezics.com/definition/realm-target-rating-observation-v3/revision-shape"
     ],
     "focusRoles": [
       "realm",
