@@ -362995,7 +362995,7 @@
                           "type": "integer"
                         },
                         "members": {
-                          "minimum": 1,
+                          "minimum": 0,
                           "type": "integer"
                         }
                       },
@@ -363127,6 +363127,23 @@
                               "target",
                               "status",
                               "reason"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "status": {
+                                "const": "not-accepted",
+                                "type": "string"
+                              },
+                              "target": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "target",
+                              "status"
                             ],
                             "type": "object"
                           }
