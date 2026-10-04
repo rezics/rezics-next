@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import {
   startTelemetry,
   flushTelemetryTraces,
@@ -21,8 +21,17 @@ interface Page {
 /** Adversarial diagnostics. First-after-write is application-cold, not a cold
  * JVM/OS cache; catalogue-scale preparation is a separate public-API profile. */
 test('G1032: dense/negated Query has fixed calls and advancing partial pages with private, disclosure and stale state', async () => {
+  let restored: Awaited<ReturnType<typeof import('../../../scripts/load/catalogue-backup.ts')['restoreCatalogueBackup']>> | undefined;
+  const corpus = Bun.env.G1032_BACKUP ? JSON.parse(readFileSync(resolve(dirname(Bun.env.G1032_BACKUP), 'corpus.json'), 'utf8')) as {
+    scale: number; catalogueWorksIncludingSamples: number; definitions: { concept: string; sense: string }[] } : undefined;
+  if (Bun.env.G1032_BACKUP) {
+    const { restoreCatalogueBackup } = await import('../../../scripts/load/catalogue-backup.ts');
+    const target = `g1032-restore-${randomUUID().slice(0, 8)}`;
+    restored = await restoreCatalogueBackup(Bun.env.G1032_BACKUP, target);
+    Object.assign(process.env, restored.apps, { REZICS_QA_RUN_ID: target });
+  }
   const sink = startWorkProfileSink({ settleMs: 50 });
-  startTelemetry('g-1032-query', { ...process.env, ...sink.env });
+  startTelemetry('g-1032-query', { ...process.env, ...sink.env, OTEL_TRACES_SAMPLER_ARG: '0' });
   // pg must load after telemetry installs its hooks. A static fixture import
   // reports a misleading zero SQL spans even while the direct meter sees work.
   const { startHomeStack, meterStatements } = await import('./feed-read-support.ts');
@@ -39,7 +48,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await import('../../../services/main/src/modules/recommendation/derived-generation.ts');
   const { configureDisclosure, DisclosureStore } =
     await import('../../../services/main/src/modules/disclosure/read.ts');
-  const home = await startHomeStack('g-1032-query');
+  const home = await startHomeStack('g-1032-query', restored ? { projectionStart: 'current' } : {});
   const { stack, author, reader } = home;
   const projection = new DiscoveryProjection(stack.accessPool);
   const account = home.deps.account;
@@ -65,7 +74,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   const started = performance.now();
   const token = `g1032${randomUUID().replaceAll('-', '')}`;
   const works: { work: string; mainVersion: string }[] = [];
-  const definitions: { concept: string; sense: string }[] = [];
+  const definitions: { concept: string; sense: string }[] = corpus?.definitions ?? [];
   const call = (query: ResourceListQuery, bearer?: string, headers = new Headers()) => {
     headers.set('content-type', 'application/json');
     headers.set('accept-language', 'en');
@@ -136,7 +145,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     await author.grant('classification:define:global', 'classification.proposition.define');
     await author.grant('classification:decide:global', 'classification.decision.set');
-    for (let index = 0; index < 8; index++)
+    for (let index = definitions.length; index < 8; index++)
       definitions.push(
         await command(
           '/v1/classification-vocabulary',
@@ -152,30 +161,31 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           201,
         ),
       );
-    // Four oldest Works survive negation. The newer 132 all carry the hot topic:
-    // the first request must stop before the survivors and expose continuation.
-    for (let index = 0; index < 136; index++) {
-      const created = await stack.publicWork(author.actor, ['en'], `${token} common ${index}`);
-      works.push(created);
-      for (const definition of index === 135
-        ? definitions
-        : index >= 4
-          ? definitions.slice(0, 1)
-          : [])
-        await command(
-          '/v1/classification-decisions',
-          {
-            profile: 'classification-direct-decision-v1',
-            context: { kind: 'global' },
-            work: created.work,
-            mainVersion: created.mainVersion,
-            sense: definition.sense,
-            expectedDecisionHead: null,
-            outcome: 'accepted',
-            actingSubject: author.actor,
-          },
-          201,
-        );
+    await author.grant('work:create:catalogue-import', 'work.create');
+    // Exactly the same adversarial distribution, created in independent items
+    // under the real public import capability rather than 544 fixture commits.
+    for (let start = 0; start < 136; start += 128) {
+      const items = Array.from({ length: Math.min(128,136-start) }, (_, offset) => {
+        const index = start + offset;
+        return { key: randomUUID(), input: { profile: 'work-catalogue-import-v1', expectedWorkHead: null,
+          title: `${token} common ${index}`, language: 'en', evidence: 'G1032 dense/negated query fixture',
+          aliases: [], semanticTypes: [], credits: [],
+          classifications: (index === 135 ? definitions.slice(0,8) : index >= 4 ? definitions.slice(0,1) : [])
+            .map(row => ({ sense: row.sense,
+              expectedSenseHead: (corpus?.definitions as unknown as { definitionRevision: string }[] | undefined)?.[definitions.indexOf(row)]?.definitionRevision,
+              expectedDecisionHead: null, outcome: 'accepted' })) } };
+      });
+      // Definition pins come from the owning vocabulary response/read, including
+      // the legacy fixture response whose local type omitted that field.
+      for (const item of items) for (const row of item.input.classifications) if (!row.expectedSenseHead) {
+        const head = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+          GRAPH <urn:rezics:graph:current> { <${row.sense}> rv:head ?head } } LIMIT 2`);
+        row.expectedSenseHead = head.results!.bindings[0]!.head!.value;
+      }
+      const imported = await command<{ items: { status: string; receipt: { work: string; mainVersion: string } }[] }>('/v1/work-imports/bulk', {
+        actingSubject: author.actor, items });
+      expect(imported.items.every(row => row.status === 'succeeded')).toBe(true);
+      works.push(...imported.items.map(row => row.receipt));
     }
     const privateWork = await stack.privateWork(reader.actor, `${token} common private`);
     // A real grant to this bearer must never enter a public catalogue plan.
@@ -357,7 +367,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       }
       const seen = new Set(first.items.map((item) => item.id));
       let cursor = first.nextCursor;
-      for (let page = 0; cursor && page < 5; page++) {
+      for (let page = 0; cursor && page < Math.ceil(((corpus?.catalogueWorksIncludingSamples ?? 0) + 136) / RESOURCE_LIST_COST.candidates) + 4; page++) {
         const next = await measured(
           `dense-eight-exclusions-page-${page + 2}`,
           { ...excluded, cursor },
@@ -484,12 +494,12 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       join(Bun.env.REZICS_QA_ARTIFACT_DIR!, `g-1032-query-${baseline ? 'before' : 'after'}.json`),
       JSON.stringify(
         {
-          evidence,
+          evidence, catalogueScale: corpus?.scale ?? null, restoreMs: restored?.elapsedMs ?? null,
           elapsedMs: performance.now() - started,
           unobserved: [
             'native Lucene postings visited',
             'storage-cold JVM/OS caches',
-            'catalogue scales 1000/10000/50000',
+            ...(corpus ? ['catalogue scale 50000', '128/512 vocabulary scale probe'] : ['catalogue scales 1000/10000/50000']),
             'real Account service calls (fixture counts verify invocations)',
           ],
         },
@@ -501,5 +511,6 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await home.stop();
     await shutdownTelemetry();
     await sink.stop();
+    await restored?.stop();
   }
 }, 420_000);

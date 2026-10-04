@@ -233,3 +233,60 @@ Acceptance queries, each through the API and the UI:
     links visible.
 12. Franchise and event membership never merges Works, and contributors keep one
     identity across Zones.
+
+## Compound catalogue creation and bulk import
+
+`POST /v1/work-imports` creates an independently maintained, public metadata-only
+Work with its initial descriptive facts, native Agent credits and global curated
+classification decisions. `POST /v1/work-imports/bulk` applies up to 128 independent
+items per durable graph commit. Neither command publishes contribution text;
+existing contribution/publication APIs retain their rights and selection policy.
+The request supplies evidence identifying a new creative scope; matching titles
+never identify an existing Work.
+
+The dedicated Access scope `work:create:catalogue-import`, action `work.create`,
+requires an explicit representation and membership-independent grant. It includes
+initial global curation; ordinary creation, creator maintainership and the
+administrator role do not imply this capability. Account requires `work:create`
+and, when classifications are present, `classification:decide`. The local dataset
+administrator setup elects this additional capability explicitly.
+
+Each item has a stable key, optional imported Work identity, `expectedWorkHead:
+null`, a title and declared language, bounded aliases/description, evidence,
+semantic types, up to eight native credits and eight global decisions. Credits
+may pin an Agent head; omission captures and guards the current head during
+preparation. Decisions pin the exact active Sense revision and require an absent
+decision head. Existing Works and decision slots are never overwritten. External
+source author references continue through their source-qualified owner APIs.
+
+An item has one ordinary Work admission, one terminal graph receipt, one logical
+source position and one audited outbox batch. Bulk keys are independent of the
+batch envelope and position: retry or regroup the same keys with the same inputs.
+Successful, denied, invalid, conflicting and pending items remain distinct;
+HTTP 200 with `partial: true` or `complete: false` is not a completed import.
+Lost graph responses and Access acknowledgements reconcile from the exact
+receipts. A terminal cancellation preserves a validation or stale-basis outcome
+on subsequent retries. Retirement prevents new semantic-type creation while
+retaining successful receipt replay.
+
+The implementation stages immutable objects before the graph writer, validates
+all existing canonical/profile bindings, and isolates candidate RDF changes per
+item. Only validated changes and terminal cancellations reach the shared writer.
+Jena does not support nested transactions, so the bounded overlay supplies item
+isolation without copying the corpus. One search-journal entry covers the physical
+commit; per-item logical sequences retain relay and recovery ordering.
+[Jena transactions](https://jena.apache.org/documentation/tdb/tdb_transactions.html)
+explain the single-writer and copy-on-write mechanics; explicit item outcomes
+follow the reasoning in [AIP-233](https://google.aip.dev/233), without adopting its
+asynchronous transport contract.
+
+The cost contract is `CATALOGUE_IMPORT_COST` beside the implementation: at most
+128 items, 1 MiB of input, 16 KiB per item, eight credits/decisions each, a 16 MB
+native envelope and 16,384 staged quads per item. Work grows with those bounded
+inputs, not unrelated catalogue/history. Admission and acknowledgement each use
+one PostgreSQL transaction with per-item receipts; the native writer has a 30 s
+deadline. File preparation runs four items concurrently, syncs each immutable
+file and the directory before dispatch, and preserves potentially shared objects
+until a terminal cancellation proves they cannot be activated. Broker and object
+backpressure remain at the API boundary. Native index page work, end-to-end relay
+throughput and production capacity are not established by the command benchmark.

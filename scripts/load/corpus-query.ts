@@ -1,6 +1,5 @@
 import type { CorpusApi } from './work-profile-corpus.ts';
-import { seedPublicProfileWork } from './work-profile-work.ts';
-import { runBoundedIndices } from './schedule.ts';
+import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 
 /** Diagnostic catalogue axes; none are production capacity qualifications. */
 export const QUERY_CATALOGUE_SCALES = [
@@ -47,7 +46,7 @@ export async function seedQueryCatalogue(input: {
   if (!Number.isSafeInteger(input.works) || input.works < 1 || input.works > 50_000)
     throw new Error('Invalid catalogue Work count');
   queryCatalogueTopics(0, input.vocabulary);
-  const definitions: { concept: string; sense: string }[] = [];
+  const definitions: { concept: string; sense: string; definitionRevision: string }[] = [];
   for (let index = 0; index < input.vocabulary; index++) {
     input.signal.throwIfAborted();
     definitions.push(
@@ -72,68 +71,31 @@ export async function seedQueryCatalogue(input: {
     if ((index + 1) % 32 === 0) await input.settle?.();
   }
   if (input.vocabulary % 32 !== 0) await input.settle?.();
-  const works: Awaited<ReturnType<typeof seedPublicProfileWork>>[] = [];
-  for (let start = 0; start < input.works; start += 32) {
-    await runBoundedIndices(
-      Math.min(32, input.works - start),
-      input.workers ?? 2,
-      async (offset) => {
-        const index = start + offset;
-        input.signal.throwIfAborted();
-        const work = await seedPublicProfileWork(input.api, `${input.key}:work:${index}`, {
-          actingSubject: input.actingSubject,
-          title: `Catalogue common Work ${index}`,
-          body: `Catalogue selected text ${index}`,
-          language: index % 20 === 0 ? 'ja' : 'en',
-        });
-        for (const topic of queryCatalogueTopics(index, input.vocabulary)) {
-          input.signal.throwIfAborted();
-          await input.api.command(
-            `${input.key}:classification:${index}:${topic}`,
-            {
-              method: 'POST',
-              path: '/v1/classification-decisions',
-              body: {
-                profile: 'classification-direct-decision-v1',
-                context: { kind: 'global' },
-                work: work.work,
-                mainVersion: work.mainVersion,
-                sense: definitions[topic]!.sense,
-                expectedDecisionHead: null,
-                outcome: 'accepted',
-                actingSubject: input.actingSubject,
-              },
-            },
-            input.signal,
-          );
-        }
-        works[index] = work;
-      },
-      (count) => input.progress?.(start + count),
-    );
+  const works: (Awaited<ReturnType<typeof seedCatalogueProfileWorks>>[number] & { language: string })[] = [];
+  for (let start = 0; start < input.works; start += 128) {
     input.signal.throwIfAborted();
+    const items = Array.from({ length: Math.min(128, input.works - start) }, (_, offset) => {
+      const index = start + offset;
+      return { key: `${input.key}:work:${index}`, input: { profile: 'work-catalogue-import-v1' as const,
+        expectedWorkHead: null, title: `Catalogue common Work ${index}`, language: index % 20 === 0 ? 'ja' : 'en',
+        evidence: 'G1032 deterministic catalogue scope fixture', aliases: [], semanticTypes: [],
+        credits: [{ agent: input.actingSubject, role: 'author' as const }],
+        classifications: queryCatalogueTopics(index, input.vocabulary).map(topic => ({ sense: definitions[topic]!.sense,
+          expectedSenseHead: definitions[topic]!.definitionRevision, expectedDecisionHead: null, outcome: 'accepted' as const })) } };
+    });
+    const rows = await seedCatalogueProfileWorks(input.api, input.actingSubject, items, input.signal);
+    works.push(...rows.map((row, index) => ({ ...row, language: items[index]!.input.language })));
+    input.progress?.(works.length);
     await input.settle?.();
   }
-  // Exact selected bytes/revision checks are outside the timed query. Sample
-  // both language cohorts, edges and the middle of the retained command set.
+  // The Query corpus is public catalogue metadata, not a selected-text corpus.
+  // Sample both language cohorts and exact creation revisions through the API.
   for (const index of new Set([0, 1, Math.floor(input.works / 2), input.works - 1])) {
-    if (index >= works.length) continue;
-    input.signal.throwIfAborted();
     const work = works[index]!;
-    const selected = await input.api.read<{
-      contribution: string;
-      selectedDraft: string;
-      body: string;
-    }>(
-      `/v1/main-versions/${work.mainVersion.slice(-36)}/selection?language=${work.language}`,
-      input.signal,
-    );
-    if (
-      selected.contribution !== work.contribution ||
-      selected.selectedDraft !== work.draftRevision ||
-      selected.body !== `Catalogue selected text ${index}`
-    )
-      throw new Error('Catalogue command verification failed');
+    const header = await input.api.read<{ id: string; revision: string; mainVersion: string; title: { value: string } }>(
+      `/v1/works/${work.work.slice(-36)}?language=${work.language}&actingSubject=${encodeURIComponent(input.actingSubject)}`, input.signal);
+    if (header.id !== work.work || header.revision !== work.workRevision || header.mainVersion !== work.mainVersion
+      || header.title.value !== `Catalogue common Work ${index}`) throw new Error('Catalogue command verification failed');
   }
   input.signal.throwIfAborted();
   return { works, definitions };

@@ -3,6 +3,8 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // G-1038 retains a command-created catalogue before independent restores.
+  'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   // M6 replays reference suites that require fresh rating and catalogue inventories.
   'tests/qa/integration/g-856-wiki.test.ts',
   'tests/qa/integration/g-856-editorial.test.ts',
@@ -143,5 +145,6 @@ export const isolatedIntegrationFileList = [
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   'tests/qa/integration/growth-search-refresh.test.ts',
 ]);
