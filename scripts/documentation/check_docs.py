@@ -122,10 +122,14 @@ def check(root: Path, files: list[Path], *, navigation: bool = True) -> list[str
                     continue
                 visited.add(source)
                 pending.extend(edges[source] - visited)
-            # Goal task briefs are working files reached through goalctl, not the docs tree.
-            briefs = root / "docs/goals/tasks"
+            # Goal task briefs (docs/goals/<goal>/tasks/) are working files reached through goalctl, not the docs tree.
+            goals = root / "docs/goals"
+
+            def brief(path: Path) -> bool:
+                return path.is_relative_to(goals) and "tasks" in path.relative_to(goals).parts[:-1]
+
             for source in sorted(texts):
-                if (source.is_relative_to(root / "docs") and not source.is_relative_to(briefs)
+                if (source.is_relative_to(root / "docs") and not brief(source)
                         and source not in visited):
                     errors.append(f"{source.relative_to(root)}: unreachable from docs/README.md")
     return errors

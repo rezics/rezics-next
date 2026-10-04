@@ -25,6 +25,20 @@ class DocumentationChecks(unittest.TestCase):
             plan.write_text('# Plan\n## Completion\n')
             self.assertEqual(check(root, files), [])
 
+    def test_goal_briefs_need_no_navigation_but_goal_pages_do(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'README.md').write_text('# Repository\n')
+            docs = root / 'docs'
+            (docs / 'goals/discovery/tasks').mkdir(parents=True)
+            (docs / 'README.md').write_text('# Design\n[Goals](../GOAL.md)\n')
+            (root / 'GOAL.md').write_text('# Goals\n[Discovery](docs/goals/discovery/GOAL.md)\n')
+            (docs / 'goals/discovery/GOAL.md').write_text('# Discovery\n')
+            (docs / 'goals/discovery/tasks/G-1065.md').write_text('# Brief\n')
+            (docs / 'goals/discovery/state.md').write_text('# State\n')
+            self.assertEqual(check(root, document_files(root)),
+                             ['docs/goals/discovery/state.md: unreachable from docs/README.md'])
+
     def test_installed_packages_and_disposable_labs_are_not_authored_docs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
