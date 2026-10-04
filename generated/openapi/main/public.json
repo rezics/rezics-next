@@ -354381,7 +354381,8 @@
                                 "release",
                                 "realization",
                                 "occurrence",
-                                "resource"
+                                "resource",
+                                "projection"
                               ],
                               "type": "string"
                             },
@@ -354443,7 +354444,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         },
@@ -355399,7 +355401,87 @@
                           "release",
                           "realization",
                           "occurrence",
-                          "resource"
+                          "resource",
+                          "projection"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "language",
+                      "targetGrain",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptedFrameDimensions": {
+                        "items": {
+                          "enum": [
+                            "work",
+                            "realization",
+                            "release",
+                            "position",
+                            "continuity",
+                            "event"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "acceptedSubjectTypes": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "displayThreshold": {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v4",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource",
+                          "projection"
                         ],
                         "type": "string"
                       }
@@ -355596,7 +355678,87 @@
                           "release",
                           "realization",
                           "occurrence",
-                          "resource"
+                          "resource",
+                          "projection"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "language",
+                      "targetGrain",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptedFrameDimensions": {
+                        "items": {
+                          "enum": [
+                            "work",
+                            "realization",
+                            "release",
+                            "position",
+                            "continuity",
+                            "event"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "acceptedSubjectTypes": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "displayThreshold": {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v4",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource",
+                          "projection"
                         ],
                         "type": "string"
                       }
@@ -355793,7 +355955,87 @@
                           "release",
                           "realization",
                           "occurrence",
-                          "resource"
+                          "resource",
+                          "projection"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "realm",
+                      "question",
+                      "language",
+                      "targetGrain",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acceptedFrameDimensions": {
+                        "items": {
+                          "enum": [
+                            "work",
+                            "realization",
+                            "release",
+                            "position",
+                            "continuity",
+                            "event"
+                          ],
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "acceptedSubjectTypes": {
+                        "items": {
+                          "maxLength": 512,
+                          "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                          "type": "string"
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "displayThreshold": {
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "realm-target-rating-context-v4",
+                        "type": "string"
+                      },
+                      "question": {
+                        "maxLength": 120,
+                        "minLength": 3,
+                        "type": "string"
+                      },
+                      "realm": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "targetGrain": {
+                        "enum": [
+                          "release",
+                          "realization",
+                          "occurrence",
+                          "resource",
+                          "projection"
                         ],
                         "type": "string"
                       }
@@ -356226,6 +356468,34 @@
                     },
                     {
                       "properties": {
+                        "acceptedFrameDimensions": {
+                          "items": {
+                            "enum": [
+                              "work",
+                              "realization",
+                              "release",
+                              "position",
+                              "continuity",
+                              "event"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 8,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "acceptedSubjectTypes": {
+                          "items": {
+                            "maxLength": 512,
+                            "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                            "type": "string"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
                         "aggregation": {
                           "const": "latest-per-rater-mean",
                           "type": "string"
@@ -356252,12 +356522,33 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "owner": {
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "realm",
+                                "global"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
                           "enum": [
+                            "realm-target-rating-context-v4",
                             "realm-target-rating-context-v3",
                             "realm-target-rating-context-v2"
                           ],
@@ -356323,7 +356614,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         }
@@ -356340,6 +356632,7 @@
                         "population",
                         "aggregation",
                         "displayThreshold",
+                        "owner",
                         "profile",
                         "sourcePosition",
                         "replayed"
@@ -356763,6 +357056,34 @@
                     },
                     {
                       "properties": {
+                        "acceptedFrameDimensions": {
+                          "items": {
+                            "enum": [
+                              "work",
+                              "realization",
+                              "release",
+                              "position",
+                              "continuity",
+                              "event"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 8,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "acceptedSubjectTypes": {
+                          "items": {
+                            "maxLength": 512,
+                            "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                            "type": "string"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
                         "aggregation": {
                           "const": "latest-per-rater-mean",
                           "type": "string"
@@ -356789,12 +357110,33 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "owner": {
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "realm",
+                                "global"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
                           "enum": [
+                            "realm-target-rating-context-v4",
                             "realm-target-rating-context-v3",
                             "realm-target-rating-context-v2"
                           ],
@@ -356860,7 +357202,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         }
@@ -356877,6 +357220,7 @@
                         "population",
                         "aggregation",
                         "displayThreshold",
+                        "owner",
                         "profile",
                         "sourcePosition",
                         "replayed"
@@ -357544,6 +357888,34 @@
                     },
                     {
                       "properties": {
+                        "acceptedFrameDimensions": {
+                          "items": {
+                            "enum": [
+                              "work",
+                              "realization",
+                              "release",
+                              "position",
+                              "continuity",
+                              "event"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 8,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
+                        "acceptedSubjectTypes": {
+                          "items": {
+                            "maxLength": 512,
+                            "pattern": "^https?://[^\\s<>\"{}|^`\\\\]+$",
+                            "type": "string"
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "type": "array",
+                          "uniqueItems": true
+                        },
                         "aggregation": {
                           "const": "latest-per-rater-mean",
                           "type": "string"
@@ -357570,12 +357942,33 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "owner": {
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "enum": [
+                                "realm",
+                                "global"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": "object"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
                           "enum": [
+                            "realm-target-rating-context-v4",
                             "realm-target-rating-context-v3",
                             "realm-target-rating-context-v2",
                             "realm-target-rating-context-v1"
@@ -357618,7 +358011,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         }
@@ -357635,6 +358029,7 @@
                         "population",
                         "aggregation",
                         "displayThreshold",
+                        "owner",
                         "profile"
                       ],
                       "type": "object"
@@ -362445,7 +362840,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         },
@@ -432108,6 +432504,26 @@
                             "minLength": 1,
                             "type": "string"
                           },
+                          "owner": {
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "realm",
+                                  "global"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": "object"
+                          },
                           "question": {
                             "type": "string"
                           },
@@ -432793,7 +433209,8 @@
                                 "release",
                                 "realization",
                                 "occurrence",
-                                "resource"
+                                "resource",
+                                "projection"
                               ],
                               "type": "string"
                             },
@@ -432973,7 +433390,8 @@
                             "release",
                             "realization",
                             "occurrence",
-                            "resource"
+                            "resource",
+                            "projection"
                           ],
                           "type": "string"
                         }
