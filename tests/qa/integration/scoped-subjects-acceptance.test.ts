@@ -155,7 +155,9 @@ test('per-map performance withholds sparse means, declares both roll-up formulas
   expect(pooled.rank.minimumRatings).toBe(50);
   expect(pooled.rank.items.map(item => item.target)).toEqual([a]);
   const prior = pooled.rank.prior;
-  expect(prior.weight).toBe(Math.max(50, Math.round(prior.ratings / prior.targets)));
+  // Only the prior's mean and weight are published (G-1093); the weight is at least the ranking minimum.
+  expect(Object.keys(prior).sort()).toEqual(['mean', 'weight']);
+  expect(prior.weight).toBeGreaterThanOrEqual(50);
   expect(pooled.rank.items[0]!.score).toBeCloseTo((50 / (50 + prior.weight)) * 9
     + (prior.weight / (50 + prior.weight)) * prior.mean, 10);
   expect(await rollup('pooled', [b])).toMatchObject({ value: null, valueWithheld: 'coverage-below-half' });
