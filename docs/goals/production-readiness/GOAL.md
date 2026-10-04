@@ -107,6 +107,23 @@ After M4's contracts settle, language and search, authority and safety, and
 documents and operations run in parallel; in M6 the scenarios run in parallel
 against the shared contracts.
 
+## Inherited from addresses-discovery
+
+Found while that Goal verified its work, outside its outcome (2026-10-05):
+
+- **Safety-matching outage admission.** `docs/operations/trust-and-safety.md`
+  says required safety-matching outages follow their own admission policy,
+  but no required-matcher adapter exists; SAFETY04 now covers only the NSFW
+  classifier outage. Needed before launch (M8 safety drills).
+- **TDB2 compaction procedure.** TDB2 grows between compactions
+  (`docs/testing/complexity.md`); bulk Work import cut growth about 45 times,
+  but production has no compaction schedule or procedure (M8 operations).
+- **Structure composition effects.** Discover classifies outbox events by
+  their effect (`services/main/src/modules/discovery/effects.ts`); opaque
+  structure changes in `structure/change.ts` and `structure/outbox-event.ts`
+  still rebuild Discover scopes conservatively (about 140 s at 10,000 Works).
+  Bounded composition membership effects would make them Work-local.
+
 ## Completion
 
 The Goal ends when the maintainer stops it, or when M8 passes its exit and the
