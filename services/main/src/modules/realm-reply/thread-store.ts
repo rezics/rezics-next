@@ -21,6 +21,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface ThreadNode {
   reply: string; parent: string | null; author: string; origin: string | null;
   rootTarget: string; rootRevision: string; createdAt: Date;
+  /** The depth boundary has children outside this bounded walk. */
+  truncated?: boolean;
 }
 /** One Realm placement head a read admits: its exact revision, review decision and pinned preparation. */
 export interface PlacedHead { reply: string; revisionId: string; reviewDecisionId: string; preparationId: string }
@@ -130,15 +132,17 @@ export class RealmReplyThreadStore {
     }
     // No ORDER BY: the outer LIMIT stops the recursive walk once it has enough rows.
     const rows = await this.content.query<{ reply: string; parent: string | null; author: string; origin: string | null;
-      root_target: string; root_revision: string; created_at: Date }>(`WITH RECURSIVE tree AS (
+      root_target: string; root_revision: string; created_at: Date; truncated: boolean }>(`WITH RECURSIVE tree AS (
         SELECT id, parent_reply, author, origin_realm, root_target, root_revision, created_at, 0 AS depth
           FROM content.reply WHERE id = $1
         UNION ALL
         SELECT c.id, c.parent_reply, c.author, c.origin_realm, c.root_target, c.root_revision, c.created_at, t.depth + 1
           FROM tree t JOIN content.reply c ON c.parent_reply = t.id WHERE t.depth < $2
       ) SELECT id AS reply, parent_reply AS parent, author, origin_realm AS origin, root_target, root_revision,
-        created_at FROM tree LIMIT $3`, [focus, REALM_THREAD_COST.depth, limit + 1]);
-    return rows.rows.map(node);
+        created_at, depth = $2 AND EXISTS(SELECT 1 FROM content.reply child
+          WHERE child.parent_reply = tree.id) AS truncated
+        FROM tree LIMIT $3`, [focus, REALM_THREAD_COST.depth, limit + 1]);
+    return rows.rows.map(row => ({ ...node(row), truncated: row.truncated }));
   }
 
   /** The focused reply's parents, nearest first, up to a fixed height. */
@@ -189,14 +193,16 @@ export class RealmReplyThreadStore {
     const counts = new Map(threads.map(id => [id, 0]));
     if (!threads.length) return { counts, complete: true };
     const limit = threads.length * REALM_THREAD_COST.countPerThread;
-    const rows = await this.content.query<{ thread: string; id: string; parent_reply: string; root_target: string; visible: boolean }>(`WITH RECURSIVE tree AS (
+    const rows = await this.content.query<{ thread: string; id: string; parent_reply: string; root_target: string; visible: boolean; truncated: boolean }>(`WITH RECURSIVE tree AS (
         SELECT r.id AS thread, c.id, 1 AS depth FROM unnest($2::text[]) AS r(id)
           JOIN content.reply c ON c.parent_reply = r.id
         UNION ALL
         SELECT t.thread, c.id, t.depth + 1 FROM tree t JOIN content.reply c ON c.parent_reply = t.id
           WHERE t.depth < $3
-      ), walked AS MATERIALIZED (SELECT thread, id FROM tree LIMIT $4)
+      ), walked AS MATERIALIZED (SELECT thread, id, depth FROM tree LIMIT $4)
       SELECT thread, walked.id, reply.parent_reply, reply.root_target,
+        walked.depth = $3 AND EXISTS(SELECT 1 FROM content.reply child
+          WHERE child.parent_reply = walked.id) AS truncated,
         ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked
         JOIN content.reply reply ON reply.id = walked.id`,
     [realm, [...threads], REALM_THREAD_COST.depth, limit + 1]);
@@ -226,7 +232,7 @@ export class RealmReplyThreadStore {
         if (decisions[index] === 'visible' && (!historyAdmission || readableChain(row.id))) counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
       });
     }
-    return { counts, complete: rows.rows.length <= limit };
+    return { counts, complete: rows.rows.length <= limit && !rows.rows.some(row => row.truncated) };
   }
 
   /**

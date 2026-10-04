@@ -7,6 +7,7 @@ import { activityTime } from '../feed/ranking.ts';
 import type { FeedCheckpoint } from '../feed/store.ts';
 import { hash } from '../work/activate.ts';
 import { realmHistoryOriginCutFilter, type RealmHistoryFloor } from '../realm-admin/history.ts';
+import { retireRealmPopulation } from './retirement.ts';
 
 export const REALM_RANK_COST = {
   projectBatch: 20,
@@ -130,7 +131,7 @@ export async function realmRankPage(
         AND c.after_event='￿'
         AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=$1 AND kind IN ('reply','discussion')
           AND NOT realm_thread_indexed LIMIT 1)
-        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1 LIMIT 1)
+        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population' LIMIT 1)
         ${
           population
             ? `AND EXISTS(SELECT 1 FROM access.realm_thread_population p WHERE p.data_epoch=$1
@@ -238,7 +239,7 @@ export class RealmThreadRankingProjection {
     }
     const dirty = (
       await this.access.query<{
-        kind: 'reply' | 'work' | 'realm' | 'parent';
+        kind: 'reply' | 'work' | 'realm' | 'parent' | 'population';
         resource: string;
         after_key: string;
       }>(
@@ -248,6 +249,10 @@ export class RealmThreadRankingProjection {
       )
     ).rows[0];
     if (dirty) {
+      if (dirty.kind === 'population') {
+        await retireRealmPopulation(this.access, session, epoch, dirty.resource, dirty.after_key);
+        return true;
+      }
       const [afterRealm = '', afterReply = ''] = dirty.after_key.split('|');
       const column = dirty.kind;
       const refs = (
@@ -496,7 +501,9 @@ export class RealmThreadRankingProjection {
       ? await session.query(
           `SELECT ?realm ?reply ?id ?work ?author ?rootRevision ?parent ?revision ?review ?preparation WHERE {
       VALUES (?realm ?reply ?slot) { ${keys.map((key) => `(${iri(key.realm)} ${iri(key.reply)} ${iri(replySlotIri(key.realm, key.reply))})`).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:replyPlacementHead ?id . }
+        GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+          ?space a rv:Space ; rv:realmCapability ?realm .
+          ?slot a rv:RealmReplySlot ; rv:replyPlacementHead ?id . }
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted ;
         rv:realm ?realm ; rv:reply ?reply ; rv:rootTarget ?work ; rv:rootRevision ?rootRevision ; rv:author ?author ;
         rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation .
@@ -524,10 +531,14 @@ export class RealmThreadRankingProjection {
     const admitted = new Set<string>();
     for (const realm of new Set(rows.map((row) => row.realm!.value))) {
       const members = heads.filter((_head, index) => rows[index]!.realm!.value === realm);
-      for (const [reply,node] of await threads.admitted(realm,members)) {
-        const row = rows.find(row=>row.realm!.value===realm && row.reply!.value===reply)!;
-        if (node.rootTarget!==row.work!.value || node.rootRevision!==row.rootRevision!.value
-          || node.author!==row.author!.value || node.parent!==(row.parent?.value ?? null)) {
+      for (const [reply, node] of await threads.admitted(realm, members)) {
+        const row = rows.find((row) => row.realm!.value === realm && row.reply!.value === reply)!;
+        if (
+          node.rootTarget !== row.work!.value ||
+          node.rootRevision !== row.rootRevision!.value ||
+          node.author !== row.author!.value ||
+          node.parent !== (row.parent?.value ?? null)
+        ) {
           throw new WorkReadUnavailable('Realm ranking placement differs from Content identity');
         }
         admitted.add(`${realm}|${reply}`);
@@ -562,11 +573,15 @@ export class RealmThreadRankingProjection {
           // parent may have appeared earlier in the SAME batch. References in
           // arbitrary restore order resume through exact parent jobs; no
           // request ancestor cap becomes a limit on the ranked population.
-          const above = (await client.query<{ thread: string; active: boolean }>(`SELECT thread,active
+          const above = (
+            await client.query<{ thread: string; active: boolean }>(
+              `SELECT thread,active
             FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3`,
-          [session.position.dataEpoch,ref.realm,ref.parent])).rows[0];
+              [session.position.dataEpoch, ref.realm, ref.parent],
+            )
+          ).rows[0];
           ref.thread = above?.thread ?? ref.parent;
-          ref.active = ref.active && above?.active===true;
+          ref.active = ref.active && above?.active === true;
         }
         // Vote and projection take the same lock order. In particular, a vote
         // concurrent with FIRST insertion cannot miss a not-yet-existing mirror.

@@ -305,7 +305,9 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
   const [subtree, parents] = await Promise.all([threads.subtree(focus), threads.ancestors(focus)]);
   if (!subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');
-  const complete = subtree.length <= REALM_THREAD_COST.replies + 1;
+  const complete = subtree.length <= REALM_THREAD_COST.replies + 1
+    && !subtree.some(node => node.truncated)
+    && !(parents.length === REALM_THREAD_COST.ancestors && parents.at(-1)?.parent);
   const nodes = [...parents, ...subtree.slice(0, REALM_THREAD_COST.replies + 1)];
   const byReply = new Map(nodes.map((item) => [item.reply, item]));
   const rows = (await session.query(`SELECT ?id ?reply ?work ?author ?revision ?review ?preparation ?rootRevision
