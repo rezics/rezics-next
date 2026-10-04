@@ -27,7 +27,14 @@ export function webClientRegistration(redirectUris: string[]) {
     grant_types: webGrantTypes, scope, skip_consent: true, require_pkce: true };
 }
 
-export interface WebAuthOptions { runId: string; redirectUris: string[]; profile?: 'dev' | 'qa' }
+export interface WebAuthOptions { runId: string; redirectUris: string[]; profile?: 'dev' | 'qa';
+  /** An integration fixture owns its directory and already-authorized operator. */
+  fixture?: { name: string; operator: OperatorCredentials } }
+
+function authFixtureDirectory(stackDir: string, name = 'web-auth') {
+  if (!/^[a-z0-9][a-z0-9-]{0,80}$/.test(name)) throw new Error('Invalid web auth fixture name');
+  return join(stackDir, name);
+}
 
 export function parseWebAuthOptions(args: string[]): WebAuthOptions {
   if (args.length < 4 || args.length % 2 !== 0 || args[0] !== '--run-id'
@@ -202,6 +209,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
   const { runId, redirectUris } = parseWebAuthOptions([
     '--run-id', options.runId, ...options.redirectUris.flatMap(uri => ['--redirect-uri', uri])]);
   const profile = options.profile ?? 'qa';
+  if (options.fixture && profile !== 'qa') throw new Error('Named auth fixtures require a QA stack');
   const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId });
   const appsPath = join(stackDir, 'apps.env');
   const composePath = join(stackDir, 'compose.env');
@@ -219,7 +227,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       throw new Error(`QA stack ${name} differs from its generated Compose configuration`);
     }
   }
-  const outputDir = join(stackDir, 'web-auth');
+  const outputDir = authFixtureDirectory(stackDir, options.fixture?.name);
   const recoveryPath = join(stackDir, 'web-auth-operator-recovery.json');
   if (existsSync(outputDir)) {
     if (readdirSync(outputDir).length === 0) rmSync(outputDir, { recursive: true });
@@ -252,7 +260,9 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: operatorIds });
     const app = createAccountApp(auth, accountPool);
     const bootstrapped = await accountPool.query('SELECT 1 FROM rezics_account_operator_bootstrap');
-    const operator = bootstrapped.rowCount
+    const operator = options.fixture
+      ? await signInOperator(app, apps.ACCOUNT_BASE_URL!, options.fixture.operator)
+      : bootstrapped.rowCount
       ? await retiredOperator(stackDir, async credentials => {
         const role = await operatorRole(accountPool, credentials.id);
         return role && rolePermits(role, 'clients:manage')
@@ -260,7 +270,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       })
       : await signUp(app, apps.ACCOUNT_BASE_URL!, 'operator');
     if (!operator) throw new Error('No retired local operator can register the web client; restore its private credentials or use the Account operator API');
-    if (!bootstrapped.rowCount) {
+    if (!options.fixture && !bootstrapped.rowCount) {
       writeFileSync(recoveryPath, JSON.stringify({ operator: { id: operator.id,
         email: operator.email, password: operator.password } }), { mode: 0o600 });
     }
@@ -319,7 +329,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     savePrivate(runtimeEnvPath, { ...apps, ACCOUNT_OPERATOR_USER_IDS: operator.id,
       ACCOUNT_MAIN_CLIENT_ID: mainClient.client_id,
       ACCOUNT_MAIN_CLIENT_SECRET: mainClient.client_secret });
-    rmSync(recoveryPath, { force: true });
+    if (!options.fixture) rmSync(recoveryPath, { force: true });
     return { publicConfigPath, privateConfigPath, runtimeEnvPath,
       clientId: webClient.client_id, actingSubject: actor };
   } finally {
@@ -373,13 +383,15 @@ export async function assertWebInstallationReady(apps: Record<string, string>, p
  * old client stays installed until the stack is reset. Also align the local
  * person's consent grant with normal provisioning, even if OAuth is current.
  * Returns whether it registered a new client. */
-export async function upgradeWebClient(options: { runId: string; profile?: 'dev' | 'qa' }): Promise<boolean> {
+export async function upgradeWebClient(options: { runId: string; profile?: 'dev' | 'qa'; fixtureName?: string }): Promise<boolean> {
   const profile = options.profile ?? 'qa';
   const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId: options.runId });
-  const publicPath = join(stackDir, 'web-auth', 'public.json');
+  if (options.fixtureName && profile !== 'qa') throw new Error('Named auth fixtures require a QA stack');
+  const authDir = authFixtureDirectory(stackDir, options.fixtureName);
+  const publicPath = join(authDir, 'public.json');
   const current = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; grantTypes?: string[] };
-  const { operator, principalId, actingSubject } = JSON.parse(readFileSync(join(stackDir, 'web-auth', 'private.json'), 'utf8')) as {
+  const { operator, principalId, actingSubject } = JSON.parse(readFileSync(join(authDir, 'private.json'), 'utf8')) as {
     operator: { id: string; email: string; password: string }; principalId: string; actingSubject: string };
   const apps = readEnv(join(stackDir, 'apps.env'));
   requireLocalApps(apps);
