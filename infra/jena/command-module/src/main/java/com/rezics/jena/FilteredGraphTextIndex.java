@@ -212,6 +212,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
             IndexSearcher searcher = new IndexSearcher(reader);
             long deadline = System.nanoTime() + 1_000_000_000L;
             searcher.setTimeout(() -> System.nanoTime() >= deadline);
+            List<OccurrenceToken> analyzed = occurrencePhrase(lucene.getQueryAnalyzer(), phrase);
+            if (analyzed.size() > 1 && analyzed.getLast().term().matches("[0-9]+")) {
+                // An unfinished chapter number is a prefix inside its label,
+                // while a bare number retains the exact numbered-tree seek.
+                // Prefix postings + sorted doc values retain <=101 candidates;
+                // no expansion/list of all matching number terms is retained.
+                return occurrenceNumberPrefix(reader, searcher, scopeQuery, scope, lower, after, analyzed, size, deadline);
+            }
             int reads = 0;
             String rarest = null; int frequency = Integer.MAX_VALUE;
             var labels = org.apache.lucene.index.MultiTerms.getTerms(reader, "occurrenceLabel");
@@ -267,6 +275,81 @@ public final class FilteredGraphTextIndex implements TextIndex {
             stream.reset(); while (stream.incrementToken()) tokens.add(term.toString()); stream.end();
         }
         return tokens;
+    }
+
+    private record OccurrenceToken(String term, int position) {}
+    private static List<OccurrenceToken> occurrencePhrase(org.apache.lucene.analysis.Analyzer analyzer, String value) throws IOException {
+        List<OccurrenceToken> tokens = new ArrayList<>();
+        try (var stream = analyzer.tokenStream(OccurrenceTextSchema.FIELD, value)) {
+            var term = stream.addAttribute(org.apache.lucene.analysis.tokenattributes.CharTermAttribute.class);
+            var increment = stream.addAttribute(org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute.class);
+            int position = -1;
+            stream.reset();
+            while (stream.incrementToken()) { position += increment.getPositionIncrement(); tokens.add(new OccurrenceToken(term.toString(), position)); }
+            stream.end();
+        }
+        return tokens;
+    }
+    /** Lucene 10.3.1's constant-score PrefixQuery avoids Boolean term expansion.
+     * One sorted top-k page retains <=101 docs and hydrates <=18*500 label chars
+     * per doc. Matching postings/sort work shares the existing one-second native
+     * deadline; this bound is on candidates, not the total matching population.
+     * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/search/PrefixQuery.html
+     * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/search/IndexSearcher.html
+     */
+    private JsonObject occurrenceNumberPrefix(DirectoryReader reader, IndexSearcher searcher, Query scopeQuery,
+        String scope, String lower, String after, List<OccurrenceToken> tokens, int size, long deadline) throws IOException {
+        if (tokens.size() + size > OCCURRENCE_VISITS) throw new TextIndexException("occurrence prefix budget exceeded");
+        var words = new BooleanQuery.Builder();
+        for (var token : tokens.subList(0, tokens.size() - 1))
+            words.add(new TermQuery(new Term(OccurrenceTextSchema.FIELD, token.term())), BooleanClause.Occur.FILTER);
+        words.add(new org.apache.lucene.search.PrefixQuery(new Term(OccurrenceTextSchema.FIELD, tokens.getLast().term())),
+            BooleanClause.Occur.FILTER);
+        var candidates = new BooleanQuery.Builder().add(words.build(), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term("occurrenceNavigation", "true")), BooleanClause.Occur.SHOULD)
+            .setMinimumNumberShouldMatch(1).build();
+        var query = new BooleanQuery.Builder().add(scopeQuery, BooleanClause.Occur.FILTER)
+            .add(candidates, BooleanClause.Occur.FILTER)
+            .add(org.apache.lucene.search.TermRangeQuery.newStringRange(lucene.getDocDef().getEntityField(),
+                after.isEmpty() ? scope : lower + ":~", null, true, false), BooleanClause.Occur.FILTER).build();
+        var page = searcher.search(query, size, new org.apache.lucene.search.Sort(
+            new org.apache.lucene.search.SortField(OccurrenceTextSchema.ORDER, org.apache.lucene.search.SortField.Type.STRING)));
+        JsonArray items = new JsonArray();
+        for (var hit : page.scoreDocs) {
+            if (System.nanoTime() >= deadline || searcher.timedOut())
+                throw new TextIndexException("occurrence prefix search deadline exceeded");
+            var stored = searcher.storedFields().document(hit.doc,
+                java.util.Set.of(lucene.getDocDef().getEntityField(), OccurrenceTextSchema.PAYLOAD));
+            String id = stored.get(lucene.getDocDef().getEntityField()), payload = stored.get(OccurrenceTextSchema.PAYLOAD);
+            if (id == null || payload == null || !id.startsWith(scope))
+                throw new TextIndexException("occurrence prefix document is incomplete");
+            boolean matches = false;
+            // Postings narrow the page; verify adjacency and positions within
+            // each carried label, never across different labels or languages.
+            for (var label : org.apache.jena.atlas.json.JSON.parse(payload).get("labels").getAsArray()) {
+                if (System.nanoTime() >= deadline) throw new TextIndexException("occurrence prefix search deadline exceeded");
+                var terms = occurrencePhrase(lucene.getQueryAnalyzer(), label.getAsObject().get("value").getAsString().value());
+                for (int at = 0; at + tokens.size() <= terms.size() && !matches; at++) {
+                    boolean same = true;
+                    for (int n = 0; n < tokens.size(); n++) {
+                        var actual = terms.get(at + n); var wanted = tokens.get(n);
+                        if (actual.position() - terms.get(at).position() != wanted.position() - tokens.getFirst().position()
+                            || !(n == tokens.size() - 1 ? actual.term().startsWith(wanted.term()) : actual.term().equals(wanted.term()))) {
+                            same = false; break;
+                        }
+                    }
+                    matches = same;
+                }
+            }
+            String encoded = id.substring(scope.length());
+            String[] key = encoded.substring(0, encoded.lastIndexOf(':')).split("!", -1);
+            if (key.length != 3) throw new TextIndexException("occurrence text identity is invalid");
+            JsonObject item = new JsonObject(); item.put("segmentKey", key[0]); item.put("orderKey", key[1]);
+            item.put("occurrence", "https://rezics.com/id/" + key[2]); item.put("matches", matches); items.add(item);
+        }
+        if (System.nanoTime() >= deadline || searcher.timedOut()) throw new TextIndexException("occurrence prefix search deadline exceeded");
+        JsonObject result = new JsonObject(); result.put("items", items); result.put("reads", tokens.size() + page.scoreDocs.length);
+        result.put("commit", Long.toString(reader.getIndexCommit().getGeneration())); return result;
     }
 
     private static final String RV = "https://rezics.com/vocab/";
@@ -493,6 +576,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         String field = lucene.getDocDef().getEntityField();
         Document doc = new Document();
         doc.add(new org.apache.lucene.document.Field(field, entity.getId(), TextIndexLucene.ftIRI));
+        doc.add(new org.apache.lucene.document.SortedDocValuesField(OccurrenceTextSchema.ORDER,
+            new org.apache.lucene.util.BytesRef(entity.getId())));
         String scope = entity.getId().substring(0, OccurrenceLabelIndex.PREFIX.length() + 3 * 37);
         doc.add(new org.apache.lucene.document.StringField("occurrenceScope", scope, org.apache.lucene.document.Field.Store.NO));
 

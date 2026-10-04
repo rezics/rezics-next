@@ -15,7 +15,7 @@ import org.apache.lucene.index.FieldInfos;
 
 /** One physical definition for live projection, update and offline indexing. */
 final class OccurrenceTextSchema {
-    static final String FIELD = "occurrenceLabel", PAYLOAD = "occurrencePayload";
+    static final String FIELD = "occurrenceLabel", PAYLOAD = "occurrencePayload", ORDER = "occurrenceOrder";
     static final FieldType TYPE = TextField.TYPE_NOT_STORED;
     static final long REBUILD_DEADLINE_MS = 600_000;
 
@@ -23,8 +23,10 @@ final class OccurrenceTextSchema {
         try (var reader = DirectoryReader.open(index.lucene().getIndexWriter())) {
             var fields = FieldInfos.getMergedFieldInfos(reader);
             var labels = fields.fieldInfo(FIELD);
+            var order = fields.fieldInfo(ORDER);
             return labels != null && (labels.getIndexOptions() != TYPE.indexOptions()
-                || labels.omitsNorms() != TYPE.omitNorms() || fields.fieldInfo(PAYLOAD) == null);
+                || labels.omitsNorms() != TYPE.omitNorms() || fields.fieldInfo(PAYLOAD) == null
+                || order == null || order.getDocValuesType() != org.apache.lucene.index.DocValuesType.SORTED);
         } catch (IOException error) { throw new TextIndexException("occurrence schema inspection failed", error); }
     }
 
