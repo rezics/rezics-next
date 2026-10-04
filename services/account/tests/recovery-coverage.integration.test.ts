@@ -1,3 +1,4 @@
+// sql-relations-allow: public.unrelated_recovery_state -- The test creates this stray table to prove coverage still rejects unknown Account tables.
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
