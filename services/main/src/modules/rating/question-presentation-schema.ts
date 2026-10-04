@@ -19,7 +19,14 @@ export const QUESTION_PRESENTATION_COST = {
   languagesPerRequest: 20,
   contextBatch: 20,
   validationFocuses: 2,
+  writeGraphCalls: 32,
+  writeGraphBytes: 256 * 1024,
+  commandBytes: 32_768,
   selectedObjectsPerContext: 1,
+  lookupRows: 2,
+  lookupGraphCalls: 16,
+  lookupGraphBytes: 256 * 1024,
+  lookupDeadlineMs: 10_000,
 } as const;
 export interface QuestionPresentationState {
   context: string;

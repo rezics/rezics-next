@@ -64,7 +64,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     ['classification:decide:global', 'statement.decide'],
     [GLOBAL_TARGET_CONTEXT_SCOPE, 'rating.context.create'],
   ]) await authorize(scope!, action!);
-  const questions = await seedScopedSubjectQuestions({ post: async <T>(path: string, body: object, requestKey: string) => {
+  const questions = await seedScopedSubjectQuestions({ get: path => api.get(path), post: async <T>(path: string, body: object, requestKey: string) => {
     if (path === '/v1/rating-question-presentations') {
       await authorize(`rating:presentation:${(body as { state: { context: string } }).state.context}`,
         'rating.question-presentation.review');

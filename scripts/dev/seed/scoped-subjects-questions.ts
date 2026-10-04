@@ -1,4 +1,6 @@
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import type { QuestionPresentationState } from '../../../services/main/src/modules/rating/question-presentation-schema.ts';
 
 export const scopedSubjectLocales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 type Labels = Record<(typeof scopedSubjectLocales)[number], string>;
@@ -52,10 +54,58 @@ export interface GlobalQuestion {
 }
 export type GlobalQuestions = Record<(typeof scopedSubjectQuestions)[number]['key'], GlobalQuestion>;
 
+interface CurrentPresentation { component: string; revision: string; state: QuestionPresentationState }
+function problemCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  if ('code' in error && typeof error.code === 'string') return error.code;
+  if ('detail' in error && typeof error.detail === 'string') {
+    try { return (JSON.parse(error.detail) as { code?: string }).code ?? null; }
+    catch { return null; }
+  }
+  return null;
+}
+
+/** Read the exact language slot before writing. A confirmed cancellation has
+ * no later graph effect, so only that terminal outcome permits a new attempt
+ * key over the same CAS head. Pending/lost responses keep their original key. */
+export async function ensureReviewedQuestionPresentation(api: Pick<ScopedSubjectApi, 'get' | 'post'>,
+  actor: string, namespace: string, context: string, contextRevision: string,
+  language: string, question: string): Promise<{ component: string; revision: string }> {
+  const cancelled = new Set<string>();
+  const desired: QuestionPresentationState = { context, language, question,
+    source: 'https://rezics.com/definition/scoped-subject-questions-v1',
+    licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'reviewed' };
+  const path = `/v1/rating-question-presentations?${new URLSearchParams({ context, language, actingSubject: actor })}`;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { presentation: current } = await api.get<{ presentation: CurrentPresentation | null }>(path);
+    if (current && (current.state.context !== context || current.state.language !== language))
+      throw new Error('Question presentation lookup returned another language slot');
+    if (current?.state.reviewStatus === 'reviewed') return { component: current.component, revision: current.revision };
+    const basis = createHash('sha256').update(JSON.stringify([namespace, actor, contextRevision,
+      current?.component ?? null, current?.revision ?? null, desired])).digest('hex');
+    const key = `question-review:v2:${cancelled.has(basis)
+      ? createHash('sha256').update(`${basis}:${randomUUID()}`).digest('hex') : basis}`;
+    try {
+      const written = await api.post<{ component: string; revision: string }>('/v1/rating-question-presentations', {
+        profile: 'rating-question-presentation-v1', actingSubject: actor,
+        ...(current ? { target: current.component } : {}), expectedHead: current?.revision ?? null, state: desired,
+      }, key);
+      return { component: written.component, revision: written.revision };
+    } catch (error) {
+      const code = problemCode(error);
+      if (code === 'operation_cancelled') { cancelled.add(basis); continue; }
+      if (code === 'stale_head') continue;
+      throw error;
+    }
+  }
+  throw new Error('Question presentation did not converge; rerun to read its current head');
+}
+
 /** Three English-authored measurements, each with seven independently reviewed
  * presentations. Only wording varies by locale; all ratings keep one Context.
- * Cost: 24 sequential API writes, independent of catalogue or rater size. */
-export async function seedScopedSubjectQuestions(api: Pick<ScopedSubjectApi, 'post'>, actingSubject: string,
+ * A settled rerun writes no presentation. Each attempt has one bounded slot
+ * lookup and one CAS; unrelated questions and ratings are never enumerated. */
+export async function seedScopedSubjectQuestions(api: Pick<ScopedSubjectApi, 'get' | 'post'>, actingSubject: string,
   namespace: string): Promise<GlobalQuestions> {
   const questions = {} as GlobalQuestions;
   for (const spec of scopedSubjectQuestions) {
@@ -69,12 +119,8 @@ export async function seedScopedSubjectQuestions(api: Pick<ScopedSubjectApi, 'po
     }, key);
     const presentations: GlobalQuestion['presentations'] = {};
     for (const language of scopedSubjectLocales.filter(locale => locale !== 'en')) {
-      presentations[language] = await api.post('/v1/rating-question-presentations', {
-        profile: 'rating-question-presentation-v1', expectedHead: null, actingSubject,
-        state: { context: created.context, language, question: spec.labels[language],
-          source: 'https://rezics.com/definition/scoped-subject-questions-v1',
-          licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'reviewed' },
-      }, `${key}:${language}`);
+      presentations[language] = await ensureReviewedQuestionPresentation(api, actingSubject, namespace,
+        created.context, created.contextRevision, language, spec.labels[language]);
     }
     questions[spec.key] = { ...created, presentations };
   }

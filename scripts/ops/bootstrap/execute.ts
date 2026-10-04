@@ -150,6 +150,7 @@ export async function executeBootstrap(input: {
     definitions: [],
     sources: [],
     questions: await seedScopedSubjectQuestions({
+      get: path => api.read(path),
       post: (path, body, label) => journal.command(api, label, 'POST', path, body),
     }, actor, plan.namespace),
   };

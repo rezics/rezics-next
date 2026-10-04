@@ -38,11 +38,31 @@ import {
   QUESTION_PRESENTATION_FAMILY,
   QUESTION_PRESENTATION_PROFILE,
   QUESTION_PRESENTATION_PROFILE_IRI,
+  QUESTION_PRESENTATION_COST,
   questionPresentationAction,
   questionPresentationDigest,
   questionPresentationScope,
   type QuestionPresentationState,
 } from './question-presentation-schema.ts';
+import { canonicalLanguage } from '../display-language/select.ts';
+
+/** One indexed Context/language tuple, including a draft for an authorized
+ * editor. A public display selection cannot recover an unreviewed head. */
+export async function findQuestionPresentation(env: WorkActivationEnvironment, context: string, language: string) {
+  checkedNativeIri(context);
+  const normalized = canonicalLanguage(language);
+  if (!normalized) throw new SemanticChangeRejected('invalid', 'Presentation language is invalid');
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?component ?head WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?component a rv:RatingQuestionPresentation ;
+      rv:presentationContext ${iri(context)} ; rv:presentationLanguage ${lit(normalized)} ; rv:questionPresentationHead ?head .
+      FILTER NOT EXISTS { ?component rv:protectionHead ?protection } }
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RatingQuestionPresentationRevision, rv:RevisionAnchor ;
+      rv:component ?component ; rv:presentationContext ${iri(context)} ; rv:presentationLanguage ${lit(normalized)} .
+      FILTER NOT EXISTS { ?head a rv:ErasedRevision } }
+  } LIMIT ${QUESTION_PRESENTATION_COST.lookupRows}`)).results?.bindings ?? [];
+  if (rows.length > 1) throw new RevisionCorrupt('Rating question presentation tuple is ambiguous');
+  return rows[0]?.component ? { component: rows[0].component.value, revision: rows[0].head!.value } : null;
+}
 
 export interface QuestionPresentationIntent {
   admission: SemanticAdmission;

@@ -62,6 +62,12 @@ async function fixture() {
         } as T;
       if (path.startsWith('/v1/lexicon/definitions/'))
         return definitions.get(path.split('/').at(-1)!) as T;
+      if (path === '/v1/rating-question-presentations') {
+        const saved = presentations.get(url.searchParams.get('context')!)?.get(url.searchParams.get('language')!);
+        if (!saved) return { presentation: null } as T;
+        const { component, revision, ...state } = saved;
+        return { presentation: { component, revision, state } } as T;
+      }
       if (path.startsWith('/v1/rating-contexts/')) {
         const question = questions.get(path.split('/').at(-1)!)!;
         const language = url.searchParams.get('languages') ?? 'en';
@@ -122,7 +128,7 @@ async function fixture() {
       if (path === '/v1/rating-question-presentations') {
         const state = body.state as Record<string, unknown>;
         const languages = presentations.get(state.context as string) ?? new Map();
-        languages.set(state.language as string, state);
+        languages.set(state.language as string, { ...state, component: native(key), revision: native(`${key}:head`) });
         presentations.set(state.context as string, languages);
         return { component: native(key), revision: native(`${key}:head`) } as T;
       }

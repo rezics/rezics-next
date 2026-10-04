@@ -4,6 +4,7 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { AdmissionDenied } from '../modules/access/admission.ts';
 import { admittedQuestionPresentationChange } from '../modules/rating/question-presentation-admitted.ts';
 import {
+  findQuestionPresentation,
   readQuestionPresentationCurrent,
   readQuestionPresentationRevision,
 } from '../modules/rating/question-presentation.ts';
@@ -13,7 +14,10 @@ import {
   QUESTION_PRESENTATION_PROFILE,
   QUESTION_PRESENTATION_ACTIONS,
   questionPresentationScope,
+  QUESTION_PRESENTATION_COST,
 } from '../modules/rating/question-presentation-schema.ts';
+import { languageTagSchema } from '../modules/display-language/schema.ts';
+import { fusekiReadBudget } from '../infrastructure/fuseki.ts';
 import { SemanticTargetUnavailable } from '../modules/semantic/command.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readId } from '../modules/work/read-contract.ts';
@@ -42,7 +46,7 @@ const read = t.Object({
   sourcePosition,
 });
 export const openApiOperations = {
-  '/v1/rating-question-presentations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rating-question-presentations': { post: { bearer: true, idempotencyKey: true }, get: { bearer: false } },
   '/v1/rating-question-presentations/{id}': { get: { bearer: false } },
   '/v1/rating-question-presentations/{id}/revisions/{revision}': { get: { bearer: false } },
 } as const;
@@ -113,6 +117,37 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
     );
   };
   return new Elysia()
+    .get('/v1/rating-question-presentations', {
+      query: t.Object({ context: readId, language: languageTagSchema(255), actingSubject: t.Optional(readId) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ presentation: t.Nullable(read) }), ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        return await fusekiReadBudget.run({ callsLeft: QUESTION_PRESENTATION_COST.lookupGraphCalls,
+          bytesLeft: QUESTION_PRESENTATION_COST.lookupGraphBytes,
+          signal: AbortSignal.any([request.signal, AbortSignal.timeout(QUESTION_PRESENTATION_COST.lookupDeadlineMs)]),
+        }, async () => {
+          await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
+          await readAuthoredRatingQuestion(work.environment, query.context);
+          const found = await findQuestionPresentation(work.environment, query.context, query.language);
+          if (!found) return Response.json({ presentation: null }, { headers: { 'cache-control': 'no-store' } });
+          try {
+            // Hydrate the immutable head captured by the tuple lookup. Reading
+            // current again can mix a concurrent review's projection with the
+            // prior manifest; the caller's next write already uses head CAS.
+            const response = await readRoute(request, query.actingSubject, found.component, found.revision);
+            const presentation = await response.json();
+            if (presentation.revision !== found.revision) throw new SemanticTargetUnavailable('Presentation moved during lookup');
+            return Response.json({ presentation }, { headers: { 'cache-control': 'no-store' } });
+          } catch (error) {
+            if (!(error instanceof SemanticTargetUnavailable)) throw error;
+            // A draft or protected head must be indistinguishable from an empty
+            // language slot to a caller without editorial authority.
+            return Response.json({ presentation: null }, { headers: { 'cache-control': 'no-store' } });
+          }
+        });
+      } catch (error) { return semanticError(error); }
+    })
     .post(
       '/v1/rating-question-presentations',
       {

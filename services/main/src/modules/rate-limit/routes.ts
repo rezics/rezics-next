@@ -58,6 +58,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/lexicon/presentations/{id}', 'read'],
   ['GET', '/v1/lexicon/presentations/{id}/revisions/{revision}', 'read'],
   ['POST', '/v1/rating-question-presentations', 'write'],
+  ['GET', '/v1/rating-question-presentations', 'read'],
   ['GET', '/v1/rating-question-presentations/{id}', 'read'],
   ['GET', '/v1/rating-question-presentations/{id}/revisions/{revision}', 'read'],
   ['GET', '/v1/resources/{id}/parts', 'read'],

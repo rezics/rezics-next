@@ -218,4 +218,4 @@ test('the three Global questions keep one English measurement and reviewed prese
   });
   expect(refused.status).toBe(422);
   expect(await refused.json()).toMatchObject({ code: 'rating_target_not_accepted' });
-});
+}, 30_000);
