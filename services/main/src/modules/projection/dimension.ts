@@ -26,6 +26,8 @@ export interface Coordinate {
   dimension: FrameDimension;
   /** The Work a position lies in; Structure ownership is the only containment a frame uses. */
   work?: string | null;
+  /** Disclosed active in-continuity memberships, loaded once for the request's Works. */
+  continuities?: readonly string[];
 }
 
 /** A target as a typed coordinate; null when its type has no dimension. */
@@ -51,6 +53,25 @@ export function covers(applicability: readonly Coordinate[], frames: readonly Co
     const exact = frame.get(dimension);
     if (exact && values.has(exact.iri)) return true;
     const position = frame.get('position');
-    return dimension === 'work' && !!position?.work && values.has(position.work);
+    if (dimension === 'work' && !!position?.work && values.has(position.work)) return true;
+    return dimension === 'continuity' && !exact && [frame.get('work'), position]
+      .some(coordinate => coordinate?.continuities?.some(continuity => values.has(continuity)));
   });
 }
+
+/** More constrained dimensions first, then exact coordinates before inherited coverage.
+ * Alternatives in one dimension never inflate specificity. */
+export function specificity(applicability: readonly Coordinate[], frames: readonly Coordinate[]) {
+  const dimensions = new Set(applicability.map(coordinate => coordinate.dimension)).size;
+  const exact = new Set(applicability.filter(coordinate => frames.some(frame =>
+    frame.dimension === coordinate.dimension && frame.iri === coordinate.iri)).map(coordinate => coordinate.dimension)).size;
+  return { dimensions, exact, score: dimensions * 16 + exact };
+}
+
+/** Structural owner types take precedence over descriptive dimensions, as dimensionOf does. */
+export const coordinateTypes: readonly (readonly [string, FrameDimension])[] = [
+  ['https://schema.org/CreativeWork', 'work'], [`https://rezics.com/vocab/TextContribution`, 'realization'],
+  [`https://rezics.com/vocab/Realization`, 'realization'], [`https://rezics.com/vocab/Release`, 'release'],
+  [`https://rezics.com/vocab/FixedRelease`, 'release'], ['https://schema.org/ListItem', 'position'],
+  ...[...descriptiveDimensions].map(([type, dimension]) => [type, dimension] as const),
+];

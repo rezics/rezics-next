@@ -17,26 +17,18 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { groupUuid } from './shared.ts';
 import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
-import { relationRenderingSchema } from './lexicon.ts';
-import { resourceSummary } from '../modules/media/summary-contract.ts';
+import { resourceRelationEntry as entry } from '../modules/entity-page/contract.ts';
 import { readingPositionQuery } from './reading-positions.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { readWikiClaimEvidence, projectWikiEvidence } from '../modules/wiki/evidence-read.ts';
-import { wikiClaimEvidence } from '../modules/wiki/evidence-contract.ts';
+import { frameQuery, readFrames } from '../modules/projection/frame-read.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
 const receipt = t.Object({ profile: t.Literal('work-derivation-v2'), derivation: native, receipt: t.String(),
   sourcePosition: position, replayed: t.Boolean() });
-const entry = t.Object({ relation: native, kind: t.Union([t.Literal('occurrence'), t.Literal('derivation'), t.Literal('collection')]),
-  revision: t.Nullable(native), evidence: t.Nullable(t.String()),
-  citations: t.Optional(t.Array(wikiClaimEvidence)),
-  sourceVersionStatus: t.Optional(t.Union([t.Literal('exact'), t.Literal('unresolved')])),
-  sourceMainVersion: t.Optional(t.Nullable(native)), sourceMainRevision: t.Optional(t.Nullable(native)),
-  targetMainRevision: t.Optional(native), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
-
 export const openApiOperations = {
   '/v1/resources/{resource}/relations': { get: { bearer: false } },
   '/v1/resources/{resource}/derivations': { post: { bearer: true, idempotencyKey: true } },
@@ -80,7 +72,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
     })
     .get('/v1/resources/:resource/relations', {
       params: t.Object({ resource: groupUuid }),
-      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery, languages: t.Optional(t.String({ maxLength: 8192 })),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery, frame: frameQuery, languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
@@ -97,6 +89,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         const actor = principal ? query.actingSubject! : null;
         const page = await readingPositionRead(work, request, principal, actor ?? undefined, async boundary => {
           const visibility = (refs: readonly string[]) => boundary.visible(refs);
+          const frames = query.frame ? await readFrames(boundary.session, query.frame) : undefined;
           const canReadSemantic = (ref: string) => work.access.canReadSemanticResource?.(
             principal, actor, ref, undefined, fuseki) ?? Promise.resolve(false);
           const reader = {
@@ -114,6 +107,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
             bytesLeft: RELATION_PAGE_COST.graphBytes }, async () => readResourceRelations(work.environment, {
             resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
+            frames,
             canRead: async ref => (await canReadSemantic(ref)
               || (await summarize([ref]))[0]?.status === 'available')
               && (await discloseInventory(work.environment, [{ owner: 'graph', resource: ref,

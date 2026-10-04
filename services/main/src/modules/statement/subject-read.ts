@@ -24,6 +24,8 @@ import { readingBoundary } from '../reading-position/boundary.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
 import { readWikiClaimEvidence, projectWikiEvidence } from '../wiki/evidence-read.ts';
 import type { WikiEvidenceRow } from '../wiki/evidence.ts';
+import { framePattern, matchFromScore } from '../projection/frame-read.ts';
+import type { Coordinate } from '../projection/dimension.ts';
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
  * disclosed lookahead. Withheld rows never produce a short continuing page.
@@ -149,6 +151,7 @@ export async function readSubjectStatements(
   session: WorkReadSession,
   resource: string,
   context = GLOBAL_CLASSIFICATION_CONTEXT,
+  frames?: readonly Coordinate[],
 ): Promise<Page> {
   await resolveTargets(session, [resource], 'discussion');
   const boundary = readingBoundary(session);
@@ -165,9 +168,10 @@ export async function readSubjectStatements(
     session.principal,
     session.options.actingSubject ?? null,
     await boundary.binding(),
+    ...(frames ? [frames] : []),
   ];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  let after: { phase: 'component' | 'statement'; predicate?: string } = { phase: 'component' };
+  let after: { phase: 'component' | 'statement'; predicate?: string; score?: number } = { phase: frames ? 'statement' : 'component' };
   if (cursor) {
     try {
       after = JSON.parse(cursor.order) as typeof after;
@@ -176,7 +180,8 @@ export async function readSubjectStatements(
     }
     if (
       !['component', 'statement'].includes(after.phase) ||
-      (after.phase === 'statement' && typeof after.predicate !== 'string')
+      (after.phase === 'statement' && (typeof after.predicate !== 'string'
+        || frames && (!Number.isInteger(after.score) || after.score! < 0 || after.score! > 136)))
     ) {
       throw new WorkReadInvalid('Statement cursor is invalid');
     }
@@ -209,8 +214,8 @@ export async function readSubjectStatements(
   };
   const items: Item[] = [];
   const publishedEvidence = new Map<string,WikiEvidenceRow[]>();
-  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string }[] = [];
-  if (after.phase === 'component') {
+  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; score?: number }[] = [];
+  const appendProperties = async () => {
     const component = await readCurrentComponent(session.deps.environment, resource, 'resource');
     const properties =
       component?.state.component === 'resource' && component.state.lifecycle === 'active'
@@ -219,7 +224,7 @@ export async function readSubjectStatements(
     const keyed = properties
       .map((property) => ({ key: JSON.stringify([property.predicate, property.value]), property }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-      .filter((item) => !cursor || item.key > cursor.after);
+      .filter((item) => !cursor || after.phase !== 'component' || item.key > cursor.after);
     for (
       let offset = 0;
       offset < keyed.length && items.length <= limit;
@@ -244,6 +249,7 @@ export async function readSubjectStatements(
           value: property.value,
           qualifiers: { applicability: [], interpretationDefinitions: [] },
           sources: [],
+          ...(frames ? { frameMatch: matchFromScore(0) } : {}),
         });
         positions.push({
           phase: 'component',
@@ -251,8 +257,10 @@ export async function readSubjectStatements(
         });
       }
     }
-  }
-  if (items.length <= limit) {
+  };
+  if (!frames && after.phase === 'component') await appendProperties();
+  if (items.length <= limit && (!frames || after.phase === 'statement')) {
+    const coverage = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
     const pattern = inherit === null ? '' : acceptedStatementPattern(context, inherit);
     const active = `GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
       rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }`;
@@ -266,7 +274,7 @@ export async function readSubjectStatements(
     ];
     let statementAfter =
       cursor && after.phase === 'statement'
-        ? { predicate: after.predicate!, statement: cursor.after }
+        ? { predicate: after.predicate!, statement: cursor.after, score: after.score ?? 0 }
         : null;
     while (items.length <= limit) {
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
@@ -274,16 +282,19 @@ export async function readSubjectStatements(
         !candidates.length
           ? []
           : await session.query(
-              `SELECT ?predicate ?statement
+              `SELECT ?predicate ?statement ${coverage ? '?specificity' : ''}
       (MIN(CONCAT(STR(?decision), "|", ?decisionSource)) AS ?acceptance) WHERE {
       ${candidates.map(candidate => `{ ${candidate} }`).join(' UNION ')}
+      ${coverage ? `${coverage.filter} BIND((${coverage.score}) AS ?specificity)` : ''}
       ${
         statementAfter
-          ? `FILTER(STR(?predicate) > ${lit(statementAfter.predicate)} ||
-        STR(?predicate) = ${lit(statementAfter.predicate)} && STR(?statement) > ${lit(statementAfter.statement)})`
+          ? `FILTER(${coverage ? `?specificity < ${statementAfter.score} || ?specificity = ${statementAfter.score} && (` : ''}
+        STR(?predicate) > ${lit(statementAfter.predicate)} ||
+        STR(?predicate) = ${lit(statementAfter.predicate)} && STR(?statement) > ${lit(statementAfter.statement)}${coverage ? ')' : ''})`
           : ''
       }
-    } GROUP BY ?predicate ?statement ORDER BY STR(?predicate) STR(?statement) LIMIT ${batchSize}`,
+    } GROUP BY ?predicate ?statement ${coverage ? '?specificity' : ''}
+      ORDER BY ${coverage ? 'DESC(?specificity)' : ''} STR(?predicate) STR(?statement) LIMIT ${batchSize}`,
               batchSize,
             );
       const page = rows;
@@ -403,6 +414,7 @@ export async function readSubjectStatements(
             meaningKey: row.key.value,
             qualifiers,
             sources,
+            ...(frames ? { frameMatch: matchFromScore(Number(candidate.specificity?.value)) } : {}),
             ...(evidence.length ? {
               publication: { kind: 'wiki-bundle' as const,works: [...new Set(evidence.map(row => row.sourceWork))] } } : {}),
             acceptance: decision ? {
@@ -415,6 +427,7 @@ export async function readSubjectStatements(
             phase: 'statement',
             key: row.statement!.value,
             predicate: row.predicate!.value,
+            ...(frames ? { score: Number(candidate.specificity?.value) } : {}),
           });
         }
         const disclosedStatements = await boundary.visible(batchPositions.map(position => position.key));
@@ -426,9 +439,11 @@ export async function readSubjectStatements(
       }
       if (rows.length < batchSize) break;
       const last = rows.at(-1)!;
-      statementAfter = { predicate: last.predicate!.value, statement: last.statement!.value };
+      statementAfter = { predicate: last.predicate!.value, statement: last.statement!.value,
+        score: Number(last.specificity?.value ?? 0) };
     }
   }
+  if (frames && items.length <= limit) await appendProperties();
   let nextCursor: string | null = null;
   if (items.length > limit) {
     const last = positions[limit - 1]!;
@@ -439,6 +454,7 @@ export async function readSubjectStatements(
       JSON.stringify({
         phase: last.phase,
         ...(last.predicate ? { predicate: last.predicate } : {}),
+        ...(last.score !== undefined ? { score: last.score } : {}),
       }),
     );
     items.splice(limit);

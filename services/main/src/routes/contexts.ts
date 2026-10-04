@@ -24,10 +24,11 @@ import { CONTEXT_RULE_DEPENDENCY_FAMILY, CONTEXT_RULE_FAMILY, changeContextRule,
   registerRuleDependencies, ruleContextBasis, staleRuleDependencies } from '../modules/context/rule.ts';
 import { FiniteRuleRejected } from '../modules/semantic/finite-rule.ts';
 import { ReasoningInputRejected, ReasoningProfileRejected } from '../modules/semantic/reasoning.ts';
+import { StatementProjectionRefused } from '../modules/statement/projection.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
-import { targetSummaries } from '../modules/target/resolve.ts';
+import { targetRead, targetSummaries } from '../modules/target/resolve.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance } from '../modules/statement/read.ts';
 import { CUTOVER_FAMILY, MIGRATION_FAMILY, cutoverRequest, cutoverV1Decisions,
   migrateV1Decision, migrationRequest } from '../modules/statement/migrate-v1.ts';
@@ -257,6 +258,7 @@ const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
       context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
 
 function contextError(error: unknown): Response {
+  if (error instanceof StatementProjectionRefused) return problem(422, error.code, error.message);
   if (error instanceof FiniteRuleRejected || error instanceof ReasoningInputRejected
     || error instanceof ReasoningProfileRejected) {
     return problem(422, 'rule_profile_rejected', 'Selected rule or fact is outside the admitted profile');
@@ -721,7 +723,13 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             const interpretation = seen.interpretation = await statementInterpretation(env, input, speaker);
             // Sealed as unavailable: the same key cannot later commit a different meaning.
             if (interpretation.state !== 'resolved') throw new ContextCommandUnavailable('interpretation is not resolved');
-            return recordStatement(env, admission, input, speaker);
+            return recordStatement(env, admission, input, speaker, undefined, async projection =>
+              targetRead(env, { access: work.access, principal, actingSubject: input.actingSubject,
+                readers: { mediaAccess: work.mediaAccess, contextSelections: work.contextSelections, governance: work.governance } },
+              async session => {
+                const [summary] = (await targetSummaries(session, [projection])).summaries;
+                return summary?.status === 'available' && summary.type === 'projection';
+              }));
           } });
         const read = await readStatement(env, receipt.component!, async () => true);
         return written(receipt, { profile: 'statement-v1', statement: receipt.component,

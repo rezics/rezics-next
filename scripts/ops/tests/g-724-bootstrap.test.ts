@@ -145,6 +145,11 @@ async function fixture() {
         definitions.set(state.notation, { definition: component });
         return { component, revision: native(`${state.notation}:revision`) } as T;
       }
+      if (path === '/v1/classification-vocabulary') {
+        const scheme = body.scheme as { id: string } | null;
+        return { scheme: scheme?.id ?? native(`${key}:scheme`), schemeHead: native(`${key}:head`),
+          concept: native(`${key}:concept`) } as T;
+      }
       if (path === '/v1/lexicon/presentations')
         return { component: native(key), revision: native(`${key}:revision`) } as T;
       if (path === '/v1/sources/intakes')
@@ -222,6 +227,8 @@ test('G-724 one API journey creates empty mounts, vocabulary and bounded intake;
     await verifyBootstrap(h.api, first, h.zones);
     expect(first.zones).toHaveLength(3);
     expect(first.definitions).toHaveLength(relationLexiconSeed.length);
+    expect(Object.keys(first.vocabulary!.variantKinds)).toEqual(['persona', 'counterpart']);
+    expect(Object.keys(first.vocabulary!.canonicity.concepts)).toEqual(['canon', 'legends', 'semi-canon', 'non-canon']);
     expect(first.counts).toEqual({ 'https://schema.org/VideoGame': 1 });
     expect(first.outcome.status).toBe('completed');
     expect(first.outcome.items[0]!.receipt).toMatch(/^urn:rezics:receipt:/);

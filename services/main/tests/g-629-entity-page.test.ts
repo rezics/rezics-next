@@ -69,7 +69,7 @@ test('G-629: base × registry presentation matrix admits only bound sections and
     realization: ['statements', 'relations', 'discussion'],
     occurrence: ['statements', 'relations', 'discussion'],
     resource: ['statements', 'relations', 'discussion'],
-    projection: [],
+    projection: ['statements', 'relations', 'ratings', 'reviews', 'discussion'],
   };
   for (const base of Object.keys(expected) as Base[]) {
     for (const entry of [

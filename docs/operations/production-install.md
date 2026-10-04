@@ -20,6 +20,8 @@ Provision the operator's Person Agent through Main's Agent API. Put its native
 IRI and the Account subject in a local copy of
 [the launch plan](../../tests/fixtures/launch/plan.yaml). Use the operator's
 Account session cookie and a consented Main bearer token for that same subject.
+Include `classification:define` in the token's scopes: bootstrap installs the
+variant-kind and canonicity Concept schemes through the vocabulary API.
 Supply them as `BOOTSTRAP_ACCOUNT_COOKIE` and `BOOTSTRAP_MAIN_TOKEN`; neither is
 written to the journal. Renew the token through Account if it expires, then
 repeat the command with the same plan and namespace.

@@ -20,6 +20,8 @@ import { RevisionCorrupt } from '../work/history.ts';
 import type { ResourceSummary } from '../media/summary.ts';
 import { discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import { framePattern, matchFromScore } from '../projection/frame-read.ts';
+import type { Coordinate } from '../projection/dimension.ts';
 
 export const RELATION_PAGE_COST = {
   pageLimit: 32,
@@ -41,9 +43,11 @@ export interface RelationPageEntry {
   targetMainRevision?: string;
   rendering: RelationRendering | null;
   counterparts: ResourceSummary[];
+  frameMatch?: ReturnType<typeof matchFromScore>;
 }
 interface Candidate {
   key: string;
+  score?: number;
   relation: string;
   kind: RelationPageEntry['kind'] | 'author-credit';
 }
@@ -60,6 +64,8 @@ interface Cursor {
   sequence: string;
   after: string;
   readingPosition?: string;
+  frames?: readonly Coordinate[];
+  score?: number;
 }
 
 async function position(env: WorkActivationEnvironment) {
@@ -76,9 +82,12 @@ export async function relationCandidates(
   env: WorkActivationEnvironment,
   resource: string,
   after?: string,
+  frames?: readonly Coordinate[],
+  afterScore = 0,
 ): Promise<Candidate[]> {
+  const coverage = frames ? framePattern(frames, '?relation', GRAPHS.current) : null;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT DISTINCT ?relation ?kind ?key WHERE {
+    SELECT DISTINCT ?relation ?kind ?key ${coverage ? '?specificity' : ''} WHERE {
       { GRAPH ${iri(GRAPHS.current)} { ?relation a rv:RelationOccurrence ; rv:occurrenceHead ?head }
         GRAPH ${iri(GRAPHS.revisions)} { ?head rv:lifecycle rv:Active ; rv:participation ?part .
           ?part rv:participant ${iri(resource)} }
@@ -100,12 +109,14 @@ export async function relationCandidates(
         FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
       } BIND("collection" AS ?kind) }
       BIND(CONCAT(?kind, ":", STR(?relation)) AS ?key)
-      ${after ? `FILTER(?key > ${lit(after)})` : ''}
-    } ORDER BY ?key LIMIT ${RELATION_PAGE_COST.scanLimit}`);
+      ${coverage ? `${coverage.filter} BIND((${coverage.score}) AS ?specificity)` : ''}
+      ${after ? `FILTER(${coverage ? `?specificity < ${afterScore} || ?specificity = ${afterScore} && ` : ''}?key > ${lit(after)})` : ''}
+    } ORDER BY ${coverage ? 'DESC(?specificity)' : ''} ?key LIMIT ${RELATION_PAGE_COST.scanLimit}`);
   return (result.results?.bindings ?? []).map((row) => ({
     relation: row.relation!.value,
     kind: row.kind!.value as Candidate['kind'],
     key: row.key!.value,
+    ...(coverage ? { score: Number(row.specificity!.value) } : {}),
   }));
 }
 
@@ -256,6 +267,7 @@ export async function readResourceRelations(
     summarize: (references: string[]) => Promise<ResourceSummary[]>;
     visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
     readingPosition?: string;
+    frames?: readonly Coordinate[];
   },
 ) {
   checkedNativeIri(input.resource);
@@ -291,6 +303,8 @@ export async function readResourceRelations(
         !cursor ||
         cursor.resource !== input.resource ||
         cursor.readingPosition !== input.readingPosition ||
+        JSON.stringify(cursor.frames) !== JSON.stringify(input.frames) ||
+        input.frames && (!Number.isInteger(cursor.score) || cursor.score! < 0 || cursor.score! > 136) ||
         typeof cursor.after !== 'string' ||
         !/^(occurrence|derivation|collection|author-credit):https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(
           cursor.after,
@@ -319,10 +333,11 @@ export async function readResourceRelations(
   const publiclyDisclosed = new Set<string>();
   const references = new Set<string>([input.resource]);
   let after = cursor?.after,
+    afterScore = cursor?.score ?? 0,
     hasNext = false,
     exhausted = false;
   for (let scan = 0; scan < RELATION_PAGE_COST.maxScans; scan++) {
-    const candidates = await relationCandidates(env, input.resource, after);
+    const candidates = await relationCandidates(env, input.resource, after, input.frames, afterScore);
     for (let offset = 0; offset < candidates.length && !hasNext; offset += DISCLOSURE_COST.batch) {
       const disclosed: { candidate: Candidate; resolved: Resolved }[] = [];
       const batch = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
@@ -340,6 +355,7 @@ export async function readResourceRelations(
         decisions[index] === 'visible' && candidate.kind === 'occurrence').map(candidate => candidate.relation));
       for (const [index, candidate] of batch.entries()) {
         after = candidate.key;
+        afterScore = candidate.score ?? 0;
         if (decisions[index] !== 'visible') continue;
         const resolved = await resolveCandidate(
           env,
@@ -394,7 +410,7 @@ export async function readResourceRelations(
   }
   const items: RelationPageEntry[] = [];
   const renderings = new Map<string, RelationRendering>();
-  for (const { resolved } of selected) {
+  for (const { candidate, resolved } of selected) {
     let rendering: RelationRendering | null = null;
     if (resolved.meaning && resolved.viewingRole && resolved.bindings) {
       const key = `${resolved.meaning.revision}:${resolved.viewingRole}`;
@@ -434,6 +450,7 @@ export async function readResourceRelations(
     }
     items.push({
       ...resolved.entry,
+      ...(input.frames ? { frameMatch: matchFromScore(candidate.score!) } : {}),
       rendering,
       counterparts: resolved.references.map((ref) =>
         summaries.find((summary) => summary.reference === ref)!,
@@ -468,6 +485,7 @@ export async function readResourceRelations(
             ...snapshot,
             after: selected.at(-1)!.candidate.key,
             readingPosition: input.readingPosition,
+            ...(input.frames ? { frames: input.frames, score: selected[selected.length - 1]!.candidate.score } : {}),
           }),
         ).toString('base64url')
       : null,

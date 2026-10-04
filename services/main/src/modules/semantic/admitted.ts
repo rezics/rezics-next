@@ -6,7 +6,7 @@ import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironmen
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { ModelGenerationChanged } from './generation-guard.ts';
-import { canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
+import { assertIdentityParticipants, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
@@ -148,8 +148,10 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, action: 'relation.change', family: RELATION_CHANGE_FAMILY,
     scope: input.occurrence ? `relation:edit:${input.occurrence}` : 'relation:create:root', digest,
-    references: async () => [...new Set(state.participations.flatMap(item =>
-      item.participant.kind === 'resource' ? [item.participant.ref] : []))],
+    references: async principal => {
+      await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
+      return [...new Set(state.participations.flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+    },
     dispatch: admission => changeRelationOccurrence(env, { admission,
       ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input }),
     readTerminal: id => readRelationChangeTerminal(env, id),

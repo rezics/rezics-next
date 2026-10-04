@@ -421,3 +421,12 @@ export const variantKindConcepts = [
     { language: 'fr', value: 'Homologue' }, { language: 'es', value: 'Contraparte' },
   ] },
 ] as const;
+
+/** Canonicity is a speaker's judgment relative to a continuity, never a frame or a policy. */
+export const canonicityConcepts = [
+  { key: 'canon', labels: [{ language: 'en', value: 'Canon' }] },
+  { key: 'legends', labels: [{ language: 'en', value: 'Legends' }] },
+  { key: 'semi-canon', labels: [{ language: 'en', value: 'Semi-canon' }] },
+  { key: 'non-canon', labels: [{ language: 'en', value: 'Non-canon' }] },
+] as const;
+export const CANONICITY_PROPERTY = 'https://rezics.com/vocab/canonicity';

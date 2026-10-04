@@ -17,6 +17,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { readingPositionQuery } from './reading-positions.ts';
+import { frameQuery, readFrames } from '../modules/projection/frame-read.ts';
 
 export const openApiOperations = {
   '/v1/resources/{resource}/page': { get: { bearer: false } },
@@ -73,7 +74,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         params,
         detail,
         query: t.Object(
-          { ...pageQuery, context: t.Optional(entityPageContext), position: readingPositionQuery },
+          { ...pageQuery, context: t.Optional(entityPageContext), position: readingPositionQuery, frame: frameQuery },
           { additionalProperties: false },
         ),
         response: { 200: subjectStatementPage, ...workReadProblems },
@@ -81,8 +82,9 @@ export function entityPageRoutes(work: MainWorkDependencies) {
       async ({ request, params: path, query }) => {
         try {
           return response(
-            await workRead(work, request, query, (session) =>
-              readSubjectStatements(session, `https://rezics.com/id/${path.resource}`, query.context),
+            await workRead(work, request, query, async (session) =>
+              readSubjectStatements(session, `https://rezics.com/id/${path.resource}`, query.context,
+                query.frame ? await readFrames(session, query.frame) : undefined),
             ),
           );
         } catch (error) {

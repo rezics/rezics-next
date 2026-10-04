@@ -17,6 +17,9 @@ test('G-724 platform role has closed actions and exact controller/principal fenc
     true,
   );
   expect(platformAdministratorAction('catalogue.verify', 'catalogue:verify:root')).toBe(true);
+  expect(platformAdministratorAction('classification.proposition.define', 'classification:define:global')).toBe(true);
+  expect(platformAdministratorAction('classification.proposition.define', `classification:define:${actor}`)).toBe(false);
+  expect(platformAdministratorAction('statement.decide', 'classification:decide:global')).toBe(false);
   expect(platformAdministratorAction('zone.edit', `zone:edit:${actor}`)).toBe(true);
   expect(platformAdministratorAction('content.draft', `content:draft:${actor}`)).toBe(false);
   for (const action of ['work.read', 'work.edit', 'collection.edit']) {
@@ -102,7 +105,7 @@ test('G-724 administrator resource authority is restricted to owned Zones and cr
       await platformAdministratorTargetAllowed(client, graph, principal, actor, action!, scope!),
     ).toBe(false);
   }
-  expect(calls).toBe(3);
+  expect(calls).toBe(4);
   expect(
     await platformAdministratorTargetAllowed(
       client,

@@ -3,7 +3,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { admitted, type AdmittedRelationChangeInput, type SemanticAccess } from '../semantic/admitted.ts';
 import { SemanticChangeRejected } from '../semantic/command.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { canonicalRelation, changeRelationOccurrence, readCurrentOccurrence, readExactDefinition,
+import { assertIdentityParticipants, canonicalRelation, changeRelationOccurrence, readCurrentOccurrence, readExactDefinition,
   readRelationChangeTerminal, relationChangeDigest, RELATION_CHANGE_FAMILY, type ExactDefinition,
   type OccurrenceState } from './change.ts';
 
@@ -25,7 +25,11 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
   const subject = relationSubjectWork(definition, state);
   const present = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
     ${iri(subject)} a <https://schema.org/CreativeWork> } }`);
-  if (!present.boolean) throw new SemanticChangeRejected('unavailable-reference', 'subject Work is unavailable');
+  if (!present.boolean) {
+    const principal = await account.verify(request, ['work:edit']);
+    await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
+    throw new SemanticChangeRejected('unavailable-reference', 'subject Work is unavailable');
+  }
   if (input.occurrence) {
     const current = await readCurrentOccurrence(env, input.occurrence);
     const previous = current ? await readExactDefinition(env, current.state.definition) : null;
@@ -47,6 +51,7 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
     scope: `work:edit:${subject}`, digest,
     references: async principal => {
       currentPrincipal = principal;
+      await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
       if (!await access.canReadWork(principal, input.actingSubject, subject)) {
         throw new SemanticChangeRejected('unavailable-reference', 'subject Work is unavailable');
       }

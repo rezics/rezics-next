@@ -17,6 +17,9 @@ import {
 import { entitySection, type SectionId } from './contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
+import { readFrames } from '../projection/frame-read.ts';
+import { readSubjectStatements } from '../statement/subject-read.ts';
+import { readPageRelations } from './relations.ts';
 
 // Stable anchors follow the Work hub order. Structural ownership binds sections;
 // descriptive types can only select the registry's explicit presentation slots.
@@ -35,8 +38,7 @@ export const baseSections = {
   realization: ['statements', 'relations', 'discussion'],
   occurrence: ['statements', 'relations', 'discussion'],
   resource: ['statements', 'relations', 'discussion'],
-  // The projection page view declares its sections when it exists.
-  projection: [],
+  projection: ['statements', 'relations', 'ratings', 'reviews', 'discussion'],
 } as const satisfies Record<Base, readonly SectionId[]>;
 
 export function pageRegistry(target: Pick<ResolvedTarget, 'base' | 'types'>) {
@@ -116,6 +118,30 @@ export async function readEntityPage(
   const registry = pageRegistry(target);
   const sections = pageSections(target, mountedReads);
   const work = target.base === 'work' ? await readWorkHeader(session, target.resource) : null;
+  let projection;
+  if (target.base === 'projection') {
+    const parts = summaryBatch.status === 'available' ? summaryBatch.parts : undefined;
+    if (!parts) throw new WorkReadUnavailable('Projection parts are unavailable');
+    const frames = await readFrames(session, parts.frames.map(frame => frame.reference));
+    const statements = await readSubjectStatements(session, parts.subject.reference, undefined, frames);
+    const relations = await readPageRelations(session, parts.subject.reference, frames);
+    projection = { subject: parts.subject, frames: parts.frames, statements, relations,
+      ratings: [], reviews: [], discussion: [] };
+    const selectedPosition = new URL(session.request.url).searchParams.get('position');
+    for (const section of sections) if (['statements','relations'].includes(section.id)) {
+      const query = new URLSearchParams();
+      for (const frame of frames) query.append('frame', frame.iri);
+      if (selectedPosition) query.set('position', selectedPosition);
+      if (session.options.actingSubject) query.set('actingSubject', session.options.actingSubject);
+      section.href = `/v1/resources/${parts.subject.reference.slice(-36)}/${section.id}?${query}`;
+    }
+    for (const id of ['ratings','reviews','discussion'] as const) {
+      const href = `${new URL(session.request.url).pathname}${new URL(session.request.url).search}#${id}`;
+      const section = sections.find(section => section.id === id);
+      if (section) section.href = href;
+      else sections.push({ id, href, actions: [] });
+    }
+  }
   if (
     work?.disclosure === 'public' &&
     session.deps.access.readRatingAggregateInventory &&
@@ -164,6 +190,7 @@ export async function readEntityPage(
     work,
     sections,
     ...(mergedFacts ? { mergedFacts } : {}),
+    ...(projection ? { projection } : {}),
     sourcePosition: session.position,
   };
 }

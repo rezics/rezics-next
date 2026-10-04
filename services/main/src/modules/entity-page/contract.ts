@@ -5,6 +5,8 @@ import { typeDefinition } from '../types/contract.ts';
 import { readId, readPosition, workHeader } from '../work/read-contract.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { wikiClaimEvidence } from '../wiki/evidence-contract.ts';
+import { frameMatch } from '../projection/frame-read.ts';
+import { relationRenderingSchema } from '../../routes/lexicon.ts';
 
 const closed = { additionalProperties: false } as const;
 export const entityPageContext = t.Union([t.Literal(GLOBAL_CLASSIFICATION_CONTEXT), readId]);
@@ -55,7 +57,8 @@ export const entitySection = t.Object(
   },
   closed,
 );
-export const entityPage = t.Object(
+// Defined after the embedded inventories below.
+const entityPageFields =
   {
     profile: t.Literal('entity-page-v1'),
     target: resolvedTarget,
@@ -69,9 +72,7 @@ export const entityPage = t.Object(
       nextCursor: t.Nullable(t.String()),
     },closed)),
     sourcePosition: readPosition,
-  },
-  closed,
-);
+  };
 
 const value = t.Union([
   t.Object({ kind: t.Literal('resource'), iri: t.String() }, closed),
@@ -102,6 +103,7 @@ const statement = t.Object(
       closed,
     ),
     sources: t.Array(t.String()),
+    frameMatch: t.Optional(frameMatch),
     evidence: t.Optional(t.Array(wikiClaimEvidence, { maxItems: 16 })),
     publication: t.Optional(t.Object({ kind: t.Literal('wiki-bundle'),works: t.Array(readId) },closed)),
     acceptance: t.Nullable(t.Object(
@@ -128,6 +130,7 @@ const componentProperty = t.Object(
       closed,
     ),
     sources: t.Array(t.String()),
+    frameMatch: t.Optional(frameMatch),
   },
   closed,
 );
@@ -152,6 +155,23 @@ export const subjectStatementPage = t.Object(
   closed,
 );
 
+export const resourceRelationEntry = t.Object({ relation: readId,
+  kind: t.Union([t.Literal('occurrence'), t.Literal('derivation'), t.Literal('collection')]),
+  revision: t.Nullable(readId), evidence: t.Nullable(t.String()), frameMatch: t.Optional(frameMatch),
+  citations: t.Optional(t.Array(wikiClaimEvidence)),
+  sourceVersionStatus: t.Optional(t.Union([t.Literal('exact'), t.Literal('unresolved')])),
+  sourceMainVersion: t.Optional(t.Nullable(readId)), sourceMainRevision: t.Optional(t.Nullable(readId)),
+  targetMainRevision: t.Optional(readId), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
+export const resourceRelationPage = t.Object({ profile: t.Literal('resource-relations-v1'), resource: readId,
+  items: t.Array(resourceRelationEntry), next: t.Nullable(t.String()), sourcePosition: readPosition });
+
+export const entityPage = t.Object({ ...entityPageFields,
+  projection: t.Optional(t.Object({ subject: resourceSummary, frames: t.Array(resourceSummary, { minItems: 1, maxItems: 8 }),
+    statements: subjectStatementPage, relations: resourceRelationPage,
+    ratings: t.Array(t.Unknown(), { maxItems: 0 }), reviews: t.Array(t.Unknown(), { maxItems: 0 }),
+    discussion: t.Array(t.Unknown(), { maxItems: 0 }) }, closed)),
+}, closed);
+
 /** Fixed descriptor inventory; one target resolve and its existing owner header.
  * Counts reuse the rating owner only when installed; no inventory-wide COUNT. */
 export const ENTITY_PAGE_COST = {
@@ -160,4 +180,6 @@ export const ENTITY_PAGE_COST = {
   maxSections: sectionIds.length,
   registryReads: 0,
   ratingReads: 1,
+  projectionInventories: 2,
+  projectionPreviewItems: 4,
 } as const;

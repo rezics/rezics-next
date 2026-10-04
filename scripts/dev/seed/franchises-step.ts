@@ -4,14 +4,14 @@ import { SeedApiError } from './api.ts';
 import { catalogueResourceId, loadCatalogue, type CatalogueResponse } from '../../../tests/fixtures/catalogue/load.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { relationLexiconSeed } from './relation-lexicon-data.ts';
-import { seedRelationLexicon } from './relation-lexicon.ts';
+import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
 import type { SeedState } from './state.ts';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 
 const COLLECTIONS = ['sao.franchise', 'index.franchise', 'index.original.reading'];
 const LEXICON = ['rewrite', 'reboot', 'sequel', 'spin-off', 'adaptation',
   'correspondence-equivalent', 'correspondence-partial', 'correspondence-revised',
-  'credit-illustrator', 'credit-concept-supervision'];
+  'credit-illustrator', 'credit-concept-supervision', 'variant-of', 'holds-title', 'represents', 'in-continuity'];
 
 /** Load the catalogue fixture through the same public API the acceptance test uses. */
 export async function seedFranchises(state: SeedState): Promise<void> {
@@ -29,6 +29,16 @@ export async function seedFranchises(state: SeedState): Promise<void> {
     }
     await grantSeedAuthority(pool, input, 'semantic:create:root', 'semantic.change');
     await ensureCatalogueLexicon(state, input, pool, session.token, session.actingSubject);
+    await grantSeedAuthority(pool, input, 'classification:define:global', 'classification.proposition.define');
+    const vocabularyClient = {
+      post: <T>(path: string, body: object, key: string) => state.api.post<T>(path, body, session.token, key),
+      authorizeDefinition: async (receipt: { component: string }) => {
+        await grantSeedAuthority(pool, input, `semantic:read:${receipt.component}`, 'semantic.read');
+        await grantSeedAuthority(pool, input, `semantic:edit:${receipt.component}`, 'semantic.change');
+      },
+    };
+    await seedVariantKindConcepts(vocabularyClient, session.actingSubject, 'catalogue-dev');
+    await seedCanonicity(vocabularyClient, session.actingSubject, 'catalogue-dev');
     await loadCatalogue({ actingSubject: session.actingSubject,
       request: (method, path, body, key) => seedRequest(state, session.token, method, path, body, key),
       grant: async (scope, action) => {

@@ -1,4 +1,4 @@
-import { relationLexiconSeed, variantKindConcepts, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
@@ -164,4 +164,28 @@ export async function seedVariantKindConcepts(
     scheme = { id: created.scheme, expectedHead: created.schemeHead };
   }
   return concepts as Record<(typeof variantKindConcepts)[number]['key'], string>;
+}
+
+/** Public vocabulary writes retain one canonicity scheme and a property DefinitionRef.
+ * A Statement names a Concept as its value, the continuity as applicability and
+ * its authority as speaker; Context acceptance decides which speakers count. */
+export async function seedCanonicity(client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'>,
+  actingSubject: string, namespace: string) {
+  const concepts: Record<string, string> = {};
+  let scheme: { id: string; expectedHead: string } | null = null;
+  for (const concept of canonicityConcepts) {
+    const created: { scheme: string; schemeHead: string; concept: string } = await client.post(
+      '/v1/classification-vocabulary',
+      { profile: 'classification-proposition-v2', scheme, labels: concept.labels, alternativeLabels: [],
+        broader: [], narrower: [], actingSubject }, `${namespace}:canonicity:v1:${concept.key}`);
+    concepts[concept.key] = created.concept;
+    scheme = { id: created.scheme, expectedHead: created.schemeHead };
+  }
+  const definition = await client.post<SeedLexiconReceipt>('/v1/semantic/changes',
+    { profile: 'semantic-change-v1', actingSubject, expectedHead: null,
+      state: { component: 'definition', kind: 'property', notation: 'canonicity', roles: [] } },
+    `${namespace}:canonicity:v1:property`);
+  await client.authorizeDefinition(definition);
+  return { definition, scheme: scheme!.id,
+    concepts: concepts as Record<(typeof canonicityConcepts)[number]['key'], string> };
 }

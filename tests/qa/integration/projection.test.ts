@@ -257,9 +257,10 @@ test('target resolution reports base projection with the report, review, rating,
     // A Resource keeps its own grain: the subject is not made a projection by having them.
     expect((await resolveCommandTarget(session, subject)).base).toBe('resource');
   });
-  // The public page resolves it through the discussion capability, as an entity of its own base with no sections yet.
+  // The page keeps the projection's own judgment inventories and scopes subject facts by its frames.
   expect(await json(await stack.call('GET', `/v1/resources/${local(projection.id)}/page`))).toMatchObject({
-    target: { base: 'projection' }, sections: [] });
+    target: { base: 'projection' }, projection: { ratings: [], reviews: [], discussion: [] },
+    sections: [{ id: 'statements' }, { id: 'relations' }, { id: 'ratings' }, { id: 'reviews' }, { id: 'discussion' }] });
 }, 120_000);
 
 test('an identity reserved by a lost command is adopted by the next caller, and the key row stays append-only', async () => {

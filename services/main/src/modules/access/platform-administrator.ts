@@ -10,6 +10,7 @@ const rootActions: Record<string, string> = {
   'space.create': 'space:create:root',
   'semantic.change': 'semantic:create:root',
   'catalogue.verify': 'catalogue:verify:root',
+  'classification.proposition.define': 'classification:define:global',
 };
 const resourceActions: Record<string, string[]> = {
   'media.labels.protect': ['media:protect'],
@@ -33,7 +34,8 @@ export function platformAdministratorAction(action: string, scope: string): bool
 
 /** Resource authority is limited to this administrator's Zones and definitions.
  * Work/Collection reads and edits retain their ordinary curator/creator policy.
- * Cost: one exact 1 KiB Zone ASK, or the bounded definition-creation proof.
+ * Cost: the bounded definition-creation proof for definition read/edit, with
+ * one exact 1 KiB Zone ASK when a read names another resource.
  * A missing Zone can only be created: its owner command checks the Space owner. */
 export async function platformAdministratorTargetAllowed(
   client: PoolClient,
@@ -50,6 +52,9 @@ export async function platformAdministratorTargetAllowed(
   const target = scope.slice(scope.indexOf('https://rezics.com/id/'));
   if (scope.startsWith('semantic:edit:')) {
     return definitionCreatorAllowed(client, graph, principal, actor, target);
+  }
+  if (action === 'semantic.read' && await definitionCreatorAllowed(client, graph, principal, actor, target)) {
+    return true;
   }
   return (
     (

@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { BootstrapApi } from './api.ts';
 import { BootstrapJournal, digest } from './journal.ts';
 import { inside, type BootstrapPlan, type ZoneManifest } from './plan.ts';
-import { seedRelationLexicon } from '../../dev/seed/relation-lexicon.ts';
+import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from '../../dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../dev/seed/relation-lexicon-data.ts';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import {
@@ -24,6 +24,7 @@ export interface BootstrapResult {
   counts: Record<string, number>;
   zones: { id: string; zone: string; realm: string; collections: Record<string, string> }[];
   definitions: { key: string; component: string; revision: string }[];
+  vocabulary?: { variantKinds: Record<string, string>; canonicity: Awaited<ReturnType<typeof seedCanonicity>> };
   sources: {
     id: string;
     version: string;
@@ -295,6 +296,14 @@ export async function executeBootstrap(input: {
     relationLexiconSeed,
     inside(root, `.temp/bootstrap/${plan.namespace}/lexicon.v3.json`),
   );
+  const vocabularyClient = {
+    post: <T>(path: string, body: object, label: string) => journal.command<T>(api, label, 'POST', path, body),
+    authorizeDefinition: async (receipt: { component: string }) => {
+      await api.read(`/v1/semantic/resources/${short(receipt.component)}?actingSubject=${encodeURIComponent(actor)}`);
+    },
+  };
+  result.vocabulary = { variantKinds: await seedVariantKindConcepts(vocabularyClient, actor, plan.namespace),
+    canonicity: await seedCanonicity(vocabularyClient, actor, plan.namespace) };
   const effects: { target: string; receipt: string }[] = [];
   for (const source of plan.sources.filter((source) => source.enabled)) {
     const imported: BootstrapResult['sources'][number] = {
@@ -479,6 +488,11 @@ export async function verifyBootstrap(
   result: BootstrapResult,
   zones: ZoneManifest[],
 ): Promise<void> {
+  if (result.vocabulary) {
+    for (const concept of [...Object.values(result.vocabulary.variantKinds), ...Object.values(result.vocabulary.canonicity.concepts)]) {
+      await api.read(`/v1/resources/${short(concept)}`, true);
+    }
+  }
   for (const zone of result.zones) {
     const spec = zones.find((spec) => spec.id === zone.id)!;
     const lookup = await api.read<{ capabilities: { zone?: string } }>(

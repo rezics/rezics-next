@@ -12,6 +12,7 @@ import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../
 import { semanticValueRdf } from '../semantic/value.ts';
 import { checkedApplicability, checkedParticipations, InvalidRelationOccurrence, PARTICIPATION_FORMAT_V2,
   RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition } from './schema.ts';
+import { targetRead, targetSummaries } from '../target/resolve.ts';
 
 export const RELATION_CHANGE_FAMILY = 'relation-change';
 
@@ -125,6 +126,35 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
 
 export class StarViolation extends SemanticChangeRejected {
   constructor(message: string) { super('star-violation', message); }
+}
+
+export class ProjectionParticipantRefused extends SemanticChangeRejected {
+  readonly problemCode = 'projection_participant_refused';
+  constructor() { super('reserved-owner', 'A Projection is not an identity; name its subject as the participant and put its frames in applicability'); }
+}
+
+export const PARTICIPANT_IDENTITY_COST = { queries: 1, participants: 64, projectionSummaryBatch: 64 } as const;
+
+/** Projections identify scoped judgments, never relation participants. Admission
+ * checks this before the ordinary reference reader, which has no Projection owner.
+ * Hidden projections retain the same unavailable-reference outcome as missing IDs. */
+export async function assertIdentityParticipants(env: WorkActivationEnvironment, participations: readonly Participation[],
+  authority?: Parameters<typeof targetRead>[1]) {
+  const participants = [...new Set(participations.flatMap(item =>
+    item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+  if (!participants.length) return;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?participant WHERE {
+    VALUES ?participant { ${participants.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?participant a rv:Projection }
+  } LIMIT ${PARTICIPANT_IDENTITY_COST.participants}`)).results?.bindings ?? [];
+  if (!rows.length) return;
+  if (authority) {
+    const batch = await targetRead(env, authority, session => targetSummaries(session, rows.map(row => row.participant!.value)));
+    if (batch.summaries.some(summary => summary.status !== 'available')) {
+      throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+    }
+  }
+  throw new ProjectionParticipantRefused();
 }
 
 function starRoles(definition: ExactDefinition) {
@@ -244,6 +274,7 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
   const receipt = familyReceiptIri(intent.admission.id, RELATION_CHANGE_FAMILY);
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
   if (existing) return checkedResult(existing, intent, true);
+  await assertIdentityParticipants(env, state.participations);
   const generation = await ensureModelGeneration(env);
   const occurrence = intent.occurrence ?? `${ID}${Bun.randomUUIDv7()}`;
   const current = intent.occurrence ? await readCurrentOccurrence(env, occurrence) : null;
@@ -303,6 +334,7 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
       ${intent.admission.scope.startsWith('work:edit:') ? `GRAPH ${iri(GRAPHS.current)} {
         ${iri(intent.admission.scope.slice('work:edit:'.length))} a <https://schema.org/CreativeWork> }` : ''}
       ${resources.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
+      ${resources.map(ref => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a rv:Projection } }`).join('\n')}
       ${conflict ? `FILTER NOT EXISTS ${conflict}` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(occurrence)} ; rv:revision ${iri(revision)} ;

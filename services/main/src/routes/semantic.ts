@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { ProjectionParticipantRefused } from '../modules/relation/change.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -43,6 +44,7 @@ export const openApiOperations = {
 
 /** Typed semantic outcomes; everything else uses the shared command problem map. */
 export function semanticError(error: unknown): Response {
+  if (error instanceof ProjectionParticipantRefused) return problem(422, error.problemCode, error.message);
   if (error instanceof WorkReadInvalid || error instanceof WorkReadMissing || error instanceof WorkReadMoved
     || error instanceof WorkReadUnavailable) return workReadError(error);
   if (error instanceof SemanticChangeRejected) {

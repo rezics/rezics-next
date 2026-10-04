@@ -10,6 +10,7 @@ import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
 import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
+import { normalizeStatementSubject } from './projection.ts';
 import { DECISION_OUTCOME_TERMS, STATEMENT_AUTHORITY, STATEMENT_DECISION_PROFILE, STATEMENT_LIMITS,
   STATEMENT_PROFILE, decisionSlotIri, statementMeaningKey, type DecisionOutcome, type DecisionTarget,
   type StatementMeaning, type StatementValue } from './schema.ts';
@@ -104,11 +105,13 @@ export async function statementInterpretation(env: WorkActivationEnvironment, in
  */
 export async function recordStatement(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: RecordStatementInput, speaker: InterpretationSpeaker,
-  beforeCommit?: (component: string, receipt: string) => Promise<void>): Promise<ContextCommandReceipt> {
+  beforeCommit?: (component: string, receipt: string) => Promise<void>,
+  canReadProjection?: (projection: string) => Promise<boolean>): Promise<ContextCommandReceipt> {
   const request = recordStatementRequest(input);
   const family = STATEMENT_FAMILIES.record;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
+  const normalized = await normalizeStatementSubject(env, input, canReadProjection);
   const interpretation = await statementInterpretation(env, input, speaker);
   if (interpretation.state === 'unavailable') throw new ContextCommandUnavailable('interpretation is unavailable');
   // The route previews first; a slot that became unresolved meanwhile seals as unavailable.
@@ -126,10 +129,10 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
     return checkedCommandReceipt((await sealCommandTerminal(env, admission, family, 'stale-head'))!,
       admission, request.digest);
   }
-  const meaning: StatementMeaning = { subject: input.subject, predicate: input.predicate,
+  const meaning: StatementMeaning = { subject: normalized.subject, predicate: input.predicate,
     relationDefinition: input.relationDefinition,
     interpretationDefinitions: interpretation.definition ? [interpretation.definition] : [],
-    value: input.value, applicability: input.applicability };
+    value: input.value, applicability: normalized.applicability };
   const meaningKey = statementMeaningKey(meaning);
   const statement = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
@@ -157,11 +160,11 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
     component: statement, revision, expectedHead: null,
     insert: `GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ;
-        rdf:subject ${iri(input.subject)} ; rdf:predicate ${term(input.predicate)} ;
+        rdf:subject ${iri(meaning.subject)} ; rdf:predicate ${term(input.predicate)} ;
         rdf:object ${objectTerm(input.value)} ; rv:relationDefinition ${term(input.relationDefinition)} ;
         ${meaning.interpretationDefinitions.map(value => `rv:interpretationDefinition ${term(value)} ;`).join(' ')}
         ${interpretation.semanticRevision ? `rv:semanticContextRevision ${iri(interpretation.semanticRevision)} ;` : ''}
-        ${input.applicability.map(value => `rv:applicability ${term(value)} ;`).join(' ')}
+        ${meaning.applicability.map(value => `rv:applicability ${term(value)} ;`).join(' ')}
         ${input.wikiPublicationWork ? `rv:source ${iri(input.wikiPublicationWork)} ;` : ''}
         rv:speaker ${iri(speakerId)} ; rv:meaningKey ${iri(meaningKey)} ; rv:statementState rv:Active ;
         rv:head ${iri(revision)} . }
@@ -172,7 +175,8 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:modelRevision ${iri(STATEMENT_PROFILE)} ; rv:shapeRevision ${iri(STATEMENT_PROFILE)} ;
         rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
-    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.subject)} a ?subjectType . }
+    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(meaning.subject)} a ?subjectType .
+      ${meaning.subject !== input.subject ? `${iri(input.subject)} a rv:Projection ; rv:projectionOf ${iri(meaning.subject)} .` : ''} }
       ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);

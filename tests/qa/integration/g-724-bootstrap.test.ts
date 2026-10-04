@@ -77,7 +77,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     ]);
 
     const scopes =
-      'openid agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate';
+      'openid agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate classification:define';
     const verifierClient = await account.workloadApp('Bootstrap token verifier', ['work:read']);
     const client = await account.nativeApp('Launch operator', scopes);
     const token = (await account.issue(client.client_id, account.operator, scopes)).access_token;
