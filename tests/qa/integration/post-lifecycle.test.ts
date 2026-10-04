@@ -9,11 +9,12 @@ import { StudioAccess } from '../../../services/main/src/modules/studio/access.t
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
 import { POST_BACKFILL_COST, prepareChapterPosts } from '../../../services/main/src/modules/post/backfill.ts';
-import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { RightsStore, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial }
   from '../../../services/main/src/modules/rights/store.ts';
 import { startMediaStack } from './media-support.ts';
+import { legacyStudioChapter } from './post-legacy-fixture.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -153,6 +154,13 @@ test('Posts retain independent custody, shared text and comments, and per-occurr
     // Older command receipts retain their immutable names; replay still returns the Post.
     const legacyMain = `https://rezics.com/id/${randomUUID()}`;
     const legacyRevision = `https://rezics.com/id/${randomUUID()}`;
+    const creation = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?operation ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(first.receipt)} rv:operation ?operation ; rv:sequence ?sequence }
+    }`)).results!.bindings[0]!;
+    const legacy = await legacyStudioChapter(stack.env, { work: first.post, mainVersion: legacyMain,
+      workRevision: first.revision, mainRevision: legacyRevision, book: firstBook.work,
+      title: body.title, language: body.language, operation: creation.operation!.value,
+      sequence: creation.sequence!.value });
     await stack.fuseki.update(`PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.receipts)} { ${iri(first.receipt)} rv:post ${iri(first.post)} ;
         rv:postRevision ${iri(first.revision)} . } }
@@ -163,17 +171,26 @@ test('Posts retain independent custody, shared text and comments, and per-occurr
     expect(await json(await send(author, 'POST', `/v1/works/${short(firstBook.work)}/chapters`, body, createKey)))
       .toMatchObject({ post: first.post, revision: first.revision, replayed: true });
     await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.post)} a rv:Post ; rv:publisher ?publisher . } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(first.post)} a schema:CreativeWork ;
-        rv:mainVersion ${iri(legacyMain)} ; schema:isPartOf ${iri(firstBook.work)} .
-        ${iri(legacyMain)} a rv:MainVersion ; rv:work ${iri(first.post)} ; rv:hostingPolicy rv:MetadataOnly . } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.post)} rv:publisher ?publisher . } }`);
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.post)} a rv:Post ; rv:publisher ?publisher . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(first.revision)} ?predicate ?value } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${legacy.current} }
+        GRAPH ${iri(GRAPHS.revisions)} { ${legacy.revisions} } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.post)} rv:publisher ?publisher . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(first.revision)} ?predicate ?value } }`);
+    await stack.accessPool.query('UPDATE access.work_maintainer_set SET main_version=$2 WHERE work=$1',
+      [first.post, legacyMain]);
     const ownerRows = (await stack.accessPool.query('SELECT * FROM access.work_maintainer_set WHERE work=$1', [first.post])).rows;
-    const history = await stack.fuseki.query(`SELECT (COUNT(*) AS ?count) WHERE { GRAPH ${iri(GRAPHS.revisions)} { ?s ?p ?o } }`);
+    const history = await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { VALUES ?subject { ${iri(first.revision)} ${iri(legacyRevision)} }
+        ?subject ?predicate ?value } } ORDER BY ?subject ?predicate ?value`);
+    expect(history.results?.bindings).toHaveLength(18);
     expect(await prepareChapterPosts(stack.env, stack.accessPool)).toBe(1);
     expect(await prepareChapterPosts(stack.env, stack.accessPool)).toBe(0);
     expect((await stack.accessPool.query('SELECT * FROM access.work_maintainer_set WHERE work=$1', [first.post])).rows).toEqual(ownerRows);
-    expect(await stack.fuseki.query(`SELECT (COUNT(*) AS ?count) WHERE { GRAPH ${iri(GRAPHS.revisions)} { ?s ?p ?o } }`)).toEqual(history);
+    expect(await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { VALUES ?subject { ${iri(first.revision)} ${iri(legacyRevision)} }
+        ?subject ?predicate ?value } } ORDER BY ?subject ?predicate ?value`)).toEqual(history);
     expect((await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0]?.status).toBe('available');
     expect(await comments.read(comment.comment.slice(-36))).toMatchObject({ resourceId: first.post, revisionId: saved.revisionId });
     expect(await rights.currentPublicDomainAssessment(first.post, assessment.assessmentId)).toBe(true);
@@ -187,7 +204,7 @@ test('Posts retain independent custody, shared text and comments, and per-occurr
   } finally { await stack.stop(); }
 }, 240_000);
 
-test('Post migration converts unplaced chapters using creation receipts and advances past a full page without publishers', async () => {
+test('Post migration retires 66 headed legacy Mains across batches and advances past missing publishers', async () => {
   const stack = await startMediaStack('post-backfill');
   try {
     const author = await stack.member('legacy-author');
@@ -195,19 +212,23 @@ test('Post migration converts unplaced chapters using creation receipts and adva
     const native = () => `https://rezics.com/id/${randomUUID()}`;
     const chapter = (prefix: string, index: number) => ({
       post: `https://rezics.com/id/${prefix}-0000-4000-8000-${String(index).padStart(12, '0')}`,
-      main: native(), head: native(), receipt: `urn:rezics:receipt:composition:${randomUUID()}`,
+      main: native(), head: native(), mainHead: native(), operation: native(),
+      receipt: `urn:rezics:receipt:composition:${randomUUID()}`,
     });
     // These occupy the entire first page; no SQL maintainer or graph actor can identify their publisher.
     const missing = [...Array.from({ length: POST_BACKFILL_COST.batch }, (_, index) => chapter('00000000', index)),
       chapter('10000000', 0)];
-    const supported = ['removed', 'unselected', 'absent'].map((placement, index) => ({
-      ...chapter('10000000', index + 1), placement,
+    const supported = Array.from({ length: 66 }, (_, index) => ({
+      ...chapter('10000000', index + 1), placement: ['removed', 'unselected', 'absent'][index % 3]!,
     }));
     const generation = native(), selected = native(), structure = native();
-    const legacy = (row: typeof missing[number]) => `${iri(row.post)} a schema:CreativeWork ;
-      rdfs:label "Legacy chapter"@en ; rv:head ${iri(row.head)} ; rv:mainVersion ${iri(row.main)} ;
-      schema:isPartOf ${iri(book.work)} .
-      ${iri(row.main)} a rv:MainVersion ; rv:work ${iri(row.post)} ; rv:hostingPolicy rv:MetadataOnly .`;
+    const sequence = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value;
+    const legacy = [];
+    for (const row of [...missing, ...supported]) legacy.push(await legacyStudioChapter(stack.env, {
+      work: row.post, mainVersion: row.main, workRevision: row.head, mainRevision: row.mainHead,
+      book: book.work, title: 'Legacy chapter', language: 'en', operation: row.operation, sequence,
+    }));
     const receipt = (row: typeof missing[number]) => `${iri(row.receipt)} a rv:OperationReceipt ;
       rv:chapterWork ${iri(row.post)} ; rv:outcome rv:Succeeded ; rv:actingSubject ${iri(author.actor)} .`;
     await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
@@ -215,7 +236,7 @@ test('Post migration converts unplaced chapters using creation receipts and adva
       INSERT DATA {
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(book.work)} a schema:Book .
-          ${[...missing, ...supported].map(legacy).join('\n')}
+          ${legacy.map(row => row.current).join('\n')}
           ${iri(structure)} a rv:Structure ; rv:structureProfile rv:BookComposition ;
             rv:structureOf ${iri(book.mainVersion)} ; rv:selectedGeneration ${iri(selected)} .
           ${iri(generation)} rv:generationState rv:Active .
@@ -225,8 +246,22 @@ test('Post migration converts unplaced chapters using creation receipts and adva
             rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(row.post)}
             ${row.placement === 'removed' ? `; rv:removedBy ${iri(native())}` : ''} .`).join('\n')}
         }
+        GRAPH ${iri(GRAPHS.revisions)} { ${legacy.map(row => row.revisions).join('\n')} }
         GRAPH ${iri(GRAPHS.receipts)} { ${supported.map(receipt).join('\n')} }
       }`);
+    const inventory = (await stack.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?main ?head (COUNT(?predicate) AS ?triples) WHERE {
+        VALUES ?main { ${[...missing, ...supported].map(row => iri(row.main)).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?main rv:head ?head ; ?predicate ?value }
+      } GROUP BY ?main ?head ORDER BY STR(?main)`)).results!.bindings;
+    expect(inventory.map(row => [row.main!.value, row.head!.value, row.triples!.value]))
+      .toEqual([...missing, ...supported].sort((a, b) => a.main.localeCompare(b.main))
+        .map(row => [row.main, row.mainHead, '4']));
+    const history = await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
+      VALUES ?subject { ${[...missing, ...supported].flatMap(row => [row.head, row.mainHead]).map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?subject ?predicate ?value }
+    } ORDER BY ?subject ?predicate ?value`, 512 * 1024);
+    expect(history.results?.bindings).toHaveLength((missing.length + supported.length) * 18);
     const skipped: number[] = [];
     const options = { onMissingPublisher: (count: number) => { skipped.push(count); } };
     expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(supported.length);
@@ -237,10 +272,15 @@ test('Post migration converts unplaced chapters using creation receipts and adva
           ${iri(row.post)} a rv:Post ; rv:publisher ${iri(author.actor)} ; rv:head ${iri(row.head)} .
           FILTER NOT EXISTS { ${iri(row.post)} a schema:CreativeWork }
           FILTER NOT EXISTS { ${iri(row.post)} schema:isPartOf ?book }
+          FILTER NOT EXISTS { ${iri(row.post)} rv:continuityProfile ?continuity }
           FILTER NOT EXISTS { ${iri(row.main)} ?p ?o }
         } }`)).boolean).toBe(true);
     }
     expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(0);
+    expect(await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
+      VALUES ?subject { ${[...missing, ...supported].flatMap(row => [row.head, row.mainHead]).map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?subject ?predicate ?value }
+    } ORDER BY ?subject ?predicate ?value`, 512 * 1024)).toEqual(history);
     expect(skipped).toEqual([POST_BACKFILL_COST.batch, 1, POST_BACKFILL_COST.batch, 1]);
     expect((await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT (COUNT(?post) AS ?count) WHERE { GRAPH ${iri(GRAPHS.current)} {

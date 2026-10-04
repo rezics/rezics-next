@@ -438,7 +438,7 @@ final class CommandService extends ActionService {
             if (creditInvariant != null) return invalid(creditInvariant);
             String childInvariant = NativeChildPolicy.check(dataset, plan);
             if (childInvariant != null) return invalid(childInvariant);
-            String headInvariant = HeadCasPolicy.check(dataset, receipt, heads);
+            String headInvariant = HeadCasPolicy.check(dataset, receipt, heads, model);
             if (headInvariant != null) return invalid(headInvariant);
             String titleInvariant = TitleControlPolicy.check(dataset, receipt, title);
             if (titleInvariant != null) return invalid(titleInvariant);

@@ -1,6 +1,7 @@
 package com.rezics.jena;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,6 +12,7 @@ import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.jena.update.UpdateAction;
 import org.junit.Test;
 
 public class ChapterPostMigrationPolicyTest {
@@ -105,6 +107,50 @@ public class ChapterPostMigrationPolicyTest {
                 new ModelMutationPolicy.Snapshot(current, Map.of())).isEmpty());
             assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT,
                 new ModelMutationPolicy.Snapshot(before().current(), Map.of(HEAD, post))).isEmpty());
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void mainHeadDeletionRequiresTheWholeExactRetirementProof() {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String mainHead = "urn:probe:main-head";
+            String prefix = "PREFIX rv: <" + RV + "> PREFIX schema: <" + SCHEMA + "> ";
+            String current = "GRAPH <" + CommandPolicy.CURRENT + "> ";
+            String post = "<" + POST + ">", main = "<" + MAIN + ">", book = "<" + BOOK + ">";
+            String legacyPost = post + " a schema:CreativeWork ; rv:mainVersion " + main
+                + " ; schema:isPartOf " + book + " .";
+            String legacyMain = main + " a rv:MainVersion ; rv:work " + post
+                + " ; rv:hostingPolicy rv:MetadataOnly ; rv:head <" + mainHead + "> .";
+            UpdateAction.parseExecute(prefix + "INSERT DATA { " + current + " { " + legacyPost
+                + " " + post + " rv:head <" + HEAD + "> . " + legacyMain + " " + book + " a schema:Book } }",
+                DatasetFactory.wrap(data));
+            String update = prefix + "DELETE { " + current + " { " + legacyPost + " " + legacyMain + " } } "
+                + "INSERT { " + current + " { " + post + " a rv:Post ; rv:publisher <urn:probe:author> } "
+                + "GRAPH <" + CommandPolicy.RECEIPTS + "> { <" + RECEIPT + "> rv:outcome rv:Succeeded ; "
+                + "rv:action \"post.migrate\" ; rv:migratedPost " + post + " ; rv:migratedPostCount 1 } } WHERE {}";
+            CommandPolicy.Plan plan = CommandPolicy.parse(update, RECEIPT);
+            HeadCasPolicy.Snapshot heads = HeadCasPolicy.capture(data, plan, RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            assertNull(HeadCasPolicy.check(data, RECEIPT, heads, before()));
+            String denied = "head transition template or prestate is ambiguous";
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads));
+            assertEquals(denied, HeadCasPolicy.check(data, "urn:rezics:receipt:ordinary", heads, before()));
+            add(data, CommandPolicy.CURRENT, MAIN, RV + "work", POST);
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads, before()));
+            data.delete(uri(CommandPolicy.CURRENT), uri(MAIN), uri(RV + "work"), uri(POST));
+            add(data, CommandPolicy.CURRENT, POST, RV + "head", "urn:probe:changed-head");
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads, before()));
+            data.delete(uri(CommandPolicy.CURRENT), uri(POST), uri(RV + "head"), uri("urn:probe:changed-head"));
+            var unrelated = new HashMap<>(before().current());
+            unrelated.put("urn:probe:unrelated", before().current().get(MAIN));
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads,
+                new ModelMutationPolicy.Snapshot(unrelated, Map.of())));
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads,
+                new ModelMutationPolicy.Snapshot(before().current(), Map.of(HEAD, before().current().get(POST)))));
+            data.delete(uri(CommandPolicy.RECEIPTS), uri(RECEIPT), uri(RV + "outcome"), uri(RV + "Succeeded"));
+            add(data, CommandPolicy.RECEIPTS, RECEIPT, RV + "outcome", RV + "Cancelled");
+            assertEquals(denied, HeadCasPolicy.check(data, RECEIPT, heads, before()));
         } finally { data.abort(); data.end(); data.close(); }
     }
 }

@@ -28,7 +28,9 @@ final class HeadCasPolicy {
     private record Key(Node subject, Node predicate) {}
     private record Transition(Key key, Node before, Node next, Node ownerType,
                               List<Node> preserved, String language, Node work, boolean mainVersion) {}
-    record Snapshot(List<Transition> transitions, String error) {}
+    record Snapshot(List<Transition> transitions, String error, Set<String> pendingMainRetirements) {
+        Snapshot(List<Transition> transitions, String error) { this(transitions, error, Set.of()); }
+    }
 
     static Snapshot capture(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify))
@@ -40,6 +42,7 @@ final class HeadCasPolicy {
         Set<Key> keys = new HashSet<>(inserted.keySet());
         keys.addAll(deleted.keySet());
         List<Transition> transitions = new ArrayList<>();
+        Set<String> mainRetirements = new HashSet<>();
         for (Key key : keys) {
             List<Node> beforeValues = values(data, CURRENT, key.subject(), key.predicate());
             boolean transition = SELECTION_HEAD.equals(key.predicate())
@@ -47,6 +50,16 @@ final class HeadCasPolicy {
             if (!transition) continue; // A fresh component's first head is covered by its canonical shape.
             List<Node> nextValues = inserted.getOrDefault(key, List.of());
             List<Node> oldTemplate = deleted.getOrDefault(key, List.of());
+            // Retirement has no successor. Defer only an exact Main head deletion;
+            // check() must prove the whole narrow chapter conversion after the update.
+            if (receipt.matches("urn:rezics:receipt:chapter-post-backfill:[0-9a-f]{64}")
+                && HEAD.equals(key.predicate()) && key.subject().isURI() && nextValues.isEmpty()
+                && beforeValues.size() == 1 && beforeValues.getFirst().isURI()
+                && oldTemplate.size() == 1 && oldTemplate.getFirst().equals(beforeValues.getFirst())
+                && data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion"))) {
+                mainRetirements.add(key.subject().getURI());
+                continue;
+            }
             if (nextValues.size() != 1 || !nextValues.getFirst().isURI()
                 || oldTemplate.size() != 1 || !key.subject().isURI())
                 return new Snapshot(List.of(), "head transition template or prestate is ambiguous");
@@ -114,11 +127,20 @@ final class HeadCasPolicy {
                 : declared.size() != 1 || !before.equals(declared.getFirst()))
                 return new Snapshot(List.of(), "receipt expected head differs from transaction prestate");
         }
-        return new Snapshot(List.copyOf(transitions), null);
+        return new Snapshot(List.copyOf(transitions), null, Set.copyOf(mainRetirements));
     }
 
     static String check(DatasetGraph data, String receipt, Snapshot snapshot) {
+        return check(data, receipt, snapshot, null);
+    }
+
+    static String check(DatasetGraph data, String receipt, Snapshot snapshot,
+                        ModelMutationPolicy.Snapshot modelBefore) {
         if (snapshot.error() != null) return snapshot.error();
+        if (!snapshot.pendingMainRetirements().isEmpty() && (modelBefore == null
+            || !ChapterPostMigrationPolicy.retired(data, receipt, modelBefore)
+                .containsAll(snapshot.pendingMainRetirements())))
+            return "head transition template or prestate is ambiguous";
         if (snapshot.transitions().isEmpty()) return null;
         if (snapshot.transitions().size() == 2) return checkMainSelectionPair(data, receipt, snapshot.transitions());
         Transition transition = snapshot.transitions().getFirst();
