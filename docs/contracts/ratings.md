@@ -53,10 +53,15 @@ or [Data Cube](https://www.w3.org/TR/vocab-data-cube/) observation.
 ## Work not yet implemented
 
 - Future or backdated entries need an explicit finite admission policy.
-- Materialized rating projections must be scoped by Context, target and time.
-  Corrections invalidate affected buckets; a rebuild keeps the active generation
-  until the replacement is complete. Expensive exact analytics should be
-  resumable jobs.
+- Target ratings keep additive components per Context and target (see the
+  owner README); time-bucketed components and the other rating families still
+  need them. Corrections invalidate affected buckets; a rebuild keeps the active
+  generation until the replacement is complete. Expensive exact analytics, such
+  as reconstructing legacy targets recorded before components existed, should
+  be resumable jobs.
+- Seals within one RatingContext serialize on its admission scope gate; a
+  question rated by many people at once needs a per-target scope before launch
+  load.
 - Joined rating search may combine qualified aggregates with graph/text
   conditions, while preserving the selected population. Raw-score joins must not
   silently change that population.
