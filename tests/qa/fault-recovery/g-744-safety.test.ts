@@ -4,8 +4,15 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
-import { MediaScreenWorker } from '../../../services/main/src/modules/media-screen/worker.ts';
-import { MediaScreenStore } from '../../../services/main/src/modules/media-screen/store.ts';
+import { SCREEN_POLICY } from '../../../services/main/src/modules/media-screen/policy.ts';
+import {
+  IMAGE_INFERENCE_POLICY,
+  type ImageMetadata,
+} from '../../../services/main/src/modules/media/presentation.ts';
+import {
+  imagePresentation,
+  type MediaImageViewer,
+} from '../../../packages/ui/src/components/media-image.tsx';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { fixtureReasons } from '../integration/g-565-decision-support.ts';
@@ -163,48 +170,170 @@ test('SAFETY02: NCII receipt closes original, known identical uses and later ide
   }
 }, 180_000);
 
-test('SAFETY04: scanner outage holds new uploads and retains a recoverable specialist case', async () => {
-  const f = await safetyFixture('g744-scanner', false);
+test('SAFETY04: NSFW classifier outage retains unknown evidence without a hold and permits recoverable manual labeling', async () => {
+  const f = await safetyFixture('nsfw-outage', false);
   try {
-    const image = await f.author.upload(png(72, 72));
-    const store = new MediaScreenStore(f.stack.contentPool);
-    const worker = new MediaScreenWorker(
-      store,
-      {
-        classify: async () => {
-          throw new Error('scanner offline');
-        },
-      },
-      f.stack.objects,
-      f.governance,
+    const bytes = png(72, 72);
+    const image = await f.author.upload(bytes);
+    for (const action of ['media.inference', 'media.labels'])
+      await f.author.grant(`media:owner:${f.author.actor}`, action);
+    const path = `/v1/media/representations/${image.representation}`;
+    const unavailable = {
+      actingSubject: f.author.actor,
+      sha256: sha(bytes),
+      model: SCREEN_POLICY.model,
+      modelVersion: SCREEN_POLICY.version,
+      weightsDigest: SCREEN_POLICY.weightsDigest,
+      policyVersion: IMAGE_INFERENCE_POLICY,
+      status: 'unavailable',
+      result: 'unknown',
+    };
+    const key = randomUUID();
+    const observation = await json<{ observation: string; result: string }>(
+      await f.author.send('POST', `${path}/inferences`, unavailable, key),
+      201,
     );
-    // Drain other files' queued uploads in this disposable tier, then locate our result.
-    for (let i = 0; i < 100; i++) {
-      await worker.tick();
-      if ((await f.stack.store.readUpload(image.upload))?.clearance === 'held') break;
-    }
-    expect((await f.stack.store.readUpload(image.upload))?.clearance).toBe('held');
-    expect(await f.clearance(image)).toBe('held');
-    const review = (
-      await f.stack.contentPool.query<{ case_id: string; reason: string }>(
-        `SELECT q.case_id,r.reason
-      FROM media.screen_review q JOIN media.screen_result r ON r.job_id = q.job_id
-      JOIN media.transform_job j ON j.id = q.job_id WHERE j.source_id = $1`,
-        [image.representation],
-      )
-    ).rows[0]!;
-    expect(review.reason).toBe('screen-unavailable');
-    expect(review.case_id).toBeString();
-    expect((await f.read(`/v1/safety-cases/${review.case_id}`)).status).toBe(200);
+    expect(observation.result).toBe('unknown');
+    // A lost acknowledgement is recovered from owner storage by a fresh handler.
+    const restarted = createMainApp(f.stack.fuseki, f.deps);
+    expect(
+      await json(
+        await restarted.handle(
+          new Request(`http://main.local${path}/inferences`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: `Bearer ${f.author.token}`,
+              'idempotency-key': key,
+            },
+            body: JSON.stringify(unavailable),
+          }),
+        ),
+      ),
+    ).toMatchObject({ observation: observation.observation, result: 'unknown', replayed: true });
+    const unknown = await json<ImageMetadata>(await f.author.read(path));
+    expect(unknown).toMatchObject({
+      nsfw: 'unknown',
+      ageRating: { status: 'unassessed' },
+      conceal: false,
+    });
+    expect(unknown.controls.nsfw.valueHead).toBeNull();
+    const viewer: MediaImageViewer = {
+      ready: true,
+      signedIn: false,
+      age: 'unknown',
+      optIns: { general: true, r15: false, sexual: false, grotesque: false },
+      nsfwDisplay: 'mask',
+    };
+    expect(imagePresentation(unknown, viewer)).toBe('masked');
+    expect(imagePresentation(unknown, { ...viewer, nsfwDisplay: 'show' })).toBe('masked');
     const work = await f.stack.publicWork(f.author.actor);
     const basis = await f.stack.store.publicationBasis([image.asset], f.author.actor);
     const use = randomUUID();
     await f.stack.store.createPublicationUses(randomUUID(), f.author.actor, work.work, [
       { ...basis[0]!, use },
     ]);
+    const unknownDelivery = await f.call('GET', `/v1/media/uses/${use}`);
+    expect(unknownDelivery.status).toBe(200);
+    expect(new Uint8Array(await unknownDelivery.arrayBuffer())).toEqual(bytes);
+    const label = {
+      actingSubject: f.author.actor,
+      field: 'nsfw',
+      value: 'nsfw',
+      mode: 'edit',
+      expectedValueHead: unknown.controls.nsfw.valueHead,
+      basis: unknown.controls.nsfw.basis,
+    };
+    const labelKey = randomUUID();
+    const corrected = await json<{ revision: string }>(
+      await f.author.send('POST', `${path}/labels`, label, labelKey),
+      201,
+    );
+    expect(
+      await json(await f.author.send('POST', `${path}/labels`, label, labelKey)),
+    ).toMatchObject({ revision: corrected.revision, replayed: true });
+    // Retrying unavailable analysis and recovering the classifier preserve the human correction.
+    await json(await f.author.send('POST', `${path}/inferences`, unavailable), 201);
+    await json(
+      await f.author.send('POST', `${path}/inferences`, {
+        ...unavailable,
+        status: 'completed',
+        result: 'sfw',
+        scores: { Drawing: 0.05, Hentai: 0.01, Neutral: 0.9, Porn: 0.01, Sexy: 0.03 },
+      }),
+      201,
+    );
+    const labeled = await json<ImageMetadata>(await f.author.read(path));
+    expect(labeled).toMatchObject({
+      nsfw: 'nsfw',
+      controls: { nsfw: { valueHead: corrected.revision } },
+    });
+    expect(imagePresentation(labeled, viewer)).toBe('masked');
+    expect(imagePresentation(labeled, { ...viewer, nsfwDisplay: 'show' })).toBe('visible');
+    expect(imagePresentation(labeled, { ...viewer, nsfwDisplay: 'show' }, true)).toBe('masked');
+    expect(
+      (
+        await f.stack.contentPool.query(
+          `SELECT producer, status, result, actor, byte_digest FROM media.inference_observation
+       WHERE representation_id = $1 ORDER BY created_at, id`,
+          [image.representation],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        producer: 'client',
+        status: 'unavailable',
+        result: 'unknown',
+        actor: f.author.actor,
+        byte_digest: sha(bytes),
+      },
+      {
+        producer: 'client',
+        status: 'unavailable',
+        result: 'unknown',
+        actor: f.author.actor,
+        byte_digest: sha(bytes),
+      },
+      {
+        producer: 'client',
+        status: 'completed',
+        result: 'sfw',
+        actor: f.author.actor,
+        byte_digest: sha(bytes),
+      },
+    ]);
+    expect(
+      (
+        await f.stack.contentPool.query(
+          'SELECT source, actor, value FROM media.field_revision WHERE id = $1',
+          [corrected.revision.split('/').at(-1)],
+        )
+      ).rows,
+    ).toEqual([{ source: 'author', actor: f.author.actor, value: 'nsfw' }]);
+    expect(
+      (
+        await f.stack.contentPool.query(
+          "SELECT 1 FROM media.transform_job WHERE source_id = $1 AND profile = 'image-screen-v1'",
+          [image.representation],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await f.stack.accessPool.query(
+          'SELECT 1 FROM access.governance_case WHERE target_resource = $1',
+          [`https://rezics.com/id/${image.asset}`],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(await json(await f.author.read(`/v1/media/uploads/${image.upload}`))).toMatchObject({
+      clearance: 'cleared',
+      clearanceReason: null,
+    });
+    expect(await f.clearance(image)).toBe('cleared');
     const delivery = await f.call('GET', `/v1/media/uses/${use}`);
-    expect(delivery.status).toBe(404);
-    expect(await delivery.text()).not.toContain(image.representation);
+    expect(delivery.status).toBe(200);
+    expect(new Uint8Array(await delivery.arrayBuffer())).toEqual(bytes);
   } finally {
     await f.stop();
   }

@@ -21,9 +21,9 @@ export const cases = defineCases('docs/operations/trust-and-safety.md', [
   },
   {
     id: 'SAFETY04',
-    scenario: 'Image scanner is unavailable',
+    scenario: 'NSFW image classifier is unavailable',
     requiredResult:
-      'New uploads are held, not delivered, and an attributable screening review remains recoverable.',
+      'Presentation evidence remains unknown, manual labeling is available and no governance hold is created; uploads are delivered with viewer presentation preferences, retaining attributable, replay-safe evidence and corrections.',
   },
   {
     id: 'SAFETY05',

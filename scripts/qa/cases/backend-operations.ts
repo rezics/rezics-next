@@ -1677,10 +1677,12 @@ export const backendOperationMappings: readonly OperationMapping[] = [
     targets: [
       { status: 'existing', method: 'POST', path: '/v1/media/uploads' },
       { status: 'existing', method: 'GET', path: '/v1/media/uploads/{upload}' },
-      { status: 'existing', method: 'GET', path: '/v1/safety-cases/{caseId}' },
+      { status: 'existing', method: 'GET', path: '/v1/media/representations/{representation}' },
+      { status: 'existing', method: 'POST', path: '/v1/media/representations/{representation}/inferences' },
+      { status: 'existing', method: 'POST', path: '/v1/media/representations/{representation}/labels' },
       { status: 'existing', method: 'GET', path: '/v1/media/uses/{use}' },
     ],
-    context: 'Scanner failure holds delivery and retains an attributable screening review.',
+    context: 'An NSFW classifier outage retains unknown presentation evidence without a governance hold; manual corrections and evidence replay, while delivery follows viewer presentation preferences.',
   },
   {
     ids: ['SAFETY05'],
