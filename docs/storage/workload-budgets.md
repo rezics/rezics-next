@@ -70,6 +70,13 @@ an indexed local plan or an asynchronous operation. Requalify profile/topology
 changes against skew, contention, latency, memory and overload on elected
 hardware. Async jobs need bounded batches and measured catch-up capacity.
 
+PostgreSQL's JIT compilation is off for the application databases (manager,
+2026-10-04). Interactive queries are short and bounded; a misestimated plan
+that crossed `jit_above_cost` spent about 240 ms compiling on every Studio read
+(G-1049), more than the query itself. A batch job that measurably benefits may
+enable JIT for its own session. Production configuration applies the same
+setting as `infra/dev/compose.yaml`.
+
 ## Qualification scope and decisions
 
 The retained [OPS05](../../scripts/qa/cases/operations.ts) and
