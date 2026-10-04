@@ -5,6 +5,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import {
@@ -21,10 +24,30 @@ const web = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH, 'u
 const stack = await startMediaStack('identity-pages', { library: true });
 const editor = await stack.member('identity-editor');
 const people = [editor];
+const grant = async (person: typeof editor, scope: string, action: string) => {
+  const grant = randomUUID();
+  await stack.accessPool.query(
+    'INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING',
+    [scope],
+  );
+  await stack.accessPool.query(
+    `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+    VALUES($1,$2,$3,$4,now()+interval '1 hour')`,
+    [randomUUID(), person.principalId, person.actor, action],
+  );
+  await stack.accessPool.query(
+    `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+    VALUES($1,$2,$2,$3,$4,now()+interval '1 hour')`,
+    [grant, person.actor, scope, action],
+  );
+  return grant;
+};
+editor.grant = (scope, action) => grant(editor, scope, action);
 const app = createMainApp(stack.fuseki, {
   environment: stack.env,
   access: stack.access,
   targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
+  agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
   account: {
     verify: async (request) => {
       const person = people.find(
@@ -83,6 +106,13 @@ const grantReader = async (ref: string) => {
 };
 
 try {
+  editor.actor = (
+    await call<{ agent: string }>('/v1/agents', {
+      profile: 'agent-provision-v1',
+      kind: 'person',
+      displayName: 'Identity fixture editor',
+    })
+  ).agent;
   await new AccessPlatformAdministrators(stack.accessPool).designateFirst(
     editor.principal.issuer,
     editor.principal.subject,
@@ -99,6 +129,22 @@ try {
       await grantReader(receipt.component);
     },
   };
+  await client.post(
+    '/v1/classification-vocabulary',
+    {
+      profile: 'classification-proposition-v2',
+      scheme: null,
+      labels: [
+        { language: 'en', value: 'Fantasy' },
+        { language: 'zh-Hant', value: '奇幻' },
+      ],
+      alternativeLabels: [],
+      broader: [],
+      narrower: [],
+      actingSubject: editor.actor,
+    },
+    `identity-topic-${process.env.REZICS_QA_RUN_ID}`,
+  );
   const keys = ['variant-of', 'represents', 'holds-title'];
   const definitions = await seedRelationLexicon(
     client,
@@ -233,6 +279,14 @@ try {
   for (let i = 0; i < 5; i++) {
     const person = await stack.member(`identity-rater-${i}`);
     people.push(person);
+    person.actor = (
+      await call<{ agent: string }>(
+        '/v1/agents',
+        { profile: 'agent-provision-v1', kind: 'person', displayName: `Identity rater ${i}` },
+        person,
+      )
+    ).agent;
+    person.grant = (scope, action) => grant(person, scope, action);
     await person.grant(`rating:observe:${context}`, 'rating.observation.set');
     await person.grant(`rating:observe:${unitContext}`, 'rating.observation.set');
     for (const target of [saber, ...(i === 0 ? [alter, unit] : [])]) {
@@ -251,23 +305,25 @@ try {
       );
     }
   }
-  console.log(
-    JSON.stringify({
-      saber,
-      alter,
-      counterpart,
-      unit,
-      title,
-      holder,
-      realm,
-      hidden,
-      context,
-      unitContext,
-      realmContext,
-      continuity,
-      otherContinuity,
-    }),
-  );
+  const seeded = {
+    saber,
+    alter,
+    counterpart,
+    unit,
+    title,
+    holder,
+    realm,
+    hidden,
+    context,
+    unitContext,
+    realmContext,
+    continuity,
+    otherContinuity,
+  };
+  const directory = resolve('.temp/identity-pages', process.env.REZICS_QA_RUN_ID);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(resolve(directory, 'seed.json'), JSON.stringify(seeded));
+  console.log(JSON.stringify(seeded));
 } finally {
   await stack.stop();
 }

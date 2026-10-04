@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { resourceHref } from '../features/address/path.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
@@ -16,6 +17,11 @@ let data: {
 };
 test.beforeAll(() => {
   test.setTimeout(360_000);
+  const retained = resolve('.temp/identity-pages', process.env.REZICS_QA_RUN_ID!, 'seed.json');
+  if (existsSync(retained)) {
+    data = JSON.parse(readFileSync(retained, 'utf8'));
+    return;
+  }
   const seed = spawnSync('bun', ['apps/web/tests/identity-pages-seed.ts'], {
     cwd: process.cwd(),
     env: process.env,

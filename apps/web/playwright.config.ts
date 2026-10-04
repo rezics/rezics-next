@@ -26,6 +26,7 @@ export default defineConfig({
   testDir: './tests',
   testMatch: '*.e2e.ts',
   grep: process.env.REZICS_E2E_GREP ? new RegExp(process.env.REZICS_E2E_GREP) : undefined,
+  globalSetup: process.env.REZICS_IDENTITY_QA_SEED === '1' ? './tests/identity-pages-setup.ts' : undefined,
   outputDir: '../../.temp/playwright/results',
   use: { baseURL: e2eBaseURL() },
   projects: chosen.map(name => ({ name, ...available[name as keyof typeof available] })),
