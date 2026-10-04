@@ -59,7 +59,7 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
       canReadSemanticResource: async (_principal: unknown, _actor: string, target: string) => {
         grants.push(target);
         return input.grant && !(input.revoke === 'grant' && grants.length > 1);
-      } }, homePersonal: { read: async () => ({ revision: '1', preferences: defaultPreferences, exclusions: [] }) },
+      } }, homePersonal: { read: async () => ({ revision: '1', preferences: defaultPreferences, exclusions: [] }), fence: async () => ({ revision: '1' }) },
   } as unknown as MainWorkDependencies;
   const request = new Request('http://main.local/v1/zones/test/routes');
   const session = (authenticated: boolean) => {
