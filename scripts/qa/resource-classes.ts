@@ -58,6 +58,7 @@ export function assertQaResourceAllocation(
   actual: {
     memory: number;
     mounts: { Type: string; Destination: string }[];
+    tmpfs?: Record<string, string> | null;
   },
   storage: 'test' | 'scale' = qaResourceClasses[name].storage,
 ): void {
@@ -69,7 +70,10 @@ export function assertQaResourceAllocation(
   )
     throw new Error(`${name} Fuseki memory allocation is below ${minimum} bytes`);
   const mount = actual.mounts.find((mount) => mount.Destination === '/fuseki/databases');
-  if (mount?.Type !== (storage === 'test' ? 'tmpfs' : 'volume'))
+  // Compose's tmpfs syntax is recorded in HostConfig.Tmpfs; --mount tmpfs
+  // instead appears in Mounts. Both describe the same storage allocation.
+  const tmpfs = Object.hasOwn(actual.tmpfs ?? {}, '/fuseki/databases') || mount?.Type === 'tmpfs';
+  if (storage === 'test' ? !tmpfs : tmpfs || mount?.Type !== 'volume')
     throw new Error(`${name} Fuseki storage does not match ${storage}`);
 }
 

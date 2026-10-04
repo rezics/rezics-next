@@ -95,6 +95,11 @@ test('G1054: live allocation rejects an undersized or wrong-storage Compose over
     assertQaResourceAllocation('catalogue-disk', { memory: 7 * 1024 ** 3, mounts: tmpfs }),
   ).toThrow('storage');
   assertQaResourceAllocation('large-tmpfs', { memory: 7 * 1024 ** 3, mounts: tmpfs });
+  assertQaResourceAllocation('large-tmpfs', {
+    memory: 7 * 1024 ** 3,
+    mounts: [],
+    tmpfs: { '/fuseki/databases': 'mode=0777' },
+  });
   assertQaResourceAllocation('catalogue-disk', { memory: 7 * 1024 ** 3, mounts: disk });
 });
 

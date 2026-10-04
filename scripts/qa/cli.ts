@@ -187,7 +187,7 @@ async function runShard(
     }
     if (resourceClass) {
       const inspected = await commandAsync(root, 'docker', ['inspect', '--format',
-        '{"memory":{{.HostConfig.Memory}},"mounts":{{json .Mounts}}}',
+        '{"memory":{{.HostConfig.Memory}},"tmpfs":{{json .HostConfig.Tmpfs}},"mounts":{{json .Mounts}}}',
         `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
       let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
       if (inspected.ok) {
