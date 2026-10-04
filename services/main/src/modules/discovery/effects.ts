@@ -55,6 +55,7 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'zone.edit': 'irrelevant',
   'collection.edit': 'irrelevant',
   'relation.change': 'irrelevant',
+  'projection.create': 'irrelevant',
   'event.observation.set': 'irrelevant',
   'package.recommendation.set': 'irrelevant',
   'reply.place': 'irrelevant',
