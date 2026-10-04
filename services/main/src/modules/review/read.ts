@@ -7,14 +7,14 @@ import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_C
 import { standingRatingSlotIri } from '../rating/observation.ts';
 import { targetContextPattern, TARGET_CONTEXT_PROFILES, TARGET_GRAINS, targetRatingSlotIri } from '../rating/target.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
+import { assertRatingTargetAccepted } from '../rating/acceptance.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import type { RatingLink, ReviewRow } from './store.ts';
 
 export async function reviewTarget(session: TargetReadSession, context: string, work: string):
   Promise<{ mainVersion: string | null; realm: string | null; generic: boolean }> {
   const [target] = await resolveTargets(session, [work], 'review');
-  // Reviews admit a projection when its owner binds a Context grain for one.
-  if (target!.base === 'projection') throw new TargetNotBound();
+  await assertRatingTargetAccepted(session, context, target!);
   if (target!.base !== 'work') {
     const rows = await session.query(`SELECT ?grain WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`, 2);

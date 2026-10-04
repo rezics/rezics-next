@@ -3,26 +3,38 @@ import { t } from 'elysia';
 import { sourcePosition } from '../../api-contract.ts';
 import { readId } from '../work/read-contract.ts';
 import { TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID, LEGACY_TARGET_CONTEXT_ID, TARGET_OBSERVATION_ID, TARGET_RATING_WRITE_COST,
-  MAX_DISPLAY_THRESHOLD } from './target.ts';
+  MAX_DISPLAY_THRESHOLD, ACCEPTED_TARGET_CONTEXT_ID } from './target.ts';
+import { ACCEPTED_FRAME_DIMENSIONS, CONTEXT_ACCEPTANCE_COST } from './acceptance.ts';
 import { TARGET_AGGREGATE_PROFILE } from './target-aggregate.ts';
 
-export const targetGrain = t.Union([t.Literal('release'), t.Literal('realization'), t.Literal('occurrence'), t.Literal('resource')]);
+const legacyTargetGrain = t.Union([t.Literal('release'), t.Literal('realization'), t.Literal('occurrence'), t.Literal('resource')]);
+export const targetGrain = t.Union([...legacyTargetGrain.anyOf, t.Literal('projection')]);
 const questionLanguage = languageTagSchema(TARGET_RATING_WRITE_COST.questionLanguageBytes);
 export const targetRatingContextInput = t.Object({ profile: t.Literal(TARGET_CONTEXT_ID), realm: readId,
-  question: t.String({ minLength: 3, maxLength: 120 }), language: questionLanguage, targetGrain, actingSubject: readId }, { additionalProperties: false });
+  question: t.String({ minLength: 3, maxLength: 120 }), language: questionLanguage, targetGrain: legacyTargetGrain, actingSubject: readId }, { additionalProperties: false });
 const displayThreshold = t.Integer({ minimum: 1, maximum: MAX_DISPLAY_THRESHOLD });
-/** v3 adds the optional threshold override; its grain list gains `projection` when projections resolve. */
+/** v3 admits projections and its optional threshold override. */
 export const scopedTargetRatingContextInput = t.Object({ profile: t.Literal(SCOPED_TARGET_CONTEXT_ID), realm: readId,
   question: t.String({ minLength: 3, maxLength: 120 }), language: questionLanguage, targetGrain,
   displayThreshold: t.Optional(displayThreshold),
   actingSubject: readId }, { additionalProperties: false });
+const acceptanceFields = {
+  acceptedSubjectTypes: t.Optional(t.Array(t.String({ pattern: '^https?://[^\\s<>"{}|^`\\\\]+$', maxLength: 512 }),
+    { minItems: 1, maxItems: CONTEXT_ACCEPTANCE_COST.subjectTypes, uniqueItems: true })),
+  acceptedFrameDimensions: t.Optional(t.Array(t.Union(ACCEPTED_FRAME_DIMENSIONS.map(dimension => t.Literal(dimension))),
+    { minItems: 1, maxItems: CONTEXT_ACCEPTANCE_COST.frameDimensions, uniqueItems: true })),
+};
+export const ratingContextOwner = t.Object({ kind: t.Union([t.Literal('realm'), t.Literal('global')]), id: readId });
+export const acceptedTargetRatingContextInput = t.Object({ ...scopedTargetRatingContextInput.properties,
+  profile: t.Literal(ACCEPTED_TARGET_CONTEXT_ID), ...acceptanceFields }, { additionalProperties: false });
 export const targetRatingContextReadResult = t.Object({ context: readId, realm: readId,
   question: t.String({ minLength: 3, maxLength: 120 }), language: questionLanguage, contextRevision: readId, targetGrain,
   scale: t.Object({ min: t.Literal(1), max: t.Literal(10), step: t.Literal(1) }), cadence: t.Literal('standing'),
   population: t.Literal('account-principal'), aggregation: t.Literal('latest-per-rater-mean'), displayThreshold,
-  profile: t.Union([t.Literal(SCOPED_TARGET_CONTEXT_ID), t.Literal(TARGET_CONTEXT_ID), t.Literal(LEGACY_TARGET_CONTEXT_ID)]) });
+  owner: ratingContextOwner, ...acceptanceFields,
+  profile: t.Union([t.Literal(ACCEPTED_TARGET_CONTEXT_ID), t.Literal(SCOPED_TARGET_CONTEXT_ID), t.Literal(TARGET_CONTEXT_ID), t.Literal(LEGACY_TARGET_CONTEXT_ID)]) });
 export const targetRatingContextWriteResult = t.Object({ ...targetRatingContextReadResult.properties,
-  profile: t.Union([t.Literal(SCOPED_TARGET_CONTEXT_ID), t.Literal(TARGET_CONTEXT_ID)]), sourcePosition, replayed: t.Boolean() });
+  profile: t.Union([t.Literal(ACCEPTED_TARGET_CONTEXT_ID), t.Literal(SCOPED_TARGET_CONTEXT_ID), t.Literal(TARGET_CONTEXT_ID)]), sourcePosition, replayed: t.Boolean() });
 export const targetRatingObservationInput = t.Object({ profile: t.Literal(TARGET_OBSERVATION_ID),
   context: readId, target: readId, actingSubject: readId, expectedRevisionHead: t.Nullable(readId),
   value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })) }, { additionalProperties: false });

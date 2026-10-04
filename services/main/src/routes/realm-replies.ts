@@ -87,7 +87,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
         if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
         try {
           await targetRead(work.environment, { access: work.access, principal, actingSubject: body.author }, async session => {
-            if (!await readReplyRoot(session, body.rootTarget, body.rootRevision)) throw new RealmReplyDenied('Reply root is unavailable');
+            if (!await readReplyRoot(session, body.rootTarget, body.rootRevision, body.contextRevision)) throw new RealmReplyDenied('Reply root is unavailable');
           });
         } catch (error) {
           if (error instanceof WorkReadMissing) throw new RealmReplyDenied('Reply root is unavailable');

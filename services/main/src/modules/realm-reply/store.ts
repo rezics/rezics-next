@@ -18,6 +18,8 @@ import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { realmHistoryOriginCutFilter } from '../realm-admin/history.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
+import { RatingTargetGrainMismatch } from '../rating/release.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -135,14 +137,15 @@ export class RealmReplyStore {
       // Only a new Content identity must bind to the target's current root.
       if (!await this.content.hasReceipt(admission.id, 'reply.create', digest)) {
         const currentRoot = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
-          session => replyRoot(session, input.rootTarget, input.rootRevision));
+          session => replyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision));
         if (!currentRoot) throw new RealmReplyDenied('Reply root is unavailable');
       }
       result = await this.content.createReply(admission, input);
     }
     catch (error) {
       if (error instanceof WorkReadMissing) error = new RealmReplyDenied('Reply root is unavailable');
-      if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
+      if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
+        || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch) {
         const succeeded = await this.content.cancelCreate(admission);
         if (succeeded) await acknowledgeContentDecision(this.env, admission);
         else await cancelPlacement(this.env, admission);

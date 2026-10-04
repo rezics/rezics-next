@@ -43,17 +43,20 @@ import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { targetRead, TargetNotBound } from '../modules/target/resolve.ts';
 import { readId } from '../modules/work/read-contract.ts';
 import { createAdmittedTargetRatingContext, setAdmittedTargetRating, readTargetRatingContext,
-  resolveRatingTarget, readTargetRatingRevision, effectiveDisplayThreshold, TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID,
+  resolveRatingTarget, readTargetRatingRevision, effectiveDisplayThreshold, TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID, ACCEPTED_TARGET_CONTEXT_ID,
   TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
 import { queryTargetRatingAggregate, TARGET_AGGREGATE_PROFILE } from '../modules/rating/target-aggregate.ts';
-import { targetAggregateInput, targetAggregateResult, targetRatingContextInput, scopedTargetRatingContextInput,
+import { targetAggregateInput, targetAggregateResult, targetRatingContextInput, scopedTargetRatingContextInput, acceptedTargetRatingContextInput,
   targetRatingContextReadResult, targetRatingContextWriteResult, targetRatingObservationInput,
   targetRatingObservationWriteResult, targetRatingObservationReadResult } from '../modules/rating/target-api.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from '../modules/rating/global.ts';
 
 /** A MainVersion target and an exact FixedRelease target are never interchangeable. */
 function ratingError(error: unknown): Response {
+  if (error instanceof RatingTargetNotAccepted) return problem(error.status, error.code, error.message);
   if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
   if (error instanceof WorkReadMissing) return problem(404, 'resource_unavailable', error.message);
   if (error instanceof RatingTargetGrainMismatch) {
@@ -147,7 +150,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         try {
           const principal = await work.account.verify(request, ['rating:submit']);
           const target = await targetRead(work.environment,
-            { access: work.access, principal, actingSubject: body.actingSubject },
+            { access: work.access, principal, actingSubject: body.actingSubject, readers: work },
             session => resolveRatingTarget(session, body.context, body.target));
           const receipt = await setAdmittedTargetRating(work.environment, work.account, work.access,
             request, { ...body, idempotencyKey }, target);
@@ -222,7 +225,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           }
           const principalId = await work.access.activePrincipalId(principal);
           if (!principalId) return problem(403, 'authority_denied', 'Authority is not admitted');
-          const found = await targetRead(work.environment, { access: work.access, principal, actingSubject: query.actingSubject },
+          const found = await targetRead(work.environment, { access: work.access, principal, actingSubject: query.actingSubject, readers: work },
             async session => {
               await resolveRatingTarget(session, query.context, query.target!);
               return readTargetRatingRevision(work.environment, principalId, { context: query.context, target: query.target!,
@@ -352,7 +355,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         timeZone: t.String({ minLength: 1, maxLength: 100 }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput, scopedTargetRatingContextInput]),
+      }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput, scopedTargetRatingContextInput, acceptedTargetRatingContextInput]),
       response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
         releaseRatingContextWriteResult, targetRatingContextWriteResult]),
         201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
@@ -363,16 +366,20 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
-      if (body.profile === TARGET_CONTEXT_ID || body.profile === SCOPED_TARGET_CONTEXT_ID) {
+      if (body.profile === TARGET_CONTEXT_ID || body.profile === SCOPED_TARGET_CONTEXT_ID || body.profile === ACCEPTED_TARGET_CONTEXT_ID) {
         try {
-          const scoped = body.profile === SCOPED_TARGET_CONTEXT_ID;
+          const accepted = body.profile === ACCEPTED_TARGET_CONTEXT_ID;
+          const scoped = body.profile === SCOPED_TARGET_CONTEXT_ID || accepted;
           const receipt = await createAdmittedTargetRatingContext(work.environment, work.account, work.access,
-            request, { ...body, scoped, idempotencyKey });
+            request, { ...body, scoped, accepted, idempotencyKey });
           return Response.json({ context: receipt.context, realm: receipt.realm, question: body.question, language: body.language,
             contextRevision: receipt.revision, targetGrain: body.targetGrain, profile: body.profile,
             scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', population: 'account-principal',
             aggregation: 'latest-per-rater-mean', replayed: receipt.replayed,
             displayThreshold: effectiveDisplayThreshold(body.targetGrain, scoped ? body.displayThreshold ?? null : null),
+            owner: { kind: body.realm === GLOBAL_RATING_POPULATION_OWNER ? 'global' : 'realm', id: body.realm },
+            ...(accepted && body.acceptedSubjectTypes ? { acceptedSubjectTypes: [...body.acceptedSubjectTypes].sort() } : {}),
+            ...(accepted && body.acceptedFrameDimensions ? { acceptedFrameDimensions: [...body.acceptedFrameDimensions].sort() } : {}),
             sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
           { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
         } catch (error) { return ratingError(error); }

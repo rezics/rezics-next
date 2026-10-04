@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { publicWork, unerased } from '../work/public-patterns.ts';
-import { globalContextPattern } from '../rating/global.ts';
+import { globalContextPattern, GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import type { AdmissionRequest } from './admission.ts';
 import { maintainerControllerProof, maintainerGeneration } from '../work/maintainer-proof.ts';
 import { publicReplyRoot } from '../realm-reply/root.ts';
@@ -11,6 +11,7 @@ import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } fr
 import { workKinds } from '../work/work-kinds.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
+import { publicInTransaction } from './semantic-disclosure.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -191,7 +192,10 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   }
   if (target.kind === 'reply' || target.kind === 'reply-draft') {
     const work = target.kind === 'reply' ? target.id : relatedWork;
-    return !!work && !!sourceRevision && await publicReplyRoot(graph, work, sourceRevision);
+    return !!work && !!sourceRevision && await publicReplyRoot(graph, work, sourceRevision, {
+      canReadSemanticResource: async (_principal, _actor, resource) =>
+        (await publicInTransaction(client, graph, [resource])).has(resource),
+    });
   }
   if (relatedWork && (!native.test(relatedWork)
     || !await baselineTargetAllowed(client, graph, principalId, actingSubject,
@@ -213,6 +217,13 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
         ?eligibility rv:publicationDecision ?publication ; rv:disclosure rv:Public .
         FILTER NOT EXISTS { <urn:rezics:content:revision:${sourceRevision}> a rv:ErasedRevision }
       }`;
+  }
+  else if (target.kind === 'rating' && !relatedWork) {
+    // Exact Global questions have no Work association. The rating owner already
+    // resolves and discloses the target; this proof binds the live controller
+    // and the public question, without inventing Realm membership or grants.
+    const { targetContextPattern } = await import('../rating/target.ts');
+    pattern = targetContextPattern(target.id, iri(GLOBAL_RATING_POPULATION_OWNER));
   }
   else if (target.kind === 'rating') pattern = `GRAPH ${current} {
     { ${globalContextPattern(target.id)} } UNION {
@@ -249,7 +260,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   if (!baselineWorkTypesAllowed(request)) return null;
   const target = baselineTarget(request.action, request.scope);
   if (!target) return null;
-  const needsWork = target.kind === 'rating' || request.action === 'translation.link';
+  const needsWork = request.action === 'translation.link';
   if (needsWork && (!request.baselineRelatedWork || !native.test(request.baselineRelatedWork))) return null;
   if (target.kind === 'comment' && (!request.baselineSourceRevision
     || !/^[0-9a-f-]{36}$/.test(request.baselineSourceRevision))) return null;

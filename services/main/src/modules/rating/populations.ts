@@ -123,7 +123,9 @@ export async function readRatingPopulations(
           rv:availableRatingCount ?availableCount . FILTER(?availableCount > 0) }
       GRAPH ${iri(GRAPHS.current)} {
         ?context rv:contextState rv:Active ; rv:head ?contextHead .
-        { ?context a rv:GlobalRatingContext ; rv:ratingPopulationOwner ?population .
+        { ?context rv:ratingPopulationOwner ?population .
+          VALUES ?globalContextType { rv:GlobalRatingContext rv:AcceptedTargetRatingContext }
+          ?context a ?globalContextType .
           FILTER(?population = ${iri(GLOBAL_RATING_POPULATION_OWNER)})
           ${q && !'global'.includes(q.toLowerCase()) ? 'FILTER(false)' : ''} }
         UNION { ?context rv:realm ?population . ?population a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .

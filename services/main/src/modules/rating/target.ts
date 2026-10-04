@@ -20,12 +20,19 @@ import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInpu
   standingRatingReceiptIri, type RatingObservationReceipt } from './observation.ts';
 import { RatingTargetGrainMismatch } from './release.ts';
 import { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput } from './target-digest.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
+import { ACCEPTED_FRAME_DIMENSIONS, CONTEXT_ACCEPTANCE_COST, assertRatingTargetAccepted,
+  readContextAcceptance, validSubjectType, subjectTypeTerm, RatingTargetNotAccepted, type ContextAcceptance, type AcceptanceTarget } from './acceptance.ts';
 
 export { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput };
 
 export const LEGACY_TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
 export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v2';
 export const SCOPED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v3';
+export const ACCEPTED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v4';
+const ACCEPTED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${ACCEPTED_TARGET_CONTEXT_ID}`;
+const ACCEPTED_OBSERVATION_ID = 'realm-target-rating-observation-v4';
+const ACCEPTED_OBSERVATION_PROFILE = `https://rezics.com/definition/${ACCEPTED_OBSERVATION_ID}`;
 export const LEGACY_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${LEGACY_TARGET_CONTEXT_ID}`;
 const LANGUAGE_OBSERVATION_ID = 'realm-target-rating-observation-v2';
 const SCOPED_OBSERVATION_ID = 'realm-target-rating-observation-v3';
@@ -35,30 +42,52 @@ export const TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${TARGET_CO
 const SCOPED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${SCOPED_TARGET_CONTEXT_ID}`;
 const TARGET_OBSERVATION_PROFILE = `https://rezics.com/definition/${TARGET_OBSERVATION_ID}`;
 /** Every revision profile a target Context or observation can carry, newest first. */
-export const TARGET_CONTEXT_PROFILES = [SCOPED_TARGET_CONTEXT_PROFILE, TARGET_CONTEXT_PROFILE, LEGACY_TARGET_CONTEXT_PROFILE] as const;
-export const TARGET_OBSERVATION_PROFILES = [SCOPED_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, TARGET_OBSERVATION_PROFILE] as const;
+export const TARGET_CONTEXT_PROFILES = [ACCEPTED_TARGET_CONTEXT_PROFILE, SCOPED_TARGET_CONTEXT_PROFILE, TARGET_CONTEXT_PROFILE, LEGACY_TARGET_CONTEXT_PROFILE] as const;
+export const TARGET_OBSERVATION_PROFILES = [ACCEPTED_OBSERVATION_PROFILE, SCOPED_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, TARGET_OBSERVATION_PROFILE] as const;
 export const TARGET_GRAINS = { release: 'Release', realization: 'Realization', occurrence: 'Occurrence',
-  resource: 'Resource' } as const;
+  resource: 'Resource', projection: 'Projection' } as const;
 export type TargetGrain = keyof typeof TARGET_GRAINS;
 export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, commandDeadlineMs: 10_000,
   questionLanguageBytes: 255 } as const;
+/** v4 adds one bounded acceptance read; projection declarations add a coordinate
+ * read and one frame batch. No observation population or membership walk. The
+ * existing Context scope gate still serializes registration, claim and sealing. */
+export const ACCEPTED_TARGET_RATING_WRITE_COST = { ...TARGET_RATING_WRITE_COST,
+  graphCalls: 48, graphBytes: 1_048_576, projectionFrames: 8, acceptedTypes: 32 } as const;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
-/** `scoped` selects the v3 profile; `displayThreshold` is its optional override. */
-export interface TargetContextInput { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string;
-  scoped?: boolean; displayThreshold?: number | null }
+/** `accepted` selects v4; older profiles retain their admitted meaning. */
+export interface TargetContextInput extends ContextAcceptance { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string;
+  scoped?: boolean; accepted?: boolean; displayThreshold?: number | null }
 export interface TargetRatingReceipt extends RatingObservationReceipt { target?: string }
+export interface ResolvedRatingTarget extends ResolvedTarget { acceptance?: AcceptanceTarget }
 
 export function targetContextDigest(input: TargetContextInput): string {
   ratingContextDigest(input);
   if (!parseLanguage(input.language) || input.language.length > TARGET_RATING_WRITE_COST.questionLanguageBytes
     || !Object.hasOwn(TARGET_GRAINS, input.targetGrain)) throw new InvalidRatingObservationInput('Invalid target grain or question language');
-  if (!input.scoped) return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
+  if (input.targetGrain === 'projection' && !input.scoped && !input.accepted
+    || input.realm === GLOBAL_RATING_POPULATION_OWNER && !input.accepted) throw new InvalidRatingObservationInput('This profile does not accept the owner or grain');
+  if (input.accepted) {
+    for (const [values, max, valid] of [
+      [input.acceptedSubjectTypes, CONTEXT_ACCEPTANCE_COST.subjectTypes, validSubjectType],
+      [input.acceptedFrameDimensions, CONTEXT_ACCEPTANCE_COST.frameDimensions,
+        (value: string) => (ACCEPTED_FRAME_DIMENSIONS as readonly string[]).includes(value)],
+    ] as const) {
+      if (values && (!values.length || values.length > max || new Set(values).size !== values.length || values.some(value => !valid(value)))) {
+        throw new InvalidRatingObservationInput('Invalid Context acceptance declaration');
+      }
+    }
+    if (input.acceptedFrameDimensions && input.targetGrain !== 'projection') throw new InvalidRatingObservationInput('Frame dimensions require the projection grain');
+  } else if (input.acceptedSubjectTypes || input.acceptedFrameDimensions) throw new InvalidRatingObservationInput('Acceptance requires v4');
+  if (!input.scoped && !input.accepted) return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
     language: input.language, targetGrain: input.targetGrain, actingSubject: input.actingSubject }));
   if (input.displayThreshold != null && (!Number.isInteger(input.displayThreshold) || input.displayThreshold < 1
     || input.displayThreshold > MAX_DISPLAY_THRESHOLD)) throw new InvalidRatingObservationInput('Invalid display threshold');
-  return hash(JSON.stringify({ family: SCOPED_TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
+  return hash(JSON.stringify({ family: input.accepted ? ACCEPTED_TARGET_CONTEXT_ID : SCOPED_TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
     language: input.language, targetGrain: input.targetGrain, displayThreshold: input.displayThreshold ?? null,
+    ...(input.accepted ? { acceptedSubjectTypes: input.acceptedSubjectTypes ? [...input.acceptedSubjectTypes].sort() : null,
+      acceptedFrameDimensions: input.acceptedFrameDimensions ? [...input.acceptedFrameDimensions].sort() : null } : {}),
     actingSubject: input.actingSubject }));
 }
 /** A mean shows from this many ratings unless the Context declares its own; a
@@ -77,20 +106,31 @@ export function targetRatingSlotIri(principalId: string, context: string, target
     principalId, context, target, cadence: RATING_STANDING_CADENCE }))}`;
 }
 
-export function targetContextPattern(context: string, realm = '?realm', revision = '?contextRevision'): string {
-  return `GRAPH ${iri(GRAPHS.current)} {
+/** Global is an ownership alternative, never a synthetic Realm. The marker is
+ * owned by v4 and preserves the existing Context/target inventory contracts. */
+export function targetContextOwnerPattern(realm: string, context: string): string {
+  return `{ ${realm} a rv:GlobalRatingPopulation ; rv:ratingContext ${context} .
+    FILTER(${realm} = ${iri(GLOBAL_RATING_POPULATION_OWNER)})
+    ${context} a rv:AcceptedTargetRatingContext ; rv:ratingPopulationOwner ${realm} .
+  } UNION {
     ?space a rv:Space ; rv:realmCapability ${realm} ; rv:disclosure rv:Public .
     FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
-    ${realm} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ; rv:ratingContext ${iri(context)} .
+    ${realm} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ; rv:ratingContext ${context} .
     FILTER NOT EXISTS { ${realm} rv:protectionHead ?realmProtection }
+  }`;
+}
+export function targetContextPattern(context: string, realm = '?realm', revision = '?contextRevision'): string {
+  return `GRAPH ${iri(GRAPHS.current)} {
+    { ${targetContextOwnerPattern(realm, iri(context))} }
     ${iri(context)} a rv:TargetRatingContext ; rv:contextState rv:Active ; rv:realm ${realm} ;
       rv:targetGrain ?grain ; rv:question ?question ; rv:head ${revision} ;
       rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
       rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
       rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
-    VALUES ?grain { rv:Release rv:Realization rv:Occurrence rv:Resource }
+    VALUES ?grain { rv:Release rv:Realization rv:Occurrence rv:Resource rv:Projection }
     FILTER NOT EXISTS { ${iri(context)} rv:protectionHead ?contextProtection }
-  }`;
+  }
+  FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${revision} a rv:ErasedRevision } }`;
 }
 export async function readTargetRatingContext(env: WorkActivationEnvironment, context: string) {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest ?profile ?threshold WHERE {
@@ -115,11 +155,24 @@ export async function readTargetRatingContext(env: WorkActivationEnvironment, co
   // infer it from the question text or the requesting client's locale.
   const language = row.question['xml:lang'];
   const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile!);
-  const tagged = profile !== LEGACY_TARGET_CONTEXT_PROFILE, scoped = profile === SCOPED_TARGET_CONTEXT_PROFILE;
+  const accepted = profile === ACCEPTED_TARGET_CONTEXT_PROFILE;
+  const tagged = profile !== LEGACY_TARGET_CONTEXT_PROFILE, scoped = accepted || profile === SCOPED_TARGET_CONTEXT_PROFILE;
+  const acceptance = accepted ? await readContextAcceptance({ query: async (body, limit) => {
+    const result = (await env.fuseki.query(`PREFIX rv: <${RV}> ${body}`)).results?.bindings ?? [];
+    if (result.length > limit) throw new RatingObservationUnavailable('Context acceptance exceeds its bound');
+    return result;
+  } }, context) : {};
+  const sameSet = (recorded: unknown, values: readonly string[] | undefined) =>
+    JSON.stringify(recorded) === JSON.stringify(values ?? null);
   const declared = row.threshold ? Number(row.threshold.value) : null;
   if (!language || !parseLanguage(language)
     || tagged && (typeof state.language !== 'string' || state.language.toLowerCase() !== language.toLowerCase())
     || (scoped ? state.displayThreshold !== declared : declared !== null)
+    || (accepted ? !sameSet(state.acceptedSubjectTypes, acceptance.acceptedSubjectTypes)
+      || !sameSet(state.acceptedFrameDimensions, acceptance.acceptedFrameDimensions)
+      : !!acceptance.acceptedSubjectTypes || !!acceptance.acceptedFrameDimensions)
+    || acceptance.acceptedFrameDimensions && grain !== 'projection'
+    || row.realm.value === GLOBAL_RATING_POPULATION_OWNER && !accepted
     || declared !== null && (!Number.isInteger(declared) || declared < 1 || declared > MAX_DISPLAY_THRESHOLD)
     || !grain || state.context !== context || state.realm !== row.realm.value || state.question !== row.question.value
     || state.targetGrain !== grain || state.state !== 'active' || state.scaleMin !== 1 || state.scaleMax !== 10
@@ -129,18 +182,25 @@ export async function readTargetRatingContext(env: WorkActivationEnvironment, co
     contextRevision: row.contextRevision.value, targetGrain: grain, scale: { min: 1 as const, max: 10 as const, step: 1 as const },
     cadence: 'standing' as const, population: 'account-principal' as const, aggregation: 'latest-per-rater-mean' as const,
     displayThreshold: effectiveDisplayThreshold(grain, declared),
-    profile: scoped ? SCOPED_TARGET_CONTEXT_ID : tagged ? TARGET_CONTEXT_ID : LEGACY_TARGET_CONTEXT_ID };
+    owner: { kind: row.realm.value === GLOBAL_RATING_POPULATION_OWNER ? 'global' as const : 'realm' as const, id: row.realm.value },
+    ...acceptance,
+    profile: accepted ? ACCEPTED_TARGET_CONTEXT_ID : scoped ? SCOPED_TARGET_CONTEXT_ID : tagged ? TARGET_CONTEXT_ID : LEGACY_TARGET_CONTEXT_ID };
 }
 
 /** Reuse the bounded, owner-authorized target resolver at the command and read boundary. */
 export async function resolveRatingTarget(session: TargetReadSession, context: string, target: string) {
   const [resolved] = await resolveTargets(session, [target], 'rating');
+  const acceptance = await assertRatingContextTarget(session, context, resolved!);
+  return { ...resolved!, ...(acceptance ? { acceptance } : {}) };
+}
+export async function assertRatingContextTarget(session: TargetReadSession, context: string, resolved: ResolvedTarget) {
+  const acceptance = await assertRatingTargetAccepted(session, context, resolved);
   const rows = await session.query(`SELECT ?grain WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(context)} rv:targetGrain ?grain } } LIMIT 2`, 2);
   const grain = rows.length === 1 ? rows[0]?.grain?.value : undefined;
-  const expected = TARGET_GRAINS[resolved!.base as TargetGrain];
+  const expected = TARGET_GRAINS[resolved.base as TargetGrain];
   if (!expected || grain !== `${RV}${expected}`) throw new RatingTargetGrainMismatch('Context and target grain differ');
-  return resolved!;
+  return acceptance;
 }
 
 /** Receipt identity is checked on every retry, including terminal cancellations. */
@@ -177,7 +237,7 @@ async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(en
     }
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest); }
+      try { admission = await access.claim(registered.id, digest, principal); }
       catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
     }
     let writeError: unknown;
@@ -201,7 +261,7 @@ async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(en
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof CancelledActivation || error instanceof RatingRealmUnavailable
-      || error instanceof RatingObservationUnavailable || error instanceof CommandRejected) throw error;
+      || error instanceof RatingObservationUnavailable || error instanceof RatingTargetNotAccepted || error instanceof CommandRejected) throw error;
     throw new PendingAdmittedWork(registered.id, kind);
   }
 }
@@ -226,13 +286,16 @@ async function createTargetRatingContext(env: WorkActivationEnvironment, admissi
   if (existing) return checked(existing, admission);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Context admission expired');
   const context = ID + Bun.randomUUIDv7(), revision = ID + Bun.randomUUIDv7(), operation = ID + Bun.randomUUIDv7();
-  const scoped = input.scoped === true, threshold = scoped ? input.displayThreshold ?? null : null;
-  const profileId = scoped ? SCOPED_TARGET_CONTEXT_ID : TARGET_CONTEXT_ID;
-  const profile = scoped ? SCOPED_TARGET_CONTEXT_PROFILE : TARGET_CONTEXT_PROFILE;
+  const accepted = input.accepted === true, scoped = accepted || input.scoped === true, threshold = scoped ? input.displayThreshold ?? null : null;
+  const profileId = accepted ? ACCEPTED_TARGET_CONTEXT_ID : scoped ? SCOPED_TARGET_CONTEXT_ID : TARGET_CONTEXT_ID;
+  const profile = accepted ? ACCEPTED_TARGET_CONTEXT_PROFILE : scoped ? SCOPED_TARGET_CONTEXT_PROFILE : TARGET_CONTEXT_PROFILE;
+  const global = input.realm === GLOBAL_RATING_POPULATION_OWNER;
+  const acceptance = { acceptedSubjectTypes: input.acceptedSubjectTypes ? [...input.acceptedSubjectTypes].sort() : null,
+    acceptedFrameDimensions: input.acceptedFrameDimensions ? [...input.acceptedFrameDimensions].sort() : null };
   const state = { context, realm: input.realm, question: input.question, language: input.language, targetGrain: input.targetGrain,
     state: 'active', scaleMin: 1, scaleMax: 10, cadence: RATING_STANDING_CADENCE,
     populationPolicy: RATING_ACCOUNT_POPULATION, aggregationPolicy: RATING_LATEST_MEAN_POLICY,
-    ...(scoped ? { displayThreshold: threshold } : {}) };
+    ...(scoped ? { displayThreshold: threshold } : {}), ...(accepted ? acceptance : {}) };
   const manifest = prepareComponent(env.objectDirectory, context, state, profile);
   const validations = await profileValidations(env.fuseki, profileId, [
     { shape: `${profile}/realm-shape`, focus: [input.realm], graphs: [GRAPHS.current] },
@@ -244,20 +307,24 @@ async function createTargetRatingContext(env: WorkActivationEnvironment, admissi
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:ratingContext ${iri(context)} .
-        ${iri(context)} a rv:TargetRatingContext, rv:${scoped ? 'Scoped' : 'LanguageTagged'}TargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
+        ${global ? `${iri(input.realm)} a rv:GlobalRatingPopulation .` : ''}
+        ${iri(context)} a rv:TargetRatingContext, rv:${accepted ? 'Accepted' : scoped ? 'Scoped' : 'LanguageTagged'}TargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
           rv:question ${lit(input.question)}@${input.language} ; rv:targetGrain rv:${TARGET_GRAINS[input.targetGrain]} ;
           rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           ${threshold === null ? '' : `rv:displayThreshold ${threshold} ;`}
-          rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ${iri(revision)} . }
+          rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ${iri(revision)} .
+        ${global ? `${iri(context)} rv:ratingPopulationOwner ${iri(input.realm)} .` : ''}
+        ${acceptance.acceptedSubjectTypes?.map(type => `${iri(context)} rv:acceptedSubjectType ${subjectTypeTerm(type)} .`).join('\n') ?? ''}
+        ${acceptance.acceptedFrameDimensions?.map(dimension => `${iri(context)} rv:acceptedFrameDimension ${lit(dimension)} .`).join('\n') ?? ''} }
       ${anchor(revision, context, operation, manifest, profile, env.lineage.dataEpoch)}
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptIdentity(receipt, operation, admission, env.lineage.dataEpoch)}
         rv:realm ${iri(input.realm)} ; rv:ratingContext ${iri(context)} ; rv:ratingContextRevision ${iri(revision)} . }
       ${outbox(receipt, operation, env.lineage.dataEpoch, 'RatingContextCreatedEvent', 'rating.context.create',
         `rv:realm ${iri(input.realm)}`)} }
     WHERE { ${controlGuard(env, receipt)}
-      GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ${iri(input.realm)} ; rv:disclosure rv:Public .
-        ${iri(input.realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active . }
+      ${global ? '' : `GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ${iri(input.realm)} ; rv:disclosure rv:Public .
+        ${iri(input.realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active . }`}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
       BIND(?n + 1 AS ?next) }` }, admission);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
@@ -296,7 +363,7 @@ function controlGuard(env: WorkActivationEnvironment, receipt: string) {
 export function setAdmittedTargetRating(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
-  request: Request, input: TargetRatingInput & { idempotencyKey: string }, target: ResolvedTarget) {
+  request: Request, input: TargetRatingInput & { idempotencyKey: string }, target: ResolvedRatingTarget) {
   return admitted(env, account, access, request, input, targetRatingDigest(input), `rating:observe:${input.context}`,
     false, admission => setTargetRating(env, admission, input, target), id => readTargetRatingReceipt(env, id))
     .then(receipt => {
@@ -309,7 +376,7 @@ export function setAdmittedTargetRating(env: WorkActivationEnvironment,
 }
 
 async function setTargetRating(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: TargetRatingInput, target: ResolvedTarget): Promise<TargetRatingReceipt> {
+  input: TargetRatingInput, target: ResolvedRatingTarget): Promise<TargetRatingReceipt> {
   const receipt = standingRatingReceiptIri(admission.id);
   await assertNotInvalidProfileReceipt(env.fuseki, receipt);
   const existing = await readTargetRatingReceipt(env, admission.id);
@@ -339,13 +406,14 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
     targetRevision: target.revision, targetGrain: context.targetGrain, contextRevision: context.contextRevision,
     realm: context.realm, predecessor: input.expectedRevisionHead, availability, value: input.value,
     evaluatedAt, submittedAt: admission.registeredAt, originalSubmissionAt: evaluatedAt, revisedAt: admission.registeredAt };
+  const accepted = context.profile === ACCEPTED_TARGET_CONTEXT_ID;
   const scoped = context.profile === SCOPED_TARGET_CONTEXT_ID, languageTagged = context.profile === TARGET_CONTEXT_ID;
-  const observationProfile = scoped ? SCOPED_OBSERVATION_PROFILE
+  const observationProfile = accepted ? ACCEPTED_OBSERVATION_PROFILE : scoped ? SCOPED_OBSERVATION_PROFILE
     : languageTagged ? LANGUAGE_OBSERVATION_PROFILE : TARGET_OBSERVATION_PROFILE;
-  const typed = scoped ? 'Scoped' : languageTagged ? 'LanguageTagged' : null;
+  const typed = accepted ? 'Accepted' : scoped ? 'Scoped' : languageTagged ? 'LanguageTagged' : null;
   const manifest = prepareComponent(env.objectDirectory, observation, state, observationProfile);
   const validations = await profileValidations(env.fuseki,
-    scoped ? SCOPED_OBSERVATION_ID : languageTagged ? LANGUAGE_OBSERVATION_ID : TARGET_OBSERVATION_ID,
+    accepted ? ACCEPTED_OBSERVATION_ID : scoped ? SCOPED_OBSERVATION_ID : languageTagged ? LANGUAGE_OBSERVATION_ID : TARGET_OBSERVATION_ID,
     ['realm', 'context', 'observation', 'revision'].map(role => ({ shape: `${observationProfile}/${role}-shape`,
       focus: [role === 'realm' ? context.realm : role === 'context' ? input.context : role === 'observation' ? observation : revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] })),
@@ -379,6 +447,10 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
       ${targetContextPattern(input.context, iri(context.realm), iri(context.contextRevision))}
       FILTER(?grain = rv:${TARGET_GRAINS[context.targetGrain]})
       ${targetRevisionGuard(target)}
+      ${target.acceptance?.frames?.map(targetRevisionGuard).join('\n') ?? ''}
+      FILTER(NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} rv:acceptedSubjectType ?acceptedType } }
+        || EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.context)} rv:acceptedSubjectType ?acceptedType .
+          ${iri(target.acceptance?.subject ?? input.target)} a ?acceptedType } })
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.target)} rv:protectionHead ?targetProtection } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(target.revision)} a rv:ErasedRevision } }
       ${target.work ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target.work)} rv:protectionHead ?workProtection } }` : ''}

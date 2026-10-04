@@ -20,10 +20,10 @@ test('a target mean is withheld below the Context display threshold and shown fr
         question: 'How good is this character?', language: 'en', targetGrain: 'resource', displayThreshold,
         actingSubject: r.owner.actor })).status).toBe(400);
     }
-    // The projection grain is admitted only once projections resolve.
+    // The projection resolver now admits the v3 grain with its own default threshold.
     expect((await r.call(r.owner, 'POST', '/v1/rating-contexts', { profile: 'realm-target-rating-context-v3', realm: r.realm,
       question: 'How good is this character?', language: 'en', targetGrain: 'projection',
-      actingSubject: r.owner.actor })).status).toBe(400);
+      actingSubject: r.owner.actor })).status).toBe(201);
     expect(await r.json(await r.call(null, 'GET', `/v1/rating-contexts/${short(declared.context)}`)))
       .toMatchObject({ profile: 'realm-target-rating-context-v3', displayThreshold: 3 });
     expect(await r.json(await r.call(null, 'GET', `/v1/rating-contexts/${short(legacy.context)}`)))

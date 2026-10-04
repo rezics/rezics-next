@@ -61,8 +61,11 @@ export async function publicSemantics(client: SemanticDisclosureClient, refs: re
   });
 }
 
-async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient, 'query'>,
+/** The same disclosure proof inside an already fenced Access transaction,
+ * including baseline reply roots. No nested checkout or independent policy. */
+export async function publicInTransaction(access: PoolClient, graph: Pick<FusekiClient, 'query'>,
   refs: readonly string[], revision?: string): Promise<ReadonlySet<string>> {
+  checkedRefs(refs);
   const rows = (await graph.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?resource WHERE {
       VALUES ?resource { ${refs.map(iri).join(' ')} }

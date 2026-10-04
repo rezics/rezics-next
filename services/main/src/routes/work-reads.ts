@@ -12,6 +12,9 @@ import { readWorkHeader } from '../modules/work/read-header.ts';
 import { readWorkPage } from '../modules/work/read-pages.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
 import { readResourceRating, readResourceRatingContexts, resourceRatingRead } from '../modules/rating/target-read.ts';
+import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
+import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
+import { ratingContextOwner } from '../modules/rating/target-api.ts';
 import { adoptionItem, classificationItem, creditItem, pageFields, pageQuery,
   readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
   workHeader } from '../modules/work/read-contract.ts';
@@ -20,6 +23,8 @@ import { commandError, problem } from './problems.ts';
 
 export const workReadProblems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 export function workReadError(error: unknown): Response {
+  if (error instanceof RatingTargetNotAccepted) return problem(error.status, error.code, error.message);
+  if (error instanceof RatingTargetGrainMismatch) return problem(422, 'rating_target_grain_mismatch', 'Target grain differs from the RatingContext');
   if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
   if (error instanceof TargetUnavailable) return problem(404, error.code, 'Resource is unavailable');
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_work_read', error.message);
@@ -93,7 +98,8 @@ export function workReadRoutes(work: MainWorkDependencies) {
     .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
-        language: languageTag, scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
+        language: languageTag, owner: t.Optional(ratingContextOwner),
+        scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
         scope: readScope, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,

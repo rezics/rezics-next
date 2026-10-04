@@ -7,6 +7,7 @@ import { REVIEW_COST, helpfulCommand, helpfulResult, quotePage, reviewCommand, r
   reviewItem as reviewItemSchema, reviewPage, reviewQuery, reviewResult } from '../modules/review/contract.ts';
 import { proveReviewRating, reviewItem, reviewTarget } from '../modules/review/read.ts';
 import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
+import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit,
   WorkReadMissing, WorkReadMoved, WorkReadUnavailable, workRead } from '../modules/work/read-session.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
@@ -30,6 +31,7 @@ export const openApiOperations = {
 } as const;
 
 function reviewError(error: unknown): Response {
+  if (error instanceof RatingTargetNotAccepted) return problem(error.status, error.code, error.message);
   if (error instanceof RatingTargetGrainMismatch) return problem(422, 'rating_target_grain_mismatch', 'Review target grain differs from the Context');
   if (error instanceof ControlInvalid) return problem(400, 'invalid_review_command', error.message);
   if (error instanceof ControlDenied) return problem(403, 'review_denied', error.message);

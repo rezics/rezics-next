@@ -42,9 +42,9 @@ test('the display threshold override is an optional bounded integer of the v3 Co
   for (const bad of [0, -1, MAX_DISPLAY_THRESHOLD + 1, 2.5, '5']) {
     expect(Value.Check(scopedTargetRatingContextInput, { ...base, displayThreshold: bad })).toBe(false);
   }
-  // v2 keeps its closed shape; v3 does not accept a grain it cannot create yet.
+  // v2 keeps its closed shape; v3 now admits the projection resolver's grain.
   expect(Value.Check(targetRatingContextInput, { ...base, profile: 'realm-target-rating-context-v2', displayThreshold: 5 })).toBe(false);
-  expect(Value.Check(scopedTargetRatingContextInput, { ...base, targetGrain: 'projection' })).toBe(false);
+  expect(Value.Check(scopedTargetRatingContextInput, { ...base, targetGrain: 'projection' })).toBe(true);
 });
 
 test('a v3 request digest binds its threshold and never collides with v2', () => {

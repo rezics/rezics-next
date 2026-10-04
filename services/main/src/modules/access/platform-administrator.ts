@@ -3,9 +3,11 @@ import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
+import { GLOBAL_CONTEXT_SCOPE } from '../rating/global.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const rootActions: Record<string, string> = {
+  'rating.context.create': GLOBAL_CONTEXT_SCOPE,
   'work.create': 'work:create:root',
   'space.create': 'space:create:root',
   'semantic.change': 'semantic:create:root',

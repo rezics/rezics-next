@@ -294,7 +294,7 @@ export interface MainCloudEvent {
       id: string; action: 'work.title.apply' | 'work.title.return' | 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.context.policy.set' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
-      operation?: string; work?: string; mainVersion?: string; workRevision?: string;
+      operation?: string; work?: string; mainVersion?: string; target?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
       workManifest?: string; mainManifest?: string;
       titleControl?: import('../work/title-control.ts').TitleControlReceipt;
@@ -778,7 +778,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
 ): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
-    ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main
+    ?digest ?authorityEpoch ?scope ?epoch ?sequence ?operation ?work ?main ?target
     ?workRevision ?mainRevision ?expectedHead ?reason ?contribution ?draftRevision
     ?author ?language ?eventContribution ?publicationDecision ?selectedDraft
     ?selection ?matchUnit ?eventSpace ?eventRealm ?space ?realm ?slot ?rejection ?reasonCode
@@ -831,6 +831,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       OPTIONAL { ?receipt rv:admittedScope ?scope }
       OPTIONAL { ?receipt rv:operation ?operation }
       OPTIONAL { ?receipt rv:work ?work }
+      OPTIONAL { ?receipt rv:target ?target }
       OPTIONAL { ?receipt rv:mainVersion ?main }
       OPTIONAL { ?receipt rv:workRevision ?workRevision }
       OPTIONAL { ?receipt rv:authorCredit ?authorCredit }
@@ -1150,6 +1151,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
   }
   iri(receiptId);
   const work = value('work');
+  const target = value('target');
   const main = value('main');
   const workRevision = value('workRevision');
   const mainRevision = value('mainRevision');
@@ -1455,7 +1457,8 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         || operation || ratingContext || ratingPolicyRevision))
     || (type === 'com.rezics.rating.observation-changed.v1'
       && (action !== 'rating.observation.set' || outcome !== `${RV}Succeeded`
-        || !operation || !realm || !ratingContext || !contextRevision || !work || !main
+        || !operation || !realm || !ratingContext || !contextRevision
+        || (target ? !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target) || !!work || !!main : !work || !main)
         || !ratingSlot || !ratingObservation || !observationRevision
         || scope !== `rating:observe:${ratingContext}` || reason
         || ![`${RV}Available`, `${RV}Withdrawn`].includes(ratingAvailability ?? '')
@@ -1470,12 +1473,12 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
       && (action !== 'rating.observation.set' || outcome !== `${RV}Cancelled`
         || !scope.startsWith('rating:observe:') || reason !== `${RV}StaleHead`
         || operation || realm || ratingContext || ratingSlot || ratingObservation
-        || observationRevision || ratingAvailability || ratingValue || work || main))
+        || observationRevision || ratingAvailability || ratingValue || work || main || target))
     || (type === 'com.rezics.rating.observation-cancelled.v1'
       && (action !== 'rating.observation.set' || outcome !== `${RV}Cancelled`
         || !scope.startsWith('rating:observe:') || reason
         || operation || realm || ratingContext || ratingSlot || ratingObservation
-        || observationRevision || ratingAvailability || ratingValue || work || main))) {
+        || observationRevision || ratingAvailability || ratingValue || work || main || target))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
@@ -1483,6 +1486,7 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
     admissionId, requestDigest, authorityEpoch, scope,
     ...(operation ? { operation } : {}), ...(work ? { work } : {}),
+    ...(target ? { target } : {}),
     ...(main ? { mainVersion: main } : {}),
     ...(workRevision ? { workRevision,
       workManifest: await revisionManifest(fuseki, workRevision) } : {}),

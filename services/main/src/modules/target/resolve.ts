@@ -192,14 +192,16 @@ export async function resolveCommandTarget(session: TargetReadSession, resource:
 export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   const { deps, principal, options } = session;
   const actingSubject = options.actingSubject;
+  const access = deps.access;
   const reader: SummaryReader = { viewer: session.viewer ?? disclosureViewer(principal),
     ...(deps.governance?.store ? {
       restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
     } : {}) };
   if (!principal || !actingSubject) return { ...reader,
+    canReadSemantic: access?.canReadSemanticResource
+      ? resource => Promise.resolve(access.canReadSemanticResource!(null, null, resource)) : undefined,
     canReadSemantics: deps.mediaAccess ? resources => deps.mediaAccess!.canReadSemantics(
       null, null, resources, deps.environment.fuseki) : undefined };
-  const access = deps.access;
   if (!access) throw new WorkReadUnavailable('Target authority is unavailable');
   let verifiedContext: ReturnType<NonNullable<typeof deps.account>['verify']> | undefined;
   const contextPrincipal = () => {
