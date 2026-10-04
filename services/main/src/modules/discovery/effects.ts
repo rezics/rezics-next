@@ -92,6 +92,8 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'model.generation.record': 'scope',
   'lexicon.presentation.change': 'irrelevant',
   'lexicon.presentation.review': 'irrelevant',
+  'rating.question-presentation.change': 'irrelevant',
+  'rating.question-presentation.review': 'irrelevant',
   'statement.record': 'scope',
   'statement.withdraw': 'scope',
   'statement.decide': 'scope',
