@@ -21,7 +21,7 @@ import {
 } from '../../scripts/qa/core.ts';
 import { completeFileResults, lastStartedTestFile } from '../../scripts/qa/file-results.ts';
 import { planIntegrationShards } from '../../scripts/qa/integration-shards.ts';
-import { integrationResourceClasses } from '../../scripts/qa/resource-classes.ts';
+import { integrationResourceClasses, queuedProjectsBudget } from '../../scripts/qa/resource-classes.ts';
 import {
   integrationOwnerResetStatements,
   resetIntegrationState,
@@ -388,6 +388,16 @@ test('G-955: a file that drops owner schemas gets a fresh project, so later file
     if (/DROP SCHEMA/.test(source) && /'(access|relay|content|account)'/.test(source))
       expect([name, isolatedIntegrationFiles.has(`tests/qa/integration/${name}`)]).toEqual([name, true]);
   }
+});
+
+test('G-955: queued fault/recovery projects get a wall deadline their own budgets can meet', () => {
+  // The whole fault tier (40 projects of 360 s on two slots) passed in 1,091 s against a flat 360 s.
+  const fault = queuedProjectsBudget(Array.from({ length: 40 }, () => 360_000), 2);
+  expect(fault).toBeGreaterThan(1_091_000);
+  expect(queuedProjectsBudget([360_000], 2)).toBe(360_000);
+  expect(queuedProjectsBudget([360_000, 360_000], 4)).toBeGreaterThanOrEqual(360_000);
+  expect(queuedProjectsBudget(Array.from({ length: 4 }, () => 360_000), 2)).toBeLessThan(fault);
+  expect(() => queuedProjectsBudget([360_000], 0)).toThrow('Invalid QA slot count');
 });
 
 test('G-955: a file that imports a heavy integration file runs in that file\'s resource class', () => {

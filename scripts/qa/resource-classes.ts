@@ -97,13 +97,21 @@ export function assertQaResourceAllocation(
 export function integrationTierBudget(classes: readonly QaResourceClass[], slots: number): number {
   if (!Number.isInteger(slots) || slots < 1) throw new Error('Invalid QA slot count');
   if (classes.every((name) => name === 'ordinary')) return qaResourceClasses.ordinary.budgetMs;
-  const workers = Math.min(slots, classes.length);
-  const costs = classes.map((name) => qaResourceClasses[name].budgetMs + 480_000);
-  // List scheduling completes within average load plus the longest job's
-  // remaining worker share. Exclude the first project's turnover allowance.
+  return Math.max(qaResourceClasses.ordinary.budgetMs,
+    queuedProjectsBudget(classes.map((name) => qaResourceClasses[name].budgetMs), slots));
+}
+
+/** Wall deadline for projects queued on fewer slots than projects, each within its own budget.
+ * List scheduling completes within average load plus the longest job's remaining worker share;
+ * the first project's turnover allowance is excluded. */
+export function queuedProjectsBudget(projectBudgetsMs: readonly number[], slots: number): number {
+  if (!Number.isInteger(slots) || slots < 1) throw new Error('Invalid QA slot count');
+  if (!projectBudgetsMs.length) return 0;
+  const workers = Math.min(slots, projectBudgetsMs.length);
+  const costs = projectBudgetsMs.map((ms) => ms + 480_000);
   const bound =
     costs.reduce((sum, ms) => sum + ms, 0) / workers +
     Math.max(...costs) * (1 - 1 / workers) -
     480_000;
-  return Math.max(qaResourceClasses.ordinary.budgetMs, Math.ceil(bound));
+  return Math.max(...projectBudgetsMs, Math.ceil(bound));
 }

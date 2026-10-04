@@ -61,7 +61,7 @@ import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
-import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses } from './resource-classes.ts';
+import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -418,7 +418,9 @@ async function runStackTier(tier: StackTier): Promise<void> {
       tier === 'integration' ? planIntegrationShards(estimates, slots.count) : undefined;
     const projects =
       integration?.map((shard) => shard.files) ?? planStackProjects(estimates, slots.count, tier);
-    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), slots.count) : budget;
+    // Fault/recovery queues more projects than slots; each keeps its own deadline.
+    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), slots.count)
+      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(() => budget), slots.count) : budget;
     const warning = stackPlanBudgetWarning(estimates, tierBudget, slots.count, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
