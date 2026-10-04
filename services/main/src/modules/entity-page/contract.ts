@@ -167,9 +167,7 @@ export const resourceRelationPage = t.Object({ profile: t.Literal('resource-rela
 
 export const entityPage = t.Object({ ...entityPageFields,
   projection: t.Optional(t.Object({ subject: resourceSummary, frames: t.Array(resourceSummary, { minItems: 1, maxItems: 8 }),
-    statements: subjectStatementPage, relations: resourceRelationPage,
-    ratings: t.Array(t.Unknown(), { maxItems: 0 }), reviews: t.Array(t.Unknown(), { maxItems: 0 }),
-    discussion: t.Array(t.Unknown(), { maxItems: 0 }) }, closed)),
+    statements: subjectStatementPage, relations: resourceRelationPage }, closed)),
 }, closed);
 
 /** Fixed descriptor inventory; one target resolve and its existing owner header.

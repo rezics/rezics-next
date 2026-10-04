@@ -125,8 +125,7 @@ export async function readEntityPage(
     const frames = await readFrames(session, parts.frames.map(frame => frame.reference));
     const statements = await readSubjectStatements(session, parts.subject.reference, undefined, frames);
     const relations = await readPageRelations(session, parts.subject.reference, frames);
-    projection = { subject: parts.subject, frames: parts.frames, statements, relations,
-      ratings: [], reviews: [], discussion: [] };
+    projection = { subject: parts.subject, frames: parts.frames, statements, relations };
     const selectedPosition = new URL(session.request.url).searchParams.get('position');
     for (const section of sections) if (['statements','relations'].includes(section.id)) {
       const query = new URLSearchParams();
@@ -135,12 +134,9 @@ export async function readEntityPage(
       if (session.options.actingSubject) query.set('actingSubject', session.options.actingSubject);
       section.href = `/v1/resources/${parts.subject.reference.slice(-36)}/${section.id}?${query}`;
     }
-    for (const id of ['ratings','reviews','discussion'] as const) {
-      const href = `${new URL(session.request.url).pathname}${new URL(session.request.url).search}#${id}`;
-      const section = sections.find(section => section.id === id);
-      if (section) section.href = href;
-      else sections.push({ id, href, actions: [] });
-    }
+    // Judgment sections keep the projection target and the mounted owner reads,
+    // just as other resource pages do. Their context selection, pagination and
+    // budgets belong to those reads; subject frames scope only facts/relations.
   }
   if (
     work?.disclosure === 'public' &&

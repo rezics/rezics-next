@@ -42,13 +42,27 @@ export async function lookupProjection(session: TargetReadSession, store: Pick<P
   return id ? (await readProjectionViews(session, [id]))[0] ?? null : null;
 }
 
-/** One page of a subject's projections after a cursor, oldest first. The page scans MAX_PAGE reserved identities
- * and omits those the reader cannot read, so it may hold fewer items than it scanned and still continue. */
+/** One page of visible projections, oldest first. Check the subject before probing its identity inventory.
+ * Seek through P+1 owner batches under the read session's graph/deadline budgets; only a disclosed
+ * lookahead can establish continuation, and only a delivered identity can be its cursor. */
 export async function listProjections(session: TargetReadSession, store: Pick<ProjectionStore, 'list'>,
   input: { subject: string; cursor: string | null; limit: number }): Promise<{ items: ProjectionView[]; nextCursor: string | null }> {
+  const subject = await targetSummaries(session, [input.subject]);
+  if (subject.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
+    throw new WorkReadMoved('Graph changed during projection subject hydration');
+  }
+  if (subject.summaries[0]?.status !== 'available') return { items: [], nextCursor: null };
   const limit = Math.min(Math.max(input.limit, 1), MAX_PAGE);
-  const ids = await store.list(input.subject, input.cursor, limit + 1);
-  const page = ids.slice(0, limit);
-  const items = (await readProjectionViews(session, page)).filter(view => view.subject === input.subject);
-  return { items, nextCursor: ids.length > limit ? page[limit - 1]!.slice(-36) : null };
+  const batchSize = limit + 1;
+  const visible: ProjectionView[] = [];
+  let after = input.cursor;
+  while (visible.length <= limit) {
+    session.checkDeadline();
+    const ids = await store.list(input.subject, after, batchSize);
+    visible.push(...(await readProjectionViews(session, ids)).filter(view => view.subject === input.subject));
+    if (ids.length < batchSize || visible.length > limit) break;
+    after = ids.at(-1)!.slice(-36);
+  }
+  const items = visible.slice(0, limit);
+  return { items, nextCursor: visible.length > limit ? items.at(-1)!.id.slice(-36) : null };
 }

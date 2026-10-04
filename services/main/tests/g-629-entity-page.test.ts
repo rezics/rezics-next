@@ -176,8 +176,7 @@ test('G-629: every advertised section href matches a GET mounted by Main', () =>
   const mounted = new Set(
     app.routes.filter((route) => route.method === 'GET').map((route) => route.path),
   );
-  // A projection has no Statements of its own; its page view reads its subject's.
-  for (const base of (Object.keys(baseSections) as Base[]).filter((base) => base !== 'projection')) {
+  for (const base of Object.keys(baseSections) as Base[]) {
     for (const entry of admittedTypes) {
       const sections = pageSections(target(base, [entry.type]), mounted);
       expect(sections.some((section) => section.id === 'statements')).toBe(true);

@@ -14,17 +14,17 @@ export const PROJECTION_WRITE_SCOPE = 'rating:submit';
 export const MAX_FRAMES = 8;
 export const MAX_PAGE = 20;
 
-/** Logical ceilings, independent of how many projections, ratings or Statements exist. A subject's
- * frames and the subject are summarized as parts (at most 9 per projection, 64 per page): a list page
- * reads at most MAX_PAGE * (MAX_FRAMES + 1) parts, which is ceil(180 / 64) = 3 part pages. */
+/** Output and owner-batch ceilings, independent of the total inventory. A list batch includes one
+ * lookahead: at most 21 * 9 = 189 parts, or three summary pages of 64. Hidden candidates can require
+ * additional batches; the read session's graph, byte and deadline budgets bound the whole request. */
 export const PROJECTION_COST = {
   /** Subject summary, one target batch for the frames, one admission probe, one identity lookup and one
    * projection summary (itself one page of parts). */
   existingReads: { summaries: 2, targetBatches: 1, admissionProbes: 1, identityLookups: 1 },
   /** Admission register, claim and seal, one identity insert and one guarded graph command. */
   creationWrites: { admissionTransactions: 3, identityInserts: 1, graphCommands: 1 },
-  listPage: MAX_PAGE, partsPerProjection: MAX_FRAMES + 1,
-  partPagesPerListPage: Math.ceil(MAX_PAGE * (MAX_FRAMES + 1) / 64),
+  listPage: MAX_PAGE, listLookahead: 1, partsPerProjection: MAX_FRAMES + 1,
+  partPagesPerListPage: Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64),
 } as const;
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;

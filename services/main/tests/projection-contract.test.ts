@@ -87,8 +87,9 @@ test('any admitted Person creates a projection under one root scope and its rece
 test('the cost contract holds for the largest page, whatever exists about the subject', () => {
   expect(PROJECTION_COST.partsPerProjection).toBe(MAX_FRAMES + 1);
   expect(PROJECTION_COST.listPage).toBe(MAX_PAGE);
-  // A full page of full projections hydrates at most 180 parts in ceil(180 / 64) = 3 pages of 64.
-  expect(PROJECTION_COST.partPagesPerListPage).toBe(Math.ceil(MAX_PAGE * (MAX_FRAMES + 1) / 64));
+  // A full candidate batch, including disclosed lookahead, still fits three part pages of 64.
+  expect(PROJECTION_COST.listLookahead).toBe(1);
+  expect(PROJECTION_COST.partPagesPerListPage).toBe(Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64));
   expect(PROJECTION_COST.partPagesPerListPage).toBe(3);
   expect(PROJECTION_COST.creationWrites.graphCommands).toBe(1);
 });
