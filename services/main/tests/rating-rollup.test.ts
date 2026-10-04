@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { RANK_MINIMUM_RATINGS, MAX_ROLLUP_MEMBERS, memberFigure, rankMembers, rankingPrior, rollUp, weightedRating }
+import { RANK_MINIMUM_RATINGS, MAX_ROLLUP_MEMBERS, memberFigure, rankMembers, rankingPrior, rollUp, rollupMemberVerdict, weightedRating }
   from '../src/modules/rating/rollup.ts';
 import { rollupInput } from '../src/modules/rating/rollup-api.ts';
 
@@ -39,6 +39,39 @@ test('the value is withheld when fewer than half of the named members reach the 
     coverage: { members: 5, available: 4, meetingThreshold: 2 } });
   expect(rollUp('mean-of-means', members([4, 8], [4, 9]), 2, 5)).toMatchObject({ value: null, valueWithheld: 'coverage-below-half',
     coverage: { members: 2, available: 2, meetingThreshold: 0 } });
+});
+
+const character = 'https://rezics.com/vocab/Character';
+const creativeWork = 'https://schema.org/CreativeWork';
+
+test('a declared acceptance rejects other subject types and frame dimensions, and no declaration accepts the grain', () => {
+  const admitted = { base: 'resource', acceptance: { types: [character], dimensions: [] as const } };
+  expect(rollupMemberVerdict({}, 'resource', admitted)).toBeNull();
+  expect(rollupMemberVerdict({ acceptedSubjectTypes: [character] }, 'resource', admitted)).toBeNull();
+  // A Work is the wrong subject for a Character question, even though its grain also differs.
+  expect(rollupMemberVerdict({ acceptedSubjectTypes: [character] }, 'resource',
+    { base: 'work', acceptance: { types: [creativeWork], dimensions: [] } })).toBe('not-accepted');
+  // The same Work on a v3 question, which declares nothing, stays a grain mismatch.
+  expect(rollupMemberVerdict({}, 'resource', { base: 'work', acceptance: { types: [creativeWork], dimensions: [] } })).toBe('grain-mismatch');
+  // A type the question accepts at the wrong grain is a grain mismatch, not a rejection of the subject.
+  expect(rollupMemberVerdict({ acceptedSubjectTypes: [character] }, 'projection', admitted)).toBe('grain-mismatch');
+  expect(rollupMemberVerdict({ acceptedSubjectTypes: [character], acceptedFrameDimensions: ['work'] }, 'projection',
+    { base: 'projection', acceptance: { types: [character], dimensions: ['event'] } })).toBe('not-accepted');
+  expect(rollupMemberVerdict({ acceptedFrameDimensions: ['work', 'event'] }, 'projection',
+    { base: 'projection', acceptance: { types: [character], dimensions: ['work'] } })).toBeNull();
+});
+
+test('members a question does not accept leave the coverage denominator, so the value follows the accepted members', () => {
+  const accepted = members([10, 8]);
+  // One accepted member meets the threshold. Omitting two rejected members keeps the value;
+  // counting them would withhold it, because one of three is below half.
+  expect(rollUp('pooled', accepted, 1, 5)).toMatchObject({ value: 8, valueWithheld: null,
+    coverage: { members: 1, available: 1, meetingThreshold: 1 } });
+  expect(rollUp('pooled', accepted, 3, 5)).toMatchObject({ value: null, valueWithheld: 'coverage-below-half',
+    coverage: { members: 3, available: 1, meetingThreshold: 1 } });
+  expect(rollUp('pooled', [], 0, 5)).toMatchObject({ value: null, valueWithheld: 'coverage-below-half',
+    coverage: { members: 0, available: 0, meetingThreshold: 0 } });
+  expect(rollUp('mean-of-means', [], 0, 5).value).toBeNull();
 });
 
 test('members the caller cannot read stay in the denominator, so unreadable members lower coverage', () => {

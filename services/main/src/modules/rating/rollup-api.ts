@@ -23,6 +23,8 @@ const rollupMember = t.Union([
   t.Object({ target: readId, status: t.Literal('unavailable'),
     reason: t.Union([t.Literal('unavailable'), t.Literal('grain-mismatch'), t.Literal('needs-reconstruction'),
       t.Literal('unverified')]) }),
+  /** The Context's acceptance declaration rejects this member. It is named, and it is outside the value, coverage and ranking. */
+  t.Object({ target: readId, status: t.Literal('not-accepted') }),
 ]);
 const rankItem = t.Object({ position: t.Integer({ minimum: 1 }), target: readId, count, mean: t.Number(), score: t.Number() });
 
@@ -34,7 +36,7 @@ export const rollupResult = t.Object({ profile: t.Literal(ROLLUP_PROFILE), conte
   formula: t.Union([t.Literal('pooled'), t.Literal('mean-of-means')]),
   displayThreshold: t.Integer({ minimum: 1, maximum: MAX_DISPLAY_THRESHOLD }),
   memberCount: t.Integer({ minimum: 1, maximum: MAX_ROLLUP_MEMBERS }),
-  coverage: t.Object({ members: t.Integer({ minimum: 1 }), available: count, meetingThreshold: count }),
+  coverage: t.Object({ members: t.Integer({ minimum: 0 }), available: count, meetingThreshold: count }),
   value: t.Nullable(t.Number()), valueWithheld: t.Nullable(t.Literal('coverage-below-half')),
   members: t.Array(rollupMember, { maxItems: MAX_ROLLUP_MEMBERS }),
   rank: t.Nullable(t.Object({ formula: t.Literal(RANK_FORMULA), minimumRatings: t.Literal(RANK_MINIMUM_RATINGS),

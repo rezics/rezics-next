@@ -117,6 +117,32 @@ test('members the caller cannot read, that do not exist or are another grain are
     status: 'available', components: { population: 0, count: 0, sum: 0 }, mean: null, meanDisplay: 'no-data', meetsThreshold: false });
 }, 300_000);
 
+test('a v4 Character question reports a Work as not-accepted and computes the value from the accepted members only', async () => {
+  const character = 'https://rezics.com/vocab/Character';
+  const context = (await r.context({ profile: 'realm-target-rating-context-v4', displayThreshold: 2,
+    question: `How much do you like this character? ${randomUUID().slice(0, 8)}`,
+    acceptedSubjectTypes: [character] })).context;
+  const liked = await r.resource('liked');
+  const people = await raters('accept', 3);
+  await fill(context, liked, people, 3, [8]);
+  const [work, other, hidden] = await Promise.all([r.stack.publicWork(r.owner.actor), r.stack.publicWork(r.owner.actor), r.stack.privateWork(r.owner.actor)]);
+  // Two Works would withhold the value if they stayed in the denominator (one of three is below half).
+  const result = await rollup({ context, targets: [liked, work.work, other.work], formula: 'pooled', rank: true });
+  expect(result.members.map(member => [member.target, member.status, member.reason])).toEqual([
+    [liked, 'available', undefined], [work.work, 'not-accepted', undefined], [other.work, 'not-accepted', undefined]]);
+  expect(result).toMatchObject({ memberCount: 3, value: 8, valueWithheld: null,
+    coverage: { members: 1, available: 1, meetingThreshold: 1 } });
+  expect(result.rank).toMatchObject({ status: 'ranked', items: [] });
+  expect(result.members.filter(member => member.status === 'available').map(member => member.target)).toEqual([liked]);
+  // A member the caller cannot read stays unavailable. Calling it not-accepted would disclose it.
+  const outsider = await r.person('accept-outsider');
+  const concealed = await rollup({ context, targets: [liked, hidden.work, work.work], formula: 'pooled' }, 200, outsider);
+  expect(concealed.members.map(member => [member.target, member.status, member.reason])).toEqual([
+    [liked, 'unavailable', 'unavailable'], [hidden.work, 'unavailable', 'unavailable'], [work.work, 'not-accepted', undefined]]);
+  expect(concealed).toMatchObject({ value: null, valueWithheld: 'coverage-below-half',
+    coverage: { members: 2, available: 0, meetingThreshold: 0 } });
+}, 300_000);
+
 test('a ranking weighs each member by a prior from its own RatingContext and lists only members of at least 50 ratings', async () => {
   const context = (await r.context({ displayThreshold: 5 })).context;
   const [big, steady, kind] = await Promise.all(['big', 'steady', 'kind'].map(name => r.resource(name))) as [string, string, string];

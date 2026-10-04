@@ -69,11 +69,13 @@ evidence, and a ranking built on it would be noise.
 or cached figure. `pooled` is the sum of the members' sums over the sum of their
 counts; `mean-of-means` averages members' means and counts only members at or
 above the threshold. The two can rank two roll-ups in opposite order, which is why
-the formula, member count, coverage (members at the threshold over members named)
-and every member's components travel with the value, and why the value is withheld
-below half coverage. A member the caller cannot read, that does not exist, or has
-another grain is listed as unavailable with its reason and still counts in the
-denominator. A ranking uses a Bayesian weighted rating, `v/(v+m)·R + m/(v+m)·C`,
+the formula, member count, coverage (members at the threshold over members the
+question counts) and every member's components travel with the value, and why the
+value is withheld below half coverage. A member the caller cannot read, that does
+not exist, or has another grain is listed as unavailable with its reason and still
+counts in the denominator. A member the Context does not accept is `not-accepted`,
+distinct from unavailable, and is left out of the value, that denominator and the
+ranking. A v1–v3 Context accepts every member its grain admits. A ranking uses a Bayesian weighted rating, `v/(v+m)·R + m/(v+m)·C`,
 whose prior mean C is the Context's own pooled mean and weight m its average
 ratings per target, never under the 50-rating listing minimum; both are returned.
 Different Contexts, questions, scales or populations are never combined, and no

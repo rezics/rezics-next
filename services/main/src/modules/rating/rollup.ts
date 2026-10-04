@@ -1,3 +1,4 @@
+import { contextAccepts, type AcceptanceTarget, type ContextAcceptance } from './acceptance.ts';
 import { meanDisclosure, type RatingComponents } from './components.ts';
 
 /** A roll-up is its own metric: a named formula over one RatingContext's additive
@@ -11,13 +12,22 @@ export const RANK_FORMULA = 'bayesian-weighted-rating';
 
 export type ValueWithheld = 'coverage-below-half';
 
-/** `requested` counts every named member, readable or not; `members` are the
- * readable ones. Coverage is the share of requested members at or above the
- * display threshold, and a value shows only when that share reaches half. */
+/** A v1–v3 Context, and a v4 Context that declares nothing, accepts every member
+ * its grain admits. A declaration rejects any other subject type or frame dimension. */
+export function rollupMemberVerdict(policy: ContextAcceptance, grain: string,
+  target: { base: string; acceptance: AcceptanceTarget }): null | 'not-accepted' | 'grain-mismatch' {
+  if ((policy.acceptedSubjectTypes || policy.acceptedFrameDimensions) && !contextAccepts(policy, target.acceptance)) return 'not-accepted';
+  return target.base === grain ? null : 'grain-mismatch';
+}
+
+/** `requested` is the coverage denominator: named members except those the Context
+ * does not accept. Members the caller cannot read stay in it and lower coverage.
+ * `members` are the readable, accepted ones. A value shows only when members at
+ * the threshold are at least half of `requested`; none counted withholds it. */
 export function rollUp(formula: RollupFormula, members: readonly RatingComponents[], requested: number, threshold: number) {
   const meeting = members.filter(member => member.count >= threshold);
   const coverage = { members: requested, available: members.length, meetingThreshold: meeting.length };
-  if (meeting.length * 2 < requested) return { coverage, value: null, valueWithheld: 'coverage-below-half' as ValueWithheld };
+  if (requested < 1 || meeting.length * 2 < requested) return { coverage, value: null, valueWithheld: 'coverage-below-half' as ValueWithheld };
   // Coverage of at least half of a nonempty request leaves one member with ratings.
   const value = formula === 'pooled'
     ? members.reduce((total, member) => total + member.sum, 0) / members.reduce((total, member) => total + member.count, 0)
