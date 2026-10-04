@@ -78,6 +78,14 @@ Settled by the maintainer after research round R40–R50; the
 49. <a id="decision-49"></a>[Work levels, realizations and versions](../contracts/work-and-release.md#work-levels-realizations-and-versions): Works within Works; translations are realizations; rewrites are two linked Works.
 50. <a id="decision-50"></a>[Catalogue quality pipeline](../contracts/identity-correction.md#catalogue-quality-pipeline) and [merge and split as one capability](../contracts/identity-correction.md#merge-and-split-as-one-capability).
 
+## Subjects and scope
+
+Maintainer and product manager, 2026-10-04.
+
+51. <a id="decision-51"></a>[Identities, variants and projections](../contracts/semantic-model.md#identities-variants-and-projections): one identity by default; variants, titles and units only on evidence; "X in F" is a projection.
+52. <a id="decision-52"></a>[Scope and evaluator](../contracts/context.md#scope-and-evaluator): applicability is the same in every Realm; continuity, canonicity and canon policy are separate records.
+53. <a id="decision-53"></a>[Scoped targets and roll-ups](../contracts/ratings.md#scoped-targets-and-roll-ups): the question decides the grain; roll-ups are named metrics over additive components.
+
 Settled research, also adopted on 2026-09-29:
 
 - R30: [URLs and SEO](urls-and-seo.md).

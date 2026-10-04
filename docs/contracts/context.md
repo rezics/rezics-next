@@ -25,6 +25,50 @@ revisions, distinguish absent/unresolved/disabled/unavailable entries, reject
 equal-priority conflicts, and bound inheritance. The resolver currently supports
 explicit, speaker object/relation, object and default selections, then Global.
 
+## Scope and evaluator
+
+Decision 52, maintainer and product manager, 2026-10-04. What a claim or rating
+is about and who judges it are kept in separate fields, even where they share a
+dimension such as time or language. Two tests sort a field:
+
+- **Truth condition.** If changing it changes what would make the claim true,
+  or which object is rated, it is object-side: applicability, a projection
+  frame or a rating target grain. It is the same in every Realm.
+- **Holder swap.** Keep the claim and its scope and swap the evaluator (Global
+  for a Realm, critics for audience, an authority for fans). What the two can
+  disagree about (acceptance, rank, interpretation, a rating value) is
+  evaluator-side: Context acceptance and definitions, a RatingContext's
+  population, or the Realm that governs it.
+
+In [McCarthy's notation](http://www-formal.stanford.edu/jmc/context3/context3.html)
+a claim reads `evaluator: ist(scope, p)`: the inner context holds in-story time,
+place, Work, continuity, route, release and position; the outer holds speaker,
+acceptance, definitions, evidence standard and the time of assertion or
+rating. [Carroll et al.](http://www2005.org/cdrom/docs/p613.pdf) separate a
+graph, its warrant and a consumer's accepted set the same way, and
+[Total Survey Error](https://academic.oup.com/poq/article/74/5/849/1817502)
+separates what is measured from who is represented.
+
+| Concept | Side | Record |
+| --- | --- | --- |
+| Narrative continuity, universe, route, edition | Object | A narrative continuity Resource; applicability; projection frames |
+| A Work belongs to a continuity | Object, with evidence | A relation occurrence between the Work and the continuity; a Work may belong to several |
+| Canonicity (canon, Legends, semi-canon, tiers) | Evaluator | A Statement about a source or element relative to a continuity, with authority, stance (declaration or opinion) and date; it may cover part of a source |
+| Canon policy (which authorities count, what silence means, precedence) | Evaluator configuration | Definitions and acceptance rules of Global or a Realm Context |
+| Fanon and headcanon | Evaluator | Statements in the same scope, accepted by a Realm or a person |
+| A translated edition rated / raters who read Chinese | Object / evaluator | Release grain or frame / RatingContext population |
+| Story time, edition / time asserted or rated | Object / evaluator | Frame or applicability / Statement revision or observation time |
+| The reader's position and spoilers | Viewer | A display filter, neither scope nor Realm |
+
+[Wookieepedia](https://starwars.fandom.com/wiki/Wookieepedia:Canon_policy)
+shows that continuity and canonicity are independent: the six films feed both
+Canon and Legends articles, and a community vote settles sources the rights
+holder left unclassified. A Realm or Zone may make a continuity its default
+view, as Wookieepedia opens on Canon; the choice is a labelled filter on
+applicability that readers can switch, and it never rewrites a Statement's
+applicability. A projection key never contains a Realm: two Realms' rating
+questions can target the same projection and keep their own populations.
+
 ## Shared adoption, Access and revision
 
 - Add admitted domain selectors and disclosed entry-point defaults to the
