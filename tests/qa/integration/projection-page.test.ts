@@ -3,16 +3,18 @@ import { randomUUID } from 'node:crypto';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import { startMediaStack, type MediaStack } from './media-support.ts';
-import { seedCanonicity, seedVariantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon.ts';
-import { CANONICITY_PROPERTY } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { seedCanonicity, seedVariantKindConcepts, seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
+import { CANONICITY_PROPERTY, relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { GRAPHS, iri, activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
+import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 
 const RV = 'https://rezics.com/vocab/';
 const short = (ref: string) => ref.slice(-36);
+const namespace = `pp-${randomUUID()}`;
 type StatementPage = Static<typeof subjectStatementPage>;
 type RelationPage = Static<typeof resourceRelationPage>;
 type Member = Awaited<ReturnType<MediaStack['member']>>;
@@ -21,6 +23,28 @@ let work: Awaited<ReturnType<MediaStack['publicWork']>>;
 let subject: string, canon: string, legends: string, chapter: string, later: string, projection: string;
 let relation: { component: string; revision: string };
 let vocabulary: Awaited<ReturnType<typeof seedCanonicity>>;
+
+const seedClient: SeedLexiconClient = {
+  post: async <T>(path: string, body: object, key: string) => {
+    // Vocabulary identities are shared by a QA project; each run still creates
+    // its own Concept schemes and never replaces another file's property head.
+    if (path === '/v1/semantic/changes' && 'state' in body
+      && (body.state as { notation?: string }).notation === 'canonicity') {
+      const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?component ?revision WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ?key a rv:DefinitionKey ; rv:keyDefinition ?component ;
+          <http://www.w3.org/2004/02/skos/core#notation> "canonicity" .
+          ?component a rv:SemanticDefinition ; rv:definitionHead ?revision }
+      } LIMIT 2`)).results?.bindings ?? [];
+      if (rows.length > 1) throw new Error('Canonicity definition key is ambiguous');
+      if (rows[0]) return { component: rows[0].component!.value, revision: rows[0].revision!.value } as T;
+    }
+    return json<T>(await owner.send('POST', path, body, key), 201);
+  },
+  authorizeDefinition: async definition => {
+    await owner.grant(`semantic:read:${definition.component}`, 'semantic.read');
+    await owner.grant(`semantic:edit:${definition.component}`, 'lexicon.presentation.change');
+  },
+};
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
@@ -64,9 +88,9 @@ async function occurrence(applicability: string[], participant = subject) {
 }
 
 beforeAll(async () => {
-  stack = await startMediaStack('projection-page');
+  stack = await startMediaStack(`projection-page-${namespace.slice(-8)}`);
   owner = await stack.member('scoped-facts');
-  const title = 'A framed Book', semanticTypes = ['https://schema.org/Book'];
+  const title = `A framed Book ${namespace}`, semanticTypes = ['https://schema.org/Book'];
   const created = await activateMetadataWork(stack.env, { title, semanticTypes,
     admission: stack.admission(owner.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
   const contribution = await stack.contribution(created.work, owner.actor, 'en', title);
@@ -85,12 +109,8 @@ beforeAll(async () => {
   subject = await semantic('One character', `${RV}Character`);
   canon = await semantic('Canon continuity', `${RV}NarrativeContinuity`);
   legends = await semantic('Legends continuity', `${RV}NarrativeContinuity`);
-  const client = { post: async <T>(path: string, body: object, key: string) => json<T>(await owner.send('POST', path, body, key), 201),
-    authorizeDefinition: async (definition: { component: string }) => {
-      await owner.grant(`semantic:read:${definition.component}`, 'semantic.read');
-    } };
-  await seedVariantKindConcepts(client, owner.actor, 'scoped-facts');
-  vocabulary = await seedCanonicity(client, owner.actor, 'scoped-facts');
+  await seedVariantKindConcepts(seedClient, owner.actor, namespace);
+  vocabulary = await seedCanonicity(seedClient, owner.actor, namespace);
   relation = await json(await owner.send('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',
     expectedHead: null, actingSubject: owner.actor, state: { component: 'definition', kind: 'relation',
       roles: ['subject','counterpart'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) } }), 201);
@@ -181,7 +201,8 @@ test('frame filters preserve OR within a dimension, AND across dimensions, speci
   expect(match).toEqual([...match].sort((a,b) => b-a));
   const relations = await json<RelationPage>(await owner.read(`/v1/resources/${short(subject)}/relations?${frameQuery([canon, chapter]).slice(1)}`));
   expect(Value.Check(resourceRelationPage, relations)).toBe(true);
-  expect(relations.items.map(item => item.relation)).toEqual([occurrences[3]!, occurrences[1]!, occurrences[0]!]);
+  expect(relations.items.filter(item => occurrences.includes(item.relation)).map(item => item.relation))
+    .toEqual([occurrences[3]!, occurrences[1]!, occurrences[0]!]);
   const first = await json<StatementPage>(await owner.read(`/v1/resources/${short(subject)}/statements?limit=1${frameQuery([canon, chapter])}`));
   expect(first.nextCursor).toBeString();
   const next = await json<StatementPage>(await owner.read(`/v1/resources/${short(subject)}/statements?limit=1${frameQuery([canon, chapter])}&cursor=${first.nextCursor}`));
@@ -196,12 +217,15 @@ test('frame filters preserve OR within a dimension, AND across dimensions, speci
 }, 120_000);
 
 test('Work and chapter frames inherit disclosed in-continuity membership with a constant preparation read', async () => {
-  const definition = await json<{ component: string; revision: string }>(await owner.send('POST', '/v1/semantic/changes',
-    { profile: 'semantic-change-v1', expectedHead: null, actingSubject: owner.actor,
-      state: { component: 'definition', kind: 'relation', notation: 'in-continuity', workSubjectRole: 'work',
-        roles: ['work','continuity'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) } }), 201);
+  // Other files may already have installed the canonical vocabulary. If this
+  // file installs it first, use the full seed so later readers also get labels.
+  const existing = await readDefinitionByKey(stack.env, 'in-continuity');
+  const definition = existing ? { component: existing.definition, revision: existing.revision }
+    : (await seedRelationLexicon(seedClient, owner.actor, namespace,
+      relationLexiconSeed.filter(item => item.key === 'in-continuity')))[0]!;
   await owner.grant(`semantic:read:${definition.component}`, 'semantic.read');
   const record = await statement([canon]); await accept(record);
+  const scopedRelation = await occurrence([canon]);
   expect(ids(await readStatements([work.work]))).not.toContain(record.statement);
   const membership = await json<{ occurrence: string }>(await owner.send('POST', '/v1/relations/changes',
     { profile: 'relation-change-v1', expectedHead: null, definition: definition.revision, participations: [
@@ -221,7 +245,8 @@ test('Work and chapter frames inherit disclosed in-continuity membership with a 
     expect(membershipQueries).toBe(2);
   } finally { stack.fuseki.query = query; }
   const page = await json<RelationPage>(await owner.read(`/v1/resources/${short(subject)}/relations?frame=${encodeURIComponent(work.work)}`));
-  expect(page.items.some(item => item.frameMatch?.dimensions === 1)).toBe(true);
+  expect(page.items.find(item => item.relation === scopedRelation)?.frameMatch)
+    .toEqual({ dimensions: 1, exact: 0, score: 16 });
   await json(await owner.send('POST', '/v1/relations/changes', { profile: 'relation-change-v1', expectedHead: null,
     definition: definition.revision, participations: [
       { role: 'work', participant: { kind: 'resource', ref: work.work } },
@@ -231,7 +256,8 @@ test('Work and chapter frames inherit disclosed in-continuity membership with a 
   expect(ids(await readStatements([work.work]))).toContain(legendsRecord.statement);
   expect(ids(await readStatements([work.work, canon]))).not.toContain(legendsRecord.statement);
   const explicit = await json<RelationPage>(await owner.read(`/v1/resources/${short(subject)}/relations?${frameQuery([work.work, canon]).slice(1)}`));
-  expect(explicit.items.every(item => item.frameMatch!.score <= 17)).toBe(true);
+  expect(explicit.items.find(item => item.relation === scopedRelation)?.frameMatch)
+    .toEqual({ dimensions: 1, exact: 1, score: 17 });
   const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(membership.occurrence)} rv:occurrenceHead ?head } }`)).results!.bindings;
   await json(await owner.send('POST', '/v1/relations/changes', { profile: 'relation-change-v1', occurrence: membership.occurrence, expectedHead: rows[0]!.head!.value,
