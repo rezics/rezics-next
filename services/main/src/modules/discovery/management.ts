@@ -8,7 +8,7 @@ import { digest, RecommendationConflict, RecommendationDenied, RecommendationMis
 import { readId, readUuid } from '../work/read-contract.ts';
 import { workRead, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { discoveryBasis, type DiscoveryBasis } from './contract.ts';
-import { admitDiscoveryBasis, projectDiscoveryWork } from './source.ts';
+import { admitDiscoveryBasis, projectDiscoveryBatch } from './source.ts';
 import type { DiscoveryGeneration } from './store.ts';
 
 export function discoveryError(error: unknown): Response {
@@ -84,9 +84,9 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
           if (row.source_epoch !== session.position.dataEpoch || row.source_sequence !== session.position.sequence) {
             throw new RecommendationRestart('Discovery graph changed');
           }
-          return projectDiscoveryWork(session, basis, row.checkpoint);
+          return projectDiscoveryBatch(session, basis, row.checkpoint);
         });
-        const result = await owner().commitStep(context, row.generation_id, lease, row.checkpoint, projected,
+        const result = await owner().commitBatch(context, row.generation_id, lease, row.checkpoint, projected,
           { dataEpoch: row.source_epoch, sequence: row.source_sequence });
         return Response.json(view(result), noStore);
       } catch (error) { return discoveryError(error); }

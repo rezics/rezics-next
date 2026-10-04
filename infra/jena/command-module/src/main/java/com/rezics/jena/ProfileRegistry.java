@@ -28,7 +28,13 @@ import org.apache.jena.vocabulary.RDF;
 final class ProfileRegistry {
     /** Generic binding rules; BindingPolicy keeps the profile-specific value checks. */
     record Binding(List<String> required, List<String> optional, List<String> roles) {}
-    record Profile(String sha256, Model shapes, Binding binding) {}
+    record Profile(String sha256, Model shapes, Binding binding, org.apache.jena.shacl.Shapes compiled) {
+        Profile(String sha256, Model shapes, Binding binding) {
+            this(sha256, shapes, binding, org.apache.jena.shacl.Shapes.parse(shapes.getGraph()));
+            if (!compiled.getTargetShapes().isEmpty())
+                throw new IllegalArgumentException("command profiles must use explicit request/canonical focus");
+        }
+    }
     /** Holds when the subject has exactly one {@code path} value whose IRI or lexical form is {@code value}. */
     record Condition(String path, String value) {}
     record Route(String profile, String shape, List<Condition> when) {}

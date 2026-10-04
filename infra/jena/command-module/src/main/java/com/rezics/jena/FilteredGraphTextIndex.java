@@ -473,11 +473,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
     }
 
-    @Override public void prepareCommit() { lucene.prepareCommit(); }
-    @Override public void commit() { lucene.commit(); }
+    @Override public void prepareCommit() { CommandWork.timed("text_prepare", lucene::prepareCommit); }
+    @Override public void commit() { CommandWork.timed("text_commit", lucene::commit); }
     @Override public void rollback() { lucene.rollback(); }
     @Override public void close() { lucene.close(); }
     @Override public void addEntity(Entity entity) {
+        CommandWork.count("text_adds", 1);
+        CommandWork.timed("text_index", () -> addMeasuredEntity(entity));
+    }
+    private void addMeasuredEntity(Entity entity) {
         if (!entity.getMap().containsKey("occurrenceLabel")) { lucene.addEntity(entity); return; }
         // Same writer, analyzer, rollback and commit as every existing text field.
         // Ordered analyzed-token terms add no second engine, substring
@@ -516,8 +520,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
         try { lucene.getIndexWriter().addDocument(doc); }
         catch (IOException error) { throw new TextIndexException("occurrence text write failed", error); }
     }
-    @Override public void updateEntity(Entity entity) { lucene.updateEntity(entity); }
-    @Override public void deleteEntity(Entity entity) { lucene.deleteEntity(entity); }
+    @Override public void updateEntity(Entity entity) {
+        CommandWork.count("text_updates", 1);
+        CommandWork.timed("text_index", () -> lucene.updateEntity(entity));
+    }
+    @Override public void deleteEntity(Entity entity) {
+        CommandWork.count("text_deletes", 1);
+        CommandWork.timed("text_index", () -> lucene.deleteEntity(entity));
+    }
     @Override public Map<String, Node> get(String uri) { return lucene.get(uri); }
     @Override public EntityDefinition getDocDef() { return lucene.getDocDef(); }
 

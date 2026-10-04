@@ -165,7 +165,8 @@ final class CommandInvariant {
                                       Node epoch, BigInteger sequence) {
         if (!plan.graphs().contains(CommandPolicy.OUTBOX)) return "outbox batch required";
         Set<Node> batches = new HashSet<>();
-        var iter = data.find(OUTBOX, Node.ANY, rv("sequence"), Node.ANY);
+        var iter = data.find(OUTBOX, Node.ANY, rv("sequence"), NodeFactory.createLiteralByValue(sequence,
+            org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
         while (iter.hasNext()) {
             Quad quad = iter.next();
             if (sequence.equals(number(quad.getObject()))

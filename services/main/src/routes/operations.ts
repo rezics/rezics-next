@@ -11,9 +11,9 @@ import { problem } from './problems.ts';
 const WORKER_INTENTS = new Set(['/v1/content-drafts', '/v1/content-comments',
   '/v1/content-publications', '/v1/content-search-eligibility']);
 /** Graph commands that append a Main outbox batch for the relay handoff. */
-const BROKER_INTENTS = new Set(['/v1/works', '/v1/fixed-releases', '/v1/content-edits']);
+const BROKER_INTENTS = new Set(['/v1/work-imports', '/v1/work-imports/bulk', '/v1/works', '/v1/fixed-releases', '/v1/content-edits']);
 /** Commands that upload immutable Work components when an object store is configured. */
-const OBJECT_INTENTS = new Set(['/v1/works']);
+const OBJECT_INTENTS = new Set(['/v1/work-imports', '/v1/work-imports/bulk', '/v1/works']);
 
 const decimal = t.String({ pattern: '^(0|[1-9][0-9]*)$' });
 const laneState = t.Union([t.Literal('open'), t.Literal('saturated'),
@@ -76,7 +76,7 @@ export function operationsRoutes(work: MainWorkDependencies,
     ...(work.relayPosition && work.environment ? { broker: relayHandoffPositions(
       work.environment.fuseki, work.environment.lineage.dataEpoch,
       () => work.relayPosition!.read()) } : {}),
-    object: Boolean(work.environment?.workObjects),
+    object: Boolean(work.environment?.workObjects || work.environment?.objectDirectory),
   }, work.backpressureProfile)) {
   const leases = new WeakMap<Request, AdmissionLease>();
   return new Elysia({ name: 'operations-backpressure' })

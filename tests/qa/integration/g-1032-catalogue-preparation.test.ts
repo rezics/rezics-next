@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { startHomeStack } from './feed-read-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
+import { CATALOGUE_IMPORT_SCOPE } from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { seedQueryCatalogue, QUERY_CATALOGUE_SCALES } from '../../../scripts/load/corpus-query.ts';
 
 /** Explicit preparation probe: never silently substitute a storage-seeded
@@ -76,11 +77,8 @@ test.skipIf(Bun.env.G1032_CATALOGUE !== '1')(
         },
       });
       // Classification authority is fixture preparation, never a timed query.
-      for (const action of ['classification.proposition.define', 'classification.decision.set']) {
-        const scope =
-          action === 'classification.proposition.define'
-            ? 'classification:define:global'
-            : 'classification:decide:global';
+      for (const [action, scope] of [['classification.proposition.define', 'classification:define:global'],
+        ['classification.decision.set', 'classification:decide:global'], ['work.create', CATALOGUE_IMPORT_SCOPE]]) {
         await stack.accessPool.query(
           `INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING`,
           [scope],

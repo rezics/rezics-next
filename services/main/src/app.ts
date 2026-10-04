@@ -80,6 +80,7 @@ import { sourceRunRoutes } from './routes/source-runs.ts';
 import { sourceSupportRoutes } from './routes/source-supports.ts';
 import { spaceRoutes } from './routes/spaces.ts';
 import { workRoutes } from './routes/works.ts';
+import { catalogueImportRoutes } from './routes/works-import.ts';
 import { catalogueCandidateRoutes } from './routes/catalogue-candidates.ts';
 import { themeRoutes } from './routes/themes.ts';
 import { contentPrivateSearchRoutes } from './routes/content-private-search.ts';
@@ -268,6 +269,7 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(graphLayoutRoutes(work))
     .use(graphQueryRoutes(work))
     .use(workRoutes(fuseki, work))
+    .use(catalogueImportRoutes(work))
     .use(judgmentRoutes(work))
     .use(proposalRoutes(work))
     .use(recipeRoutes(fuseki, work));

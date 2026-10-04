@@ -22,6 +22,7 @@ export interface DatasetAdminSetup {
 }
 export const DATASET_ADMIN_GRANTS = [
   { action: 'work.create', scope: 'work:create:root' },
+  { action: 'work.create', scope: 'work:create:catalogue-import' },
   { action: 'catalogue.verify', scope: 'catalogue:verify:root' },
   { action: 'semantic.change', scope: 'semantic:create:root' },
   { action: 'semantic.change.bulk', scope: 'semantic:create:root' },

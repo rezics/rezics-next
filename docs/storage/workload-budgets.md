@@ -162,3 +162,54 @@ liquid routing is a separately qualified bounded job.
 - Ratings reduce per rater before population aggregation, update affected
   buckets incrementally, bound interval intersections and run exact analytics
   asynchronously.
+
+## Catalogue write qualification
+
+G-1038, 2026-10-04: disk-backed Jena 6.2.0, one native author and one global
+classification per imported Work. The public command corpus was built once to
+10,000 Works, with stopped all-owner backups at 1,000 and 10,000. Full preparation,
+including startup and the final backup, took 388.0 s. The snapshots retain the
+undelivered relay backlog and immutable objects; they are command/read fixtures,
+not evidence of end-to-end projection throughput.
+
+| Background Works | Path | ms / Work | Durable graph commits | Allocated TDB2 KiB / Work |
+| --- | --- | ---: | ---: | ---: |
+| 100 | Ordinary publication + classification | 3,058 | 5 | 5,272 |
+| 100 | Compound catalogue | 499 | 1 | 1,712 |
+| 100 | Bulk catalogue, 128 items | 35.8 | 1 / 128 | 53.7 |
+| 1,000 | Ordinary publication + classification | 3,422 | 5 | 8,012 |
+| 1,000 | Compound catalogue | 511 | 1 | 2,712 |
+| 1,000 | Bulk catalogue, 128 items | 27.0 | 1 / 128 | 71.8 |
+| 10,000 | Ordinary publication + classification | 2,965 | 5 | 11,868 |
+| 10,000 | Compound catalogue | 792 | 1 | 4,000 |
+| 10,000 | Bulk catalogue, 128 items | 28.5 | 1 / 128 | 135.5 |
+
+The ordinary path creates a draft, publishes and selects short native text, then
+classifies it. Initial metadata and author credit already share its creation
+commit. The compound path creates a public catalogue record without selected
+text. These are distinct workloads, not interchangeable latency measurements.
+Numbers are traced requests at each background scale; bulk latency is batch wall
+time divided by 128. Allocated filesystem blocks are distinct from logical file
+lengths and modified index pages. No latency distribution or storage-cold claim
+is made.
+
+The write diagnostic elects `catalogue-preparation-v1`, with a 15,000-position
+broker ceiling, to measure durable writes separately from relay delivery. The
+production ceiling remains 1,000. Eight vocabulary definitions support the
+query matrix; the separate 128/512-definition scale probe remains unqualified.
+Use `tests/qa/integration/g-1038-catalogue-scale.test.ts` for the writer and
+`G1032_BACKUP=<backup.json>` with `g-1032-query-cost.test.ts` for isolated restores.
+The benchmark, stopped-copy driver and public import recipe live under
+`scripts/load/`; neither raw storage seeding nor a bulk loader establishes these
+command results.
+
+The retained-cut smoke passes at both scales (QA `20261004t002639-892359`),
+checking sampled exact Work heads, public names and native index readiness.
+The writer run `20261003t233032-70c3be` completed all measurements and stopped
+backups but failed during a second pool close; that cleanup is corrected.
+G-1032 Query attempts on independent 1,000 and 10,000 restores
+(`20261004t000229-1f970a`, `20261004t001328-46e0b0`) timed out at 420 s during
+Discovery generation preparation, before the interactive query assertions.
+The public advance route now uses the existing bounded batch path, but per-Work
+classification hydration remains the preparation bottleneck. These query scales
+and the richer vocabulary probe are unqualified; no timeout was extended.

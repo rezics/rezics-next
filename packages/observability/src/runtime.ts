@@ -25,6 +25,9 @@ import { telemetryConfig } from './config.ts';
 import { telemetryLog } from './log.ts';
 import {
   fusekiEngineTime,
+  fusekiCommandWork,
+  commandPhases,
+  commandCounters,
   requestBodyBytes,
   preserveResponseMetadata,
 } from './http-measurement.ts';
@@ -42,6 +45,8 @@ const spanAttributes = new Set([
   'rezics.http.headers_ms',
   'rezics.peer.service',
   'rezics.fuseki.engine_ms',
+  ...commandPhases.map((phase) => `rezics.fuseki.${phase}_ms`),
+  ...commandCounters.map((counter) => `rezics.fuseki.${counter}`),
   'db.system.name',
   'db.namespace',
   'db.operation.name',
@@ -293,6 +298,7 @@ export function instrumentFetch(
             span.setAttribute('http.response.status_code', response.status);
             if (response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
             if (peer === 'fuseki') {
+              span.setAttributes(fusekiCommandWork(response.headers));
               const engineMs = fusekiEngineTime(response.headers);
               if (engineMs !== undefined) span.setAttribute('rezics.fuseki.engine_ms', engineMs);
               if (!response.body) {
