@@ -574,7 +574,10 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
-await prepareChapterPosts(environment, pool);
+// A failed or partial conversion must not take Main down: unconverted chapters
+// stay legacy until a restart resumes the migration.
+await withWorkerTelemetry('main.post.backfill', () => prepareChapterPosts(environment, pool), undefined, 'startup')
+  .catch(error => console.warn('Chapter Post migration paused; restart to resume', error));
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 telemetryLog('main_listening');
 const libraryBackfillController = new AbortController();
