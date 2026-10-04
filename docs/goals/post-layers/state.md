@@ -3,9 +3,11 @@
 The manager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-05) |
+| Field | State (2026-10-05 07:40 CST) |
 | --- | --- |
-| Done | Research and decision: [Posts, texts and Works](../../contracts/work-and-release.md#posts-texts-and-works). |
-| Running | G-1079 attempt 4 (Sol xhigh): review fixes — migrate unplaced chapter Works by footprint, publisher fallback that never blocks a batch. Attempts 1–3 delivered 2dd929fe3 (103 files; Post profile, creation, custody, comments, rights, search/library/discovery readers, 20 hide filters removed, startup backfill plus a narrow Jena migration policy); its 19 heavy discovery/feed/reading regressions passed with the cost assertions unchanged. |
-| Next | addresses-discovery reviews two effects.ts classifications (studio.chapter.create and structure.command → irrelevant). Merge G-1079 with `--allow-scope` (Fuseki tag, release manifest, toolchain, app.ts, Jena policy, media summary, search-state, home-v2 seed, g-1063 effects test), then `task gen` and typecheck; restart the shared dev stack on the new Fuseki image and qualify the startup migration there (count legacy chapter Works before and after, read a seeded serial). Then dispatch G-1080 surfaces (old `/w/<chapter>` addresses need a Post place read), G-1081 notes and G-1082 identification. |
-| Coupling | addresses-discovery (rezics-next-1c) owns `discovery/**`, `feed/**`, `notification/**`, which hold chapter-Work filters and mappings; scoped-subjects (rezics-next-97) frames may name chapters. Manager worktree `.temp/worktrees/post-layers-manager`. |
+| Done | P1: G-1079 merged (b2c8bc0cd…e9868d135) and closed. Chapters are `rv:Post`; no chapter Work is minted; 20 hide filters gone; startup migration converted all 66 dev chapters under the same IRIs; Fuseki pin c51f3cc510da on the dev stack. Hotfixes b076d078b (migration never blocks Main) and 40ef0d365 (worker name). |
+| Running | G-1080 (Sonnet) surfaces and durable chapter addresses with a Post place read; G-1081 (Sol) author's notes, backend phase; wave QA for G-1079 (`--affected 58dee1a1a`, whole tiers, 2 shards) in `.temp/worktrees/post-layers-qa` pinned at e9868d135. |
+| Waiting | G-1082 (Sol) identification as a Work: queued behind the 5-worker host limit by a retry loop. |
+| Next | After G-1080 merges: reclaim G-1081 with the reader and Studio note files and resume it for phase two; place G-1082's "also a Work" link. Then P5 convergence (structure README, creation/composition docs, code comments still saying chapter Work, `chapter-work.ts` naming) and the browser journeys, including the four `wiki position` journeys in apps/web/tests/direction-9.e2e.ts. |
+| Lessons | A legacy-data migration must be tested on fixtures written by the old command itself (the first fixture lacked the chapter Main head that real data had). A startup migration must never keep Main from listening. A new telemetry worker name belongs in `WorkerName`. |
+| Coupling | addresses-discovery (rezics-next-1c) approved the effects.ts classifications on the condition, now tested, that chapter creation leaves the Book's head, Main Version, classifications and credits unchanged. scoped-subjects (rezics-next-97) frames chapters by occurrence; it owns Access 1080 (G-1079 used none). |
