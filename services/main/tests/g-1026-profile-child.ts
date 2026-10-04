@@ -25,6 +25,9 @@ const { startFusekiMeter } = await import('../../../scripts/load/measurement.ts'
 const started = performance.now();
 const home = await startHomeStack('g-1026-community', { projectionStart: 'current' });
 const { stack } = home;
+// This corpus measures community/site APIs, which do not consume Home target
+// indexes. Refresh its feed/ranking references without unrelated author backfill.
+home.deps.feed.projectTargets = async () => false;
 const nativeQuery = stack.fuseki.query.bind(stack.fuseki);
 let selectedQuery: string | undefined;
 stack.fuseki.query = async (query, maxBytes) => {
@@ -70,6 +73,10 @@ const signed = (path: `/v1/${string}`) => `${path}${path.includes('?') ? '&' : '
 const evidence: Array<Record<string, unknown>> = [];
 const profiles: Array<{ dimension: string; scale: string; operation: string; viewer: string;
   temperature: string; profile: Awaited<ReturnType<typeof profileRequest>>['profile'] }> = [];
+const allDimensions = ['realmSize', 'historyDepth', 'follows', 'memberships', 'unrelatedWorks'] as const;
+const selectedDimensions = allDimensions.filter(dimension=>!process.env.G1026_DIMENSIONS
+  || process.env.G1026_DIMENSIONS.split(',').includes(dimension));
+assert(selectedDimensions.length, 'Choose at least one known community profile dimension');
 const fixed: CorpusDimensions = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0,
   memberships: 0, historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
 const grant = async (scope: string, action: string) => {
@@ -103,6 +110,7 @@ const join = async (realm: string, key: string) => {
 };
 async function measure(dimension: string, scale: string, operation: string, path: `/v1/${string}`,
   validate: (body: any) => void) {
+  if (operation === 'threads-best' || operation === 'threads-top') await home.project();
   for (const viewer of ['anonymous', 'member']) for (const temperature of ['first', 'warm']) {
     await flushTelemetryTraces();
     sink.clear();
@@ -175,13 +183,13 @@ try {
   // All relationship targets exist before the sweeps. Following an existing
   // Agent changes only follows; joining an existing Realm changes only memberships.
   const followTargets: string[] = [];
-  for (let index = 0; index < 64; index++) {
+  for (let index = 0; index < (selectedDimensions.includes('follows') ? 64 : 0); index++) {
     followTargets.push((await authorApi.command<{ agent: string }>(`g1026:follow-target:${index}`, {
       method: 'POST',path: '/v1/agents',body: { profile: 'agent-provision-v1',kind: 'person',
         displayName: `Unrelated author ${index}` } })).agent);
   }
   const joinTargets: Array<{ realm: string; space: string }> = [];
-  for (let index = 0; index < 24; index++) joinTargets.push(await createRealm(`g1026:join-target:${index}`));
+  for (let index = 0; index < (selectedDimensions.includes('memberships') ? 24 : 0); index++) joinTargets.push(await createRealm(`g1026:join-target:${index}`));
   const actual: CorpusDimensions = { ...fixed,realmSize: 1,historyDepth: 1,follows: 1,memberships: 1 };
   async function inventory(path: `/v1/${string}`) {
     const items: any[] = [];
@@ -195,7 +203,7 @@ try {
   }
 
   // One dimension at a time. Each public command is read back before its measurement.
-  for (const dimension of ['realmSize', 'historyDepth', 'follows', 'memberships', 'unrelatedWorks'] as const) {
+  for (const dimension of selectedDimensions) {
     let grown = actual[dimension];
     for (const scale of WORK_PROFILE_SCALES) {
       const dimensions = workProfileDimensions(dimension, scale, fixed);

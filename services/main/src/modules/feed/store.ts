@@ -13,6 +13,7 @@ import type { ReviewEvent } from '../review/store.ts';
 import { reviewActivityId } from './source.ts';
 import { FeedReadFrame } from './frame.ts';
 import { FeedTargetIndex } from './target-index.ts';
+import { RealmThreadRankingProjection } from '../rankings/realm-threads.ts';
 
 export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id: string; revision: string;
   rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
@@ -29,6 +30,14 @@ export class FeedStore {
   }
   projectTargets(session: import('../work/read-session.ts').WorkReadSession, relay: Pool, checkpoint: FeedCheckpoint, through: string) {
     return new FeedTargetIndex(this.pool,relay).tick(session,checkpoint,through);
+  }
+  projectRealmThreads(
+    session: import('../work/read-session.ts').WorkReadSession,
+    relay: Pool,
+    checkpoint: FeedCheckpoint,
+    through: string,
+  ) {
+    return new RealmThreadRankingProjection(this.pool, relay).tick(session, checkpoint, through);
   }
 
   async checkpoint(epoch: string): Promise<FeedCheckpoint> {

@@ -3,6 +3,8 @@ import { allocateAgentHandle } from '../src/modules/agent/handle.ts';
 import { discussionParts } from '../src/modules/realm-reply/discussion-text.ts';
 import { readRealmThread, readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
+import { bestKey } from '../src/modules/feed/ranking.ts';
+import type { RealmRankKey } from '../src/modules/rankings/realm-threads.ts';
 import type { PlacedHead, ThreadNode, ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { decodeReadCursor, WorkReadMissing, WorkReadMoved, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -27,12 +29,14 @@ const agent = (value: number) => `https://rezics.com/id/00000000-0000-4000-c000-
 const bind = (value: string) => ({ value });
 
 interface Placed { id: number; parent?: number; author: number; minutes?: number; body?: string;
-  approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean; rootRevision?: string }
+  approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean; rootRevision?: string;
+}
 
 function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
-  truncated?: boolean; countsComplete?: boolean; blocked?: number[] } = {}) {
+  truncated?: boolean; countsComplete?: boolean; blocked?: number[];
+  } = {}) {
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
-  const byId = new Map(placed.map(item => [item.id, item]));
+  const byId = new Map(placed.map((item) => [item.id, item]));
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
     author: agent(item.author), origin: null, rootTarget: work, rootRevision: item.rootRevision ?? reply(900),
     createdAt: new Date(start) });
@@ -46,7 +50,7 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
   const descendants = (id: number): Placed[] => {
     const out: Placed[] = [byId.get(id)!];
     for (let index = 0; index < out.length; index++) {
-      out.push(...placed.filter(item => item.parent === out[index]!.id));
+      out.push(...placed.filter((item) => item.parent === out[index]!.id));
     }
     return out;
   };
@@ -66,17 +70,22 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
       if (query.includes('SELECT ?decision WHERE')) return [];
       if (query.includes('rv:RestoreCutover')) return [];
       if (query.includes('rv:agentKind')) {
-        return [...new Set(placed.filter(item => !item.hiddenAuthor).map(item => item.author))].map(id => ({
+        return [...new Set(placed.filter((item) => !item.hiddenAuthor).map((item) => item.author))].map((id) => ({
           agent: bind(agent(id)), displayName: bind(`Reader ${id}`), agentKind: bind(`${RV}PersonAgent`),
           handle: bind(allocateAgentHandle(agent(id))) }));
       }
       calls.graph++;
-      if (query.includes('VALUES (?slot ?reply)')) {
-        return placed.filter(item => query.includes(`<${reply(item.id)}>`)).map(graphRow);
+      if (query.includes('VALUES (?slot ?id)')) {
+        return placed
+          .filter((item) => query.includes(`<${placement(item.id, item.minutes)}>`))
+          .map(graphRow);
       }
-      return placed.filter(item => !item.parent).sort((a, b) => b.id - a.id).map(graphRow);
+      if (query.includes('VALUES (?slot ?reply)')) {
+        return placed.filter((item) => query.includes(`<${reply(item.id)}>`)).map(graphRow);
+      }
+      return placed.filter((item) => !item.parent).sort((a, b) => b.id - a.id).map(graphRow);
     },
-    summaries: async (ids: string[]) => ids.map(id => ({ status: 'available', disclosure: 'public', type: 'work',
+    summaries: async (ids: string[]) => ids.map((id) => ({ status: 'available', disclosure: 'public', type: 'work',
       name: { value: 'Rainy Night Bookshop', language: 'en', direction: 'ltr', basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'work' } })),
     deps: {
@@ -88,20 +97,76 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
           label: { value: 'Rainy Night Bookshop', 'xml:lang': 'en' },
         }] } }) } },
       personPreferences: { blockedActors: async (_principal: unknown, _agent: string, actors: string[]) =>
-        new Set(actors.filter(actor => options.blocked?.some(id => actor === agent(id)))) },
-      profiles: { agentFences: async (ids: string[]) => new Map(ids.map(id => [id, 'fence'])) },
+        new Set(actors.filter((actor) => options.blocked?.some((id) => actor === agent(id)))) },
+      profiles: { agentFences: async (ids: string[]) => new Map(ids.map((id) => [id, 'fence'])) },
       content: { readExactBatch: async (ids: string[]) => {
         calls.bodies++;
-        return ids.map(id => {
-          const item = placed.find(candidate => revision(candidate.id) === id)!;
+        return ids.map((id) => {
+          const item = placed.find((candidate) => revision(candidate.id) === id)!;
           return { revisionId: id, status: 'available', body: { body: item.body ?? `Title ${item.id}\nBody ${item.id}` },
             reference: { resourceId: reply(item.id), language: { kind: 'tag', tag: 'en', originalTag: 'en' } } };
         });
       } },
       realmReplyThreads: {
+        rankingRevision: async () =>
+          String(
+            1 +
+              Object.values(options.votes ?? {}).reduce(
+                (sum, vote) => sum + Math.abs(vote.score ?? 0),
+                0,
+              ),
+          ),
+        rankedPage: async (
+          _session: unknown,
+          _realm: string,
+          sort: 'best' | 'top',
+          period: 'week' | 'month' | 'all',
+          limit: number,
+          after?: RealmRankKey & { revision: string },
+        ) => {
+          const revision = String(
+            1 +
+              Object.values(options.votes ?? {}).reduce(
+                (sum, vote) => sum + Math.abs(vote.score ?? 0),
+                0,
+              ),
+          );
+          if (after && after.revision !== revision)
+            throw new WorkReadMoved('Thread ranking changed');
+          const ranked = placed
+            .filter(
+              (item) =>
+                !item.parent &&
+                item.approved !== false &&
+                (sort === 'best' ||
+                  period === 'all' ||
+                  now - (start + (item.minutes ?? item.id) * 60_000) <=
+                    (period === 'week' ? 7 : 30) * 86_400_000),
+            )
+            .map((item) => {
+              const time = start + (item.minutes ?? item.id) * 60_000,
+                score = options.votes?.[item.id]?.score ?? 0;
+              return {
+                reply: reply(item.id),
+                placement: placement(item.id, item.minutes),
+                rank_key: -(sort === 'best' ? bestKey(score, time) : score),
+                time_key: String(-time),
+              };
+            })
+            .sort(
+              (a, b) =>
+                a.rank_key - b.rank_key ||
+                Number(a.time_key) - Number(b.time_key) ||
+                a.placement.localeCompare(b.placement),
+            );
+          const offset = after
+            ? ranked.findIndex((item) => item.placement === after.placement) + 1
+            : 0;
+          return { revision, rows: ranked.slice(offset, offset + limit + 1) };
+        },
         subtree: async (focus: string) => {
           calls.store++;
-          const id = placed.find(item => reply(item.id) === focus)?.id;
+          const id = placed.find((item) => reply(item.id) === focus)?.id;
           const tree = id === undefined ? [] : descendants(id).map(node);
           // A thread longer than one read: the store returns one row past the bound.
           return options.truncated ? [...tree, ...Array.from({ length: REALM_THREAD_COST.replies + 2 - tree.length },
@@ -110,27 +175,29 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
         ancestors: async (focus: string) => {
           calls.store++;
           const out: ThreadNode[] = [];
-          let current = placed.find(item => reply(item.id) === focus);
+          let current = placed.find((item) => reply(item.id) === focus);
           while (current?.parent) { current = byId.get(current.parent); if (current) out.push(node(current)); }
           return out;
         },
         admitted: async (_realm: string, heads: readonly PlacedHead[]) => {
           calls.admitted++;
-          return new Map(heads.flatMap(head => {
-            const item = placed.find(candidate => reply(candidate.id) === head.reply);
+          return new Map(heads.flatMap((head) => {
+            const item = placed.find((candidate) => reply(candidate.id) === head.reply);
             return item && item.approved !== false ? [[head.reply, node(item)] as const] : [];
           }));
         },
         counts: async (_realm: string, threads: readonly string[]) => {
           calls.counts++;
-          return { counts: new Map(threads.map(thread => [thread, placed.filter(item => item.parent
+          return { counts: new Map(threads.map((thread) => [thread, placed.filter(
+                  (item) => item.parent
             && reply(item.parent) === thread && item.approved !== false).length])),
           complete: options.countsComplete ?? true };
         },
         votes: async (_epoch: string, ids: readonly string[]) => {
           calls.votes++;
-          return new Map(ids.map(id => {
-            const item = placed.find(candidate => placement(candidate.id, candidate.minutes) === id)!;
+          return new Map(ids.map((id) => {
+            const item = placed.find(
+                (candidate) => placement(candidate.id, candidate.minutes) === id)!;
             return [id, { score: 0, value: 0, revision: null, open: true, ...options.votes?.[item.id] }] as const;
           }));
         },
@@ -160,7 +227,7 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
     work: { id: work, title: { value: 'Rainy Night Bookshop' } }, rootRevision: reply(900), ancestors: [],
     complete: true });
   // Depth first: each reply is followed by its own replies, best first.
-  expect(read.items.map(item => [item.reply, item.parent])).toEqual([[reply(1), null], [reply(2), reply(1)],
+  expect(read.items.map((item) => [item.reply, item.parent])).toEqual([[reply(1), null], [reply(2), reply(1)],
     [reply(4), reply(2)], [reply(3), reply(1)]]);
   // The opening discussion's first line is its title; its body goes on from there. Replies have no title.
   expect(read.items[0]).toMatchObject({ title: 'Chapter one: the letter', body: 'Who left it?', language: 'en',
@@ -177,7 +244,7 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
 
 test('a reader who blocked an author gets a collapsed reply without its identity or words', async () => {
   const read = await readRealmThread(world(thread, { blocked: [2] }).session, realm, reply(1));
-  const items = new Map(read.items.map(item => [item.reply, item]));
+  const items = new Map(read.items.map((item) => [item.reply, item]));
   expect(items.get(reply(2))).toMatchObject({ blocked: true, author: null, body: '', title: null });
   expect(items.get(reply(4))).toMatchObject({ blocked: false, body: 'Title 4\nBody 4' });
   expect(items.get(reply(3))).toMatchObject({ blocked: false });
@@ -196,7 +263,8 @@ test('a thread reads in the order asked for: Top by votes, New newest first', as
     { id: 3, parent: 1, author: 3, minutes: 20 }, { id: 4, parent: 1, author: 1, minutes: 30 }];
   const votes = { 2: { score: 9 }, 3: { score: 4 }, 4: { score: -1 } };
   const order = async (sort: 'top' | 'new') => (await readRealmThread(world(replies, { votes }).session, realm,
-    reply(1), sort)).items.map(item => item.reply);
+    reply(1), sort)).items.map(
+      (item) => item.reply);
   expect(await order('top')).toEqual([reply(1), reply(2), reply(3), reply(4)]);
   expect(await order('new')).toEqual([reply(1), reply(4), reply(3), reply(2)]);
 });
@@ -205,13 +273,13 @@ test('a reply read on its own carries its visible parents, opening discussion fi
   const { session } = world(thread);
   const read = await readRealmThread(session, realm, reply(4));
   expect(read.thread).toBe(reply(1));
-  expect(read.ancestors.map(item => item.reply)).toEqual([reply(1), reply(2)]);
-  expect(read.items.map(item => item.reply)).toEqual([reply(4)]);
+  expect(read.ancestors.map((item) => item.reply)).toEqual([reply(1), reply(2)]);
+  expect(read.items.map((item) => item.reply)).toEqual([reply(4)]);
 });
 
 test('a reply whose graph parent disagrees with Content, or whose thread is cut off, is not shown as settled', async () => {
   const moved = world([{ id: 1, author: 1 }, { id: 2, parent: 1, author: 2, graphParent: null }]);
-  expect((await readRealmThread(moved.session, realm, reply(1))).items.map(item => item.reply)).toEqual([reply(1)]);
+  expect((await readRealmThread(moved.session, realm, reply(1))).items.map((item) => item.reply)).toEqual([reply(1)]);
   const long = world(thread, { truncated: true });
   expect((await readRealmThread(long.session, realm, reply(1))).complete).toBe(false);
 });
@@ -235,7 +303,7 @@ test('a Realm lists its discussions newest first, a page at a time, with their r
   const { session } = world(discussions);
   const first = await readRealmThreads(session, realm, { sort: 'new', limit: 2, now });
   expect(first).toMatchObject({ profile: 'realm-threads-v1', realm, sort: 'new' });
-  expect(first.items.map(item => item.reply)).toEqual([reply(4)]);
+  expect(first.items.map((item) => item.reply)).toEqual([reply(4)]);
   expect(first.items[0]).toMatchObject({ title: 'Title 4', excerpt: 'Body 4', replies: { value: 2, kind: 'exact' },
     work: { id: work }, author: { name: 'Reader 1' } });
   expect(first.nextCursor).not.toBeNull();
@@ -246,9 +314,9 @@ test('a Realm lists its discussions newest first, a page at a time, with their r
 test('Best weighs votes against age, Top counts votes in the period, and a reordered ranking restarts the next page', async () => {
   const votes = { 1: { score: 5000 }, 2: { score: 1 }, 4: { score: 2 } };
   const best = await readRealmThreads(world(discussions, { votes }).session, realm, { sort: 'best', now });
-  expect(best.items.map(item => item.reply)).toEqual([reply(1), reply(4), reply(2)]);
+  expect(best.items.map((item) => item.reply)).toEqual([reply(1), reply(4), reply(2)]);
   const week = await readRealmThreads(world(discussions, { votes }).session, realm, { sort: 'top', window: 'week', now });
-  expect(week.items.map(item => item.reply)).toEqual([reply(4), reply(2)]);
+  expect(week.items.map((item) => item.reply)).toEqual([reply(4), reply(2)]);
   const all = await readRealmThreads(world(discussions, { votes, countsComplete: false }).session, realm,
     { sort: 'top', window: 'all', limit: 1, now });
   expect(all.items).toMatchObject([{ reply: reply(1), replies: { kind: 'lower-bound' } }]);

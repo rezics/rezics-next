@@ -22,7 +22,10 @@ test('G1026: community and site API profiles keep bounded hydration across publi
     operation: string; viewer: string; temperature: string; profile: WorkProfile }> };
   expect(measured.profiles.length).toBeGreaterThan(100);
   if (process.env.G1026_PHASE === 'before') return;
-  for (const dimension of ['realmSize','historyDepth','follows','memberships','unrelatedWorks']) {
+  const dimensions = ['realmSize','historyDepth','follows','memberships','unrelatedWorks']
+    .filter(dimension=>!process.env.G1026_DIMENSIONS || process.env.G1026_DIMENSIONS.split(',').includes(dimension));
+  expect(dimensions.length).toBeGreaterThan(0);
+  for (const dimension of dimensions) {
     for (const operation of ['header','threads-best','threads-new','threads-top','thread','roster','zone-home','zone-presentation'] satisfies CommunityProfileOperation[]) {
       for (const viewer of ['anonymous','member']) for (const temperature of ['first','warm']) {
         const profiles = measured.profiles.filter(item => item.dimension === dimension && item.operation === operation

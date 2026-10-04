@@ -710,20 +710,15 @@ export class AccessAdmissionRegistry {
 
   /** Returns only a currently active Access counting identity for an introspected Account subject. */
   async activePrincipalId(principal: VerifiedPrincipal): Promise<string | null> {
-    const client = await this.pool.connect();
-    try {
-      await client.query(READ_BEGIN);
-      await requireRecoveryOpen(client);
-      const result = await client.query<{ id: string }>(
-        `SELECT id FROM access.principal WHERE account_issuer = $1
-         AND account_subject = $2 AND active FOR SHARE`,
-        [principal.issuer, principal.subject]);
-      await client.query('COMMIT');
-      return result.rows.length === 1 ? result.rows[0]!.id : null;
-    } catch (error) {
-      await rollback(client);
-      throw error;
-    } finally { client.release(); }
+    // Autocommit holds the recovery row lock through the whole statement. No
+    // authority result survives this call; workRead repeats it before delivery.
+    const row = (await this.pool.query<{ open: boolean; id: string | null }>(`WITH fence AS MATERIALIZED (
+      SELECT open FROM access.recovery_fence WHERE id FOR SHARE
+    ) SELECT fence.open, p.id FROM fence LEFT JOIN access.principal p
+      ON p.account_issuer = $1 AND p.account_subject = $2 AND p.active`,
+    [principal.issuer, principal.subject])).rows[0];
+    if (!row?.open) throw new AdmissionUnavailable('Access recovery is held');
+    return row.id;
   }
 
   private async canReadScopedResource(

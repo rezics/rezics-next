@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { DISCLOSURE_CHANNELS, DisclosureStore, configureDisclosure, disclosurePoolReader, disclose,
+import { DISCLOSURE_CHANNELS, DisclosureStore, DisclosureUnavailable, configureDisclosure, disclosurePoolReader, disclose,
   type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
@@ -34,15 +34,16 @@ const fixtures: DisclosureTarget[] = [
 function storage() {
   let restricted = false, labels: Labels[] = [], open = true, malformed = false;
   let ownerQueries = 0;
-  const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open }] };
-    if (sql.includes('WITH requested')) {
+  const query = async (sql: string, args?: unknown[]) => {
+    if (sql.includes('requested AS')) {
       ownerQueries++;
       const targets = JSON.parse(String(args![0])) as { ordinal: number }[];
-      return { rows: malformed ? [] : targets.map(target => ({ ordinal: target.ordinal, restricted, assessments: labels })) };
+      return { rows: malformed ? [] : targets.map(target => ({ ordinal: target.ordinal, open, restricted, assessments: labels })) };
     }
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open }] };
     return { rows: [] };
-  } }) } as unknown as Pool;
+  };
+  const pool = { query, connect: async () => ({ release() {}, query }) } as unknown as Pool;
   return { pool, set: (state: { restricted?: boolean; labels?: Labels[]; open?: boolean; malformed?: boolean }) => {
     if (state.restricted !== undefined) restricted = state.restricted;
     if (state.labels !== undefined) labels = state.labels;
@@ -81,7 +82,7 @@ test('G-542: governance applies to every channel; interactive reads leave rating
 test('G-542: configured recovery and incomplete results fail closed; absent governance preserves fixtures', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
   s.set({ open: false });
-  await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure owner is unavailable');
+  await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toBeInstanceOf(DisclosureUnavailable);
   s.set({ open: true, malformed: true });
   await expect(reader.read(fixtures, ANONYMOUS_VIEWER, 'read')).rejects.toThrow('Disclosure result is incomplete');
   const env = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: '.temp/g-542',
@@ -135,18 +136,19 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
 test('G-542: two Governance stores on one pool retain current heads for notices and reply counts', async () => {
   const oldHead = id(11), newHead = id(12);
   let current = oldHead;
-  const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('WITH requested')) {
+  const query = async (sql: string, args?: unknown[]) => {
+    if (sql.includes('requested AS')) {
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
-      return { rows: targets.map(target => ({ ordinal: target.ordinal,
+      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true,
         restricted: target.resource === id(1) && target.component === 'name'
           && (target.revision == null || target.revision === oldHead)
           || target.work === id(1) && (target.workRevision == null || target.workRevision === oldHead),
         assessments: [] })) };
     }
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
     return { rows: [] };
-  } }) } as unknown as Pool;
+  };
+  const pool = { query, connect: async () => ({ release() {}, query }) } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
     head: { type: 'uri', value: current } }] } });

@@ -4,8 +4,9 @@ import { DISCUSSION_TITLE_CHARS } from './discussion-text.ts';
 import { documentSnapshotSchema } from '../../api-document.ts';
 
 /**
- * Bounds of the Realm thread reads. A list page ranks at most `cohort` of the
- * Realm's newest threads for Best and Top; New seeks by placement order. A
+ * Bounds of the Realm thread reads. Best and Top seek at most pageSize+1
+ * maintained order rows; New seeks by placement order. `cohort` is a legacy
+ * admission batch bound, never the ranked population. A
  * thread read returns at most `replies` replies below its focus, `depth`
  * levels deep, and `ancestors` parents above it; `complete: false` says more
  * exist. Reply counts walk at most `countPerThread` replies per listed thread.

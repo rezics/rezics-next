@@ -6,6 +6,13 @@ import { RealmReplyInvalid } from './content-store.ts';
 import { REALM_THREAD_COST } from './thread-contract.ts';
 import { disclosurePoolReader, discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import {
+  ensureRealmHistoryPopulation,
+  realmRankPage,
+  type RealmRankKey,
+} from '../rankings/realm-threads.ts';
+import type { RealmHistoryFloor } from '../realm-admin/history.ts';
+import type { WorkReadSession } from '../work/read-session.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -50,6 +57,52 @@ const approved = (realm: string, reply: string, revision: string, review: string
  */
 export class RealmReplyThreadStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
+
+  /** Content source inventory for the existing bounded background projector. */
+  get rankingContent() {
+    return this.content;
+  }
+  rankedPage(
+    session: WorkReadSession,
+    realm: string,
+    sort: 'best' | 'top',
+    period: 'week' | 'month' | 'all',
+    limit: number,
+    after?: RealmRankKey & { revision: string },
+    population?: string,
+  ) {
+    return realmRankPage(this.access, session, realm, sort, period, limit, after, population);
+  }
+  historyPopulation(epoch: string, realm: string, floor: RealmHistoryFloor) {
+    return ensureRealmHistoryPopulation(this.access, epoch, realm, floor);
+  }
+  async rankedHistoryAdmission(
+    epoch: string,
+    realm: string,
+    population: string,
+    replies: readonly string[],
+  ) {
+    if (replies.length > DISCLOSURE_COST.batch)
+      throw new RealmReplyInvalid('Invalid ranked history batch');
+    const rows = await this.access.query<{ reply: string; }>(
+      `SELECT reply FROM access.realm_thread_population_admission
+      WHERE data_epoch=$1 AND realm=$2 AND population=$3 AND reply=ANY($4::text[]) AND admitted`,
+      [epoch, realm, population, [...replies]],
+    );
+    return new Set(rows.rows.map((row) => row.reply));
+  }
+  async rankingRevision(epoch: string, realm: string): Promise<string> {
+    return (
+      (
+        await this.access.query<{ revision: string }>(
+          `SELECT COALESCE(s.revision,0)::text AS revision
+      FROM access.recovery_fence f LEFT JOIN access.realm_thread_state s ON s.data_epoch=$1 AND s.realm=$2
+      WHERE f.id AND f.open`,
+          [epoch, realm],
+        )
+      ).rows[0]?.revision ?? 'unavailable'
+    );
+  }
 
   /** One author's newest Realm replies; a caller must still admit each current placement. */
   async authorPage(author: string, kind: 'posts' | 'comments', limit: number,

@@ -45,6 +45,7 @@ export class FeedRefreshWorker {
         await this.store.advance(checkpoint, relay.sequence, grouped, new Map(times.rows.map(row => [row.sequence, row.delivered_at])));
         return 'advanced';
       }
+      if (await this.store.projectRealmThreads(session,this.relay,checkpoint,relay.sequence)) return 'advanced';
       if (!this.deps.reviews) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';
       const events = await this.deps.reviews.eventsAfter(checkpoint.review_sequence);
       if (!events.length) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';

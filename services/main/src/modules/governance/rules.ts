@@ -100,6 +100,53 @@ export async function publishRuleRevision(client: PoolClient, principalId: strin
 export class GovernanceRules implements RuleBasis {
   constructor(private readonly pool: Pool) {}
 
+  /** The header's managed rules and every scoped link share one statement
+   * snapshot. The fallback is the graph-fenced profile, never a request cache. */
+  async realmHeaderRules(
+    realm: string,
+    fallback: ReturnType<typeof currentRealmRulesDocument>['rules'] | null,
+  ) {
+    if (!agentPattern.test(realm) || (fallback?.length ?? 0) > MAX_RULES) {
+      throw new GovernanceInvalid('Invalid Realm header rules');
+    }
+    const row = (
+      await this.pool.query<{
+        open: boolean
+        document: unknown
+        heads: { ref: string; revision: string; digest: string }[];
+      }>(
+        `WITH fence AS MATERIALIZED (
+        SELECT open FROM access.recovery_fence WHERE id FOR SHARE
+      ), document AS MATERIALIZED (
+        SELECT r.document FROM access.governance_rule_head h
+        JOIN access.governance_rule_revision r ON r.ref=h.ref AND r.revision=h.revision
+        WHERE h.ref=$1 AND h.scope_id=$2
+      ), refs AS (
+        SELECT rule#>>'{governanceRule,ref}' AS ref FROM (SELECT rule FROM jsonb_array_elements(
+          CASE WHEN jsonb_typeof((SELECT document->'rules' FROM document))='array'
+            THEN (SELECT document->'rules' FROM document) ELSE '[]'::jsonb END) rule LIMIT ${MAX_RULES}) bounded
+        UNION SELECT rule#>>'{governanceRule,ref}' FROM jsonb_array_elements($3::jsonb) rule
+      ) SELECT fence.open,(SELECT document FROM document) AS document,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('ref',h.ref,'revision',h.revision::text,'digest',h.digest))
+          FROM access.governance_rule_head h WHERE h.scope_id=$2 AND h.ref IN (SELECT ref FROM refs)), '[]'::jsonb) AS heads
+      FROM fence`,
+        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? [])],
+      )
+    ).rows[0];
+    if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
+    let rules = fallback;
+    try {
+      rules = currentRealmRulesDocument(
+        row.document && typeof row.document === 'object'
+          ? { ...row.document, public: true }
+          : row.document,
+      ).rules;
+    } catch (error) {
+      if (!(error instanceof GovernanceInvalid)) throw error;
+    }
+    return { rules, heads: new Map(row.heads.map((head) => [head.ref, head])) };
+  }
+
   /** Only the explicit public profile crosses into Realm home reads. Generic
    * governance documents may contain private material and never fall through.
    * Localized maps use the existing Realm profile schema and read-side fallback. */

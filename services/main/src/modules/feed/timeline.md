@@ -35,6 +35,64 @@ unrelated corpus adds no visits or extra pages. Row/byte work remains proportion
 to the selected page. This is a design derivation; the profile and SQL plan
 tests qualify the actual implementation at three diagnostic scales.
 
+## Realm Best and Top
+
+Decision, G-1034, 2026-10-04. A Realm ranks its complete current discussion
+population. The former newest-256 cohort excluded an older winner and caused
+page-two graph response bytes to grow with the Realm. We reuse the admitted
+score relation and shared target-index pattern: immutable references discover
+current slots in saved-key batches; graph and Content events invalidate only
+the affected reply, Work or Realm. The existing Home refresh worker owns this
+work, including migration and restored-epoch backfill. A request reports
+unavailable until its source cut and population are complete.
+
+Best retains `bestKey(netVotes, placementTime)`. Its common `-now/24h` term
+cancels in comparisons, so advancing time needs no full-relation rescore.
+Reply changes maintain the root's count and latest activity with deltas and an
+indexed latest-child probe; they do not change the vote/age formula or rejuvenate
+an old placement. Votes update the current placement's order rows in the same
+Access transaction. A Realm revision binds keyset cursors and is checked again
+after page hydration. Ordering normalizes descending score/time to an ascending
+tuple, with placement IRI in PostgreSQL's C collation as its final key.
+
+Top has independent all/week/month populations. Rolling periods use exact
+placement time plus seven/thirty days. A bounded expiry worker removes elapsed
+entries; an indexed expiry probe refuses a page while its population contains
+elapsed entries. Daily bucket merges would either approximate the boundary or
+filter a potentially unbounded high-score prefix of the boundary bucket. We
+choose maintenance work and explicit readiness instead.
+
+Private history from admission also needs an admitted population before LIMIT.
+Equal immutable admission cuts share an index; current Access obtains the cut
+and still fences every private read. Its first build seeks reply keys in batches
+and evaluates the slot's first-publication rule off the request path. New slots
+queue exact cut-admission jobs, while edits, votes, gates and Top expiry mirror
+existing admissions transactionally. This adds writes/storage proportional to
+the retained distinct cuts in that Realm, rather than to followers. It avoids
+an after-LIMIT history filter and does not retain a member roster or grant.
+
+The diagnostic PostgreSQL planner chose bitmap-plus-sort for a small Top tail.
+The bounded seek therefore uses a function with local `enable_bitmapscan=off`
+and `enable_seqscan=off`; PostgreSQL restores the settings on function exit
+([CREATE FUNCTION](https://www.postgresql.org/docs/18/sql-createfunction.html),
+[planner methods](https://www.postgresql.org/docs/18/runtime-config-query.html)).
+The guards execute the seek algebra under those same function settings and
+reject sorts, excess rows and filtered prefixes. This qualifies the tested
+plans, not an assertion that PostgreSQL always chooses an ordered index from
+ORDER BY/LIMIT alone. Trigger maintenance participates in the source transaction
+([trigger behavior](https://www.postgresql.org/docs/18/trigger-definition.html)).
+
+`g-1034-realm-ranking.test.ts` profiles 100/1,000/10,000 real current placements,
+with retained graph history, against an independently sorted score oracle.
+The scale snapshot imports complete owner records from an API-created approved
+template; it is not command-throughput or stopped-backup/restore evidence.
+G-1024's native request profile measures round trips and bytes, while real
+PostgreSQL EXPLAIN measures its index visits. First/warm are not engine-cold;
+neither those counters nor SPARQL algebra claim native TDB2 operator visits.
+The public header's recovery-fenced atomic probes and one rules/link cut hold
+six anonymous or nine signed-in SQL statements across rules/moderators/roles;
+the tests also retain live link invalidation and current principal denial.
+
 ## Current relationships and invalidation
 
 Direct keys name the Work, poster, Realm and Zone. Author keys name the current

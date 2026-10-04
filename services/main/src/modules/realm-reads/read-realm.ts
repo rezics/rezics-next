@@ -48,18 +48,16 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     : profile ? fallbackAvatar('realm', realm) : summary.avatar;
   const moderators = profile ? [...await chosenModerators(session.deps.environment,
     realm, profile.moderators)] : [];
-  const managedRules = await session.deps.governance?.rules?.publishedRealmRules(realm, true);
-  const sourceRules = managedRules ?? profile?.rules;
   const governance = session.deps.governance?.rules;
-  const refs = sourceRules?.flatMap(rule => rule.governanceRule ? [rule.governanceRule.ref] : []) ?? [];
-  let ruleHeads: Awaited<ReturnType<NonNullable<typeof governance>['currentRealmHeads']>> | undefined;
-  if (governance && refs.length) {
-    try { ruleHeads = await governance.currentRealmHeads(realm, refs); }
+  let snapshot: Awaited<ReturnType<NonNullable<typeof governance>['realmHeaderRules']>> | undefined;
+  if (governance) {
+    try { snapshot = await governance.realmHeaderRules(realm, profile?.rules ?? null); }
     catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
   }
+  const sourceRules = snapshot?.rules ?? profile?.rules;
   const rules = sourceRules ? sourceRules.map(rule => {
     let governanceRule = rule.governanceRule;
-    if (governanceRule && ruleHeads?.get(governanceRule.ref)?.revision !== governanceRule.revision) {
+    if (governanceRule && snapshot?.heads.get(governanceRule.ref)?.revision !== governanceRule.revision) {
       governanceRule = null;
     }
     return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };

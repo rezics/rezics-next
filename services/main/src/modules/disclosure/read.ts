@@ -2,7 +2,6 @@ import type { Pool } from 'pg';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { GovernanceComponent, GovernanceOwner } from '../governance/store.ts';
 import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../governance/schema.ts';
-import { controlRead } from '../access/topology-control.ts';
 import { MediaUnavailable } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } from '../suitability/policy.ts';
 
@@ -74,11 +73,15 @@ export class DisclosureStore implements DisclosureReader {
     if (!targets.length) return [];
     const suitabilityDefault = usesSuitabilityDefault(channel);
     try {
-      return await controlRead(this.pool, async client => {
-        const rows = (await client.query<{ ordinal: number; restricted: boolean; assessments: Labels[] }>(`
-          WITH requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
+      // The recovery lock lives until this autocommit statement finishes;
+      // policy and the fence share one snapshot, without six protocol calls.
+      const rows = (await this.pool.query<{ ordinal: number;
+          open: boolean; restricted: boolean; assessments: Labels[]
+        }>(`
+          WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
+          requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
             ordinal int, owner text, resource text, component text, revision text, context text, work text, "workRevision" text))
-          SELECT wanted.ordinal,
+          SELECT wanted.ordinal, fence.open,
             EXISTS (SELECT 1 FROM access.governance_enforcement e
               WHERE e.state = 'restricted' AND e.effect = ANY($2::text[])
                 AND e.context = ANY(ARRAY[$3::text, wanted.context])
@@ -105,11 +108,13 @@ export class DisclosureStore implements DisclosureReader {
               CROSS JOIN LATERAL (SELECT a.labels FROM access.suitability_assessment a
                 WHERE a.target = refs.ref ORDER BY a.revision_number DESC LIMIT 1) head), '[]'::jsonb)`
               : "'[]'::jsonb"} AS assessments
-          FROM requested wanted ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
+          FROM requested wanted CROSS JOIN fence ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
           ...target, ordinal, revision: target.revision ?? null, context: target.context ?? GLOBAL_CONTEXT,
           work: target.work ?? null,
         }))), effects(channel), GLOBAL_CONTEXT])).rows;
-        if (rows.length !== targets.length || rows.some((row, index) => row.ordinal !== index
+        if (rows.length !== targets.length || rows.some((row, index) =>
+            !row.open ||
+            row.ordinal !== index
           || typeof row.restricted !== 'boolean' || !Array.isArray(row.assessments)
           || row.assessments.some(labels => !validLabels(labels)))) {
           throw new DisclosureUnavailable('Disclosure result is incomplete');
@@ -120,7 +125,6 @@ export class DisclosureStore implements DisclosureReader {
           }).eligible))) return 'visible';
           return ['read', 'summary', 'thread', 'feed', 'inbox'].includes(channel) ? 'tombstone' : 'hidden';
         });
-      });
     } catch (cause) {
       if (cause instanceof DisclosureUnavailable) throw cause;
       throw new DisclosureUnavailable('Disclosure owner is unavailable', { cause });

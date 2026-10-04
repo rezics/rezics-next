@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { defaultNamePreferencesProjection, type NamePreferencesProjection } from '../search/name-preferences.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { agentPattern, controlRead, controlTransaction, ControlConflict, ControlDenied,
-  ControlInvalid, ControlStale, requirePrincipal } from '../access/topology-control.ts';
+  ControlInvalid, ControlStale, ControlUnavailable, requirePrincipal } from '../access/topology-control.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { canonicalReadingLanguages, invalidateHomePreferences, lockReadingPreferences,
@@ -45,17 +45,20 @@ export class PersonPreferencesStore {
   constructor(private readonly pool: Pool, private readonly projectNames?: NamePreferencesProjection) {}
 
   /** Display-language selection follows the reader's first active Person,
-   * independently of an Organization or Service acting context. Two indexed
-   * statements and one bounded language array; it grants no target authority. */
+   * independently of an Organization or Service acting context. One atomic
+   * fenced statement and one bounded language array; it grants no target authority. */
   async languagesForReader(principal: VerifiedPrincipal): Promise<string[]> {
-    return controlRead(this.pool, async client => {
-      const owner = await requirePrincipal(client, principal);
-      if (!principal.emailVerified) return [];
-      const row = (await client.query<{ content_languages: string[] | null }>(`SELECT p.content_languages
-        FROM (${PRIMARY_READING_PERSON_SQL}) reader
-        LEFT JOIN access.person_preferences p ON p.agent_id = reader.agent_id`, [owner.id])).rows[0];
-      return row?.content_languages ?? [];
-    });
+    const person = PRIMARY_READING_PERSON_SQL.replace('a.principal_id = $1', 'a.principal_id = owner.id');
+    const row = (await this.pool.query<{ open: boolean; id: string | null; content_languages: string[] | null }>(`
+      WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE)
+      SELECT fence.open, owner.id, p.content_languages FROM fence
+      LEFT JOIN access.principal owner ON owner.account_issuer = $1 AND owner.account_subject = $2 AND owner.active
+      LEFT JOIN LATERAL (${person}) reader ON $3::boolean AND owner.id IS NOT NULL
+      LEFT JOIN access.person_preferences p ON p.agent_id = reader.agent_id`,
+    [principal.issuer, principal.subject, principal.emailVerified])).rows[0];
+    if (!row?.open) throw new ControlUnavailable('Access recovery is held');
+    if (!row.id) throw new ControlDenied('principal is not admitted');
+    return row.content_languages ?? [];
   }
 
   async read(principal: VerifiedPrincipal, agent: string): Promise<PersonPreferences> {
