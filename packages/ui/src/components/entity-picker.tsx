@@ -44,6 +44,9 @@ export interface EntityPickerProps<T extends EntityPickerItem> {
   /** Followed or frequently used choices; shown only for an empty query. */
   suggestions?: ReactNode;
   renderItem?: (item: T) => ReactNode;
+  /** Navigation pickers keep the query until they leave the page, avoiding a
+   * second remote read caused by the combobox clearing its input on selection. */
+  selectionBehavior?: 'clear' | 'preserve';
 }
 
 /** Remote choices retain selection across queries and pages; loaded counts never imply a total. */
@@ -60,6 +63,7 @@ export function EntityPicker<T extends EntityPickerItem>({
   locale,
   suggestions,
   renderItem,
+  selectionBehavior = 'clear',
 }: EntityPickerProps<T>) {
   const [hydrated, setHydrated] = useState(false);
   // Server-rendered controls cannot dispatch a remote search or selection yet.
@@ -140,7 +144,7 @@ export function EntityPicker<T extends EntityPickerItem>({
         disabled={unavailable}
         value={value.map((entry) => entry.item.value)}
         inputBehavior="none"
-        selectionBehavior="clear"
+        selectionBehavior={selectionBehavior}
         onInputValueChange={({ inputValue }) => {
           if (!composing.current) void source.search(inputValue);
         }}

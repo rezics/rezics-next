@@ -762,11 +762,22 @@ for (const locale of locales)
         await page
           .getByRole('combobox', { name: t.searchChapters, exact: true })
           .fill(positions.laterChapter.name);
-        await page.getByRole('option', { name: positions.laterChapter.name, exact: true }).click();
+        const result = page.getByRole('option', { name: positions.laterChapter.name, exact: true });
+        await expect(result).toBeVisible();
+        const searchedPath = new URL(page.url()).pathname;
+        const obsoleteSearches: string[] = [];
+        page.on('request', (request) => {
+          // G1059: clearing the combobox on selection launched a second server
+          // action at position=all and superseded the chosen chapter navigation.
+          if (request.method() === 'POST' && new URL(request.url()).pathname === searchedPath)
+            obsoleteSearches.push(request.url());
+        });
+        await result.click();
         await expect
           .poll(() => new URL(page.url()).searchParams.get('position'))
           .toBe(short(positions.laterChapter.occurrence));
         await expect(trigger).toContainText(positions.laterChapter.name);
+        expect(obsoleteSearches, 'selecting a chapter starts no obsolete chooser server action').toEqual([]);
         await screenshot(page, info, 'wiki-later-chapter-selected');
       });
 
