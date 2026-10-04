@@ -6,6 +6,8 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { ownerOutboxEventHandler, type OwnerCloudEvent,
   type OwnerOutboxEventHandler } from './event-handlers.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from '../rating/target-context-authority.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -1429,7 +1431,8 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
     || (type === 'com.rezics.rating.context-created.v1'
       && (action !== 'rating.context.create' || outcome !== `${RV}Succeeded`
         || !operation || !realm || !ratingContext || !ratingContextRevision
-        || scope !== `rating:context:${realm}`
+        || (scope !== `rating:context:${realm}`
+          && !(realm === GLOBAL_RATING_POPULATION_OWNER && scope === GLOBAL_TARGET_CONTEXT_SCOPE))
         || value('eventOperation') !== operation || value('eventRealm') !== realm
         || work || main || space || contribution || classificationContext
         || contextRevision || sense || application || decision || reason))
@@ -1480,6 +1483,15 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
         || operation || realm || ratingContext || ratingSlot || ratingObservation
         || observationRevision || ratingAvailability || ratingValue || work || main || target))) {
     throw new OutboxIncomplete('event type differs from terminal receipt');
+  }
+  if (type === 'com.rezics.rating.context-created.v1' && scope === GLOBAL_TARGET_CONTEXT_SCOPE) {
+    // The specialized administrator scope cannot relay a legacy standing
+    // creation: its retained anchor must prove the v4 target owner profile.
+    const proof = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(ratingContextRevision!)} a rv:RevisionAnchor ; rv:component ${iri(ratingContext!)} ;
+        rv:modelRevision ${iri(GLOBAL_TARGET_CONTEXT_PROFILE)} ; rv:shapeRevision ${iri(GLOBAL_TARGET_CONTEXT_PROFILE)} .
+    } }`, 1024);
+    if (proof.boolean !== true) throw new OutboxIncomplete('Global target creation has no retained v4 profile proof');
   }
   const receipt: MainCloudEvent['data']['receipt'] = {
     id: receiptId, action: action as MainCloudEvent['data']['receipt']['action'],

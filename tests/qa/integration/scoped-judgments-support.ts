@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
-import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
@@ -143,11 +143,10 @@ export async function scopedJudgmentsFixture() {
   };
   const owner = await person('question-owner'),
     outsider = await person('non-member-reader');
-  await new AccessPlatformAdministrators(stack.accessPool).designateFirst(
-    owner.principal.issuer,
-    owner.principal.subject,
-    () => {},
-  );
+  // This fixture needs two exact command grants, independent of whichever
+  // account another file designated as the project's first administrator.
+  await grant(owner, 'semantic:create:root', 'semantic.change');
+  await grant(owner, GLOBAL_TARGET_CONTEXT_SCOPE, 'rating.context.create');
   const work = await stack.publicWork(owner.actor);
   const realm = (
     await json<{ realm: string }>(

@@ -15,6 +15,7 @@ import { targetContextDigest, effectiveDisplayThreshold } from '../src/modules/r
 import { GLOBAL_RATING_POPULATION_OWNER } from '../src/modules/rating/global.ts';
 import { workReadError } from '../src/routes/work-reads.ts';
 import { platformAdministratorAction } from '../src/modules/access/platform-administrator.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../src/modules/rating/target-context-authority.ts';
 
 const id = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -129,13 +130,16 @@ test('v4 acceptance declarations preserve set identity and refuse empty, duplica
   expect(effectiveDisplayThreshold('projection', null)).toBe(10);
 });
 
-test('Global creation uses the ordinary Context scope and mismatches have a typed 422 read outcome', async () => {
+test('Global target creation has a separate administrator scope and mismatches have a typed 422 read outcome', async () => {
+  expect(platformAdministratorAction('rating.context.create', GLOBAL_TARGET_CONTEXT_SCOPE)).toBe(
+    true,
+  );
   expect(
     platformAdministratorAction(
       'rating.context.create',
       `rating:context:${GLOBAL_RATING_POPULATION_OWNER}`,
     ),
-  ).toBe(true);
+  ).toBe(false);
   expect(platformAdministratorAction('rating.context.create', `rating:context:${id(1)}`)).toBe(
     false,
   );

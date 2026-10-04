@@ -14,6 +14,10 @@ import {
 import { outboxEventHandlers } from '../../../services/main/src/modules/rating/outbox-event.ts';
 import { GRAPHS, RV, iri, hash } from '../../../services/main/src/modules/work/activate.ts';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
+import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
+import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startMediaStack } from './media-support.ts';
 
 const short = (value: string) => value.slice(-36);
@@ -55,6 +59,50 @@ test('Rating question presentations preserve meaning across locales, permission 
       outsider = await s.member('reader'),
       drafter = await s.member('draft-delegate');
     const members = [owner, manager, outsider, drafter];
+    // Reuse the project's designated account with a fresh controlled persona
+    // when an earlier file already bootstrapped it. Never replace its role or
+    // designation receipt just to make this fixture the first administrator.
+    const designated = (
+      await s.accessPool.query<{ id: string; issuer: string; subject: string }>(`
+      SELECT p.id,p.account_issuer AS issuer,p.account_subject AS subject FROM access.platform_administrator a
+      JOIN access.principal p ON p.id=a.principal_id AND p.active WHERE a.singleton`)
+    ).rows[0];
+    if (designated) {
+      owner.principal = { issuer: designated.issuer, subject: designated.subject };
+      owner.principalId = designated.id;
+      owner.grant = async (scope: string, action: string) => {
+        const grantId = randomUUID(),
+          client = await s.accessPool.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query(
+            'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
+            [scope],
+          );
+          const expiry =
+            action === 'agent.control'
+              ? 'infinity'
+              : new Date(Date.now() + 3_600_000).toISOString();
+          await client.query(
+            `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+            VALUES($1,$2,$3,$4,$5)`,
+            [randomUUID(), owner.principalId, owner.actor, action, expiry],
+          );
+          await client.query(
+            `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+            VALUES($1,$2,$2,$3,$4,$5)`,
+            [grantId, owner.actor, scope, action, expiry],
+          );
+          await client.query('COMMIT');
+          return grantId;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
+      };
+    }
     await owner.grant('work:create:root', 'agent.control');
     expect(
       (
@@ -64,7 +112,7 @@ test('Rating question presentations preserve meaning across locales, permission 
           () => {},
         )
       ).status,
-    ).toBe('granted');
+    ).toBe(designated ? 'ignored' : 'granted');
     const app = createMainApp(s.fuseki, {
       environment: s.env,
       access: s.access,
@@ -114,6 +162,103 @@ test('Rating question presentations preserve meaning across locales, permission 
       return JSON.parse(body) as T;
     };
     const question = 'How much did you enjoy this Work?';
+    // Legacy Global standing creation retains its explicit grant; the
+    // administrator role only grants Global-owned v4 target creation.
+    expect(
+      (
+        await call(owner, 'POST', '/v1/global-rating-contexts', {
+          profile: 'global-rating-standing-context-v1',
+          question,
+          actingSubject: owner.actor,
+        })
+      ).status,
+    ).toBe(403);
+    const globalTargetBody = {
+      profile: 'realm-target-rating-context-v4',
+      realm: GLOBAL_RATING_POPULATION_OWNER,
+      question: 'How do you rate this subject?',
+      language: 'en',
+      targetGrain: 'resource',
+      actingSubject: owner.actor,
+    };
+    expect(
+      (
+        await call(outsider, 'POST', '/v1/rating-contexts', {
+          ...globalTargetBody,
+          actingSubject: outsider.actor,
+        })
+      ).status,
+    ).toBe(403);
+    for (const profile of ['realm-target-rating-context-v2', 'realm-target-rating-context-v3']) {
+      expect(
+        (await call(owner, 'POST', '/v1/rating-contexts', { ...globalTargetBody, profile })).status,
+      ).toBe(400);
+    }
+    const targetKey = randomUUID();
+    const globalTarget = await json<Context>(
+      await call(owner, 'POST', '/v1/rating-contexts', globalTargetBody, targetKey),
+      201,
+    );
+    expect(
+      await json(await call(owner, 'POST', '/v1/rating-contexts', globalTargetBody, targetKey)),
+    ).toMatchObject({ context: globalTarget.context, replayed: true });
+    const targetProof = (
+      await s.accessPool.query(
+        `SELECT a.scope_id FROM access.admission a
+      JOIN access.platform_administrator_admission proof ON proof.admission_id=a.id
+      WHERE a.principal_id=$1 AND a.action='rating.context.create' AND a.idempotency_key=$2`,
+        [owner.principalId, targetKey],
+      )
+    ).rows;
+    expect(targetProof).toEqual([{ scope_id: GLOBAL_TARGET_CONTEXT_SCOPE }]);
+    const createdEvent = (
+      await s.fuseki.query(`PREFIX rv: <${RV}> SELECT ?batch ?event ?epoch ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:event ?event ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        ?event a rv:RatingContextCreatedEvent ; rv:receipt ?receipt . }
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:ratingContext ${iri(globalTarget.context)} . }
+    }`)
+    ).results!.bindings[0]!;
+    const creationEnvelope = await readMainOutboxEnvelope(
+      s.fuseki,
+      {
+        batchId: createdEvent.batch!.value,
+        dataEpoch: createdEvent.epoch!.value,
+        sequence: createdEvent.sequence!.value,
+        routingEpoch: s.env.lineage.routingEpoch,
+        eventIds: [createdEvent.event!.value],
+      },
+      createdEvent.event!.value,
+    );
+    expect(creationEnvelope.data.receipt).toMatchObject({
+      scope: GLOBAL_TARGET_CONTEXT_SCOPE,
+      ratingContext: globalTarget.context,
+      ratingContextRevision: globalTarget.contextRevision,
+    });
+    await json(
+      await call(owner, 'POST', '/v1/rating-question-presentations', {
+        profile: 'rating-question-presentation-v1',
+        expectedHead: null,
+        actingSubject: owner.actor,
+        state: {
+          context: globalTarget.context,
+          language: 'eo',
+          question: 'Kiel vi taksas ĉi tiun subjekton?',
+          reviewStatus: 'reviewed',
+          source: 'https://example.test/global-target-question',
+          licence: 'https://creativecommons.org/licenses/by/4.0/',
+        },
+      }),
+      201,
+    );
+    expect(
+      await json(
+        await call(null, 'GET', `/v1/rating-contexts/${short(globalTarget.context)}?languages=eo`),
+      ),
+    ).toMatchObject({
+      language: 'en',
+      displayQuestion: { language: 'eo', reviewStatus: 'reviewed' },
+    });
+    await owner.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
     const context = await json<Context>(
       await call(owner, 'POST', '/v1/global-rating-contexts', {
         profile: 'global-rating-standing-context-v1',

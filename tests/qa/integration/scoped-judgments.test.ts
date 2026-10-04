@@ -313,14 +313,24 @@ test('administrators create Global target questions through v4; a non-member rat
     rating: 8,
     realm: GLOBAL_RATING_POPULATION_OWNER,
   });
-  expect(await h.json(await h.page(target, null))).toMatchObject({
-    items: [
-      expect.objectContaining({
-        context: q.context,
-        owner: { kind: 'global', id: GLOBAL_RATING_POPULATION_OWNER },
-      }),
-    ],
-  });
+  // Earlier files may have authored other Global questions for this grain.
+  // Traverse the live inventory and prove this question's ownership without
+  // assuming the shared population is a singleton or fits on its first page.
+  const contexts: { context: string; owner: { kind: string; id: string } }[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await h.json<{ items: typeof contexts; nextCursor: string | null }>(
+      await h.page(target, null, 20, cursor),
+    );
+    contexts.push(...page.items);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(contexts).toContainEqual(
+    expect.objectContaining({
+      context: q.context,
+      owner: { kind: 'global', id: GLOBAL_RATING_POPULATION_OWNER },
+    }),
+  );
   expect(
     await h.json(
       await h.call(

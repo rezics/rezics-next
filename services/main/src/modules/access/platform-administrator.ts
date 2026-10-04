@@ -3,14 +3,14 @@ import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
-import { GLOBAL_CONTEXT_SCOPE } from '../rating/global.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../rating/target-context-authority.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { questionContextPattern } from '../rating/question-presentation-context.ts';
 import { ratingQuestionPresentationAction } from './rating-question-presentation.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const rootActions: Record<string, string> = {
-  'rating.context.create': GLOBAL_CONTEXT_SCOPE,
+  'rating.context.create': GLOBAL_TARGET_CONTEXT_SCOPE,
   'work.create': 'work:create:root',
   'space.create': 'space:create:root',
   'semantic.change': 'semantic:create:root',

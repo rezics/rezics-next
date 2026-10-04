@@ -21,6 +21,7 @@ import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInpu
 import { RatingTargetGrainMismatch } from './release.ts';
 import { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput } from './target-digest.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from './target-context-authority.ts';
 import { ACCEPTED_FRAME_DIMENSIONS, CONTEXT_ACCEPTANCE_COST, assertRatingTargetAccepted,
   readContextAcceptance, validSubjectType, subjectTypeTerm, RatingTargetNotAccepted, type ContextAcceptance, type AcceptanceTarget } from './acceptance.ts';
 
@@ -30,7 +31,7 @@ export const LEGACY_TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
 export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v2';
 export const SCOPED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v3';
 export const ACCEPTED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v4';
-const ACCEPTED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${ACCEPTED_TARGET_CONTEXT_ID}`;
+const ACCEPTED_TARGET_CONTEXT_PROFILE = GLOBAL_TARGET_CONTEXT_PROFILE;
 const ACCEPTED_OBSERVATION_ID = 'realm-target-rating-observation-v4';
 const ACCEPTED_OBSERVATION_PROFILE = `https://rezics.com/definition/${ACCEPTED_OBSERVATION_ID}`;
 export const LEGACY_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${LEGACY_TARGET_CONTEXT_ID}`;
@@ -270,7 +271,8 @@ export function createAdmittedTargetRatingContext(env: WorkActivationEnvironment
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request, input: TargetContextInput & { idempotencyKey: string }) {
-  return admitted(env, account, access, request, input, targetContextDigest(input), `rating:context:${input.realm}`,
+  return admitted(env, account, access, request, input, targetContextDigest(input),
+    input.realm === GLOBAL_RATING_POPULATION_OWNER ? GLOBAL_TARGET_CONTEXT_SCOPE : `rating:context:${input.realm}`,
     true, admission => createTargetRatingContext(env, admission, input), id => readRatingContextReceipt(env, id))
     .then(receipt => {
       if (receipt.realm !== input.realm || !receipt.context || !receipt.revision) throw new IdempotencyConflict('Context receipt differs from intent');
