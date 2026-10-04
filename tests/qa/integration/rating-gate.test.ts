@@ -22,22 +22,31 @@ function pauseQuery(pool: Pool, matches: (sql: string, params: readonly unknown[
   const connect = pool.connect.bind(pool),
     originals = new Map<PoolClient, PoolClient['query']>();
   let used = false;
-  pool.connect = (async () => {
-    const client = await connect();
+  const instrument = (client: PoolClient) => {
     if (!originals.has(client)) {
       const query = client.query;
       originals.set(client, query);
-      client.query = (async (sql: string, params: unknown[] = []) => {
-        const result = await query.call(client, sql, params);
-        if (!used && matches(sql, params)) {
-          used = true;
-          reached();
-          await released;
-        }
-        return result;
+      const run = query.bind(client) as (...args: unknown[]) => unknown;
+      client.query = ((...args: unknown[]) => {
+        // pg's pool.query uses the callback overload on checked-out clients.
+        if (typeof args.at(-1) === 'function') return run(...args);
+        return (async () => {
+          const [sql, params = []] = args as [string, unknown[]?];
+          const result = await run(sql, params);
+          if (!used && matches(sql, params)) {
+            used = true;
+            reached();
+            await released;
+          }
+          return result;
+        })();
       }) as typeof client.query;
     }
     return client;
+  };
+  pool.connect = ((...args: unknown[]) => {
+    if (typeof args[0] === 'function') return (connect as (...args: unknown[]) => unknown)(...args);
+    return connect().then(instrument);
   }) as typeof pool.connect;
   return {
     locked,
