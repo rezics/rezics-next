@@ -46,7 +46,8 @@ export class FeedTargetIndex {
         AND (sequence>$3::numeric OR sequence=$3::numeric AND $4<>'￿' AND event_id>$4)
         ORDER BY sequence,event_id LIMIT $5`,
     [epoch,through,position.sequence,position.after_event,BATCH])).rows;
-    if (!events.length && position.sequence === through) return false;
+    // An exactly full final batch leaves an event key at `through`. Its next
+    // empty seek must seal that sequence, or readiness remains partial forever.
     await controlTransaction(this.access, async client => {
       // Any Work mutation may replace reported or native credits. Only that
       // Work's indexed history is dirtied; unrelated Works are untouched.

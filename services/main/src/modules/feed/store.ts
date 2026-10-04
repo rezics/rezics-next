@@ -49,6 +49,31 @@ export class FeedStore {
     });
   }
 
+  /** Constant-size status probes; no payloads, inventory walks or refresh writes. */
+  async readiness(position: ReadPosition) {
+    return controlRead(this.pool, async client => {
+      const row = (await client.query<{ checkpoint: FeedCheckpoint | null; target_sequence: string | null;
+        target_complete: boolean; pending_reviews: boolean }>(`SELECT
+        to_jsonb(c) || jsonb_build_object('sequence',c.sequence::text,'review_sequence',c.review_sequence::text) AS checkpoint,
+        t.sequence::text AS target_sequence,
+        t.data_epoch IS NOT NULL AND t.after_event='￿'
+          AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=c.data_epoch AND NOT target_indexed LIMIT 1)
+          AND NOT EXISTS(SELECT 1 FROM access.feed_author_dirty WHERE data_epoch=c.data_epoch LIMIT 1) AS target_complete,
+        EXISTS(SELECT 1 FROM access.reader_review_event WHERE sequence>c.review_sequence LIMIT 1) AS pending_reviews
+        FROM (SELECT 1) root LEFT JOIN access.feed_checkpoint c ON c.id
+        LEFT JOIN access.feed_target_checkpoint t ON t.data_epoch=c.data_epoch`)).rows[0]!;
+      const c = row.checkpoint;
+      if (!c || c.data_epoch !== position.dataEpoch || BigInt(c.sequence) > BigInt(position.sequence))
+        throw new WorkReadUnavailable('Feed projection is recovering');
+      const targetsCurrent = row.target_complete && row.target_sequence === position.sequence;
+      const current = c.sequence === position.sequence && c.after_id === '\uffff'
+        && !c.rebuild_epoch && !row.pending_reviews && targetsCurrent;
+      return { status: current ? 'ready' as const : 'indexing' as const, sourcePosition: position,
+        projection: { sequence: c.sequence, reviewSequence: c.review_sequence },
+        targets: { sequence: row.target_sequence, status: targetsCurrent ? 'current' as const : 'indexing' as const } };
+    });
+  }
+
   async reviewPending(sequence: string): Promise<boolean> {
     return controlRead(this.pool, async client => (await client.query(
       'SELECT 1 FROM access.reader_review_event WHERE sequence > $1::bigint LIMIT 1', [sequence])).rowCount !== 0);
@@ -57,7 +82,7 @@ export class FeedStore {
   async initialize(epoch: string): Promise<FeedCheckpoint> {
     return controlTransaction(this.pool, async client => {
       await client.query(`INSERT INTO access.feed_checkpoint (data_epoch, sequence, revision) VALUES ($1,0,$2)
-        ON CONFLICT (id) DO UPDATE SET data_epoch = EXCLUDED.data_epoch, sequence = 0,
+        ON CONFLICT (id) DO UPDATE SET data_epoch = EXCLUDED.data_epoch, sequence = 0, review_sequence = 0,
         after_id = '', rebuild_epoch = access.feed_checkpoint.data_epoch, rebuild_after = '',
         revision = EXCLUDED.revision WHERE access.feed_checkpoint.data_epoch <> EXCLUDED.data_epoch`,
       [epoch, randomUUID()]);
@@ -178,7 +203,9 @@ export class FeedStore {
       const owner = frame ? frame.owner : reader ? await followPrincipal(client as PoolClient, reader.principal, reader.agent) : null;
       const cutoff = window === 'all' ? new Date(0) : new Date(asOf - (window === 'week' ? 7 : 30) * 86_400_000);
       if (sort === 'new' && reader?.scope === 'following' && frame) {
-        frame.requireFollowingIndex(position.sequence);
+        // A partial target index still provides a bounded, live-disclosed page.
+        // The reader reports projecting until its frontier and backfill catch up.
+        frame.useFollowingIndex();
         return (await client.query<FeedRow>(`WITH followed AS MATERIALIZED (
           SELECT target FROM access.follow WHERE principal_id=$5 AND following),
         keys AS MATERIALIZED (

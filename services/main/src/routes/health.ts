@@ -10,6 +10,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { ratingProjectionHealth, readRatingProjectionHealth } from '../modules/rating/projection-health.ts';
 import { discoveryRankingHealth, readDiscoveryRankingHealth } from '../modules/discovery/public-ranking.ts';
+import { feedProjectionHealth, readFeedProjectionHealth } from '../modules/home/projection-health.ts';
 
 export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) {
   return new Elysia()
@@ -62,6 +63,17 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       } catch {
         return status(503, { status: 'unavailable' as const });
       }
+    })
+    .get('/health/feed-ready', {
+      response: {
+        200: feedProjectionHealth,
+        503: t.Object({ status: t.Literal('unavailable') }),
+      },
+    }, async ({ status }) => {
+      if (!work) return status(503, { status: 'unavailable' as const });
+      try {
+        return await workRead(work, new Request('http://main.internal/health/feed-ready'), {}, readFeedProjectionHealth);
+      } catch { return status(503, { status: 'unavailable' as const }); }
     })
     .get('/health/search-ready', {
       response: {

@@ -459,18 +459,20 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   let asOf = Date.now(), followedSeen = 0;
   let recentRealms: (string | null)[] = [];
   if (cursor) {
-    let order: { key: string; projection: string; following: string | null; personal: string | null;
+    let order: { key: string; projection: string; following: string | null; personal: string | null; targetIndex: string | null;
       asOf: number; followedSeen: number; recentRealms: (string | null)[] };
     try {
       order = JSON.parse(cursor.order) as typeof order;
       if (!order || typeof order.key !== 'string' || typeof order.projection !== 'string'
         || (order.personal !== null && typeof order.personal !== 'string')
+        || (order.targetIndex !== null && typeof order.targetIndex !== 'string')
         || !Number.isSafeInteger(order.asOf) || !Number.isInteger(order.followedSeen)
         || order.followedSeen < 0 || order.followedSeen > FEED_RANKING.thinFollowing || !Array.isArray(order.recentRealms)
         || order.recentRealms.length > 9 || order.recentRealms.some(id => id !== null && typeof id !== 'string')) throw new Error('cursor');
     } catch { throw new WorkReadInvalid('Invalid feed cursor'); }
     if (order.projection !== checkpoint.revision || order.personal !== (personal?.revision ?? null)
-      || (scope === 'following' && order.following !== following?.revision)) {
+      || (scope === 'following' && (order.following !== following?.revision
+        || sort === 'new' && order.targetIndex !== frame.followingIndexRevision))) {
       throw new WorkReadMoved('Feed changed');
     }
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
@@ -777,7 +779,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   await session.fenceSummaryMedia();
   const { pending, watermark } = await frame.close();
   const last = page.at(-1);
-  const current = projected && !pending;
+  const current = projected && !pending && (scope !== 'following' || sort !== 'new'
+    || frame.followingIndexCurrent(session.position.sequence));
   return { profile: 'home-feed-v1' as const, scope, sort, window, ranking: FEED_RANKING,
     caughtUp: scope === 'following' && sort === 'new' ? { asOf: new Date(asOf).toISOString(),
       lastVisitedAt: watermark?.data_epoch === session.position.dataEpoch
@@ -787,6 +790,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       ? feedTombstone(item) : item), more && last
       ? encodeReadCursor(binding, session.position, last.id, JSON.stringify({ key: last.order_key,
         projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
+        targetIndex: scope === 'following' && sort === 'new' ? frame.followingIndexRevision : null,
         personal: personal?.revision ?? null,
         asOf, recentRealms, followedSeen })) : null),
     projection: { sequence: checkpoint.sequence, reviewSequence: checkpoint.review_sequence,

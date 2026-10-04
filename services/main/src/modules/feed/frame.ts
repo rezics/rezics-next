@@ -24,7 +24,7 @@ const actorRows = `SELECT s.id, s.generation::text, n.key AS handle,
   COALESCE(p.hide_reading_activity,false) AS hide_reading_activity
   FROM access.authority_subject s
   LEFT JOIN access.person_preferences p ON p.agent_id = s.id
-  LEFT JOIN access.name_registry n ON n.holder = s.id AND n.scope = 'agent' AND n.state = 'current'
+  LEFT JOIN access.alias_registry n ON n.holder = s.id AND n.scope = 'agent' AND n.state = 'current'
   WHERE s.id = ANY($3::text[]) AND s.kind = 'agent' AND s.active ORDER BY s.id`;
 
 /** One opening and one closing Access cut. The opening cut reads each private
@@ -61,7 +61,7 @@ export class FeedReadFrame {
       COALESCE((SELECT jsonb_agg(a) FROM (${actorRows}) a),'[]'::jsonb) AS actors,
       (SELECT generation::text FROM access.recovery_fence WHERE id) AS recovery_generation,
       i.sequence::text AS index_sequence, i.revision AS index_revision,
-      i.data_epoch IS NOT NULL AND NOT EXISTS(SELECT 1 FROM access.feed_item
+      i.data_epoch IS NOT NULL AND i.after_event='￿' AND NOT EXISTS(SELECT 1 FROM access.feed_item
         WHERE data_epoch=c.data_epoch AND NOT target_indexed LIMIT 1)
         AND NOT EXISTS(SELECT 1 FROM access.feed_author_dirty WHERE data_epoch=c.data_epoch LIMIT 1) AS index_complete,
       EXISTS(SELECT 1 FROM access.reader_review_event WHERE sequence > c.review_sequence LIMIT 1) AS pending_reviews
@@ -103,10 +103,13 @@ export class FeedReadFrame {
   get following() { return this.owner ? { owner: this.owner, revision: this.opening.following_revision,
     count: this.opening.following_count } : null; }
   get watermark() { const w = this.opening.watermark; return w ? { ...w, updated_at: new Date(w.updated_at) } : null; }
-  requireFollowingIndex(sequence: string) {
-    if (!this.opening.index_complete || this.opening.index_sequence === null || BigInt(this.opening.index_sequence) < BigInt(sequence))
-      throw new WorkReadUnavailable('Following timeline is projecting');
+  useFollowingIndex() {
     this.usedTargetIndex = true;
+  }
+  get followingIndexRevision() { return this.opening.index_revision; }
+  followingIndexCurrent(sequence: string) {
+    return this.opening.index_complete && this.opening.index_sequence !== null
+      && BigInt(this.opening.index_sequence) >= BigInt(sequence);
   }
 
   /** Actor state and all follow reasons share one MVCC statement snapshot. */
@@ -144,7 +147,7 @@ export class FeedReadFrame {
         || current.recovery_generation !== this.opening.recovery_generation
         || current.checkpoint.revision !== this.checkpoint.revision || current.revision !== this.opening.revision
         || current.following_revision !== this.opening.following_revision
-        || this.usedTargetIndex && (!current.index_complete || current.index_revision !== this.opening.index_revision)
+        || this.usedTargetIndex && current.index_revision !== this.opening.index_revision
         || Number(current.settings?.version ?? 0) !== this.personSettings?.version && this.owner !== null
         || JSON.stringify(current.actors) !== JSON.stringify([...this.actors.values()])) throw new WorkReadMoved('Feed changed');
       return { pending: current.pending_reviews, watermark: this.watermark };
