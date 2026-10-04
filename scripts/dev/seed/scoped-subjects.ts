@@ -4,7 +4,7 @@ import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
 import { relationLexiconSeed, CANONICITY_PROPERTY } from './relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
 import { seedScopedSubjectQuestions, type ScopedSubjectApi, type GlobalQuestions } from './scoped-subjects-questions.ts';
-import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
+import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
 import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
@@ -62,7 +62,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     ['catalogue:verify:root', 'catalogue.verify'], ['relation:create:root', 'relation.change'],
     ['classification:define:global', 'classification.proposition.define'],
     ['classification:decide:global', 'statement.decide'],
-    [GLOBAL_CONTEXT_SCOPE, 'rating.context.create'],
+    [GLOBAL_TARGET_CONTEXT_SCOPE, 'rating.context.create'],
   ]) await authorize(scope!, action!);
   const questions = await seedScopedSubjectQuestions({ post: async <T>(path: string, body: object, requestKey: string) => {
     if (path === '/v1/rating-question-presentations') {
