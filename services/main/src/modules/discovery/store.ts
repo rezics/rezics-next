@@ -68,6 +68,12 @@ export interface DiscoveryGeneration {
   catchup_works?: string[];
   rebuild_pending?: boolean;
 }
+/** Bind the immutable physical cut once; $1 is a storage root, $2 its version.
+ * A retained generation must never inherit its root's newer live rows. */
+export const discoveryStorage = (
+  row: Pick<DiscoveryGeneration, 'generation_id' | 'storage_generation' | 'storage_version'>,
+) => [row.storage_generation ?? row.generation_id, row.storage_version ?? '0'] as const;
+
 export interface DiscoveryReadGeneration extends DiscoveryGeneration {
   stale: boolean;
 }
@@ -81,8 +87,8 @@ export const discoveryScopeKey = (basis: OwnedDiscoveryBasis) =>
   digest(['discovery-standing-mean-v1', basis]);
 
 export const DISCOVERY_SELECTED_TERM_COST = { terms: DISCOVERY_COST.pageSize, queries: 1 } as const;
-export const discoverySelectedTermsSql = `SELECT term, concept, work_count::text FROM access.discovery_terms($1)
-  WHERE generation_id = $1 AND term = ANY($2::text[]) LIMIT ${DISCOVERY_SELECTED_TERM_COST.terms}`;
+export const discoverySelectedTermsSql = `SELECT term, concept, work_count::text FROM access.discovery_terms($1,$2)
+  WHERE generation_id = $1 AND term = ANY($3::text[]) LIMIT ${DISCOVERY_SELECTED_TERM_COST.terms}`;
 
 /** A Condition page reads at most `window` recent rows per drive term, checks each
  * with at most `groups + 1` primary-key probes, then loads at most `pageSize` payloads. */
@@ -112,28 +118,36 @@ export function discoveryConditionSql(
 ): string {
   const order = sort === 'recent' ? 'recent_order' : 'rating_order';
   const rated = sort === 'top-rated' ? ' AND e.rating_count > 0' : '';
-  const probe = (parameter: number) => `EXISTS (SELECT 1 FROM access.discovery_entries($1) x
-    WHERE x.generation_id = $1 AND x.work = d.work AND x.work_type = $2 AND x.term = ANY($${parameter}::text[]))`;
-  const first = continuation ? 7 : 5;
+  // A scalar LIMIT keeps this correlated: EXISTS may become a hashed SubPlan
+  // that reads an entire term population when retained history changes costs.
+  const probe = (parameter: number) => `coalesce((SELECT true FROM access.discovery_entries($1,$2) x
+    WHERE x.generation_id = $1 AND x.work = d.work AND x.work_type = $3 AND x.term = ANY($${parameter}::text[])
+    LIMIT 1),false)`;
+  const first = continuation ? 8 : 6;
   const checks = [
     ...Array.from({ length: groups }, (_, index) => probe(first + index)),
     ...(excluded ? [`NOT ${probe(first + groups)}`] : []),
   ];
   return `SELECT d.work, d.${order}::text AS order_key, d.term, ${checks.join(' AND ') || 'true'} AS matched
-    FROM unnest($3::text[]) AS drive(term) CROSS JOIN LATERAL (
-      SELECT e.work, e.${order}, e.term FROM access.discovery_entries($1) e
-      WHERE e.generation_id = $1 AND e.work_type = $2 AND e.term = drive.term${rated}
-        ${continuation ? `AND (e.${order}, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")` : ''}
-      ORDER BY e.${order}, e.work COLLATE "C" LIMIT $4) d`;
+    FROM unnest($4::text[]) AS drive(term) CROSS JOIN LATERAL (
+      SELECT e.work, e.${order}, e.term FROM access.discovery_entries($1,$2) e
+      WHERE e.generation_id = $1 AND e.work_type = $3 AND e.term = drive.term${rated}
+        ${continuation ? `AND (e.${order}, e.work COLLATE "C") > ($6::numeric, $7::text COLLATE "C")` : ''}
+      ORDER BY e.${order}, e.work COLLATE "C" LIMIT $5) d`;
 }
-export const discoveryConditionPayloadSql = `SELECT e.work, e.payload FROM access.discovery_entries($1) e
-  JOIN unnest($3::text[], $4::text[]) AS k(work, term) ON e.work = k.work AND e.term = k.term
-  WHERE e.generation_id = $1 AND e.work_type = $2`;
+export const discoveryConditionPayloadSql = `SELECT e.work, e.payload FROM access.discovery_entries($1,$2) e
+  JOIN unnest($4::text[], $5::text[]) AS k(work, term) ON e.work = k.work AND e.term = k.term
+  WHERE e.generation_id = $1 AND e.work_type = $3`;
 
-export const discoveryResourceCardPayloadSql = `SELECT generation_id::text, work, jsonb_build_object(
+// Ordered, limited Work probes prevent a small high-degree generation from
+// becoming a population scan. Two rows preserve the ambiguity rejection.
+export const discoveryResourceCardPayloadSql = `SELECT cuts.id::text AS generation_id, e.work, jsonb_build_object(
   'primaryCredits', payload->'primaryCredits', 'rating', payload->'rating') AS payload
-  FROM unnest($1::uuid[]) AS ids(id) CROSS JOIN LATERAL access.discovery_entries(ids.id)
-  WHERE generation_id=ANY($1::uuid[]) AND work=ANY($2::text[]) AND work_type='' AND term=''`;
+  FROM unnest($1::uuid[], $2::uuid[], $3::bigint[]) AS cuts(id, root, version)
+  CROSS JOIN unnest($4::text[]) AS k(work) CROSS JOIN LATERAL (
+    SELECT payload, work FROM access.discovery_entries(cuts.root, cuts.version)
+    WHERE work=k.work AND work_type='' AND term=''
+    ORDER BY entry_version DESC LIMIT 2) e`;
 
 type SeekPosition = { key: string; work: string };
 const integerKey = /^-?\d+$/;
@@ -196,11 +210,11 @@ export function decideConditionPage(
 
 export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boolean): string {
   const key = sort === 'recent' ? 'recent_order' : 'rating_order';
-  return `SELECT work, ${key}::text AS order_key, payload FROM access.discovery_entries($1)
-    WHERE generation_id = $1 AND work_type = $2 AND term = $3
+  return `SELECT work, ${key}::text AS order_key, payload FROM access.discovery_entries($1,$2)
+    WHERE generation_id = $1 AND work_type = $3 AND term = $4
       ${sort === 'top-rated' ? 'AND rating_count > 0' : ''}
-      ${continuation ? `AND (${key}, work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")` : ''}
-    ORDER BY ${key}, work COLLATE "C" LIMIT $4`;
+      ${continuation ? `AND (${key}, work COLLATE "C") > ($6::numeric, $7::text COLLATE "C")` : ''}
+    ORDER BY ${key}, work COLLATE "C" LIMIT $5`;
 }
 
 /** The existing (generation,type,term,recent_order,work) index supplies each
@@ -209,21 +223,21 @@ export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boo
  * https://www.postgresql.org/docs/18/indexes-multicolumn.html */
 export function discoveryResourceSeekSql(continuation: boolean, scoped = true): string {
   const after = continuation
-    ? 'AND (e.recent_order, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")'
+    ? 'AND (e.recent_order, e.work COLLATE "C") > ($6::numeric, $7::text COLLATE "C")'
     : '';
   if (!scoped)
-    return `SELECT e.work, e.recent_order::text AS order_key FROM access.discovery_entries($1) e
-    WHERE e.generation_id=$1 AND e.work_type=$2 AND e.term=$3 ${after}
-    ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4`;
+    return `SELECT e.work, e.recent_order::text AS order_key FROM access.discovery_entries($1,$2) e
+    WHERE e.generation_id=$1 AND e.work_type=$3 AND e.term=$4 ${after}
+    ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $5`;
   return `SELECT work, recent_order::text AS order_key FROM (
     SELECT DISTINCT ON (d.work) d.work, d.recent_order
-    FROM unnest($3::text[]) AS drive(term) CROSS JOIN LATERAL (
-      SELECT e.work, e.recent_order FROM access.discovery_entries($1) e
-      WHERE e.generation_id=$1 AND e.work_type=$2 AND e.term=drive.term
+    FROM unnest($4::text[]) AS drive(term) CROSS JOIN LATERAL (
+      SELECT e.work, e.recent_order FROM access.discovery_entries($1,$2) e
+      WHERE e.generation_id=$1 AND e.work_type=$3 AND e.term=drive.term
         ${after}
-      ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4
+      ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $5
     ) d ORDER BY d.work, d.recent_order
-  ) merged ORDER BY recent_order, work COLLATE "C" LIMIT $4`;
+  ) merged ORDER BY recent_order, work COLLATE "C" LIMIT $5`;
 }
 interface ResourceSeekRow {
   work: string;
@@ -724,7 +738,15 @@ export class DiscoveryProjection {
         )
       ).rows[0];
       if (!head) throw new RecommendationUnavailable('Discovery has no active generation');
-      const row = await generation(client, pinned ?? head.active_generation);
+      const row = await generation(client, pinned ?? head.active_generation).catch(
+        (error: unknown) => {
+          // A retained cursor expires identically before and after its physical
+          // projection metadata is purged. It never becomes a missing resource.
+          if (pinned && error instanceof RecommendationMissing)
+            throw new RecommendationRestart('Discovery generation expired');
+          throw error;
+        },
+      );
       // Activation may replace the head between these READ COMMITTED statements.
       // The captured generation is also a pin on a first page, not a 503 race.
       const retained =
@@ -780,7 +802,7 @@ export class DiscoveryProjection {
       }
       const result = (
         await client.query<DiscoveryRow>(discoverySeekSql(sort, !!after), [
-          row.generation_id,
+          ...discoveryStorage(row),
           type,
           term,
           limit + 1,
@@ -812,7 +834,7 @@ export class DiscoveryProjection {
         ? (
             await client.query<{ term: string; concept: string; work_count: string }>(
               discoverySelectedTermsSql,
-              [row.generation_id, terms],
+              [...discoveryStorage(row), terms],
             )
           ).rows
         : [];
@@ -837,10 +859,10 @@ export class DiscoveryProjection {
       const rows = (
         await client.query<{ work: string; term: string; concept: string }>(
           `
-        SELECT work, term, payload->'classification'->>'concept' AS concept FROM access.discovery_entries($1)
-        WHERE generation_id = $1 AND work = ANY($2::text[]) AND work_type = '' AND term <> ''
+        SELECT work, term, payload->'classification'->>'concept' AS concept FROM access.discovery_entries($1,$2)
+        WHERE generation_id = $1 AND work = ANY($3::text[]) AND work_type = '' AND term <> ''
         LIMIT ${bound + 1}`,
-          [row.generation_id, works],
+          [...discoveryStorage(row), works],
         )
       ).rows;
       if (rows.length > bound) throw new RecommendationUnavailable('Work terms exceed their bound');
@@ -889,7 +911,7 @@ export class DiscoveryProjection {
         await client.query<ConditionRow>(
           discoveryConditionSql(groups.length, excluded.length > 0, !!after, sort),
           [
-            row.generation_id,
+            ...discoveryStorage(row),
             type,
             drive,
             cost.window,
@@ -906,7 +928,7 @@ export class DiscoveryProjection {
               await client.query<{ work: string; payload: DiscoveryRow['payload'] }>(
                 discoveryConditionPayloadSql,
                 [
-                  row.generation_id,
+                  ...discoveryStorage(row),
                   type,
                   page.map((item) => item.work),
                   page.map((item) => item.term),
@@ -950,9 +972,9 @@ export class DiscoveryProjection {
         throw new RecommendationRestart('Discovery recovery basis expired');
       return (
         await client.query<{ work: string; term: string }>(
-          `SELECT work, term FROM access.discovery_entries($1)
-        WHERE generation_id = $1 AND work = ANY($2::text[]) AND work_type = '' AND term = ANY($3::text[])`,
-          [row.generation_id, works, terms],
+          `SELECT work, term FROM access.discovery_entries($1,$2)
+        WHERE generation_id = $1 AND work = ANY($3::text[]) AND work_type = '' AND term = ANY($4::text[])`,
+          [...discoveryStorage(row), works, terms],
         )
       ).rows;
     });
@@ -983,7 +1005,7 @@ export class DiscoveryProjection {
         throw new RecommendationRestart('Discovery recovery basis expired');
       return (
         await client.query<ResourceSeekRow>(discoveryResourceSeekSql(!!after, !!drive), [
-          row.generation_id,
+          ...discoveryStorage(row),
           type,
           ...(drive ? [drive] : ['']),
           limit + 1,
@@ -1001,9 +1023,9 @@ export class DiscoveryProjection {
       return new Set(
         (
           await client.query<{ work: string }>(
-            `SELECT work FROM access.discovery_entries($1)
-        WHERE generation_id=$1 AND work_type='' AND term='' AND work=ANY($2::text[])`,
-            [row.generation_id, works],
+            `SELECT work FROM access.discovery_entries($1,$2)
+        WHERE generation_id=$1 AND work_type='' AND term='' AND work=ANY($3::text[])`,
+            [...discoveryStorage(row), works],
           )
         ).rows.map((row) => row.work),
       );
@@ -1028,7 +1050,12 @@ export class DiscoveryProjection {
           generation_id: string;
           work: string;
           payload: DiscoveryRow['payload'];
-        }>(discoveryResourceCardPayloadSql, [generations.map((row) => row.generation_id), works])
+        }>(discoveryResourceCardPayloadSql, [
+          generations.map((row) => row.generation_id),
+          generations.map((row) => discoveryStorage(row)[0]),
+          generations.map((row) => discoveryStorage(row)[1]),
+          works,
+        ])
       ).rows;
       if (
         rows.length > generations.length * works.length ||
@@ -1057,8 +1084,8 @@ export class DiscoveryProjection {
       await requireRecoveryOpen(client);
       return (
         await client.query<{ concept: string; work_count: string }>(
-          `SELECT concept, work_count::text FROM access.discovery_concepts($1) WHERE concept=ANY($2::text[])`,
-          [row.generation_id, concepts],
+          `SELECT concept, work_count::text FROM access.discovery_concepts($1,$2) WHERE concept=ANY($3::text[])`,
+          [...discoveryStorage(row), concepts],
         )
       ).rows;
     });
@@ -1072,10 +1099,10 @@ export class DiscoveryProjection {
       await requireRecoveryOpen(client);
       return (
         await client.query<{ concept: string; work_count: string }>(
-          `SELECT concept, work_count::text FROM access.discovery_concepts($1)
-          WHERE ($2::bigint IS NULL OR work_count<$2::bigint OR (work_count=$2::bigint AND concept>$3))
-        ORDER BY work_count DESC,concept COLLATE "C" LIMIT $4`,
-          [row.generation_id, after?.count ?? null, after?.concept ?? '', limit + 1],
+          `SELECT concept, work_count::text FROM access.discovery_concepts($1,$2)
+          ${after ? 'WHERE (-work_count,concept) > (-$3::bigint,$4::text COLLATE "C")' : ''}
+        ORDER BY -work_count,concept COLLATE "C" LIMIT $${after ? 5 : 3}`,
+          [...discoveryStorage(row), ...(after ? [after.count, after.concept] : []), limit + 1],
         )
       ).rows;
     });
@@ -1092,9 +1119,9 @@ export class DiscoveryProjection {
       return (
         await client.query<{ term: string; concept: string; work_count: string }>(
           `
-        SELECT term, concept, work_count::text FROM access.discovery_terms($1)
-        WHERE generation_id = $1 ORDER BY work_count DESC, term COLLATE "C" LIMIT $2`,
-          [row.generation_id, limit],
+        SELECT term, concept, work_count::text FROM access.discovery_terms($1,$2) t
+        WHERE generation_id = $1 ORDER BY t.work_count DESC, term COLLATE "C" LIMIT $3`,
+          [...discoveryStorage(row), limit],
         )
       ).rows;
     });

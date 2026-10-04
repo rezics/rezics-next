@@ -15,6 +15,7 @@ import { digest } from '../../../services/main/src/modules/recommendation/derive
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import { startMediaStack } from './media-support.ts';
+import { isolateCardRatingContext } from './discovery-rating-context-fixture.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
@@ -25,6 +26,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 test('G1011: Query keeps Works and continuation when item credits, ratings or covers cannot be read', async () => {
   const started = performance.now();
   const f = await startMediaStack('g-1011-optional', { profileCredits: true, library: true });
+  const restoreContexts = await isolateCardRatingContext(f.fuseki);
   try {
     const bad = await f.member('G1011 affected author'), good = await f.member('G1011 healthy author');
     const works = await Promise.all([
@@ -66,8 +68,9 @@ test('G1011: Query keeps Works and continuation when item credits, ratings or co
         const batch = await projectDiscoveryBatch(session, basis, '', { works: works.map(work => work.work).sort() });
         expect(batch.complete).toBe(true);
         await projection.commitBatch(automaticDiscovery(null), row.generation_id, step.lease, '', batch, session.position);
-        await projection.activate(automaticDiscovery(null), row.generation_id, null, session.position,
+        const activated = await projection.activate(automaticDiscovery(null), row.generation_id, row.active_head, session.position,
           { idempotencyKey: randomUUID(), requestDigest: digest(row.generation_id) });
+        expect(activated.outcome).toBe('succeeded');
       }
     });
     expect(performance.now() - started).toBeLessThan(600_000);
@@ -180,5 +183,5 @@ test('G1011: Query keeps Works and continuation when item credits, ratings or co
         context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 20,
         filter: { all: [{ facet: 'type', any: ['https://schema.org/CreativeWork'] }] } }),
     })), 503);
-  } finally { await f.stop(); }
+  } finally { await restoreContexts(); await f.stop(); }
 }, 600_000);

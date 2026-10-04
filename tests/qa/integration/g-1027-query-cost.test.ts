@@ -620,16 +620,16 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
             const plans = (
               await stack.accessPool.query<{ 'QUERY PLAN': { Plan: SqlPlan }[] }>(
                 `EXPLAIN (ANALYZE, BUFFERS, WAL, FORMAT JSON, TIMING OFF) ${discoveryResourceSeekSql(false)}`,
-                [generation.generation_id, '', [definitions[1]!.sense], 4],
+                [generation.storage_generation ?? generation.generation_id, generation.storage_version ?? '0', '', [definitions[1]!.sense], 4],
               )
             ).rows;
+            diagnostics.push({ scale, kind: 'SQL execution plan', plan: plans });
             const nodes = planNodes(plans[0]!['QUERY PLAN'][0]!.Plan);
             expect(nodes.some((node) => node['Node Type'] === 'Seq Scan')).toBe(false);
             const index = nodes.find((node) => node['Index Name'] === 'discovery_recent_seek');
             expect(index).toBeDefined();
             expect(index!['Actual Rows'] * index!['Actual Loops']).toBe(1);
             expect(index!['Rows Removed by Filter'] ?? 0).toBe(0);
-            diagnostics.push({ scale, kind: 'SQL execution plan', plan: plans });
           }
           if (
             scale === 80 &&

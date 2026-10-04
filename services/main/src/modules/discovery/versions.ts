@@ -20,12 +20,14 @@ export async function discoveryWriter(
 }
 
 /** An operator can activate an older independent cut. Reuse only the storage
- * family's current physical snapshot, never silently inherit a later one. */
+ * family's current physical snapshot, never silently inherit a later one.
+ * Every projected Work publishes its canonical posting alongside its tags. */
 export async function discoveryStorageReusable(client: PoolClient, row: DiscoveryGeneration) {
   const result = (
     await client.query<{ reusable: boolean }>(
       `SELECT NOT EXISTS (
-    SELECT 1 FROM access.discovery_entry WHERE generation_id=$1 AND entry_version>$2 LIMIT 1)
+    SELECT 1 FROM access.discovery_entry WHERE generation_id=$1 AND work_type='' AND term=''
+      AND entry_version>$2 LIMIT 1)
     AND NOT EXISTS (SELECT 1 FROM access.discovery_entry WHERE generation_id=$1 AND retired_version>$2 LIMIT 1) AS reusable`,
       [row.storage_generation ?? row.generation_id, row.storage_version ?? '0'],
     )

@@ -213,7 +213,7 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
         [node, ...((node.Plans ?? []) as Record<string, unknown>[]).flatMap(nodes)];
       for (const continued of [false, true]) {
         const explained = await stack.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-          ${discoveryConditionSql(1, true, continued)}`, [planBuild.generation, '', [often], DISCOVERY_CONDITION_COST.window,
+          ${discoveryConditionSql(1, true, continued)}`, [planBuild.generation, '0', '', [often], DISCOVERY_CONDITION_COST.window,
           ...continued ? ['10000', 'https://rezics.com/id/00000000-0000-4000-8000-000000010000'] : [], [rare], [never]]);
         const plan = explained.rows[0]['QUERY PLAN'][0].Plan;
         const planned = nodes(plan);
@@ -233,7 +233,7 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
       }
       const active = await owner.active({ scope: 'global', realm: null, context: null, owner: null },
         (await json<{ sourcePosition: { dataEpoch: string; sequence: string } }>(await call('GET', '/v1/works'))).sourcePosition);
-      const synthetic = { ...active, generation_id: planBuild.generation };
+      const synthetic = { ...active, generation_id: planBuild.generation, storage_generation: null, storage_version: '0' };
       const first = await owner.conditionPage(synthetic, '', { drive: [often], groups: [[rare]], excluded: [never] }, 20);
       // In 60 even Works only the multiples of 50 not of 3 match: 50 and 100 of 2..120.
       expect(first.rows.map(item => Number(item.order_key))).toEqual([50, 100]);
