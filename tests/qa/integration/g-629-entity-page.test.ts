@@ -285,6 +285,8 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
       concurrent.find((response) => response.status === 200)!,
       200,
     );
+    expect(await concurrent.find((response) => response.status === 409)!.json())
+      .toMatchObject({ code: 'stale_head', currentHead: concurrentWinner.revision });
     // A lost graph acknowledgement still resolves the committed receipt.
     await f.grant(`semantic:edit:${sao.web.work}`, 'semantic.change');
     const originalGraph = f.env.fuseki;
