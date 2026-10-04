@@ -10,7 +10,8 @@ import { FailureNote } from './failure.tsx';
 import { ScoreFigure } from './figure.tsx';
 import { translate } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
-import { ProjectionHeader } from './projection-header.tsx';
+import { FrameChips } from './projection-header.tsx';
+import { frameChips } from './frames.ts';
 import { questionText } from './question-rating.tsx';
 import { figuresOfRating, type Figures } from './score.ts';
 import type { Outcome, Question } from './types.ts';
@@ -45,7 +46,8 @@ function ProjectionRow({ read, api, scope, question, locale, messages }: {
   const t = translate(messages, locale);
   const [row, reload] = useLoad(() => readRow(api, read.projection.id, scope, question), `${read.projection.id}\n${question?.context ?? ''}`);
   return <li data-projection={read.projection.id} className="grid gap-3 rounded-2xl border border-border/60 bg-card p-4">
-    <ProjectionHeader summary={read.summary} locale={locale} messages={messages} />
+    {/* The list is one subject's, so each row leads with where it is rated, not with the subject again. */}
+    <FrameChips chips={frameChips(read.summary ?? undefined, locale)} label={t.within} size="lg" />
     {row.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : row.state === 'failed' ? <FailureNote failure={row.failure} locale={locale} messages={messages} retry={reload} />
         : !row.data.question ? <p className="text-muted-foreground text-sm">{t.noQuestions}</p>

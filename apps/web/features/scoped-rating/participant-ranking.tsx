@@ -6,7 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import type { ProjectionRead, ScopedRatingApi } from './api.ts';
 import { FailureNote } from './failure.tsx';
-import { formatMean, formatNumber, translate } from './format.ts';
+import { formatNumber, translate } from './format.ts';
 import { subjectOf } from './frames.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { SubjectAvatar } from './projection-header.tsx';
@@ -63,7 +63,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
             <p>{t.rankingBasis}</p>
             <p data-ranking-eligibility>
               {t.rankingEligibility({ min: formatNumber(rank?.minimumRatings ?? 50, locale) })}
-              {rank?.prior ? ` ${t.rankingPrior({ mean: formatMean(rank.prior.mean, locale), ratings: t.ratingCount(rank.prior.ratings) })}` : ''}
+              {rank?.prior ? ` ${t.rankingPrior({ mean: formatNumber(rank.prior.mean, locale, 1), ratings: t.ratingCount(rank.prior.ratings) })}` : ''}
             </p>
           </div>
           {rank?.status === 'unavailable' || !rank?.items.length
@@ -73,10 +73,10 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
                 className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]">
                 <span className="font-semibold text-muted-foreground text-sm tabular-nums">{t.rankingPlace({ position: formatNumber(item.position, locale) })}</span>
                 <Participant read={byTarget.get(item.target)} locale={locale} />
-                <span className="col-span-2 flex flex-wrap items-baseline gap-x-2 text-sm sm:col-span-1 sm:justify-end">
-                  <span className="font-semibold tabular-nums">{t.rankingWeighted({ score: formatMean(item.score, locale) })}</span>
+                <span className="col-span-2 grid gap-0.5 text-sm sm:col-span-1 sm:justify-items-end">
+                  <span className="font-semibold tabular-nums">{t.rankingWeighted({ score: formatNumber(item.score, locale, 1) })}</span>
                   <span className="text-muted-foreground tabular-nums">
-                    {t.score({ mean: formatMean(item.mean, locale), max: formatNumber(max, locale) })} · {t.ratingCount(item.count)}</span>
+                    {t.score({ mean: formatNumber(item.mean, locale, 1), max: formatNumber(max, locale) })} · {t.ratingCount(item.count)}</span>
                 </span>
               </li>)}
             </ol>}

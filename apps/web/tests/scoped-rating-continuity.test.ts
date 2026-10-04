@@ -2,6 +2,11 @@ import { expect, test } from 'bun:test';
 import { continuityFrame, continuityParam, offContinuity, parseContinuity, sameContinuity, withContinuity, type ContinuityChoice }
   from '../features/wiki/continuity.ts';
 import { parsePosition, withPosition } from '../features/wiki/position.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { spaceHref } from '../features/address/path.ts';
+
+const wiki = localizedPath(spaceHref('wiki', 'site'), 'en');
+const characters = `${wiki}/characters`;
 
 const canon = '0199a2b4-1c3e-7a21-8b4d-5e6f7a8b9c0d';
 const legends = '0199a2b4-1c3e-7a21-8b4d-5e6f7a8b9c0e';
@@ -39,14 +44,14 @@ test('the address carries nothing where the choice is the default', () => {
 });
 
 test('the choice survives every link built from the address, with the reading position, and drops a cursor from another continuity', () => {
-  const here = '/en/z/wiki/characters?position=all&cursor=abc#top';
+  const here = `${characters}?position=all&cursor=abc#top`;
   const chosen = withContinuity(here, { kind: 'at', continuity: canon });
-  expect(chosen).toBe(`/en/z/wiki/characters?position=all&continuity=${canon}#top`);
+  expect(chosen).toBe(`${characters}?position=all&continuity=${canon}#top`);
   // Moving the reading position keeps the continuity, and the other way round.
   const moved = withPosition(chosen, { kind: 'at', occurrence: '0199a2b4-1c3e-7a21-8b4d-5e6f7a8b9c0f' });
   expect(moved).toContain(`continuity=${canon}`);
   expect(parsePosition({ position: '0199a2b4-1c3e-7a21-8b4d-5e6f7a8b9c0f' })).toEqual({ kind: 'at', occurrence: '0199a2b4-1c3e-7a21-8b4d-5e6f7a8b9c0f' });
   expect(withContinuity(moved, offContinuity)).not.toContain('continuity=');
   expect(withContinuity(moved, offContinuity)).toContain('position=0199a2b4');
-  expect(withContinuity('/en/z/wiki', offContinuity, { kind: 'at', continuity: canon })).toBe('/en/z/wiki?continuity=off');
+  expect(withContinuity(wiki, offContinuity, { kind: 'at', continuity: canon })).toBe(`${wiki}?continuity=off`);
 });

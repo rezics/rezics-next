@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import { useMemo } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -27,7 +29,7 @@ const meta = {
   component: Ranking,
   args: { locale: 'en', scenario: fixture.participantScenario, who: fixture.participants },
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/e/spring-finals' } },
+  parameters: { route: { pathname: localizedPath(resourceHref('/e/', 'spring-finals'), 'en') } },
 } satisfies Meta<typeof Ranking>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -90,6 +92,7 @@ export const SpoilerHidden: Story = {
 export const SpoilerHiddenPhone: Story = { ...SpoilerHidden, globals: phone };
 
 const localized = (locale: UiLocale): Story => ({
+  globals: phone,
   args: { locale },
   async play({ canvasElement }) {
     const t = translate(messages[locale], locale);

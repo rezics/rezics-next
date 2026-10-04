@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { EntityPickerItem, EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { browserMainApi } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -43,7 +44,7 @@ export function readingPositionSource({ work, actingSubject, locale, label }: {
         const text = pickPositionLabel(item.labels, locale);
         const value = text?.value ?? item.displayLabel ?? (item.ordinal ? String(item.ordinal) : item.occurrence.slice(-8));
         return option({ iri: item.occurrence,
-          dimension: 'position', name: { value, language: text?.lang ?? '', direction: text?.dir ?? 'ltr' } });
+          dimension: 'position', name: { value, language: text?.lang ?? '', direction: text?.dir ?? direction('', value) } });
       }) };
   } };
 }

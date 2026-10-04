@@ -1,6 +1,6 @@
 'use client';
 
-import { SegmentGroup, SegmentGroupItem, SegmentGroupItemText } from '@rezics/ui/segment-group';
+import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-group';
 import { cn } from '@rezics/ui/utils';
 import { useId, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -54,7 +54,7 @@ function RollupView({ members, question, unit, api, defaultFormula, locale, mess
   const t = translate(messages, locale);
   const noun = unitName(unit, t);
   const [formula, setFormula] = useState<RollupFormula>(defaultFormula);
-  const formulaLabel = useId();
+  const formulaName = useId();
   const targets = members.map(member => member.projection.id);
   const [rollup, reload] = useLoad(() => api.rollup(question.context, targets, formula), `${question.context}\n${formula}\n${targets.join()}`);
   const byTarget = new Map(members.map(member => [member.projection.id, member]));
@@ -64,16 +64,13 @@ function RollupView({ members, question, unit, api, defaultFormula, locale, mess
       <h3 className="font-semibold text-lg tracking-tight">{t.combined({ unit: noun })}</h3>
       <p lang={text.language} dir={text.direction} className="text-muted-foreground text-sm">{text.value}</p>
     </div>
-    <div className="grid gap-1.5">
-      <span id={formulaLabel} className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{t.combineAs}</span>
-      <SegmentGroup aria-labelledby={formulaLabel} value={formula} className="justify-self-start"
-        onValueChange={details => { if (details.value === 'pooled' || details.value === 'mean-of-means') setFormula(details.value); }}>
-        <SegmentGroupItem value="pooled"><SegmentGroupItemText>{t.formulaPooled}</SegmentGroupItemText></SegmentGroupItem>
-        <SegmentGroupItem value="mean-of-means">
-          <SegmentGroupItemText>{t.formulaMeanOfMeans({ unit: noun })}</SegmentGroupItemText></SegmentGroupItem>
-      </SegmentGroup>
-      <p className="text-muted-foreground text-sm">{formula === 'pooled' ? t.explainPooled : t.explainMeanOfMeans({ unit: noun })}</p>
-    </div>
+    <RadioGroup value={formula} name={formulaName} className="flex-row flex-wrap gap-x-6 gap-y-2"
+      onValueChange={details => { if (details.value === 'pooled' || details.value === 'mean-of-means') setFormula(details.value); }}>
+      <RadioGroupLabel className="basis-full">{t.combineAs}</RadioGroupLabel>
+      <RadioGroupItem value="pooled">{t.formulaPooled}</RadioGroupItem>
+      <RadioGroupItem value="mean-of-means">{t.formulaMeanOfMeans({ unit: noun })}</RadioGroupItem>
+    </RadioGroup>
+    <p className="text-muted-foreground text-sm">{formula === 'pooled' ? t.explainPooled : t.explainMeanOfMeans({ unit: noun })}</p>
     {rollup.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : rollup.state === 'failed' ? <FailureNote failure={rollup.failure} locale={locale} messages={messages} retry={reload} />
         : <RollupBody rollup={rollup.data} byTarget={byTarget} noun={noun} locale={locale} messages={messages} />}
@@ -109,7 +106,7 @@ function RollupBody({ rollup, byTarget, noun, locale, messages }: {
         const read = byTarget.get(member.target);
         const figures = figuresOfMember(member, rollup.displayThreshold, max);
         return <li key={member.target} data-rollup-member={member.target}
-          className={cn('grid gap-2 rounded-xl border border-border/60 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] sm:items-center')}>
+          className="grid gap-2 rounded-xl border border-border/60 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6">
           <FrameChips chips={frameChips(read?.summary ?? undefined, locale)} label={t.within} />
           {figures ? <ScoreFigure figures={figures} locale={locale} messages={messages} /> : null}
         </li>;

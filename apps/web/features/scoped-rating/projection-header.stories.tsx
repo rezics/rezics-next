@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import { expect, within } from 'storybook/test';
 import type { FrameCandidate } from './frames.ts';
 import { ProjectionHeader } from './projection-header.tsx';
@@ -19,7 +21,7 @@ const meta = {
   args: { summary: fixture.placeEpisode3.summary, locale: 'en', messages: messages.en },
   decorators: [Story => <div className="mx-auto max-w-xl p-4 sm:p-6"><Story /></div>],
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/e/elizabeth-bennet' } },
+  parameters: { route: { pathname: localizedPath(resourceHref('/e/', 'elizabeth-bennet'), 'en') } },
 } satisfies Meta<typeof ProjectionHeader>;
 export default meta;
 type Story = StoryObj<typeof meta>;

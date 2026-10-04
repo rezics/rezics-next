@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import { useMemo } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -30,7 +32,7 @@ const meta = {
   component: Rate,
   args: { locale: 'en', scenario: fixture.populated, viewer: fixture.readerViewer, frames: [] },
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/e/elizabeth-bennet' } },
+  parameters: { route: { pathname: localizedPath(resourceHref('/e/', 'elizabeth-bennet'), 'en') } },
 } satisfies Meta<typeof Rate>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -204,6 +206,7 @@ export const RateAndWithdraw: Story = {
 };
 
 const localized = (locale: UiLocale): Story => ({
+  globals: phone,
   args: { locale, frames: [e3] },
   async play() {
     const dialog = await screen.findByRole('dialog', { name: copy(locale).sheetTitle({ name: fixture.subject.name.value }) });
@@ -220,4 +223,3 @@ export const Korean: Story = localized('ko');
 export const German: Story = localized('de');
 export const French: Story = localized('fr');
 export const Spanish: Story = localized('es');
-export const GermanPhone: Story = { ...localized('de'), globals: phone };

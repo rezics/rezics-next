@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import { useMemo } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -26,7 +28,7 @@ const meta = {
   component: Rollup,
   args: { locale: 'en', scenario: fixture.populated, unit: 'episodes' },
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/e/elizabeth-bennet' } },
+  parameters: { route: { pathname: localizedPath(resourceHref('/e/', 'elizabeth-bennet'), 'en') } },
 } satisfies Meta<typeof Rollup>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -56,7 +58,7 @@ export const AverageOfEpisodes: Story = {
     const canvas = within(canvasElement);
     await see(canvasElement, '4 of 5 episodes have enough ratings to count.');
     const pooled = canvasElement.querySelector('[data-rollup-value]')?.textContent;
-    await userEvent.click(canvas.getByText('Average of episodes', { selector: '[data-part="item-text"], span' }));
+    await userEvent.click(canvas.getByRole('radio', { name: 'Average of episodes' }));
     await see(canvasElement, 'Average of episodes: every one counts the same, however many ratings it has.');
     await waitFor(() => expect(canvasElement.querySelector('[data-rollup-value]')?.textContent).not.toBe(pooled));
     await expect(canvas.getByRole('radio', { name: 'Average of episodes' })).toBeChecked();
@@ -112,6 +114,7 @@ export const Unreadable: Story = {
 };
 
 const localized = (locale: UiLocale): Story => ({
+  globals: phone,
   args: { locale, unit: 'episodes' },
   async play({ canvasElement }) {
     const t = translate(messages[locale], locale);

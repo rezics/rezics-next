@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { frameChips, sameProjection, subjectOf, withFrame, withoutFrame, type FrameCandidate } from '../features/scoped-rating/frames.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { resourceHref } from '../features/address/path.ts';
 
 const [e1, e2] = fixture.episodes as [FrameCandidate, FrameCandidate];
 const canon = fixture.continuities[0]!;
@@ -22,7 +24,7 @@ test('chips come from the summary parts in frame order and link each place to it
   const read = fixture.projectionRead(fixture.iri('1a90'), fixture.subject.iri, [e1.iri, canon.iri]);
   const chips = frameChips(read.summary ?? undefined, 'en');
   expect(chips.map(chip => chip.name.value)).toEqual([e1.name.value, canon.name.value]);
-  expect(chips.every(chip => chip.href.startsWith('/en/e/'))).toBe(true);
+  expect(chips.every(chip => chip.href.startsWith(localizedPath(resourceHref('/e/', ''), 'en')))).toBe(true);
   expect(chips[0]?.kind).toBe('part');
   expect(subjectOf(read.summary ?? undefined, 'en')?.name.value).toBe('Elizabeth Bennet');
 });

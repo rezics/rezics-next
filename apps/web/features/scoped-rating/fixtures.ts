@@ -2,6 +2,7 @@
 // thresholds withhold a mean, a roll-up counts only the members a question accepts, a ranking waits for 50 ratings.
 // Shapes come from the Eden types, so a contract change breaks the stories' build as well as the components'.
 import { uuidToSid } from '@rezics/model/address';
+import { direction } from '@rezics/main/language';
 import { memoryOwnRatings, type ProjectionList, type ProjectionRead, type QuestionScope, type ScopedRatingApi } from './api.ts';
 import { type FrameCandidate, type FrameDimension, sameProjection } from './frames.ts';
 import { staticFrameSource } from './sources.ts';
@@ -14,14 +15,14 @@ export const iri = (tail: string) => `${base}019a5c00-0000-7000-8000-${tail.padS
 const sourcePosition = { datasetId: 'product' as const, dataEpoch: '8c483e38-59e7-4d95-b27b-de9cd6742a3e', sequence: '4812' };
 const ok = <T>(data: T): Outcome<T> => ({ ok: true, data });
 const fail = <T>(failure: Failure): Outcome<T> => ({ ok: false, failure });
-const name = (value: string, language = 'en') => ({ value, language, direction: 'ltr' as const, basis: 'requested' as const });
+const name = (value: string, language = 'en') => ({ value, language, direction: direction(language, value), basis: 'requested' as const });
 
 // ── What is rated, and where ───────────────────────────────────────────────
 
-export const subject: Subject = { iri: iri('c001'), name: { value: 'Elizabeth Bennet', language: 'en', direction: 'ltr' } };
+export const subject: Subject = { iri: iri('c001'), name: { value: 'Elizabeth Bennet', language: 'en', direction: direction('en', 'Elizabeth Bennet') } };
 
 const frame = (tail: string, value: string, dimension: FrameDimension): FrameCandidate =>
-  ({ iri: iri(tail), dimension, name: { value, language: 'en', direction: 'ltr' } });
+  ({ iri: iri(tail), dimension, name: { value, language: 'en', direction: direction('en', value) } });
 export const episodes = [
   frame('e001', 'Episode 1 · Netherfield', 'position'), frame('e002', 'Episode 2 · The ball', 'position'),
   frame('e003', 'Episode 3 · Hunsford', 'position'), frame('e004', 'Episode 4 · Pemberley', 'position'),
@@ -67,7 +68,7 @@ export function projectionRead(id: string, subjectIri: string, frames: readonly 
 export function question(tail: string, text: string, language = 'en'): Question {
   return { context: iri(tail), question: text, language, scale: { min: 1, max: 10, step: 1 },
     owner: { kind: 'global', id: iri('9001') },
-    displayQuestion: { value: text, language, direction: 'ltr', basis: 'requested', script: null, reviewStatus: 'reviewed',
+    displayQuestion: { value: text, language, direction: direction(language, text), basis: 'requested', script: null, reviewStatus: 'reviewed',
       presentation: null, source: null, licence: null, fallback: null } };
 }
 export const writing = question('d001', 'How well written is this character here?');

@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import { useMemo } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -25,7 +27,7 @@ const meta = {
   component: Projections,
   args: { locale: 'en', scenario: fixture.populated },
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/e/elizabeth-bennet' } },
+  parameters: { route: { pathname: localizedPath(resourceHref('/e/', 'elizabeth-bennet'), 'en') } },
 } satisfies Meta<typeof Projections>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -120,6 +122,7 @@ export const Failed: Story = {
 };
 
 const localized = (locale: UiLocale): Story => ({
+  globals: phone,
   args: { locale },
   async play({ canvasElement }) {
     await waitFor(() => expect(canvasElement.querySelectorAll('[data-projection]').length).toBeGreaterThan(2), { timeout: 4000 });

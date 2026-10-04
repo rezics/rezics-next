@@ -9,8 +9,7 @@ type Search = Record<string, string | string[] | undefined>;
 
 export type ContinuityChoice =
   /** No continuity: every statement and relation shows, each with the continuities it holds in. */
-  | { kind: 'off' }
-  | { kind: 'at'; continuity: string };
+  { kind: 'off' } | { kind: 'at'; continuity: string };
 
 export const CONTINUITY_PARAM = 'continuity';
 export const offContinuity: ContinuityChoice = Object.freeze({ kind: 'off' });
@@ -22,7 +21,10 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  * The choice an address carries, else `fallback` (the host's default; off when it has none). Anything malformed or
  * repeated is no choice, so a damaged link reads as the default rather than as a different continuity.
  */
-export function parseContinuity(search: Search, fallback: ContinuityChoice = offContinuity): ContinuityChoice {
+export function parseContinuity(
+  search: Search,
+  fallback: ContinuityChoice = offContinuity,
+): ContinuityChoice {
   const value = search[CONTINUITY_PARAM];
   if (typeof value !== 'string') return fallback;
   if (value === OFF) return offContinuity;
@@ -38,7 +40,10 @@ export function continuityFrame(choice: ContinuityChoice): string[] {
 }
 
 /** The address value for `choice`: nothing where it is the host's default, `off` where it turns that default off. */
-export function continuityParam(choice: ContinuityChoice, fallback: ContinuityChoice = offContinuity): string | undefined {
+export function continuityParam(
+  choice: ContinuityChoice,
+  fallback: ContinuityChoice = offContinuity,
+): string | undefined {
   if (sameContinuity(choice, fallback)) return undefined;
   return choice.kind === 'at' ? choice.continuity : OFF;
 }
@@ -47,7 +52,11 @@ export function continuityParam(choice: ContinuityChoice, fallback: ContinuityCh
  * `href` with the choice written into its query (replacing any earlier one) and without a `cursor`, which belongs to
  * the continuity it was issued for. Every other query parameter, the reading position included, is kept.
  */
-export function withContinuity(href: string, choice: ContinuityChoice, fallback: ContinuityChoice = offContinuity): string {
+export function withContinuity(
+  href: string,
+  choice: ContinuityChoice,
+  fallback: ContinuityChoice = offContinuity,
+): string {
   const hash = href.indexOf('#');
   const fragment = hash < 0 ? '' : href.slice(hash);
   const bare = hash < 0 ? href : href.slice(0, hash);

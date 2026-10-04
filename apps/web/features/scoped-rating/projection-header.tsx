@@ -30,12 +30,12 @@ const icons: Record<FrameKind, typeof BookOpenIcon> = {
 };
 
 /** The places a rating is in, as chips in each place's own language, linked to its page. */
-export function FrameChips({ chips, label }: { chips: readonly FrameChip[]; label: string }) {
+export function FrameChips({ chips, label, size = 'md' }: { chips: readonly FrameChip[]; label: string; size?: 'md' | 'lg' }) {
   return <ul aria-label={label} className="flex flex-wrap gap-1.5">
     {chips.map(chip => {
       const Icon = icons[chip.kind];
       return <li key={chip.iri} className="min-w-0 max-w-full">
-        <Link href={chip.href} className={cn(badgeVariants({ variant: 'outline', size: 'md' }), 'max-w-full')}>
+        <Link href={chip.href} className={cn(badgeVariants({ variant: 'outline', size }), 'max-w-full')}>
           <Icon aria-hidden="true" /><span className="truncate"><LocalizedText text={chip.name} /></span></Link>
       </li>;
     })}
