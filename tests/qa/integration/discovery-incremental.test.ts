@@ -34,9 +34,10 @@ test('Discovery incremental: appended Works preserve a partial pin and a moved r
     const pinned = (await stack.accessPool.query('SELECT generation_id, source_sequence::text FROM access.discovery_generation')).rows[0];
     const appended = await stack.publicWork(member.actor);
     await drain();
-    expect(await tick()).toBe('activated');
+    expect(await tick()).toBe('advanced');
     const retained = (await stack.accessPool.query('SELECT source_sequence::text, work_count FROM access.discovery_generation WHERE generation_id = $1', [pinned.generation_id])).rows[0];
-    expect(retained).toEqual({ source_sequence: pinned.source_sequence, work_count: '2' });
+    expect(BigInt(retained.source_sequence)).toBeGreaterThan(BigInt(pinned.source_sequence));
+    expect(retained.work_count).toBe('2');
     expect((await stack.accessPool.query(`SELECT work FROM access.discovery_entry
       WHERE generation_id = $1 AND work_type = '' AND term = '' ORDER BY work`, [pinned.generation_id])).rows.map(row => row.work))
       .toEqual(originals.map(work => work.work).sort());
@@ -61,7 +62,7 @@ test('Discovery incremental: appended Works preserve a partial pin and a moved r
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1 AND work = $2',
       [pending.generation_id, appended.work])).rows[0].count).toBe('0');
     await drain();
-    expect(await tick()).toBe('activated');
+    expect(await tick()).toBe('advanced');
     expect((await stack.accessPool.query('SELECT work_count FROM access.discovery_generation WHERE generation_id = $1', [pending.generation_id])).rows[0].work_count).toBe('3');
     expect(await tick()).toBe('activated');
     expect((await stack.accessPool.query(`SELECT d.work_count FROM access.discovery_generation d

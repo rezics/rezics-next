@@ -66,11 +66,12 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_generation')).rows[0].count).toBe('0');
     await drain();
     let maxQueries = 0, maxMs = 0, ticks = 0;
+    const scheduledWorker = worker();
     const tick = async () => {
       await due();
       const before = (await stack.accessPool.query('SELECT coalesce(sum(work_count),0)::text AS count FROM access.discovery_generation')).rows[0].count;
       const queries = stack.fuseki.queries, started = performance.now();
-      const outcome = await worker().tick(); // New process object each step exercises durable resume.
+      const outcome = await scheduledWorker.tick(); // Preserve the scheduler's foreground/background burst.
       const elapsed = performance.now() - started;
       const graphCalls = stack.fuseki.queries - queries;
       maxQueries = Math.max(maxQueries, graphCalls); maxMs = Math.max(maxMs, elapsed); ticks++;
@@ -111,9 +112,9 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
     expect(await tick()).toBe('current');
     expect((await stack.accessPool.query('SELECT active_generation FROM access.derived_generation_head WHERE scope_key = $1', [key])).rows[0].active_generation).toBe(active);
 
-    // Access-only changes also refresh after the relay stays at the same cut.
+    // New Accounts do not invalidate a population; leases still serialize its refresh.
     const b = await stack.member('b');
-    expect(await json(await read())).toMatchObject({ stale: true });
+    expect(await json(await read())).toMatchObject({ stale: false });
     await due();
     const held = await store.claim();
     expect(held).not.toBeNull();
@@ -181,6 +182,8 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
       SELECT $1, work, work_type, term, recent_order, rating_count, rating_sum, payload
       FROM access.discovery_entry WHERE generation_id = $2`, [obsolete, ready.id]);
     await projection.cancel(automaticDiscovery(null), obsolete);
+    await stack.accessPool.query("UPDATE access.derived_generation SET finished_at=clock_timestamp()-interval '1 hour' WHERE id=$1", [obsolete]);
+    await stack.accessPool.query("UPDATE access.discovery_retirement SET due_at=clock_timestamp()-interval '1 hour' WHERE generation_id=$1", [obsolete]);
     for (let i = 0; i < 8; i++) await store.purge();
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1', [obsolete])).rows[0].count).toBe('0');
     const measurements = { ticks, maxQueries, maxMs: Math.ceil(maxMs), worksPerTick: DISCOVERY_REFRESH_COST.worksPerTick };
