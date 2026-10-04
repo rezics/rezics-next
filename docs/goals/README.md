@@ -124,7 +124,10 @@ exit, and runs the integration tiers, Storybook and browser journeys once.
 - The manager merges ready tasks in waves, one at a time, regenerates derived
   artifacts once (`task gen`), runs the static checks and one
   `goalctl test --affected <wave base>` run, then commits. Failures go back to
-  the responsible session through `resume`.
+  the responsible session through `resume`. With several Goals on one `main`,
+  a merge that adds a profile or changes a served contract is followed at once
+  by `task gen`, `task main:typecheck` and a regeneration commit, because other
+  Goals type-check `main` between your waves.
 - Run wave tests from a worktree pinned at the wave commit: the harness aborts
   with `Source changed during QA run` when commits land during the run.
 - Frontend waves also need the changed flows exercised in a real browser
