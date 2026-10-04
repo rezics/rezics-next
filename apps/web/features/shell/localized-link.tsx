@@ -6,7 +6,8 @@ import { isPublicPagePath, localizedPath } from '../../i18n/locale.ts';
 import { useOptionalShell } from './shell-provider.tsx';
 
 /** Keeps page links in the current UI locale. Non-page routes stay at the origin root. */
-export default function LocalizedLink({ href, onClick, ...props }: ComponentProps<typeof Link>) {
+export default function LocalizedLink({ href, onClick, documentNavigation = false, ...props }:
+  ComponentProps<typeof Link> & { documentNavigation?: boolean }) {
   const [enhanced, setEnhanced] = useState(false);
   useEffect(() => setEnhanced(true), []);
   const locale = useOptionalShell()?.locale ?? 'en';
@@ -23,7 +24,10 @@ export default function LocalizedLink({ href, onClick, ...props }: ComponentProp
   return <Link href={destination} {...props} onClick={(event) => {
     onClick?.(event);
     const anchor = event.currentTarget;
-    if (enhanced || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+    // Rapid browse choices must stay with one navigation owner through hydration.
+    // A document request supersedes the preceding document request in the browser;
+    // handing the second choice to the router can cancel it without replacing it.
+    if ((enhanced && !documentNavigation) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
       event.shiftKey || event.altKey || anchor.hasAttribute('download') ||
       (anchor.target && anchor.target !== '_self')) return;
     event.preventDefault();

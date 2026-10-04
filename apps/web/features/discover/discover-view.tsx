@@ -102,6 +102,8 @@ export function DiscoverView({
           {tabs.map(({ id: tab, label }) => (
             <Link
               key={tab}
+              documentNavigation
+              prefetch={false}
               href={browseHref(changeBrowse(state, { tab }))}
               aria-current={state.tab === tab && !state.section ? 'page' : undefined}
               className="inline-flex h-9 shrink-0 items-center rounded-full px-4 font-medium text-sm outline-none
