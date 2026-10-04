@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { CONTEXT_COMPONENT_SHARDS, targetShard } from '../../../services/main/src/modules/access/rating-aggregate-inventory.ts';
 import { ROLLUP_COST } from '../../../services/main/src/modules/rating/rollup-read.ts';
 import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startRatingStack, type Person } from './rating-components-support.ts';
@@ -174,6 +175,59 @@ test('a roll-up costs the owners a fixed snapshot plus a bounded cost per member
   expect(after.result.members[0]).toMatchObject({ components: { count: 40 } });
   expect({ graph: after.graph, access: after.access }).toEqual({ graph: before.graph, access: before.access });
 }, 600_000);
+
+test('a seal moves only its target\'s shard of the Context totals, and the ranking prior equals the unsharded sum', async () => {
+  const context = (await r.context({ displayThreshold: 2 })).context;
+  const targets: string[] = [];
+  await inBatches(Array.from({ length: 24 }, (_, index) => index), 6, async index => { targets[index] = await r.resource(`shard-${index}`); });
+  const people = await raters('shard', 3) as [Person, Person, Person];
+  const pool = r.stack.accessPool;
+  // The migration's SQL hash and the seal's hash are one function.
+  const hashed = (await pool.query(`SELECT v, get_byte(sha256(convert_to(v, 'UTF8')), 0) % 16 AS shard FROM unnest($1::text[]) AS t(v)`,
+    [targets])).rows as { v: string; shard: number }[];
+  for (const row of hashed) expect(row.shard).toBe(targetShard(row.v));
+  const a = targets[0]!, b = targets.find(target => targetShard(target) !== targetShard(a))!;
+  expect(targetShard(a)).not.toBe(targetShard(b));
+  const stamps = async () => new Map((await pool.query(`SELECT shard, xmin::text AS stamp FROM access.target_rating_context_component
+    WHERE context = $1`, [context])).rows.map((row: { shard: number; stamp: string }) => [row.shard, row.stamp]));
+  await r.rate(people[0], context, a, 7);
+  await r.rate(people[0], context, b, 6);
+  // A seal for `a` moves a's shard row and no other.
+  const before = await stamps();
+  expect([...before.keys()].sort((p, q) => p - q)).toEqual([targetShard(a), targetShard(b)].sort((p, q) => p - q));
+  await r.rate(people[1], context, a, 8);
+  const afterA = await stamps();
+  expect(afterA.get(targetShard(a))).not.toBe(before.get(targetShard(a)));
+  expect(afterA.get(targetShard(b))).toBe(before.get(targetShard(b)));
+  // Concurrent seals on targets of different shards both land, each on its own row.
+  const [aStamp, bStamp] = [afterA.get(targetShard(a)), afterA.get(targetShard(b))];
+  await Promise.all([r.rate(people[2], context, a, 9), r.rate(people[1], context, b, 5)]);
+  const concurrent = await stamps();
+  expect(concurrent.get(targetShard(a))).not.toBe(aStamp);
+  expect(concurrent.get(targetShard(b))).not.toBe(bStamp);
+  expect(concurrent.size).toBe(2);
+  // Rate the rest, then every shard row is exactly the sum of its own targets' rows.
+  const rest = targets.filter(target => target !== a && target !== b);
+  await inBatches(rest, 6, (target, index) => r.rate(people[index % 3]!, context, target, (index % 10) + 1));
+  const perShard = (await pool.query(`SELECT get_byte(sha256(convert_to(target, 'UTF8')), 0) % 16 AS shard, count(*)::int AS targets,
+      sum(slots)::int AS slots, sum(rating_count)::int AS count, sum(rating_sum)::int AS sum
+    FROM access.target_rating_component WHERE context = $1 GROUP BY 1 ORDER BY 1`, [context])).rows;
+  const shardRows = (await pool.query(`SELECT shard, targets, slots, rating_count AS count, rating_sum::int AS sum
+    FROM access.target_rating_context_component WHERE context = $1 ORDER BY shard`, [context])).rows;
+  expect(shardRows).toEqual(perShard);
+  expect(shardRows.length).toBeGreaterThan(1);
+  expect(shardRows.length).toBeLessThanOrEqual(CONTEXT_COMPONENT_SHARDS);
+  // The prior reads the sixteen rows and equals the sum over every target's own row.
+  const total = (await pool.query(`SELECT count(*)::int AS targets, sum(slots)::int AS slots, sum(rating_count)::int AS count,
+    sum(rating_sum)::int AS sum FROM access.target_rating_component WHERE context = $1`, [context])).rows[0] as
+    { targets: number; slots: number; count: number; sum: number };
+  // `a` holds three ratings, `b` two and each of the other twenty-two one.
+  expect(total).toMatchObject({ targets: 24, count: 3 + 2 + rest.length });
+  const ranked = await rollup({ context, targets: [a], formula: 'pooled', rank: true });
+  expect(ranked.rank).toMatchObject({ status: 'ranked', prior: { mean: total.sum / total.count, ratings: total.count, targets: total.targets,
+    weight: Math.max(50, Math.round(total.count / total.targets)) } });
+  expect(await r.contextTotals(context)).toMatchObject({ targets: total.targets, slots: total.slots, count: total.count, sum: total.sum });
+}, 300_000);
 
 test('a roll-up combines one RatingContext only: other Contexts, stored means and malformed requests are refused', async () => {
   const context = (await r.context()).context, target = await r.resource('solo');

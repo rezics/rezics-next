@@ -45,7 +45,9 @@ backend run is named in `docs/plan/README.md#current-state`.
 Target ratings (release, realization, occurrence and resource grains) read from
 additive components, never from a walk of the raters. Access keeps the head
 count, rating count, sum and a 1–10 histogram per (RatingContext, target), and
-the same figures summed per Context. The seal that moves a head moves both rows in
+the same figures summed per Context in 16 shards keyed by a hash of the target,
+so a seal moves only its target's shard row and a ranking's prior sums sixteen
+rows. The seal that moves a head moves its target row and shard row in
 its own transaction (subtract the head's recorded value, add the new one;
 withdrawal subtracts only), and the sealed value must match the admitted request
 digest. Count and sum are what the histogram says, which the database checks.

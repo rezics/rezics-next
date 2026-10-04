@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
-import { RatingInventoryConflict, recordRatingAggregateHead } from '../src/modules/access/rating-aggregate-inventory.ts';
+import { CONTEXT_COMPONENT_SHARDS, RatingInventoryConflict, recordRatingAggregateHead, sumShards, targetShard } from '../src/modules/access/rating-aggregate-inventory.ts';
 import { targetRatingDigest } from '../src/modules/rating/target-digest.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
@@ -59,7 +59,8 @@ test('a first rating inserts a valued head and creates both component rows from 
   expect(inserts[0]!.params.at(-1)).toBe(8);
   // slots, rating count, sum and a histogram with one rating in bin 8.
   expect(inserts[1]!.params).toEqual([context, target, 1, 8, [0, 0, 0, 0, 0, 0, 0, 1, 0, 0], 'ad000000-0000-4000-8000-000000000000']);
-  expect(inserts[2]!.params).toEqual([context, 1, 8, [0, 0, 0, 0, 0, 0, 0, 1, 0, 0]]);
+  // The Context's totals are the target's shard row: [context, shard, count, sum, bins].
+  expect(inserts[2]!.params).toEqual([context, targetShard(target), 1, 8, [0, 0, 0, 0, 0, 0, 0, 1, 0, 0]]);
 });
 
 test('a revision subtracts the head\'s recorded value and adds the new one; a withdrawal subtracts only', async () => {
@@ -72,7 +73,8 @@ test('a revision subtracts the head\'s recorded value and adds the new one; a wi
   // [context, target, slots, unvalued, count, sum, previous, next, admission] for the target row.
   const [target6to9, context6to9] = await revise(9, { value: 6, value_known: true });
   expect(target6to9!.slice(2)).toEqual([0, 0, 0, 3, 6, 9, 'ad000000-0000-4000-8000-000000000000']);
-  expect(context6to9!.slice(1)).toEqual([0, 0, 0, 0, 3, 6, 9]);
+  expect(context6to9!.slice(0, 2)).toEqual([context, targetShard(target)]);
+  expect(context6to9!.slice(2)).toEqual([0, 0, 0, 0, 3, 6, 9]);
   const [withdraw] = await revise(null, { value: 6, value_known: true });
   expect(withdraw!.slice(2)).toEqual([0, 0, -1, -6, 6, null, 'ad000000-0000-4000-8000-000000000000']);
   // A withdrawn rater rating again adds one rating and subtracts nothing.
@@ -87,4 +89,51 @@ test('a revision whose predecessor head is not the sealed one moves nothing', as
   const { client, statements } = fakeClient(null, true);
   await expect(recordRatingAggregateHead(client, admissionFor(9, predecessor), proof(9, predecessor))).rejects.toBeInstanceOf(RatingInventoryConflict);
   expect(writes(statements)).toEqual([]);
+});
+
+/** Targets whose shards differ, and two that share one, found by trying ids. */
+function targetsByShard() {
+  const found = new Map<number, string>();
+  let same: [string, string] | null = null;
+  for (let n = 100; !same || found.size < 2; n++) {
+    const candidate = id(n), shard = targetShard(candidate);
+    if (found.has(shard) && !same) same = [found.get(shard)!, candidate];
+    if (!found.has(shard)) found.set(shard, candidate);
+  }
+  return { differ: [...found.values()].slice(0, 2) as [string, string], same: same! };
+}
+
+test('a target\'s shard is a stable hash in 0-15 spread over the Context\'s targets', () => {
+  const shards = Array.from({ length: 1600 }, (_, n) => targetShard(id(n + 1)));
+  expect(shards.every(shard => Number.isInteger(shard) && shard >= 0 && shard < CONTEXT_COMPONENT_SHARDS)).toBe(true);
+  expect(shards).toEqual(Array.from({ length: 1600 }, (_, n) => targetShard(id(n + 1))));
+  // Every shard is used, and none takes more than a few times its even share.
+  const counts = Array.from({ length: CONTEXT_COMPONENT_SHARDS }, (_, shard) => shards.filter(value => value === shard).length);
+  expect(Math.min(...counts)).toBeGreaterThan(40);
+  expect(Math.max(...counts)).toBeLessThan(200);
+});
+
+test('seals of different targets move different shard rows of one Context, and the same shard only for targets that hash alike', async () => {
+  const { differ: [first, second], same: [alike, twin] } = targetsByShard();
+  // The admission digest names the target, so each seal is built for its own target.
+  const seal = async (target: string, value: number) => {
+    const { client, statements } = fakeClient(null, false, true);
+    const admission = { ...admissionFor(value, null), request_digest: targetRatingDigest({ context, target, expectedRevisionHead: null,
+      value, actingSubject: actor }) };
+    await recordRatingAggregateHead(client, admission, proof(value, null, { target }));
+    return writes(statements).find(statement => statement.sql.includes('target_rating_context_component'))!.params.slice(0, 2);
+  };
+  expect(await seal(first, 7)).toEqual([context, targetShard(first)]);
+  expect(await seal(second, 7)).toEqual([context, targetShard(second)]);
+  expect((await seal(first, 7))[1]).not.toBe((await seal(second, 7))[1]);
+  expect((await seal(alike, 7))[1]).toBe((await seal(twin, 7))[1]);
+});
+
+test('the Context totals are the sum of the shard rows', () => {
+  const row = (targets: number, slots: number, histogram: number[]) => ({ targets, slots, unvalued: 0,
+    rating_count: histogram.reduce((a, b) => a + b, 0), rating_sum: String(histogram.reduce((a, b, i) => a + b * (i + 1), 0)), histogram });
+  expect(sumShards([])).toBeNull();
+  const total = sumShards([row(2, 5, [0, 1, 0, 0, 2, 0, 0, 0, 0, 0]), row(1, 3, [0, 0, 0, 1, 0, 0, 0, 0, 0, 2]), row(1, 1, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0])]);
+  expect(total).toEqual({ targets: 4, slots: 9, unvalued: 0, count: 7, sum: 2 + 10 + 4 + 20 + 1,
+    histogram: [1, 1, 0, 1, 2, 0, 0, 0, 0, 2] });
 });

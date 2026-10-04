@@ -160,9 +160,16 @@ const bins = (value: number | null) => Array.from({ length: 10 }, (_, index) => 
 const histogramMove = (previous: string, next: string) => `ARRAY(SELECT u.h + (CASE WHEN u.i = ${next}::int THEN 1 ELSE 0 END)
   - (CASE WHEN u.i = ${previous}::int THEN 1 ELSE 0 END) FROM unnest(histogram) WITH ORDINALITY AS u(h, i) ORDER BY u.i)`;
 
-/** Moves the target's row and its Context's row in the transaction of the seal
- * (or repair) that moved a head. Rows of one Context change only under that
- * Context's scope gate, so reading before writing cannot race. */
+export const CONTEXT_COMPONENT_SHARDS = 16;
+/** The shard of a target's Context totals: the low nibble of the first byte of its
+ * SHA-256, the same expression the migration's backfill computes in SQL. */
+export function targetShard(target: string): number {
+  return createHash('sha256').update(target, 'utf8').digest()[0]! % CONTEXT_COMPONENT_SHARDS;
+}
+
+/** Moves the target's row and its shard of the Context's totals in the transaction
+ * of the seal (or repair) that moved a head. Rows of one Context change only under
+ * that Context's scope gate, so reading before writing cannot race. */
 async function moveTargetComponents(client: PoolClient, context: string, target: string, admission: string | null,
   move: ComponentMove): Promise<void> {
   const count = (move.next === null ? 0 : 1) - (move.previous === null ? 0 : 1);
@@ -182,17 +189,19 @@ async function moveTargetComponents(client: PoolClient, context: string, target:
       last_admission_id = COALESCE($9::uuid, last_admission_id) WHERE context = $1 AND target = $2`,
     [context, target, move.slots, move.unvalued, count, sum, move.previous, move.next, admission]);
   }
-  const contextRow = await client.query('SELECT 1 FROM access.target_rating_context_component WHERE context = $1 FOR UPDATE',
-    [context]);
-  if (!contextRow.rowCount) {
+  // Only this target's shard of the Context's totals moves; the other fifteen rows are not touched.
+  const shard = targetShard(target);
+  const shardRow = await client.query('SELECT 1 FROM access.target_rating_context_component WHERE context = $1 AND shard = $2 FOR UPDATE',
+    [context, shard]);
+  if (!shardRow.rowCount) {
     await client.query(`INSERT INTO access.target_rating_context_component
-      (context,targets,slots,unvalued,rating_count,rating_sum,histogram) VALUES ($1,1,1,0,$2,$3,$4::int[])`,
-    [context, count, sum, bins(move.next)]);
+      (context,shard,targets,slots,unvalued,rating_count,rating_sum,histogram) VALUES ($1,$2,1,1,0,$3,$4,$5::int[])`,
+    [context, shard, count, sum, bins(move.next)]);
   } else {
-    await client.query(`UPDATE access.target_rating_context_component SET targets = targets + $2,
-      slots = slots + $3, unvalued = unvalued + $4, rating_count = rating_count + $5, rating_sum = rating_sum + $6,
-      histogram = ${histogramMove('$7', '$8')} WHERE context = $1`,
-    [context, existing.rowCount ? 0 : 1, move.slots, move.unvalued, count, sum, move.previous, move.next]);
+    await client.query(`UPDATE access.target_rating_context_component SET targets = targets + $3,
+      slots = slots + $4, unvalued = unvalued + $5, rating_count = rating_count + $6, rating_sum = rating_sum + $7,
+      histogram = ${histogramMove('$8', '$9')} WHERE context = $1 AND shard = $2`,
+    [context, shard, existing.rowCount ? 0 : 1, move.slots, move.unvalued, count, sum, move.previous, move.next]);
   }
 }
 
@@ -305,19 +314,31 @@ export interface TargetRatingSnapshot extends Omit<RatingAggregateInventory, 'he
 
 const COMPONENT_CONTEXT_SQL = `SELECT c.realm, c.revision AS context_revision, c.policy_revision, f.open, f.generation,
     ca.state AS context_state, ca.graph_outcome AS context_outcome, ca.graph_receipt AS context_receipt,
-    ca.graph_data_epoch AS context_epoch, ca.graph_sequence AS context_sequence,
-    k.targets, k.slots, k.unvalued, k.rating_count, k.rating_sum, k.histogram
+    ca.graph_data_epoch AS context_epoch, ca.graph_sequence AS context_sequence
   FROM access.rating_aggregate_context c
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
-  LEFT JOIN access.target_rating_context_component k ON k.context = c.context
   WHERE c.context = $1 AND f.id = true`;
+/** At most sixteen shard rows, whatever the number of targets. */
+const COMPONENT_SHARDS_SQL = `SELECT targets, slots, unvalued, rating_count, rating_sum, histogram
+  FROM access.target_rating_context_component WHERE context = $1`;
 const COMPONENT_MEMBERS_SQL = `SELECT k.target, k.slots, k.unvalued, k.rating_count, k.rating_sum, k.histogram,
     la.state, la.graph_outcome, la.graph_receipt, la.graph_data_epoch, la.graph_sequence, la.request_digest,
     (la.action = 'rating.observation.set' AND la.scope_id = 'rating:observe:' || k.context) AS identity_valid
   FROM access.target_rating_component k JOIN access.admission la ON la.id = k.last_admission_id
   WHERE k.context = $1 AND k.target = ANY($2::text[])`;
 
+/** The Context's totals are the sum of its shard rows, each of which holds its own CHECKs. */
+export function sumShards(rows: readonly QueryResultRow[]): ContextRatingComponents | null {
+  if (!rows.length) return null;
+  const total: ContextRatingComponents = { targets: 0, slots: 0, unvalued: 0, count: 0, sum: 0, histogram: Array(10).fill(0) };
+  for (const row of rows) {
+    total.targets += Number(row.targets); total.slots += Number(row.slots); total.unvalued += Number(row.unvalued);
+    total.count += Number(row.rating_count); total.sum += Number(row.rating_sum);
+    (row.histogram as unknown[]).forEach((bin, index) => { total.histogram[index] = total.histogram[index]! + Number(bin); });
+  }
+  return total;
+}
 const figures = (row: QueryResultRow) => ({ slots: Number(row.slots), unvalued: Number(row.unvalued),
   count: Number(row.rating_count), sum: Number(row.rating_sum), histogram: (row.histogram as unknown[]).map(Number) });
 
@@ -334,6 +355,7 @@ export async function readTargetRatingSnapshot(pool: Pool, context: string, targ
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
     }
+    const shards = (await client.query(COMPONENT_SHARDS_SQL, [context])).rows;
     const members = new Map<string, TargetRatingComponents>();
     for (const row of (await client.query(COMPONENT_MEMBERS_SQL, [context, targets])).rows) {
       if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true) {
@@ -350,7 +372,7 @@ export async function readTargetRatingSnapshot(pool: Pool, context: string, targ
     return { realm: first.realm, contextRevision: first.context_revision, policyRevision: first.policy_revision ?? null,
       contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch,
       contextSequence: first.context_sequence, recoveryGeneration: first.generation,
-      contextComponents: first.targets === null ? null : { targets: Number(first.targets), ...figures(first) },
+      contextComponents: sumShards(shards),
       members, heads };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }

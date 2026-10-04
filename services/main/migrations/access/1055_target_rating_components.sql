@@ -42,16 +42,21 @@ SELECT h.context, h.target, count(*), count(*), 0, 0, ARRAY[0,0,0,0,0,0,0,0,0,0]
 FROM access.target_rating_head h JOIN access.admission a ON a.id = h.admission_id
 GROUP BY h.context, h.target;
 
--- The same components summed over every target of a Context. A ranking's prior
--- mean and weight come from here, so no read scans the Context's targets.
+-- The same components summed over the targets of a Context, in 16 shards keyed by
+-- a stable hash of the target (low nibble of the first byte of its SHA-256). A
+-- seal updates only its target's shard row, so no single row is hot, and a
+-- ranking's prior mean and weight sum the 16 rows, a constant cost however many
+-- targets the Context has.
 CREATE TABLE access.target_rating_context_component (
-  context text PRIMARY KEY REFERENCES access.rating_aggregate_context(context),
+  context text NOT NULL REFERENCES access.rating_aggregate_context(context),
+  shard smallint NOT NULL CHECK (shard BETWEEN 0 AND 15),
   targets integer NOT NULL CHECK (targets > 0),
   slots integer NOT NULL CHECK (slots >= targets),
   unvalued integer NOT NULL CHECK (unvalued BETWEEN 0 AND slots),
   rating_count integer NOT NULL CHECK (rating_count >= 0),
   rating_sum bigint NOT NULL CHECK (rating_sum >= 0),
   histogram integer[] NOT NULL,
+  PRIMARY KEY (context, shard),
   CONSTRAINT target_rating_context_component_histogram CHECK (
     cardinality(histogram) = 10 AND array_position(histogram, NULL) IS NULL AND 0 <= ALL(histogram)
     AND rating_count = histogram[1] + histogram[2] + histogram[3] + histogram[4] + histogram[5]
@@ -62,6 +67,7 @@ CREATE TABLE access.target_rating_context_component (
     AND rating_count + unvalued <= slots)
 );
 INSERT INTO access.target_rating_context_component
-  (context, targets, slots, unvalued, rating_count, rating_sum, histogram)
-SELECT context, count(*), sum(slots), sum(unvalued), 0, 0, ARRAY[0,0,0,0,0,0,0,0,0,0]
-FROM access.target_rating_component GROUP BY context;
+  (context, shard, targets, slots, unvalued, rating_count, rating_sum, histogram)
+SELECT context, get_byte(sha256(convert_to(target, 'UTF8')), 0) % 16, count(*), sum(slots), sum(unvalued), 0, 0,
+  ARRAY[0,0,0,0,0,0,0,0,0,0]
+FROM access.target_rating_component GROUP BY context, get_byte(sha256(convert_to(target, 'UTF8')), 0) % 16;

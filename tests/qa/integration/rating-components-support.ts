@@ -105,9 +105,12 @@ export async function startRatingStack(label: string) {
     const { row, recomputed } = await components(contextId, target);
     expect(row).toEqual(recomputed);
   };
-  const contextTotals = async (contextId: string) => (await stack.accessPool.query(`SELECT targets, slots, unvalued,
-    rating_count AS count, rating_sum::int AS sum, histogram FROM access.target_rating_context_component WHERE context = $1`,
-  [contextId])).rows[0] ?? null;
+  /** The Context's totals: its shard rows summed, as the ranking prior reads them. */
+  const contextTotals = async (contextId: string) => (await stack.accessPool.query(`SELECT sum(targets)::int AS targets,
+    sum(slots)::int AS slots, sum(unvalued)::int AS unvalued, sum(rating_count)::int AS count, sum(rating_sum)::int AS sum,
+    ARRAY(SELECT sum(u.h)::int FROM access.target_rating_context_component s, unnest(s.histogram) WITH ORDINALITY AS u(h, i)
+      WHERE s.context = $1 GROUP BY u.i ORDER BY u.i) AS histogram
+    FROM access.target_rating_context_component WHERE context = $1 HAVING count(*) > 0`, [contextId])).rows[0] ?? null;
   return { stack, app, call, json, person, owner, realm, resource, context, rate, aggregate, components, measure,
     expectComponentsMatchHeads, contextTotals, stop: () => stack.stop() };
 }
