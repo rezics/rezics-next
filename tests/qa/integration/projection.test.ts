@@ -15,12 +15,12 @@ const local = (ref: string) => ref.slice(ID.length);
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 interface View { id: string; subject: string; frames: string[]; revision: string; disclosure: 'public' | 'restricted' }
 interface Write { projection: View; created: boolean; replayed: boolean }
-interface Page { items: View[]; nextCursor: string | null }
+interface Page { items: View[]; nextCursor: string | null; sourcePosition: { dataEpoch: string; sequence: string } }
 interface Problem { code: string; status: number }
 
 let stack: MediaStack;
 let owner: Member, outsider: Member;
-let work: { work: string };
+let work: { work: string; title: string };
 const resources: Record<string, string> = {};
 
 async function json<T>(response: Response, status = 200): Promise<T> {
