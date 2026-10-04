@@ -8,6 +8,7 @@ import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbo
 import { AccessVotes, voteReceiptIri } from '../../../services/main/src/modules/vote/access.ts';
 import { pollScopeId } from '../../../services/main/src/modules/vote/schema.ts';
 import { ID } from '../../../services/main/src/modules/work/activate.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const native = () => ID + randomUUID();
 
@@ -177,11 +178,13 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV19/GOV20/GOV21/GOV22/GO
       shares: [{ option: 'no', units: 100 }] };
     const competing = { ...castBody, representationId: mandateTwo,
       expectedHead: castReceipt.revision };
-    const [one, two] = await Promise.all([
-      request('POST', `${path}/ballots`, 'representative-one', changed, 'change-one'),
-      request('POST', `${path}/ballots`, 'representative-two', competing, 'change-two'),
-    ]);
-    expect([one.status, two.status].sort()).toEqual([201, 409]);
+    const ballotCommands = [
+      request.bind(null, 'POST', `${path}/ballots`, 'representative-one', changed, 'change-one'),
+      request.bind(null, 'POST', `${path}/ballots`, 'representative-two', competing, 'change-two'),
+    ];
+    await assertCommandRace(await Promise.all(ballotCommands.map((send) => send())), 201, (index) =>
+      ballotCommands[index]!(),
+    );
     const finalTally = await request('GET', `${path}/tallies`, 'administrator');
     expect(finalTally.status).toBe(200);
     const distribution = await finalTally.json() as { castSeats: number; castUnits: number;

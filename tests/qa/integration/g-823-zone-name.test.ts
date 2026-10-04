@@ -9,6 +9,7 @@ import {
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 test('G823: HTTP Zone names retain writer language through rename, retry, fencing and configuration edits', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -234,17 +235,25 @@ test('G823: HTTP Zone names retain writer language through rename, retry, fencin
         language: 'und',
         direction: 'ltr',
       });
-      const concurrent = await Promise.all(
-        ['Winner A', 'Winner B'].map((name) =>
-          f.call('PUT', config, {
+      const concurrentCommands = ['Winner A', 'Winner B'].map((name) =>
+        f.call.bind(
+          f,
+          'PUT',
+          config,
+          {
             expectedHead: recovered.revision,
             actingSubject: f.actor,
             name,
             language: 'en',
-          }),
+          },
+          randomUUID(),
         ),
       );
-      expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+      const concurrent = await assertCommandRace(
+        await Promise.all(concurrentCommands.map((send) => send())),
+        200,
+        (index) => concurrentCommands[index]!(),
+      );
       const winner = (await concurrent.find((response) => response.status === 200)!.json()) as {
         revision: string;
       };

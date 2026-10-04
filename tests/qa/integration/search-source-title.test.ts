@@ -12,6 +12,7 @@ import { DiscoveryProjection } from '../../../services/main/src/modules/discover
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 async function json(response: Response, status = 200): Promise<Record<string, any>> {
   const text = await response.text();
@@ -128,9 +129,24 @@ test('title, localized title, tagline and retained author facts match current pu
     expect((await json(await call('/v1/works'))).items.find((row: any) => row.id === title.work).primaryCredits)
       .toMatchObject([{ displayName: '珍·奥斯汀' }]);
     expect((await call(path, { action: 'remove', expectedRevision: first.revision, reason: 'stale' }, 'owner')).status).toBe(409);
-    const competing = await Promise.all(['one', 'two'].map(reason => call(path, {
-      action: 'remove', expectedRevision: updated.revision, reason }, 'owner')));
-    expect(competing.map(response => response.status).sort()).toEqual([200, 409]);
+    const competingCommands = ['one', 'two'].map((reason) =>
+      call.bind(
+        null,
+        path,
+        {
+          action: 'remove',
+          expectedRevision: updated.revision,
+          reason,
+        },
+        'owner',
+        randomUUID(),
+      ),
+    );
+    await assertCommandRace(
+      await Promise.all(competingCommands.map((send) => send())),
+      200,
+      (index) => competingCommands[index]!(),
+    );
     expect((await search('奥斯汀')).total).toBe(0);
     expect((await json(await call(`/v1/works/${title.work.slice(-36)}/credits`))).items)
       .toMatchObject([{ id: credit, displayName: null }]);

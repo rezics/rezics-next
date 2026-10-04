@@ -11,6 +11,7 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { collectionRoutes } from '../../../services/main/src/routes/collections.ts';
 import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hides private members', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -148,15 +149,49 @@ test('WIKI03/WIKI06/CTX08: a Collection keeps repeated occurrence history and hi
     expect(await f.env.fuseki.query(graphSnapshot)).toEqual(beforeGraph);
     const afterGroups = await statements();
     expect(afterGroups).toEqual(beforeGroups);
-    const concurrent = await Promise.all([
-      f.call('POST', `${path}/changes`, { expectedHead: moved.revision,
-        actingSubject: f.actor, operations: [{ op: 'move', occurrence: inserted.occurrences[0],
-          parent: created.structure, position: 'last' }] }),
-      f.call('POST', `${path}/changes`, { expectedHead: moved.revision,
-        actingSubject: f.actor, operations: [{ op: 'move', occurrence: inserted.occurrences[1],
-          parent: created.structure, position: 'last' }] }),
-    ]);
-    expect(concurrent.map(result => result.status).sort()).toEqual([200, 409]);
+    const concurrentCommands = [
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/changes`,
+        {
+          expectedHead: moved.revision,
+          actingSubject: f.actor,
+          operations: [
+            {
+              op: 'move',
+              occurrence: inserted.occurrences[0],
+              parent: created.structure,
+              position: 'last',
+            },
+          ],
+        },
+        randomUUID(),
+      ),
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/changes`,
+        {
+          expectedHead: moved.revision,
+          actingSubject: f.actor,
+          operations: [
+            {
+              op: 'move',
+              occurrence: inserted.occurrences[1],
+              parent: created.structure,
+              position: 'last',
+            },
+          ],
+        },
+        randomUUID(),
+      ),
+    ];
+    await assertCommandRace(
+      await Promise.all(concurrentCommands.map((send) => send())),
+      200,
+      (index) => concurrentCommands[index]!(),
+    );
     expect((await f.json<{ occurrences: Array<{ occurrence: string }> }>(await f.call('GET',
       `${path}?${query}`), 200)).occurrences).toHaveLength(2);
     // G-829 admits readers of public Collections. These metadata-only Works

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { CONTEXT_COST } from '../../../services/main/src/modules/context/schema.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const short = (id: string) => id.split('/').at(-1)!;
 
@@ -36,9 +37,20 @@ test('MODEL13: Label as scoped SKOS labels retain lexical value, language and ex
       .toMatchObject({ preferenceRevision: chosen.preferenceRevision, replayed: true });
     const other = await f.json<{ preferenceRevision: string }>(
       await f.call('POST', path(second.context), body('Red', null)), 201);
-    const contenders = await Promise.all(['Crimson', 'Ruby'].map(label =>
-      f.call('POST', path(first.context), body(label, chosen.preferenceRevision))));
-    expect(contenders.map(response => response.status).sort()).toEqual([201, 409]);
+    const contendersCommands = ['Crimson', 'Ruby'].map((label) =>
+      f.call.bind(
+        f,
+        'POST',
+        path(first.context),
+        body(label, chosen.preferenceRevision),
+        randomUUID(),
+      ),
+    );
+    const contenders = await assertCommandRace(
+      await Promise.all(contendersCommands.map((send) => send())),
+      201,
+      (index) => contendersCommands[index]!(),
+    );
     const winner = contenders.find(response => response.status === 201)!;
     const winnerLabel = contenders.indexOf(winner) === 0 ? 'Crimson' : 'Ruby';
     const revised = await f.json<{ preferenceRevision: string }>(winner, 201);

@@ -6,6 +6,7 @@ import { readTitleControl, type TitleControlState } from '../../../services/main
 import { signTitleAdmission } from '../../../services/main/src/modules/access/title-admission.ts';
 import { readExactWorkRevision } from '../../../services/main/src/modules/work/history.ts';
 import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 function barrier() {
   let reached!: () => void, release!: () => void;
@@ -99,8 +100,15 @@ test('LIVE03/MODEL17: exact title control races, return authority, immutable rec
     }
 
     // Return contenders share exactly one control basis and retain one success.
-    const returns = await Promise.all([f.returnControl(current, first), f.returnControl(current, first)]);
-    expect(returns.map(response => response.status).sort()).toEqual([200, 409]);
+    const returnsCommands = [
+      f.returnControl.bind(f, current, first, randomUUID()),
+      f.returnControl.bind(f, current, first, randomUUID()),
+    ];
+    await assertCommandRace(
+      await Promise.all(returnsCommands.map((send) => send())),
+      200,
+      (index) => returnsCommands[index]!(),
+    );
     const afterReturns = await f.state(work.work);
     expect(BigInt(afterReturns.basis.epoch)).toBe(BigInt(current.basis.epoch) + 1n);
     // The immutable revision cannot be extended, deleted or have its manifest retargeted.

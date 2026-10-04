@@ -8,6 +8,7 @@ import { CONTEXT_COST } from '../../../services/main/src/modules/context/schema.
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { RV, contextFixture, nativeId, shortId } from './context-fixture.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type Written = { context: string; semanticRevision: string; revision: string; replayed: boolean;
   expectedHead: string | null; sourcePosition: { sequence: string } };
@@ -64,9 +65,27 @@ test('Context template: real Account/Access/Main/Jena write, exact read, denial,
     expect((await stale.json() as { code: string }).code).toBe('stale_head');
 
     // Two successors prepared from one head: exactly one commits, the other seals stale.
-    const race = await Promise.all([f.call('POST', `${path}/semantic-revisions`, revise(second.semanticRevision)),
-      f.call('POST', `${path}/semantic-revisions`, revise(second.semanticRevision))]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/semantic-revisions`,
+        revise(second.semanticRevision),
+        randomUUID(),
+      ),
+      f.call.bind(
+        f,
+        'POST',
+        `${path}/semantic-revisions`,
+        revise(second.semanticRevision),
+        randomUUID(),
+      ),
+    ];
+    const race = await assertCommandRace(
+      await Promise.all(raceCommands.map((send) => send())),
+      201,
+      (index) => raceCommands[index]!(),
+    );
     const winner = await (race.find(response => response.status === 201)!).json() as Written;
 
     // Exact old revisions stay readable after successors; missing or corrupt bytes are unavailable.

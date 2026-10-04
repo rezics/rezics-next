@@ -19,6 +19,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type Changed = { component: string; revision: string; replayed: boolean };
 type Work = { work: string; mainVersion: string; mainRevision: string };
@@ -129,15 +130,19 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const staleOccurrence = await occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work }, undefined, randomUUID(),
       { occurrence: spin.occurrence, expectedHead: nativeId() });
     expect(staleOccurrence.status).toBe(409);
-    const updates = await Promise.all(['one', 'two'].map(async suffix => {
-      const key = randomUUID();
-      const change = () => occurrence('spin-off', { source: bunko.work, 'spin-off': aggo.work },
-        `https://example.com/${suffix}`, key, { occurrence: spin.occurrence, expectedHead: spin.revision });
-      let response = await change();
-      for (let attempt = 0; response.status === 202 && attempt < 3; attempt++) response = await change();
-      return response;
-    }));
-    expect(updates.map(response => response.status).sort()).toEqual([200, 409]);
+    const updateCommands = ['one', 'two'].map((suffix) =>
+      occurrence.bind(
+        null,
+        'spin-off',
+        { source: bunko.work, 'spin-off': aggo.work },
+        `https://example.com/${suffix}`,
+        randomUUID(),
+        { occurrence: spin.occurrence, expectedHead: spin.revision },
+      ),
+    );
+    await assertCommandRace(await Promise.all(updateCommands.map((send) => send())), 200, (index) =>
+      updateCommands[index]!(),
+    );
     const moved = await occurrence('spin-off', { source: bunko.work, 'spin-off': bunko.work }, undefined, randomUUID(),
       { occurrence: spin.occurrence, expectedHead: spin.revision });
     expect(moved.status).toBe(422);

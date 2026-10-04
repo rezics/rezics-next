@@ -16,6 +16,7 @@ import {
   statementMeaningKey,
 } from '../../../services/main/src/modules/statement/schema.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 type Work = { work: string; workRevision: string; mainVersion: string };
 type Change = {
@@ -265,13 +266,21 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     expect(overlap.status).toBe(422);
 
     await f.grant(`semantic:edit:${sao.volume1.work}`, 'semantic.change');
-    const concurrent = await Promise.all([
-      change(sao.volume1.work, sao.volume1.workRevision, properties),
-      change(sao.volume1.work, sao.volume1.workRevision, [
-        { ...properties[0], value: { kind: 'integer', lexical: '2010' } },
-      ]),
-    ]);
-    expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+    const concurrentCommands = [
+      change.bind(null, sao.volume1.work, sao.volume1.workRevision, properties, randomUUID()),
+      change.bind(
+        null,
+        sao.volume1.work,
+        sao.volume1.workRevision,
+        [{ ...properties[0], value: { kind: 'integer', lexical: '2010' } }],
+        randomUUID(),
+      ),
+    ];
+    const concurrent = await assertCommandRace(
+      await Promise.all(concurrentCommands.map((send) => send())),
+      200,
+      (index) => concurrentCommands[index]!(),
+    );
     const concurrentWinner = await f.json<Change>(
       concurrent.find((response) => response.status === 200)!,
       200,

@@ -10,6 +10,7 @@ import { TargetRatingInventoryStore } from '../../../services/main/src/modules/r
 import { TARGET_RATING_WRITE_COST } from '../../../services/main/src/modules/rating/target.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { startMediaStack } from './media-support.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 const short = (value: string) => value.slice(-36);
 const nativeId = () => `https://rezics.com/id/${randomUUID()}`;
@@ -208,9 +209,25 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         + `?profile=realm-target-rating-observation-v1&context=${encodeURIComponent(context.context)}`
         + `&target=${encodeURIComponent(target.target)}&actingSubject=${encodeURIComponent(actor)}`, undefined, a.token)))
         .toMatchObject({ value: 8, target: target.target });
-      const changes = await Promise.all([7, 6].map(value => call('POST', '/v1/rating-observations', {
-        ...rating, expectedRevisionHead: opinion.observationRevision, value }, a.token)));
-      expect(changes.map(response => response.status).sort()).toEqual([201, 409]);
+      const changesCommands = [7, 6].map((value) =>
+        call.bind(
+          null,
+          'POST',
+          '/v1/rating-observations',
+          {
+            ...rating,
+            expectedRevisionHead: opinion.observationRevision,
+            value,
+          },
+          a.token,
+          randomUUID(),
+        ),
+      );
+      const changes = await assertCommandRace(
+        await Promise.all(changesCommands.map((send) => send())),
+        201,
+        (index) => changesCommands[index]!(),
+      );
       const winner = await changes.find(response => response.status === 201)!.json() as Opinion;
       scored = await json<Review>(await call('POST', '/v1/reviews', { ...review(context.context, target.target),
         expectedRevision: scored.revision, text: 'An edit binding the newly current rating' }, a.token));

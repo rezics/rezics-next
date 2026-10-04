@@ -16,6 +16,7 @@ import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { reconcileRetainedMainSelection } from '../../../services/main/src/modules/work/reconcile-restored.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 
 test('G-277: language CAS is independent, stale within a language, exact through history and lost responses', async () => {
   const h = await memberFixture();
@@ -48,8 +49,15 @@ test('G-277: language CAS is independent, stale within a language, exact through
     const second = await h.contribution('English replacement. Bilingual needle');
     const next = { ...h.selection, ...second, expectedSelectionHead: english.body.selection };
     delete (next as Record<string, unknown>).draftRevision;
-    const winners = await Promise.all([h.post('/v1/publication-selections', next), h.post('/v1/publication-selections', next)]);
-    expect(winners.map(result => result.status).sort()).toEqual([201, 409]);
+    const winnersCommands = [
+      h.post.bind(h, '/v1/publication-selections', next, randomUUID()),
+      h.post.bind(h, '/v1/publication-selections', next, randomUUID()),
+    ];
+    const winners = await assertCommandRace(
+      await Promise.all(winnersCommands.map((send) => send())),
+      201,
+      (index) => winnersCommands[index]!(),
+    );
     const winner = winners.find(result => result.status === 201)!.body;
     const exact = await readExactMainRevision(h.env, h.work.mainVersion, winner.mainRevision, async () => true);
     expect(exact.defaultSelections).toEqual({ en: winner.selection, 'zh-cn': zh.body.selection });
