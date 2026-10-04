@@ -371,6 +371,16 @@ test('G-955: a file that imports other test files runs in its own process, so ne
   }
 });
 
+test('G-955: a file that writes synthetic outbox batches gets a fresh project, so later relays see only real ones', () => {
+  const directory = join(root, 'tests/qa/integration');
+  for (const name of readdirSync(directory).filter((name) => name.endsWith('.test.ts'))) {
+    if (!/a rv:OutboxBatch/.test(readFileSync(join(directory, name), 'utf8'))) continue;
+    const file = `tests/qa/integration/${name}`;
+    const own = isolatedIntegrationFiles.has(file) || integrationResourceClasses.has(file);
+    expect([name, own]).toEqual([name, true]);
+  }
+});
+
 test('G-955: a file that drops owner schemas gets a fresh project, so later files keep migrated owners', () => {
   const directory = join(root, 'tests/qa/integration');
   for (const name of readdirSync(directory).filter((name) => name.endsWith('.test.ts'))) {

@@ -150,6 +150,10 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-991-owner-migrations.test.ts',
   // Replays other files in one process; shared, their cached modules register no tests.
   'tests/qa/integration/discovery-read-isolation.test.ts',
+  // Synthetic outbox batches would reach later files' relays in a shared project.
+  'tests/qa/integration/g-1063-cost.test.ts',
+  'tests/qa/integration/g-1056-occurrence-projection.test.ts',
+  'tests/qa/integration/g-842-catalogue.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
