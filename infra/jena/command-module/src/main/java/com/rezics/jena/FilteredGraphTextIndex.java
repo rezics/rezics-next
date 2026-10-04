@@ -482,7 +482,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
         CommandWork.timed("text_index", () -> addMeasuredEntity(entity));
     }
     private void addMeasuredEntity(Entity entity) {
-        if (!entity.getMap().containsKey("occurrenceLabel")) { lucene.addEntity(entity); return; }
+        if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) { lucene.addEntity(entity); return; }
+        try { lucene.getIndexWriter().addDocument(occurrenceDocument(entity)); }
+        catch (IOException error) { throw new TextIndexException("occurrence text write failed", error); }
+    }
+    private Document occurrenceDocument(Entity entity) {
         // Same writer, analyzer, rollback and commit as every existing text field.
         // Ordered analyzed-token terms add no second engine, substring
         // dictionary, page log or story-sized postings cache.
@@ -502,12 +506,17 @@ public final class FilteredGraphTextIndex implements TextIndex {
             String value = (String) entry.getValue();
             // One document per occurrence. Multivalued text fields retain
             // label boundaries through the analyzer's large position gap.
-            doc.add(new org.apache.lucene.document.StoredField(entry.getKey(), value));
+            // Stored JSON and analyzed labels have distinct field names. Even
+            // an unlabeled navigation occurrence uses the same indexed type.
+            doc.add(new org.apache.lucene.document.StoredField(OccurrenceTextSchema.PAYLOAD, value));
             JsonArray labels = org.apache.jena.atlas.json.JSON.parse(value).get("labels").getAsArray();
             if (labels.size() > 18) throw new TextIndexException("occurrence labels exceed their write bound");
+            if (labels.isEmpty()) doc.add(new org.apache.lucene.document.Field(
+                OccurrenceTextSchema.FIELD, "", OccurrenceTextSchema.TYPE));
             for (var item : labels) {
                 JsonObject label = item.getAsObject();
-                doc.add(new org.apache.lucene.document.TextField(entry.getKey(), label.get("value").getAsString().value(), org.apache.lucene.document.Field.Store.NO));
+                doc.add(new org.apache.lucene.document.Field(OccurrenceTextSchema.FIELD,
+                    label.get("value").getAsString().value(), OccurrenceTextSchema.TYPE));
                 doc.add(new org.apache.lucene.document.StringField(lucene.getDocDef().getLangField(), label.get("language").getAsString().value(), org.apache.lucene.document.Field.Store.YES));
                 try { tokens.addAll(occurrenceTokens(lucene.getAnalyzer(), label.get("value").getAsString().value())); }
                 catch (IOException error) { throw new TextIndexException("occurrence analysis failed", error); }
@@ -517,12 +526,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
         for (String token : tokens) doc.add(new org.apache.lucene.document.StringField("occurrenceDirectory",
             scope + "\u0001" + token + "\u0001" + entity.getId(), org.apache.lucene.document.Field.Store.NO));
-        try { lucene.getIndexWriter().addDocument(doc); }
-        catch (IOException error) { throw new TextIndexException("occurrence text write failed", error); }
+        return doc;
     }
     @Override public void updateEntity(Entity entity) {
         CommandWork.count("text_updates", 1);
-        CommandWork.timed("text_index", () -> lucene.updateEntity(entity));
+        CommandWork.timed("text_index", () -> {
+            if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) { lucene.updateEntity(entity); return; }
+            try { lucene.getIndexWriter().updateDocument(new Term(lucene.getDocDef().getEntityField(), entity.getId()),
+                occurrenceDocument(entity)); }
+            catch (IOException error) { throw new TextIndexException("occurrence text update failed", error); }
+        });
     }
     @Override public void deleteEntity(Entity entity) {
         CommandWork.count("text_deletes", 1);
