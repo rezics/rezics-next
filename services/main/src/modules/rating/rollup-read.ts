@@ -10,48 +10,55 @@ import { readTargetRatingContext, type TargetGrain } from './target.ts';
 import type { TargetRatingInventoryStore } from './target-inventory.ts';
 import { ROLLUP_PROFILE } from './rollup-api.ts';
 
-/** One Access snapshot of every member's row and the Context's own, two graph
- * probes (Context seal, the members' last writes) and ceil(members / 64)
- * visibility batches; no member's raters are read. */
+/** This owner's own work is fixed: one Access snapshot of every member's row and
+ * the Context's own (plus a fence recheck) and two graph probes, whatever the
+ * members' ratings. Whether a caller may read a member is the shared target
+ * resolver's work and grows with the members, so it runs in sessions of at most
+ * 64 members, each with its own call budget and deadline. */
 export const ROLLUP_COST = { members: MAX_ROLLUP_MEMBERS, accessSnapshots: 1, graphProbes: 2,
-  visibilityBatch: MAX_SUMMARY_BATCH, deadlineMs: 10_000 } as const;
+  visibilityBatch: MAX_SUMMARY_BATCH, perMember: { graphCalls: 3, accessCheckouts: 3 } } as const;
+
+/** Runs an operation in its own read session; each call has a fresh budget and graph-position fence. */
+export type RollupReader = <T>(operation: (session: WorkReadSession) => Promise<T>) => Promise<T>;
 
 type Unavailable = 'unavailable' | 'grain-mismatch' | 'needs-reconstruction' | 'unverified';
 
 /** Members the caller cannot read, or that cannot be verified, are named with a
  * reason and counted in the member total; nothing is dropped silently. */
-async function readableMembers(session: WorkReadSession, targets: readonly string[], grain: TargetGrain) {
+async function readableMembers(read: RollupReader, targets: readonly string[], grain: TargetGrain) {
   const verdict = new Map<string, Unavailable | null>(targets.map(target => [target, 'unavailable']));
-  const resolve = async (batch: readonly string[]) => {
-    for (const target of await resolveVisibleTargets(session, batch, 'rating')) {
-      verdict.set(target.resource, target.base === grain ? null : 'grain-mismatch');
+  const resolve = async (batch: readonly string[]): Promise<void> => {
+    try {
+      const resolved = await read(session => resolveVisibleTargets(session, batch, 'rating'));
+      for (const target of resolved) verdict.set(target.resource, target.base === grain ? null : 'grain-mismatch');
+    } catch (error) {
+      if (!(error instanceof TargetNotBound)) throw error;
+      // A target the rating capability rejects is another grain, not a failure of its batch.
+      if (batch.length === 1) { verdict.set(batch[0]!, 'grain-mismatch'); return; }
+      const half = batch.length >> 1;
+      await resolve(batch.slice(0, half));
+      await resolve(batch.slice(half));
     }
   };
-  for (let start = 0; start < targets.length; start += MAX_SUMMARY_BATCH) {
-    const batch = targets.slice(start, start + MAX_SUMMARY_BATCH);
-    // A target the rating capability rejects is another grain, not a failure of its batch.
-    try { await resolve(batch); }
-    catch (error) {
-      if (!(error instanceof TargetNotBound)) throw error;
-      for (const target of batch) {
-        try { await resolve([target]); } catch (single) {
-          if (!(single instanceof TargetNotBound)) throw single;
-          verdict.set(target, 'grain-mismatch');
-        }
-      }
-    }
-  }
+  for (let start = 0; start < targets.length; start += MAX_SUMMARY_BATCH) await resolve(targets.slice(start, start + MAX_SUMMARY_BATCH));
   return verdict;
 }
 
-export async function queryRatingRollup(session: WorkReadSession, store: TargetRatingInventoryStore,
+export async function queryRatingRollup(read: RollupReader, store: TargetRatingInventoryStore,
   input: { context: string; targets: readonly string[]; formula: RollupFormula; rank: boolean }) {
-  const env = session.deps.environment;
-  const signal = AbortSignal.timeout(ROLLUP_COST.deadlineMs);
-  const context = await readTargetRatingContext(env, input.context);
+  const context = await read(session => readTargetRatingContext(session.deps.environment, input.context));
   if (!context) throw new WorkReadMissing('Target Context unavailable');
-  const verdict = await readableMembers(session, input.targets, context.targetGrain);
+  const verdict = await readableMembers(read, input.targets, context.targetGrain);
   const readable = input.targets.filter(target => verdict.get(target) === null);
+  return read(session => assemble(session, store, input, context, verdict, readable));
+}
+
+/** One Access snapshot and two graph probes over the readable members. */
+async function assemble(session: WorkReadSession, store: TargetRatingInventoryStore,
+  input: { context: string; targets: readonly string[]; formula: RollupFormula; rank: boolean },
+  context: NonNullable<Awaited<ReturnType<typeof readTargetRatingContext>>>,
+  verdict: ReadonlyMap<string, Unavailable | null>, readable: readonly string[]) {
+  const signal = AbortSignal.timeout(10_000);
   const snapshot = await store.readMembers(input.context, readable.length ? readable : [input.targets[0]!], signal);
   if (context.contextRevision !== snapshot.contextRevision || context.realm !== snapshot.realm) {
     throw new RatingAggregateUnavailable('Target Context seal differs');

@@ -42,6 +42,41 @@ module. RATE01–09 are declared in `scripts/qa/cases/ratings-and-event-time.ts`
 `scripts/qa/coverage/rate*.ts` names the complete-case tests. The recorded
 backend run is named in `docs/plan/README.md#current-state`.
 
+Target ratings (release, realization, occurrence and resource grains) read from
+additive components, never from a walk of the raters. Access keeps the head
+count, rating count, sum and a 1–10 histogram per (RatingContext, target), and
+the same figures summed per Context. The seal that moves a head moves both rows in
+its own transaction (subtract the head's recorded value, add the new one;
+withdrawal subtracts only), and the sealed value must match the admitted request
+digest. Count and sum are what the histogram says, which the database checks.
+A target of at most 100 raters is also verified head by head against its
+manifests and must equal its components; a larger one is witnessed by its last
+sealed write, which must still be its observation's live head, so a graph that
+lost it or rolled back past it makes the read unavailable instead of wrong. Heads
+sealed before components existed have no recorded value (SQL cannot read the
+graph): they are counted as `unvalued`, a verified read of such a target records
+their values, and a target above 100 raters waits for its raters' next revisions.
+
+A Context shows a target's mean only from its display threshold, 5 ratings by
+default and 10 for the `projection` grain, and a `realm-target-rating-context-v3`
+Context may declare its own. Count, sum and histogram always show: with the
+histogram the mean is no secret, but a mean from a handful of ratings is not
+evidence, and a ranking built on it would be noise.
+
+`POST /v1/rating-rollups` is a derived metric over one RatingContext, not a stored
+or cached figure. `pooled` is the sum of the members' sums over the sum of their
+counts; `mean-of-means` averages members' means and counts only members at or
+above the threshold. The two can rank two roll-ups in opposite order, which is why
+the formula, member count, coverage (members at the threshold over members named)
+and every member's components travel with the value, and why the value is withheld
+below half coverage. A member the caller cannot read, that does not exist, or has
+another grain is listed as unavailable with its reason and still counts in the
+denominator. A ranking uses a Bayesian weighted rating, `v/(v+m)·R + m/(v+m)·C`,
+whose prior mean C is the Context's own pooled mean and weight m its average
+ratings per target, never under the 50-rating listing minimum; both are returned.
+Different Contexts, questions, scales or populations are never combined, and no
+mean is ever an input.
+
 Materialized rating projections, joined rating search, policy-controlled
 backdated entries, cross-context policies beyond the named Realm/Global
 synthesis, and physical capacity need separate implementation and qualification.

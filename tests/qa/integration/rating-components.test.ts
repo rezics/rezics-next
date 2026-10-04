@@ -88,12 +88,22 @@ test('a target rated by more than 100 principals aggregates from its components,
   const crowd = await raters('crowd', 130);
   const heads = new Map<string, { observationRevision: string }>();
   const aggregates = new Map<number, Awaited<ReturnType<typeof r.aggregate>>>();
+  const costs = new Map<number, { graph: number; access: number }>();
+  const measured = async (population: number) => {
+    const { result, graph, access } = await r.measure(() => r.aggregate(context, target));
+    aggregates.set(population, result);
+    costs.set(population, { graph, access });
+  };
+  await measured(0);
   await inBatches(crowd.slice(0, 100), 10, async (rater, index) => heads.set(rater.actor, await r.rate(rater, context, target, (index % 10) + 1)));
-  aggregates.set(100, await r.aggregate(context, target));
+  await measured(100);
   await r.rate(crowd[100]!, context, target, 10);
-  aggregates.set(101, await r.aggregate(context, target));
+  await measured(101);
   await inBatches(crowd.slice(101), 10, async (rater, index) => heads.set(rater.actor, await r.rate(rater, context, target, ((index + 101) % 10) + 1)));
-  aggregates.set(130, await r.aggregate(context, target));
+  await measured(130);
+  // A read costs the same graph queries and Access checkouts at 0, 100, 101 and 130 raters: the population is never walked.
+  expect(new Set([...costs.values()].map(cost => JSON.stringify(cost))).size).toBe(1);
+  expect(costs.get(130)!.graph).toBeGreaterThan(0);
   // Up to 100 raters the heads are verified one by one; past it only the components answer. Both agree.
   expect(aggregates.get(100)).toMatchObject({ count: 100, population: 100, sum: 550, mean: 5.5, meanDisplay: 'shown' });
   expect(aggregates.get(100)!.histogram).toEqual(Array(10).fill(10));

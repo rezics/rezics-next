@@ -31,7 +31,7 @@ test('G-652: every resource ratings response variant requires complete aggregati
     aggregationScope: { question: 'How good is the story?', grain: 'main-version',
       population: 'account-principal', countedTarget: id(5) } },
   ...['release', 'realization', 'occurrence', 'resource'].map(grain => ({ ...base,
-    profile: 'target-rating-read-v1', target: id(3), targetGrain: grain,
+    profile: 'target-rating-read-v1', target: id(3), targetGrain: grain, displayThreshold: 5, meanDisplay: 'no-data',
     aggregationScope: { question: 'How good is this target?', language: 'en', grain,
       population: 'account-principal', countedTarget: id(3) } }))];
   // Iterate the route's actual response union, so another variant cannot escape this guard.
@@ -59,7 +59,8 @@ test('G-652: scope is mandatory for every aggregate, including an empty populati
       grain: 'realization', population: 'account-principal', countedTarget: id(3) }, scale: { min: 1, max: 10, step: 1 },
     cadence: 'standing', populationPolicy: 'account-principal', aggregationPolicy: 'latest-per-rater-mean',
     population: 0, count: 0, withdrawnCount: 0, histogram: Array.from({ length: 10 }, () => 0), sum: 0,
-    mean: null, precision: { kind: 'no-data' }, sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    displayThreshold: 5, mean: null, meanDisplay: 'no-data', precision: { kind: 'no-data' },
+    sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
   expect(Value.Check(targetAggregateResult, result)).toBe(true);
   const { scope, ...withoutScope } = result;
   expect(Value.Check(targetAggregateResult, withoutScope)).toBe(false);

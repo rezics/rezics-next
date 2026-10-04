@@ -19,9 +19,8 @@ export function ratingRollupRoutes(work: MainWorkDependencies) {
     try {
       if (!work.targetRatingInventory) throw new RatingAggregateUnavailable('Target inventory unavailable');
       const inventory = work.targetRatingInventory;
-      const result = await workRead(work, request, { actingSubject: body.actingSubject },
-        session => queryRatingRollup(session, inventory, { context: body.context, targets: body.targets,
-          formula: body.formula, rank: body.rank === true }));
+      const result = await queryRatingRollup(operation => workRead(work, request, { actingSubject: body.actingSubject }, operation),
+        inventory, { context: body.context, targets: body.targets, formula: body.formula, rank: body.rank === true });
       return Response.json(result, { headers: { 'cache-control': 'no-store' } });
     } catch (error) {
       if (error instanceof TargetNotBound) return problem(422, error.code, error.message);

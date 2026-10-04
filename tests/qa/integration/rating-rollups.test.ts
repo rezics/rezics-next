@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { ROLLUP_COST } from '../../../services/main/src/modules/rating/rollup-read.ts';
 import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startRatingStack, type Person } from './rating-components-support.ts';
 
@@ -145,6 +146,34 @@ test('a ranking weighs each member by a prior from its own RatingContext and lis
   expect((await rollup({ context: empty, targets: [kind, steady], formula: 'pooled', rank: true })).rank)
     .toMatchObject({ status: 'unavailable', prior: null, items: [] });
 }, 480_000);
+
+test('a roll-up costs the owners a fixed snapshot plus a bounded cost per member, and the same however many ratings its members hold', async () => {
+  const context = (await r.context({ displayThreshold: 2 })).context;
+  const members: string[] = [];
+  await inBatches(Array.from({ length: 200 }, (_, index) => index), 5, async index => { members[index] = await r.resource(`member-${index}`); });
+  const people = await raters('cost', 40);
+  await fill(context, members[0]!, people, 12, [5, 6, 7]);
+  const costs = new Map<number, { graph: number; access: number }>();
+  for (const size of [1, 2, 64, 65, 130, 200]) {
+    const { graph, access, result } = await r.measure(() => rollup({ context, targets: members.slice(0, size), formula: 'pooled' }));
+    expect(result.members).toHaveLength(size);
+    expect(result.members.every(member => member.status === 'available')).toBe(true);
+    costs.set(size, { graph, access });
+  }
+  // Members are paid for by the shared target resolver: linear in their number, within its declared per-member bound.
+  const declared = ROLLUP_COST.perMember;
+  for (const [small, large] of [[1, 64], [64, 130], [130, 200]] as const) {
+    const extra = large - small;
+    expect(costs.get(large)!.graph - costs.get(small)!.graph).toBeLessThanOrEqual(declared.graphCalls * extra);
+    expect(costs.get(large)!.access - costs.get(small)!.access).toBeLessThanOrEqual(declared.accessCheckouts * extra);
+  }
+  // This owner adds one snapshot and fence however many members: nothing beyond the per-member part is spent on ratings.
+  const before = await r.measure(() => rollup({ context, targets: members.slice(0, 64), formula: 'pooled' }));
+  await fill(context, members[0]!, people.slice(12), 28, [5, 6, 7, 8]);
+  const after = await r.measure(() => rollup({ context, targets: members.slice(0, 64), formula: 'pooled' }));
+  expect(after.result.members[0]).toMatchObject({ components: { count: 40 } });
+  expect({ graph: after.graph, access: after.access }).toEqual({ graph: before.graph, access: before.access });
+}, 600_000);
 
 test('a roll-up combines one RatingContext only: other Contexts, stored means and malformed requests are refused', async () => {
   const context = (await r.context()).context, target = await r.resource('solo');
