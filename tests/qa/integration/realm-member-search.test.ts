@@ -188,7 +188,7 @@ test('Realm member search complexity: GIN candidate probes and bounded identity 
         `EXPLAIN (ANALYZE, FORMAT JSON) ${REALM_MEMBER_SEARCH_SQL}`, [s.realm, '', '小明', 2, '小明']);
       const plan = actual.rows[0]!['QUERY PLAN'][0]!.Plan;
       expect(scanned(plan, 'agent_provision')).toBeLessThan(64);
-      expect(scanned(plan, 'name_registry')).toBeLessThan(64);
+      expect(scanned(plan, 'alias_registry')).toBeLessThan(64);
       expect(scanned(plan, 'membership')).toBeLessThan(64);
       await client.query('ROLLBACK');
     } finally { client.release(); }

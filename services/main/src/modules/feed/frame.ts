@@ -24,7 +24,7 @@ const actorRows = `SELECT s.id, s.generation::text, n.key AS handle,
   COALESCE(p.hide_reading_activity,false) AS hide_reading_activity
   FROM access.authority_subject s
   LEFT JOIN access.person_preferences p ON p.agent_id = s.id
-  LEFT JOIN access.name_registry n ON n.holder = s.id AND n.scope = 'agent' AND n.state = 'current'
+  LEFT JOIN access.alias_registry n ON n.holder = s.id AND n.scope = 'agent' AND n.state = 'current'
   WHERE s.id = ANY($3::text[]) AND s.kind = 'agent' AND s.active ORDER BY s.id`;
 
 /** One opening and one closing Access cut. The opening cut reads each private
