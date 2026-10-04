@@ -22,16 +22,26 @@ export async function discoveryChanges(
   if (count < 0n || count > BigInt(DISCOVERY_DELTA_COST.batches)) return null;
   const rows = await session
     .query(
-      `SELECT ?batch ?sequence ?count ?event ?ordinal ?action ?work ?outcome ?ratingContext ?realm ?mainVersion ?ratingSlot ?chapterWork ?commandAction WHERE {
+      `SELECT ?batch ?sequence ?count ?event ?ordinal ?action ?work ?outcome ?ratingContext ?realm ?mainVersion ?target ?targetWork ?ratingSlot ?chapterWork ?commandAction WHERE {
     VALUES ?sequence { ${Array.from({ length: Number(count) }, (_, i) => BigInt(after) + BigInt(i + 1)).join(' ')} }
     GRAPH ${iri(GRAPHS.outbox)} {
       ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?sequence ; rv:eventCount ?count .
       OPTIONAL { ?batch rv:event ?event .
         OPTIONAL { ?event rv:ordinal ?ordinal ; rv:action ?action }
-        ${['work', 'outcome', 'ratingContext', 'realm', 'mainVersion', 'ratingSlot', 'chapterWork']
+        ${[
+          'work',
+          'outcome',
+          'ratingContext',
+          'realm',
+          'mainVersion',
+          'target',
+          'ratingSlot',
+          'chapterWork',
+        ]
           .map((field) => `OPTIONAL { ?event rv:${field} ?event_${field} }`)
           .join('\n')}
         OPTIONAL { ?event rv:receipt ?receipt . GRAPH ${iri(GRAPHS.receipts)} {
+          ?receipt a rv:OperationReceipt .
           OPTIONAL { ?receipt rv:action ?commandAction }
           ${[
             'work',
@@ -39,6 +49,7 @@ export async function discoveryChanges(
             'ratingContext',
             'realm',
             'mainVersion',
+            'target',
             'ratingSlot',
             'chapterWork',
           ]
@@ -46,13 +57,30 @@ export async function discoveryChanges(
             .join('\n')}
         } } }
     }
-    ${['work', 'outcome', 'ratingContext', 'realm', 'mainVersion', 'ratingSlot', 'chapterWork']
+    ${[
+      'work',
+      'outcome',
+      'ratingContext',
+      'realm',
+      'mainVersion',
+      'target',
+      'ratingSlot',
+      'chapterWork',
+    ]
       .map(
         (field) =>
           `FILTER(!BOUND(?event_${field}) || !BOUND(?receipt_${field}) || ?event_${field}=?receipt_${field})
        BIND(COALESCE(?event_${field},?receipt_${field}) AS ?${field})`,
       )
       .join('\n')}
+    OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?event rv:target ?ratedEventTarget }
+      GRAPH ${iri(GRAPHS.current)} { ?ratedEventTarget a rv:MainVersion ; rv:work ?event_targetWork .
+        ?event_targetWork rv:mainVersion ?ratedEventTarget } }
+    OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?event rv:receipt ?targetReceipt }
+      GRAPH ${iri(GRAPHS.receipts)} { ?targetReceipt rv:target ?ratedReceiptTarget }
+      GRAPH ${iri(GRAPHS.current)} { ?ratedReceiptTarget a rv:MainVersion ; rv:work ?receipt_targetWork .
+        ?receipt_targetWork rv:mainVersion ?ratedReceiptTarget } }
+    BIND(COALESCE(?event_targetWork,?receipt_targetWork) AS ?targetWork)
   } LIMIT ${DISCOVERY_DELTA_COST.events + 1}`,
       DISCOVERY_DELTA_COST.events + 1,
     )
@@ -70,12 +98,14 @@ export async function discoveryChanges(
   for (const row of rows) {
     if (!row.sequence || !row.batch || !row.count || !row.event || !row.ordinal || !row.action)
       return null;
+    if (row.targetWork && row.work && row.targetWork.value !== row.work.value) return null;
     const event = {
       action: row.action.value,
-      work: row.work?.value,
+      work: row.work?.value ?? row.targetWork?.value,
       realm: row.realm?.value,
       ratingContext: row.ratingContext?.value,
-      mainVersion: row.mainVersion?.value,
+      mainVersion: row.mainVersion?.value ?? (row.targetWork ? row.target?.value : undefined),
+      target: row.target?.value,
       ratingSlot: row.ratingSlot?.value,
       chapterWork: row.chapterWork?.value,
       commandAction: row.commandAction?.value,

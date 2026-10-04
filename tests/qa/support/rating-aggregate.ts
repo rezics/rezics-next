@@ -319,8 +319,10 @@ export async function exerciseRatingAggregates(f: Fixture) {
   inventoryCoverage.restored = inventoryTablesRestored.state;
   expect(inventoryCoverage.restored.count).toBe(inventoryCoverage.before.count);
   expect(inventoryTablesRestored.catalogDigest).toBe(inventoryTablesBefore.catalogDigest);
-  // Delete, insert and both updates invalidate derived snapshots. Restoring
-  // the authoritative head must not roll those invalidation counters back.
+  // These out-of-band writes have no classified rating outbox event. Their
+  // source fences must survive restoration of the authoritative head.
+  expect((await accessPool.query("SELECT current_setting('rezics.discovery_rating_outbox',true) AS marker"))
+    .rows[0]!.marker).not.toBe('on');
   for (const [table, coverage] of Object.entries(inventoryTablesBefore.tables)) {
     if (fenceRevisions.has(table)) {
       expect(BigInt((await accessPool.query<{ revision: string }>(
