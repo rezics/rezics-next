@@ -185,7 +185,8 @@ export function WikiEntity({ zone, entity, position, mount, rest, Link }: Entity
             <dt>{row.label || t.relationship}</dt>
             <dd><ul className="fw-chips">{row.others.map((other, at) => <li key={at}>{other.href
               ? <Link href={other.href} className="fw-member"><Text text={other.name} /></Link>
-              : <span className="fw-member"><Text text={other.name} /></span>}</li>)}</ul></dd>
+              : <span className="fw-member"><Text text={other.name} /></span>}
+              {other.creditedName ? <span data-credited-name className="fw-quiet">{' '}{t.creditedAs}{' '}<Text text={other.creditedName} /></span> : null}</li>)}</ul></dd>
           </div>)}</dl>
         </section> : null}
         {entity.evidence.length ? <section aria-labelledby="fw-passages" data-wiki-passages="" className="fw-section">
@@ -199,4 +200,3 @@ export function WikiEntity({ zone, entity, position, mount, rest, Link }: Entity
     </div>
   </article>;
 }
-

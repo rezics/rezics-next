@@ -6,7 +6,9 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { failureOf } from './failure.ts';
-import type { WorkPageMessages } from './messages.ts';
+import { messages as workMessages, type WorkPageMessages } from './messages.ts';
+import { ratingsUntilMean } from '../catalogue/rating.tsx';
+import { Distribution } from './ratings.tsx';
 import { aggregateOf, type ReviewAggregate, type ReviewGrain, type ReviewScopeQuery, type ReviewTarget }
   from './reviews-grain-model.tsx';
 import type { Loaded, ReadFailure, ReviewPage } from './types.ts';
@@ -92,9 +94,11 @@ const populationNames = (t: Translation): Record<string, string> => ({ 'account-
 export function AggregateScope({ aggregate, locale, t }: { aggregate: ReviewAggregate | null; locale: UiLocale; t: Translation }): ReactNode {
   if (!aggregate) return null;
   const mean = aggregate.mean === null ? null : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(aggregate.mean);
-  return <p data-review-aggregate data-aggregate-grain={aggregate.grain} data-aggregate-population={aggregate.population}
+  const summary = aggregate.summary;
+  const withheld = summary && 'meanDisplay' in summary && summary.meanDisplay !== 'shown';
+  return <div data-review-aggregate data-aggregate-grain={aggregate.grain} data-aggregate-population={aggregate.population}
     data-aggregate-counted={idOf(aggregate.countedTarget)} data-aggregate-count={aggregate.count}
-    className="flex flex-wrap gap-x-2 gap-y-0.5 text-muted-foreground text-sm">
+    className="grid gap-3 text-muted-foreground text-sm"><p className="flex flex-wrap gap-x-2 gap-y-0.5">
     <span lang="en">{aggregate.question}</span><span aria-hidden="true">·</span>
     <span>{t.aggregateGrain({ grain: grainNames(t)[aggregate.grain] ?? aggregate.grain })}</span>
     <span aria-hidden="true">·</span>
@@ -102,5 +106,8 @@ export function AggregateScope({ aggregate, locale, t }: { aggregate: ReviewAggr
     <span aria-hidden="true">·</span><span>{aggregate.count ? t.ratingCount(aggregate.count) : t.aggregateNone}</span>
     {mean ? <><span aria-hidden="true">·</span>
       <span>{t.aggregateMean({ mean, max: String(aggregate.scale?.max ?? '') })}</span></> : null}
-  </p>;
+  </p>{withheld ? <>
+    <p>{ratingsUntilMean(summary.count, summary.displayThreshold, locale)}</p>
+    <Distribution summary={summary} locale={locale} messages={workMessages[locale]} />
+  </> : null}</div>;
 }

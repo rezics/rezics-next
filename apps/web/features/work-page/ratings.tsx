@@ -5,7 +5,7 @@ import { materializeData } from 'native-i18n';
 import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { StarMeter } from '../catalogue/rating.tsx';
+import { ratingsUntilMean, StarMeter } from '../catalogue/rating.tsx';
 import { messages as shelfMessages } from '../catalogue/messages.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -73,18 +73,21 @@ export function Mean({ summary, locale, messages, size = 'lg', href, reviews, cl
 }) {
   const t = materializeData(messages, { locale });
   const max = summary.scale?.max ?? 5;
-  const mean = formatNumber(summary.mean ?? 0, locale, 2);
+  const shown = summary.mean !== null && (!('meanDisplay' in summary) || summary.meanDisplay === 'shown');
+  const mean = shown ? formatNumber(summary.mean!, locale, 2) : null;
   const count = t.ratingCount(summary.count);
-  return <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-1', className)}>
-    <StarMeter mean={summary.mean ?? 0} max={max} className={size === 'lg' ? 'text-[1.75rem]' : 'text-2xl'} />
+  const remaining = !shown && 'displayThreshold' in summary ? ratingsUntilMean(summary.count, summary.displayThreshold, locale) : null;
+  return <div data-rating-mean={shown ? 'shown' : 'withheld'} className={cn('flex flex-wrap items-center gap-x-3 gap-y-1', className)}>
+    {shown ? <><StarMeter mean={summary.mean!} max={max} className={size === 'lg' ? 'text-[1.75rem]' : 'text-2xl'} />
     <p className={cn('font-semibold font-work-title tabular-nums tracking-tight', size === 'lg' ? 'text-4xl' : 'text-3xl')}>
-      {mean}<span className="sr-only"> — {t.average({ mean, max: formatNumber(max, locale) })}</span>
+      {mean}<span className="sr-only"> — {t.average({ mean: mean!, max: formatNumber(max, locale) })}</span>
       {max === 5 ? null : <span aria-hidden="true" className="ms-1 font-normal font-sans text-base text-muted-foreground">
-        / {formatNumber(max, locale)}</span>}</p>
+        / {formatNumber(max, locale)}</span>}</p></> : null}
     <p className="flex flex-wrap items-center gap-x-1.5 text-muted-foreground text-sm">
       {href ? <Link href={href} className={countLink}>{count}</Link> : count}
       {reviews ? <><span aria-hidden="true">·</span>{reviews}</> : null}
     </p>
+    {remaining ? <p className="w-full text-muted-foreground text-sm">{remaining}</p> : null}
   </div>;
 }
 
@@ -125,7 +128,7 @@ export function RatingLine({ ratings, stats, locale, messages }: {
   const group = 'grid justify-items-start gap-1.5';
   if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return <>{reading}{want}</>;
   const { summary } = ratings.data;
-  if (!summary.count) {
+  if (!summary.count && !('displayThreshold' in summary)) {
     return <div className={group}><p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>{reading}{want}</div>;
   }
   const reviews = counts?.reviews?.value ? <Link href={`#${REVIEWS_ANCHOR}`} className={countLink}>
@@ -133,6 +136,7 @@ export function RatingLine({ ratings, stats, locale, messages }: {
   return <div className={group}>
     <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`} reviews={reviews}
       className="justify-start" />
+    {'meanDisplay' in summary && summary.meanDisplay !== 'shown' ? <Distribution summary={summary} locale={locale} messages={messages} /> : null}
     {reading}
     {want}
   </div>;
@@ -168,7 +172,7 @@ export function RatingSummaryRegion({ ratings, view, scopeBar, locale, messages 
   if (summary.status === 'no-context' || !summary.scale) {
     body = <EmptyScope title={scope.kind === 'global' ? t.noQuestionGlobal : scope.kind === 'mine' ? t.noQuestionMine
       : t.noQuestionRealm({ realm: name })}>{offer}</EmptyScope>;
-  } else if (summary.count === 0) {
+  } else if (summary.count === 0 && !('displayThreshold' in summary)) {
     body = <EmptyScope title={scope.kind === 'global' ? t.noRatingsGlobal : scope.kind === 'mine' ? t.noRatingMine
       : t.noRatingsRealm({ realm: name })}>{offer}</EmptyScope>;
   } else if (scope.kind === 'mine') {
@@ -229,7 +233,7 @@ export function TargetRatingsRegion({ ratings, subject, none, locale, messages }
   const { summary } = ratings.data;
   return <Region id={RATINGS_REGION} title={t.ratings}>
     <p className="text-muted-foreground text-sm">{subject}</p>
-    {summary.status !== 'available' || !summary.scale || !summary.count ? <EmptyScope title={none} />
+    {summary.status !== 'available' || !summary.scale || !summary.count && !('displayThreshold' in summary) ? <EmptyScope title={none} />
       : <div className="grid gap-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
         <Mean summary={summary} locale={locale} messages={messages} />
         <Distribution summary={summary} locale={locale} messages={messages} />

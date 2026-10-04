@@ -155,6 +155,9 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
           others.push({ name: zoneText(summaryOf.name), href: await zoneLink(site, summaryOf.reference, summaryOf.type) });
         } else if (item.target.kind === 'external') others.push({ name: zoneContentText(item.target.label), href: null });
         else continue;
+        if (item.creditedName && item.creditedName.lexical !== others.at(-1)!.name.value) {
+          others.at(-1)!.creditedName = zoneContentText(item.creditedName.lexical, item.creditedName.language);
+        }
         const cited = item.evidence ? idOf(item.evidence) : null;
         if (cited) claims.push({ ids: [cited], supports: claimText(row.label.text?.value ?? null, others.at(-1)!.name.value) });
       }

@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  creditedAs: "배역명:",
   parts: '구성', partsList: '출간 순서의 구성', partsPages: '구성 페이지',
   partsUnavailable: '구성을 불러오지 못했습니다.',
   partOf: '소속:', partOfList: '이 작품을 포함하는 묶음',

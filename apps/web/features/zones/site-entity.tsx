@@ -62,6 +62,7 @@ export async function ZoneEntityPage({
       hrefFor={hrefFor}
       cursors={cursors}
       position={site.main}
+      ratingScope={{ scope: 'realm', realm: view.realm.header.id }}
     />
   );
   const Slot = view.pkg?.slots.entity;
@@ -91,6 +92,8 @@ export async function ZoneEntityPage({
       cursors={cursors}
       position={site.main}
       header={false}
+      identitySections
+      ratingScope={{ scope: 'realm', realm: view.realm.header.id }}
       sections={['ratings', 'reviews', 'discussion']}
     />
   );

@@ -8,6 +8,7 @@ import { entityMetadata } from '../../../../features/entity-page/metadata.ts';
 import { readEntityProjection } from '../../../../features/entity-page/read.ts';
 import { parseEntityCursors, parseEntityRef } from '../../../../features/entity-page/route.ts';
 import { pageUrl, representationPath } from '../../../../features/seo/address.ts';
+import { mainPosition, parsePosition } from '../../../../features/wiki/position.ts';
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -27,11 +28,15 @@ export default async function EntityRoute({ params, searchParams }: Props) {
   const id = parseEntityRef(ref);
   const cursors = parseEntityCursors(query);
   if (!id || !cursors) notFound();
-  const projection = await readEntityProjection(id);
+  const position = mainPosition(parsePosition(query));
+  const realm = typeof query.realm === 'string' ? parseEntityRef(query.realm) : null;
+  const ratingScope = query.scope === 'realm' && realm
+    ? { scope: 'realm' as const, realm: `https://rezics.com/id/${realm}` } : { scope: 'global' as const };
+  const projection = await readEntityProjection(id, position);
   if (projection.ok && projection.data.target.base === 'work') {
     const summary = projection.data.summary;
     const address = 'address' in summary ? summary.address as AddressTarget : id;
     permanentRedirect(localizedPath(resourceHref('/w/', address), locale));
   }
-  return <EntityPage resource={id} locale={locale} cursors={cursors} />;
+  return <EntityPage resource={id} locale={locale} cursors={cursors} position={position} ratingScope={ratingScope} />;
 }

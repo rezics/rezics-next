@@ -19,6 +19,8 @@ export type ReviewScopeQuery = { scope: 'global' | 'realm' | 'mine'; realm?: str
 export interface ReviewAggregate {
   question: string; grain: string; population: string; countedTarget: string;
   count: number; mean: number | null; scale: { min: number; max: number } | null;
+  /** Retains the owner's histogram and disclosure metadata for target aggregates. */
+  summary?: RatingSummary;
 }
 
 /** The aggregate of a rating summary, exactly as Main returned it; null when the summary has no question or states no scope. */
@@ -26,5 +28,5 @@ export function aggregateOf(summary: RatingSummary): ReviewAggregate | null {
   if (summary.status !== 'available' || !summary.aggregationScope) return null;
   const { question, grain, population, countedTarget } = summary.aggregationScope;
   return { question, grain, population, countedTarget, count: summary.count, mean: summary.mean,
-    scale: summary.scale ? { min: summary.scale.min, max: summary.scale.max } : null };
+    scale: summary.scale ? { min: summary.scale.min, max: summary.scale.max } : null, summary };
 }

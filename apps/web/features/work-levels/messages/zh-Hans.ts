@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  creditedAs: '署名为',
   parts: '组成部分', partsList: '按出版顺序排列的组成部分', partsPages: '组成部分分页',
   partsUnavailable: '组成部分暂时无法加载。',
   partOf: '属于', partOfList: '包含这部作品的整体',

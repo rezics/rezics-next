@@ -37,7 +37,8 @@ export interface GrainAnswer {
   label: GrainLabel; target: string; context: string; question: string; score: number; text: string;
   scale: { min: number; max: number };
   aggregationScope: { question: string; grain: string; population: string; countedTarget: string };
-  count: number; mean: number; reviews: { id: string; text: string; rating: number }[];
+  count: number; mean: number | null; displayThreshold?: number | null; meanDisplay?: string | null;
+  distribution?: { value: number; count: number }[]; reviews: { id: string; text: string; rating: number }[];
 }
 export interface AcceptanceAnswers {
   zones: Zones;
@@ -138,12 +139,14 @@ export async function answerAcceptance(seed: AcceptanceSeed, read: Read, actor: 
     const question = contexts.items.find(entry => entry.context === item.context);
     if (!question) throw new Error(`${item.label}: Main lists no rating question ${item.context} in the SAO Realm`);
     const ratings = await read(`${base}/ratings?${scope}&context=${encodeURIComponent(item.context)}`) as {
-      aggregationScope: GrainAnswer['aggregationScope']; count: number; mean: number };
+      aggregationScope: GrainAnswer['aggregationScope']; count: number; mean: number | null;
+      displayThreshold?: number | null; meanDisplay?: string | null; distribution?: { value: number; count: number }[] };
     const reviews = await read(`${base}/reviews?context=${encodeURIComponent(item.context)}&actingSubject=${actor}`) as {
       items: { id: string; text: string; rating: number }[] };
     grains[item.label] = { label: item.label, target: item.target, context: item.context, question: question.question,
       score: item.score, text: item.text, scale: question.scale, aggregationScope: ratings.aggregationScope,
-      count: ratings.count, mean: ratings.mean, reviews: reviews.items.map(entry => ({ id: entry.id, text: entry.text, rating: entry.rating })) };
+      count: ratings.count, mean: ratings.mean, displayThreshold: ratings.displayThreshold, meanDisplay: ratings.meanDisplay,
+      distribution: ratings.distribution, reviews: reviews.items.map(entry => ({ id: entry.id, text: entry.text, rating: entry.rating })) };
   }
   const credits = await read(`/v1/works/${short(manifest.works['sao.bunko']!.work)}/agent-credits?actingSubject=${actor}`) as {
     items: { role: string; agent: string; displayName: string; handle: string }[] };

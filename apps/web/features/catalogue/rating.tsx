@@ -3,11 +3,22 @@ import { StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages } from './messages.ts';
+import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { type CardRating, formatCompact, formatMean } from './work.ts';
 
 /** The spoken form of a rating: mean, scale and count, or the reader's own value. */
-export function ratingLabel(rating: CardRating, locale: UiLocale): string {
+export type InlineRating = CardRating | { mean: null; count: number; max: number; displayThreshold: number | null };
+
+/** Main withholds a mean until this many more observations exist; never derive it from the histogram. */
+export function ratingsUntilMean(count: number, threshold: number | null | undefined, locale: UiLocale): string | null {
+  if (threshold == null || count >= threshold) return null;
+  if (threshold - count === 1) return entityCopy(locale).oneRatingUntilMean;
+  return entityCopy(locale).ratingsUntilMean({ count: new Intl.NumberFormat(locale).format(threshold - count) });
+}
+
+export function ratingLabel(rating: InlineRating, locale: UiLocale): string {
   const t = materializeData(messages[locale], { locale });
+  if (rating.mean === null) return t.ratingCount(rating.count);
   const mean = formatMean(rating.mean, locale);
   const max = String(rating.max);
   return rating.own ? t.ownRating({ value: mean, max }) : t.averageRating({ mean, max, count: t.ratingCount(rating.count) });
@@ -18,8 +29,13 @@ export function ratingLabel(rating: CardRating, locale: UiLocale): string {
  * Realm scale keeps its `/10`, so a mean is never read on the wrong scale;
  * the reader's own rating says so instead of a count.
  */
-export function RatingInline({ rating, locale, className }: { rating: CardRating; locale: UiLocale; className?: string }) {
+export function RatingInline({ rating, locale, className }: { rating: InlineRating; locale: UiLocale; className?: string }) {
   const t = materializeData(messages[locale], { locale });
+  if (rating.mean === null) return <div className={cn('grid gap-1 text-sm', className)} data-rating-mean="withheld">
+    <p className="text-muted-foreground tabular-nums">{t.ratingCount(rating.count)}</p>
+    {ratingsUntilMean(rating.count, rating.displayThreshold, locale)
+      ? <p className="text-muted-foreground">{ratingsUntilMean(rating.count, rating.displayThreshold, locale)}</p> : null}
+  </div>;
   return <p className={cn('flex min-w-0 items-center gap-1 text-sm', className)}>
     <span className="sr-only">{ratingLabel(rating, locale)}</span>
     <StarIcon aria-hidden="true" className="size-3.5 shrink-0 fill-current text-rating" />

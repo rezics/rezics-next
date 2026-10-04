@@ -26,7 +26,7 @@ export interface Franchise {
   parts: ReadonlyMap<string, Loaded<PartsPage>>;
 }
 
-function Target({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
+function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
   const target = item.target;
   if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.unavailable}</span>;
   if (target.kind === 'external') {
@@ -40,6 +40,19 @@ function Target({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hre
       : <bdi className="font-mono text-sm">{target.label}</bdi>;
   }
   return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
+}
+
+function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
+  const { item, t, people } = props;
+  const name = item.target.kind === 'resource' && item.target.summary?.status === 'available'
+    ? item.target.summary.name.value : item.target.kind === 'external'
+      ? (item.target.agent ? people?.get(item.target.agent)?.name : undefined) ?? item.target.label : null;
+  const credited = name !== null && item.creditedName?.lexical !== name ? item.creditedName : undefined;
+  return <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-1">
+    <Participant {...props} />
+    {credited ? <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
+      <bdi lang={credited.language} dir="auto">{credited.lexical}</bdi></span> : null}
+  </span>;
 }
 
 /** The mark a derivation carries when its source's Main Version is not pinned: the link is known, its version is not. */
@@ -86,7 +99,7 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
     </dl> : null}
     {chips.length ? <ul aria-label={t.rolesList} className="flex flex-wrap gap-2">
       {chips.flatMap(row => row.items.map((item, index) => <li key={`${row.key}-${item.relation}-${index}`} data-role-chip
-        className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-sm">
+        className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-border/70 px-3 py-1 text-sm">
         <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>
         <Target item={item} t={t} hrefFor={hrefFor} people={people} />
       </li>))}

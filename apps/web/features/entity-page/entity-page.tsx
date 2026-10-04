@@ -20,6 +20,11 @@ import { entityHref, type EntityCursors, parseEntityRef, standaloneHrefFor } fro
 import { DiscussionSection, RatingsSection, RelationsSection, ReviewsSectionOf, StatementsSection } from './sections.tsx';
 import { drawnSections } from './views.tsx';
 import type { EntityProjection, EntitySection, HrefFor, SectionId } from './types.ts';
+import { readIdentitySections, type IdentityRatingScope } from './identity-read.ts';
+import { IdentitySectionsView } from './identity-views.tsx';
+import { entryLabel } from '../catalogue/types.ts';
+import { TargetRatingsRegion } from '../work-page/ratings.tsx';
+import { inSentence } from './messages.ts';
 
 function Unavailable({ t, messages, frame }: { t: Copy; messages: WorkPageMessages; frame: boolean }) {
   const body = <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}
@@ -46,7 +51,7 @@ export function EntityNotFound({ t }: { t: Copy }) {
  * hidden resource both end in `notFound()`.
  */
 export async function EntityPage({ resource, locale, hrefFor, frame = true, cursors = {}, sections: only, position,
-  header = true }: {
+  header = true, identitySections = header, ratingScope = { scope: 'global' } }: {
   /** The resource's UUID or IRI. */
   resource: string; locale: UiLocale;
   /** Defaults to the standalone addresses: Works at `/w`, everything else at `/e`. */
@@ -59,6 +64,8 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   position?: string;
   /** Draw the page's heading; a host that sets the name out itself leaves it off. */
   header?: boolean;
+  identitySections?: boolean;
+  ratingScope?: IdentityRatingScope;
 }) {
   const id = parseEntityRef(resource);
   if (!id) notFound();
@@ -69,7 +76,14 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   }
   const page = projection.data;
   if (page.summary.status !== 'available') notFound();
-  const address = hrefFor ?? standaloneHrefFor(cursors, entityHref(id));
+  const baseAddress = hrefFor ?? standaloneHrefFor(cursors, entityHref(id));
+  const address: HrefFor = link => {
+    const result = baseAddress(link);
+    const url = new URL(result, 'https://rezics.invalid');
+    if (position && !url.searchParams.has('position')) url.searchParams.set('position', position === 'all' ? 'all' : position.slice(-36));
+    if (ratingScope.scope === 'realm') { url.searchParams.set('scope', 'realm'); url.searchParams.set('realm', ratingScope.realm); }
+    return url.pathname + url.search + url.hash;
+  };
   const [{ avatarQuery }, { signedIn, actingSubject }] = await Promise.all([browseReader(), readingAgent()]);
   const draw = page.sections.filter(section => drawnSections.includes(section.id)
     && (!only || only.includes(section.id)));
@@ -83,6 +97,10 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
       kind={page.summary.base === 'work' ? 'work' : ['realm', 'space', 'collection', 'concept'].includes(page.summary.type)
         ? page.summary.type : page.registry.type} name={page.summary.name.value} locale={locale}
       signedIn={signedIn} actingSubject={actingSubject} signInHref="/auth/start" /> : null}
+    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
+      <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
+      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
+        avatarQuery={avatarQuery} {...common} /></Suspense> : null}
     {draw.map(section => {
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
@@ -102,6 +120,22 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
     })}
   </div>;
   return frame ? <PageContainer className="max-w-4xl [text-autospace:normal]">{body}</PageContainer> : body;
+}
+
+async function IdentitySections({ page, cursors, ratingScope, position, ...props }: {
+  page: EntityProjection; cursors: EntityCursors; ratingScope: IdentityRatingScope; position?: string;
+  avatarQuery: string; hrefFor: HrefFor; locale: UiLocale; t: Copy; messages: WorkPageMessages;
+}) {
+  if (page.summary.status !== 'available') return null;
+  const data = await readIdentitySections(page, cursors, ratingScope, position);
+  return <>
+    <IdentitySectionsView data={data} self={page.summary}
+      currentHref={props.hrefFor({ kind: 'continue', section: 'relations', cursor: cursors.relations ?? null })} {...props} />
+    {data.ok && data.data.ratings && !page.sections.some(section => section.id === 'ratings')
+      ? <TargetRatingsRegion ratings={data.data.ratings}
+        subject={props.t.ratingsFor({ subject: inSentence(entryLabel(page.registry, props.locale), props.locale) })}
+        none={props.t.noRatingQuestion} locale={props.locale} messages={props.messages} /> : null}
+  </>;
 }
 
 export type { EntityProjection };

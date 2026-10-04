@@ -3,6 +3,7 @@
 // type registry and from the story's own labels, never from here.
 
 const en = {
+  creditedAs: "as",
   atPosition: (label: string) => `Showing what is revealed up to ${label}.`,
   atAnyPosition: 'Showing what is revealed at your position.',
   atEverything: 'Showing everything, including records from chapters you may not have read.',
@@ -56,6 +57,7 @@ const zoneLocales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] a
 const translations: Record<ZoneLocale, Strings> = {
   en,
   'zh-Hans': {
+    creditedAs: '署名为',
     atPosition: (label: string) => `正在显示截至「${label}」已揭示的内容。`,
     atAnyPosition: '正在显示你当前位置已揭示的内容。',
     atEverything: '正在显示全部，包括你可能还没读到的章节中的记录。',
@@ -86,6 +88,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `全部${name}`, kind: '类型',
   },
   'zh-Hant': {
+    creditedAs: '署名為',
     atPosition: (label: string) => `正在顯示截至「${label}」已揭示的內容。`,
     atAnyPosition: '正在顯示你目前位置已揭示的內容。',
     atEverything: '正在顯示全部，包括你可能還沒讀到的章節中的記錄。',
@@ -116,6 +119,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `全部${name}`, kind: '類型',
   },
   ja: {
+    creditedAs: "役名：",
     atPosition: (label: string) => `「${label}」までに明かされた内容を表示しています。`,
     atAnyPosition: '現在の位置で明かされている内容を表示しています。',
     atEverything: 'まだ読んでいない章の記録も含め、すべてを表示しています。',
@@ -146,6 +150,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `${name}の一覧`, kind: '種類',
   },
   ko: {
+    creditedAs: "배역명:",
     atPosition: (label: string) => `「${label}」까지 밝혀진 내용을 보여 주고 있습니다.`,
     atAnyPosition: '현재 위치에서 밝혀진 내용을 보여 주고 있습니다.',
     atEverything: '아직 읽지 않은 장의 기록까지 모두 보여 주고 있습니다.',
@@ -176,6 +181,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `${name} 전체`, kind: '종류',
   },
   de: {
+    creditedAs: "als",
     atPosition: (label: string) => `Gezeigt wird, was bis „${label}“ verraten ist.`,
     atAnyPosition: 'Gezeigt wird, was an deiner Position verraten ist.',
     atEverything: 'Alles wird gezeigt, auch Einträge aus Kapiteln, die du vielleicht noch nicht gelesen hast.',
@@ -206,6 +212,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `Alle: ${name}`, kind: 'Art',
   },
   fr: {
+    creditedAs: 'sous le nom de',
     atPosition: (label: string) => `Ce qui est révélé jusqu’à « ${label} » est affiché.`,
     atAnyPosition: 'Ce qui est révélé à votre position est affiché.',
     atEverything: 'Tout est affiché, y compris des fiches de chapitres que vous n’avez peut-être pas lus.',
@@ -236,6 +243,7 @@ const translations: Record<ZoneLocale, Strings> = {
     back: (name: string) => `Tout : ${name}`, kind: 'Type',
   },
   es: {
+    creditedAs: "como",
     atPosition: (label: string) => `Se muestra lo revelado hasta «${label}».`,
     atAnyPosition: 'Se muestra lo revelado en tu posición.',
     atEverything: 'Se muestra todo, incluidos registros de capítulos que quizá no hayas leído.',

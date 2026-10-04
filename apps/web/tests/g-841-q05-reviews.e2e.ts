@@ -4,6 +4,9 @@ import { localizedPath } from '../i18n/locale.ts';
 import { expect, type Page } from '@playwright/test';
 import { acrossViews, seeded, test, uuid, type Seeded } from './g-841-fixture.ts';
 import type { GrainAnswer, GrainLabel } from './g-914-acceptance.ts';
+import { copyOf as entityCopy } from '../features/entity-page/messages.ts';
+import { materializeData } from 'native-i18n';
+import { messages as workMessages } from '../features/work-page/messages.ts';
 
 // Query 5 of the catalogue acceptance fixtures, read through the web UI as the stack's web member. The SAO story
 // Work's reviews are read in the SAO Zone's Realm, where its edition, its translation and the Works adapted from it
@@ -44,9 +47,15 @@ async function reads(page: Page, answer: GrainAnswer, locale: UiLocale) {
   );
   await expect(aggregate).toHaveAttribute('data-aggregate-count', String(answer.count));
   await expect(aggregate).toContainText(answer.aggregationScope.question);
-  await expect(aggregate).toContainText(
-    new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(answer.mean),
-  );
+  if (answer.mean === null) {
+    expect(answer.meanDisplay).toBe('withheld-below-threshold');
+    await expect(aggregate).toContainText(entityCopy(locale).ratingsUntilMean({
+      count: new Intl.NumberFormat(locale).format(answer.displayThreshold! - answer.count),
+    }));
+    await expect(aggregate.getByRole('list', { name: materializeData(workMessages[locale], { locale }).distribution })).toBeVisible();
+  } else {
+    await expect(aggregate).toContainText(new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(answer.mean));
+  }
   // Exactly that grain's reviews, as Main lists them.
   const list = page.locator('section[aria-labelledby="work-reviews"] ol > li');
   await expect(list).toHaveCount(answer.reviews.length);

@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  creditedAs: "como",
   parts: 'Partes', partsList: 'Partes en orden de publicación', partsPages: 'Páginas de partes',
   partsUnavailable: 'No se pudieron cargar las partes.',
   partOf: 'Parte de', partOfList: 'Conjuntos que contienen esta obra',

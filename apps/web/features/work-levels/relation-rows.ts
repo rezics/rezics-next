@@ -21,6 +21,7 @@ export interface RelationItem {
   /** The derivation's source Main Version has no pinned revision: the link is known, its version is not. */
   unresolvedSource: boolean;
   evidence: string | null;
+  creditedName?: { lexical: string; language: string };
 }
 
 /** A label exactly as Main selected it, with where it came from. */
@@ -84,7 +85,8 @@ export function relationRows(entries: readonly RelationEntry[]): RelationRow[] {
       const group = groups.get(key) ?? { projection, items: [] };
       for (const argument of projection.arguments.filter(item => item.role === projection.toRole)) {
         group.items.push({ relation: entry.relation, target: participantTarget(argument.value, summaries),
-          unresolvedSource: entry.sourceVersionStatus === 'unresolved', evidence: entry.evidence });
+          unresolvedSource: entry.sourceVersionStatus === 'unresolved', evidence: entry.evidence,
+          ...(argument.creditedName ? { creditedName: argument.creditedName } : {}) });
       }
       groups.set(key, group);
     }

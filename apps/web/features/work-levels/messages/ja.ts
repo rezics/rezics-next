@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  creditedAs: "役名：",
   parts: '構成', partsList: '刊行順の構成', partsPages: '構成のページ',
   partsUnavailable: '構成を読み込めませんでした。',
   partOf: '所属：', partOfList: 'この作品を含むまとまり',

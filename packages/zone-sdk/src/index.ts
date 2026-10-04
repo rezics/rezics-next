@@ -388,7 +388,7 @@ export interface ZoneFact {
 }
 
 /** A relationship as a structured row: what it is, and the other participants. */
-export interface ZoneRelationship { label: string; others: { name: ZoneText; href: string | null }[] }
+export interface ZoneRelationship { label: string; others: { name: ZoneText; href: string | null; creditedName?: ZoneText }[] }
 
 /**
  * A passage that supports a claim, with its source. `text` is null when Main withheld the quotation under a rights

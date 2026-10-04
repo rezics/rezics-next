@@ -26,6 +26,7 @@ const en = {
   noConnections: 'No connections yet', noConnectionsBody: 'No franchise or relation names this Work yet.',
   relationsList: 'Relations', rolesList: 'Roles', relationsPages: 'Relations pages',
   relatedFallback: 'Related',
+  creditedAs: 'as',
   labelIn: insert('in {{language}}', { language: String }),
   unresolvedSource: 'Source version unresolved',
   unresolvedHint: 'The link is on record, but which revision of the source it follows is not.',

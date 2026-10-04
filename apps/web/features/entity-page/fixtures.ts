@@ -15,7 +15,7 @@ export const baseSections: Record<TargetBase, readonly SectionId[]> = {
   realization: ['statements', 'relations', 'discussion'],
   occurrence: ['statements', 'relations', 'discussion'],
   resource: ['statements', 'relations', 'discussion'],
-  projection: [],
+  projection: ['statements', 'relations', 'ratings', 'reviews', 'discussion'],
 };
 
 /** The `type` Main's summary gives each base: a Work, a release, a chapter occurrence, a text, or any other resource. */

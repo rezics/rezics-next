@@ -5,6 +5,7 @@ import { localeAlternates, pageUrl } from '../seo/address.ts';
 import { copyOf } from './messages.ts';
 import { readEntityProjection } from './read.ts';
 import { entityHref, parseEntityCursors, parseEntityRef } from './route.ts';
+import { mainPosition, parsePosition } from '../wiki/position.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -17,7 +18,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
 export async function entityMetadata(ref: string, query: SearchParams, locale: UiLocale): Promise<Metadata> {
   const id = parseEntityRef(ref);
   if (!id) return {};
-  const projection = await readEntityProjection(id);
+  const projection = await readEntityProjection(id, mainPosition(parsePosition(query)));
   if (!projection.ok) return projection.failure === 'missing' ? { title: copyOf(locale).notFoundTitle }
     : { title: copyOf(locale).pageUnavailableTitle, robots: { index: false } };
   const { summary, target } = projection.data;
@@ -26,7 +27,7 @@ export async function entityMetadata(ref: string, query: SearchParams, locale: U
   const address = 'address' in summary ? summary.address as AddressTarget : id;
   const alternates = origin ? localeAlternates(origin, entityHref(address), locale) : null;
   const cursors = parseEntityCursors(query);
-  const paged = !cursors || Object.keys(cursors).length > 0;
+  const paged = !cursors || Object.keys(cursors).length > 0 || query.position !== undefined || query.scope === 'realm';
   return { title: summary.name.value, ...(alternates ? { alternates } : {}),
     ...(target.disclosure !== 'public' || paged ? { robots: { index: false } } : {}) };
 }
