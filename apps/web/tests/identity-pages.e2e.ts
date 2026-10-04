@@ -42,7 +42,7 @@ test('identity pages compare separate figures, preserve credits and show units a
   ] as const) {
     await page.setViewportSize(viewport);
     await page.goto(path(data.alter));
-    const family = page.locator('section[aria-labelledby="identity-family"]');
+    const family = page.getByRole('region', { name: 'Variant family', exact: true });
     await expect(family).toBeVisible();
     await expect(family.locator('[data-identity-member]')).toHaveCount(3);
     await expect(family.locator('[data-identity-hub]')).toContainText('Saber');
@@ -54,7 +54,11 @@ test('identity pages compare separate figures, preserve credits and show units a
     await expect(alter.locator('[data-rating-mean="withheld"] svg')).toHaveCount(0);
     await expect(alter.getByRole('list', { name: 'Rating distribution' })).toBeVisible();
     await expect(family.locator(`[data-identity-member="${data.saber}"]`)).toContainText('8/10');
-    await expect(page.locator('[data-title-context]')).toContainText('Fate/stay night');
+    await expect(
+      page
+        .getByRole('region', { name: 'Titles held', exact: true })
+        .locator('[data-title-context]'),
+    ).toContainText('Fate/stay night');
     await expect(family.getByRole('link', { name: 'Saber', exact: true }).first()).toHaveAttribute(
       'href',
       /position=all/,
@@ -64,16 +68,16 @@ test('identity pages compare separate figures, preserve credits and show units a
     );
     await page.screenshot({ path: info.outputPath(`variant-${width}.png`), fullPage: true });
     await page.goto(path(data.saber));
-    await expect(page.locator('section[aria-labelledby="identity-units"]')).toContainText(
+    await expect(page.getByRole('region', { name: 'Units', exact: true })).toContainText(
       'Saber unit',
     );
     await page.goto(path(data.unit));
-    await expect(page.locator('section[aria-labelledby="identity-represents"]')).toContainText(
+    await expect(page.getByRole('region', { name: 'Represents', exact: true })).toContainText(
       'Saber',
     );
     await page.screenshot({ path: info.outputPath(`unit-${width}.png`), fullPage: true });
     await page.goto(path(data.title));
-    const holders = page.locator('section[aria-labelledby="identity-holders"]');
+    const holders = page.getByRole('region', { name: 'Holders', exact: true });
     await expect(holders).toBeVisible();
     await expect(holders.locator('[data-identity-member]')).toHaveCount(2);
     await expect(holders).toContainText('Fate/stay night');
