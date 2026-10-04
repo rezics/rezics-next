@@ -76,8 +76,9 @@ designation, stable boundaries, independent attribution, established
 bibliographic identity or independent reuse. An ISBN, a file boundary, a title
 or a number alone is not enough. A unit that only groups, navigates or
 positions content inside one realization is an identified occurrence in the
-Work's Structure; it still has a stable ID, revisions, discussion and progress
-targets. So series, published volumes and separately identified episodes can
+Work's Structure; it keeps a stable ID, structural revisions and progress,
+while its text and discussion belong to the [Post](#posts-texts-and-works) it
+places. So series, published volumes and separately identified episodes can
 be Works at several levels, while chapters, arcs and visual-novel routes are
 occurrences by default, and a mechanical split of one novel is two releases,
 not two Works.
@@ -161,6 +162,45 @@ carries the read. Series pages and fragment correspondence remain separate
 work; series features are adapters over the shared Composed, Versioned and
 Trackable capabilities, never a book-only store. The SAO and Index franchises and a set of
 works whose web and published versions diverge are the acceptance fixtures.
+
+## Posts, texts and Works
+
+Maintainer and manager, 2026-10-05. **A Post is a publication, not a Work.**
+Publishing a chapter creates a Post and places it in its Book's Structure; it
+never mints a Work. Four layers stay separate:
+
+| Layer | Carries |
+| --- | --- |
+| Work | Identity under the rule above: ratings, reviews, search, follows, credited authorship and Work relations |
+| Text | The Post's Content variants: language, immutable revisions, contributors and measures; a chapter's text is a component of its Work's realization |
+| Post | The act and its record: publisher, time, venue, disclosure, custody (who may edit and publish), rights and terms of that unit, and the discussion of it |
+| Occurrence | A use of the Post in a composition: order, label, reading progress and position, new-chapter notifications |
+
+A Post placed in several compositions keeps one text and one conversation;
+each placement keeps its own progress. A Post is linked to a Work of its own
+only on the evidence above (separate authorship, standing alone under its own
+title, separate translation, publication or citation), and that link adds a
+Work without moving the Post's text, custody, discussion or occurrences. An
+author's note published with a chapter is a separate part of the Post, not of
+the chapter's text: it is not counted, translated or carried into a release of
+the Work.
+
+The reasons are the standards' and the cost. FRBRoo once modeled the
+publisher's act as a Work (F19 Publication Work, F24 Publication Expression);
+[LRMoo 1.1.1](https://cidoc-crm.org/sites/default/files/LRMoo_V1.1.1.pdf)
+deprecated them as "unneeded subclasses of F1 Work" and separated the act (F30
+Manifestation Creation) from its product (F3 Manifestation). No bibliographic
+or web-content model places a post or chapter at the work level:
+[FaBiO](https://sparontologies.github.io/fabio/current/fabio.html) makes blog
+posts and book chapters expressions, [SIOC](http://rdfs.org/sioc/spec/) makes
+a post an item, [Activity Streams](https://www.w3.org/TR/activitystreams-core/)
+separates Create from its object, and
+[Wikidata](https://www.wikidata.org/wiki/Wikidata:Notability) admits a chapter
+only when separately authored, stand-alone or separately translated.
+[LRM](https://repository.ifla.org/bitstreams/7d23aa55-1f85-490f-b500-6170285585a6/download)
+treats notes and forewords as augmentations belonging to separate works.
+A Work per chapter forced every catalogue read to filter chapters back out
+and gave a thousand-chapter novel a thousand Works.
 
 ## Catalogue acceptance fixtures
 
