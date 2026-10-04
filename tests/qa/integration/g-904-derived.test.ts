@@ -7,7 +7,8 @@ import { SuitabilityStore } from '../../../services/main/src/modules/suitability
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { SerialStatisticsProjection } from '../../../services/main/src/modules/work/serial-projection.ts';
-import type { ReadRankingProjection } from '../../../services/main/src/modules/rankings/projection.ts';
+import { ReadRankingProjection, rankingBuckets } from '../../../services/main/src/modules/rankings/projection.ts';
+import { refreshReadRankingAdmissions } from '../../../services/main/src/modules/feed/ranking-admission.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import {
   realmSelectionDigest,
@@ -61,37 +62,32 @@ test('G-904: interactive derived inventories retain rated targets and enforce cu
       { current: async () => null },
       { current: async () => null },
     );
-    const scores = works.map((work, index) => ({
-      work: work.work,
-      score: String(100 - index),
-      growth: '1',
-    }));
-    const rankings = {
-      current: async () => ({
-        generation: 'g904',
-        contentEpoch: 'content',
-        contentSequence: '1',
-        graphEpoch: home.stack.env.lineage.dataEpoch,
-        reviewPosition: '0',
-      }),
-      candidates: async (
-        _generation: string,
-        _metric: string,
-        _interval: string,
-        _bucket: string,
-        _order: string,
-        after: { value: string; work: string } | null,
-        limit: number,
-      ) =>
-        scores
-          .filter(
-            (row) =>
-              !after ||
-              Number(row.score) < Number(after.value) ||
-              (row.score === after.value && row.work > after.work),
-          )
-          .slice(0, limit),
-    } as unknown as ReadRankingProjection;
+    // Production seeks the admitted score index. A raw-score double would
+    // keep returning a revoked Work and correctly trigger the reader's stale
+    // admission fence instead of exercising the SQL revocation triggers.
+    const rankings = new ReadRankingProjection(home.stack.accessPool, home.stack.content,
+      home.stack.contentPool, home.stack.env);
+    for (let tick = 0; tick < 100; tick++) {
+      if (!await rankings.tick()) break;
+      if (tick === 99) throw new Error('Ranking fixture did not catch up with its owner events');
+    }
+    const rankingCheckpoint = await rankings.current();
+    const rankingBucket = rankingBuckets(new Date(), 'week').current;
+    await home.stack.accessPool.query(`INSERT INTO access.read_ranking_score
+      (generation,metric,interval,bucket,work,score,growth)
+      SELECT $1,'reads','week',$2,work,score,score FROM unnest($3::text[],$4::bigint[]) AS scores(work,score)`,
+    [rankingCheckpoint.generation, rankingBucket, works.map(work => work.work), works.map((_, index) => 100 - index)]);
+    await refreshReadRankingAdmissions(home.stack.env, home.stack.accessPool, works.map(work => work.work));
+    // Numeric keysets and ordering must agree across a digit boundary. The
+    // response's text aliases must not rank 99 ahead of 100 for either order.
+    for (const order of ['score', 'growth'] as const) {
+      const first = await rankings.candidates(rankingCheckpoint.generation, 'reads', 'week', rankingBucket, order, null, 2);
+      expect(first).toHaveLength(2);
+      const last = first.at(-1)!;
+      const second = await rankings.candidates(rankingCheckpoint.generation, 'reads', 'week', rankingBucket, order,
+        { value: last[order], work: last.work }, 2);
+      expect([...first, ...second].map(row => row.work)).toEqual(works.map(work => work.work));
+    }
     let graphSequence = '0';
     const serial = new SerialStatisticsProjection(
       home.stack.accessPool,
