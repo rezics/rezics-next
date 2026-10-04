@@ -53,7 +53,7 @@ test('identity pages compare separate figures, preserve credits and show units a
   const legacy = `/en${resourceHref('/e/', { prefix: '/e/', key: data.alter.slice(-36), suffixSource: '' })}?position=all`;
   const canonical = await page.request.get(legacy, { maxRedirects: 0 });
   expect(canonical.status()).toBe(301);
-  expect(new URL(canonical.headers().location!).pathname).toBe(
+  expect(new URL(canonical.headers().location!, page.url()).pathname).toBe(
     `/en${resourceHref('/e/', data.alter)}`,
   );
   for (const [width, viewport] of [

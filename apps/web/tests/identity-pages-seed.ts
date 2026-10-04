@@ -20,6 +20,7 @@ if (!process.env.REZICS_QA_RUN_ID || !process.env.REZICS_WEB_AUTH_PRIVATE_PATH)
 const web = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH, 'utf8')) as {
   principalId: string;
   actingSubject: string;
+  operator: { id: string };
 };
 const stack = await startMediaStack('identity-pages', { library: true });
 const editor = await stack.member('identity-editor');
@@ -106,6 +107,23 @@ const grantReader = async (ref: string) => {
 };
 
 try {
+  // The same real QA operator signs in for Direction 9's administrator-only Space setup.
+  const publicConfig = JSON.parse(
+    readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH!, 'utf8'),
+  ) as { issuer: string };
+  await stack.accessPool.query(
+    `INSERT INTO access.principal(id,account_issuer,account_subject)
+    VALUES($1,$2,$3) ON CONFLICT(account_issuer,account_subject) DO NOTHING`,
+    [randomUUID(), publicConfig.issuer, web.operator.id],
+  );
+  editor.principalId = (
+    await stack.accessPool.query<{ id: string }>(
+      'SELECT id FROM access.principal WHERE account_issuer=$1 AND account_subject=$2',
+      [publicConfig.issuer, web.operator.id],
+    )
+  ).rows[0]!.id;
+  editor.principal.issuer = publicConfig.issuer;
+  editor.principal.subject = web.operator.id;
   editor.actor = (
     await call<{ agent: string }>('/v1/agents', {
       profile: 'agent-provision-v1',
