@@ -257,11 +257,20 @@ test('Post migration retires 66 headed legacy Mains across batches and advances 
     expect(inventory.map(row => [row.main!.value, row.head!.value, row.triples!.value]))
       .toEqual([...missing, ...supported].sort((a, b) => a.main.localeCompare(b.main))
         .map(row => [row.main, row.mainHead, '4']));
-    const history = await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
-      VALUES ?subject { ${[...missing, ...supported].flatMap(row => [row.head, row.mainHead]).map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.revisions)} { ?subject ?predicate ?value }
-    } ORDER BY ?subject ?predicate ?value`, 512 * 1024);
-    expect(history.results?.bindings).toHaveLength((missing.length + supported.length) * 18);
+    const historySubjects = [...missing, ...supported].flatMap(row => [row.head, row.mainHead]);
+    const readHistory = async () => {
+      const rows = [];
+      for (let offset = 0; offset < historySubjects.length; offset += POST_BACKFILL_COST.batch * 2) {
+        const subjects = historySubjects.slice(offset, offset + POST_BACKFILL_COST.batch * 2);
+        rows.push(...(await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
+          VALUES ?subject { ${subjects.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.revisions)} { ?subject ?predicate ?value }
+        } ORDER BY ?subject ?predicate ?value LIMIT ${subjects.length * 9 + 1}`, 512 * 1024)).results!.bindings);
+      }
+      return rows;
+    };
+    const history = await readHistory();
+    expect(history).toHaveLength((missing.length + supported.length) * 18);
     const skipped: number[] = [];
     const options = { onMissingPublisher: (count: number) => { skipped.push(count); } };
     expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(supported.length);
@@ -277,10 +286,7 @@ test('Post migration retires 66 headed legacy Mains across batches and advances 
         } }`)).boolean).toBe(true);
     }
     expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(0);
-    expect(await stack.fuseki.query(`SELECT ?subject ?predicate ?value WHERE {
-      VALUES ?subject { ${[...missing, ...supported].flatMap(row => [row.head, row.mainHead]).map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.revisions)} { ?subject ?predicate ?value }
-    } ORDER BY ?subject ?predicate ?value`, 512 * 1024)).toEqual(history);
+    expect(await readHistory()).toEqual(history);
     expect(skipped).toEqual([POST_BACKFILL_COST.batch, 1, POST_BACKFILL_COST.batch, 1]);
     expect((await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT (COUNT(?post) AS ?count) WHERE { GRAPH ${iri(GRAPHS.current)} {
