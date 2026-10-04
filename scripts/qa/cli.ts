@@ -191,7 +191,9 @@ async function runShard(
         `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
       let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
       if (inspected.ok) {
-        try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output), qaStackMode(environment)); }
+        // Command-only files start a persistent stack in test mode too; check
+        // the storage that stack:up was asked for, not the mode's default.
+        try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output), persistent ? 'scale' : 'test'); }
         catch (error) { failure = error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'; }
       }
       if (failure) {

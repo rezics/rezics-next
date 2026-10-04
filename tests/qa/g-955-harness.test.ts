@@ -360,6 +360,17 @@ test('G-955: retained small backups are reused and absent/incompatible backups a
   ).rejects.toThrow('owner load failed');
 });
 
+test('G-955: a file that imports a heavy integration file runs in that file\'s resource class', () => {
+  const directory = join(root, 'tests/qa/integration');
+  for (const name of readdirSync(directory).filter((name) => name.endsWith('.test.ts'))) {
+    const file = `tests/qa/integration/${name}`;
+    const imported = [...readFileSync(join(directory, name), 'utf8')
+      .matchAll(/^import '\.\/([\w-]+\.test\.ts)';$/gm)].map((match) => `tests/qa/integration/${match[1]}`);
+    for (const heavy of imported.filter((path) => integrationResourceClasses.has(path)))
+      expect([file, integrationResourceClasses.get(file)]).toEqual([file, integrationResourceClasses.get(heavy)]);
+  }
+});
+
 test('G-955: all QA stacks inherit heap/direct-memory settings below their container limit', () => {
   const env = qaStackEnvironment({
     REZICS_FUSEKI_MEMORY_LIMIT: '7g',

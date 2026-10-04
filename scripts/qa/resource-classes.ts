@@ -48,6 +48,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-1026-community-cost',
     'g-828-zone-browse',
     'g-856-zones',
+    'g-856-library',
   ].map((name) => [`tests/qa/integration/${name}.test.ts`, 'large-tmpfs'] as const),
   ...[
     'g-1038-catalogue-scale',
