@@ -260,7 +260,11 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       !== JSON.stringify(originalCredits)
       || JSON.stringify(typeSignature(await session.query(typesQuery, ids.length * MAX_WORK_SEMANTIC_TYPES + 1)))
       !== JSON.stringify(originalTypes)) throw new WorkReadMoved('Feed Work presentation changed');
-    const currentNames = await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
+    // Feed names are full Agent cards (including non-credit actors and
+    // localized names); their fence must use the same keys and adapter.
+    const currentNames = feed
+      ? await readAgentCards(session, [...names.keys()], 'required', feed.frame.actorState)
+      : await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
     if (JSON.stringify([...currentNames]) !== JSON.stringify([...names])) throw new WorkReadMoved('Feed Work author changed');
   } };
 }

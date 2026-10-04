@@ -19,9 +19,12 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
   finally {
     [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
   }
-  const matches = home.deps.follows.matches.bind(home.deps.follows);
+  const openFrame = home.deps.feed.openFrame.bind(home.deps.feed);
   try {
     const seeded = await seedHome(home);
+    expect(await home.json(await home.call('GET', '/health/feed-ready'))).toMatchObject({
+      status: 'ready', targets: { status: 'current' },
+    });
     const request = new Request('http://main.local/v1/feed', {
       headers: { authorization: `Bearer ${home.reader.token}` } });
     const principal = await home.deps.account.verify(request);
@@ -30,15 +33,26 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
     const liveSession = () => workRead(home.deps, publicRequest, {}, async session => session);
     const reader = { principal, agent: seeded.reader };
     const calls: number[] = [];
+    let observedScope: 'all' | 'following' = 'all';
     let changeDuringMatch = false;
-    home.deps.follows.matches = async (...args) => {
-      calls.push(args[2].length);
-      const result = await matches(...args);
-      if (changeDuringMatch && args[2].length) {
-        await home.stack.accessPool.query('UPDATE access.follow_inventory SET revision = $2 WHERE principal_id = $1',
-          [home.reader.principalId, randomUUID()]);
-      }
-      return result;
+    // Home matches inside its Access frame, not FollowsStore.matches. Observe
+    // the actual card batch and closing inventory fence. Following also reads
+    // the opening inventory head before it validates a continuation.
+    home.deps.feed.openFrame = async (...args) => {
+      const frame = await openFrame(...args);
+      if (observedScope === 'following') calls.push(0);
+      const cardAccess = frame.cardAccess.bind(frame), close = frame.close.bind(frame);
+      frame.cardAccess = async (...cardArgs) => {
+        calls.push(cardArgs[1].length);
+        const result = await cardAccess(...cardArgs);
+        if (changeDuringMatch && cardArgs[1].length) {
+          await home.stack.accessPool.query('UPDATE access.follow_inventory SET revision = $2 WHERE principal_id = $1',
+            [home.reader.principalId, randomUUID()]);
+        }
+        return result;
+      };
+      frame.close = async () => { calls.push(0); return close(); };
+      return frame;
     };
     for (const sort of ['best', 'top'] as const) {
       calls.length = 0;
@@ -53,6 +67,7 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
       expect(calls[0]).toBeGreaterThan(0);
       expect(calls[1]).toBe(0);
     }
+    observedScope = 'following';
     const following = await workRead(home.deps, publicRequest, {}, session =>
       readFeed(session, { scope: 'following', sort: 'best', limit: 1 }, reader));
     expect(following.nextCursor).not.toBeNull();
@@ -67,9 +82,19 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
       continuation, reader)).rejects.toBeInstanceOf(WorkReadMoved);
     // The inventory head rejects a stale continuation before card matching.
     expect(calls).toEqual([0]);
+    // A live, unfenced graph read with unchanged owners must reach the closing
+    // inventory check rather than fail on unrelated author presentation data.
+    observedScope = 'all';
+    calls.length = 0;
+    const stableSession = await liveSession();
+    const stable = await readFeed(new WorkReadSession(home.deps, publicRequest, {}, stableSession.position),
+      { scope: 'all', sort: 'best' }, reader);
+    expect(stable.items.length).toBeGreaterThanOrEqual(5);
+    expect(calls).toHaveLength(2);
     // A follow change after the card-match batch must never return stale reasons.
     changeDuringMatch = true;
     for (const scope of ['all', 'following'] as const) {
+      observedScope = scope;
       calls.length = 0;
       // Capture the live graph position, independently of the retained feed
       // checkpoint, then bypass retries so this injected follow race is observed.
@@ -81,7 +106,7 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
       expect(calls.at(-1)).toBe(0);
     }
   } finally {
-    home.deps.follows.matches = matches;
+    home.deps.feed.openFrame = openFrame;
     try { await home.stop(); } finally { await databases.close(); }
   }
 }, 120_000);
