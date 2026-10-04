@@ -1,6 +1,6 @@
 import { readComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { RatingInventoryConflict, MAX_RATING_AGGREGATE_SLOTS, type RatingInventoryHead, type TargetRatingComponents,
+import { MAX_RATING_AGGREGATE_SLOTS, type RatingAggregateInventory, type RatingInventoryHead, type TargetRatingComponents,
   type TargetRatingSnapshot } from '../access/rating-aggregate-inventory.ts';
 import { RatingAggregateUnavailable } from './aggregate.ts';
 import { componentsAgree, meanDisclosure, type MeanDisplay, type RatingComponents } from './components.ts';
@@ -29,25 +29,28 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
     throw new RatingAggregateUnavailable('Target Context seal differs');
   }
   const components = snapshot.members.get(input.target) ?? null;
+  if (components && components.unvalued > 0)
+    throw new RatingAggregateUnavailable('Target components need reconstruction');
   const verified = snapshot.heads !== null
-    ? await verifyHeads(env, snapshot, snapshot.heads, components, input, context, signal) : null;
-  let figures: RatingComponents & { slots: number }, position: { dataEpoch: string; sequence: string };
+    ? await verifyTargetRatingHeads(env, snapshot, snapshot.heads, components, input, context, signal) : null;
+  let figures: RatingComponents & { slots: number };
   if (verified) {
-    ({ figures, position } = verified);
-    if (components && components.unvalued > 0) {
-      // Heads sealed before components existed take their values from this verified read.
-      await access.record(input.context, input.target, snapshot.recoveryGeneration, verified.heads, signal)
-        .catch(error => { if (!(error instanceof RatingInventoryConflict)) throw error; });
-    }
+    ({ figures } = verified);
   } else {
-    if (!components || components.unvalued > 0) throw new RatingAggregateUnavailable('Target components need reconstruction');
-    position = await witnessLastWrite(env, snapshot, components, input);
+    if (!components) throw new RatingAggregateUnavailable('Target components need reconstruction');
+    await witnessLastWrite(env, snapshot, components, input);
     figures = { slots: components.slots, count: components.count, sum: components.sum, histogram: components.histogram };
   }
   if (!componentsAgree(figures)) throw new RatingAggregateUnavailable('Target components are inconsistent');
   if (!await access.checkFence(snapshot.recoveryGeneration, signal)) throw new RatingAggregateUnavailable('Recovery fence changed');
   const { mean, display } = meanDisclosure(figures, context.displayThreshold);
+  const position = components?.last ?? {
+    dataEpoch: snapshot.contextDataEpoch,
+    sequence: snapshot.contextSequence,
+  };
   return { profile: TARGET_AGGREGATE_PROFILE, complete: true as const, context: input.context, realm: context.realm,
+    contextRevision: snapshot.contextRevision,
+    lastAdmissionId: components?.last.admissionId ?? null,
     target: input.target, targetGrain: context.targetGrain,
     scope: { question: context.question, language: context.language, grain: context.targetGrain, population: 'account-principal' as const,
       countedTarget: input.target }, scale: context.scale, cadence: context.cadence,
@@ -95,10 +98,12 @@ async function witnessLastWrite(env: WorkActivationEnvironment, snapshot: Target
 
 /** The exhaustive check for a target small enough to verify: every sealed head
  * against its graph row, receipt and immutable manifest. */
-async function verifyHeads(env: WorkActivationEnvironment, snapshot: TargetRatingSnapshot,
+export async function verifyTargetRatingHeads(env: WorkActivationEnvironment, snapshot: Omit<RatingAggregateInventory, 'heads'>,
   inventory: readonly RatingInventoryHead[], components: TargetRatingComponents | null,
   input: { context: string; target: string }, context: NonNullable<Awaited<ReturnType<typeof readTargetRatingContext>>>,
-  signal: AbortSignal) {
+  signal: AbortSignal,
+  partial = false,
+) {
   if (inventory.length > TARGET_AGGREGATE_COST.verifiedHeads) throw new RatingAggregateUnavailable('Target population exceeds verification');
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?population
     ?contextReceipt ?contextEpoch ?contextSequence ?receipt ?digest ?revisionEpoch ?revisionSequence
@@ -109,11 +114,19 @@ async function verifyHeads(env: WorkActivationEnvironment, snapshot: TargetRatin
       rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence }
     GRAPH ${iri(GRAPHS.receipts)} { ?contextReceipt rv:ratingContext ${iri(input.context)} ;
       rv:ratingContextRevision ${iri(snapshot.contextRevision)} ; rv:outcome rv:Succeeded }
-    { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE { { SELECT ?candidate WHERE {
+    ${
+      partial
+        ? `BIND(${inventory.length} AS ?population)`
+        : `{ SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE { { SELECT ?candidate WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?candidate rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} }
-    } LIMIT 101 } } }
-    OPTIONAL { { SELECT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ?observation rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} } } LIMIT 101 }
+    } LIMIT 101 } } }`
+    }
+    OPTIONAL { ${
+      partial
+        ? `VALUES ?observation { ${inventory.map((head) => iri(head.observation)).join(' ')} }`
+        : `{ SELECT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ?observation rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} } } LIMIT 101 }`
+    }
       GRAPH ${iri(GRAPHS.current)} { ?observation a rv:TargetRatingObservation ;
       rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} ; rv:ratingSlot ?slot ; rv:observationHead ?head . }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:TargetRatingObservationRevision, rv:RevisionAnchor ;
@@ -175,9 +188,11 @@ async function verifyHeads(env: WorkActivationEnvironment, snapshot: TargetRatin
   const figures = { slots: population, count: population - withdrawnCount, sum, histogram };
   // Sealed components are exact only once no pre-component head awaits its value.
   const exact = components !== null && components.unvalued === 0;
-  if ((components ? components.slots !== population : population !== 0)
-    || exact && (components.count !== figures.count || components.sum !== sum
-      || components.histogram.some((bin, index) => bin !== histogram[index]))) {
+  if (!partial &&
+    ((components ? components.slots !== population : population !== 0)
+    || (exact && (components.count !== figures.count || components.sum !== sum
+      || components.histogram.some((bin, index) => bin !== histogram[index]))) )
+  ) {
     throw new RatingAggregateUnavailable('Target components differ from heads');
   }
   return { figures, heads, position: { dataEpoch: first.epoch.value, sequence: first.sequence.value } };

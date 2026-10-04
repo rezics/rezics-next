@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startRatingStack, type Person } from './rating-components-support.ts';
+import { reconstructLegacyTargetRatings } from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
 
 let r: Awaited<ReturnType<typeof startRatingStack>>;
 beforeAll(async () => { r = await startRatingStack('rating-components'); }, 300_000);
@@ -133,6 +134,30 @@ test('a target rated by more than 100 principals aggregates from its components,
     actingSubject: r.owner.actor }), 503)).toMatchObject({ code: 'rating_aggregate_unavailable' });
   await r.stack.fuseki.update(drop.replace('DELETE DATA', 'INSERT DATA'));
   expect(await r.aggregate(context, target)).toMatchObject({ count: 129 });
+// An arbitrarily large legacy target can be reconstructed without a whole-population read.
+  await r.stack.accessPool.query(
+    'UPDATE access.target_rating_head SET value=NULL,value_known=false WHERE context=$1',
+    [context],
+  );
+  await r.stack.accessPool.query(
+    'UPDATE access.target_rating_component SET unvalued=slots,rating_count=0,rating_sum=0,histogram=$2 WHERE context=$1',
+    [context, Array(10).fill(0)],
+  );
+  const batch = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+    context,
+    target,
+    batchSize: 100,
+  });
+  expect(batch).toMatchObject({ complete: false, scanned: 100, recorded: 100 });
+  expect(
+    await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+      context,
+      target,
+      cursor: batch.cursor!,
+    }),
+  ).toMatchObject({ complete: true, scanned: 30, recorded: 30 });
+  await r.expectComponentsMatchHeads(context, target);
+  expect(await r.aggregate(context, target)).toMatchObject({ count: 129, sum: moved.sum });
 }, 480_000);
 
 test('a component that no longer equals its heads makes a verifiable target unavailable instead of wrong', async () => {
@@ -155,7 +180,7 @@ test('a component that no longer equals its heads makes a verifiable target unav
   expect(await r.aggregate(context, target)).toMatchObject({ count: 2, sum: 10 });
 }, 300_000);
 
-test('heads sealed before components existed are counted unvalued, read from verified heads and then recorded', async () => {
+test('legacy heads remain unavailable on read and are reconstructed by resumable idempotent batches', async () => {
   const context = (await r.context({ displayThreshold: 1 })).context;
   const target = await r.resource('Leafa');
   const [a, b, c] = await raters('legacy', 3) as [Person, Person, Person];
@@ -163,8 +188,7 @@ test('heads sealed before components existed are counted unvalued, read from ver
   for (const [rater, value] of [[a, 7], [b, 9], [c, 2]] as const) opinions.set(rater.actor, await r.rate(rater, context, target, value));
   // Return Access to its state before the migration: heads without values, no component rows.
   await r.stack.accessPool.query('UPDATE access.target_rating_head SET value = NULL, value_known = false WHERE context = $1', [context]);
-  await r.stack.accessPool.query('DELETE FROM access.target_rating_component WHERE context = $1', [context]);
-  await r.stack.accessPool.query('DELETE FROM access.target_rating_context_component WHERE context = $1', [context]);
+  await r.stack.accessPool.query('DELETE FROM access.target_rating_component WHERE context = $1', [context, ]);
   const migration = readFileSync(new URL('../../../services/main/migrations/access/1055_target_rating_components.sql', import.meta.url), 'utf8');
   const statement = (table: string) => migration.match(new RegExp(`INSERT INTO access\\.${table}\\b[\\s\\S]*?;`))![0];
   // The migration's own backfill statements, restricted to the Context under test: every head is counted and none has a value.
@@ -173,12 +197,64 @@ test('heads sealed before components existed are counted unvalued, read from ver
     return sql.replace(from, to);
   };
   await r.stack.accessPool.query(restricted(statement('target_rating_component'), 'ON a.id = h.admission_id',
-    `ON a.id = h.admission_id AND h.context = '${context}'`));
-  await r.stack.accessPool.query(restricted(statement('target_rating_context_component'), 'FROM access.target_rating_component GROUP BY context',
-    `FROM access.target_rating_component WHERE context = '${context}' GROUP BY context`));
+    `ON a.id = h.admission_id AND h.context = '${context}'`,
+    ), );
   expect((await r.components(context, target)).row).toEqual({ slots: 3, unvalued: 3, count: 0, sum: 0, histogram: Array(10).fill(0) });
   expect(await r.contextTotals(context)).toMatchObject({ targets: 1, slots: 3, unvalued: 3, count: 0, sum: 0 });
-  // The first verified read answers from the heads' own bytes and records what it learned.
+  const read = () =>
+    r.call(r.owner, 'POST', '/v1/rating-aggregates', {
+      profile: 'realm-target-latest-mean-v1',
+      context,
+      target,
+      actingSubject: r.owner.actor,
+    });
+  expect((await read()).status).toBe(503);
+  expect((await r.components(context, target)).row.unvalued).toBe(3);
+  const lost = `PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(
+      (
+        await r.stack.accessPool.query(
+          'SELECT observation FROM access.target_rating_head WHERE context=$1 AND revision=$2',
+          [context, opinions.get(a.actor)!.observationRevision],
+        )
+      ).rows[0].observation,
+    )} rv:observationHead ${iri(opinions.get(a.actor)!.observationRevision)} } }`;
+  await r.stack.fuseki.update(lost);
+  await expect(
+    reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, { context, target }),
+  ).rejects.toThrow();
+  expect((await r.components(context, target)).row.unvalued).toBe(3);
+  await r.stack.fuseki.update(lost.replace('DELETE DATA', 'INSERT DATA'));
+  const first = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+    context,
+    target,
+    batchSize: 2,
+  });
+  expect(first).toMatchObject({ complete: false, scanned: 2, recorded: 2 });
+  await expect(
+    reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+      context,
+      target,
+      cursor: { ...first.cursor!, recoveryGeneration: '999999' },
+    }),
+  ).rejects.toThrow('stale');
+  expect((await read()).status).toBe(503);
+  const resumed = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+    context,
+    target,
+    batchSize: 2,
+    cursor: first.cursor!,
+  });
+  expect(resumed).toMatchObject({ complete: true, scanned: 1, recorded: 1, cursor: null });
+  // Retrying after a lost response cannot double-count a contribution.
+  expect(
+    await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+      context,
+      target,
+      batchSize: 2,
+      cursor: first.cursor!,
+    }),
+  ).toMatchObject({ complete: true, scanned: 0, recorded: 0 });
   expect(await r.aggregate(context, target)).toMatchObject({ count: 3, population: 3, sum: 18, mean: 6 });
   expect((await r.components(context, target)).row).toEqual({ slots: 3, unvalued: 0, count: 3, sum: 18, histogram: [0, 1, 0, 0, 0, 0, 1, 0, 1, 0] });
   expect(await r.contextTotals(context)).toMatchObject({ targets: 1, slots: 3, unvalued: 0, count: 3, sum: 18 });
@@ -188,11 +264,28 @@ test('heads sealed before components existed are counted unvalued, read from ver
   await r.stack.accessPool.query(`UPDATE access.target_rating_head SET value = NULL, value_known = false
     WHERE context = $1 AND principal_id = $2`, [context, b.principalId]);
   await r.stack.accessPool.query(`UPDATE access.target_rating_component SET unvalued = 1, rating_count = 2, rating_sum = 9,
-    histogram = ARRAY[0,1,0,0,0,0,1,0,0,0] WHERE context = $1 AND target = $2`, [context, target]);
-  await r.stack.accessPool.query(`UPDATE access.target_rating_context_component SET unvalued = 1, rating_count = 2, rating_sum = 9,
-    histogram = ARRAY[0,1,0,0,0,0,1,0,0,0] WHERE context = $1`, [context]);
+    histogram = ARRAY[0,1,0,0,0,0,1,0,0,0] WHERE context = $1 AND target = $2`, [context, target], );
   await r.rate(b, context, target, 5, opinions.get(b.actor)!.observationRevision);
   expect((await r.components(context, target)).row).toEqual({ slots: 3, unvalued: 0, count: 3, sum: 14, histogram: [0, 1, 0, 0, 1, 0, 1, 0, 0, 0] });
   await r.expectComponentsMatchHeads(context, target);
   expect(await r.aggregate(context, target)).toMatchObject({ count: 3, sum: 14 });
+}, 300_000);
+test('target aggregate evidence names its Context revision and last admission and ignores unrelated writes', async () => {
+  const created = await r.context({ displayThreshold: 1 });
+  const target = await r.resource('evidence-target'),
+    other = await r.resource('evidence-other');
+  const person = await r.person('evidence-rater');
+  await r.rate(person, created.context, target, 7);
+  const before = await r.aggregate(created.context, target);
+  const last = (
+    await r.stack.accessPool.query(
+      'SELECT last_admission_id FROM access.target_rating_component WHERE context=$1 AND target=$2',
+      [created.context, target],
+    )
+  ).rows[0].last_admission_id;
+  expect(before.lastAdmissionId).toBe(last);
+  expect(before.contextRevision).toBe(created.contextRevision);
+  await r.rate(person, created.context, other, 3);
+  await r.resource('evidence-unrelated');
+  expect(await r.aggregate(created.context, target)).toEqual(before);
 }, 300_000);

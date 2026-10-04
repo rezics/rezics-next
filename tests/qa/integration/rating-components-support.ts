@@ -9,6 +9,9 @@ type Stack = Awaited<ReturnType<typeof startMediaStack>>;
 export type Person = Awaited<ReturnType<Stack['member']>>;
 export interface Opinion { observation: string; observationRevision: string; value: number | null }
 export interface Aggregate { count: number; population: number; withdrawnCount: number; sum: number;
+  contextRevision: string;
+  lastAdmissionId: string | null;
+  sourcePosition: { dataEpoch: string; sequence: string };
   mean: number | null; meanDisplay: string; displayThreshold: number; histogram: number[];
   precision: { kind: string } }
 export const short = (value: string) => value.slice(-36);
@@ -65,8 +68,10 @@ export async function startRatingStack(label: string) {
     return created.component;
   };
   await owner.grant(`rating:context:${realm}`, 'rating.context.create');
-  const context = async (body: Record<string, unknown> = {}) => (await json<{ context: string; displayThreshold: number;
-    profile: string }>(await call(owner, 'POST', '/v1/rating-contexts', { profile: 'realm-target-rating-context-v3', realm,
+  const context = async (body: Record<string, unknown> = {}) => await json<{ context: string;
+      contextRevision: string; displayThreshold: number;
+    profile: string ;
+    }>(await call(owner, 'POST', '/v1/rating-contexts', { profile: 'realm-target-rating-context-v3', realm,
     question: `How good is this character? ${randomUUID().slice(0, 8)}`, language: 'en', targetGrain: 'resource',
     actingSubject: owner.actor, ...body }), 201));
   const granted = new Set<string>();
@@ -105,12 +110,12 @@ export async function startRatingStack(label: string) {
     const { row, recomputed } = await components(contextId, target);
     expect(row).toEqual(recomputed);
   };
-  /** The Context's totals: its shard rows summed, as the ranking prior reads them. */
-  const contextTotals = async (contextId: string) => (await stack.accessPool.query(`SELECT sum(targets)::int AS targets,
+  /** Recompute across target rows for fixture assertions; no Context totals are stored. */
+  const contextTotals = async (contextId: string) => (await stack.accessPool.query(`SELECT count(*)::int AS targets,
     sum(slots)::int AS slots, sum(unvalued)::int AS unvalued, sum(rating_count)::int AS count, sum(rating_sum)::int AS sum,
-    ARRAY(SELECT sum(u.h)::int FROM access.target_rating_context_component s, unnest(s.histogram) WITH ORDINALITY AS u(h, i)
+    ARRAY(SELECT sum(u.h)::int FROM access.target_rating_component s, unnest(s.histogram) WITH ORDINALITY AS u(h, i)
       WHERE s.context = $1 GROUP BY u.i ORDER BY u.i) AS histogram
-    FROM access.target_rating_context_component WHERE context = $1 HAVING count(*) > 0`, [contextId])).rows[0] ?? null;
+    FROM access.target_rating_component WHERE context = $1 HAVING count(*) > 0`, [contextId])).rows[0] ?? null;
   return { stack, app, call, json, person, owner, realm, resource, context, rate, aggregate, components, measure,
     expectComponentsMatchHeads, contextTotals, stop: () => stack.stop() };
 }

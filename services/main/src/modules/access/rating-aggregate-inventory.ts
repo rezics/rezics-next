@@ -1,5 +1,5 @@
 import { standingRatingSlotIri } from '../rating/observation.ts';
-import { targetRatingDigest } from '../rating/target-digest.ts';
+import { targetRatingDigest, targetRatingSlotIri } from '../rating/target-digest.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { GraphTerminalProof } from './admission.ts';
@@ -44,6 +44,26 @@ interface SealingRatingAdmission { id: string; action: string; principal_id: str
   acting_subject: string; request_digest: string }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
+/** Authority remains Context-scoped; only inventory serialization is per target.
+ * The recovery and authority fences are acquired before this gate everywhere. */
+export async function lockRatingObservationTarget(
+  client: PoolClient,
+  context: string,
+  target: string,
+): Promise<void> {
+  if (![context, target].every((value) => nativeId.test(value)))
+    throw new RatingInventoryConflict('invalid Rating target');
+  await client.query(
+    `INSERT INTO access.rating_observation_gate (context,target) VALUES ($1,$2)
+    ON CONFLICT (context,target) DO NOTHING`,
+    [context, target],
+  );
+  await client.query(
+    'SELECT 1 FROM access.rating_observation_gate WHERE context = $1 AND target = $2 FOR UPDATE',
+    [context, target],
+  );
+}
+
 /** First seal only, inside the admission transaction. Exact-head CAS orders
  * delayed seals: a child waits for its parent's seal. Retried seals never rewind. */
 export async function recordRatingAggregateHead(client: PoolClient,
@@ -78,10 +98,17 @@ export async function recordRatingAggregateHead(client: PoolClient,
       || proof.work !== undefined || proof.mainVersion !== undefined || proof.release !== undefined) {
       throw new RatingInventoryConflict('Target rating receipt differs from its inventory');
     }
+    if (
+      proof.scope !== `rating:observe:${proof.context}` ||
+      proof.slot !== targetRatingSlotIri(admitted.principal_id, proof.context!, proof.target)
+    ) {
+      throw new RatingInventoryConflict('Target rating slot differs from its principal');
+    }
     const context = await client.query('SELECT 1 FROM access.rating_aggregate_context WHERE context = $1 AND realm = $2 AND revision = $3',
       [proof.context, proof.realm, proof.contextRevision]);
     if (context.rowCount !== 1) throw new RatingInventoryConflict('Target Context seal unavailable');
     const value = sealedTargetValue(proof, admitted);
+    await lockRatingObservationTarget(client, proof.context!, proof.target);
     const values = [proof.context, proof.target, proof.slot, proof.observation, proof.revision,
       admitted.principal_id, admitted.id];
     if (proof.predecessor === null) {
@@ -119,6 +146,7 @@ export async function recordRatingAggregateHead(client: PoolClient,
   }
   const values = [proof.context, proof.mainVersion, proof.slot, proof.work,
     proof.observation, proof.revision, admitted.principal_id, admitted.id, proof.release ?? null];
+  await lockRatingObservationTarget(client, proof.context!, proof.release ?? proof.mainVersion!);
   if (proof.predecessor === null) {
     await client.query(`INSERT INTO access.rating_aggregate_head
       (context, main_version, slot, work, observation, revision, principal_id, admission_id,
@@ -160,16 +188,8 @@ const bins = (value: number | null) => Array.from({ length: 10 }, (_, index) => 
 const histogramMove = (previous: string, next: string) => `ARRAY(SELECT u.h + (CASE WHEN u.i = ${next}::int THEN 1 ELSE 0 END)
   - (CASE WHEN u.i = ${previous}::int THEN 1 ELSE 0 END) FROM unnest(histogram) WITH ORDINALITY AS u(h, i) ORDER BY u.i)`;
 
-export const CONTEXT_COMPONENT_SHARDS = 16;
-/** The shard of a target's Context totals: the low nibble of the first byte of its
- * SHA-256, the same expression the migration's backfill computes in SQL. */
-export function targetShard(target: string): number {
-  return createHash('sha256').update(target, 'utf8').digest()[0]! % CONTEXT_COMPONENT_SHARDS;
-}
-
-/** Moves the target's row and its shard of the Context's totals in the transaction
- * of the seal (or repair) that moved a head. Rows of one Context change only under
- * that Context's scope gate, so reading before writing cannot race. */
+/** Moves the target's components under its observation gate, in the same
+ * transaction as the seal or reconstruction that moved a head. */
 async function moveTargetComponents(client: PoolClient, context: string, target: string, admission: string | null,
   move: ComponentMove): Promise<void> {
   const count = (move.next === null ? 0 : 1) - (move.previous === null ? 0 : 1);
@@ -188,20 +208,6 @@ async function moveTargetComponents(client: PoolClient, context: string, target:
       rating_count = rating_count + $5, rating_sum = rating_sum + $6, histogram = ${histogramMove('$7', '$8')},
       last_admission_id = COALESCE($9::uuid, last_admission_id) WHERE context = $1 AND target = $2`,
     [context, target, move.slots, move.unvalued, count, sum, move.previous, move.next, admission]);
-  }
-  // Only this target's shard of the Context's totals moves; the other fifteen rows are not touched.
-  const shard = targetShard(target);
-  const shardRow = await client.query('SELECT 1 FROM access.target_rating_context_component WHERE context = $1 AND shard = $2 FOR UPDATE',
-    [context, shard]);
-  if (!shardRow.rowCount) {
-    await client.query(`INSERT INTO access.target_rating_context_component
-      (context,shard,targets,slots,unvalued,rating_count,rating_sum,histogram) VALUES ($1,$2,1,1,0,$3,$4,$5::int[])`,
-    [context, shard, count, sum, bins(move.next)]);
-  } else {
-    await client.query(`UPDATE access.target_rating_context_component SET targets = targets + $3,
-      slots = slots + $4, unvalued = unvalued + $5, rating_count = rating_count + $6, rating_sum = rating_sum + $7,
-      histogram = ${histogramMove('$8', '$9')} WHERE context = $1 AND shard = $2`,
-    [context, shard, existing.rowCount ? 0 : 1, move.slots, move.unvalued, count, sum, move.previous, move.next]);
   }
 }
 
@@ -242,7 +248,7 @@ export async function readRatingContextPolicyWitness(pool: Pool, context: string
 // they also count toward the population: truncation cannot hide an overflow.
 // Every origin, precedence and admission lookup is an exact indexed probe.
 // https://www.postgresql.org/docs/18/indexes-ordering.html
-function inventorySql(release: boolean | 'target'): string { return `SELECT c.realm, c.revision AS context_revision,
+function inventorySql(release: boolean | 'target', reconstruction = false): string { return `SELECT c.realm, c.revision AS context_revision,
     c.policy_revision,
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
     ca.graph_receipt AS context_receipt, ca.graph_data_epoch AS context_epoch,
@@ -273,14 +279,63 @@ function inventorySql(release: boolean | 'target'): string { return `SELECT c.re
           AND origin.slot=s.origin_slot AND origin.principal_id=s.principal_id
           AND origin.target_release IS NULL LIMIT 1) h ON native.present IS NULL
       WHERE native.present IS NULL
-    ) selected ORDER BY slot LIMIT 101` : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
-    WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ORDER BY slot LIMIT 101`}) h ON true
+    ) selected ORDER BY slot LIMIT 101`
+      : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
+    WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ${reconstruction ? 'AND NOT value_known AND slot > $3' : ''} ORDER BY slot LIMIT ${reconstruction ? '$4' : '101'}`
+  }) h ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id LIMIT 1) original ON true
   WHERE c.context = $1 AND f.id = true`; }
 export const RATING_INVENTORY_SQL = inventorySql(false);
 export const RELEASE_RATING_INVENTORY_SQL = inventorySql(true);
 export const TARGET_RATING_INVENTORY_SQL = inventorySql('target');
+
+const RECONSTRUCTION_INVENTORY_SQL = inventorySql('target', true);
+
+/** Indexed keyset page of legacy heads. Already reconstructed heads are skipped;
+ * a retry of a page cannot add a contribution twice. No population count or OFFSET. */
+export async function readTargetRatingReconstructionBatch(
+  pool: Pool,
+  context: string,
+  target: string,
+  afterSlot: string,
+  limit: number,
+  signal = AbortSignal.timeout(10_000),
+): Promise<RatingAggregateInventory> {
+  if (
+    ![context, target].every((value) => nativeId.test(value)) ||
+    (afterSlot !== '' && !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(afterSlot)) ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_RATING_AGGREGATE_SLOTS
+  ) {
+    throw new RatingInventoryConflict('invalid reconstruction page');
+  }
+  return withInventoryClient(pool, signal, async (client) => {
+    const rows = (
+      await client.query(RECONSTRUCTION_INVENTORY_SQL, [context, target, afterSlot, limit])
+    ).rows;
+    const first = rows[0];
+    if (
+      !first ||
+      first.open !== true ||
+      first.context_state !== 'sealed' ||
+      first.context_outcome !== 'succeeded'
+    ) {
+      throw new RatingInventoryConflict('Rating inventory is unavailable');
+    }
+    return {
+      realm: first.realm,
+      contextRevision: first.context_revision,
+      policyRevision: first.policy_revision ?? null,
+      contextReceipt: first.context_receipt,
+      contextDataEpoch: first.context_epoch,
+      contextSequence: first.context_sequence,
+      recoveryGeneration: first.generation,
+      heads: inventoryHeads(rows, 'target', context, target),
+    };
+  });
+}
 
 /** One bounded owner snapshot; raw counting identities stay within Access. */
 export async function readRatingAggregateInventory(pool: Pool, context: string,
@@ -298,16 +353,12 @@ export async function readReleaseRatingAggregateInventory(pool: Pool, context: s
  * the sums, so the figures are exact only while `unvalued` is zero. */
 export interface TargetRatingComponents {
   slots: number; unvalued: number; count: number; sum: number; histogram: number[];
-  last: { receipt: string; requestDigest: string; dataEpoch: string; sequence: string };
-}
-export interface ContextRatingComponents {
-  targets: number; slots: number; unvalued: number; count: number; sum: number; histogram: number[];
+  last: { admissionId: string; receipt: string; requestDigest: string; dataEpoch: string; sequence: string };
 }
 /** Context seal, recovery fence and components of the requested targets from one
  * snapshot. `heads` is the exact private inventory, read only for one target
  * small enough to verify head by head. */
 export interface TargetRatingSnapshot extends Omit<RatingAggregateInventory, 'heads'> {
-  contextComponents: ContextRatingComponents | null;
   members: ReadonlyMap<string, TargetRatingComponents>;
   heads: RatingInventoryHead[] | null;
 }
@@ -319,26 +370,12 @@ const COMPONENT_CONTEXT_SQL = `SELECT c.realm, c.revision AS context_revision, c
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
   WHERE c.context = $1 AND f.id = true`;
-/** At most sixteen shard rows, whatever the number of targets. */
-const COMPONENT_SHARDS_SQL = `SELECT targets, slots, unvalued, rating_count, rating_sum, histogram
-  FROM access.target_rating_context_component WHERE context = $1`;
 const COMPONENT_MEMBERS_SQL = `SELECT k.target, k.slots, k.unvalued, k.rating_count, k.rating_sum, k.histogram,
-    la.state, la.graph_outcome, la.graph_receipt, la.graph_data_epoch, la.graph_sequence, la.request_digest,
+    k.last_admission_id, la.state, la.graph_outcome, la.graph_receipt, la.graph_data_epoch, la.graph_sequence, la.request_digest,
     (la.action = 'rating.observation.set' AND la.scope_id = 'rating:observe:' || k.context) AS identity_valid
   FROM access.target_rating_component k JOIN access.admission la ON la.id = k.last_admission_id
   WHERE k.context = $1 AND k.target = ANY($2::text[])`;
 
-/** The Context's totals are the sum of its shard rows, each of which holds its own CHECKs. */
-export function sumShards(rows: readonly QueryResultRow[]): ContextRatingComponents | null {
-  if (!rows.length) return null;
-  const total: ContextRatingComponents = { targets: 0, slots: 0, unvalued: 0, count: 0, sum: 0, histogram: Array(10).fill(0) };
-  for (const row of rows) {
-    total.targets += Number(row.targets); total.slots += Number(row.slots); total.unvalued += Number(row.unvalued);
-    total.count += Number(row.rating_count); total.sum += Number(row.rating_sum);
-    (row.histogram as unknown[]).forEach((bin, index) => { total.histogram[index] = total.histogram[index]! + Number(bin); });
-  }
-  return total;
-}
 const figures = (row: QueryResultRow) => ({ slots: Number(row.slots), unvalued: Number(row.unvalued),
   count: Number(row.rating_count), sum: Number(row.rating_sum), histogram: (row.histogram as unknown[]).map(Number) });
 
@@ -355,13 +392,13 @@ export async function readTargetRatingSnapshot(pool: Pool, context: string, targ
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
     }
-    const shards = (await client.query(COMPONENT_SHARDS_SQL, [context])).rows;
     const members = new Map<string, TargetRatingComponents>();
     for (const row of (await client.query(COMPONENT_MEMBERS_SQL, [context, targets])).rows) {
       if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true) {
         throw new RatingInventoryConflict('Target component seal is unavailable');
       }
-      members.set(row.target, { ...figures(row), last: { receipt: row.graph_receipt, requestDigest: row.request_digest,
+      members.set(row.target, { ...figures(row), last: { admissionId: row.last_admission_id,
+            receipt: row.graph_receipt, requestDigest: row.request_digest,
         dataEpoch: row.graph_data_epoch, sequence: row.graph_sequence } });
     }
     const only = options.heads ? members.get(targets[0]!) : undefined;
@@ -372,7 +409,6 @@ export async function readTargetRatingSnapshot(pool: Pool, context: string, targ
     return { realm: first.realm, contextRevision: first.context_revision, policyRevision: first.policy_revision ?? null,
       contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch,
       contextSequence: first.context_sequence, recoveryGeneration: first.generation,
-      contextComponents: sumShards(shards),
       members, heads };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
@@ -380,22 +416,34 @@ export async function readTargetRatingSnapshot(pool: Pool, context: string, targ
   } });
 }
 
-/** Records values a verified read learned for heads sealed before components
+/** Records values a reconstruction batch verified for heads sealed before components
  * existed. A head moves only if it still carries the verified revision, and its
- * contribution moves both component rows in the same transaction. */
+ * contribution moves the target components in the same transaction. */
 export async function recordTargetRatingValues(pool: Pool, context: string, target: string, generation: string,
   heads: readonly { slot: string; revision: string; value: number | null }[],
   signal = AbortSignal.timeout(10_000)): Promise<number> {
-  if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
+  if (![context, target].every(value => nativeId.test(value)) ||
+    heads.length > MAX_RATING_AGGREGATE_SLOTS ||
+    heads.some(
+      (head) =>
+        !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(head.slot) ||
+        !nativeId.test(head.revision) ||
+        (head.value !== null &&
+          (!Number.isInteger(head.value) || head.value < 1 || head.value > 10)),
+    )
+  ) {
+    throw new RatingInventoryConflict('invalid reconstruction values');
+  }
   return withInventoryClient(pool, signal, async client => { try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query('SELECT open, generation FROM access.recovery_fence WHERE id = true');
+    const fence = await client.query('SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== true || fence.rows[0]?.generation !== generation) {
       throw new RatingInventoryConflict('Recovery fence changed');
     }
-    await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR UPDATE', [`rating:observe:${context}`]);
+    await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE', [`rating:observe:${context}`]);
+    await lockRatingObservationTarget(client, context, target);
     let recorded = 0;
     for (const head of heads) {
       const changed = await client.query(`UPDATE access.target_rating_head SET value = $5, value_known = true
@@ -419,6 +467,9 @@ function inventoryHeads(rows: QueryResultRow[], release: boolean | 'target', con
     if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true
       || !(row.evaluated_at instanceof Date) || !(row.submitted_at instanceof Date)) {
       throw new RatingInventoryConflict('Rating inventory head is unavailable');
+    }
+    if (release === 'target' && row.slot !== targetRatingSlotIri(row.principal_id, context, target)) {
+      throw new RatingInventoryConflict('Target inventory slot differs from its principal');
     }
     if (release === 'target' ? row.target !== target : release ? row.target_release !== target : row.target_release !== null) {
       throw new RatingInventoryConflict('Rating inventory target differs');

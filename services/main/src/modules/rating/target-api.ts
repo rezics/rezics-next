@@ -55,6 +55,8 @@ const aggregatePrecision = t.Union([t.Object({ kind: t.Literal('no-data') }),
 /** Count, histogram and sum always show; the mean only from the Context's display threshold. */
 export const targetAggregateResult = t.Object({ profile: t.Literal(TARGET_AGGREGATE_PROFILE),
   complete: t.Literal(true), context: readId, realm: readId, target: readId, targetGrain,
+  contextRevision: readId,
+  lastAdmissionId: t.Nullable(t.String({ format: 'uuid' })),
   scope: t.Object({ question: t.String({ minLength: 3, maxLength: 120 }), language: questionLanguage, grain: targetGrain,
     population: t.Literal('account-principal'), countedTarget: readId }),
   scale: targetRatingContextReadResult.properties.scale, cadence: t.Literal('standing'),

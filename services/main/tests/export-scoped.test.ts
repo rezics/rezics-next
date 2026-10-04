@@ -13,6 +13,8 @@ const aggregate: Aggregate = {
   profile: 'realm-target-latest-mean-v1',
   complete: true,
   context: 'https://example.org/context',
+  contextRevision: 'https://example.org/context-revision',
+  lastAdmissionId: 'ad000000-0000-4000-8000-000000000000',
   realm: 'https://example.org/realm',
   target: 'https://example.org/projection',
   targetGrain: 'projection',
@@ -87,6 +89,7 @@ test('derived rollups retain unavailable members and coverage without leaking me
     scope: aggregate.scope,
     scale: aggregate.scale,
     formula: 'mean-of-means',
+    contextRevision: aggregate.contextRevision,
     displayThreshold: 10,
     memberCount: 2,
     coverage: { members: 2, available: 1, meetingThreshold: 0 },
@@ -96,6 +99,7 @@ test('derived rollups retain unavailable members and coverage without leaking me
       {
         target: aggregate.target,
         status: 'available',
+        lastAdmissionId: aggregate.lastAdmissionId,
         components: {
           population: 1,
           count: 1,

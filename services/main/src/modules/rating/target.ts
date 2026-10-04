@@ -19,13 +19,13 @@ import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInpu
   StaleRatingObservation, sealStandingRatingAdmission, sealRatingObservationTerminal,
   standingRatingReceiptIri, type RatingObservationReceipt } from './observation.ts';
 import { RatingTargetGrainMismatch } from './release.ts';
-import { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput } from './target-digest.ts';
+import { TARGET_OBSERVATION_ID, targetRatingDigest, targetRatingSlotIri, type TargetRatingInput } from './target-digest.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from './target-context-authority.ts';
 import { ACCEPTED_FRAME_DIMENSIONS, CONTEXT_ACCEPTANCE_COST, assertRatingTargetAccepted,
   readContextAcceptance, validSubjectType, subjectTypeTerm, RatingTargetNotAccepted, type ContextAcceptance, type AcceptanceTarget } from './acceptance.ts';
 
-export { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput };
+export { TARGET_OBSERVATION_ID, targetRatingDigest, targetRatingSlotIri, type TargetRatingInput };
 
 export const LEGACY_TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
 export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v2';
@@ -52,10 +52,9 @@ export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, c
   questionLanguageBytes: 255 } as const;
 /** v4 adds one bounded acceptance read; projection declarations add a coordinate
  * read and one frame batch. No observation population or membership walk. The
- * existing Context scope gate still serializes registration, claim and sealing. */
+ * Context authority gate serializes registration and claim; seals use a target gate. */
 export const ACCEPTED_TARGET_RATING_WRITE_COST = { ...TARGET_RATING_WRITE_COST,
   graphCalls: 48, graphBytes: 1_048_576, projectionFrames: 8, acceptedTypes: 32 } as const;
-const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 /** `accepted` selects v4; older profiles retain their admitted meaning. */
 export interface TargetContextInput extends ContextAcceptance { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string;
@@ -98,13 +97,6 @@ const PROJECTION_DISPLAY_THRESHOLD = 10;
 export const MAX_DISPLAY_THRESHOLD = 1000;
 export function effectiveDisplayThreshold(grain: string, declared: number | null): number {
   return declared ?? (grain === 'projection' ? PROJECTION_DISPLAY_THRESHOLD : DEFAULT_DISPLAY_THRESHOLD);
-}
-export function targetRatingSlotIri(principalId: string, context: string, target: string): string {
-  if (!/^[0-9a-f-]{36}$/.test(principalId) || ![context, target].every(value => nativeId.test(value))) {
-    throw new InvalidRatingObservationInput('Invalid target slot');
-  }
-  return `urn:rezics:rating-slot:${hash(JSON.stringify({ family: TARGET_OBSERVATION_ID,
-    principalId, context, target, cadence: RATING_STANDING_CADENCE }))}`;
 }
 
 /** Global is an ownership alternative, never a synthetic Realm. The marker is

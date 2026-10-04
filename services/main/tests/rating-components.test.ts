@@ -73,6 +73,8 @@ test('an aggregate response past the former 100-slot bound is a valid contract, 
   const shown = histogramOf(...Array.from({ length: 150 }, (_, i) => (i % 10) + 1));
   const result = (figures: typeof shown, display: Parameters<typeof precision>[1]) => ({
     profile: 'realm-target-latest-mean-v1', complete: true, context: id(1), realm: id(2), target: id(3), targetGrain: 'resource',
+    contextRevision: id(4),
+    lastAdmissionId: 'ad000000-0000-4000-8000-000000000000',
     scope: { question: 'How good is this character?', language: 'en', grain: 'resource', population: 'account-principal', countedTarget: id(3) },
     scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', populationPolicy: 'account-principal',
     aggregationPolicy: 'latest-per-rater-mean', population: 160, count: figures.count, withdrawnCount: 160 - figures.count,

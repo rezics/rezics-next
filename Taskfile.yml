@@ -492,6 +492,11 @@ tasks:
     cmds:
       - bun services/main/src/private-search-pending.ts {{.CLI_ARGS}}
 
+  rating:reconstruct:
+    desc: Resume bounded legacy target-rating reconstruction with a local checkpoint.
+    cmds:
+      - bun services/main/src/rating-reconstruction.ts {{.CLI_ARGS}}
+
   research:architecture:
     desc: Run the storage architecture research lab.
     cmds:

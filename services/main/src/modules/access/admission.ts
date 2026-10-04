@@ -1691,12 +1691,15 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
-      const locator = await client.query<{ scope_id: string }>(
-        'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
+      const locator = await client.query<{ scope_id: string; action: string }>(
+        'SELECT scope_id, action FROM access.admission WHERE id = $1', [admissionId]);
       if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
       const scope = locator.rows[0]!.scope_id;
+      // Observation seals share the unchanged authority fence. Their owner takes
+      // an exclusive (Context, target) gate before it moves any inventory.
+      const lock = locator.rows[0]!.action === 'rating.observation.set' ? 'SHARE' : 'UPDATE';
       const gate = await client.query<GateRow>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+        `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR ${lock}`, [scope]);
       if (gate.rowCount !== 1) throw new AdmissionUnavailable('scope gate is unavailable');
       const result = await client.query<AdmissionRow & {
         graph_receipt: string | null; graph_outcome: string | null;

@@ -35,14 +35,14 @@ export function rollUp(formula: RollupFormula, members: readonly RatingComponent
   return { coverage, value, valueWithheld: null };
 }
 
-/** The prior comes from the same RatingContext's own components: its pooled mean,
+/** The prior comes from the readable requested members of one RatingContext: its pooled mean,
  * weighted as the average ratings per target but never lighter than the ranking
  * minimum, so a sparse Context cannot hand a handful of ratings full say. */
 export function rankingPrior(context: { targets: number; count: number; sum: number }) {
   if (context.targets < 1 || context.count < 1) return null;
   return { mean: context.sum / context.count,
     weight: Math.max(RANK_MINIMUM_RATINGS, Math.round(context.count / context.targets)),
-    ratings: context.count, targets: context.targets };
+    };
 }
 export type RankingPrior = NonNullable<ReturnType<typeof rankingPrior>>;
 
@@ -54,9 +54,11 @@ export function weightedRating(components: RatingComponents, prior: RankingPrior
 
 /** Members with enough ratings, best first; ties keep the larger sample, then target order. */
 export function rankMembers<T extends { target: string; components: RatingComponents }>(members: readonly T[],
-  prior: RankingPrior) {
-  return members.filter(member => member.components.count >= RANK_MINIMUM_RATINGS)
-    .map(member => ({ target: member.target, count: member.components.count,
+  prior: RankingPrior,
+  threshold = RANK_MINIMUM_RATINGS,
+) {
+  return members.filter((member ) => member.components.count >= Math.max(RANK_MINIMUM_RATINGS, threshold))
+    .map((member ) => ({ target: member.target, count: member.components.count,
       mean: member.components.sum / member.components.count, score: weightedRating(member.components, prior) }))
     .sort((a, b) => b.score - a.score || b.count - a.count || (a.target < b.target ? -1 : 1))
     .map((item, index) => ({ position: index + 1, ...item }));

@@ -15,7 +15,7 @@ import type { TargetRatingInventoryStore } from './target-inventory.ts';
 import { ROLLUP_PROFILE } from './rollup-api.ts';
 
 /** This owner's own work is fixed: one Access snapshot of every member's row and
- * the Context's own (plus a fence recheck) and two graph probes, whatever the
+ * the Context seal (plus a fence recheck) and two graph probes, whatever the
  * members' ratings. Acceptance is that Context read. A non-projection member is
  * classified from the types the resolver already returned. A projection's subject
  * and frames are one probe per visibility batch, and only when the Context declares
@@ -211,21 +211,35 @@ async function assemble(session: WorkReadSession, store: TargetRatingInventorySt
     const components = sealed ?? { slots: 0, count: 0, sum: 0, histogram: Array.from({ length: 10 }, () => 0) };
     return { target, status: 'available' as const, components: { population: components.slots, count: components.count,
       withdrawnCount: components.slots - components.count, sum: components.sum, histogram: [...components.histogram] },
+      lastAdmissionId: sealed?.last.admissionId ?? null,
     ...memberFigure(components, context.displayThreshold) };
   });
   const available = members.flatMap(member => member.status === 'available' ? [member] : []);
   const figures = available.map(member => member.components);
   const ranking = input.rank ? (() => {
-    const prior = snapshot.contextComponents && snapshot.contextComponents.unvalued === 0
-      && componentsAgree(snapshot.contextComponents) ? rankingPrior(snapshot.contextComponents) : null;
-    return { formula: RANK_FORMULA, minimumRatings: RANK_MINIMUM_RATINGS, status: prior ? 'ranked' as const : 'unavailable' as const,
-      prior, items: prior ? rankMembers(available, prior) : [] };
+    const prior = rankingPrior({ targets: available.length,
+      count: figures.reduce((sum, member) => sum + member.count, 0),
+      sum: figures.reduce((sum, member) => sum + member.sum, 0) });
+    return { formula: RANK_FORMULA, minimumRatings: Math.max(RANK_MINIMUM_RATINGS, context.displayThreshold),
+      status: prior ? 'ranked' as const : 'unavailable' as const,
+      prior, items: prior ? rankMembers(available, prior, context.displayThreshold) : [] };
   })() : null;
-  if (!await store.checkFence(snapshot.recoveryGeneration, signal)) throw new RatingAggregateUnavailable('Recovery fence changed');
+  if (!await store.checkFence(snapshot.recoveryGeneration, signal))
+    throw new RatingAggregateUnavailable('Recovery fence changed');
+  const position = available.reduce(
+    (last, member) => {
+      const next = snapshot.members.get(member.target)?.last;
+      return next && BigInt(next.sequence) > BigInt(last.sequence) ? next : last;
+    },
+    { dataEpoch: snapshot.contextDataEpoch, sequence: snapshot.contextSequence },
+  );
   return { profile: ROLLUP_PROFILE, context: input.context, realm: context.realm,
+    contextRevision: snapshot.contextRevision,
     scope: { question: context.question, language: context.language, grain: context.targetGrain,
       population: 'account-principal' as const }, scale: context.scale, formula: input.formula,
     displayThreshold: context.displayThreshold, memberCount: input.targets.length,
     ...rollUp(input.formula, figures, input.targets.filter(target => verdict.get(target) !== 'not-accepted').length, context.displayThreshold),
-    members, rank: ranking, sourcePosition: { datasetId: 'product' as const, ...session.position } };
+    members, rank: ranking, sourcePosition: { datasetId: 'product' as const, dataEpoch: position.dataEpoch,
+      sequence: position.sequence,
+    } };
 }

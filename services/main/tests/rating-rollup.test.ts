@@ -91,8 +91,8 @@ test("a member's own figure follows the same threshold as its page", () => {
 test('the ranking prior is the Context pooled mean weighted by its average ratings per target, never under the minimum', () => {
   expect(rankingPrior({ targets: 0, count: 0, sum: 0 })).toBeNull();
   expect(rankingPrior({ targets: 3, count: 0, sum: 0 })).toBeNull();
-  expect(rankingPrior({ targets: 4, count: 100, sum: 600 })).toEqual({ mean: 6, weight: RANK_MINIMUM_RATINGS, ratings: 100, targets: 4 });
-  expect(rankingPrior({ targets: 4, count: 1000, sum: 7000 })).toEqual({ mean: 7, weight: 250, ratings: 1000, targets: 4 });
+  expect(rankingPrior({ targets: 4, count: 100, sum: 600 })).toEqual({ mean: 6, weight: RANK_MINIMUM_RATINGS, });
+  expect(rankingPrior({ targets: 4, count: 1000, sum: 7000 })).toEqual({ mean: 7, weight: 250});
 });
 
 test('weighted rating pulls a small sample toward the prior and leaves a large one near its own mean', () => {
@@ -121,6 +121,28 @@ test('a ranking can order members differently from their raw means', () => {
   const ranked = rankMembers([{ target: id(1), components: few! }, { target: id(2), components: many! }], prior);
   expect(ranked.map(item => item.target)).toEqual([id(2), id(1)]);
   expect(ranked[0]!.mean < ranked[1]!.mean).toBe(true);
+});
+
+test('ranking never reveals a mean below a Context threshold higher than 50', () => {
+  const [below, enough] = members([60, 10], [80, 8]);
+  const prior = { mean: 8, weight: 50 };
+  expect(
+    rankMembers(
+      [
+        { target: id(1), components: below! },
+        { target: id(2), components: enough! },
+      ],
+      prior,
+      80,
+    ).map((item) => item.target),
+  ).toEqual([id(2)]);
+});
+
+test('the public prior contains only the mean and weight', () => {
+  expect(Object.keys(rankingPrior({ targets: 2, count: 100, sum: 600 })!).sort()).toEqual([
+    'mean',
+    'weight',
+  ]);
 });
 
 test('a roll-up request names one Context, one to 200 distinct members and a known formula', () => {
