@@ -78,13 +78,31 @@ test('Posts retain independent custody, shared text and comments, and per-occurr
     };
     const firstBook = await book('Shared serial'), secondBook = await book('Second serial');
     await grant(cowriter, `work:edit:${firstBook.work}`, 'work.edit');
+    // Chapter creation is irrelevant to Discover only while the Book's own basis is unchanged.
+    const bookDiscoveryBasis = async () => (await stack.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      SELECT ?head ?main ?classification ?credit ?creditRevision WHERE {
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(firstBook.work)} rv:head ?head ; rv:mainVersion ?main .
+          OPTIONAL {
+            { ?classification a rv:ClassificationApplication ; rv:targetMainVersion ?main }
+            UNION { ?classification a rdf:Statement ; rdf:subject ?main ; rdf:predicate rv:classifiedAs }
+          }
+          OPTIONAL { ?credit rv:work ${iri(firstBook.work)} ; rv:creditRevision ?creditRevision }
+        }
+      } ORDER BY ?head ?main ?classification ?credit ?creditRevision`)).results?.bindings ?? [];
+    const bookBeforeChapters = await bookDiscoveryBasis();
+    expect(bookBeforeChapters).toHaveLength(1);
+    expect(bookBeforeChapters[0]).toMatchObject({ head: { type: 'uri' }, main: { value: firstBook.mainVersion } });
     const body = { profile: 'book-chapter-create-v1', title: 'Opening chapter', language: 'en', direction: 'ltr',
       parent: firstBook.structure, position: 'last', expectedCompositionHead: firstBook.revision, actingSubject: author.actor };
     const createKey = randomUUID();
     const first = await json<{ post: string; revision: string; variantId: string; occurrence: string;
       compositionRevision: string; receipt: string }>(await send(author, 'POST', `/v1/works/${short(firstBook.work)}/chapters`, body, createKey));
+    expect(await bookDiscoveryBasis()).toEqual(bookBeforeChapters);
     const second = await json<typeof first>(await send(cowriter, 'POST', `/v1/works/${short(firstBook.work)}/chapters`, {
       ...body, title: 'Cowriter chapter', expectedCompositionHead: first.compositionRevision, actingSubject: cowriter.actor }));
+    expect(await bookDiscoveryBasis()).toEqual(bookBeforeChapters);
     const draft = (post: typeof first, actor = author, expectedHead: string | null = null) => send(actor, 'POST', '/v1/content-drafts', {
       profile: 'content-text-v1', resourceId: post.post, variantId: post.variantId,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead,
