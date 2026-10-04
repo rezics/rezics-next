@@ -188,6 +188,7 @@ export function PositionControl({
                     locale={locale}
                     load={load}
                     value={[]}
+                    selectionBehavior="preserve"
                     renderItem={(item) => (
                       <span className="flex min-w-0 items-center gap-2">
                         <CheckIcon
