@@ -9,13 +9,17 @@ import {
 } from '@rezics/observability/runtime';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceCard } from '../../../services/main/src/modules/query/resource-contract.ts';
+import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
 
 test('G1051: Agent Query batches public policy at 1, 16 and 64 cards and fences revocation and recovery', async () => {
+  if (Bun.env.G1053_QUERY_CHILD !== 'g-1051-query-agents.test.ts')
+    return queryProfileProcess('g-1051-query-agents.test.ts');
   const sink = startWorkProfileSink({ settleMs: 25 });
   startTelemetry('g-1051-query', { ...process.env, ...sink.env, OTEL_TRACES_SAMPLER_ARG: '0' });
   const { Elysia } = await import('elysia');
   const { httpTelemetry } = await import('@rezics/observability/elysia');
-  const { startHomeStack } = await import('./feed-read-support.ts');
+  const { startQueryHome, advanceQueryPopulation } =
+    await import('../../../services/main/tests/g-1053-query-fixture.ts');
   const { captureSql } = await import('./g-1051-sql-profile.ts');
   const { publicWorkRead } =
     await import('../../../services/main/src/modules/work/read-session.ts');
@@ -29,7 +33,7 @@ test('G1051: Agent Query batches public policy at 1, 16 and 64 cards and fences 
   const { createMainApp } = await import('../../../services/main/src/app.ts');
   const { backfillPublicNames } =
     await import('../../../services/main/src/modules/search/names.ts');
-  const home = await startHomeStack('g-1051-query');
+  const home = await startQueryHome('g-1051-query');
   const { stack, author } = home;
   const discovery = new DiscoveryProjection(stack.accessPool);
   const deps = { ...home.deps, discovery };
@@ -169,13 +173,21 @@ test('G1051: Agent Query batches public policy at 1, 16 and 64 cards and fences 
       },
     );
     while (!generation.complete)
-      generation = await command(`/v1/discovery/generations/${generation.generation}/advance`, {
-        expectedCheckpoint: generation.checkpoint,
-      });
+      generation = await advanceQueryPopulation(home, discovery, generation, [
+        imported.receipt.work,
+      ]);
+    const head = await home.json<{ activeHeadRevision: string | null }>(
+      await app.handle(
+        new Request(
+          `http://main.local/v1/discovery/generations/${generation.generation}?actingSubject=${encodeURIComponent(author.actor)}`,
+          { headers: { authorization: `Bearer ${author.token}` } },
+        ),
+      ),
+    );
     await command('/v1/discovery/generation-activations', {
       profile: 'discovery-generation-activation-v1',
       generation: generation.generation,
-      expectedHeadRevision: null,
+      expectedHeadRevision: head.activeHeadRevision,
     });
     const costs = [];
     const queryAgents = (headers = new Headers(), limit = 64) => {

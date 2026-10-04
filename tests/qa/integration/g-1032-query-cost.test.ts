@@ -9,6 +9,7 @@ import {
 } from '@rezics/observability/runtime';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceListQuery } from '../../../services/main/src/modules/query/resource-contract.ts';
+import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
 
 interface Page {
   items: { id: string; types: string[]; name: { value: string }; work?: unknown }[];
@@ -21,6 +22,8 @@ interface Page {
 /** Adversarial diagnostics. First-after-write is application-cold, not a cold
  * JVM/OS cache; catalogue-scale preparation is a separate public-API profile. */
 test('G1032: dense/negated Query has fixed calls and advancing partial pages with private, disclosure and stale state', async () => {
+  if (Bun.env.G1053_QUERY_CHILD !== 'g-1032-query-cost.test.ts')
+    return queryProfileProcess('g-1032-query-cost.test.ts');
   const preparationStartedAt = Date.now();
   let restored:
     | Awaited<
@@ -51,9 +54,13 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   startTelemetry('g-1032-query', { ...process.env, ...sink.env, OTEL_TRACES_SAMPLER_ARG: '0' });
   // pg must load after telemetry installs its hooks. A static fixture import
   // reports a misleading zero SQL spans even while the direct meter sees work.
-  const { startHomeStack, meterStatements } = await import('./feed-read-support.ts');
+  const { meterStatements } = await import('./feed-read-support.ts');
+  const { startQueryHome, advanceQueryPopulation } =
+    await import('../../../services/main/tests/g-1053-query-fixture.ts');
   const { captureSql } = await import('./g-1051-sql-profile.ts');
   const { createMainApp } = await import('../../../services/main/src/app.ts');
+  const { BACKPRESSURE_PROFILE_V1 } =
+    await import('../../../services/main/src/operations/backpressure.ts');
   const { DiscoveryProjection } =
     await import('../../../services/main/src/modules/discovery/store.ts');
   const { AccessPolicyOwner } =
@@ -66,7 +73,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await import('../../../services/main/src/modules/recommendation/derived-generation.ts');
   const { configureDisclosure, DisclosureStore } =
     await import('../../../services/main/src/modules/disclosure/read.ts');
-  const home = await startHomeStack('g-1032-query', restored ? { projectionStart: 'current' } : {});
+  const home = await startQueryHome('g-1032-query', !!restored);
   let homeClosed = false;
   const { stack, author, reader } = home;
   const projection = new DiscoveryProjection(stack.accessPool);
@@ -76,6 +83,17 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   const deps = {
     ...home.deps,
     discovery: projection,
+    // The bulk preparation recipe retains its relay backlog for qualification,
+    // as G1038 does. Request cost caps and production's profile stay identical.
+    ...(Bun.env.G1053_CATALOGUE_SCALE
+      ? {
+          backpressureProfile: {
+            ...BACKPRESSURE_PROFILE_V1,
+            id: 'query-catalogue-preparation-v1',
+            broker: { ...BACKPRESSURE_PROFILE_V1.broker, maxBacklog: 15000 },
+          },
+        }
+      : {}),
     accessPolicy: new AccessPolicyOwner(stack.accessPool),
     account: {
       ...account,
@@ -95,7 +113,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   const progress = (phase: string, detail: Record<string, unknown> = {}) => {
     const row = {
       phase,
-      catalogueScale: corpus?.scale ?? null,
+      catalogueScale: catalogueScale || null,
       elapsedMs: performance.now() - started,
       graphQueries: stack.fuseki.queries,
       ...detail,
@@ -108,7 +126,10 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   };
   const token = corpus?.queryFixture?.token ?? `g1032${randomUUID().replaceAll('-', '')}`;
   const works: { work: string; mainVersion: string }[] = [...(corpus?.queryFixture?.works ?? [])];
-  const definitions: { concept: string; sense: string }[] = corpus?.definitions ?? [];
+  const backgroundWorks: string[] = [];
+  const catalogueScale = corpus?.scale ?? Number(Bun.env.G1053_CATALOGUE_SCALE ?? 0);
+  const definitions: { concept: string; sense: string; definitionRevision?: string }[] =
+    corpus?.definitions ?? [];
   const call = (query: ResourceListQuery, bearer?: string, headers = new Headers()) => {
     headers.set('content-type', 'application/json');
     headers.set('accept-language', 'en');
@@ -148,10 +169,10 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     );
     let steps = 0;
     while (!row.complete) {
-      row = await command(`/v1/discovery/generations/${row.generation}/advance`, {
-        actingSubject: author.actor,
-        expectedCheckpoint: row.checkpoint,
-      });
+      row = await advanceQueryPopulation(home, projection, row, [
+        ...works.map((work) => work.work),
+        ...backgroundWorks,
+      ]);
       if (++steps % 10 === 0)
         progress('projection-building', { steps, checkpoint: row.checkpoint });
     }
@@ -202,6 +223,49 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         ),
       );
     await author.grant('work:create:catalogue-import', 'work.create');
+    // Scale backgrounds use the same public bulk recipe as the diagnostic
+    // cohort. No serial one-Work publication or nested stack/restore is needed.
+    if (Bun.env.G1053_CATALOGUE_SCALE) {
+      expect([1000, 10000]).toContain(catalogueScale);
+      const background = `g1053background${randomUUID().replaceAll('-', '')}`;
+      for (let start = 0; start < catalogueScale; start += 128) {
+        const imported = await command<{
+          complete: boolean;
+          partial: boolean;
+          items: { status: string; receipt: { work: string } }[];
+        }>('/v1/work-imports/bulk', {
+          actingSubject: author.actor,
+          items: Array.from({ length: Math.min(128, catalogueScale - start) }, (_, offset) => ({
+            key: randomUUID(),
+            input: {
+              profile: 'work-catalogue-import-v1',
+              expectedWorkHead: null,
+              title: `${background} Work ${start + offset}`,
+              language: 'en',
+              evidence: 'G1051 public bulk scale background',
+              aliases: [],
+              semanticTypes: [],
+              credits: [],
+              classifications: [],
+            },
+          })),
+        });
+        expect(imported.complete).toBe(true);
+        expect(imported.partial).toBe(false);
+        expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
+        backgroundWorks.push(...imported.items.map((row) => row.receipt.work));
+        expect(performance.now() - started).toBeLessThan(600_000);
+        progress('bulk-background', { completed: backgroundWorks.length });
+      }
+      expect(backgroundWorks).toHaveLength(catalogueScale);
+    } else if (corpus) {
+      const retained = JSON.parse(
+        readFileSync(join(dirname(Bun.env.G1032_BACKUP!), 'corpus.json'), 'utf8'),
+      ) as {
+        works: { work: string }[];
+      };
+      backgroundWorks.push(...retained.works.map((work) => work.work));
+    }
     // Exactly the same adversarial distribution, created in independent items
     // under the real public import capability rather than 544 fixture commits.
     for (let start = works.length; start < 136; start += 128) {
@@ -225,9 +289,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
                 : []
             ).map((row) => ({
               sense: row.sense,
-              expectedSenseHead: (
-                corpus?.definitions as unknown as { definitionRevision: string }[] | undefined
-              )?.[definitions.indexOf(row)]?.definitionRevision,
+              expectedSenseHead: row.definitionRevision,
               expectedDecisionHead: null,
               outcome: 'accepted',
             })),
@@ -644,7 +706,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     }
     if (Bun.env.G1051_MATRIX_ONLY === '1') return;
     const beforeWrite = await measured('cursor-before-write', base, reader.token);
-    await stack.publicWork(author.actor, ['en'], `${token} stale-new`);
+    backgroundWorks.push((await stack.publicWork(author.actor, ['en'], `${token} stale-new`)).work);
     const stale = await measured('stale-projection', base, reader.token);
     expect(stale.stale).toBe(true);
     expect(stale.complete).toBe(false);
@@ -796,13 +858,13 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       JSON.stringify(
         {
           evidence,
-          catalogueScale: corpus?.scale ?? null,
+          catalogueScale: catalogueScale || null,
           restoreMs: restored?.elapsedMs ?? null,
           elapsedMs: performance.now() - started,
           unobserved: [
             'native Lucene postings visited',
             'storage-cold JVM/OS caches',
-            ...(corpus ? ['catalogue scale 50000'] : ['catalogue scales 1000/10000/50000']),
+            ...(catalogueScale ? ['catalogue scale 50000'] : ['catalogue scales 1000/10000/50000']),
             ...(Bun.env.G1041_VOCABULARY === '1' ? [] : ['128/512 vocabulary scale probe']),
             'real Account service calls (fixture counts verify invocations)',
           ],
