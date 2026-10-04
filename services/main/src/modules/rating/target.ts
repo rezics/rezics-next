@@ -29,11 +29,11 @@ export const SCOPED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v3';
 export const LEGACY_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${LEGACY_TARGET_CONTEXT_ID}`;
 const LANGUAGE_OBSERVATION_ID = 'realm-target-rating-observation-v2';
 const SCOPED_OBSERVATION_ID = 'realm-target-rating-observation-v3';
-export const LANGUAGE_OBSERVATION_PROFILE = `https://rezics.com/definition/${LANGUAGE_OBSERVATION_ID}`;
-export const SCOPED_OBSERVATION_PROFILE = `https://rezics.com/definition/${SCOPED_OBSERVATION_ID}`;
+const LANGUAGE_OBSERVATION_PROFILE = `https://rezics.com/definition/${LANGUAGE_OBSERVATION_ID}`;
+const SCOPED_OBSERVATION_PROFILE = `https://rezics.com/definition/${SCOPED_OBSERVATION_ID}`;
 export const TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${TARGET_CONTEXT_ID}`;
-export const SCOPED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${SCOPED_TARGET_CONTEXT_ID}`;
-export const TARGET_OBSERVATION_PROFILE = `https://rezics.com/definition/${TARGET_OBSERVATION_ID}`;
+const SCOPED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${SCOPED_TARGET_CONTEXT_ID}`;
+const TARGET_OBSERVATION_PROFILE = `https://rezics.com/definition/${TARGET_OBSERVATION_ID}`;
 /** Every revision profile a target Context or observation can carry, newest first. */
 export const TARGET_CONTEXT_PROFILES = [SCOPED_TARGET_CONTEXT_PROFILE, TARGET_CONTEXT_PROFILE, LEGACY_TARGET_CONTEXT_PROFILE] as const;
 export const TARGET_OBSERVATION_PROFILES = [SCOPED_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, TARGET_OBSERVATION_PROFILE] as const;
@@ -63,8 +63,8 @@ export function targetContextDigest(input: TargetContextInput): string {
 }
 /** A mean shows from this many ratings unless the Context declares its own; a
  * projection is a finer, rarer judgment, so it waits longer. */
-export const DEFAULT_DISPLAY_THRESHOLD = 5;
-export const PROJECTION_DISPLAY_THRESHOLD = 10;
+const DEFAULT_DISPLAY_THRESHOLD = 5;
+const PROJECTION_DISPLAY_THRESHOLD = 10;
 export const MAX_DISPLAY_THRESHOLD = 1000;
 export function effectiveDisplayThreshold(grain: string, declared: number | null): number {
   return declared ?? (grain === 'projection' ? PROJECTION_DISPLAY_THRESHOLD : DEFAULT_DISPLAY_THRESHOLD);

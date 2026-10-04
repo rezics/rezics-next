@@ -37,7 +37,7 @@ export const targetAggregateInput = t.Object({ profile: t.Literal(TARGET_AGGREGA
   context: readId, target: readId, actingSubject: t.Optional(readId) }, { additionalProperties: false });
 const count = t.Integer({ minimum: 0 });
 export const meanDisplay = t.Union([t.Literal('shown'), t.Literal('withheld-below-threshold'), t.Literal('no-data')]);
-export const aggregatePrecision = t.Union([t.Object({ kind: t.Literal('no-data') }),
+const aggregatePrecision = t.Union([t.Object({ kind: t.Literal('no-data') }),
   t.Object({ kind: t.Literal('withheld-below-threshold') }),
   t.Object({ kind: t.Literal('exact-rational'), numerator: t.Integer({ minimum: 1 }), denominator: t.Integer({ minimum: 1 }) })]);
 /** Count, histogram and sum always show; the mean only from the Context's display threshold. */

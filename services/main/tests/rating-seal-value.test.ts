@@ -29,7 +29,7 @@ const proof = (value: number | null, expected: string | null, over: Record<strin
   receipt: 'urn:rezics:receipt:x', admissionId: 'ad', requestDigest: 'd', authorityEpoch: '0', scope: 's', dataEpoch: 'e', sequence: '1',
   context, realm, revision, target, observation, contextRevision, slot, predecessor: expected, value,
   availability: value === null ? 'withdrawn' as const : 'available' as const, ...over });
-const writes = (statements: { sql: string }[]) => statements.filter(statement => /^(INSERT|UPDATE)/.test(statement.sql));
+const writes = <T extends { sql: string }>(statements: T[]) => statements.filter(statement => /^(INSERT|UPDATE)/.test(statement.sql));
 
 test('a sealed value must be the one in the admitted request digest, and nothing is written when it is not', async () => {
   const { client, statements } = fakeClient(null, false);

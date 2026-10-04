@@ -16,7 +16,7 @@ export const rollupInput = t.Object({ profile: t.Literal(ROLLUP_PROFILE), contex
 
 const memberComponents = t.Object({ population: count, count, withdrawnCount: count, sum: count,
   histogram: t.Array(count, { minItems: 10, maxItems: 10 }) });
-export const rollupMember = t.Union([
+const rollupMember = t.Union([
   t.Object({ target: readId, status: t.Literal('available'), components: memberComponents,
     mean: t.Nullable(t.Number()), meanDisplay, meetsThreshold: t.Boolean() }),
   /** `unavailable` also covers a target the caller cannot read or that does not exist; neither is told apart. */

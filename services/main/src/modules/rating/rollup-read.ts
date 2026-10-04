@@ -94,7 +94,7 @@ async function assemble(session: WorkReadSession, store: TargetRatingInventorySt
   }
   const members = input.targets.map(target => {
     const reason = verdict.get(target);
-    if (reason !== null) return { target, status: 'unavailable' as const, reason: reason ?? 'unavailable' as const };
+    if (reason !== null) return { target, status: 'unavailable' as const, reason: reason ?? ('unavailable' as const) };
     const sealed = snapshot.members.get(target);
     if (sealed && sealed.unvalued > 0) return { target, status: 'unavailable' as const, reason: 'needs-reconstruction' as const };
     if (sealed && (!live.has(target) || !componentsAgree(sealed))) {

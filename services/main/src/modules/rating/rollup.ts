@@ -2,7 +2,7 @@ import { meanDisclosure, type RatingComponents } from './components.ts';
 
 /** A roll-up is its own metric: a named formula over one RatingContext's additive
  * components, never over stored means and never across Contexts or scales. */
-export const ROLLUP_FORMULAS = ['pooled', 'mean-of-means'] as const;
+const ROLLUP_FORMULAS = ['pooled', 'mean-of-means'] as const;
 export type RollupFormula = typeof ROLLUP_FORMULAS[number];
 export const MAX_ROLLUP_MEMBERS = 200;
 /** Members below this many ratings are not ranked, however high their mean. */

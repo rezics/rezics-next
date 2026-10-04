@@ -5,7 +5,7 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { startMediaStack } from './media-support.ts';
 
-export type Stack = Awaited<ReturnType<typeof startMediaStack>>;
+type Stack = Awaited<ReturnType<typeof startMediaStack>>;
 export type Person = Awaited<ReturnType<Stack['member']>>;
 export interface Opinion { observation: string; observationRevision: string; value: number | null }
 export interface Aggregate { count: number; population: number; withdrawnCount: number; sum: number;
