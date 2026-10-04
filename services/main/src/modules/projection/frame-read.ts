@@ -31,7 +31,7 @@ async function readContinuities(session: WorkReadSession, work: string): Promise
   const boundary = readingBoundary(session);
   const continuities = new Set<string>();
   let visible = 0;
-  let after: string | null = null;
+  let after: { occurrence: string; continuity: string } | null = null;
   for (let scan = 0; scan < FRAME_READ_COST.membershipScans; scan++) {
     const rows = await session.query(`SELECT DISTINCT ?work ?continuity ?occurrence WHERE {
       VALUES ?work { ${iri(work)} }
@@ -45,8 +45,9 @@ async function readContinuities(session: WorkReadSession, work: string): Promise
         ?occurrence a rv:RelationOccurrence ; rv:occurrenceHead ?head . }
       FILTER(STR(?workRole) = CONCAT(STR(?definition), "/role/work"))
       FILTER(STR(?continuityRole) = CONCAT(STR(?definition), "/role/continuity"))
-      ${after === null ? '' : `FILTER(STR(?occurrence) > ${lit(after)})`}
-    } ORDER BY STR(?occurrence) LIMIT ${FRAME_READ_COST.membershipBatch}`, FRAME_READ_COST.membershipBatch);
+      ${after === null ? '' : `FILTER(STR(?occurrence) > ${lit(after.occurrence)}
+        || STR(?occurrence) = ${lit(after.occurrence)} && STR(?continuity) > ${lit(after.continuity)})`}
+    } ORDER BY STR(?occurrence) STR(?continuity) LIMIT ${FRAME_READ_COST.membershipBatch}`, FRAME_READ_COST.membershipBatch);
     const occurrences = [...new Set(rows.map(row => row.occurrence!.value))];
     const disclosed = await session.disclosure(occurrences.map(resource => ({ owner: 'graph', resource, component: 'record' })));
     const visibleOccurrences = await boundary.visible(occurrences.filter((_, index) => disclosed[index] === 'visible'));
@@ -57,7 +58,7 @@ async function readContinuities(session: WorkReadSession, work: string): Promise
       continuities.add(row.continuity!.value);
     }
     if (rows.length < FRAME_READ_COST.membershipBatch) return [...continuities];
-    after = rows.at(-1)!.occurrence!.value;
+    after = { occurrence: rows.at(-1)!.occurrence!.value, continuity: rows.at(-1)!.continuity!.value };
   }
   throw new WorkReadLimit('Work continuity membership scan exceeds the frame read budget');
 }

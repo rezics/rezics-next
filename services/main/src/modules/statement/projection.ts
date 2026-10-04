@@ -4,7 +4,7 @@ import { dimensionOfTypes, slotOf, type Coordinate, type FrameSlot } from '../pr
 import { MAX_FRAMES } from '../projection/schema.ts';
 import { STATEMENT_LIMITS } from './schema.ts';
 
-export type StatementApplicabilityRefusal = 'statement_applicability_too_large' | 'statement_applicability_unknown'
+type StatementApplicabilityRefusal = 'statement_applicability_too_large' | 'statement_applicability_unknown'
   | 'statement_applicability_projection' | 'statement_applicability_not_coordinate'
   | 'statement_applicability_slot_occupied';
 
