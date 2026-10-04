@@ -21,9 +21,26 @@ interface Page {
 /** Adversarial diagnostics. First-after-write is application-cold, not a cold
  * JVM/OS cache; catalogue-scale preparation is a separate public-API profile. */
 test('G1032: dense/negated Query has fixed calls and advancing partial pages with private, disclosure and stale state', async () => {
-  let restored: Awaited<ReturnType<typeof import('../../../scripts/load/catalogue-backup.ts')['restoreCatalogueBackup']>> | undefined;
-  const corpus = Bun.env.G1032_BACKUP ? JSON.parse(readFileSync(resolve(dirname(Bun.env.G1032_BACKUP), 'corpus.json'), 'utf8')) as {
-    scale: number; catalogueWorksIncludingSamples: number; definitions: { concept: string; sense: string }[] } : undefined;
+  const preparationStartedAt = Date.now();
+  let restored:
+    | Awaited<
+        ReturnType<
+          (typeof import('../../../scripts/load/catalogue-backup.ts'))['restoreCatalogueBackup']
+        >
+      >
+    | undefined;
+  const corpus = Bun.env.G1032_BACKUP
+    ? (JSON.parse(readFileSync(resolve(dirname(Bun.env.G1032_BACKUP), 'corpus.json'), 'utf8')) as {
+        scale: number;
+        queryFixture?: {
+          token: string;
+          works: { work: string; mainVersion: string }[];
+          privateWork: { work: string };
+        };
+        catalogueWorksIncludingSamples: number;
+        definitions: { concept: string; sense: string }[];
+      })
+    : undefined;
   if (Bun.env.G1032_BACKUP) {
     const { restoreCatalogueBackup } = await import('../../../scripts/load/catalogue-backup.ts');
     const target = `g1032-restore-${randomUUID().slice(0, 8)}`;
@@ -49,6 +66,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   const { configureDisclosure, DisclosureStore } =
     await import('../../../services/main/src/modules/disclosure/read.ts');
   const home = await startHomeStack('g-1032-query', restored ? { projectionStart: 'current' } : {});
+  let homeClosed = false;
   const { stack, author, reader } = home;
   const projection = new DiscoveryProjection(stack.accessPool);
   const account = home.deps.account;
@@ -72,8 +90,23 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   const evidence: Record<string, unknown>[] = [];
   const baseline = Bun.env.G1032_BASELINE === '1';
   const started = performance.now();
-  const token = `g1032${randomUUID().replaceAll('-', '')}`;
-  const works: { work: string; mainVersion: string }[] = [];
+  const preparation: Record<string, unknown>[] = [];
+  const progress = (phase: string, detail: Record<string, unknown> = {}) => {
+    const row = {
+      phase,
+      catalogueScale: corpus?.scale ?? null,
+      elapsedMs: performance.now() - started,
+      graphQueries: stack.fuseki.queries,
+      ...detail,
+    };
+    if (phase !== 'matrix') preparation.push(row);
+    writeFileSync(
+      join(Bun.env.REZICS_QA_ARTIFACT_DIR!, 'g-1041-query-progress.json'),
+      JSON.stringify({ ...row, preparation }, null, 2),
+    );
+  };
+  const token = corpus?.queryFixture?.token ?? `g1032${randomUUID().replaceAll('-', '')}`;
+  const works: { work: string; mainVersion: string }[] = [...(corpus?.queryFixture?.works ?? [])];
   const definitions: { concept: string; sense: string }[] = corpus?.definitions ?? [];
   const call = (query: ResourceListQuery, bearer?: string, headers = new Headers()) => {
     headers.set('content-type', 'application/json');
@@ -103,6 +136,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       expected,
     );
   const refresh = async () => {
+    progress('projection-start');
     let row = await command<{ generation: string; checkpoint: string; complete: boolean }>(
       '/v1/discovery/generation-builds',
       {
@@ -111,11 +145,15 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         basis: { scope: 'global', realm: null, context: null },
       },
     );
-    while (!row.complete)
+    let steps = 0;
+    while (!row.complete) {
       row = await command(`/v1/discovery/generations/${row.generation}/advance`, {
         actingSubject: author.actor,
         expectedCheckpoint: row.checkpoint,
       });
+      if (++steps % 10 === 0)
+        progress('projection-building', { steps, checkpoint: row.checkpoint });
+    }
     const head = await home.json<{ activeHeadRevision: string | null }>(
       await app.handle(
         new Request(
@@ -130,6 +168,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       generation: row.generation,
       expectedHeadRevision: head.activeHeadRevision,
     });
+    progress('projection-ready', { steps });
   };
   const type = { facet: 'type', any: ['https://schema.org/CreativeWork'] };
   const base: ResourceListQuery = {
@@ -164,30 +203,58 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await author.grant('work:create:catalogue-import', 'work.create');
     // Exactly the same adversarial distribution, created in independent items
     // under the real public import capability rather than 544 fixture commits.
-    for (let start = 0; start < 136; start += 128) {
-      const items = Array.from({ length: Math.min(128,136-start) }, (_, offset) => {
+    for (let start = works.length; start < 136; start += 128) {
+      const items = Array.from({ length: Math.min(128, 136 - start) }, (_, offset) => {
         const index = start + offset;
-        return { key: randomUUID(), input: { profile: 'work-catalogue-import-v1', expectedWorkHead: null,
-          title: `${token} common ${index}`, language: 'en', evidence: 'G1032 dense/negated query fixture',
-          aliases: [], semanticTypes: [], credits: [],
-          classifications: (index === 135 ? definitions.slice(0,8) : index >= 4 ? definitions.slice(0,1) : [])
-            .map(row => ({ sense: row.sense,
-              expectedSenseHead: (corpus?.definitions as unknown as { definitionRevision: string }[] | undefined)?.[definitions.indexOf(row)]?.definitionRevision,
-              expectedDecisionHead: null, outcome: 'accepted' })) } };
+        return {
+          key: randomUUID(),
+          input: {
+            profile: 'work-catalogue-import-v1',
+            expectedWorkHead: null,
+            title: `${token} common ${index}`,
+            language: 'en',
+            evidence: 'G1032 dense/negated query fixture',
+            aliases: [],
+            semanticTypes: [],
+            credits: [],
+            classifications: (index === 135
+              ? definitions.slice(0, 8)
+              : index >= 4
+                ? definitions.slice(0, 1)
+                : []
+            ).map((row) => ({
+              sense: row.sense,
+              expectedSenseHead: (
+                corpus?.definitions as unknown as { definitionRevision: string }[] | undefined
+              )?.[definitions.indexOf(row)]?.definitionRevision,
+              expectedDecisionHead: null,
+              outcome: 'accepted',
+            })),
+          },
+        };
       });
       // Definition pins come from the owning vocabulary response/read, including
       // the legacy fixture response whose local type omitted that field.
-      for (const item of items) for (const row of item.input.classifications) if (!row.expectedSenseHead) {
-        const head = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+      for (const item of items)
+        for (const row of item.input.classifications)
+          if (!row.expectedSenseHead) {
+            const head = await stack.fuseki
+              .query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
           GRAPH <urn:rezics:graph:current> { <${row.sense}> rv:head ?head } } LIMIT 2`);
-        row.expectedSenseHead = head.results!.bindings[0]!.head!.value;
-      }
-      const imported = await command<{ items: { status: string; receipt: { work: string; mainVersion: string } }[] }>('/v1/work-imports/bulk', {
-        actingSubject: author.actor, items });
-      expect(imported.items.every(row => row.status === 'succeeded')).toBe(true);
-      works.push(...imported.items.map(row => row.receipt));
+            row.expectedSenseHead = head.results!.bindings[0]!.head!.value;
+          }
+      const imported = await command<{
+        items: { status: string; receipt: { work: string; mainVersion: string } }[];
+      }>('/v1/work-imports/bulk', {
+        actingSubject: author.actor,
+        items,
+      });
+      expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
+      works.push(...imported.items.map((row) => row.receipt));
     }
-    const privateWork = await stack.privateWork(reader.actor, `${token} common private`);
+    const privateWork =
+      corpus?.queryFixture?.privateWork ??
+      (await stack.privateWork(reader.actor, `${token} common private`));
     // A real grant to this bearer must never enter a public catalogue plan.
     await reader.grant(`work:read:${privateWork.work}`, 'work.read');
     // Background private episodes grow the reader's authority inventory while
@@ -235,8 +302,44 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       privateReads++;
       return realmProof(...args);
     };
-    await backfillPublicNames(stack.env);
-    await refresh();
+    if (!corpus?.queryFixture) {
+      progress('name-backfill-start');
+      await backfillPublicNames(stack.env);
+      progress('name-backfill-ready');
+      await refresh();
+    }
+    if (Bun.env.G1041_PREPARE_QUERY === '1') {
+      if (!restored || !corpus)
+        throw new Error('Query preparation requires a retained command corpus');
+      const { retainCatalogueBackup } = await import('../../../scripts/load/catalogue-backup.ts');
+      await home.stop();
+      homeClosed = true;
+      const directory = resolve(`.temp/g-1041/query-ready-${corpus.scale}`);
+      const backup = await retainCatalogueBackup(
+        Bun.env.REZICS_QA_RUN_ID!,
+        corpus.scale,
+        directory,
+        preparationStartedAt,
+      );
+      writeFileSync(
+        join(directory, 'corpus.json'),
+        JSON.stringify(
+          {
+            ...corpus,
+            backup,
+            queryFixture: {
+              token,
+              works: works.map(({ work, mainVersion }) => ({ work, mainVersion })),
+              privateWork: { work: privateWork.work },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      progress('query-ready-backup', { backup });
+      return;
+    }
     const measured = async (name: string, query: ResourceListQuery, bearer?: string) => {
       const captured: string[] = [];
       let candidates = 0,
@@ -299,6 +402,11 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           ...Object.fromEntries(Object.entries(profile).filter(([key]) => key !== 'spans')),
           queries: captured,
         });
+        progress('matrix', {
+          cell: name,
+          viewer: bearer ? 'signed' : 'anonymous',
+          cells: evidence.length,
+        });
         expect(result.items.map((item) => item.id)).not.toContain(privateWork.work);
         expect(privateReads - beforePrivate).toBe(0);
         expect(accountChecks - beforeAccount).toBe(bearer ? 1 : 0);
@@ -333,6 +441,73 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       }
     };
     for (const bearer of [undefined, reader.token]) {
+      if (corpus) {
+        for (const sort of ['relevance', 'newest', 'updated'] as const) {
+          const query = { ...base, q: 'Catalogue common', sort };
+          const first = await measured(`catalogue-dense-${sort}-first`, query, bearer);
+          const warm = await measured(`catalogue-dense-${sort}-warm`, query, bearer);
+          expect(first.items).toEqual(warm.items);
+          const reachMatches = async (name: string, query: ResourceListQuery, page: Page) => {
+            let returned = page.items.length;
+            const seen = new Set(page.items.map((item) => item.id));
+            // Temporal sorts first encounter the newer diagnostic cohort. Each
+            // empty bounded page must advance through it to catalogue matches.
+            for (let index = 0; returned < 3 && page.nextCursor && index < 8; index++) {
+              if (!page.items.length) {
+                expect(page.complete).toBe(false);
+                expect(page.count).toEqual({ value: 0, kind: 'at-least' });
+              }
+              const cursor = page.nextCursor;
+              page = await measured(`${name}-partial-${index + 1}`, { ...query, cursor }, bearer);
+              expect(page.nextCursor).not.toBe(cursor);
+              for (const item of page.items) {
+                expect(seen.has(item.id)).toBe(false);
+                seen.add(item.id);
+              }
+              returned += page.items.length;
+            }
+            expect(returned).toBeGreaterThanOrEqual(3);
+          };
+          await reachMatches(`catalogue-dense-${sort}`, query, first);
+          const next = await measured(
+            `catalogue-dense-${sort}-continuation`,
+            { ...query, cursor: first.nextCursor! },
+            bearer,
+          );
+          expect(
+            next.items.every((item) => !first.items.some((prior) => prior.id === item.id)),
+          ).toBe(true);
+          await reachMatches(`catalogue-dense-${sort}-continuation`, query, next);
+          const topics = await measured(
+            `catalogue-include-plus-exclude-${sort}`,
+            {
+              ...query,
+              filter: {
+                all: [
+                  type,
+                  { facet: 'concept', all: [definitions[0]!.concept] },
+                  { facet: 'concept', none: [definitions[1]!.concept] },
+                ],
+              },
+            },
+            bearer,
+          );
+          await reachMatches(
+            `catalogue-include-plus-exclude-${sort}`,
+            {
+              ...query,
+              filter: {
+                all: [
+                  type,
+                  { facet: 'concept', all: [definitions[0]!.concept] },
+                  { facet: 'concept', none: [definitions[1]!.concept] },
+                ],
+              },
+            },
+            topics,
+          );
+        }
+      }
       const largePage = await measured('dense-64-card-page', { ...base, limit: 64 }, bearer);
       expect(largePage.items).toHaveLength(64);
       for (const sort of ['relevance', 'newest', 'updated'] as const) {
@@ -367,7 +542,16 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       }
       const seen = new Set(first.items.map((item) => item.id));
       let cursor = first.nextCursor;
-      for (let page = 0; cursor && page < Math.ceil(((corpus?.catalogueWorksIncludingSamples ?? 0) + 136) / RESOURCE_LIST_COST.candidates) + 4; page++) {
+      for (
+        let page = 0;
+        cursor &&
+        page <
+          Math.ceil(
+            ((corpus?.catalogueWorksIncludingSamples ?? 0) + 136) / RESOURCE_LIST_COST.candidates,
+          ) +
+            4;
+        page++
+      ) {
         const next = await measured(
           `dense-eight-exclusions-page-${page + 2}`,
           { ...excluded, cursor },
@@ -465,6 +649,66 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     expect((await call({ ...base, cursor: beforeWrite.nextCursor! }, reader.token)).status).toBe(
       409,
     );
+    if (Bun.env.G1041_VOCABULARY === '1') {
+      for (const size of [128, 512]) {
+        for (let index = definitions.length; index < size; index++) {
+          definitions.push(
+            await command(
+              '/v1/classification-vocabulary',
+              {
+                profile: 'classification-proposition-v2',
+                scheme: null,
+                labels: [{ language: 'en', value: `G1041 vocabulary ${index}` }],
+                alternativeLabels: [],
+                broader: [],
+                narrower: [],
+                actingSubject: author.actor,
+              },
+              201,
+            ),
+          );
+          if ((index + 1) % 32 === 0) progress('vocabulary-building', { definitions: index + 1 });
+        }
+        // Refresh only after all vocabulary edits, at an independently restored
+        // catalogue. Same eight-key plan; vocabulary size is an unrelated axis.
+        await refresh();
+        for (const bearer of [undefined, reader.token]) {
+          for (const sort of ['relevance', 'newest', 'updated'] as const) {
+            const included = await measured(
+              `vocabulary-${size}-include-plus-exclude-${sort}`,
+              {
+                ...base,
+                sort,
+                filter: {
+                  all: [
+                    type,
+                    { facet: 'concept', all: [definitions[0]!.concept] },
+                    { facet: 'concept', none: definitions.slice(-7).map((row) => row.concept) },
+                  ],
+                },
+              },
+              bearer,
+            );
+            expect(included.items).toHaveLength(3);
+            const excluded = await measured(
+              `vocabulary-${size}-eight-absent-exclusions-${sort}`,
+              {
+                ...base,
+                sort,
+                filter: {
+                  all: [
+                    type,
+                    { facet: 'concept', none: definitions.slice(-8).map((row) => row.concept) },
+                  ],
+                },
+              },
+              bearer,
+            );
+            expect(excluded.items).toHaveLength(3);
+          }
+        }
+      }
+    }
     if (!baseline) {
       // A cached readiness proof cannot survive a process restart. Inject the
       // changed health identity after the native collector, then require the
@@ -494,12 +738,15 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       join(Bun.env.REZICS_QA_ARTIFACT_DIR!, `g-1032-query-${baseline ? 'before' : 'after'}.json`),
       JSON.stringify(
         {
-          evidence, catalogueScale: corpus?.scale ?? null, restoreMs: restored?.elapsedMs ?? null,
+          evidence,
+          catalogueScale: corpus?.scale ?? null,
+          restoreMs: restored?.elapsedMs ?? null,
           elapsedMs: performance.now() - started,
           unobserved: [
             'native Lucene postings visited',
             'storage-cold JVM/OS caches',
-            ...(corpus ? ['catalogue scale 50000', '128/512 vocabulary scale probe'] : ['catalogue scales 1000/10000/50000']),
+            ...(corpus ? ['catalogue scale 50000'] : ['catalogue scales 1000/10000/50000']),
+            ...(Bun.env.G1041_VOCABULARY === '1' ? [] : ['128/512 vocabulary scale probe']),
             'real Account service calls (fixture counts verify invocations)',
           ],
         },
@@ -508,9 +755,9 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       ),
     );
     sql.restore();
-    await home.stop();
+    if (!homeClosed) await home.stop();
     await shutdownTelemetry();
     await sink.stop();
     await restored?.stop();
   }
-}, 420_000);
+}, 600_000);

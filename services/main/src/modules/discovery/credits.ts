@@ -7,10 +7,15 @@ import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 
-/** One bounded source query. External references retain their explicit absent
- * name; Agent names and handles are hydrated at read time from current owners. */
-export async function primaryDiscoveryCredits(session: WorkReadSession, work: string): Promise<ProjectedWork['primaryCredits']> {
-  const rows = await session.query(`SELECT ?id ?key ?ordinal ?agent WHERE {
+export const DISCOVERY_CREDIT_BATCH_COST = { works: 64, queries: 1, rows: 192 } as const;
+/** Each Work retains its own ordered three-credit seek. Literal Work keys keep
+ * the graph joins local; source-reported attributions share one owner batch. */
+export async function primaryDiscoveryCreditBatch(session: WorkReadSession, works: readonly string[]) {
+  const unique = [...new Set(works)];
+  if (unique.length > DISCOVERY_CREDIT_BATCH_COST.works) throw new WorkReadUnavailable('Discovery credit batch is out of bounds');
+  const result = new Map<string, ProjectedWork['primaryCredits']>();
+  if (!unique.length) return result;
+  const seeks = unique.map(work => `{ SELECT ?work ?id ?key ?ordinal ?agent WHERE { BIND(${iri(work)} AS ?work)
     { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ${iri(work)} ;
         rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
         rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
@@ -23,23 +28,37 @@ export async function primaryDiscoveryCredits(session: WorkReadSession, work: st
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
         rv:work ${iri(work)} ; rv:agent ?agent ; schema:roleName "author" .
         FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
-  } ORDER BY ?ordinal STR(?id) LIMIT ${DISCOVERY_COST.primaryCredits}`, DISCOVERY_COST.primaryCredits);
-  if (rows.some(row => !row.id || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
-    || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
-    || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
-    throw new WorkReadUnavailable('Discovery credits are ambiguous');
+  } ORDER BY ?ordinal STR(?id) LIMIT ${DISCOVERY_COST.primaryCredits} }`).join(' UNION ');
+  const all = await session.query(`SELECT ?work ?id ?key ?ordinal ?agent WHERE { ${seeks} }`,
+    unique.length * DISCOVERY_COST.primaryCredits);
+  if (all.some(row => !row.work || !unique.includes(row.work.value))) {
+    throw new WorkReadUnavailable('Discovery credit Work is incomplete');
   }
-  const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
-    ? { id: row.id!.value, role: 'author', participantKind: 'agent',
-    provider: null, key: null, ordinal: null, agent: row.agent.value, displayName: null, handle: null }
-    : ({ id: row.id!.value, role: 'author', participantKind: 'external-reference',
-    provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
-    agent: null, displayName: null, handle: null }));
-  const reported = (await sourceReportedCredits(session, [work])).get(work) ?? [];
-  const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
-  return [...confirmed, ...reported.filter(credit => !confirmedKeys.has(credit.key))]
-    .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
-    .slice(0, DISCOVERY_COST.primaryCredits);
+  const reports = await sourceReportedCredits(session, unique);
+  for (const work of unique) {
+    const rows = all.filter(row => row.work?.value === work);
+    if (rows.some(row => !row.id || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
+      || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
+      || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
+      throw new WorkReadUnavailable('Discovery credits are ambiguous');
+    }
+    const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
+      ? { id: row.id!.value, role: 'author', participantKind: 'agent',
+      provider: null, key: null, ordinal: null, agent: row.agent.value, displayName: null, handle: null }
+      : ({ id: row.id!.value, role: 'author', participantKind: 'external-reference',
+      provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
+      agent: null, displayName: null, handle: null }));
+    const reported = reports.get(work) ?? [];
+    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+    result.set(work, [...confirmed, ...reported.filter(credit => !confirmedKeys.has(credit.key))]
+      .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
+      .slice(0, DISCOVERY_COST.primaryCredits));
+  }
+  return result;
+}
+
+export async function primaryDiscoveryCredits(session: WorkReadSession, work: string): Promise<ProjectedWork['primaryCredits']> {
+  return (await primaryDiscoveryCreditBatch(session, [work])).get(work)!;
 }
 
 /** At most 60 projected Agent mentions per page and one graph name read. */

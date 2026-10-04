@@ -41,11 +41,13 @@ export async function retainCatalogueBackup(runId: string, works: number, direct
 }
 
 /** Restore into a distinct project under the QA slot; the caller closes it in
- * finally. Fresh ports, retained owner secrets/lineage and all stores agree. */
+ * finally. The containing .temp directory may move with preserved worker
+ * artifacts; recorded absolute directories are provenance, not restore keys.
+ * Fresh ports, retained owner secrets/lineage and all stores agree. */
 export async function restoreCatalogueBackup(path: string, runId: string) {
   const startedAt = Date.now(), directory = privateDirectory(resolve(path, '..'));
   const backup = JSON.parse(readFileSync(join(directory, 'backup.json'), 'utf8')) as CatalogueBackup;
-  if (backup.format !== 'command-catalogue-backup-v1' || backup.directory !== directory
+  if (backup.format !== 'command-catalogue-backup-v1'
     || !/^rezics-catalogue-g1038-[a-z0-9-]+$/.test(backup.project)
     || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId) || runId === backup.runId
     || !compatibleLoadStorage(backup.compatibility, loadCompatibility(root)))

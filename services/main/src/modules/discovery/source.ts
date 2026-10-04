@@ -1,15 +1,14 @@
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
-import { readWorkClassifications } from '../work/read-classifications.ts';
+import { readPublicWorkClassifications, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
 import { queryWorkStandingRating } from '../rating/global-aggregate.ts';
 import { standingRatingSlotIri } from '../rating/observation.ts';
-import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { publicWork, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { DISCOVERY_COST, type DiscoveryBasis, type ProjectedWork } from './contract.ts';
 import { readEpochOrder } from './lineage.ts';
-import { primaryDiscoveryCredits } from './credits.ts';
+import { primaryDiscoveryCreditBatch } from './credits.ts';
 import type { Pool } from 'pg';
 import type { MainCloudEvent } from '../outbox/relay.ts';
 import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
@@ -114,7 +113,7 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
   options: { limit?: number; works?: readonly string[]; sequence?: string } = {}) {
   await admitDiscoveryBasis(session, basis);
   const epochs = await readEpochOrder(session);
-  const limit = options.limit ?? DISCOVERY_COST.buildWorks;
+  const limit = Math.min(options.limit ?? DISCOVERY_COST.buildWorks, WORK_CLASSIFICATION_BATCH_COST.works);
   const selected = options.works?.filter(work => work > after).slice(0, limit);
   const candidates = selected ?? (await session.query(`SELECT DISTINCT ?work WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork }
@@ -124,37 +123,34 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
     return row.work.value;
   });
   if (!candidates.length) return { after, complete: true, items: [] };
-  // ARQ does not push an outer VALUES binding through every GRAPH join.
-  // Embed a one-Work delta's exact key in those patterns so it cannot scan the
-  // public population before joining that binding (covered by the load test).
-  const target = candidates.length === 1 ? iri(candidates[0]!) : '?work';
-  // Explicit VALUES reaches TDB's Work-keyed lookups. A subquery under an
-  // OPTIONAL made ARQ enumerate the entire public relation for every page.
-  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?sequence ?epochOrder ?type
-    ?classified ?credited WHERE {
-      VALUES ?work { ${candidates.slice(0, limit).map(iri).join(' ')} }
-      ${publicWork(target, '?main')}
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${target} schema:isPartOf ?parentWork } }
+  // Literal keys in every GRAPH join prevent ARQ from enumerating the
+  // catalogue before joining an outer VALUES relation to the bounded page.
+  const patterns = candidates.slice(0, limit).map(work => `{ BIND(${iri(work)} AS ?work)
+      ${publicWork(iri(work), '?main')}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} schema:isPartOf ?parentWork } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?legacyStructure a rv:Structure ;
           rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?legacyGeneration .
           ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
-            rv:occurrenceRole rv:ChapterRole ; schema:item ${target} .
+            rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(work)} .
           FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
-      ${options.sequence && options.sequence !== session.position.sequence ? `GRAPH ${iri(GRAPHS.revisions)} { ?birth a rv:RevisionAnchor ; rv:component ${target} .
+      ${options.sequence && options.sequence !== session.position.sequence ? `GRAPH ${iri(GRAPHS.revisions)} { ?birth a rv:RevisionAnchor ; rv:component ${iri(work)} .
         FILTER NOT EXISTS { ?birth rv:predecessor ?previous }
         FILTER NOT EXISTS { ?birth rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?born .
           FILTER(?born > ${options.sequence}) } }` : ''}
     ${epochs}
-    GRAPH ${iri(GRAPHS.current)} { ${target} rv:head ?head .
-      ${target} rv:mainVersion ?main .
-      OPTIONAL { ${target} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
+    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head .
+      ${iri(work)} rv:mainVersion ?main .
+      OPTIONAL { ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
       BIND(EXISTS { { ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main }
         UNION { ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate rv:classifiedAs } } AS ?classified)
-      BIND(EXISTS { ?credit rv:work ${target} ; rv:creditRevision ?creditRevision } AS ?credited)
+      BIND(EXISTS { ?credit rv:work ${iri(work)} ; rv:creditRevision ?creditRevision } AS ?credited)
     }
-    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ${target} ;
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ${iri(work)} ;
       rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence }
-  } ORDER BY STR(?work) LIMIT ${(limit + 1) * 4 + 1}`, (limit + 1) * 4);
+  }`).join(' UNION ');
+  const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?sequence ?epochOrder ?type
+    ?classified ?credited WHERE { ${patterns} }
+    ORDER BY STR(?work) LIMIT ${(limit + 1) * 4 + 1}`, (limit + 1) * 4);
   const groups = new Map<string, typeof rows>();
   for (const row of rows) {
     if (!row.work) throw new WorkReadUnavailable('Discovery source is incomplete');
@@ -162,12 +158,16 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
   }
   // Explicit deltas also advance across Works that ceased to be public.
   const items: ProjectedWork[] = [];
-  let spent = 0, checkpoint = after;
+  const classifiedWorks = basis.scope === 'mine' ? [] : candidates.slice(0, limit)
+    .filter(work => groups.get(work)?.[0]?.classified?.value === 'true')
+    .slice(0, WORK_CLASSIFICATION_BATCH_COST.works);
+  const classificationsByWork = await readPublicWorkClassifications(session, classifiedWorks);
+  const creditsByWork = await primaryDiscoveryCreditBatch(session, candidates.slice(0, limit)
+    .filter(work => groups.get(work)?.[0]?.credited?.value === 'true' || !!session.deps.sourceAdoptions));
+  let checkpoint = after;
   const principal = basis.scope === 'mine' ? await session.deps.access.activePrincipalId(session.principal!) : null;
   if (basis.scope === 'mine' && !principal) throw new WorkReadMissing('Reader is unavailable');
   for (const work of candidates.slice(0, limit)) {
-    // The source attribution owner fences one batch of at most 64 Works.
-    if (session.deps.sourceAdoptions && items.length === 64) break;
     const own = groups.get(work), first = own?.[0];
     if (!first?.head) { checkpoint = work; continue; }
     if (!first.main || !first.sequence || !first.epochOrder || !first.classified || !first.credited) {
@@ -177,23 +177,12 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
       new Set(own!.map(row => row[key]?.value)).size !== 1)) throw new WorkReadUnavailable('Discovery source is ambiguous');
     const classified = basis.scope !== 'mine' && first.classified!.value === 'true';
     const credited = first.credited!.value === 'true' || !!session.deps.sourceAdoptions;
-    // One classified Work is a handful of owner reads. Fill the step's graph
-    // budget instead of stopping after the first, so a quiet catalogue (the
-    // seed's Mods genres) activates within a minute rather than one Work per tick.
-    const callsLeft = fusekiReadBudget.getStore()?.callsLeft;
-    if (classified && checkpoint !== after && callsLeft !== undefined && callsLeft < 40) break;
-    const cost = (classified ? 20 : 0) + (basis.context ? 2 : 0) + (credited ? 1 : 0);
-    if (spent + cost > 120 && checkpoint !== after) break;
-    spent += cost;
     checkpoint = work;
-    const classifications = classified ? await readWorkClassifications(session, work).catch(error => {
-      if (error instanceof WorkReadMissing) return false as const;
-      throw error;
-    }) : null;
+    const classifications = classified ? classificationsByWork.get(work) : null;
     // The classification owner also checks current Work disclosure. An
     // unavailable candidate is a hole, as in the former one-Work projector.
-    if (classifications === false) continue;
-    if (classifications?.nextCursor || (classifications?.items.length ?? 0) > DISCOVERY_COST.termsPerWork) {
+    if (classified && !classifications) continue;
+    if (classifications?.after || (classifications?.items.length ?? 0) > DISCOVERY_COST.termsPerWork) {
       throw new WorkReadLimit('Discovery classification fanout exceeds its build budget');
     }
     const access = session.deps.access;
@@ -207,7 +196,7 @@ export async function projectDiscoveryBatch(session: WorkReadSession, basis: Dis
     if (basis.scope === 'mine' && !rating?.count) continue;
     const sum = rating?.histogram.reduce((total, count, index) => total + (index + 1) * count, 0) ?? 0;
     const item: ProjectedWork = { work, revision: first.head!.value, mainVersion: first.main!.value,
-      primaryCredits: credited ? await primaryDiscoveryCredits(session, work) : [],
+      primaryCredits: credited ? creditsByWork.get(work) ?? [] : [],
       types: own!.flatMap(row => row.type ? [row.type.value] : []).sort(),
       recentOrder: discoveryRecentOrder(Number(first.epochOrder!.value), first.sequence!.value),
       rating: rating?.count ? { context: basis.context!, count: rating.count, sum, mean: sum / rating.count,
