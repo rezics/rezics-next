@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { MainClient } from '../features/discover/types.ts';
 import { mainScopedRatingApi, memoryOwnRatings } from '../features/scoped-rating/api.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
+import { readingPositionSource, staticFrameSource } from '../features/scoped-rating/sources.ts';
 
 type Call = { name: string; body?: unknown; query?: unknown; key?: string };
 const player = 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000aa';
@@ -162,4 +163,25 @@ test('an unreachable Main is a failure to retry, not an exception', async () => 
   const main = (() => { throw new Error('offline'); }) as unknown as () => MainClient;
   expect(await mainScopedRatingApi({ actingSubject: null, own: memoryOwnRatings(), main }).questions(place.projection.id, { kind: 'global' }))
     .toEqual({ ok: false, failure: 'unavailable' });
+});
+
+test('a static source is searched by name and offers only the kind of place it was made for', async () => {
+  const source = staticFrameSource('position', fixture.episodes, 'Episodes');
+  const all = await source.load({ q: '', cursor: null });
+  expect(all.items).toHaveLength(fixture.episodes.length);
+  expect(all.items.every(item => item.candidate.dimension === 'position')).toBe(true);
+  const found = await source.load({ q: 'hunsford', cursor: null });
+  expect(found.items.map(item => item.value)).toEqual([fixture.episodes[2]!.iri]);
+});
+
+test('the chapters or episodes Main lists become position frames, in the language Main labelled them', async () => {
+  const occurrence = fixture.iri('0c01');
+  const page = { items: [{ occurrence, ordinal: 3, displayLabel: 'Chapter 3',
+    labels: [{ value: '第三章', language: 'zh-Hans' }] }], nextCursor: null, complete: true, search: { status: 'current' } };
+  const main = (() => ({ v1: { 'reading-positions': () => ({ get: async () => ({ data: page, error: null }) }) } })) as unknown as () => MainClient;
+  const source = readingPositionSource({ work: fixture.iri('0c00'), locale: 'zh-Hans', main });
+  const loaded = await source.load({ q: '', cursor: null });
+  expect(loaded).toMatchObject({ complete: true, nextCursor: null, updating: false });
+  expect(loaded.items[0]).toMatchObject({ value: occurrence, label: '第三章',
+    candidate: { iri: occurrence, dimension: 'position', name: { value: '第三章', language: 'zh-Hans', direction: 'ltr' } } });
 });

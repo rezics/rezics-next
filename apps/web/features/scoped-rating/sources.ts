@@ -1,6 +1,7 @@
 import { direction } from '@rezics/main/language';
 import type { EntityPickerItem, EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { browserMainApi } from '../api/browser.ts';
+import type { MainClient } from '../discover/types.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { pickPositionLabel, readReadingPositionPage } from '../wiki/position-picker.ts';
 import type { FrameCandidate, FrameDimension } from './frames.ts';
@@ -33,11 +34,11 @@ export function staticFrameSource(dimension: FrameDimension, candidates: readonl
  * The chapters or episodes of a Work, from Main's reading order: Main searches every language it carries and applies
  * disclosure before the page bound, so a place the reader has not reached never appears here.
  */
-export function readingPositionSource({ work, actingSubject, locale, label }: {
-  work: string; actingSubject?: string; locale: UiLocale; label?: string;
+export function readingPositionSource({ work, actingSubject, locale, label, main = () => browserMainApi(undefined, { anonymous: !actingSubject }) }: {
+  work: string; actingSubject?: string; locale: UiLocale; label?: string; main?: () => MainClient;
 }): FrameSource {
   return { dimension: 'position', label, async load({ q, cursor }) {
-    const page = await readReadingPositionPage(browserMainApi(undefined, { anonymous: !actingSubject }),
+    const page = await readReadingPositionPage(main(),
       { work, actingSubject, q, cursor: cursor ?? undefined, limit: 20, language: locale });
     return { nextCursor: page.nextCursor, complete: page.complete, updating: page.search?.status === 'indexing',
       items: page.items.map(item => {

@@ -47,7 +47,6 @@ function Switch({
   options: ContinuityOption[];
   withPosition: boolean;
 }) {
-  const t = translate(messages[locale], locale);
   const sw = (
     <ContinuitySwitch
       here={here}
@@ -76,7 +75,7 @@ function Switch({
         everythingOption: 'Show everything',
         everythingNote: 'Includes later records.',
         moreChapters: 'More chapters exist.',
-        close: t.close,
+        close: 'Close',
       }}
       at={{ kind: 'all' }}
       options={[]}

@@ -19,8 +19,6 @@ export default {
   removePlace: insert('移除{{name}}', { name: String }),
   continue: '繼續',
   chooseDifferently: '重新選擇',
-  close: '關閉',
-  opening: '正在開啟…',
   retry: '重試',
 
   failMissing: '此內容在這裡看不到，或已不存在。',
@@ -35,7 +33,6 @@ export default {
   signInToRate: '登入後評分',
   yourRating: '你的評分',
   yourRatingValue: insert('你的評分：{{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('評分：{{question}}', { question: String }),
   removeRating: '收回我的評分',
   saving: '正在儲存…',
   saved: '已儲存',
@@ -43,7 +40,6 @@ export default {
   saveFailed: '無法儲存你的評分，請重試。',
   saveConflict: '你的評分已在別處變更，因此這次評分未儲存。',
   writeReview: '撰寫評論',
-  readReviews: '評論',
   discuss: '討論',
 
   noRatings: '尚無評分',

@@ -19,8 +19,6 @@ export default {
   removePlace: insert('{{name}} 빼기', { name: String }),
   continue: '계속',
   chooseDifferently: '다시 고르기',
-  close: '닫기',
-  opening: '여는 중…',
   retry: '다시 시도',
 
   failMissing: '여기서는 볼 수 없거나 더 이상 존재하지 않아요.',
@@ -35,7 +33,6 @@ export default {
   signInToRate: '로그인해서 평가하기',
   yourRating: '내 평가',
   yourRatingValue: insert('내 평가: {{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('평가: {{question}}', { question: String }),
   removeRating: '내 평가 지우기',
   saving: '저장하는 중…',
   saved: '저장됨',
@@ -43,7 +40,6 @@ export default {
   saveFailed: '평가를 저장하지 못했어요. 다시 시도하세요.',
   saveConflict: '평가가 다른 곳에서 바뀌어서 이번 평가는 저장되지 않았어요.',
   writeReview: '리뷰 쓰기',
-  readReviews: '리뷰',
   discuss: '토론하기',
 
   noRatings: '아직 평가가 없어요',

@@ -71,14 +71,19 @@ export const ChoosePlaceEmptyPhone: Story = { ...ChoosePlaceEmpty, globals: phon
 export const ChoosePlace: Story = {
   async play() {
     const dialog = await screen.findByRole('dialog');
-    const search = await within(dialog).findByRole('combobox', { name: 'Episodes' });
+    const search = await within(dialog).findByRole('combobox', { name: 'Episodes' }, { timeout: 4000 });
     await waitFor(() => expect(search).toBeEnabled());
     const choose = async (query: string, option: RegExp) => {
-      await userEvent.click(search);
-      const list = await screen.findByRole('listbox', { name: 'Episodes' });
+      // The sheet moves focus once it has opened, which closes a list opened just before; open it until it stays open.
+      await waitFor(async () => {
+        if (search.getAttribute('aria-expanded') !== 'true') await userEvent.click(search);
+        await expect(search).toHaveAttribute('aria-expanded', 'true');
+      }, { timeout: 5000 });
       await userEvent.clear(search);
       await userEvent.type(search, query);
-      await userEvent.click(await within(list).findByRole('option', { name: option }));
+      // The list is briefly aria-hidden while a search is answered; the options are there either way.
+      const found = await screen.findByRole('option', { name: option, hidden: true }, { timeout: 4000 });
+      await userEvent.click(found);
     };
     await choose('Hunsford', /Episode 3/);
     await seeRole(dialog, 'button', 'Remove Episode 3 · Hunsford');

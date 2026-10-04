@@ -10,7 +10,6 @@ type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
 export type ProjectionAnswer = Ok<Main['projections']['post']>;
 export type ProjectionWrite = Extract<ProjectionAnswer, { projection: unknown }>;
 export type ProjectionView = ProjectionWrite['projection'];
-export type ProjectionPage = Ok<Main['projections']['get']>;
 export type SummaryBatch = Ok<Main['resources']['summaries']['post']>;
 export type ResourceSummary = SummaryBatch['summaries'][number];
 export type AvailableSummary = Extract<ResourceSummary, { status: 'available' }>;
@@ -22,7 +21,6 @@ export type TargetRating = Extract<RatingRead, { profile: 'target-rating-read-v1
 export type Rollup = Ok<Main['rating-rollups']['post']>;
 export type RollupMember = Rollup['members'][number];
 export type RollupFormula = Rollup['formula'];
-export type RollupRank = NonNullable<Rollup['rank']>;
 
 /** Every figure of a target and question comes from here, so a stale answer can never be shown as the latest. */
 export type Outcome<T> = { ok: true; data: T } | { ok: false; failure: Failure };

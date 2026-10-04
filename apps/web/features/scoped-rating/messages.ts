@@ -30,8 +30,6 @@ const en = {
   removePlace: insert('Remove {{name}}', { name: String }),
   continue: 'Continue',
   chooseDifferently: 'Choose differently',
-  close: 'Close',
-  opening: 'Opening…',
   retry: 'Try again',
 
   // Why something has no data
@@ -48,7 +46,6 @@ const en = {
   signInToRate: 'Sign in to rate',
   yourRating: 'Your rating',
   yourRatingValue: insert('Your rating: {{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('Rate: {{question}}', { question: String }),
   removeRating: 'Remove my rating',
   saving: 'Saving…',
   saved: 'Saved',
@@ -56,7 +53,6 @@ const en = {
   saveFailed: 'Your rating could not be saved. Try again.',
   saveConflict: 'Your rating was changed somewhere else, so this one wasn’t saved.',
   writeReview: 'Write a review',
-  readReviews: 'Reviews',
   discuss: 'Discuss',
 
   // Figures

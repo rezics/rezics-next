@@ -19,8 +19,6 @@ export default {
   removePlace: insert('Retirer {{name}}', { name: String }),
   continue: 'Continuer',
   chooseDifferently: 'Choisir autrement',
-  close: 'Fermer',
-  opening: 'Ouverture…',
   retry: 'Réessayer',
 
   failMissing: 'Cet élément n’est pas visible ici ou n’existe plus.',
@@ -35,7 +33,6 @@ export default {
   signInToRate: 'Connectez-vous pour noter',
   yourRating: 'Votre note',
   yourRatingValue: insert('Votre note : {{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('Noter : {{question}}', { question: String }),
   removeRating: 'Retirer ma note',
   saving: 'Enregistrement…',
   saved: 'Enregistré',
@@ -43,7 +40,6 @@ export default {
   saveFailed: 'Votre note n’a pas pu être enregistrée. Réessayez.',
   saveConflict: 'Votre note a été modifiée ailleurs, celle-ci n’a donc pas été enregistrée.',
   writeReview: 'Écrire une critique',
-  readReviews: 'Critiques',
   discuss: 'Discuter',
 
   noRatings: 'Pas encore de notes',

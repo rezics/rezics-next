@@ -45,7 +45,7 @@ export function QuestionRating({ api, target, question, scope, viewer, entryHref
   entryHref?: EntryHref; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
   const t = translate(messages, locale);
-  const [figures, reload] = useLoad(() => api.rating(target, question.context, scope), `${target}\n${question.context}`);
+  const [figures, reload] = useLoad(() => api.rating(target, question.context, scope), `${target}\n${question.context}\n${scope.kind === 'realm' ? scope.realm : 'global'}`);
   const [own, setOwn] = useState<number | null>(() => api.own(target, question.context));
   const [saving, setSaving] = useState<Saving>({ state: 'idle' });
   const text = questionText(question);
@@ -75,7 +75,7 @@ export function QuestionRating({ api, target, question, scope, viewer, entryHref
         {t.signInToRate}</Link>
       : <div className="grid justify-items-start gap-1.5">
         <Rating size="md" count={max} value={own ?? 0} className="items-start"
-          onValueChange={({ value }) => { if (value !== own) void save(value); }}>
+          onValueChange={({ value }) => { if (value >= 1 && value !== own) void save(value); }}>
           <RatingLabel className="font-normal text-muted-foreground text-sm">
             {own ? t.yourRatingValue({ value: formatNumber(own, locale), max: formatNumber(max, locale) }) : t.yourRating}
           </RatingLabel>

@@ -19,8 +19,6 @@ export default {
   removePlace: insert('{{name}} を外す', { name: String }),
   continue: '続ける',
   chooseDifferently: '選び直す',
-  close: '閉じる',
-  opening: '開いています…',
   retry: 'もう一度試す',
 
   failMissing: 'ここでは表示できないか、すでに存在しません。',
@@ -35,7 +33,6 @@ export default {
   signInToRate: 'サインインして評価する',
   yourRating: 'あなたの評価',
   yourRatingValue: insert('あなたの評価：{{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('評価する：{{question}}', { question: String }),
   removeRating: '自分の評価を取り消す',
   saving: '保存しています…',
   saved: '保存しました',
@@ -43,7 +40,6 @@ export default {
   saveFailed: '評価を保存できませんでした。もう一度お試しください。',
   saveConflict: '評価が別の場所で変更されたため、今回の評価は保存されませんでした。',
   writeReview: 'レビューを書く',
-  readReviews: 'レビュー',
   discuss: '話し合う',
 
   noRatings: 'まだ評価がありません',

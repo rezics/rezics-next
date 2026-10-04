@@ -19,8 +19,6 @@ export default {
   removePlace: insert('{{name}} entfernen', { name: String }),
   continue: 'Weiter',
   chooseDifferently: 'Anders wählen',
-  close: 'Schließen',
-  opening: 'Wird geöffnet…',
   retry: 'Erneut versuchen',
 
   failMissing: 'Das ist hier nicht sichtbar oder existiert nicht mehr.',
@@ -35,7 +33,6 @@ export default {
   signInToRate: 'Zum Bewerten anmelden',
   yourRating: 'Deine Bewertung',
   yourRatingValue: insert('Deine Bewertung: {{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('Bewerten: {{question}}', { question: String }),
   removeRating: 'Meine Bewertung entfernen',
   saving: 'Wird gespeichert…',
   saved: 'Gespeichert',
@@ -43,7 +40,6 @@ export default {
   saveFailed: 'Deine Bewertung konnte nicht gespeichert werden. Bitte versuche es erneut.',
   saveConflict: 'Deine Bewertung wurde anderswo geändert, daher wurde diese nicht gespeichert.',
   writeReview: 'Rezension schreiben',
-  readReviews: 'Rezensionen',
   discuss: 'Diskutieren',
 
   noRatings: 'Noch keine Bewertungen',

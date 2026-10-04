@@ -19,8 +19,6 @@ export default {
   removePlace: insert('Quitar {{name}}', { name: String }),
   continue: 'Continuar',
   chooseDifferently: 'Elegir otra cosa',
-  close: 'Cerrar',
-  opening: 'Abriendo…',
   retry: 'Reintentar',
 
   failMissing: 'Esto no es visible aquí o ya no existe.',
@@ -35,7 +33,6 @@ export default {
   signInToRate: 'Inicia sesión para valorar',
   yourRating: 'Tu valoración',
   yourRatingValue: insert('Tu valoración: {{value}}/{{max}}', { value: String, max: String }),
-  rateQuestion: insert('Valorar: {{question}}', { question: String }),
   removeRating: 'Quitar mi valoración',
   saving: 'Guardando…',
   saved: 'Guardado',
@@ -43,7 +40,6 @@ export default {
   saveFailed: 'No se pudo guardar tu valoración. Inténtalo de nuevo.',
   saveConflict: 'Tu valoración se cambió en otro sitio, así que esta no se guardó.',
   writeReview: 'Escribir una reseña',
-  readReviews: 'Reseñas',
   discuss: 'Comentar',
 
   noRatings: 'Aún no hay valoraciones',
