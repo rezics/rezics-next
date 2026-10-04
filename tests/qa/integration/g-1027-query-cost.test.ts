@@ -238,6 +238,40 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     expect(imported.items).toHaveLength(51);
     expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
     works.push(...imported.items.map((row) => row.receipt));
+    // Legacy typeahead/catalogue reads require selected text as well as public
+    // metadata. Preserve that cohort while bulk-importing its identities and
+    // classification decisions; Query and the legacy adapters see the same 52.
+    for (const work of works.slice(1)) {
+      const contribution = await stack.contribution(
+        work.work,
+        author.actor,
+        'en',
+        'G1027 Work body',
+      );
+      const input = {
+        context: { kind: 'main-version-default' as const, id: work.mainVersion },
+        work: work.work,
+        contribution: contribution.contribution,
+        publicationDecision: contribution.decision,
+        expectedSelectionHead: null,
+        selectionBasis: 'main-maintainer' as const,
+        actingSubject: author.actor,
+      };
+      expect(
+        (
+          await selectMainDefault(
+            stack.env,
+            stack.admission(
+              author.actor,
+              `publication:select:${work.mainVersion}`,
+              'publication.select',
+              mainSelectionDigest(input),
+            ),
+            input,
+          )
+        ).outcome,
+      ).toBe('succeeded');
+    }
     const privateWork = await stack.privateWork(author.actor, `${token} common hidden`);
     {
       const work = works[0]!,
