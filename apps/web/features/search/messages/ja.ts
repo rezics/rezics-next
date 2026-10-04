@@ -60,6 +60,7 @@ export default {
   badLinkTitle: '検索リンクの形式が正しくありません',
   badLinkHelp: 'URL に検索で使えない絞り込み条件があります。',
   titlesUnavailable: 'タイトルを読み込めなかったため、一部の結果には短い ID が表示されます。',
+  matchChapter: insert('章「{{chapter}}」で見つかりました', { chapter: String }),
   matchTitle: '題名が一致',
   matchOtherTitle: insert('別題：{{title}}', { title: String }),
   matchCredit: insert('著者：{{name}}', { name: String }),

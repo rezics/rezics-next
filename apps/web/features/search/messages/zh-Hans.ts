@@ -59,6 +59,7 @@ export default {
   badLinkTitle: '此搜索链接格式有误',
   badLinkHelp: '地址中有搜索不认识的筛选条件。',
   titlesUnavailable: '无法加载标题，因此部分结果显示简短 ID。',
+  matchChapter: insert('在章节“{{chapter}}”中找到', { chapter: String }),
   matchTitle: '标题匹配',
   matchOtherTitle: insert('又名 {{title}}', { title: String }),
   matchCredit: insert('作者：{{name}}', { name: String }),

@@ -41,6 +41,7 @@ const en = {
   freshness: insert('Search index as of change {{sequence}}', { sequence: String }),
   reasons: 'Why this matched',
   textMatch: insert('Found in the {{language}} text', { language: String }),
+  matchChapter: insert('Found in the chapter {{chapter}}', { chapter: String }),
   matchTitle: 'Title matches',
   matchOtherTitle: insert('Also titled {{title}}', { title: String }),
   matchCredit: insert('By {{name}}', { name: String }),

@@ -14,14 +14,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     : work.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle };
 }
 
-// A missing Work, a renamed slug or a chapter (read in its Book) is left to the view, which throws notFound()
+// A missing Work, a renamed slug or a chapter Post (read in its Book) is left to the view, which throws notFound()
 // or redirects: vinext renders not-found boundaries for pages, not layouts.
 export default async function WorkLayout({ params, children }: Params & { children: ReactNode }) {
   const { ref } = await params;
   const locale = await requestLocale();
   const [work, messages] = await Promise.all([resolveWork(ref, locale), getMessages('workPage', locale)]);
   if (work.kind === 'unavailable') return <WorkUnavailable messages={messages} />;
-  if (work.kind !== 'work' || work.header.partOf) return children;
+  if (work.kind !== 'work') return children;
   return <WorkFrameView workRef={ref} id={work.id} work={work.header} locale={locale} messages={messages}>
     {children}</WorkFrameView>;
 }

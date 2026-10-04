@@ -59,6 +59,7 @@ export default {
   badLinkTitle: 'Dieser Suchlink ist fehlerhaft',
   badLinkHelp: 'Die Adresse enthält einen Filter, den die Suche nicht kennt.',
   titlesUnavailable: 'Titel konnten nicht geladen werden; einige Ergebnisse zeigen deshalb eine Kurz-ID.',
+  matchChapter: insert('Im Kapitel {{chapter}} gefunden', { chapter: String }),
   matchTitle: 'Titel stimmt überein',
   matchOtherTitle: insert('Auch: {{title}}', { title: String }),
   matchCredit: insert('Von {{name}}', { name: String }),

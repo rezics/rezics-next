@@ -60,6 +60,7 @@ export default {
   badLinkTitle: '搜尋連結格式錯誤',
   badLinkHelp: '網址中有搜尋功能不認得的篩選條件。',
   titlesUnavailable: '無法載入標題，因此部分結果會顯示簡短 ID。',
+  matchChapter: insert('在章節「{{chapter}}」中找到', { chapter: String }),
   matchTitle: '標題相符',
   matchOtherTitle: insert('又名 {{title}}', { title: String }),
   matchCredit: insert('作者：{{name}}', { name: String }),

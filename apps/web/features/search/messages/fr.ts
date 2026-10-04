@@ -59,6 +59,7 @@ export default {
   badLinkTitle: 'Ce lien de recherche est mal formé',
   badLinkHelp: 'L’adresse contient un filtre que la recherche ne reconnaît pas.',
   titlesUnavailable: 'Impossible de charger les titres ; certains résultats affichent donc un identifiant abrégé.',
+  matchChapter: insert('Trouvé dans le chapitre {{chapter}}', { chapter: String }),
   matchTitle: 'Le titre correspond',
   matchOtherTitle: insert('Aussi intitulé {{title}}', { title: String }),
   matchCredit: insert('De {{name}}', { name: String }),

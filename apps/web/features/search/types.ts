@@ -1,5 +1,6 @@
 import type { MainClient, WorkCover, WorkName } from '../discover/types.ts';
 import type { CatalogueAuthor } from '../catalogue/work.ts';
+import { chapterHref, idOf } from '../work-page/route.ts';
 
 // Main's phrase page shapes (`publicPhrasePageRequest`/`publicPhrasePageResult`
 // in `services/main/src/api-contract.ts`), taken from the typed Eden client.
@@ -26,6 +27,8 @@ export interface MatchReasons {
   field: MatchField;
   matchedText: string | null;
   matchedLanguage: string | null;
+  /** A chapter's text matched: the chapter Post's title and its place in the result's Book. */
+  chapter: { title: string; href: string } | null;
   /** Realm results: adopted by the Realm, or its Main Version because the Realm selected none. */
   realm: 'realm-adoption' | 'main-fallback' | null;
   /** Classified results: the accepted concept and whose decision placed it. */
@@ -83,12 +86,20 @@ export function searchFailureOf(status: number, code: string | undefined): Searc
   return 'unavailable';
 }
 
+/** The matched chapter Post, linked by its address in the Book the result shows, which moves to its occurrence. */
+function chapterOf(match: Match): MatchReasons['chapter'] {
+  const book = match.matchedChapter && idOf(match.matchedChapter.book);
+  const post = match.matchedChapter && idOf(match.matchedChapter.post);
+  return match.matchedChapter && book && post
+    ? { title: match.matchedChapter.title, href: chapterHref(book, post, match.language) } : null;
+}
+
 export function reasonsOf(match: Match): Omit<MatchReasons, 'classification'>
   & { classification: { concept: string | null; source: 'local' | 'global' } | null } {
   const classification = 'classification' in match ? match.classification : null;
   return { language: match.language, field: match.matchedField ?? 'body',
     matchedText: match.matchedField && match.matchedField !== 'body' ? match.matchedText ?? null : null,
-    matchedLanguage: match.matchedLanguage ?? null,
+    matchedLanguage: match.matchedLanguage ?? null, chapter: chapterOf(match),
     realm: 'reason' in match && (match.reason === 'realm-adoption' || match.reason === 'main-fallback')
       ? match.reason : null,
     classification: classification ? { concept: classification.concept ?? null,

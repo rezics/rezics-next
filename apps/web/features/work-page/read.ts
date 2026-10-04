@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { notFound, permanentRedirect, redirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
 import { resolveAddress } from '../address/server.ts';
 import type { ResolvedAddress } from '../address/client.ts';
@@ -14,7 +14,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { chapterHref, chapterPlaceHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, textHref,
+import { chapterHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, postPlaceHref, textHref,
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
@@ -135,8 +135,30 @@ export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage 
   return settleNullable(followHref<HubWorkPage | null>(main, href, { actingSubject }));
 }
 
+/** A chapter Post with the Books that place it, as Main's Post read gives them. */
+export type PostRead = NonNullable<Awaited<ReturnType<ReturnType<ReturnType<typeof mainApiWithToken>['v1']['posts']>['get']>>['data']>;
+
+/** One chapter Post as its reader may read it: its title, publisher and the Books that use it. */
+export const readPost = cache(async (id: string, locale: UiLocale): Promise<Loaded<PostRead>> => {
+  const { main, actingSubject } = await reader();
+  return settle(() => main.v1.posts({ id }).get({ query: { language: locale, actingSubject } }));
+});
+
+/**
+ * Where a chapter Post is read in one named Book, for an address that carries both (`/w/{book}/read/{post}`);
+ * null when that Book does not use the Post or the reader may not read it.
+ */
+export async function postPlaceInBook(post: string, book: string, locale: UiLocale, language?: string):
+  Promise<string | null> {
+  const read = await readPost(post, locale);
+  return read.ok && read.data.placements.some(placement => idOf(placement.book) === book)
+    ? postPlaceHref(read.data.placements, book, language) : null;
+}
+
 export type WorkResolution =
   | { kind: 'work'; id: string; header: WorkHeader }
+  /** A chapter Post: its address moves to its place in a Book's reader, or its Book's Contents. */
+  | { kind: 'post'; id: string; href: string }
   | { kind: 'moved'; key: string }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
@@ -144,7 +166,8 @@ export type WorkResolution =
 /**
  * The Work behind a `/w/{ref}` page, shared by its layout, views and
  * metadata. Metadata reads this directly: vinext streams metadata, so a
- * `notFound()` thrown there would answer 200.
+ * `notFound()` thrown there would answer 200. A chapter's address, from before chapters became Posts of their
+ * Book, resolves to its Post.
  */
 export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<WorkResolution> => {
   const parsed = parseWorkRef(ref);
@@ -153,22 +176,26 @@ export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<
   if (resolved.kind !== 'work') return resolved;
   const header = await readWorkHeader(resolved.id, locale);
   if (header.ok) return { kind: 'work', id: resolved.id, header: header.data };
-  return { kind: header.failure === 'missing' ? 'missing' : 'unavailable' };
+  if (header.failure !== 'missing') return { kind: 'unavailable' };
+  const post = await readPost(resolved.id, locale);
+  if (!post.ok) return { kind: post.failure === 'missing' ? 'missing' : 'unavailable' };
+  const href = postPlaceHref(post.data.placements);
+  return href ? { kind: 'post', id: resolved.id, href } : { kind: 'missing' };
 });
 
 /**
  * The Work for a layout or view. A missing or invisible Work is a 404 and a
  * renamed alias moves to the current one; when Main cannot answer, the page
  * says the Work is unavailable rather than pretending it does not exist. A
- * chapter is read in its Book: its address opens the Book's reader there.
+ * chapter is a Post of its Book: its address moves for good to the Book's
+ * reader at that chapter.
  */
 export async function loadWork(ref: string, locale: UiLocale):
   Promise<{ ok: true; id: string; header: WorkHeader } | { ok: false }> {
   const work = await resolveWork(ref, locale);
   if (work.kind === 'missing') notFound();
   if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.key), locale));
-  const place = work.kind === 'work' && work.header.partOf ? chapterPlaceHref(work.header.partOf) : null;
-  if (place) redirect(localizedPath(place, locale));
+  if (work.kind === 'post') permanentRedirect(localizedPath(work.href, locale));
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 

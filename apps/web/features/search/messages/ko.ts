@@ -58,6 +58,7 @@ export default {
   badLinkTitle: '검색 링크가 잘못되었습니다',
   badLinkHelp: '주소에 검색 필터로 인식하지 못하는 항목이 있습니다.',
   titlesUnavailable: '제목을 불러오지 못해 일부 결과에 짧은 ID가 표시됩니다.',
+  matchChapter: insert('‘{{chapter}}’ 챕터에서 찾음', { chapter: String }),
   matchTitle: '제목 일치',
   matchOtherTitle: insert('다른 제목: {{title}}', { title: String }),
   matchCredit: insert('저자: {{name}}', { name: String }),

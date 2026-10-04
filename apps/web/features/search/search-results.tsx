@@ -84,6 +84,15 @@ export function withValue(message: (value: string) => string, value: string, lan
   return withName(message, contentText(value, lang ?? ''));
 }
 
+const SLOT = '\u0000';
+
+/** The matched chapter's title as a link to its place in the Book, set in the title's own language. */
+function chapterMatch(chapter: NonNullable<SearchHit['reasons']['chapter']>, language: string, t: Text): ReactNode {
+  const [before = '', after = ''] = t.matchChapter({ chapter: SLOT }).split(SLOT);
+  return <span>{before}<Link href={chapter.href} lang={language}
+    className="font-medium text-foreground underline-offset-4 hover:underline">{chapter.title}</Link>{after}</span>;
+}
+
 /** Where the phrase was found, in words: the title (or another of its titles), an author, the tagline or the text. */
 function matchReason(hit: SearchHit, locale: UiLocale, t: Text): { icon: typeof FileTextIcon; text: ReactNode } {
   const { field, matchedText, matchedLanguage, language } = hit.reasons;
@@ -93,7 +102,9 @@ function matchReason(hit: SearchHit, locale: UiLocale, t: Text): { icon: typeof 
     case 'credit': return { icon: UserRoundIcon, text: matchedText
       ? withValue(name => t.matchCredit({ name }), matchedText, matchedLanguage) : t.matchCreditUnnamed };
     case 'tagline': return { icon: QuoteIcon, text: t.matchTagline };
-    case 'body': return { icon: FileTextIcon, text: t.textMatch({ language: languageName(language, locale) }) };
+    case 'body': return hit.reasons.chapter
+      ? { icon: FileTextIcon, text: chapterMatch(hit.reasons.chapter, language, t) }
+      : { icon: FileTextIcon, text: t.textMatch({ language: languageName(language, locale) }) };
   }
 }
 

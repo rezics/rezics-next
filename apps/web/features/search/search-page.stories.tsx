@@ -21,7 +21,7 @@ function hit(n: number, title: string | null, language: string, reasons: Partial
     title: title === null ? null : { value: title, language, direction: 'ltr', basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: `work-${n}`, resourceType: 'work' },
     authors: [], rating: null, tagline: null, completion: null, ...card,
-    reasons: { language, field: 'body', matchedText: null, matchedLanguage: null, realm: null, classification: null,
+    reasons: { language, field: 'body', matchedText: null, matchedLanguage: null, chapter: null, realm: null, classification: null,
       ...reasons } };
 }
 
@@ -92,6 +92,20 @@ export const Populated: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await waitFor(() => expect(canvas.getByRole('link', { name: 'Pride and Prejudice — Chapter 3' })).toHaveFocus());
     await expect(canvas.getByRole('link', { name: 'Work 00000005' })).toBeVisible();
+  },
+};
+
+/** The phrase is in a chapter's text: the Book is the result and the chapter's title links to its place. */
+const chapterPlace = `${resourceHref('/w/', id(10))}/read/${id(100).slice(-36)}`;
+export const ChapterTextMatch: Story = {
+  args: { parsed: state('proud stranger'), initial: results([
+    hit(10, 'Pride and Prejudice', 'en', { chapter: { title: 'Chapter 3 · A proud stranger', href: chapterPlace } })]) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
+    await expect(canvas.getByRole('list', { name: 'Why this matched' })).toHaveTextContent('Found in the chapter Chapter 3 · A proud stranger');
+    await expect(canvas.getByRole('link', { name: 'Chapter 3 · A proud stranger' }))
+      .toHaveAttribute('href', localizedPath(chapterPlace, 'en'));
   },
 };
 

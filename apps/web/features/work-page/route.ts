@@ -197,14 +197,29 @@ export const textHref = (ref: WorkAt, language?: string) =>
   withQuery(`${globalWorkHref(workRefOf(ref))}/read`, { language });
 
 /**
- * Where a chapter Work is read: at its place in its Book's reader, or the Book's Contents when it has no
- * place there now. A chapter is never shown as a Work of its own.
+ * Where a chapter is read: at its place in its Book's reader, or the Book's Contents when it has no single
+ * place there now. A chapter is a Post of its Book, never a Work of its own.
  */
-export function chapterPlaceHref(partOf: { work: string; occurrence: string | null }): string | null {
+export function chapterPlaceHref(partOf: { work: string; occurrence: string | null }, language?: string): string | null {
   const book = idOf(partOf.work);
   const chapter = partOf.occurrence ? idOf(partOf.occurrence) : null;
   if (!book) return null;
-  return chapter ? chapterHref(book, chapter) : workHref(book, 'contents');
+  return chapter ? chapterHref(book, chapter, language) : workHref(book, 'contents');
+}
+
+/** One Book's use of a Post, as Main's Post read lists it: in Book then occurrence order. */
+export interface PostPlacement { book: string; occurrence: string }
+
+/**
+ * A chapter Post's durable address: its place in the Book that uses it. `book` picks the Book when several do;
+ * otherwise the first, as Main orders them. A Book that uses the Post more than once has no single place, so
+ * its Contents opens. Null when no Book this reader may read uses the Post.
+ */
+export function postPlaceHref(placements: readonly PostPlacement[], book?: string, language?: string): string | null {
+  const chosen = (book && placements.find(placement => idOf(placement.book) === book)?.book) ?? placements[0]?.book;
+  if (!chosen) return null;
+  const places = placements.filter(placement => placement.book === chosen);
+  return chapterPlaceHref({ work: chosen, occurrence: places.length === 1 ? places[0]!.occurrence : null }, language);
 }
 
 /** The Contents tab's level, language and page. */

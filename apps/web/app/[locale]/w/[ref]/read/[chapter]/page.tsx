@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { workPageMetadata } from '../../../../../../features/seo/work.ts';
 import { ChapterNotFound, ChapterReader, ChapterUnavailable } from '../../../../../../features/work-page/reader.tsx';
 import { parseReaderSettings, READER_COOKIE } from '../../../../../../features/work-page/reader-settings.ts';
-import { loadWork, readChapter, readingAgent, readProgress, resolveWork }
+import { loadWork, postPlaceInBook, readChapter, readingAgent, readProgress, resolveWork }
   from '../../../../../../features/work-page/read.ts';
 import { parseReaderLanguage, parseWorkRef } from '../../../../../../features/work-page/route.ts';
+import { localizedPath } from '../../../../../../i18n/locale.ts';
 import { WorkUnavailable } from '../../../../../../features/work-page/work-states.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../../../i18n/server.ts';
 
@@ -36,6 +37,11 @@ export default async function ChapterPage({ params, searchParams }: Props) {
   const [work, messages, jar] = await Promise.all([loadWork(ref, locale), getMessages('workPage', locale), cookies()]);
   if (!work.ok) return <WorkUnavailable messages={messages} />;
   const read = chapterId.test(chapter) && language !== null ? await readChapter(chapter, language) : null;
+  // The address of a chapter Post in this Book, such as a search result's, moves to its occurrence.
+  if (read && !read.ok && read.failure === 'missing') {
+    const place = await postPlaceInBook(chapter, work.id, locale, language ?? undefined);
+    if (place) permanentRedirect(localizedPath(place, locale));
+  }
   // A missing chapter, or a chapter address under another Work's ref, is not this Work's chapter.
   if (!read || (!read.ok && read.failure === 'missing') || (read.ok && read.data.work !== work.header.id)) {
     return <ChapterNotFound workRef={ref} messages={messages} />;

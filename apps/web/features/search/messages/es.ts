@@ -59,6 +59,7 @@ export default {
   badLinkTitle: 'El enlace de búsqueda no es válido',
   badLinkHelp: 'La dirección contiene un filtro que la búsqueda no reconoce.',
   titlesUnavailable: 'No se pudieron cargar los títulos, así que algunos resultados muestran un identificador corto.',
+  matchChapter: insert('Encontrado en el capítulo {{chapter}}', { chapter: String }),
   matchTitle: 'El título coincide',
   matchOtherTitle: insert('También titulado {{title}}', { title: String }),
   matchCredit: insert('De {{name}}', { name: String }),
