@@ -11,7 +11,6 @@ test('SR-4: Accounts and web reject controls before URL parsing and return canon
     '/\\evil.test',
     '/%5cevil.test',
     '/%5C/evil.test',
-    // ast-grep-ignore: web-links-use-address -- Deliberately malformed inbound address verifies that unsafe input is rejected.
     '/.//evil.test',
     // ast-grep-ignore: web-links-use-address -- Deliberately malformed inbound address verifies unsafe input rejection.
     '/a/..//evil.test',

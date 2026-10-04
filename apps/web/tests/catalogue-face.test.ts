@@ -23,7 +23,6 @@ const name = (value: string, language: string, basis: 'requested' | 'fallback' =
 
 describe('one face per Work', () => {
   test('every form of a Work’s id picks the same design, and Main’s per-read fallback keys do not', () => {
-    // ast-grep-ignore: web-links-use-address -- Legacy URL inputs verify UUID extraction and case normalization, not navigation destinations.
     for (const id of [
       `https://rezics.com/id/${uuid}`,
       uuid,

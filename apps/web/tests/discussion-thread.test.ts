@@ -44,7 +44,6 @@ describe('how a discussion reads', () => {
   });
 
   test('a thread lives under its Realm’s address, by the reply’s SID', () => {
-    // ast-grep-ignore: web-links-use-address -- Independent expected SID guards the discussion builder's identity encoding.
     expect(threadPath(spaceHref('fiction', 'community'), id(7))).toBe(
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
       `/r/fiction/discussions/${uuidToSid(id(7).slice(-36))}`,

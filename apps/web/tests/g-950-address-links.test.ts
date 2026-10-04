@@ -71,7 +71,6 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
       .toBe('/@lin_mei/shelves/reading?cursor=a%2Fb%2B%3F');
     const address = { prefix: '/a/' as const, key: sid, suffixSource: 'Lin Mei' };
-    // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(profileHref({ handle: 'old_handle', address }, { kind: 'works' })).toBe(
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
       `/a/${sid}-lin-mei/works`,
@@ -94,7 +93,6 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     const thread = threadPath(communityHref(iri, 'fiction'), iri);
     // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(thread).toBe(`/r/fiction/discussions/${sid}`);
-    // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     for (const target of [
       thread,
       `${thread}-old-title#reply`,
@@ -103,7 +101,6 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     ]) {
       expect(discussionTarget(target)).toBe(iri);
     }
-    // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     for (const target of [
       // ast-grep-ignore: web-links-use-address -- Malformed discussion input verifies rejection rather than navigation.
       '/r/fiction/discussions/not-an-id',
@@ -126,7 +123,6 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
       match: 'all',
     };
     const other = '0199a0fe-0b21-7000-8000-123456789abd';
-    // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(conceptHref(withValue(state, other, 'include'))).toBe(
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
       `/concepts/${sid}-fantasy?include=${other}`,
@@ -134,7 +130,6 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     expect(continueHref(encodedWork, { discussion: 'read+next' }, 'statements', 's/next')).toBe(
       `${encodedWork}?discussion=read%2Bnext&statements=s%2Fnext#statements`,
     );
-    // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(destinationOf('/v1/works/{work}/realizations/{realization}', iri)).toBe(
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
       `/w/${sid}/edit/editions`,
