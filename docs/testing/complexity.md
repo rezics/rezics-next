@@ -122,14 +122,36 @@ seconds. The scale constants are diagnostic recipes, not evidence that every
 owner's command corpus already prepares under that ceiling. Qualify the actual
 recipe's preparation time and isolated restore before retaining its dataset.
 
-Large command corpora use `REZICS_QA_STACK_MODE=scale`: one setting chooses
-persistent disk volumes, a 1,536 MiB JVM heap, a 512 MiB direct-memory cap and
-a 7 GiB Fuseki container limit. Ordinary integration shards retain tmpfs,
-512 MiB heap, 128 MiB direct memory and a 2 GiB container limit. The
-[catalogue recipe registry](../../scripts/qa/stack-environment.ts) selects scale
-mode before starting the G-1031 write probe and G-1032 preparation probe;
-the shard planner gives these recipes separate projects. Other scale probes
-can select it explicitly:
+The [QA resource registry](../../scripts/qa/resource-classes.ts) declares storage,
+Fuseki allocation and command budget before startup. The runner records the
+class and budget beside each project's result, and checks the live container's
+memory limit and storage mount before bootstrap. The tmpfs Compose overlay uses
+the saved project allocation; separate overlay variables previously left it at
+2 GiB even when the runner had selected 7 GiB.
+
+| Class | Storage | Container memory | JVM heap / direct memory | Test command budget |
+| --- | --- | --- | --- | --- |
+| `ordinary` | tmpfs | 2 GiB | 512 / 128 MiB | 480 s |
+| `large-tmpfs` | tmpfs | 7 GiB | 1,536 / 512 MiB | 600 s |
+| `catalogue-disk` | persistent disk | 7 GiB | 1,536 / 512 MiB | 480 s |
+
+Home's G-1025 cost probes, the G-1021/G-1022 reading probes, G-1034 Realm
+ranking and G-1048 search availability use `large-tmpfs`. Complete large
+library, Zone and discovery fixtures use the same class. These corpora retain
+enough TDB2 history to exhaust the ordinary container's memory; switching to
+disk also changes their timing substantially. Catalogue growth and preparation
+recipes use `catalogue-disk`. Every declared heavy file owns one project,
+including when it is selected alongside ordinary files or only one QA slot is
+free. A memory override below its declared minimum fails before startup.
+
+Projects queue through the available QA slots. Each keeps its declared command
+deadline; a selected tier with heavy projects gets a bounded scheduling
+allowance for those commands and project turnover (up to 120 s cleanup and
+180 s each for startup and bootstrap). Ordinary-only selections retain their
+480-second tier budget. These test deadlines leave the existing 600-second
+fixture preparation ceiling unchanged.
+
+Other scale probes can select disk storage explicitly:
 
 ```sh
 REZICS_QA_STACK_MODE=scale bun scripts/goal/goalctl.ts test tests/qa/integration/g-1032-query-cost.test.ts
