@@ -267,12 +267,12 @@ export class ReadRankingProjection {
     }
     const key = order === 'score' ? 'score' : 'growth';
     const result = await this.access.query<{ work: string; score: string; growth: string }>(
-      `SELECT work, score::text, growth::text FROM access.read_ranking_admitted
+      `SELECT work, score::text, growth::text FROM access.read_ranking_admitted AS admitted
        WHERE generation = $1 AND metric = $2 AND interval = $3 AND bucket = $4 AND context=$8
          ${order === 'growth' ? 'AND growth > 0' : ''}
          AND ($5::bigint IS NULL OR ${key} < $5::bigint
            OR (${key} = $5::bigint AND work > $6::text))
-       ORDER BY ${key} DESC, work LIMIT $7`,
+       ORDER BY admitted.${key} DESC, work LIMIT $7`,
       [generation, metric, interval, bucket, after?.value ?? null, after?.work ?? '', limit,
         realm ?? 'urn:rezics:context:global']);
     return result.rows;

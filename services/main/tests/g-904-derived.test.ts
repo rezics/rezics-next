@@ -45,26 +45,24 @@ function fixture(signed = false) {
   const batches: DisclosureTarget[][] = [];
   let failed = false;
   const pool = {
-    connect: async () => ({
-      release() {},
-      query: async (sql: string, args?: unknown[]) => {
-        if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-        if (!sql.includes('WITH requested')) return { rows: [] };
-        if (failed) throw new Error('Assessment store unavailable');
-        const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
-        expect(targets.length).toBeLessThanOrEqual(64);
-        batches.push(targets);
-        return {
-          rows: targets.map((target) => ({
-            ordinal: target.ordinal,
-            restricted: [target.resource, target.work].some(ref => ref && restricted.has(ref)),
-            assessments: [...new Set([target.resource, target.work])].flatMap((ref) =>
-              ref && labels.has(ref) ? [labels.get(ref)!] : [],
-            ),
-          })),
-        };
-      },
-    }),
+    // Disclosure and its recovery fence now share one autocommit snapshot.
+    query: async (sql: string, args?: unknown[]) => {
+      if (!sql.includes('jsonb_to_recordset')) return { rows: [] };
+      if (failed) throw new Error('Assessment store unavailable');
+      const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
+      expect(targets.length).toBeLessThanOrEqual(64);
+      batches.push(targets);
+      return {
+        rows: targets.map((target) => ({
+          open: true,
+          ordinal: target.ordinal,
+          restricted: [target.resource, target.work].some(ref => ref && restricted.has(ref)),
+          assessments: [...new Set([target.resource, target.work])].flatMap((ref) =>
+            ref && labels.has(ref) ? [labels.get(ref)!] : [],
+          ),
+        })),
+      };
+    },
   } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async (query) => ({
@@ -278,7 +276,8 @@ for (const signed of [false, true]) {
     f.restricted.add(id(4));
     f.session.query = async (query) =>
       query.includes('SELECT DISTINCT ?work ?main ?head')
-        ? candidates.map((candidate) => row({ work: candidate.work, head: id(900), main: id(800) }))
+        ? candidates.filter(candidate => query.includes(`<${candidate.work}>`))
+          .map((candidate) => row({ work: candidate.work, head: id(900), main: id(800) }))
         : query.includes('SELECT ?work ?head')
           ? serialHeads(query)
           : [];
@@ -289,7 +288,9 @@ for (const signed of [false, true]) {
         contentSequence: '1',
         reviewPosition: '1',
       }),
-      candidates: async () => candidates,
+      // The projection seeks admitted scores; denied raw rows never consume
+      // the page or its lookahead. The reader still fences these identities.
+      candidates: async () => candidates.filter(candidate => !f.restricted.has(candidate.work)),
     } as unknown as ReadRankingProjection;
     const page = await readRankings(f.session, projection, {
       realm: null,
