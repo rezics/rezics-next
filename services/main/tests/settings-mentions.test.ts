@@ -22,7 +22,7 @@ async function mentionEvents(currentRevision: string) {
     query: async () => ({ rows: [{ data_epoch: 'epoch', sequence: '1' }] }) } as unknown as Pool;
   const access = { query: async (sql: string) => {
     if (sql.includes('FROM access.admission')) return { rows: [{ principal_id: id(8) }] };
-    if (sql.includes('FROM access.agent_handle')) return { rows: [{ agent_id: native(9) }] };
+    if (sql.includes('FROM access.alias_registry')) return { rows: [{ agent_id: native(9) }] };
     if (sql.includes('FROM access.representation')) return { rows: [{ id: id(10) }] };
     if (sql.includes('access.watch')) return { rows: [],rowCount: 1 };
     if (sql.includes('WITH targets AS')) return { rows: [] };

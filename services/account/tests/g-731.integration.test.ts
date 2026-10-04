@@ -1,3 +1,4 @@
+// sql-relations-allow: public.rezics_mail_event -- G731 verifies that raw mail events are never retained in a relation.
 import { expect, test } from 'bun:test';
 import { accountFixture, freePort } from './account-fixture.ts';
 import { createAccountApp } from '../src/app.ts';

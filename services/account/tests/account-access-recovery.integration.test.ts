@@ -1,3 +1,4 @@
+// sql-relations-allow: public.recovery_inventory_unexpected -- The recovery fixture temporarily renames a table to verify inventory refusal.
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';

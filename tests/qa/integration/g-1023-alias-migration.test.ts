@@ -1,3 +1,8 @@
+// sql-relations-allow: access.name_registry -- G1023 restores the pre-1029 registry before upgrading it.
+// sql-relations-allow: access.name_history -- G1023 restores the pre-1029 history before upgrading it.
+// sql-relations-allow: access.name_receipt -- G1023 restores pre-1029 retained command results before upgrading them.
+// sql-relations-allow: access.name_graph_import -- G1023 restores the pre-1029 import cursor before upgrading it.
+// sql-relations-allow: access.name_graph_import_report -- G1023 restores the pre-1029 import report before upgrading it.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';

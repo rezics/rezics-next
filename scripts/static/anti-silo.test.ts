@@ -2,6 +2,12 @@
 // Rewrite it with `bun scripts/static/anti-silo.test.ts --update` or
 // `ANTI_SILO_UPDATE=1 bun test scripts/static/anti-silo.test.ts`. Bun's test runner
 // swallows a bare `--update` flag, so `bun test … --update` does not rewrite it.
+// sql-relations-allow: access.bookmark -- Synthetic domain-name parser fixture.
+// sql-relations-allow: access.game_notes -- Synthetic domain-table violation fixture.
+// sql-relations-allow: access.mods -- Synthetic domain-name parser fixture.
+// sql-relations-allow: access.book_mark -- Synthetic quoted domain-name parser fixture.
+// sql-relations-allow: access.reader_note -- Synthetic SQL comment parser fixture.
+// sql-relations-allow: access.moderation_bookmark -- Synthetic accepted domain-table fixture.
 import { expect, test } from 'bun:test';
 import {
   existsSync,
