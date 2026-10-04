@@ -75,6 +75,10 @@ test('G-727: encrypted small owner cut replays WAL, retains deletion/revocation,
       return pool;
     };
     const account = owner('account');
+    const migrationLedger = (await account.query(
+      'SELECT name, applied_at FROM public.rezics_local_migration ORDER BY name',
+    )).rows;
+    expect(migrationLedger.length).toBeGreaterThan(0);
     const access = owner('access');
     const content = owner('content');
     const relay = owner('relay');
@@ -248,6 +252,9 @@ process.exit(result.exitCode);
       key,
       environment: offhost,
       checks: recoveryChecks(probes, key, async (context) => {
+        expect((await context.pools.account.query(
+          'SELECT name, applied_at FROM public.rezics_local_migration ORDER BY name',
+        )).rows).toEqual(migrationLedger);
         expect(
           (await context.pools.access.query('SELECT body FROM access.g727_inflight WHERE id = 1'))
             .rows[0]?.body,
