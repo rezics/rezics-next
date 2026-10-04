@@ -13,7 +13,7 @@ import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezi
 import { cn } from '@rezics/ui/utils';
 import type { ZoneText } from '@rezics/zone-sdk';
 import { BookMarkedIcon, CheckIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browseMessages } from '../discover/browse-messages.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -65,6 +65,8 @@ export interface PositionControlProps {
   load?: EntityPickerLoad<PositionPickerItem>;
   /** Navigation adapter for embedded previews; the app uses document navigation. */
   navigate?: (href: string) => void;
+  /** Further controls for the bar that share the reader's place in the story, such as the continuity switch. */
+  children?: ReactNode;
 }
 
 const row =
@@ -95,6 +97,7 @@ export function PositionControl({
   search,
   load: providedLoad,
   navigate = (href) => window.location.assign(href),
+  children,
 }: PositionControlProps) {
   const load: EntityPickerLoad<PositionPickerItem> | undefined =
     providedLoad ??
@@ -281,6 +284,7 @@ export function PositionControl({
             </LocalizedLink>
           </>
         ) : null}
+        {children}
       </div>
     </div>
   );
