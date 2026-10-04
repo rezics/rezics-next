@@ -16,4 +16,4 @@ The numbered product [decisions](docs/product/decisions.md) and the
 `task goal -- status` shows each running Goal's manager session and live tasks.
 
 Main-wide regression ([practice](docs/goals/README.md#several-goals)): held by
-addresses-discovery, being handed over as it wraps up.
+scoped-subjects since 2026-10-05, taken over from addresses-discovery.
