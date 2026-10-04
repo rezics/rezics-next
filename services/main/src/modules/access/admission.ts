@@ -1730,7 +1730,13 @@ export class AccessAdmissionRegistry {
       if (proof.outcome === 'succeeded' && row.state !== 'claimed') {
         throw new AdmissionConflict('unclaimed admission cannot succeed');
       }
+      // Only this seal's inventory writes are covered by its graph outbox event.
+      // Restore/repair writes retain Discovery's independent source fence.
+      const ratingOutbox = proof.outcome === 'succeeded'
+        && ['rating.context.create', 'rating.context.policy.set', 'rating.observation.set'].includes(row.action);
+      if (ratingOutbox) await client.query("SELECT set_config('rezics.discovery_rating_outbox','on',true)");
       await recordRatingAggregateHead(client, row, proof);
+      if (ratingOutbox) await client.query("SELECT set_config('rezics.discovery_rating_outbox','off',true)");
       await recordInitialMaintainer(client, row, proof);
       if (row.action === 'space.create') await settleBaselineSpace(client, admissionId, proof.outcome);
       await client.query(

@@ -116,6 +116,7 @@ export interface DiscoveryEventInput {
   outcome?: string;
   work?: string;
   mainVersion?: string;
+  target?: string;
   ratingContext?: string;
   ratingSlot?: string;
   realm?: string;
@@ -129,6 +130,14 @@ export function discoveryEventEffect(
   const effect = DISCOVERY_EFFECTS[event.action];
   if (!effect) return undefined;
   if (event.outcome === 'cancelled' || event.outcome === 'stale' || event.outcome === 'denied')
+    return 'irrelevant';
+  // Discover reads MainVersion aggregates. A structural grain's owning Work
+  // does not make its exact target's rating part of that population.
+  if (
+    event.action === 'rating.observation.set' &&
+    event.target &&
+    event.target !== event.mainVersion
+  )
     return 'irrelevant';
   if (basis && event.action.startsWith('rating.')) {
     if (!basis.context || event.ratingContext !== basis.context) return 'irrelevant';

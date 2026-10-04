@@ -25,6 +25,7 @@ import { readEpochOrder } from './lineage.ts';
 import { primaryDiscoveryCreditBatch, DISCOVERY_CREDIT_BATCH_COST } from './credits.ts';
 import type { Pool } from 'pg';
 import type { MainCloudEvent } from '../outbox/relay.ts';
+import { FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
 import { discoveryEventEffect, discoveryEventWorks, type DiscoveryEventInput } from './effects.ts';
 
@@ -34,6 +35,8 @@ export const DISCOVERY_REFRESH_INPUT_COST = {
   events: DISCOVERY_DELTA_COST.events,
   birthQueries: 1,
   birthRows: DISCOVERY_DELTA_COST.events,
+  targetQueries: 1,
+  targetRows: DISCOVERY_DELTA_COST.events,
 } as const;
 
 /** One statement sees batch headers and their events at the same SQL snapshot:
@@ -49,6 +52,7 @@ export class DiscoveryRefreshInputs {
     position: { dataEpoch: string; sequence: string },
     after: string,
     basis?: OwnedDiscoveryBasis,
+    session?: Pick<WorkReadSession, 'query'>,
   ): Promise<DiscoveryChanges | null> {
     const count = BigInt(position.sequence) - BigInt(after);
     if (count === 0n) return { works: [], created: [] };
@@ -79,6 +83,53 @@ export class DiscoveryRefreshInputs {
       )
     ).rows;
     if (rows.length > DISCOVERY_REFRESH_INPUT_COST.events) return null;
+    const targets = [
+      ...new Set(
+        rows.flatMap((row) => {
+          const input = row.envelope?.data?.receipt as DiscoveryEventInput | undefined;
+          return input?.action === 'rating.observation.set' &&
+            input.outcome === 'succeeded' &&
+            input.target &&
+            !input.mainVersion &&
+            (!basis || basis.context === input.ratingContext)
+            ? [input.target]
+            : [];
+        }),
+      ),
+    ];
+    const targetWorks = new Map<string, string>();
+    if (targets.length) {
+      if (
+        !session ||
+        targets.some((target) => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target))
+      )
+        return null;
+      const resolved = await session
+        .query(
+          `SELECT ?target ?work WHERE {
+        VALUES ?target { ${targets.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?target a rv:MainVersion ; rv:work ?work .
+          ?work rv:mainVersion ?target }
+      } LIMIT ${targets.length + 1}`,
+          targets.length,
+        )
+        .catch((error) => {
+          if (error instanceof WorkReadLimit || error instanceof FusekiQueryResponseTooLarge)
+            return null;
+          throw error;
+        });
+      if (!resolved) return null;
+      for (const row of resolved) {
+        if (
+          !row.target ||
+          !row.work ||
+          !targets.includes(row.target.value) ||
+          targetWorks.has(row.target.value)
+        )
+          return null;
+        targetWorks.set(row.target.value, row.work.value);
+      }
+    }
     const batches = new Map<string, typeof rows>();
     const works = new Set<string>(),
       created = new Set<string>();
@@ -99,7 +150,12 @@ export class DiscoveryRefreshInputs {
         data.sourcePosition.sequence !== row.sequence
       )
         return null;
-      const input = receipt as DiscoveryEventInput;
+      const input = { ...receipt } as DiscoveryEventInput;
+      if (input.target && !input.mainVersion && targetWorks.has(input.target)) {
+        if (input.work && input.work !== targetWorks.get(input.target)) return null;
+        input.work = targetWorks.get(input.target);
+        input.mainVersion = input.target;
+      }
       const effect = discoveryEventEffect(input, basis);
       if (!effect || effect === 'scope') return null;
       if (effect === 'work') {

@@ -156,7 +156,12 @@ export class DiscoveryRefreshWorker {
           ) {
             const after = state.row.validated_sequence ?? state.row.source_sequence;
             intervening = this.deps.discoveryRefreshInputs
-              ? await this.deps.discoveryRefreshInputs.read(session.position, after, job.basis)
+              ? await this.deps.discoveryRefreshInputs.read(
+                  session.position,
+                  after,
+                  job.basis,
+                  session,
+                )
               : await discoveryChanges(session, after, job.basis);
             // Finish the pinned population; journal changes and reconcile them
             // before publication. Remote HTTP cannot reconstruct an old mutable
@@ -169,6 +174,7 @@ export class DiscoveryRefreshWorker {
                     session.position,
                     state.reuse.covered_sequence ?? state.reuse.source_sequence,
                     job.basis,
+                    session,
                   )
                 : await discoveryChanges(
                     session,
