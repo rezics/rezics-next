@@ -110,6 +110,7 @@ const join = async (realm: string, key: string) => {
 };
 async function measure(dimension: string, scale: string, operation: string, path: `/v1/${string}`,
   validate: (body: any) => void) {
+  if (process.env.G1026_OPERATIONS && !process.env.G1026_OPERATIONS.split(',').includes(operation)) return;
   if (operation === 'threads-best' || operation === 'threads-top') await home.project();
   for (const viewer of ['anonymous', 'member']) for (const temperature of ['first', 'warm']) {
     await flushTelemetryTraces();
@@ -125,6 +126,7 @@ async function measure(dimension: string, scale: string, operation: string, path
     assert(profile.postgresStatements !== null && profile.postgresStatements > 0,
       'A real database request must export SQL spans');
     profiles.push({ dimension, scale, operation, viewer, temperature, profile });
+    console.log(JSON.stringify({ stage: 'measured', dimension, scale, operation, viewer, temperature, elapsedMs: performance.now()-started }));
   }
 }
 
@@ -179,6 +181,9 @@ try {
   const opening = await post(0);
   await post(-1, opening);
   posts.push(opening);
+  // Every isolated dimension needs the same two-item page. Keep the opening
+  // (and its child) outside that page, as the original Realm-size-first sweep did.
+  posts.push(await post(1), await post(2));
 
   // All relationship targets exist before the sweeps. Following an existing
   // Agent changes only follows; joining an existing Realm changes only memberships.
@@ -190,7 +195,7 @@ try {
   }
   const joinTargets: Array<{ realm: string; space: string }> = [];
   for (let index = 0; index < (selectedDimensions.includes('memberships') ? 24 : 0); index++) joinTargets.push(await createRealm(`g1026:join-target:${index}`));
-  const actual: CorpusDimensions = { ...fixed,realmSize: 1,historyDepth: 1,follows: 1,memberships: 1 };
+  const actual: CorpusDimensions = { ...fixed,realmSize: posts.length,historyDepth: 1,follows: 1,memberships: 1 };
   async function inventory(path: `/v1/${string}`) {
     const items: any[] = [];
     let cursor: string | null = null;
@@ -207,6 +212,7 @@ try {
     let grown = actual[dimension];
     for (const scale of WORK_PROFILE_SCALES) {
       const dimensions = workProfileDimensions(dimension, scale, fixed);
+      console.log(JSON.stringify({ stage: 'grow',dimension,scale,elapsedMs: performance.now()-started }));
       for (; grown < dimensions[dimension]; grown++) {
         boundedPreparation();
         const key = `g1026:${dimension}:${grown}`;
@@ -248,6 +254,7 @@ try {
       boundedPreparation();
       evidence.push({ dimension, scale, dimensions: { ...actual },
         cumulativeMs: performance.now() - started, basis: 'public command corpus; no stopped backup/restore; first is not engine-cold' });
+      console.log(JSON.stringify({ stage: 'measure',dimension,scale,elapsedMs: performance.now()-started }));
       await measure(dimension, scale, 'header', root, body => assert.equal(body.id, community.realm));
       for (const sort of ['best', 'new', 'top']) await measure(dimension, scale, `threads-${sort}`,
         `${root}/threads?sort=${sort}&limit=2`, body => {
@@ -262,6 +269,9 @@ try {
     }
   }
 
+  // Only surface shards need rule/banner preparation and assertions.
+  if (!process.env.G1026_OPERATIONS || process.env.G1026_OPERATIONS.split(',')
+    .some(operation => operation === 'header-rules' || operation === 'zone-banners')) {
   // Rules are part of every community header. References retain live scope/revision checks.
   let profileHead: string | null = null;
   const publishedRules = [];
@@ -318,9 +328,11 @@ try {
       assert.equal(body.bannerMedia.length, size); assert(body.bannerMedia.every((banner: any) => banner.image === null));
     });
   }
+  }
   // Capture the actual list-selection algebra. It cannot attest native TDB2 visits.
   const meter = startFusekiMeter(process.env.FUSEKI_URL!);
   // Query capture uses a separate HTTP peer; the application client stays untouched.
+  if (!selectedQuery) await readerApi.read(`${root}/threads?sort=new&limit=2&actingSubject=${encodeURIComponent(reader)}`);
   assert(selectedQuery, 'The operation must capture its actual selection query');
   try {
     meter.beginCapture();
@@ -332,7 +344,7 @@ try {
     evidence.push({ plan });
   } finally { await meter.stop(); }
   mkdirSync('.temp/work-profiles', { recursive: true });
-  writeFileSync(`.temp/work-profiles/g-1026-${process.env.G1026_PHASE ?? 'after'}.json`, JSON.stringify({ evidence, profiles }, null, 2));
+  writeFileSync(`.temp/work-profiles/g-1026-${process.env.G1026_PHASE ?? 'after'}-${selectedDimensions.join('-')}-${process.env.G1026_GROUP ?? 'all'}.json`, JSON.stringify({ evidence, profiles }, null, 2));
   console.log(JSON.stringify({ evidence, profiles: profiles.length }));
 } finally {
   await home.stop();
