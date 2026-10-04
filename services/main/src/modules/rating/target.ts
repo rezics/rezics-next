@@ -373,7 +373,7 @@ function targetRevisionGuard(target: ResolvedTarget) {
     return `GRAPH ${iri(GRAPHS.revisions)} { ${resource} a rv:FixedRelease }`;
   }
   const pointers: Record<Base, string> = { work: 'rv:head', realization: 'rv:head', release: 'rv:releaseHead',
-    occurrence: 'rv:structureHead', resource: 'rv:semanticHead' };
+    occurrence: 'rv:structureHead', resource: 'rv:semanticHead', projection: 'rv:projectionHead' };
   if (target.base === 'realization') return `{ GRAPH ${iri(GRAPHS.current)} { ${resource} rv:head ${revision} } }
     UNION { GRAPH ${iri(GRAPHS.current)} { ${resource} rv:publicationHead ?publication }
       GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:component ${resource} ; rv:selectedDraft ${revision} } }`;
