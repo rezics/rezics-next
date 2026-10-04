@@ -582,6 +582,18 @@ export const profileRegistry = {
       "opening"
     ]
   },
+  "projection-v1": {
+    "sha256": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
+    "file": "shapes/projection-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/projection-v1/projection-shape",
+      "https://rezics.com/definition/projection-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "projection",
+      "revision"
+    ]
+  },
   "proposal-v1": {
     "sha256": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "file": "shapes/proposal-v1.ttl",

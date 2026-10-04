@@ -373,6 +373,22 @@
       "file": "shapes/poll-snapshot-v1.ttl"
     },
     {
+      "id": "projection-v1",
+      "sha256": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
+      "file": "shapes/projection-v1.ttl",
+      "binding": {
+        "required": [
+          "projection",
+          "revision"
+        ],
+        "optional": [],
+        "roles": [
+          "projection",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "proposal-v1",
       "sha256": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
       "file": "shapes/proposal-v1.ttl"
@@ -2656,6 +2672,26 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/Projection",
+      "routes": [
+        {
+          "profile": "projection-v1",
+          "shape": "https://rezics.com/definition/projection-v1/projection-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ProjectionRevision",
+      "routes": [
+        {
+          "profile": "projection-v1",
+          "shape": "https://rezics.com/definition/projection-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/Proposal",
       "routes": [
         {
@@ -3510,6 +3546,14 @@
       "profile": "definition-presentation-v1"
     },
     {
+      "type": "https://rezics.com/vocab/Projection",
+      "profile": "projection-v1"
+    },
+    {
+      "type": "https://rezics.com/vocab/ProjectionRevision",
+      "profile": "projection-v1"
+    },
+    {
       "type": "https://rezics.com/vocab/RealizationRevision",
       "profile": "realization-v1"
     },
@@ -3592,6 +3636,7 @@
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
     "contexts/poll-snapshot-v1.jsonld": "9fb3fab241d6162821eee026cd8678198c5c819be32ac318a4eb00fce78a23f7",
+    "contexts/projection-v1.jsonld": "e982171326068e040b95e5d269483b3acc276e9e246df7e4853a55a36459e8be",
     "contexts/proposal-v1.jsonld": "9b15fd249376b05db294eafb5296b6209d8f51451801b07c111f5acc4e57bc23",
     "contexts/protection-revision-v1.jsonld": "a34ff68ba13da88dbdfb1e08ba33757dda7cfebefc0390972bf72861173b27b2",
     "contexts/rating-aggregate-default-policy-v1.jsonld": "a2e6e731c50a827471cefd97aaeca10ba0b6e8a87a1ddf912258c5e7fe759d38",
@@ -3717,6 +3762,7 @@
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
+    "shapes/projection-v1.ttl": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
     "shapes/proposal-v1.ttl": "5fa5082efb1b4215773347902cf82a11dc925ed9bdb4396cc2461006fe8291ce",
     "shapes/protection-revision-v1.ttl": "92a6e82e55849a2c3ab4bae1076cb8d17f18a4516870d3d46bbd7f050bcdb396",
     "shapes/rating-aggregate-default-policy-v1.ttl": "0d9a0acbe78f4043628960ed5942b64bc7a90d915e5e1fe0cb40938bda5f6fe4",
@@ -3797,9 +3843,9 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "fa6b00ac881048abd1a136481035fd6c2bc09525ca9b4295afe9614057739b01",
-    "packages/model/src/generated/profiles.ts": "0ec0c079408218cba493964137e00b3eac8ae4e039f34fdae1a4c183ced35ac0",
-    "packages/model/src/generated/schemas.ts": "deab26f63bccc53ad5554dc2321dd60f4bbb6412002c075fb6ba677169c6c340",
-    "packages/model/src/generated/vocabulary.ts": "fe2b3f92c740315d14e656aadfbbc77487faa7943302bb3aa1810ac4f78afb09"
+    "packages/model/src/generated/arbitraries.ts": "4168ab1467d32782f2fdf984b6ffc3cdad022bd622db10872916c5fea5317d5a",
+    "packages/model/src/generated/profiles.ts": "c942ca6d7a309a3f3c7a915dc8de2e128a0d0107e7a6f3456658b5767987160c",
+    "packages/model/src/generated/schemas.ts": "cc31981560553ca0615dafa7a808b990947fb88bdd0cf23851e1e14fb8272d38",
+    "packages/model/src/generated/vocabulary.ts": "c7d8d6a1b96bb0d14b2aa2823f4ef2c48990f1358a80cbff5c13481ddaff3df5"
   }
 }
