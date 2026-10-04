@@ -33,7 +33,6 @@ import {
   type ResourceListPlan,
 } from './resource-contract.ts';
 import { searchGraphSnapshot } from '../search/snapshot-state.ts';
-import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import type { DiscoveryReadGeneration } from '../discovery/store.ts';
 import { DISCOVERY_CONDITION_COST } from '../discovery/store.ts';
 import { resourceWorkCards } from './work-cards.ts';
@@ -159,6 +158,16 @@ interface PageCursor {
   seeks?: Record<string, { id: string; key: string }>;
   done?: string[];
 }
+async function publicAgents(session: WorkReadSession, agents: readonly string[]) {
+  if (!agents.length) return new Set<string>();
+  if (!session.deps.personPreferences)
+    throw new WorkReadUnavailable('Agent profile owner is unavailable');
+  try {
+    return await session.deps.personPreferences.publicDiscoveryProfiles(agents);
+  } catch (cause) {
+    throw new WorkReadUnavailable('Public Agent policy is unavailable', { cause });
+  }
+}
 /** Hydrate through the shared summary/Agent owners, then recheck disclosure at
  * delivery. Window mode delegates preview hydration and the final search fence
  * to the enclosing read, after it has selected the delivered page. */
@@ -172,26 +181,7 @@ export async function resourceCards(
   if (agents.length && (!session.deps.personPreferences || !session.deps.profiles)) {
     throw new WorkReadUnavailable('Agent profile owner is unavailable');
   }
-  const visibleAgents = async () => {
-    const listings = new Map<string, string>();
-    for (let offset = 0; offset < agents.length; offset += 50)
-      for (const [agent, listing] of await session.deps.profiles!.listing.readBatch(
-        agents.slice(offset, offset + 50),
-      ))
-        listings.set(agent, listing);
-    return new Set(
-      (
-        await Promise.all(
-          agents.map(async (agent) =>
-            pageDiscoveryPolicy('public', listings.get(agent) === 'listed' ? 'listed' : 'unlisted')
-              .indexable && (await session.deps.personPreferences!.profileVisible(agent, null))
-              ? agent
-              : null,
-          ),
-        )
-      ).filter((value) => value !== null),
-    );
-  };
+  const visibleAgents = () => publicAgents(session, agents);
   const before = await visibleAgents();
   const cards = await readAgentCards(
     session,
@@ -301,12 +291,20 @@ export async function resourceCards(
   const enriched = page.map((item) =>
     item.kind === 'work' ? { ...item, work: workCards.get(item.id)! } : item,
   );
+  // SQL policy can change during another owner's optional Work preview.
+  const deliveredAgents = await publicAgents(
+    session,
+    page.filter((item) => item.kind === 'agent').map((item) => item.id),
+  );
   const descriptorById = new Map(candidates.map((row) => [row.id, row]));
   const delivery = await session.disclosure(
     page.map((item) => resourceDisclosureTarget(descriptorById.get(item.id)!)),
     'search',
   );
-  return enriched.filter((_, index) => delivery[index] === 'visible');
+  return enriched.filter(
+    (item, index) =>
+      delivery[index] === 'visible' && (item.kind !== 'agent' || deliveredAgents.has(item.id)),
+  );
 }
 
 /** Match accepted Concept interpretations through the existing Discovery owner. */
@@ -783,6 +781,10 @@ async function readResourceListAtPosition(
   const enriched = items.map((item) =>
     item.kind === 'work' ? { ...item, work: previews.get(item.id)! } : item,
   );
+  const deliveredAgents = await publicAgents(
+    session,
+    items.filter((item) => item.kind === 'agent').map((item) => item.id),
+  );
   // SQL-only removal/Work fences can move while a later window or an optional
   // preview is read. Recheck the delivered page, without reopening per-Work
   // head queries: the session's final graph fence pins the admitted heads.
@@ -790,7 +792,10 @@ async function readResourceListAtPosition(
     items.map((item) => resourceDisclosureTarget(descriptors.get(item.id)!)),
     'search',
   );
-  const visible = enriched.filter((_, index) => delivery[index] === 'visible');
+  const visible = enriched.filter(
+    (item, index) =>
+      delivery[index] === 'visible' && (item.kind !== 'agent' || deliveredAgents.has(item.id)),
+  );
   const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
   if (index) await fenceLabelIndex(session, index);
   state.seen += visible.length;
