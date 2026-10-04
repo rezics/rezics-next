@@ -421,10 +421,10 @@ test('G-840 G-913: all twelve catalogue fixture queries through the public API',
       const aggregateScope = { question: target.question, grain: target.grain,
         population: 'account-principal', countedTarget: generic ? target.target : work!.mainVersion };
       expect(await ok(await call('GET', `/v1/resources/${short(target.target)}/ratings?scope=realm&realm=${encodeURIComponent(saoZone.realm)}&context=${encodeURIComponent(context.context)}&actingSubject=${actor}`)))
-        .toMatchObject({ count: 1, mean: target.score, aggregationScope: aggregateScope });
+        .toMatchObject({ count: 1, mean: generic ? null : target.score, aggregationScope: aggregateScope });
       if (generic) expect(await ok(await call('POST', '/v1/rating-aggregates', {
         profile: 'realm-target-latest-mean-v1', context: context.context, target: target.target, actingSubject: person })))
-        .toMatchObject({ count: 1, mean: target.score, scope: aggregateScope });
+        .toMatchObject({ count: 1, sum: target.score, mean: null, scope: aggregateScope });
       expect((await ok<{ items: unknown[] }>(await call('GET', `/v1/resources/${short(target.target)}/reviews?context=${encodeURIComponent(context.context)}&rating=1&actingSubject=${actor}`))).items).toEqual([]);
     }
     expect(reviewIds.size).toBe(5);

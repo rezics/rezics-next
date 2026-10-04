@@ -183,7 +183,8 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
       const aggregateBody = { profile: 'realm-target-latest-mean-v1', context: context.context, target: target.target,
         ...(suffix ? { actingSubject: actor } : {}) };
       const aggregate = () => call('POST', '/v1/rating-aggregates', aggregateBody, suffix ? a.token : undefined);
-      expect(await json(await aggregate())).toMatchObject({ count: 1, mean: 8, target: target.target,
+      // One rating is under the display threshold: the sum and histogram show, the mean does not.
+      expect(await json(await aggregate())).toMatchObject({ count: 1, sum: 8, mean: null, meanDisplay: 'withheld-below-threshold', target: target.target,
         scope: { question: target.question, grain: target.grain, population: 'account-principal', countedTarget: target.target } });
       if (target.grain === 'release') {
         await s.fuseki.update(`DELETE DATA { GRAPH <urn:rezics:graph:current> { <${opinion.observation}>
@@ -191,7 +192,7 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         try { expect((await aggregate()).status).toBe(503); }
         finally { await s.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:current> { <${opinion.observation}>
           <https://rezics.com/vocab/observationHead> <${opinion.observationRevision}> } }`); }
-        expect(await json(await aggregate())).toMatchObject({ count: 1, mean: 8 });
+        expect(await json(await aggregate())).toMatchObject({ count: 1, sum: 8, mean: null, meanDisplay: 'withheld-below-threshold' });
         await json(await call('PUT', `/v1/reviews/${unscored.review}/helpful`, {
           profile: 'reader-review-helpful-v1', actingSubject: other, helpful: true, expectedRevision: null }, b.token));
       }
@@ -199,7 +200,7 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
       expect(await json(await call('GET', `/v1/resources/${short(target.target)}/rating-contexts?${readQuery}`,
         undefined, suffix ? a.token : undefined))).toMatchObject({ items: [{ context: context.context, question: target.question }] });
       expect(await json(await call('GET', `/v1/resources/${short(target.target)}/ratings?${readQuery}&context=${encodeURIComponent(context.context)}`,
-        undefined, suffix ? a.token : undefined))).toMatchObject({ count: 1, mean: 8, target: target.target,
+        undefined, suffix ? a.token : undefined))).toMatchObject({ count: 1, mean: null, meanDisplay: 'withheld-below-threshold', target: target.target,
         aggregationScope: { question: target.question, grain: target.grain,
           population: 'account-principal', countedTarget: target.target } });
       await grant(`rating:read:${context.context}`, 'rating.observation.read');

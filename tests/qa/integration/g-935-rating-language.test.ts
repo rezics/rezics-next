@@ -75,7 +75,8 @@ test('G-935: declared question languages survive writes, inventories, ratings an
     expect(await json(await call('POST', '/v1/rating-observations', rating, ratingKey))).toMatchObject({ ...opinion, replayed: true });
     const aggregate = () => call('POST', '/v1/rating-aggregates', { profile: 'realm-target-latest-mean-v1',
       context: context.context, target, actingSubject: member.actor });
-    expect(await json(await aggregate())).toMatchObject({ count: 1, mean: 8, scope: { question: question.question, language: 'ja' } });
+    expect(await json(await aggregate())).toMatchObject({ count: 1, sum: 8, mean: null, meanDisplay: 'withheld-below-threshold',
+      scope: { question: question.question, language: 'ja' } });
     expect(await json(await call('GET', `/v1/resources/${short(target)}/ratings?${scope}&context=${encodeURIComponent(context.context)}`)))
       .toMatchObject({ aggregationScope: { question: question.question, language: 'ja' }, count: 1 });
     await member.grant(`rating:read:${context.context}`, 'rating.observation.read');
@@ -111,7 +112,7 @@ test('G-935: declared question languages survive writes, inventories, ratings an
     await member.grant(`rating:observe:${legacy.context}`, 'rating.observation.set');
     await json(await call('POST', '/v1/rating-observations', { ...rating, context: legacy.context }), 201);
     expect(await json(await call('POST', '/v1/rating-aggregates', { profile: 'realm-target-latest-mean-v1',
-      context: legacy.context, target, actingSubject: member.actor }))).toMatchObject({ count: 1, mean: 8, scope: { language: 'en' } });
+      context: legacy.context, target, actingSubject: member.actor }))).toMatchObject({ count: 1, sum: 8, mean: null, scope: { language: 'en' } });
 
     const replaceTag = async (from: string, to: string) => s.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(context.context)} <${RV}question> ${lit(question.question)}@${from} } };
