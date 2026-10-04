@@ -754,7 +754,7 @@ try {
 } finally {
   mkdirSync('.temp/work-profiles', { recursive: true });
   writeFileSync(
-    '.temp/work-profiles/g-1034.json',
+    process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1034.json',
     JSON.stringify({ evidence, profiles }, null, 2) + '\n',
   );
   await home.stop();

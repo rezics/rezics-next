@@ -48,12 +48,23 @@ const pool = real
       database: 'telemetry',
       ssl: false,
     });
+let phase = 'startup';
 const app = new Elysia()
   .use(httpTelemetry())
+  .error(({ error }) =>
+    Response.json(
+      {
+        phase,
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      },
+      { status: 500 },
+    ),
+  )
   .get('/profile/:id', async () => {
     const loops = Number(process.env.WORK_PROFILE_LOOPS);
     const rows: string[] = [];
     for (let index = 0; index < loops; index++) {
+      phase = 'Fuseki calibration';
       const response = await fetch(
         new URL('query', fusekiUrl.endsWith('/') ? fusekiUrl : `${fusekiUrl}/`),
         {
@@ -63,6 +74,7 @@ const app = new Elysia()
             accept: 'application/sparql-results+json',
           },
           body: 'SELECT (1 AS ?value) WHERE {} # PRIVATE_SPARQL_LITERAL',
+          signal: AbortSignal.timeout(30_000),
         },
       );
       if (!response.ok) throw new Error(`Fuseki returned HTTP ${response.status}`);
@@ -70,21 +82,26 @@ const app = new Elysia()
         results: { bindings: { value: { value: string } }[] };
       };
       rows.push(data.results.bindings[0]!.value.value);
+      phase = 'PostgreSQL calibration';
       await pool.query('SELECT 1 AS value /* PRIVATE_SQL_LITERAL */');
     }
+    phase = 'Account calibration';
     const response = await fetch(`${account.url.origin}/introspect?token=PRIVATE_QUERY`, {
       headers: { authorization: 'Bearer PRIVATE_TOKEN' },
+      signal: AbortSignal.timeout(30_000),
     });
+    if (!response.ok) throw new Error(`Account calibration returned HTTP ${response.status}`);
     return { rows, account: await response.json() };
   })
-  .listen({ hostname: '127.0.0.1', port: 0 });
+  .listen({ hostname: '127.0.0.1', port: 0, idleTimeout: 60 });
 try {
   const started = performance.now();
   const response = await fetch(`${app.server!.url.origin}/profile/PRIVATE_ID?query=PRIVATE_QUERY`, {
     headers: { traceparent: process.env.WORK_PROFILE_TRACEPARENT! },
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(`Profile probe returned HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(`Profile probe returned HTTP ${response.status}: ${JSON.stringify(result)}`);
   console.log(
     JSON.stringify({
       ...(result as Record<string, unknown>),

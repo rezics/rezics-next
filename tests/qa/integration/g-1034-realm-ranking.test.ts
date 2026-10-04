@@ -1,22 +1,17 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { runWorkProfileChild } from '../support/work-profile-child.ts';
+import { integrationOrderPrelude } from '../support/integration-order.ts';
 import { assertWorkCostAtScales, type WorkProfile } from '../support/work-profile.ts';
 
 test('G1034: complete Realm Best/Top and fixed header work at 100/1000/10000 real threads with retained history', async () => {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
-  const child = Bun.spawn([process.execPath, 'services/main/tests/g-1034-profile-child.ts'], {
-    env: { ...process.env },
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const started = performance.now();
+  await integrationOrderPrelude('g-1034-realm-ranking');
+  const { resultPath } = await runWorkProfileChild('services/main/tests/g-1034-profile-child.ts', {
+    timeoutMs: Math.max(1, 590_000 - (performance.now() - started)),
   });
-  const [code, output, errors] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  if (code !== 0)
-    throw new Error(`Realm ranking profile failed (${code}): ${errors}\n${output.slice(-2000)}`);
-  const measured = JSON.parse(readFileSync('.temp/work-profiles/g-1034.json', 'utf8')) as {
+  const measured = JSON.parse(readFileSync(resultPath, 'utf8')) as {
     profiles: {
       size: number;
       operation: string;

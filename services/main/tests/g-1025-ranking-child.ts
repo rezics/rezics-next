@@ -100,6 +100,6 @@ try {
   assert.equal(reopened.status,200); assert.deepEqual((await reopened.json() as { items: { id: string }[] }).items.map(row=>row.id),[visible.work]);
 } finally {
   mkdirSync('.temp/work-profiles',{ recursive: true });
-  writeFileSync('.temp/work-profiles/g-1025-ranking.json',JSON.stringify(evidence,null,2)+'\n');
+  writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1025-ranking.json',JSON.stringify(evidence,null,2)+'\n');
   await home.stop(); await shutdownTelemetry(); await sink.stop();
 }

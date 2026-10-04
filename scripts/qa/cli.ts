@@ -59,7 +59,9 @@ import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-owner
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
-import { qaStackEnvironment, qaStackMode, scaleIntegrationFiles } from './stack-environment.ts';
+import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
+
+import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses } from './resource-classes.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -125,10 +127,12 @@ async function runShard(
   batches: string[][] = [files],
 ): Promise<ShardRun> {
   const preparationStartedAt = Date.now();
+  const resourceClass = tier === 'integration' ? integrationResourceClass(files) : undefined;
+  if (resourceClass) budget = qaResourceClasses[resourceClass].budgetMs;
   const environment = qaStackEnvironment({
     ...process.env,
     ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
-  }, files.some(file => scaleIntegrationFiles.has(file)) ? 'scale' : undefined);
+  }, resourceClass && resourceClass !== 'ordinary' ? qaResourceClasses[resourceClass].storage : undefined, resourceClass);
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const persistent = qaStackMode(environment) === 'scale'
     || tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
@@ -141,7 +145,8 @@ async function runShard(
   const started = persistent ? startedFixtureProjects : startedProjects;
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
-    ...(isolated ? { isolation: true } : {}) };
+    ...(isolated ? { isolation: true } : {}),
+    ...(resourceClass ? { resourceClass, budgetMs: budget } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
     if (record.stage !== 'test') {
       const results = completeFileResults(run.xml ?? '', files, tier, {
@@ -179,6 +184,22 @@ async function runShard(
       errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
       return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
+    }
+    if (resourceClass) {
+      const inspected = await commandAsync(root, 'docker', ['inspect', '--format',
+        '{"memory":{{.HostConfig.Memory}},"tmpfs":{{json .HostConfig.Tmpfs}},"mounts":{{json .Mounts}}}',
+        `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
+      let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
+      if (inspected.ok) {
+        try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output), qaStackMode(environment)); }
+        catch (error) { failure = error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'; }
+      }
+      if (failure) {
+        writeFileSync(join(logs, `${label}-allocation.log`), failure);
+        errors.push(`${tier} allocation failed: ${projectRunId} (see logs/${label}-allocation.log)`);
+        return finish({ ok: false, timedOut: inspected.timedOut, noMatch: false,
+          xml: xmlForCommand(tier, false, inspected.elapsedMs, failure) });
+      }
     }
     const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
     apps = readEnv(join(stackDir, 'apps.env'));
@@ -395,7 +416,8 @@ async function runStackTier(tier: StackTier): Promise<void> {
       tier === 'integration' ? planIntegrationShards(estimates, slots.count) : undefined;
     const projects =
       integration?.map((shard) => shard.files) ?? planStackProjects(estimates, slots.count, tier);
-    const warning = stackPlanBudgetWarning(estimates, budget, slots.count, maximum, tier,
+    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), slots.count) : budget;
+    const warning = stackPlanBudgetWarning(estimates, tierBudget, slots.count, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
     const runs = new Array<ShardRun>(projects.length);
@@ -470,12 +492,12 @@ async function runStackTier(tier: StackTier): Promise<void> {
     for (const run of [...runs, ...completed]) {
       if (run.record.stage !== 'test' || (run.record.isolation ? run.ok : resolved(run))) continue;
       const label = `${artifact}-${run.record.project.slice(runId.length + 1)}`;
-      errors.push(`${tier} failed or exceeded ${budget / 1000}s in ${run.record.project} (see logs/${label}.log)`);
+      errors.push(`${tier} failed or exceeded ${(run.record.budgetMs ?? budget) / 1000}s in ${run.record.project} (see logs/${label}.log)`);
     }
     const executed = parseJUnit(mergeJUnit(suites, 0), tier).length > 0;
     if (!executed) errors.push(`${tier} executed no tests`);
-    if (elapsedMs > budget) errors.push(`${tier} test wall time ${(elapsedMs / 1000).toFixed(1)}s exceeded ${budget / 1000}s`);
-    const ok = executed && elapsedMs <= budget && runs.every(resolved) && completed.every(run => run.ok);
+    if (elapsedMs > tierBudget) errors.push(`${tier} test wall time ${(elapsedMs / 1000).toFixed(1)}s exceeded ${tierBudget / 1000}s`);
+    const ok = executed && elapsedMs <= tierBudget && runs.every(resolved) && completed.every(run => run.ok);
     tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs,
       shards: [...runs, ...completed].map(run => run.record) });
   } finally {

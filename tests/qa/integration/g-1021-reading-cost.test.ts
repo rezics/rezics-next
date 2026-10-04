@@ -6,6 +6,8 @@ import { ReadingPositionStore } from '../../../services/main/src/modules/reading
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { StructureStageStore } from '../../../services/main/src/modules/structure/stage.ts';
+import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
+import { integrationOrderPrelude } from '../support/integration-order.ts';
 import { startMediaStack } from './media-support.ts';
 
 type Page = { items: Array<{ occurrence: string; ordinal: number }>; nextCursor: string | null;
@@ -22,6 +24,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 // scale. HTTP/graph/object counters measure store exchanges and bytes, not native
 // TDB operators. The immutable-tree unit test separately observes visited pages.
 test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 1000 and 10000 chapters', async () => {
+  await integrationOrderPrelude('g-1021-reading-cost');
   const stack = await startMediaStack('g-1021-reading-cost');
   try {
     const member = await stack.member('reading-cost-editor');
@@ -100,6 +103,8 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
           holder: stage.holder, fence: stage.fence }));
         await json(await call('POST', `${path}/${stage.id}/activate`, { actingSubject: member.actor }));
       }
+      // Activation queues the label projection; seek assertions require its completed index.
+      await backfillOccurrenceLabels(stack.env);
       const buildMs = performance.now() - buildStarted;
       expect(buildMs).toBeLessThan(600_000);
       const measured = async (operation: string, params: Record<string, string>) => {

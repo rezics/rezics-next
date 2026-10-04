@@ -219,7 +219,7 @@ async function profileHome() {
     }
   } finally {
     mkdirSync('.temp/work-profiles', { recursive: true });
-    writeFileSync('.temp/work-profiles/g-1025-home.json', JSON.stringify({
+    writeFileSync(process.env.REZICS_WORK_PROFILE_RESULT ?? '.temp/work-profiles/g-1025-home.json', JSON.stringify({
       basis: 'isolated real Main/Fuseki/PostgreSQL; fixture Account assertion; first/repeated reads, not engine cache eviction; no stopped backup/restore qualification',
       plans, continuations, comparison, evidence }, null, 2) + '\n');
     await home.stop();

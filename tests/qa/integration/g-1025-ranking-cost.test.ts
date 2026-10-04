@@ -1,23 +1,16 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { runWorkProfileChild } from '../support/work-profile-child.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
 
 test('G1025: ranked reads seek one admitted page behind 4/16/64 privately read Books', async () => {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
+  const started = performance.now();
   await integrationOrderPrelude('g-1025-ranking');
-  const child = Bun.spawn([process.execPath, 'services/main/tests/g-1025-ranking-child.ts'], {
-    env: { ...process.env },
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const { resultPath } = await runWorkProfileChild('services/main/tests/g-1025-ranking-child.ts', {
+    timeoutMs: Math.max(1, 410_000 - (performance.now() - started)),
   });
-  const [code, output, errors] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  if (code !== 0)
-    throw new Error(`Ranking cost failed (${code}): ${errors}\n${output.slice(-2000)}`);
-  const evidence = JSON.parse(readFileSync('.temp/work-profiles/g-1025-ranking.json', 'utf8')) as {
+  const evidence = JSON.parse(readFileSync(resultPath, 'utf8')) as {
     rejected: number;
     newSeeks: number;
   }[];
