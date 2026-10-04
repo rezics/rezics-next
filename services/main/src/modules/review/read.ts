@@ -5,7 +5,7 @@ import { resolveTargets, TargetNotBound } from '../target/resolve.ts';
 import { GLOBAL_RATING_POPULATION_OWNER, GLOBAL_RATING_POPULATION } from '../rating/global.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { standingRatingSlotIri } from '../rating/observation.ts';
-import { targetContextPattern, TARGET_CONTEXT_PROFILE, LEGACY_TARGET_CONTEXT_PROFILE, TARGET_GRAINS, targetRatingSlotIri } from '../rating/target.ts';
+import { targetContextPattern, TARGET_CONTEXT_PROFILES, TARGET_GRAINS, targetRatingSlotIri } from '../rating/target.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import type { RatingLink, ReviewRow } from './store.ts';
@@ -24,7 +24,7 @@ export async function reviewTarget(session: TargetReadSession, context: string, 
     const contexts = await session.query(`SELECT ?realm WHERE { ${targetContextPattern(context)}
       GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
         rv:modelRevision ?profile .
-        VALUES ?profile { ${iri(TARGET_CONTEXT_PROFILE)} ${iri(LEGACY_TARGET_CONTEXT_PROFILE)} } FILTER NOT EXISTS { ?contextRevision a rv:ErasedRevision } }
+        VALUES ?profile { ${TARGET_CONTEXT_PROFILES.map(iri).join(' ')} } FILTER NOT EXISTS { ?contextRevision a rv:ErasedRevision } }
     } LIMIT 2`, 2);
     if (contexts.length !== 1 || !contexts[0]?.realm) throw new WorkReadMissing('Review Context unavailable');
     return { mainVersion: null, realm: contexts[0].realm.value, generic: true };

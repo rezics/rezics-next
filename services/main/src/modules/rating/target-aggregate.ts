@@ -1,34 +1,114 @@
 import { readComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './aggregate.ts';
+import { RatingInventoryConflict, MAX_RATING_AGGREGATE_SLOTS, type RatingInventoryHead, type TargetRatingComponents,
+  type TargetRatingSnapshot } from '../access/rating-aggregate-inventory.ts';
+import { RatingAggregateUnavailable } from './aggregate.ts';
+import { componentsAgree, meanDisclosure, type MeanDisplay, type RatingComponents } from './components.ts';
 import { sameRatingInstant } from './observation.ts';
-import { TARGET_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, readTargetRatingContext, targetRatingDigest } from './target.ts';
+import { TARGET_OBSERVATION_PROFILES, readTargetRatingContext, targetRatingDigest } from './target.ts';
 import type { TargetRatingInventoryStore } from './target-inventory.ts';
 
 export const TARGET_AGGREGATE_PROFILE = 'realm-target-latest-mean-v1';
-/** One indexed k+1 inventory, one exact Context, one bounded graph snapshot,
- * at most k immutable manifests, and one recovery fence. No cross-grain rollup. */
-export const TARGET_AGGREGATE_COST = { slots: 100, graphCalls: 3, graphBytes: 524_288,
-  manifestBytes: 524_288, deadlineMs: 10_000 } as const;
+/** Read from the sealed additive components, whatever the population: one Access
+ * snapshot (Context seal, the target's row, recovery fence), one bounded graph
+ * snapshot that finds the last sealed write live, and one fence recheck.
+ * A target of at most `verifiedHeads` raters is also checked head by head against
+ * its immutable manifests, and the components must equal that recomputation. */
+export const TARGET_AGGREGATE_COST = { verifiedHeads: MAX_RATING_AGGREGATE_SLOTS, graphCalls: 3,
+  graphBytes: 524_288, manifestBytes: 524_288, deadlineMs: 10_000 } as const;
+
+/** One head's verified standing value, in the shape Access records it. */
+interface VerifiedHead { slot: string; revision: string; value: number | null }
 
 export async function queryTargetRatingAggregate(env: WorkActivationEnvironment, access: TargetRatingInventoryStore,
   input: { context: string; target: string }) {
   const signal = AbortSignal.timeout(TARGET_AGGREGATE_COST.deadlineMs);
-  const inventory = await access.read(input.context, input.target, signal);
-  if (inventory.heads.length > TARGET_AGGREGATE_COST.slots) throw new RatingAggregateBudgetExceeded('Target population exceeds budget');
+  const snapshot = await access.read(input.context, input.target, signal);
   const context = await readTargetRatingContext(env, input.context);
-  if (!context || context.contextRevision !== inventory.contextRevision || context.realm !== inventory.realm) {
+  if (!context || context.contextRevision !== snapshot.contextRevision || context.realm !== snapshot.realm) {
     throw new RatingAggregateUnavailable('Target Context seal differs');
   }
+  const components = snapshot.members.get(input.target) ?? null;
+  const verified = snapshot.heads !== null
+    ? await verifyHeads(env, snapshot, snapshot.heads, components, input, context, signal) : null;
+  let figures: RatingComponents & { slots: number }, position: { dataEpoch: string; sequence: string };
+  if (verified) {
+    ({ figures, position } = verified);
+    if (components && components.unvalued > 0) {
+      // Heads sealed before components existed take their values from this verified read.
+      await access.record(input.context, input.target, snapshot.recoveryGeneration, verified.heads, signal)
+        .catch(error => { if (!(error instanceof RatingInventoryConflict)) throw error; });
+    }
+  } else {
+    if (!components || components.unvalued > 0) throw new RatingAggregateUnavailable('Target components need reconstruction');
+    position = await witnessLastWrite(env, snapshot, components, input);
+    figures = { slots: components.slots, count: components.count, sum: components.sum, histogram: components.histogram };
+  }
+  if (!componentsAgree(figures)) throw new RatingAggregateUnavailable('Target components are inconsistent');
+  if (!await access.checkFence(snapshot.recoveryGeneration, signal)) throw new RatingAggregateUnavailable('Recovery fence changed');
+  const { mean, display } = meanDisclosure(figures, context.displayThreshold);
+  return { profile: TARGET_AGGREGATE_PROFILE, complete: true as const, context: input.context, realm: context.realm,
+    target: input.target, targetGrain: context.targetGrain,
+    scope: { question: context.question, language: context.language, grain: context.targetGrain, population: 'account-principal' as const,
+      countedTarget: input.target }, scale: context.scale, cadence: context.cadence,
+    populationPolicy: 'account-principal' as const, aggregationPolicy: 'latest-per-rater-mean' as const,
+    population: figures.slots, count: figures.count, withdrawnCount: figures.slots - figures.count,
+    histogram: [...figures.histogram], sum: figures.sum, displayThreshold: context.displayThreshold, mean,
+    meanDisplay: display, precision: precision(figures, display),
+    sourcePosition: { datasetId: 'product' as const, dataEpoch: position.dataEpoch, sequence: position.sequence } };
+}
+
+export function precision(figures: RatingComponents, display: MeanDisplay) {
+  return display === 'shown' ? { kind: 'exact-rational' as const, numerator: figures.sum, denominator: figures.count }
+    : display === 'no-data' ? { kind: 'no-data' as const } : { kind: 'withheld-below-threshold' as const };
+}
+
+/** O(1) in the population: control position, the Context seal, and the last
+ * sealed write, which must still be its observation's live head. A graph that
+ * lost it, or that was rolled back past it, cannot match the sealed receipt. */
+async function witnessLastWrite(env: WorkActivationEnvironment, snapshot: TargetRatingSnapshot,
+  components: TargetRatingComponents, input: { context: string; target: string }) {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?contextReceipt ?contextEpoch
+    ?contextSequence ?digest ?lastEpoch ?lastSequence WHERE {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(snapshot.contextRevision)} rv:component ${iri(input.context)} ;
+      rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence }
+    GRAPH ${iri(GRAPHS.receipts)} { ?contextReceipt rv:ratingContext ${iri(input.context)} ;
+      rv:ratingContextRevision ${iri(snapshot.contextRevision)} ; rv:outcome rv:Succeeded .
+      ${iri(components.last.receipt)} a rv:OperationReceipt ; rv:ratingContext ${iri(input.context)} ;
+        rv:target ${iri(input.target)} ; rv:ratingObservation ?observation ; rv:observationRevision ?lastRevision ;
+        rv:requestDigest ?digest ; rv:outcome rv:Succeeded ; rv:dataEpoch ?lastEpoch ; rv:sequence ?lastSequence }
+    GRAPH ${iri(GRAPHS.current)} { ?observation a rv:TargetRatingObservation ; rv:ratingContext ${iri(input.context)} ;
+      rv:target ${iri(input.target)} ; rv:observationHead ?lastRevision }
+  } LIMIT 2`, TARGET_AGGREGATE_COST.graphBytes)).results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row || row.epoch?.value !== env.lineage.dataEpoch || !row.sequence
+    || row.contextReceipt?.value !== snapshot.contextReceipt || row.contextEpoch?.value !== snapshot.contextDataEpoch
+    || row.contextSequence?.value !== snapshot.contextSequence
+    || row.digest?.value !== components.last.requestDigest || row.lastEpoch?.value !== components.last.dataEpoch
+    || row.lastSequence?.value !== components.last.sequence) {
+    throw new RatingAggregateUnavailable('Target snapshot unavailable');
+  }
+  return { dataEpoch: row.epoch.value, sequence: row.sequence!.value };
+}
+
+/** The exhaustive check for a target small enough to verify: every sealed head
+ * against its graph row, receipt and immutable manifest. */
+async function verifyHeads(env: WorkActivationEnvironment, snapshot: TargetRatingSnapshot,
+  inventory: readonly RatingInventoryHead[], components: TargetRatingComponents | null,
+  input: { context: string; target: string }, context: NonNullable<Awaited<ReturnType<typeof readTargetRatingContext>>>,
+  signal: AbortSignal) {
+  if (inventory.length > TARGET_AGGREGATE_COST.verifiedHeads) throw new RatingAggregateUnavailable('Target population exceeds verification');
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?population
     ?contextReceipt ?contextEpoch ?contextSequence ?receipt ?digest ?revisionEpoch ?revisionSequence
     ?observation ?slot ?head ?availability ?value ?manifest ?predecessor ?evaluatedAt ?submittedAt ?profile WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-    GRAPH ${iri(GRAPHS.revisions)} { ${iri(inventory.contextRevision)} rv:component ${iri(input.context)} ;
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(snapshot.contextRevision)} rv:component ${iri(input.context)} ;
       rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence }
     GRAPH ${iri(GRAPHS.receipts)} { ?contextReceipt rv:ratingContext ${iri(input.context)} ;
-      rv:ratingContextRevision ${iri(inventory.contextRevision)} ; rv:outcome rv:Succeeded }
+      rv:ratingContextRevision ${iri(snapshot.contextRevision)} ; rv:outcome rv:Succeeded }
     { SELECT (COUNT(DISTINCT ?candidate) AS ?population) WHERE { { SELECT ?candidate WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?candidate rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} }
     } LIMIT 101 } } }
@@ -40,7 +120,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
         rv:component ?observation ; rv:observation ?observation ; rv:modelRevision ?profile ;
         rv:ratingAvailability ?availability ; rv:manifest ?manifest ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
         rv:dataEpoch ?revisionEpoch ; rv:sequence ?revisionSequence .
-        VALUES ?profile { ${iri(TARGET_OBSERVATION_PROFILE)} ${iri(LANGUAGE_OBSERVATION_PROFILE)} }
+        VALUES ?profile { ${TARGET_OBSERVATION_PROFILES.map(iri).join(' ')} }
         FILTER NOT EXISTS { ?head a rv:ErasedRevision }
         OPTIONAL { ?head rv:ratingValue ?value } OPTIONAL { ?head rv:predecessor ?predecessor } }
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:ratingObservation ?observation ; rv:observationRevision ?head ;
@@ -49,26 +129,26 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
   const first = rows[0];
   const population = Number(first?.population?.value);
   if (!first?.epoch || !first.sequence || first.epoch.value !== env.lineage.dataEpoch
-    || first.contextReceipt?.value !== inventory.contextReceipt || first.contextEpoch?.value !== inventory.contextDataEpoch
-    || first.contextSequence?.value !== inventory.contextSequence
+    || first.contextReceipt?.value !== snapshot.contextReceipt || first.contextEpoch?.value !== snapshot.contextDataEpoch
+    || first.contextSequence?.value !== snapshot.contextSequence
     || !Number.isSafeInteger(population) || population < 0) throw new RatingAggregateUnavailable('Target snapshot unavailable');
-  if (population > TARGET_AGGREGATE_COST.slots) throw new RatingAggregateBudgetExceeded('Target population exceeds budget');
+  if (population > TARGET_AGGREGATE_COST.verifiedHeads) throw new RatingAggregateUnavailable('Target population exceeds verification');
   const observations = rows.filter(row => row.observation);
-  if (observations.length !== population || population !== inventory.heads.length
+  if (observations.length !== population || population !== inventory.length
     || population === 0 && rows.length !== 1) throw new RatingAggregateUnavailable('Target population incomplete');
-  const heads = new Map(inventory.heads.map(head => [head.observation, head]));
-  const seen = new Set<string>(), histogram = Array.from({ length: 10 }, () => 0);
+  const sealed = new Map(inventory.map(head => [head.observation, head]));
+  const seen = new Set<string>(), histogram = Array.from({ length: 10 }, () => 0), heads: VerifiedHead[] = [];
   const budget = { bytesLeft: TARGET_AGGREGATE_COST.manifestBytes as number, signal };
   let withdrawnCount = 0, sum = 0;
   for (const row of observations) {
     signal.throwIfAborted();
-    const sealed = heads.get(row.observation!.value);
-    if (!sealed || !row.slot || !row.head || !row.manifest || !row.profile || seen.has(row.slot.value)
-      || sealed.slot !== row.slot.value || sealed.revision !== row.head.value
-      || sealed.receipt !== row.receipt?.value || sealed.requestDigest !== row.digest?.value
-      || sealed.dataEpoch !== row.revisionEpoch?.value || sealed.sequence !== row.revisionSequence?.value
-      || !sameRatingInstant(sealed.evaluatedAt, row.evaluatedAt?.value)
-      || !sameRatingInstant(sealed.submittedAt, row.submittedAt?.value)
+    const head = sealed.get(row.observation!.value);
+    if (!head || !row.slot || !row.head || !row.manifest || !row.profile || seen.has(row.slot.value)
+      || head.slot !== row.slot.value || head.revision !== row.head.value
+      || head.receipt !== row.receipt?.value || head.requestDigest !== row.digest?.value
+      || head.dataEpoch !== row.revisionEpoch?.value || head.sequence !== row.revisionSequence?.value
+      || !sameRatingInstant(head.evaluatedAt, row.evaluatedAt?.value)
+      || !sameRatingInstant(head.submittedAt, row.submittedAt?.value)
       || row.epoch?.value !== first.epoch.value || row.sequence?.value !== first.sequence.value) {
       throw new RatingAggregateUnavailable('Target head differs from seal');
     }
@@ -77,29 +157,28 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
     const available = row.availability?.value === `${RV}Available`, withdrawn = row.availability?.value === `${RV}Withdrawn`;
     const value = row.value ? Number(row.value.value) : null;
     if ((!available && !withdrawn) || available && (!Number.isInteger(value) || value! < 1 || value! > 10)
-      || withdrawn && value !== null || state.observation !== sealed.observation || state.revision !== sealed.revision
-      || state.context !== input.context || state.target !== input.target || state.slot !== sealed.slot
+      || withdrawn && value !== null || state.observation !== head.observation || state.revision !== head.revision
+      || state.context !== input.context || state.target !== input.target || state.slot !== head.slot
       || state.realm !== context.realm || state.contextRevision !== context.contextRevision || state.targetGrain !== context.targetGrain
       || state.availability !== (available ? 'available' : 'withdrawn') || state.value !== value
       || state.predecessor !== (row.predecessor?.value ?? null)
-      || !sameRatingInstant(state.evaluatedAt, sealed.evaluatedAt) || !sameRatingInstant(state.originalSubmissionAt, sealed.evaluatedAt)
-      || !sameRatingInstant(state.submittedAt, sealed.submittedAt) || !sameRatingInstant(state.revisedAt, sealed.submittedAt)
+      || !sameRatingInstant(state.evaluatedAt, head.evaluatedAt) || !sameRatingInstant(state.originalSubmissionAt, head.evaluatedAt)
+      || !sameRatingInstant(state.submittedAt, head.submittedAt) || !sameRatingInstant(state.revisedAt, head.submittedAt)
       || targetRatingDigest({ context: input.context, target: input.target, value,
-        expectedRevisionHead: state.predecessor as string | null, actingSubject: sealed.actingSubject }) !== sealed.requestDigest) {
+        expectedRevisionHead: state.predecessor as string | null, actingSubject: head.actingSubject }) !== head.requestDigest) {
       throw new RatingAggregateUnavailable('Target revision bytes differ');
     }
+    heads.push({ slot: head.slot, revision: head.revision, value });
     if (withdrawn) withdrawnCount++;
     else { histogram[value! - 1] = histogram[value! - 1]! + 1; sum += value!; }
   }
-  if (!await access.checkFence(inventory.recoveryGeneration, signal)) throw new RatingAggregateUnavailable('Recovery fence changed');
-  const count = population - withdrawnCount;
-  return { profile: TARGET_AGGREGATE_PROFILE, complete: true as const, context: input.context, realm: context.realm,
-    target: input.target, targetGrain: context.targetGrain,
-    scope: { question: context.question, language: context.language, grain: context.targetGrain, population: 'account-principal' as const,
-      countedTarget: input.target }, scale: context.scale, cadence: context.cadence,
-    populationPolicy: 'account-principal' as const, aggregationPolicy: 'latest-per-rater-mean' as const,
-    population, count, withdrawnCount, histogram, sum, mean: count ? sum / count : null,
-    precision: count ? { kind: 'exact-rational' as const, numerator: sum, denominator: count }
-      : { kind: 'no-data' as const },
-    sourcePosition: { datasetId: 'product' as const, dataEpoch: first.epoch.value, sequence: first.sequence.value } };
+  const figures = { slots: population, count: population - withdrawnCount, sum, histogram };
+  // Sealed components are exact only once no pre-component head awaits its value.
+  const exact = components !== null && components.unvalued === 0;
+  if ((components ? components.slots !== population : population !== 0)
+    || exact && (components.count !== figures.count || components.sum !== sum
+      || components.histogram.some((bin, index) => bin !== histogram[index]))) {
+    throw new RatingAggregateUnavailable('Target components differ from heads');
+  }
+  return { figures, heads, position: { dataEpoch: first.epoch.value, sequence: first.sequence.value } };
 }

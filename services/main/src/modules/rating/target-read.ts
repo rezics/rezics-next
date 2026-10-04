@@ -9,7 +9,7 @@ import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { RATING_STANDING_CADENCE } from './context.ts';
 import { TARGET_GRAINS, type TargetGrain } from './target.ts';
 import { queryTargetRatingAggregate } from './target-aggregate.ts';
-import { targetGrain, targetAggregateResult } from './target-api.ts';
+import { targetGrain, targetAggregateResult, meanDisplay } from './target-api.ts';
 
 export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-read-v1'), target: readId,
   targetGrain, scope: readScope, context: t.Nullable(readId),
@@ -17,6 +17,7 @@ export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-rea
   aggregationScope: t.Nullable(targetAggregateResult.properties.scope),
   scale: t.Nullable(t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) })),
   count: t.Integer({ minimum: 0 }), mean: t.Nullable(t.Number()),
+  displayThreshold: t.Nullable(t.Integer({ minimum: 1 })), meanDisplay: t.Nullable(meanDisplay),
   distribution: t.Array(t.Object({ value: t.Integer(), count: t.Integer({ minimum: 0 }) }), { maxItems: 10 }),
   sourcePosition: readPosition });
 
@@ -64,10 +65,11 @@ export async function readResourceRating(session: WorkReadSession, target: strin
   const context = rows[0]?.context?.value ?? null;
   if (!context) return { profile: 'target-rating-read-v1' as const, target, targetGrain: grain, scope, context,
     status: 'no-context' as const, aggregationScope: null, scale: null, count: 0, mean: null,
-    distribution: [], sourcePosition: session.position };
+    displayThreshold: null, meanDisplay: null, distribution: [], sourcePosition: session.position };
   if (!session.deps.targetRatingInventory) throw new WorkReadUnavailable('Target inventory unavailable');
   const aggregate = await queryTargetRatingAggregate(session.deps.environment, session.deps.targetRatingInventory, { context, target });
   return { profile: 'target-rating-read-v1' as const, target, targetGrain: grain, scope, context, status: 'available' as const,
     aggregationScope: aggregate.scope, scale: aggregate.scale, count: aggregate.count, mean: aggregate.mean,
+    displayThreshold: aggregate.displayThreshold, meanDisplay: aggregate.meanDisplay,
     distribution: aggregate.histogram.map((count, index) => ({ value: index + 1, count })), sourcePosition: session.position };
 }

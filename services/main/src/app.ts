@@ -102,6 +102,7 @@ import { projectionRoutes } from './routes/projections.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
+import { ratingRollupRoutes } from './routes/rating-rollups.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { libraryImportsRoutes } from './routes/library-imports.ts';
 import { libraryExportRoutes } from './routes/library-export.ts';
@@ -286,7 +287,8 @@ function extraRoutes7(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(packageModRoutes(work))
     .use(realmReplyRoutes(work))
     .use(pollRoutes(work))
-    .use(semanticRoutes(fuseki, work));
+    .use(semanticRoutes(fuseki, work))
+    .use(ratingRollupRoutes(work));
 }
 
 function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {

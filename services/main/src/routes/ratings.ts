@@ -43,9 +43,10 @@ import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { targetRead, TargetNotBound } from '../modules/target/resolve.ts';
 import { readId } from '../modules/work/read-contract.ts';
 import { createAdmittedTargetRatingContext, setAdmittedTargetRating, readTargetRatingContext,
-  resolveRatingTarget, readTargetRatingRevision, TARGET_CONTEXT_ID, TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
+  resolveRatingTarget, readTargetRatingRevision, effectiveDisplayThreshold, TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID,
+  TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
 import { queryTargetRatingAggregate, TARGET_AGGREGATE_PROFILE } from '../modules/rating/target-aggregate.ts';
-import { targetAggregateInput, targetAggregateResult, targetRatingContextInput,
+import { targetAggregateInput, targetAggregateResult, targetRatingContextInput, scopedTargetRatingContextInput,
   targetRatingContextReadResult, targetRatingContextWriteResult, targetRatingObservationInput,
   targetRatingObservationWriteResult, targetRatingObservationReadResult } from '../modules/rating/target-api.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -351,7 +352,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         timeZone: t.String({ minLength: 1, maxLength: 100 }),
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput]),
+      }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput, scopedTargetRatingContextInput]),
       response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
         releaseRatingContextWriteResult, targetRatingContextWriteResult]),
         201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
@@ -362,14 +363,16 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
-      if (body.profile === TARGET_CONTEXT_ID) {
+      if (body.profile === TARGET_CONTEXT_ID || body.profile === SCOPED_TARGET_CONTEXT_ID) {
         try {
+          const scoped = body.profile === SCOPED_TARGET_CONTEXT_ID;
           const receipt = await createAdmittedTargetRatingContext(work.environment, work.account, work.access,
-            request, { ...body, idempotencyKey });
+            request, { ...body, scoped, idempotencyKey });
           return Response.json({ context: receipt.context, realm: receipt.realm, question: body.question, language: body.language,
-            contextRevision: receipt.revision, targetGrain: body.targetGrain, profile: TARGET_CONTEXT_ID,
+            contextRevision: receipt.revision, targetGrain: body.targetGrain, profile: body.profile,
             scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', population: 'account-principal',
             aggregation: 'latest-per-rater-mean', replayed: receipt.replayed,
+            displayThreshold: effectiveDisplayThreshold(body.targetGrain, scoped ? body.displayThreshold ?? null : null),
             sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
           { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
         } catch (error) { return ratingError(error); }

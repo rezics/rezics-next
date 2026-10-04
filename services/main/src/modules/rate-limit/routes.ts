@@ -645,6 +645,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['POST', '/v1/rating-contexts', 'write'],
   ['POST', '/v1/rating-contexts/{id}/policy-revisions', 'write'],
   ['POST', '/v1/rating-observations', 'write'],
+  ['POST', '/v1/rating-rollups', 'read'],
   ['POST', '/v1/rating-syntheses', 'read'],
   ['PUT', '/v1/reader/settings', 'write'],
   ['POST', '/v1/realm-replies', 'write'],

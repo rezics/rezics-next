@@ -1,6 +1,7 @@
 import { standingRatingSlotIri } from '../rating/observation.ts';
+import { targetRatingDigest } from '../rating/target-digest.ts';
 import { createHash } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { GraphTerminalProof } from './admission.ts';
 
 export const MAX_RATING_AGGREGATE_SLOTS = 100;
@@ -37,8 +38,10 @@ interface RatingProof extends GraphTerminalProof {
   context?: string; realm?: string; revision?: string; work?: string;
   mainVersion?: string; slot?: string; observation?: string; predecessor?: string | null;
   contextRevision?: string; policyRevision?: string; release?: string; target?: string;
+  value?: number | null; availability?: 'available' | 'withdrawn';
 }
-interface SealingRatingAdmission { id: string; action: string; principal_id: string }
+interface SealingRatingAdmission { id: string; action: string; principal_id: string;
+  acting_subject: string; request_digest: string }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 /** First seal only, inside the admission transaction. Exact-head CAS orders
@@ -78,17 +81,28 @@ export async function recordRatingAggregateHead(client: PoolClient,
     const context = await client.query('SELECT 1 FROM access.rating_aggregate_context WHERE context = $1 AND realm = $2 AND revision = $3',
       [proof.context, proof.realm, proof.contextRevision]);
     if (context.rowCount !== 1) throw new RatingInventoryConflict('Target Context seal unavailable');
+    const value = sealedTargetValue(proof, admitted);
     const values = [proof.context, proof.target, proof.slot, proof.observation, proof.revision,
       admitted.principal_id, admitted.id];
     if (proof.predecessor === null) {
       await client.query(`INSERT INTO access.target_rating_head
-        (context,target,slot,observation,revision,principal_id,admission_id,original_admission_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$7)`, values);
+        (context,target,slot,observation,revision,principal_id,admission_id,original_admission_id,value,value_known)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,true)`, [...values, value]);
+      await moveTargetComponents(client, proof.context!, proof.target, admitted.id,
+        { slots: 1, unvalued: 0, previous: null, next: value });
     } else {
-      const changed = await client.query(`UPDATE access.target_rating_head SET revision = $5, admission_id = $7
-        WHERE context = $1 AND target = $2 AND slot = $3 AND observation = $4 AND principal_id = $6 AND revision = $8`,
-      [...values, proof.predecessor]);
-      if (changed.rowCount !== 1) throw new RatingInventoryConflict('Target predecessor seal unavailable');
+      // The row lock orders this seal after any repair that is recording the same head's value.
+      const prior = await client.query<{ value: number | null; value_known: boolean }>(`SELECT value, value_known
+        FROM access.target_rating_head WHERE context = $1 AND target = $2 AND slot = $3 AND observation = $4
+          AND principal_id = $5 AND revision = $6 FOR UPDATE`,
+      [proof.context, proof.target, proof.slot, proof.observation, admitted.principal_id, proof.predecessor]);
+      if (prior.rowCount !== 1) throw new RatingInventoryConflict('Target predecessor seal unavailable');
+      await client.query(`UPDATE access.target_rating_head SET revision = $5, admission_id = $7, value = $8, value_known = true
+        WHERE context = $1 AND target = $2 AND slot = $3 AND observation = $4 AND principal_id = $6 AND revision = $9`,
+      [...values, value, proof.predecessor]);
+      const known = prior.rows[0]!.value_known;
+      await moveTargetComponents(client, proof.context!, proof.target, admitted.id,
+        { slots: 0, unvalued: known ? 0 : -1, previous: known ? prior.rows[0]!.value : null, next: value });
     }
     return;
   }
@@ -117,6 +131,68 @@ export async function recordRatingAggregateHead(client: PoolClient,
         AND target_release IS NOT DISTINCT FROM $9 AND revision = $10`,
     [...values, proof.predecessor]);
     if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating predecessor seal is unavailable');
+  }
+}
+
+/** The sealed value must be the one the admitted request carried: the digest
+ * names context, target, predecessor, value and actor, so a receipt cannot move
+ * a sum the principal never asked for. */
+function sealedTargetValue(proof: RatingProof, admitted: SealingRatingAdmission): number | null {
+  const value = proof.availability === 'available' ? proof.value
+    : proof.availability === 'withdrawn' && proof.value === null ? null : undefined;
+  if (value === undefined || value !== null && (!Number.isInteger(value) || value < 1 || value > 10)) {
+    throw new RatingInventoryConflict('Target rating value is invalid');
+  }
+  let digest: string;
+  try {
+    digest = targetRatingDigest({ context: proof.context!, target: proof.target!, expectedRevisionHead: proof.predecessor!,
+      value, actingSubject: admitted.acting_subject });
+  } catch { throw new RatingInventoryConflict('Target rating value differs from its admission'); }
+  if (digest !== admitted.request_digest) throw new RatingInventoryConflict('Target rating value differs from its admission');
+  return value;
+}
+
+/** One head's change in a target's components. `previous` is the value the head
+ * already contributed (null for none or withdrawn); a head whose value was never
+ * recorded contributes nothing yet, so `unvalued` falls when it first is. */
+interface ComponentMove { slots: number; unvalued: number; previous: number | null; next: number | null }
+const bins = (value: number | null) => Array.from({ length: 10 }, (_, index) => value === index + 1 ? 1 : 0);
+const histogramMove = (previous: string, next: string) => `ARRAY(SELECT u.h + (CASE WHEN u.i = ${next}::int THEN 1 ELSE 0 END)
+  - (CASE WHEN u.i = ${previous}::int THEN 1 ELSE 0 END) FROM unnest(histogram) WITH ORDINALITY AS u(h, i) ORDER BY u.i)`;
+
+/** Moves the target's row and its Context's row in the transaction of the seal
+ * (or repair) that moved a head. Rows of one Context change only under that
+ * Context's scope gate, so reading before writing cannot race. */
+async function moveTargetComponents(client: PoolClient, context: string, target: string, admission: string | null,
+  move: ComponentMove): Promise<void> {
+  const count = (move.next === null ? 0 : 1) - (move.previous === null ? 0 : 1);
+  const sum = (move.next ?? 0) - (move.previous ?? 0);
+  const existing = await client.query('SELECT 1 FROM access.target_rating_component WHERE context = $1 AND target = $2 FOR UPDATE',
+    [context, target]);
+  if (!existing.rowCount) {
+    if (move.slots !== 1 || move.previous !== null || admission === null) {
+      throw new RatingInventoryConflict('Target component seal unavailable');
+    }
+    await client.query(`INSERT INTO access.target_rating_component
+      (context,target,slots,unvalued,rating_count,rating_sum,histogram,last_admission_id)
+      VALUES ($1,$2,1,0,$3,$4,$5::int[],$6)`, [context, target, count, sum, bins(move.next), admission]);
+  } else {
+    await client.query(`UPDATE access.target_rating_component SET slots = slots + $3, unvalued = unvalued + $4,
+      rating_count = rating_count + $5, rating_sum = rating_sum + $6, histogram = ${histogramMove('$7', '$8')},
+      last_admission_id = COALESCE($9::uuid, last_admission_id) WHERE context = $1 AND target = $2`,
+    [context, target, move.slots, move.unvalued, count, sum, move.previous, move.next, admission]);
+  }
+  const contextRow = await client.query('SELECT 1 FROM access.target_rating_context_component WHERE context = $1 FOR UPDATE',
+    [context]);
+  if (!contextRow.rowCount) {
+    await client.query(`INSERT INTO access.target_rating_context_component
+      (context,targets,slots,unvalued,rating_count,rating_sum,histogram) VALUES ($1,1,1,0,$2,$3,$4::int[])`,
+    [context, count, sum, bins(move.next)]);
+  } else {
+    await client.query(`UPDATE access.target_rating_context_component SET targets = targets + $2,
+      slots = slots + $3, unvalued = unvalued + $4, rating_count = rating_count + $5, rating_sum = rating_sum + $6,
+      histogram = ${histogramMove('$7', '$8')} WHERE context = $1`,
+    [context, existing.rowCount ? 0 : 1, move.slots, move.unvalued, count, sum, move.previous, move.next]);
   }
 }
 
@@ -208,9 +284,133 @@ export async function readReleaseRatingAggregateInventory(pool: Pool, context: s
   return readInventory(pool, context, release, true, signal);
 }
 
-export async function readTargetRatingAggregateInventory(pool: Pool, context: string,
-  target: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
-  return readInventory(pool, context, target, 'target', signal);
+/** The additive figures of one target and the seal that last moved them. Heads
+ * sealed before components existed are `unvalued`: they are in `slots` but not in
+ * the sums, so the figures are exact only while `unvalued` is zero. */
+export interface TargetRatingComponents {
+  slots: number; unvalued: number; count: number; sum: number; histogram: number[];
+  last: { receipt: string; requestDigest: string; dataEpoch: string; sequence: string };
+}
+export interface ContextRatingComponents {
+  targets: number; slots: number; unvalued: number; count: number; sum: number; histogram: number[];
+}
+/** Context seal, recovery fence and components of the requested targets from one
+ * snapshot. `heads` is the exact private inventory, read only for one target
+ * small enough to verify head by head. */
+export interface TargetRatingSnapshot extends Omit<RatingAggregateInventory, 'heads'> {
+  contextComponents: ContextRatingComponents | null;
+  members: ReadonlyMap<string, TargetRatingComponents>;
+  heads: RatingInventoryHead[] | null;
+}
+
+const COMPONENT_CONTEXT_SQL = `SELECT c.realm, c.revision AS context_revision, c.policy_revision, f.open, f.generation,
+    ca.state AS context_state, ca.graph_outcome AS context_outcome, ca.graph_receipt AS context_receipt,
+    ca.graph_data_epoch AS context_epoch, ca.graph_sequence AS context_sequence,
+    k.targets, k.slots, k.unvalued, k.rating_count, k.rating_sum, k.histogram
+  FROM access.rating_aggregate_context c
+  JOIN access.admission ca ON ca.id = c.admission_id
+  CROSS JOIN access.recovery_fence f
+  LEFT JOIN access.target_rating_context_component k ON k.context = c.context
+  WHERE c.context = $1 AND f.id = true`;
+const COMPONENT_MEMBERS_SQL = `SELECT k.target, k.slots, k.unvalued, k.rating_count, k.rating_sum, k.histogram,
+    la.state, la.graph_outcome, la.graph_receipt, la.graph_data_epoch, la.graph_sequence, la.request_digest,
+    (la.action = 'rating.observation.set' AND la.scope_id = 'rating:observe:' || k.context) AS identity_valid
+  FROM access.target_rating_component k JOIN access.admission la ON la.id = k.last_admission_id
+  WHERE k.context = $1 AND k.target = ANY($2::text[])`;
+
+const figures = (row: QueryResultRow) => ({ slots: Number(row.slots), unvalued: Number(row.unvalued),
+  count: Number(row.rating_count), sum: Number(row.rating_sum), histogram: (row.histogram as unknown[]).map(Number) });
+
+/** Two indexed reads and, for one small target, one k+1 head read, all in one
+ * repeatable-read snapshot; no read walks a large target's raters. */
+export async function readTargetRatingSnapshot(pool: Pool, context: string, targets: readonly string[],
+  signal = AbortSignal.timeout(10_000), options: { heads?: boolean } = {}): Promise<TargetRatingSnapshot> {
+  if (![context, ...targets].every(value => nativeId.test(value)) || targets.length < 1 || targets.length > 200
+    || options.heads && targets.length !== 1) throw new RatingInventoryConflict('invalid Rating target');
+  return withInventoryClient(pool, signal, async client => { try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const first = (await client.query(COMPONENT_CONTEXT_SQL, [context])).rows[0];
+    if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
+      throw new RatingInventoryConflict('Rating inventory is unavailable');
+    }
+    const members = new Map<string, TargetRatingComponents>();
+    for (const row of (await client.query(COMPONENT_MEMBERS_SQL, [context, targets])).rows) {
+      if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true) {
+        throw new RatingInventoryConflict('Target component seal is unavailable');
+      }
+      members.set(row.target, { ...figures(row), last: { receipt: row.graph_receipt, requestDigest: row.request_digest,
+        dataEpoch: row.graph_data_epoch, sequence: row.graph_sequence } });
+    }
+    const only = options.heads ? members.get(targets[0]!) : undefined;
+    const heads = options.heads && (!only || only.slots <= MAX_RATING_AGGREGATE_SLOTS)
+      ? inventoryHeads((await client.query(TARGET_RATING_INVENTORY_SQL, [context, targets[0]])).rows, 'target', context, targets[0]!)
+      : null;
+    await client.query('COMMIT');
+    return { realm: first.realm, contextRevision: first.context_revision, policyRevision: first.policy_revision ?? null,
+      contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch,
+      contextSequence: first.context_sequence, recoveryGeneration: first.generation,
+      contextComponents: first.targets === null ? null : { targets: Number(first.targets), ...figures(first) },
+      members, heads };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
+    throw error;
+  } });
+}
+
+/** Records values a verified read learned for heads sealed before components
+ * existed. A head moves only if it still carries the verified revision, and its
+ * contribution moves both component rows in the same transaction. */
+export async function recordTargetRatingValues(pool: Pool, context: string, target: string, generation: string,
+  heads: readonly { slot: string; revision: string; value: number | null }[],
+  signal = AbortSignal.timeout(10_000)): Promise<number> {
+  if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
+  return withInventoryClient(pool, signal, async client => { try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const fence = await client.query('SELECT open, generation FROM access.recovery_fence WHERE id = true');
+    if (fence.rows[0]?.open !== true || fence.rows[0]?.generation !== generation) {
+      throw new RatingInventoryConflict('Recovery fence changed');
+    }
+    await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR UPDATE', [`rating:observe:${context}`]);
+    let recorded = 0;
+    for (const head of heads) {
+      const changed = await client.query(`UPDATE access.target_rating_head SET value = $5, value_known = true
+        WHERE context = $1 AND target = $2 AND slot = $3 AND revision = $4 AND NOT value_known`,
+      [context, target, head.slot, head.revision, head.value]);
+      if (changed.rowCount !== 1) continue;
+      await moveTargetComponents(client, context, target, null, { slots: 0, unvalued: -1, previous: null, next: head.value });
+      recorded++;
+    }
+    await client.query('COMMIT');
+    return recorded;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
+    throw error;
+  } });
+}
+
+function inventoryHeads(rows: QueryResultRow[], release: boolean | 'target', context: string,
+  target: string): RatingInventoryHead[] {
+  return rows.filter(row => row.slot).map((row): RatingInventoryHead => {
+    if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true
+      || !(row.evaluated_at instanceof Date) || !(row.submitted_at instanceof Date)) {
+      throw new RatingInventoryConflict('Rating inventory head is unavailable');
+    }
+    if (release === 'target' ? row.target !== target : release ? row.target_release !== target : row.target_release !== null) {
+      throw new RatingInventoryConflict('Rating inventory target differs');
+    }
+    return { slot: row.slot, work: row.effective_work ?? row.work, mainVersion: row.effective_main_version ?? row.main_version,
+      ...(row.effective_work ? { originWork: row.work, originMainVersion: row.main_version,
+        effectiveSlot: standingRatingSlotIri(row.principal_id, context, target) } : {}),
+      observation: row.observation, revision: row.revision,
+      raterKey: createHash('sha256').update(JSON.stringify({ family: 'rating-private-rater-v1',
+        principalId: row.principal_id, context, target })).digest('hex'),
+      evaluatedAt: row.evaluated_at.toISOString(), submittedAt: row.submitted_at.toISOString(),
+      actingSubject: row.acting_subject, requestDigest: row.request_digest,
+      receipt: row.graph_receipt, dataEpoch: row.graph_data_epoch, sequence: row.graph_sequence };
+  });
 }
 
 async function readInventory(pool: Pool, context: string, target: string,
@@ -228,24 +428,7 @@ async function readInventory(pool: Pool, context: string, target: string,
     if (result.rows.some(row => row.effective_work && !row.slot)) {
       throw new RatingInventoryConflict('Merged rating origin is unavailable');
     }
-    const heads = result.rows.filter(row => row.slot).map((row): RatingInventoryHead => {
-      if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true
-        || !(row.evaluated_at instanceof Date) || !(row.submitted_at instanceof Date)) {
-        throw new RatingInventoryConflict('Rating inventory head is unavailable');
-      }
-      if (release === 'target' ? row.target !== target : release ? row.target_release !== target : row.target_release !== null) {
-        throw new RatingInventoryConflict('Rating inventory target differs');
-      }
-      return { slot: row.slot, work: row.effective_work ?? row.work, mainVersion: row.effective_main_version ?? row.main_version,
-        ...(row.effective_work ? { originWork: row.work,originMainVersion: row.main_version,
-          effectiveSlot: standingRatingSlotIri(row.principal_id,context,target) } : {}),
-        observation: row.observation, revision: row.revision,
-        raterKey: createHash('sha256').update(JSON.stringify({ family: 'rating-private-rater-v1',
-          principalId: row.principal_id, context, target })).digest('hex'),
-        evaluatedAt: row.evaluated_at.toISOString(), submittedAt: row.submitted_at.toISOString(),
-        actingSubject: row.acting_subject, requestDigest: row.request_digest,
-        receipt: row.graph_receipt, dataEpoch: row.graph_data_epoch, sequence: row.graph_sequence };
-    });
+    const heads = inventoryHeads(result.rows, release, context, target);
     await client.query('COMMIT');
     return { realm: first.realm, contextRevision: first.context_revision,
       policyRevision: first.policy_revision ?? null,

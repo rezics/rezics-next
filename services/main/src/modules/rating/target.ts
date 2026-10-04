@@ -19,15 +19,24 @@ import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInpu
   StaleRatingObservation, sealStandingRatingAdmission, sealRatingObservationTerminal,
   standingRatingReceiptIri, type RatingObservationReceipt } from './observation.ts';
 import { RatingTargetGrainMismatch } from './release.ts';
+import { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput } from './target-digest.ts';
+
+export { TARGET_OBSERVATION_ID, targetRatingDigest, type TargetRatingInput };
 
 export const LEGACY_TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
 export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v2';
+export const SCOPED_TARGET_CONTEXT_ID = 'realm-target-rating-context-v3';
 export const LEGACY_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${LEGACY_TARGET_CONTEXT_ID}`;
 const LANGUAGE_OBSERVATION_ID = 'realm-target-rating-observation-v2';
+const SCOPED_OBSERVATION_ID = 'realm-target-rating-observation-v3';
 export const LANGUAGE_OBSERVATION_PROFILE = `https://rezics.com/definition/${LANGUAGE_OBSERVATION_ID}`;
-export const TARGET_OBSERVATION_ID = 'realm-target-rating-observation-v1';
+export const SCOPED_OBSERVATION_PROFILE = `https://rezics.com/definition/${SCOPED_OBSERVATION_ID}`;
 export const TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${TARGET_CONTEXT_ID}`;
+export const SCOPED_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${SCOPED_TARGET_CONTEXT_ID}`;
 export const TARGET_OBSERVATION_PROFILE = `https://rezics.com/definition/${TARGET_OBSERVATION_ID}`;
+/** Every revision profile a target Context or observation can carry, newest first. */
+export const TARGET_CONTEXT_PROFILES = [SCOPED_TARGET_CONTEXT_PROFILE, TARGET_CONTEXT_PROFILE, LEGACY_TARGET_CONTEXT_PROFILE] as const;
+export const TARGET_OBSERVATION_PROFILES = [SCOPED_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, TARGET_OBSERVATION_PROFILE] as const;
 export const TARGET_GRAINS = { release: 'Release', realization: 'Realization', occurrence: 'Occurrence',
   resource: 'Resource' } as const;
 export type TargetGrain = keyof typeof TARGET_GRAINS;
@@ -35,27 +44,30 @@ export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, c
   questionLanguageBytes: 255 } as const;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
-export interface TargetContextInput { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string }
-export interface TargetRatingInput { context: string; target: string; expectedRevisionHead: string | null;
-  value: number | null; actingSubject: string }
+/** `scoped` selects the v3 profile; `displayThreshold` is its optional override. */
+export interface TargetContextInput { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string;
+  scoped?: boolean; displayThreshold?: number | null }
 export interface TargetRatingReceipt extends RatingObservationReceipt { target?: string }
 
 export function targetContextDigest(input: TargetContextInput): string {
   ratingContextDigest(input);
   if (!parseLanguage(input.language) || input.language.length > TARGET_RATING_WRITE_COST.questionLanguageBytes
     || !Object.hasOwn(TARGET_GRAINS, input.targetGrain)) throw new InvalidRatingObservationInput('Invalid target grain or question language');
-  return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question, language: input.language,
-    targetGrain: input.targetGrain, actingSubject: input.actingSubject }));
+  if (!input.scoped) return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
+    language: input.language, targetGrain: input.targetGrain, actingSubject: input.actingSubject }));
+  if (input.displayThreshold != null && (!Number.isInteger(input.displayThreshold) || input.displayThreshold < 1
+    || input.displayThreshold > MAX_DISPLAY_THRESHOLD)) throw new InvalidRatingObservationInput('Invalid display threshold');
+  return hash(JSON.stringify({ family: SCOPED_TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
+    language: input.language, targetGrain: input.targetGrain, displayThreshold: input.displayThreshold ?? null,
+    actingSubject: input.actingSubject }));
 }
-export function targetRatingDigest(input: TargetRatingInput): string {
-  if (![input.context, input.target, input.actingSubject].every(value => nativeId.test(value))
-    || input.expectedRevisionHead !== null && !nativeId.test(input.expectedRevisionHead)
-    || input.value !== null && (!Number.isInteger(input.value) || input.value < 1 || input.value > 10)
-    || input.value === null && input.expectedRevisionHead === null) {
-    throw new InvalidRatingObservationInput('Invalid target rating');
-  }
-  return hash(JSON.stringify({ family: TARGET_OBSERVATION_ID, context: input.context, target: input.target,
-    expectedRevisionHead: input.expectedRevisionHead, value: input.value, actingSubject: input.actingSubject }));
+/** A mean shows from this many ratings unless the Context declares its own; a
+ * projection is a finer, rarer judgment, so it waits longer. */
+export const DEFAULT_DISPLAY_THRESHOLD = 5;
+export const PROJECTION_DISPLAY_THRESHOLD = 10;
+export const MAX_DISPLAY_THRESHOLD = 1000;
+export function effectiveDisplayThreshold(grain: string, declared: number | null): number {
+  return declared ?? (grain === 'projection' ? PROJECTION_DISPLAY_THRESHOLD : DEFAULT_DISPLAY_THRESHOLD);
 }
 export function targetRatingSlotIri(principalId: string, context: string, target: string): string {
   if (!/^[0-9a-f-]{36}$/.test(principalId) || ![context, target].every(value => nativeId.test(value))) {
@@ -81,11 +93,12 @@ export function targetContextPattern(context: string, realm = '?realm', revision
   }`;
 }
 export async function readTargetRatingContext(env: WorkActivationEnvironment, context: string) {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest ?profile WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest ?profile ?threshold WHERE {
     ${targetContextPattern(context)}
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:displayThreshold ?threshold } }
     GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
       rv:modelRevision ?profile ; rv:manifest ?manifest .
-      VALUES ?profile { ${iri(TARGET_CONTEXT_PROFILE)} ${iri(LEGACY_TARGET_CONTEXT_PROFILE)} }
+      VALUES ?profile { ${TARGET_CONTEXT_PROFILES.map(iri).join(' ')} }
       FILTER NOT EXISTS { ?contextRevision a rv:ErasedRevision } }
   } LIMIT 2`)).results?.bindings ?? [];
   if (!rows.length) return null;
@@ -95,23 +108,28 @@ export async function readTargetRatingContext(env: WorkActivationEnvironment, co
   }
   const grain = Object.entries(TARGET_GRAINS).find(([, value]) => `${RV}${value}` === row.grain!.value)?.[0] as TargetGrain | undefined;
   const profile = row.profile?.value;
-  if (profile !== TARGET_CONTEXT_PROFILE && profile !== LEGACY_TARGET_CONTEXT_PROFILE) {
+  if (!(TARGET_CONTEXT_PROFILES as readonly (string | undefined)[]).includes(profile)) {
     throw new RatingObservationUnavailable('Target Context profile is unavailable');
   }
   // v1 manifests did not carry language. Recover the recorded RDF tag, never
   // infer it from the question text or the requesting client's locale.
   const language = row.question['xml:lang'];
-  const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile);
+  const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile!);
+  const tagged = profile !== LEGACY_TARGET_CONTEXT_PROFILE, scoped = profile === SCOPED_TARGET_CONTEXT_PROFILE;
+  const declared = row.threshold ? Number(row.threshold.value) : null;
   if (!language || !parseLanguage(language)
-    || profile === TARGET_CONTEXT_PROFILE && (typeof state.language !== 'string'
-      || state.language.toLowerCase() !== language.toLowerCase())
+    || tagged && (typeof state.language !== 'string' || state.language.toLowerCase() !== language.toLowerCase())
+    || (scoped ? state.displayThreshold !== declared : declared !== null)
+    || declared !== null && (!Number.isInteger(declared) || declared < 1 || declared > MAX_DISPLAY_THRESHOLD)
     || !grain || state.context !== context || state.realm !== row.realm.value || state.question !== row.question.value
     || state.targetGrain !== grain || state.state !== 'active' || state.scaleMin !== 1 || state.scaleMax !== 10
     || state.cadence !== RATING_STANDING_CADENCE || state.populationPolicy !== RATING_ACCOUNT_POPULATION
     || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) throw new RatingObservationUnavailable('Target Context bytes differ');
-  return { context, realm: row.realm.value, question: row.question.value, language: profile === TARGET_CONTEXT_PROFILE ? state.language as string : language, contextRevision: row.contextRevision.value,
-    targetGrain: grain, scale: { min: 1 as const, max: 10 as const, step: 1 as const }, cadence: 'standing' as const,
-    population: 'account-principal' as const, aggregation: 'latest-per-rater-mean' as const, profile: profile === TARGET_CONTEXT_PROFILE ? TARGET_CONTEXT_ID : LEGACY_TARGET_CONTEXT_ID };
+  return { context, realm: row.realm.value, question: row.question.value, language: tagged ? state.language as string : language,
+    contextRevision: row.contextRevision.value, targetGrain: grain, scale: { min: 1 as const, max: 10 as const, step: 1 as const },
+    cadence: 'standing' as const, population: 'account-principal' as const, aggregation: 'latest-per-rater-mean' as const,
+    displayThreshold: effectiveDisplayThreshold(grain, declared),
+    profile: scoped ? SCOPED_TARGET_CONTEXT_ID : tagged ? TARGET_CONTEXT_ID : LEGACY_TARGET_CONTEXT_ID };
 }
 
 /** Reuse the bounded, owner-authorized target resolver at the command and read boundary. */
@@ -208,25 +226,31 @@ async function createTargetRatingContext(env: WorkActivationEnvironment, admissi
   if (existing) return checked(existing, admission);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Context admission expired');
   const context = ID + Bun.randomUUIDv7(), revision = ID + Bun.randomUUIDv7(), operation = ID + Bun.randomUUIDv7();
+  const scoped = input.scoped === true, threshold = scoped ? input.displayThreshold ?? null : null;
+  const profileId = scoped ? SCOPED_TARGET_CONTEXT_ID : TARGET_CONTEXT_ID;
+  const profile = scoped ? SCOPED_TARGET_CONTEXT_PROFILE : TARGET_CONTEXT_PROFILE;
   const state = { context, realm: input.realm, question: input.question, language: input.language, targetGrain: input.targetGrain,
     state: 'active', scaleMin: 1, scaleMax: 10, cadence: RATING_STANDING_CADENCE,
-    populationPolicy: RATING_ACCOUNT_POPULATION, aggregationPolicy: RATING_LATEST_MEAN_POLICY };
-  const manifest = prepareComponent(env.objectDirectory, context, state, TARGET_CONTEXT_PROFILE);
-  const validations = await profileValidations(env.fuseki, TARGET_CONTEXT_ID, [
-    { shape: `${TARGET_CONTEXT_PROFILE}/realm-shape`, focus: [input.realm], graphs: [GRAPHS.current] },
-    { shape: `${TARGET_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
-  ], { realm: input.realm, context, question: input.question, language: input.language, grain: `${RV}${TARGET_GRAINS[input.targetGrain]}` });
+    populationPolicy: RATING_ACCOUNT_POPULATION, aggregationPolicy: RATING_LATEST_MEAN_POLICY,
+    ...(scoped ? { displayThreshold: threshold } : {}) };
+  const manifest = prepareComponent(env.objectDirectory, context, state, profile);
+  const validations = await profileValidations(env.fuseki, profileId, [
+    { shape: `${profile}/realm-shape`, focus: [input.realm], graphs: [GRAPHS.current] },
+    { shape: `${profile}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
+  ], { realm: input.realm, context, question: input.question, language: input.language, grain: `${RV}${TARGET_GRAINS[input.targetGrain]}`,
+    ...(threshold === null ? {} : { displayThreshold: String(threshold) }) });
   const result = await validatedCommand(env, { receipt, digest: admission.requestDigest, validations, deadlineMs: 10_000,
     update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:ratingContext ${iri(context)} .
-        ${iri(context)} a rv:TargetRatingContext, rv:LanguageTaggedTargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
+        ${iri(context)} a rv:TargetRatingContext, rv:${scoped ? 'Scoped' : 'LanguageTagged'}TargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
           rv:question ${lit(input.question)}@${input.language} ; rv:targetGrain rv:${TARGET_GRAINS[input.targetGrain]} ;
           rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
+          ${threshold === null ? '' : `rv:displayThreshold ${threshold} ;`}
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ${iri(revision)} . }
-      ${anchor(revision, context, operation, manifest, TARGET_CONTEXT_PROFILE, env.lineage.dataEpoch)}
+      ${anchor(revision, context, operation, manifest, profile, env.lineage.dataEpoch)}
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptIdentity(receipt, operation, admission, env.lineage.dataEpoch)}
         rv:realm ${iri(input.realm)} ; rv:ratingContext ${iri(context)} ; rv:ratingContextRevision ${iri(revision)} . }
       ${outbox(receipt, operation, env.lineage.dataEpoch, 'RatingContextCreatedEvent', 'rating.context.create',
@@ -315,10 +339,13 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
     targetRevision: target.revision, targetGrain: context.targetGrain, contextRevision: context.contextRevision,
     realm: context.realm, predecessor: input.expectedRevisionHead, availability, value: input.value,
     evaluatedAt, submittedAt: admission.registeredAt, originalSubmissionAt: evaluatedAt, revisedAt: admission.registeredAt };
-  const languageTagged = context.profile === TARGET_CONTEXT_ID;
-  const observationProfile = languageTagged ? LANGUAGE_OBSERVATION_PROFILE : TARGET_OBSERVATION_PROFILE;
+  const scoped = context.profile === SCOPED_TARGET_CONTEXT_ID, languageTagged = context.profile === TARGET_CONTEXT_ID;
+  const observationProfile = scoped ? SCOPED_OBSERVATION_PROFILE
+    : languageTagged ? LANGUAGE_OBSERVATION_PROFILE : TARGET_OBSERVATION_PROFILE;
+  const typed = scoped ? 'Scoped' : languageTagged ? 'LanguageTagged' : null;
   const manifest = prepareComponent(env.objectDirectory, observation, state, observationProfile);
-  const validations = await profileValidations(env.fuseki, languageTagged ? LANGUAGE_OBSERVATION_ID : TARGET_OBSERVATION_ID,
+  const validations = await profileValidations(env.fuseki,
+    scoped ? SCOPED_OBSERVATION_ID : languageTagged ? LANGUAGE_OBSERVATION_ID : TARGET_OBSERVATION_ID,
     ['realm', 'context', 'observation', 'revision'].map(role => ({ shape: `${observationProfile}/${role}-shape`,
       focus: [role === 'realm' ? context.realm : role === 'context' ? input.context : role === 'observation' ? observation : revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] })),
@@ -332,10 +359,10 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} rv:observationHead ${iri(prior)} }` : ''} }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:TargetRatingObservation ${languageTagged ? ', rv:LanguageTaggedTargetRatingObservation' : ''} ; rv:ratingContext ${iri(input.context)} ;
+      GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:TargetRatingObservation ${typed ? `, rv:${typed}TargetRatingObservation` : ''} ; rv:ratingContext ${iri(input.context)} ;
         rv:target ${iri(input.target)} ; rv:ratingSlot ${iri(slot)} ; rv:observationHead ${iri(revision)} . }
       ${anchor(revision, observation, operation, manifest, observationProfile, env.lineage.dataEpoch)}
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:TargetRatingObservationRevision ${languageTagged ? ', rv:LanguageTaggedTargetRatingObservationRevision' : ''} ;
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:TargetRatingObservationRevision ${typed ? `, rv:${typed}TargetRatingObservationRevision` : ''} ;
         rv:observation ${iri(observation)} ; rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ; ${rated}
         ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
         rv:evaluatedAt ${lit(evaluatedAt)}^^xsd:dateTime ; rv:submittedAt ${lit(admission.registeredAt)}^^xsd:dateTime ;
@@ -426,7 +453,7 @@ export async function readTargetRatingRevision(env: WorkActivationEnvironment, p
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.revision)} a rv:TargetRatingObservationRevision, rv:RevisionAnchor ;
       rv:component ${iri(input.observation)} ; rv:modelRevision ?profile ;
       rv:manifest ?manifest ; rv:ratingAvailability ?availability ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt .
-      VALUES ?profile { ${iri(TARGET_OBSERVATION_PROFILE)} ${iri(LANGUAGE_OBSERVATION_PROFILE)} }
+      VALUES ?profile { ${TARGET_OBSERVATION_PROFILES.map(iri).join(' ')} }
       FILTER NOT EXISTS { ${iri(input.revision)} a rv:ErasedRevision }
       OPTIONAL { ${iri(input.revision)} rv:ratingValue ?value } OPTIONAL { ${iri(input.revision)} rv:predecessor ?predecessor }
     } } LIMIT 2`)).results?.bindings ?? [];
