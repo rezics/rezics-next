@@ -1,4 +1,7 @@
 import { Elysia, t } from 'elysia';
+import { readerLanguages } from '../modules/display-language/select.ts';
+import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
+import { presentRatingContext } from '../modules/rating/question-presentation-read.ts';
 import { DAILY_CONTEXT_PROFILE, DAILY_CADENCE, DAILY_OBSERVATION_PROFILE, DAILY_OBSERVATION_ID,
   dailyRatingSlotIri, canonicalRatingTimeZone } from '../modules/rating/calendar.ts';
 import { readDailyRevisionPeriod } from '../modules/rating/daily-period.ts';
@@ -479,14 +482,21 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Union([ratingContextReadResult, dailyRatingContextReadResult, experienceRatingContextReadResult,
-        releaseRatingContextReadResult, targetRatingContextReadResult]), ...readProblems },
-    }, async ({ params }) => {
+      query: t.Object(questionLanguagesQuery, { additionalProperties: false }),
+      response: { 200: t.Union([
+        t.Object({ ...ratingContextReadResult.properties, ...questionReadFields }),
+        t.Object({ ...dailyRatingContextReadResult.properties, ...questionReadFields }),
+        t.Object({ ...experienceRatingContextReadResult.properties, ...questionReadFields }),
+        t.Object({ ...releaseRatingContextReadResult.properties, ...questionReadFields }),
+        t.Object({ ...targetRatingContextReadResult.properties, ...questionReadFields }),
+      ]), ...readProblems },
+    }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const context = `https://rezics.com/id/${params.id}`;
+        const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
         const targetContext = await readTargetRatingContext(work.environment, context);
-        if (targetContext) return Response.json(targetContext, { headers: { 'cache-control': 'no-store' } });
+        if (targetContext) return Response.json(await presentRatingContext(work.environment, targetContext, languages), { headers: { 'cache-control': 'no-store' } });
         const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?realm ?question ?revision ?manifest ?profile ?cadence ?timeZone WHERE {
             GRAPH <urn:rezics:graph:current> {
@@ -518,7 +528,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             .catch(error => { if (error instanceof RatingObservationUnavailable) return 'damaged' as const; throw error; })
             : null;
           if (release === 'damaged') return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
-          if (release) return Response.json(release, { headers: { 'cache-control': 'no-store' } });
+          if (release) return Response.json(await presentRatingContext(work.environment, release, languages), { headers: { 'cache-control': 'no-store' } });
           return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
         }
         const state = readComponentState(work.environment.objectDirectory,
@@ -547,13 +557,13 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             throw new RatingPolicyUnavailable('Rating policy witness differs');
           }
         }
-        return Response.json({ context, realm: row.realm.value, question: row.question.value,
+        return Response.json(await presentRatingContext(work.environment, { context, realm: row.realm.value, question: row.question.value,
           contextRevision: row.revision.value, targetGrain: 'mainVersion',
           scale: { min: 1, max: 10, step: 1 }, cadence: experience ? 'experience' : daily ? 'daily' : 'standing',
           ...(daily ? { timeZone: state.timeZone, calendar: 'iso8601' } : {}),
           population: 'account-principal', aggregation: policy?.aggregationPolicy ?? 'latest-per-rater-mean',
           ...(policy ? { policyRevision: policy.policyHead } : {}),
-          profile: experience ? EXPERIENCE_CONTEXT_ID : daily ? 'realm-daily-rating-context-v1' : 'realm-standing-rating-context-v1' },
+          profile: experience ? EXPERIENCE_CONTEXT_ID : daily ? 'realm-daily-rating-context-v1' : 'realm-standing-rating-context-v1' }, languages),
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });

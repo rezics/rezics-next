@@ -1,4 +1,7 @@
 import { Elysia, t } from 'elysia';
+import { readerLanguages } from '../modules/display-language/select.ts';
+import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
+import { presentRatingContext } from '../modules/rating/question-presentation-read.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readProblems, writeProblems } from '../api-responses.ts';
 import { RatingAggregateUnavailable } from '../modules/rating/aggregate.ts';
@@ -48,13 +51,15 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/global-rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: globalContextRead, ...readProblems },
-    }, async ({ params }) => {
+      query: t.Object(questionLanguagesQuery, { additionalProperties: false }),
+      response: { 200: t.Object({ ...globalContextRead.properties, ...questionReadFields }), ...readProblems },
+    }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
         const context = await readGlobalRatingContext(work.environment, `https://rezics.com/id/${params.id}`);
         if (!context) return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
-        return Response.json({ ...context, populationOwner: GLOBAL_RATING_POPULATION_OWNER, ...policy },
+        return Response.json(await presentRatingContext(work.environment, { ...context, populationOwner: GLOBAL_RATING_POPULATION_OWNER, ...policy },
+          readerLanguages(query.languages, request.headers.get('accept-language'))),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

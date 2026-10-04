@@ -32,7 +32,7 @@ import { platformAdministratorAction, platformAdministratorTargetAllowed, platfo
 import { controlTransaction,requirePrincipal,requireMandate,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
-import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof } from './realm-roles-rating.ts';
+import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -969,7 +969,7 @@ export class AccessAdmissionRegistry {
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
 
-      const ratingConfiguration = ['rating.context.create', 'rating.context.policy.set'].includes(request.action);
+      const ratingConfiguration = ratingConfigurationAction(request.action);
       const savedRating = existing && ratingConfiguration ? await savedRealmRatingProof(client, existing.id) : null;
       if (existing && savedRating) {
         if (existing.request_digest !== request.requestDigest || existing.acting_subject !== request.actingSubject
@@ -1416,7 +1416,7 @@ export class AccessAdmissionRegistry {
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       await requirePlatformParticipation(client, row.principal_id);
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
-      const rating = ['rating.context.create', 'rating.context.policy.set'].includes(row.action)
+      const rating = ratingConfigurationAction(row.action)
         ? await savedRealmRatingProof(client, row.id) : null;
       if (rating && !await realmRatingProof(client, this.baselineGraph, row.principal_id, row.acting_subject,
         row.action, row.scope_id, rating)) {

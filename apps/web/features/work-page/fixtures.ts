@@ -110,7 +110,9 @@ export const mineScope: WorkScope = { kind: 'mine' };
 export const scopeView = (scope: WorkScope, withRealms = realms): ScopeView => ({ workRef, scope, realms: withRealms });
 
 const question = (context: string, text: string, max: number): RatingContext =>
-  ({ context, question: text, language: 'en', scale: { min: 1, max, step: 1 } });
+  ({ context, question: text, language: 'en', scale: { min: 1, max, step: 1 },
+    displayQuestion: { value: text, language: 'en', direction: 'ltr', basis: 'requested', script: 'Latn',
+      reviewStatus: 'authored', presentation: null, source: null, licence: null, fallback: null } });
 const globalQuestion = question(globalContext, 'How good is this Work overall?', 5);
 const summary = (scope: WorkScope, context: RatingContext | null, counts: number[]) => {
   const count = counts.reduce((sum, value) => sum + value, 0);

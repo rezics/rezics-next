@@ -5,15 +5,18 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from './context.ts';
 import { GLOBAL_RATING_POPULATION, GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
+import { questionLanguagesQuery, questionReadFields } from './question-presentation-schema.ts';
+import { presentRatingQuestions } from './question-presentation-read.ts';
 
 /** P+1 Context rows, no Work enumeration or rating aggregation. Native graph
  * selection may sort the Context population; the shared read deadline applies. */
-export const RATING_CONTEXTS_COST = { pageSize: 20, graphRows: 21, graphCalls: 4 } as const;
+export const RATING_CONTEXTS_COST = { pageSize: 20, graphRows: 21, graphCalls: 84 } as const;
 export const ratingContextsQuery = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
+  ...questionLanguagesQuery,
   scope: t.Optional(t.Union([t.Literal('global'), t.Literal('realm')])), realm: t.Optional(readId),
 }, { additionalProperties: false });
 export const standingContextItem = t.Object({ context: readId, revision: readId,
-  question: t.String({ minLength: 3, maxLength: 120 }), language: t.Literal('en'),
+  question: t.String({ minLength: 3, maxLength: 120 }), ...questionReadFields,
   targetGrain: t.Literal('main-version'), cadence: t.Literal('standing'),
   scale: t.Object({ min: t.Literal(1), max: t.Union([t.Literal(5), t.Literal(10)]), step: t.Literal(1) }) });
 export const ratingContextsPage = t.Object({ profile: t.Literal('standing-rating-contexts-v1'),
@@ -54,10 +57,11 @@ export async function readStandingRatingContexts(session: WorkReadSession) {
     throw new WorkReadUnavailable('Standing rating Contexts are ambiguous');
   }
   const page = rows.slice(0, limit);
+  const items = await presentRatingQuestions(session.deps.environment, page.map(row => ({ context: row.context!.value, revision: row.revision!.value,
+    question: row.question!.value, language: row.question!['xml:lang']!, targetGrain: 'main-version' as const,
+    cadence: 'standing' as const, scale: { min: 1 as const, max: Number(row.max!.value) as 5 | 10, step: 1 as const } })), session.displayLanguages);
   return { profile: 'standing-rating-contexts-v1' as const,
     scope: { kind: scope.kind as 'global' | 'realm', realm: scope.realm },
-    ...pageResult(session, page.map(row => ({ context: row.context!.value, revision: row.revision!.value,
-      question: row.question!.value, language: 'en' as const, targetGrain: 'main-version' as const,
-      cadence: 'standing' as const, scale: { min: 1 as const, max: Number(row.max!.value) as 5 | 10, step: 1 as const } })),
+    ...pageResult(session, items,
     rows.length > limit ? encodeReadCursor(binding, session.position, page.at(-1)!.context!.value) : null) };
 }

@@ -3,6 +3,8 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // Question presentations qualify first-administrator authority and independent revision heads on an empty graph.
+  'tests/qa/integration/rating-question-presentation.test.ts',
   // G-1044: these complete discovery populations and relay histories belong to each file.
   'tests/qa/integration/g-1016-discovery-refresh.test.ts',
   'tests/qa/integration/g-1029-discovery-ready.test.ts',

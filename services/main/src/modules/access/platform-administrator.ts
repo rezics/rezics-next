@@ -4,6 +4,9 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../rating/global.ts';
+import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
+import { questionContextPattern } from '../rating/question-presentation-context.ts';
+import { ratingQuestionPresentationAction } from './rating-question-presentation.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const rootActions: Record<string, string> = {
@@ -23,6 +26,8 @@ const resourceActions: Record<string, string[]> = {
   'semantic.change': ['semantic:edit'],
   'lexicon.presentation.change': ['semantic:edit'],
   'lexicon.presentation.review': ['semantic:edit'],
+  'rating.question-presentation.change': ['rating:presentation'],
+  'rating.question-presentation.review': ['rating:presentation'],
 };
 
 /** A closed administrative vocabulary; unrelated private/member actions do not
@@ -34,10 +39,11 @@ export function platformAdministratorAction(action: string, scope: string): bool
   );
 }
 
-/** Resource authority is limited to this administrator's Zones and definitions.
+/** Resource authority covers this administrator's Zones and definitions, and
+ * active questions owned by the Global rating population.
  * Work/Collection reads and edits retain their ordinary curator/creator policy.
  * Cost: the bounded definition-creation proof for definition read/edit, with
- * one exact 1 KiB Zone ASK when a read names another resource.
+ * one exact 1 KiB Zone or Global question ASK when another resource is named.
  * A missing Zone can only be created: its owner command checks the Space owner. */
 export async function platformAdministratorTargetAllowed(
   client: PoolClient,
@@ -52,6 +58,11 @@ export async function platformAdministratorTargetAllowed(
   if (['media.labels.protect', 'media.conceal.protect'].includes(action)) return true;
   if (!graph || !native.test(actor)) return false;
   const target = scope.slice(scope.indexOf('https://rezics.com/id/'));
+  if (ratingQuestionPresentationAction(action)) {
+    return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      ${questionContextPattern(target)} FILTER(?questionOwner = ${iri(GLOBAL_RATING_POPULATION_OWNER)})
+    }`, 1024)).boolean === true;
+  }
   if (scope.startsWith('semantic:edit:')) {
     return definitionCreatorAllowed(client, graph, principal, actor, target);
   }

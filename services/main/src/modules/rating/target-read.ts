@@ -12,6 +12,7 @@ import { contextAcceptanceFilter, ratingAcceptanceTarget, assertRatingTargetAcce
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { queryTargetRatingAggregate } from './target-aggregate.ts';
 import { targetGrain, targetAggregateResult, meanDisplay } from './target-api.ts';
+import { presentRatingQuestions } from './question-presentation-read.ts';
 
 export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-read-v1'), target: readId,
   targetGrain, scope: readScope, context: t.Nullable(readId),
@@ -38,7 +39,10 @@ function contextPattern(grain: TargetGrain, scope: { kind: string; realm: string
 }
 export async function readResourceRatingContexts(session: WorkReadSession, target: string) {
   const [resolved] = await resolveTargets(session, [target], 'rating');
-  if (resolved!.base === 'work') return readWorkRatingContexts(session, target);
+  if (resolved!.base === 'work') {
+    const page = await readWorkRatingContexts(session, target);
+    return { ...page, items: await presentRatingQuestions(session.deps.environment, page.items, session.displayLanguages) };
+  }
   const grain = resolved!.base as TargetGrain, scope = await session.scope(), limit = session.options.limit ?? 20;
   const acceptance = await ratingAcceptanceTarget(session, resolved!);
   const binding = ['target-rating-contexts-v1', target, grain, scope];
@@ -51,11 +55,12 @@ export async function readResourceRatingContexts(session: WorkReadSession, targe
     throw new WorkReadUnavailable('Target Context inventory ambiguous');
   }
   const page = rows.slice(0, limit);
-  return { scope, ...pageResult(session, page.map(row => ({ context: row.context!.value, question: row.question!.value,
+  const items = await presentRatingQuestions(session.deps.environment, page.map(row => ({ context: row.context!.value, question: row.question!.value,
     language: row.question!['xml:lang']!, targetGrain: grain,
     owner: { kind: scope.kind === 'global' ? 'global' as const : 'realm' as const,
       id: scope.kind === 'global' ? GLOBAL_RATING_POPULATION_OWNER : scope.realm! },
-    scale: { min: 1, max: 10, step: 1 as const } })),
+    scale: { min: 1, max: 10, step: 1 as const } })), session.displayLanguages);
+  return { scope, ...pageResult(session, items,
   rows.length > limit ? encodeReadCursor(binding, session.position, page.at(-1)!.context!.value) : null) };
 }
 export async function readResourceRating(session: WorkReadSession, target: string, selectedContext?: string) {

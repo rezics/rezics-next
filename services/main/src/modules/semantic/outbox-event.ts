@@ -53,9 +53,10 @@ async function readModelGenerationEvent({ fuseki, batch, eventId, value, ordinal
 
 /** Prove that a change event names the exact admitted terminal and retained revision. */
 export async function readChangedEvent(input: EventInput,
-  action: 'semantic.change' | 'relation.change' | 'lexicon.presentation.change' | 'lexicon.presentation.review',
-  family: 'semantic-change' | 'relation-change' | 'lexicon-presentation-change',
-  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision' | 'PresentationRevision')[],
+  action: 'semantic.change' | 'relation.change' | 'lexicon.presentation.change' | 'lexicon.presentation.review'
+    | 'rating.question-presentation.change' | 'rating.question-presentation.review',
+  family: 'semantic-change' | 'relation-change' | 'lexicon-presentation-change' | 'rating-question-presentation-change',
+  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision' | 'PresentationRevision' | 'RatingQuestionPresentationRevision')[],
   type: string, ownerProof?: (component: string, revision: string) =>
     Promise<{ scope: string; fields: Record<string, string> }>) {
   const { fuseki, batch, eventId, value, ordinal } = input;

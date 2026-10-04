@@ -1,4 +1,3 @@
-import { languageTag } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -15,6 +14,7 @@ import { readResourceRating, readResourceRatingContexts, resourceRatingRead } fr
 import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
 import { ratingContextOwner } from '../modules/rating/target-api.ts';
+import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
 import { adoptionItem, classificationItem, creditItem, pageFields, pageQuery,
   readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
   workHeader } from '../modules/work/read-contract.ts';
@@ -96,9 +96,9 @@ export function workReadRoutes(work: MainWorkDependencies) {
       catch (error) { return workReadError(error); }
     })
     .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
-      query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
+      query: t.Object({ ...pageQuery, ...scopeQuery, language: t.Optional(questionReadFields.language), ...questionLanguagesQuery }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
-        language: languageTag, owner: t.Optional(ratingContextOwner),
+        ...questionReadFields, owner: t.Optional(ratingContextOwner),
         scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
         scope: readScope, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {

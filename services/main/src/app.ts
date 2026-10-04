@@ -119,6 +119,7 @@ import { reviewRoutes } from './routes/reviews.ts';
 import { continueRoutes } from './routes/continue.ts';
 import { onboardingInterestsRoutes } from './routes/onboarding-interests.ts';
 import { ratingContextReadRoutes } from './routes/rating-contexts.ts';
+import { ratingQuestionPresentationRoutes } from './routes/rating-question-presentations.ts';
 import { managementReadRoutes } from './routes/management-reads.ts';
 import { facetRoutes } from './routes/facets.ts';
 import { typeRoutes } from './routes/types.ts';
@@ -243,6 +244,7 @@ function extraRoutes4(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workMetadataRoutes(work))
     .use(discoveryRoutes(work))
     .use(ratingContextReadRoutes(work))
+    .use(ratingQuestionPresentationRoutes(work))
     .use(managementReadRoutes(work))
     .use(conceptRoutes(work))
     .use(realmSubmissionRoutes(work))

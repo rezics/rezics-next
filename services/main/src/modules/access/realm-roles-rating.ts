@@ -1,6 +1,12 @@
 import type { PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri, RV } from '../work/activate.ts';
+import { ratingQuestionPresentationAction } from './rating-question-presentation.ts';
+
+export function ratingConfigurationAction(action: string): boolean {
+  return ['rating.context.create', 'rating.context.policy.set'].includes(action)
+    || ratingQuestionPresentationAction(action);
+}
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const REALM_RATING_AUTHORITY_COST = {
@@ -30,7 +36,7 @@ async function targetRealm(
       ? 'rating:context:'
       : action === 'rating.context.policy.set'
         ? 'rating:policy:'
-        : null;
+        : ratingQuestionPresentationAction(action) ? 'rating:presentation:' : null;
   if (!graph || !prefix || !scope.startsWith(prefix)) return null;
   const target = scope.slice(prefix.length);
   if (!native.test(target)) return null;
@@ -42,7 +48,8 @@ async function targetRealm(
       ${
         action === 'rating.context.create'
           ? `BIND(${iri(target)} AS ?realm)`
-          : `${iri(target)} a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?realm .
+          : `${iri(target)} a ?ratingContextKind ; rv:contextState rv:Active ; rv:realm ?realm .
+          VALUES ?ratingContextKind { rv:RatingContext ${ratingQuestionPresentationAction(action) ? 'rv:TargetRatingContext rv:ReleaseRatingContext' : ''} }
           ?realm rv:ratingContext ${iri(target)} .`
       }
       ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
