@@ -75,6 +75,8 @@ const EVENT_TYPES: Record<string, { committed: string; stale: string; cancelled:
     stale: 'StatementMigrationStaleEvent', cancelled: 'StatementMigrationCancelledEvent' },
   'statement-cutover-v1': { committed: 'StatementCutoverEvent',
     stale: 'StatementCutoverStaleEvent', cancelled: 'StatementCutoverCancelledEvent' },
+  'projection-create-v1': { committed: 'ProjectionCreatedEvent', stale: 'ProjectionCreateStaleEvent',
+    cancelled: 'ProjectionCreateCancelledEvent' },
 };
 
 function eventType(family: string, outcome: 'committed' | 'stale' | 'cancelled'): string {

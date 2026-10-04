@@ -98,6 +98,7 @@ import { workContentsRoutes } from './routes/work-contents.ts';
 import { readingSettingsRoutes } from './routes/reading-settings.ts';
 import { preferencesRoutes } from './routes/preferences.ts';
 import { suitabilityRoutes } from './routes/suitability.ts';
+import { projectionRoutes } from './routes/projections.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
@@ -298,7 +299,8 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(facetRoutes())
     .use(typeAdministrationRoutes(work))
     .use(typeRoutes())
-    .use(ratingPopulationRoutes(work));
+    .use(ratingPopulationRoutes(work))
+    .use(projectionRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */

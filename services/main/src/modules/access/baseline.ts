@@ -62,7 +62,8 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     return native.test(id) ? { kind: 'author-work', id } : null;
   }
   if ((action === 'work.create' && scope === 'work:create:root')
-    || (action === 'space.create' && scope === 'space:create:root')) return { kind: 'root' };
+    || (action === 'space.create' && scope === 'space:create:root')
+    || (action === 'projection.create' && scope === 'projection:create:root')) return { kind: 'root' };
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
     'zone.edit': { prefix: 'zone:edit:', kind: 'zone' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },

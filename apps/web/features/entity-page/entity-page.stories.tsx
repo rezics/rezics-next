@@ -147,7 +147,7 @@ export const Ratings: Story = {
 
 /** Every registry entry on its base: the header says what it is and the page offers no book controls unless it is a book. */
 const bases = Object.keys(baseSections) as TargetBase[];
-const registryBase = (base: TargetBase) => base === 'work' || base === 'resource' ? base : 'record';
+const registryBase = (base: TargetBase) => base === 'work' || base === 'resource' || base === 'projection' ? base : 'record';
 const entries = bases.flatMap(base => servedTypes.types.filter(entry => entry.base === registryBase(base))
   .map(entry => ({ base, entry })));
 

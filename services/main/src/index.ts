@@ -31,6 +31,7 @@ import { FeedViewerStateReader } from './modules/feed/viewer-state.ts';
 import { HomePersonalStore } from './modules/feed/personal.ts';
 import { PersonPreferencesStore } from './modules/preferences/store.ts';
 import { SuitabilityStore } from './modules/suitability/store.ts';
+import { ProjectionStore } from './modules/projection/store.ts';
 import { SavedFilterStore } from './modules/saved-filter/store.ts';
 import { RankingHomeTrendingReader } from './modules/feed/trending.ts';
 import { FeedRefreshWorker } from './modules/feed/refresh.ts';
@@ -402,6 +403,7 @@ const app = createMainApp(fuseki, {
   editorialReview: new EditorialReviewStore(pool),
   types,
   suitability: new SuitabilityStore(pool, access),
+  projections: new ProjectionStore(pool),
   rateLimit: mainRateLimit(pool, config),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),

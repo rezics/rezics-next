@@ -15,11 +15,12 @@ export const baseSections: Record<TargetBase, readonly SectionId[]> = {
   realization: ['statements', 'relations', 'discussion'],
   occurrence: ['statements', 'relations', 'discussion'],
   resource: ['statements', 'relations', 'discussion'],
+  projection: [],
 };
 
 /** The `type` Main's summary gives each base: a Work, a release, a chapter occurrence, a text, or any other resource. */
 const summaryType = { work: 'work', release: 'release', occurrence: 'occurrence', realization: 'realization',
-  resource: 'resource' } as const satisfies Record<TargetBase, string>;
+  resource: 'resource', projection: 'projection' } as const satisfies Record<TargetBase, string>;
 
 const typeHref = { recipe: 'recipes', prompt: 'hub', skill: 'hub' } as const;
 
@@ -27,7 +28,7 @@ const typeHref = { recipe: 'recipes', prompt: 'hub', skill: 'hub' } as const;
 export function projectionFor({ id = '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d', base, types, name, restricted = false }: {
   id?: string; base: TargetBase; types: readonly string[]; name: string; restricted?: boolean;
 }): EntityProjection {
-  const registryBase = base === 'work' || base === 'resource' ? base : 'record';
+  const registryBase = base === 'work' || base === 'resource' || base === 'projection' ? base : 'record';
   const registry = typeEntry(types, registryBase);
   if (!registry) throw new Error('Seed the served type registry before building a projection');
   const typeSection = base === 'work' && (registry.presentation === 'recipe' || registry.presentation === 'prompt'

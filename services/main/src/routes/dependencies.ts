@@ -112,6 +112,7 @@ export interface MainWorkDependencies {
   seriesSessions?: import('../modules/session/series-store.ts').SeriesSessionReader;
   catalogueIntake?: import('../modules/catalogue-intake/store.ts').CatalogueIntakeStore;
   suitability?: import('../modules/suitability/store.ts').SuitabilityStore;
+  projections?: import('../modules/projection/store.ts').ProjectionStore;
   sessions?: ConsumptionSessionStore;
   onboardingPersons?: import('../modules/onboarding/persons.ts').OnboardingPersons;
   rateLimit?: import('../modules/rate-limit/hook.ts').MainRateLimit;

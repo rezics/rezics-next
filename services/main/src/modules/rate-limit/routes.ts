@@ -37,6 +37,8 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['DELETE', '/v1/me/library-imports/{id}', 'write'],
   ['GET', '/v1/me/library-export', 'read'],
   ['PUT', '/v1/suitability/{target}', 'write'],
+  ['POST', '/v1/projections', 'write'],
+  ['GET', '/v1/projections', 'read'],
   ['POST', '/v1/suitability/reads', 'read'],
   ['GET', '/v1/me/sessions', 'read'],
   ['POST', '/v1/me/sessions', 'write'],
