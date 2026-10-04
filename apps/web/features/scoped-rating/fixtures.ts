@@ -121,6 +121,8 @@ export interface Scenario {
   rateFails?: Failure;
   /** Every get-or-create answers with this failure. */
   projectionFails?: Failure;
+  /** Every read of a subject's places answers with this failure. */
+  listFails?: Failure;
   /** Milliseconds each call takes, so loading states can be seen. */
   delay?: number;
   /** Projections per page of a subject's list. */
@@ -184,7 +186,8 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       if (scenario.projectionFails) return fail(scenario.projectionFails);
       const wanted = { subject: subjectIri, frames: [...frames] };
       const existing = places.find(place => sameProjection(place.projection, wanted));
-      if (existing) return ok({ ...existing, created: false });
+      // A place the reader has not reached does not exist for them: Main refuses it as it refuses an absent one.
+      if (existing) return existing.summary?.status === 'available' ? ok({ ...existing, created: false }) : fail('missing');
       minted += 1;
       const created = projectionRead(iri(`f${String(minted).padStart(3, '0')}`), subjectIri, frames);
       places.push(created);
@@ -192,6 +195,7 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
     },
     async projections(subjectIri, cursor) {
       await wait(scenario.delay ?? 0);
+      if (scenario.listFails) return fail(scenario.listFails);
       const mine = places.filter(place => place.projection.subject === subjectIri);
       const from = cursor ? Number(cursor) : 0;
       const page: ProjectionList = { items: mine.slice(from, from + pageSize),

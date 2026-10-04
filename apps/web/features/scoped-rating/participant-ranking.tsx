@@ -38,6 +38,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
 }) {
   const t = translate(messages, locale);
   const Heading = `h${level}` as const;
+  const SubHeading = `h${level + 1}` as 'h3' | 'h4';
   const visible = participants.filter(read => read.summary?.status === 'available');
   const targets = visible.map(read => read.projection.id);
   const [result, reload] = useLoad<Rollup | null>(async () => targets.length ? api.rollup(question.context, targets, 'pooled', true)
@@ -80,7 +81,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
               </li>)}
             </ol>}
           {waiting.length ? <div className="grid gap-2">
-            <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{t.rankingWaiting}</h4>
+            <SubHeading className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{t.rankingWaiting}</SubHeading>
             <ul className="grid gap-1.5">
               {waiting.map(entry => <li key={entry.target} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
                 <Participant read={byTarget.get(entry.target)} locale={locale} />
