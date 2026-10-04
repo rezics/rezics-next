@@ -35,36 +35,44 @@ export function planChapterPosts(rows: readonly LegacyChapter[]) {
  * Each bounded graph transaction is its own durable checkpoint: interruption
  * resumes at the remaining CreativeWorks, without scanning converted Posts. */
 export async function prepareChapterPosts(env: WorkActivationEnvironment, access: Pick<Pool, 'query'>,
-  options: { signal?: AbortSignal } = {}) {
+  options: { signal?: AbortSignal; onMissingPublisher?: (count: number) => void } = {}) {
   const deadline = Date.now() + POST_BACKFILL_COST.deadlineMs;
+  const onMissingPublisher = options.onMissingPublisher ?? ((count: number) =>
+    console.warn('Post migration skipped legacy chapters without publisher evidence', { count }));
   let converted = 0;
+  // Failed rows remain repairable, but cannot occupy the first page all run.
+  let after: string | undefined;
   for (;;) {
     options.signal?.throwIfAborted();
     if (Date.now() >= deadline) throw new Error('Post migration reached its ten-minute budget; restart to resume');
     const found = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-      PREFIX schema: <https://schema.org/> SELECT DISTINCT ?post ?main ?head ?book ?continuity WHERE {
+      PREFIX schema: <https://schema.org/> SELECT DISTINCT ?post ?main ?head ?book ?continuity ?receiptPublisher WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ?post a schema:CreativeWork ; schema:isPartOf ?book ; rv:mainVersion ?main ; rv:head ?head .
         OPTIONAL { ?post rv:continuityProfile ?continuity }
         ?main a rv:MainVersion ; rv:work ?post ; rv:hostingPolicy rv:MetadataOnly .
-        ?book a schema:Book ; rv:mainVersion ?bookMain .
-        ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-          rv:structureOf ?bookMain ; rv:selectedGeneration ?generation .
-        ?generation rv:generationState rv:Active .
-        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
-          rv:occurrenceRole rv:ChapterRole ; schema:item ?post .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+        ?book a schema:Book .
       }
-    } LIMIT ${POST_BACKFILL_COST.batch}`, 64 * 1024)).results?.bindings ?? [];
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} {
+        ?creation a rv:OperationReceipt ; rv:chapterWork ?post ; rv:outcome rv:Succeeded ;
+          rv:actingSubject ?receiptPublisher .
+      } }
+      ${after ? `FILTER(STR(?post) > ${lit(after)})` : ''}
+    } ORDER BY STR(?post) LIMIT ${POST_BACKFILL_COST.batch}`, 64 * 1024)).results?.bindings ?? [];
     if (!found.length) return converted;
+    after = found.at(-1)!.post!.value;
     const publishers = (await access.query<{ post: string; publisher: string }>(`
       SELECT s.work AS post, a.acting_subject AS publisher FROM access.work_maintainer_set s
       JOIN access.admission a ON a.id = s.creation_admission
       WHERE s.work = ANY($1::text[]) AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'`,
     [found.map(row => row.post?.value)])).rows;
     const byPost = new Map(publishers.map(row => [row.post, row.publisher]));
-    const rows = planChapterPosts(found.map(row => ({ post: row.post?.value ?? '', main: row.main?.value ?? '',
-      head: row.head?.value ?? '', publisher: byPost.get(row.post?.value ?? '') ?? '' })));
+    const publisher = (row: typeof found[number]) => byPost.get(row.post?.value ?? '') ?? row.receiptPublisher?.value;
+    const eligible = found.filter(row => publisher(row));
+    if (eligible.length !== found.length) onMissingPublisher(found.length - eligible.length);
+    if (!eligible.length) continue;
+    const rows = planChapterPosts(eligible.map(row => ({ post: row.post?.value ?? '', main: row.main?.value ?? '',
+      head: row.head?.value ?? '', publisher: publisher(row)! })));
     const mainTriples = (await env.fuseki.query(`SELECT ?main ?predicate ?value WHERE {
       VALUES ?main { ${rows.map(row => iri(row.main)).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?main ?predicate ?value }
@@ -77,7 +85,7 @@ export async function prepareChapterPosts(env: WorkActivationEnvironment, access
       if (inventory.length > POST_BACKFILL_COST.mainTriples) throw new Error('Legacy Main inventory exceeds batch budget');
     }
     const removed = rows.flatMap((row, index) => {
-      const candidate = found[index]!;
+      const candidate = eligible[index]!;
       if (!candidate.book || !byMain.get(row.main)?.length) throw new Error('Legacy chapter owner is unavailable');
       return [`${iri(row.post)} a schema:CreativeWork ; rv:mainVersion ${iri(row.main)} ;
         schema:isPartOf ${iri(candidate.book.value)} .`,

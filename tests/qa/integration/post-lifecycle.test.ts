@@ -8,7 +8,7 @@ import { ContentComments } from '../../../services/content/src/comments.ts';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
-import { prepareChapterPosts } from '../../../services/main/src/modules/post/backfill.ts';
+import { POST_BACKFILL_COST, prepareChapterPosts } from '../../../services/main/src/modules/post/backfill.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { RightsStore, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial }
@@ -166,5 +166,72 @@ test('Posts retain independent custody, shared text and comments, and per-occurr
       work: firstBook.work, actingSubject: author.actor, target: cowriter.actor, action: 'transfer', expectedGeneration: '0' }), 201);
     expect((await draft(first, author, saved.revisionId)).status).toBe(201);
     expect((await draft(first, cowriter, saved.revisionId)).status).toBe(403);
+  } finally { await stack.stop(); }
+}, 240_000);
+
+test('Post migration converts unplaced chapters using creation receipts and advances past a full page without publishers', async () => {
+  const stack = await startMediaStack('post-backfill');
+  try {
+    const author = await stack.member('legacy-author');
+    const book = await stack.catalogueWork(author.actor, 'Legacy serial');
+    const native = () => `https://rezics.com/id/${randomUUID()}`;
+    const chapter = (prefix: string, index: number) => ({
+      post: `https://rezics.com/id/${prefix}-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      main: native(), head: native(), receipt: `urn:rezics:receipt:composition:${randomUUID()}`,
+    });
+    // These occupy the entire first page; no SQL maintainer or graph actor can identify their publisher.
+    const missing = [...Array.from({ length: POST_BACKFILL_COST.batch }, (_, index) => chapter('00000000', index)),
+      chapter('10000000', 0)];
+    const supported = ['removed', 'unselected', 'absent'].map((placement, index) => ({
+      ...chapter('10000000', index + 1), placement,
+    }));
+    const generation = native(), selected = native(), structure = native();
+    const legacy = (row: typeof missing[number]) => `${iri(row.post)} a schema:CreativeWork ;
+      rdfs:label "Legacy chapter"@en ; rv:head ${iri(row.head)} ; rv:mainVersion ${iri(row.main)} ;
+      schema:isPartOf ${iri(book.work)} .
+      ${iri(row.main)} a rv:MainVersion ; rv:work ${iri(row.post)} ; rv:hostingPolicy rv:MetadataOnly .`;
+    const receipt = (row: typeof missing[number]) => `${iri(row.receipt)} a rv:OperationReceipt ;
+      rv:chapterWork ${iri(row.post)} ; rv:outcome rv:Succeeded ; rv:actingSubject ${iri(author.actor)} .`;
+    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      INSERT DATA {
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(book.work)} a schema:Book .
+          ${[...missing, ...supported].map(legacy).join('\n')}
+          ${iri(structure)} a rv:Structure ; rv:structureProfile rv:BookComposition ;
+            rv:structureOf ${iri(book.mainVersion)} ; rv:selectedGeneration ${iri(selected)} .
+          ${iri(generation)} rv:generationState rv:Active .
+          ${iri(selected)} rv:generationState rv:Active .
+          ${supported.filter(row => row.placement !== 'absent').map(row => `${iri(native())}
+            a rv:OccurrencePlacement ; rv:generation ${iri(row.placement === 'removed' ? selected : generation)} ;
+            rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(row.post)}
+            ${row.placement === 'removed' ? `; rv:removedBy ${iri(native())}` : ''} .`).join('\n')}
+        }
+        GRAPH ${iri(GRAPHS.receipts)} { ${supported.map(receipt).join('\n')} }
+      }`);
+    const skipped: number[] = [];
+    const options = { onMissingPublisher: (count: number) => { skipped.push(count); } };
+    expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(supported.length);
+    expect(skipped).toEqual([POST_BACKFILL_COST.batch, 1]);
+    for (const row of supported) {
+      expect((await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        ASK { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(row.post)} a rv:Post ; rv:publisher ${iri(author.actor)} ; rv:head ${iri(row.head)} .
+          FILTER NOT EXISTS { ${iri(row.post)} a schema:CreativeWork }
+          FILTER NOT EXISTS { ${iri(row.post)} schema:isPartOf ?book }
+          FILTER NOT EXISTS { ${iri(row.main)} ?p ?o }
+        } }`)).boolean).toBe(true);
+    }
+    expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(0);
+    expect(skipped).toEqual([POST_BACKFILL_COST.batch, 1, POST_BACKFILL_COST.batch, 1]);
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT (COUNT(?post) AS ?count) WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ?post a schema:CreativeWork ; schema:isPartOf ${iri(book.work)} . } }`)).results?.bindings[0]?.count?.value)
+      .toBe(String(missing.length));
+    // Evidence repaired after a skipped run is retried without changing resource identity.
+    await stack.fuseki.update(`PREFIX rv: <${RV}>
+      INSERT DATA { GRAPH ${iri(GRAPHS.receipts)} { ${receipt(missing[0]!)} } }`);
+    expect(await prepareChapterPosts(stack.env, stack.accessPool, options)).toBe(1);
+    expect(skipped.slice(-2)).toEqual([POST_BACKFILL_COST.batch - 1, 1]);
   } finally { await stack.stop(); }
 }, 240_000);

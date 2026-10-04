@@ -62,10 +62,30 @@ public class ChapterPostMigrationPolicyTest {
             assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT, before()).isEmpty());
             data.delete(uri(CommandPolicy.CURRENT), uri(MAIN), uri(RV + "head"), uri(HEAD));
             add(data, CommandPolicy.CURRENT, PLACE, RV + "removedBy", "urn:probe:removal");
-            assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT, before()).isEmpty());
-            data.delete(uri(CommandPolicy.CURRENT), uri(PLACE), uri(RV + "removedBy"), uri("urn:probe:removal"));
+            assertEquals(Set.of(POST, MAIN), ChapterPostMigrationPolicy.retired(data, RECEIPT, before()));
             data.delete(uri(CommandPolicy.CURRENT), uri(POST), uri(RV + "head"), uri(HEAD));
             add(data, CommandPolicy.CURRENT, POST, RV + "head", "urn:probe:changed-head");
+            assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT, before()).isEmpty());
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void legacyFootprintSurvivesUnselectedOrAbsentPlacementButRequiresABookAndOwnedMetadataOnlyMain() {
+        DatasetGraph data = converted();
+        try {
+            data.delete(uri(CommandPolicy.CURRENT), uri("urn:probe:structure"), uri(RV + "selectedGeneration"), uri(GENERATION));
+            assertEquals(Set.of(POST, MAIN), ChapterPostMigrationPolicy.retired(data, RECEIPT, before()));
+            data.deleteAny(uri(CommandPolicy.CURRENT), uri(PLACE), Node.ANY, Node.ANY);
+            assertEquals(Set.of(POST, MAIN), ChapterPostMigrationPolicy.retired(data, RECEIPT, before()));
+            for (String key : Set.of("chapterOwner", "hostingPolicy")) {
+                var current = new HashMap<>(before().current());
+                var main = current.get(MAIN);
+                var basis = new HashMap<>(main.mutationBasis());
+                basis.put(key, Set.of(uri("urn:probe:wrong")));
+                current.put(MAIN, new ModelMutationPolicy.Subject(main.graph(), null, Map.of(), main.types(), basis));
+                assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT,
+                    new ModelMutationPolicy.Snapshot(current, Map.of())).isEmpty());
+            }
+            data.delete(uri(CommandPolicy.CURRENT), uri(BOOK), RDF.type.asNode(), uri(SCHEMA + "Book"));
             assertTrue(ChapterPostMigrationPolicy.retired(data, RECEIPT, before()).isEmpty());
         } finally { data.abort(); data.end(); data.close(); }
     }

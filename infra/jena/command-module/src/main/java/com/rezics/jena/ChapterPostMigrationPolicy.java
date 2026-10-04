@@ -54,41 +54,12 @@ final class ChapterPostMigrationPolicy {
                 || !values(data, CURRENT, post, RV + "mainVersion").isEmpty()
                 || !values(data, CURRENT, post, SCHEMA + "isPartOf").isEmpty()
                 || values(data, CURRENT, post, RV + "publisher").size() != 1
-                || !placed(data, post, book)) return Set.of();
+                || !data.contains(CURRENT, book, RDF.type.asNode(), uri(SCHEMA + "Book"))) return Set.of();
             retired.add(post.getURI());
             retired.add(main.getURI());
         }
         // No unrelated current or historical component can ride this migration.
         return retired.equals(before.current().keySet()) ? Set.copyOf(retired) : Set.of();
-    }
-
-    private static boolean placed(DatasetGraph data, Node post, Node book) {
-        if (!data.contains(CURRENT, book, RDF.type.asNode(), uri(SCHEMA + "Book"))) return false;
-        Set<Node> mains = values(data, CURRENT, book, RV + "mainVersion");
-        if (mains.size() != 1) return false;
-        var placements = data.find(CURRENT, Node.ANY, uri(SCHEMA + "item"), post);
-        int seen = 0;
-        try {
-            while (placements.hasNext()) {
-                if (++seen > 256) return false;
-                Node placement = placements.next().getSubject();
-                if (!data.contains(CURRENT, placement, uri(RV + "occurrenceRole"), uri(RV + "ChapterRole"))
-                    || data.find(CURRENT, placement, uri(RV + "removedBy"), Node.ANY).hasNext()) continue;
-                Set<Node> generations = values(data, CURRENT, placement, RV + "generation");
-                for (Node generation : generations) {
-                    if (!data.contains(CURRENT, generation, uri(RV + "generationState"), uri(RV + "Active"))) continue;
-                    var structures = data.find(CURRENT, Node.ANY, uri(RV + "selectedGeneration"), generation);
-                    try {
-                        while (structures.hasNext()) {
-                            Node structure = structures.next().getSubject();
-                            if (data.contains(CURRENT, structure, uri(RV + "structureProfile"), uri(RV + "BookComposition"))
-                                && data.contains(CURRENT, structure, uri(RV + "structureOf"), mains.iterator().next())) return true;
-                        }
-                    } finally { org.apache.jena.atlas.iterator.Iter.close(structures); }
-                }
-            }
-        } finally { org.apache.jena.atlas.iterator.Iter.close(placements); }
-        return false;
     }
 
     private ChapterPostMigrationPolicy() {}
