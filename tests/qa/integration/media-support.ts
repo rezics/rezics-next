@@ -39,6 +39,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
+import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -123,7 +124,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
     ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
       consumer: contentConsumer } } : {}),
-    mediaAccess, actingContexts, managedOrganizations, contextSelections,
+    mediaAccess, actingContexts, managedOrganizations, contextSelections, projections: new ProjectionStore(accessPool),
     ...(options.agents ? { agentProvisioning: new AgentProvisioning(accessPool, env) } : {}),
     ...(options.library ? { libraryStatus: new ReaderLibraryStatusStore(contentPool),
       profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool),

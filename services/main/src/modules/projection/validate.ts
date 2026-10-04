@@ -1,6 +1,4 @@
-import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { readResourceSummaries } from '../media/summary.ts';
-import { resolveTargets, targetSummaryReader, TargetNotBound, TargetUnavailable,
+import { resolveTargets, targetSummaries, TargetNotBound, TargetUnavailable,
   type TargetReadSession } from '../target/resolve.ts';
 import { coordinateOf } from './dimension.ts';
 import { MAX_FRAMES, ProjectionRefused, projectionKey, type ProjectionKey } from './schema.ts';
@@ -12,10 +10,8 @@ export interface ResolvedProjection extends ProjectionKey {
 
 /** The canonical subject of a request: readable to this reader, a Resource and never a Projection.
  * A merged identity names its survivor, so a new projection attaches to the identity that remains. */
-export async function resolveSubject(session: TargetReadSession, subject: string) {
-  const [summary] = (await readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    targetSummaryReader(session), { resources: [subject], context: DEFAULT_MEDIA_CONTEXT, includeCollections: true,
-      language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages })).summaries;
+async function resolveSubject(session: TargetReadSession, subject: string) {
+  const [summary] = (await targetSummaries(session, [subject], { resolveMerges: true, includeCollections: true })).summaries;
   if (summary?.status !== 'available') throw new ProjectionRefused('subject-unavailable', 'Subject is unavailable');
   if (summary.type === 'projection') throw new ProjectionRefused('subject-is-projection', 'A projection of a projection does not exist');
   return { subject: summary.resolution?.survivor ?? summary.reference, disclosure: summary.disclosure };

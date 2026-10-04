@@ -59,7 +59,10 @@ the semantic owner's exact current read after an Access check; Context state
 goes through its disclosure-aware owner read. The latter owner reads currently
 cost up to four and two graph queries per distinct reference, respectively,
 and semantic Access checks cost one query per reference. They are included in
-the response cost counters; a 64-item request is the hard bound.
+the response cost counters; a 64-item request is the hard bound. A projection
+adds its parts: its subject and frames are summarized as ordinary references in
+extra pages of 64 on the same graph generation, and its disclosure is the most
+restrictive of theirs ([projections](../projection/README.md)).
 `access-batch.ts` evaluates the current gate, principal, represented subject and grant under the Access recovery fence.
 It takes the same share locks as `AccessAdmissionRegistry.canReadWork`; each
 target needs only an indexed scope/grant probe, and no result is cached.

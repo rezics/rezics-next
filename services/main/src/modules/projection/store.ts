@@ -18,6 +18,15 @@ export class ProjectionStore {
     });
   }
 
+  /** Whether this principal's earlier request with this key reached admission, sealed or not. Such a request
+   * replays through its admission, which answers the same and seals what an interrupted attempt left open. */
+  admitted(principal: { issuer: string; subject: string }, idempotencyKey: string): Promise<boolean> {
+    return controlRead(this.pool, async client => (await client.query(
+      `SELECT 1 FROM access.admission a JOIN access.principal p ON p.id = a.principal_id
+       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND a.action = 'projection.create'
+         AND a.idempotency_key = $3`, [principal.issuer, principal.subject, idempotencyKey])).rowCount === 1);
+  }
+
   /** One page of a subject's reserved projections after a cursor, oldest first. One index range scan of
    * `limit` rows, however many projections the subject has. Graph availability is checked by the caller. */
   list(subject: string, after: string | null, limit: number): Promise<string[]> {

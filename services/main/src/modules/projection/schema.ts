@@ -18,8 +18,9 @@ export const MAX_PAGE = 20;
  * frames and the subject are summarized as parts (at most 9 per projection, 64 per page): a list page
  * reads at most MAX_PAGE * (MAX_FRAMES + 1) parts, which is ceil(180 / 64) = 3 part pages. */
 export const PROJECTION_COST = {
-  /** Subject summary, one target batch for the frames, one identity lookup and one projection summary. */
-  existingReads: { summaries: 2, targetBatches: 1, identityLookups: 1 },
+  /** Subject summary, one target batch for the frames, one admission probe, one identity lookup and one
+   * projection summary (itself one page of parts). */
+  existingReads: { summaries: 2, targetBatches: 1, admissionProbes: 1, identityLookups: 1 },
   /** Admission register, claim and seal, one identity insert and one guarded graph command. */
   creationWrites: { admissionTransactions: 3, identityInserts: 1, graphCommands: 1 },
   listPage: MAX_PAGE, partsPerProjection: MAX_FRAMES + 1,
@@ -70,7 +71,7 @@ export function projectionDigest(key: ProjectionKey, actingSubject: string): str
   return createHash('sha256').update(JSON.stringify([PROJECTION_FAMILY, key.key, actingSubject])).digest('hex');
 }
 
-export const projectionDisclosure = t.Union([t.Literal('public'), t.Literal('restricted')]);
+const projectionDisclosure = t.Union([t.Literal('public'), t.Literal('restricted')]);
 /** Disclosure is the most restrictive of the subject and every frame. */
 export const projectionView = t.Object({ id: readId, subject: readId,
   frames: t.Array(readId, { minItems: 1, maxItems: MAX_FRAMES }), revision: readId,

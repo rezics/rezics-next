@@ -2,7 +2,8 @@ import { Value } from 'typebox/value';
 import { MAX_WORK_REDIRECT_HOPS } from '../address/contract.ts';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryBatch, type SummaryReader } from '../media/summary.ts';
+import { MAX_SUMMARY_BATCH, readResourceSummaries, SummaryGraphMoved, type SummaryBatch,
+  type SummaryReader } from '../media/summary.ts';
 import { DATASET, GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { READ_PREFIX, workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
@@ -59,7 +60,10 @@ export function resourceTargetReader(deps: WorkReadSession['deps'], request: Req
  * this adapter fences graph positions and leaves all disclosure to the resolver. */
 export async function targetRead<T>(environment: WorkActivationEnvironment,
   authority: { access?: TargetReadSession['deps']['access']; principal?: TargetReadSession['principal'];
-    actingSubject?: string }, operation: (session: TargetReadSession) => Promise<T>): Promise<T> {
+    actingSubject?: string;
+    /** Owners that hydrate with batched authority (public decisions, private Contexts) pass the same readers a route has. */
+    readers?: Partial<Pick<TargetReadSession['deps'], 'account' | 'governance' | 'media' | 'mediaAccess' | 'contextSelections'>> },
+  operation: (session: TargetReadSession) => Promise<T>): Promise<T> {
   const deadline = Date.now() + 10_000;
   const checkDeadline = () => {
     if (Date.now() > deadline) throw new WorkReadUnavailable('Target deadline exceeded');
@@ -85,7 +89,7 @@ export async function targetRead<T>(environment: WorkActivationEnvironment,
   const session: TargetReadSession = { query, checkDeadline,
     request: new Request('http://main.local/v1/resources'), options: { actingSubject: authority.actingSubject },
     position: before, displayLanguages: ['en'], principal: authority.principal ?? null,
-    deps: { access: authority.access, environment: { ...environment,
+    deps: { ...authority.readers, access: authority.access, environment: { ...environment,
       lineage: { ...environment.lineage, dataEpoch: before.dataEpoch } } } };
   const result = await operation(session);
   const after = await position();
@@ -220,11 +224,19 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   };
 }
 
-/** Use the resolver's authority adapter when filtering mixed public inventories. */
-export function targetSummaries(session: TargetReadSession, resources: readonly string[]) {
-  return readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT, resolveMerges: false,
-      language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
+/** Use the resolver's authority adapter when filtering mixed public inventories. Merged identities
+ * stay as asked unless `resolveMerges` names their survivors; Collections are summarized only on request. */
+export async function targetSummaries(session: TargetReadSession, resources: readonly string[],
+  options: { resolveMerges?: boolean; includeCollections?: boolean } = {}) {
+  try {
+    return await readResourceSummaries(session.deps.environment, session.deps.media?.store,
+      targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
+        resolveMerges: options.resolveMerges ?? false, includeCollections: options.includeCollections,
+        language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
+  } catch (error) {
+    if (error instanceof SummaryGraphMoved) throw new WorkReadMoved(error.message);
+    throw error;
+  }
 }
 
 async function redirected(resource: string, redirectOf: RedirectOf): Promise<string> {

@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { ContextCommandUnavailable, commitCommand, runAdmittedCommand,
@@ -5,6 +7,7 @@ import { ContextCommandUnavailable, commitCommand, runAdmittedCommand,
 import { DATASET, GRAPHS, ID, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { targetRead } from '../target/resolve.ts';
+import { WORK_READ_COST } from '../work/read-contract.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { PROJECTION_ACTION, PROJECTION_FAMILY, PROJECTION_PROFILE, PROJECTION_SCOPE, PROJECTION_WRITE_SCOPE,
@@ -18,18 +21,24 @@ const existsGuard = (resource: string) => `FILTER EXISTS {
   { GRAPH ${iri(GRAPHS.current)} { ${iri(resource)} a ?refType } }
   UNION { GRAPH ${iri(GRAPHS.revisions)} { ${iri(resource)} a <${RV}FixedRelease> } } }`;
 
-/** The graph moves with every write anywhere; a read that straddles one is repeated, a few times at most. */
+/** The graph moves with every write anywhere, so a read that straddles one is repeated, with the same bounded
+ * backoff as an ordinary read. Only reads are repeated: a command has its own receipt. */
 async function stable<T>(read: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     try { return await read(); }
-    catch (error) { if (!(error instanceof WorkReadMoved) || attempt === 4) throw error; }
+    catch (error) {
+      if (!(error instanceof WorkReadMoved) || attempt + 1 === WORK_READ_COST.attempts) throw error;
+      const wait = Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt, WORK_READ_COST.maximumRetryDelayMs);
+      // Jitter keeps concurrent callers from retrying in step behind the same write.
+      await delay(wait + randomInt(0, wait));
+    }
   }
 }
 
 /** Create the graph Resource of an already reserved identity, once. The guards prove the identity is unused and that the
  * subject and every frame still exist; a command whose guards fail wrote nothing, and its caller adopts the Resource
  * a concurrent creation committed. One guarded update: its work grows with the frame count, never with other Resources. */
-export async function createProjection(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+async function createProjection(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   store: Pick<ProjectionStore, 'reserve'>, key: ProjectionKey, digest: string): Promise<ContextCommandReceipt | null> {
   const { projection } = await store.reserve({ ...key, admission: admission.id });
   const revision = ID + Bun.randomUUIDv7();
@@ -72,7 +81,9 @@ export async function getOrCreateProjection(deps: MainWorkDependencies, request:
   if (!store) throw new ProjectionUnavailable('Projection owner is unavailable');
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await deps.account.verify(request, [PROJECTION_WRITE_SCOPE]);
-  const authority = { access: deps.access, principal, actingSubject: input.actingSubject };
+  const authority = { access: deps.access, principal, actingSubject: input.actingSubject,
+    readers: { account: deps.account, governance: deps.governance, media: deps.media, mediaAccess: deps.mediaAccess,
+      contextSelections: deps.contextSelections } };
   const key = await stable(() => targetRead(env, authority, session => resolveProjection(session, input)));
   const present = async (): Promise<ProjectionWrite | null> => {
     const id = await store.lookup(key.key);
@@ -83,8 +94,11 @@ export async function getOrCreateProjection(deps: MainWorkDependencies, request:
         dataEpoch: session.position.dataEpoch, sequence: session.position.sequence } } : null;
     }));
   };
-  const existing = await present();
-  if (existing) return existing;
+  // An existing projection is a read, unless this very request already reached admission: then it replays.
+  if (!await store.admitted(principal, input.idempotencyKey)) {
+    const existing = await present();
+    if (existing) return existing;
+  }
   const digest = projectionDigest(key, input.actingSubject);
   try {
     const receipt = await runAdmittedCommand(env, deps.account, deps.access, request, { family: PROJECTION_FAMILY,

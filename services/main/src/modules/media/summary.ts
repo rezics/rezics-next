@@ -28,6 +28,8 @@ import { readSummaryPages, SUMMARY_PAGE_COST } from './summary-pages.ts';
 export { direction } from '../display-language/select.ts';
 
 export const MAX_SUMMARY_BATCH = SUMMARY_PAGE_COST.batch;
+/** A projection's parts were read at another graph position than the projection; read again. */
+export class SummaryGraphMoved extends MediaUnavailable {}
 export const FALLBACK_POLICY = 'avatar-fallback-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
@@ -90,14 +92,14 @@ export type AvatarDescriptor =
     crop: string | null; basis: { policy: string; context: string } }
   | { kind: 'fallback'; policy: string; key: string; resourceType: ResourceType };
 
-export type AvailableSummary = { reference: string; status: 'available'; type: ResourceType;
+type AvailableSummary = { reference: string; status: 'available'; type: ResourceType;
   disclosure: 'public' | 'restricted'; base: Base | null; work: string | null;
   address: CanonicalAddress;
   name: DisplayName & { context?: string; preferenceRevision?: string };
   avatar: AvatarDescriptor; resolution?: MergedIdentity;
   /** A projection's subject and frames as their own summaries, in frame order; clients format them, the server concatenates no labels. */
   parts?: { subject: PartSummary; frames: PartSummary[] } };
-export type PartSummary = Omit<AvailableSummary, 'resolution' | 'parts'>;
+type PartSummary = Omit<AvailableSummary, 'resolution' | 'parts'>;
 export type ResourceSummary = AvailableSummary | { reference: string; status: 'unavailable' };
 
 export interface SummaryBatch {
@@ -415,7 +417,7 @@ async function readProjectionSummaries(env: WorkActivationEnvironment, reader: S
     const page = await readSummaryPage(env, undefined, reader, { ...input,
       resources: references.slice(offset, offset + MAX_SUMMARY_BATCH), includeCollections: true,
       projectionPart: true });
-    if (page.generation.graph !== generation) throw new MediaUnavailable('Projection parts graph moved');
+    if (page.generation.graph !== generation) throw new SummaryGraphMoved('Projection parts graph moved');
     for (const summary of page.summaries) {
       if (summary.status === 'available' && summary.type !== 'projection') parts.set(summary.reference, summary);
     }
