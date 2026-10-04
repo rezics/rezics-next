@@ -437521,6 +437521,47 @@
                             "null"
                           ]
                         },
+                        "own": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "availability": {
+                              "enum": [
+                                "available",
+                                "withdrawn"
+                              ],
+                              "type": "string"
+                            },
+                            "observation": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "revisionHead": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "~elyTyp": 7,
+                              "maximum": 10,
+                              "minimum": 1,
+                              "nullable": true,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "observation",
+                            "revisionHead",
+                            "availability",
+                            "value"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "profile": {
                           "const": "target-rating-read-v1",
                           "type": "string"
