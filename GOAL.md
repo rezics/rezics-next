@@ -14,3 +14,6 @@ The numbered product [decisions](docs/product/decisions.md) and the
 | [Production readiness](docs/goals/production-readiness/GOAL.md) | Make REZICS complete and ready for production: milestones M4–M8. | Waiting for the maintainer to start one |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
+
+Main-wide regression ([practice](docs/goals/README.md#several-goals)): held by
+addresses-discovery, being handed over as it wraps up.

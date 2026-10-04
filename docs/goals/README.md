@@ -99,6 +99,22 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - **Talking.** Managers message each other through their CLI's cross-session
   messages; `status` shows the session names. A peer's request is information,
   never authority.
+- **Main-wide regression.** Maintainer, 2026-10-05: each manager verifies its
+  own merges, but someone must also run the whole of `main` from time to time:
+  unit, model, every integration batch, fault/recovery, Storybook and the
+  browser journeys. Managers agree who, and the duty falls to a manager whose
+  Goal still has unfinished tasks. The holder routes each failure, with
+  evidence, to the manager whose area or merge it belongs to; when the owner is
+  unclear, it runs the failing files at the commits before and after the
+  suspect merge. A manager that can wrap up offers the duty to another, hands
+  over its last run (commit, results, artifact paths, open attributions) and
+  then wraps up. If no other manager can take it, for example because they are
+  all about to wrap up too, it keeps the duty. The root `GOAL.md` names the
+  holder. A Goal's own completion is judged on its areas and the tests its own
+  changes affect. A failure that another Goal's merge caused goes to that
+  Goal's manager and does not hold the first Goal open: on 2026-10-05 a
+  "final" pass of addresses-discovery kept finding other Goals' fresh
+  regressions, because `main` moved under every run.
 
 ## Shared worktrees and unified checks
 
