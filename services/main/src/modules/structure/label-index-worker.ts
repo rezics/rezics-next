@@ -10,8 +10,11 @@ export class OccurrenceLabelWorker {
   constructor(private readonly environment: WorkActivationEnvironment, private readonly intervalMs = 1000) {}
   start() {
     this.running = true;
-    this.task ??= runMainRelay(() => projectOccurrenceLabelsOnce(this.environment),
-      () => this.running, this.intervalMs, { consumer: 'occurrence-labels' });
+    this.task ??= runMainRelay(() => projectOccurrenceLabelsOnce(this.environment, {
+      onProgress: progress => console.info(JSON.stringify({ level: 'info', event: 'occurrence_label_projection_progress', ...progress })),
+    }),
+      () => this.running, this.intervalMs, { consumer: 'occurrence-labels' })
+      .finally(() => { this.task = undefined; });
   }
   async stop() { this.running = false; await this.task; }
 }
