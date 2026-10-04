@@ -2,12 +2,15 @@ import type { Pool } from 'pg';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
 import { importDigest, type RowMatch } from '../library-import/file-store.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadMissing,
   type WorkReadSession } from '../work/read-session.ts';
+import { WORK_READ_COST } from '../work/read-contract.ts';
+import { readProjectionResource, ratingAnnotation } from '../export/scoped.ts';
+import { readTargetRatingRevision, readTargetRatingContext } from '../rating/target.ts';
 import type { SessionState } from '../session/contract.ts';
 
-export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 16, graphPerPage: 26,
-  phases: 7, responseBytes: FILE_IMPORT_COST.bytes } as const;
+export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
+  phases: 8, scopedRatingsPerPage: 1, responseBytes: FILE_IMPORT_COST.bytes } as const;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
@@ -29,7 +32,8 @@ export class LibraryBundleExporter {
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
     const ratings = await this.access.query<{ digest: string }>(`SELECT md5(coalesce(string_agg(
       context||':'||work||':'||revision,'|' ORDER BY context,work),'')) AS digest
-      FROM access.rating_aggregate_head WHERE principal_id=$1 AND target_release IS NULL`,[principalId]);
+      FROM (SELECT context,work,revision FROM access.rating_aggregate_head WHERE principal_id=$1 AND target_release IS NULL
+        UNION ALL SELECT context,target AS work,revision FROM access.target_rating_head WHERE principal_id=$1) heads`,[principalId]);
     // Aggregate only this reader's collection heads. Jena preserves the ordered
     // subquery input to GROUP_CONCAT; neither bodies nor memberships are returned.
     const collections = await session.query(`SELECT (SHA256(GROUP_CONCAT(?part; separator="|")) AS ?digest) WHERE {
@@ -57,7 +61,7 @@ export class LibraryBundleExporter {
     if (cursor) {
       let key: unknown;
       try { key = JSON.parse(cursor.after); } catch { throw new WorkReadInvalid('Invalid library export cursor'); }
-      if (!Array.isArray(key) || key.length !== 2 || !Number.isInteger(key[0]) || key[0]<0 || key[0]>=7 || typeof key[1] !== 'string') {
+      if (!Array.isArray(key) || key.length !== 2 || !Number.isInteger(key[0]) || key[0]<0 || key[0]>=LIBRARY_EXPORT_COST.phases || typeof key[1] !== 'string') {
         throw new WorkReadInvalid('Invalid library export cursor');
       }
       [phase,after] = key as [number,string];
@@ -65,11 +69,13 @@ export class LibraryBundleExporter {
     const rows: CanonicalRow[] = [];
     let rowBytes = 0;
     while (phase < LIBRARY_EXPORT_COST.phases && rows.length < limit) {
-      const page = await this.phase(session,agent,phase,after,limit-rows.length+1);
+      // Bound exact scoped-record hydration without limiting the traversable inventory.
+      const pageLimit = phase === 7 ? Math.min(limit, rows.length + LIBRARY_EXPORT_COST.scopedRatingsPerPage) : limit;
+      const page = await this.phase(session,agent,phase,after,pageLimit-rows.length+1);
       const accepted: typeof page = [];
       for (const item of page) {
         const bytes = new TextEncoder().encode(JSON.stringify(item.row)).length + 1;
-        if (accepted.length + rows.length >= limit || rowBytes + bytes > LIBRARY_EXPORT_COST.responseBytes - 8192) break;
+        if (accepted.length + rows.length >= pageLimit || rowBytes + bytes > LIBRARY_EXPORT_COST.responseBytes - 8192) break;
         accepted.push(item); rowBytes += bytes;
       }
       rows.push(...accepted.map(item => item.row));
@@ -157,6 +163,78 @@ export class LibraryBundleExporter {
     }
     const principalId = await session.deps.access.activePrincipalId(principal);
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
+    if (phase === 7) {
+      const result = await this.access.query<{
+        target: string;
+        context: string;
+        observation: string;
+        revision: string;
+        key: string;
+      }>(
+        `
+        SELECT target,context,observation,revision,context||':'||target AS key FROM access.target_rating_head
+        WHERE principal_id=$1 AND context||':'||target>$2 ORDER BY context,target LIMIT $3`,
+        [principalId, after, limit],
+      );
+      if (result.rows.length) {
+        const reader = await session.deps.account.verify(session.request, ['rating:read']);
+        if (reader.issuer !== principal.issuer || reader.subject !== principal.subject)
+          throw new WorkReadUnavailable('Rating export principal changed');
+      }
+      const exported: Array<{ key: string; row: CanonicalRow }> = [];
+      for (const head of result.rows) {
+        const live = await session.query(
+          `SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(head.observation)} rv:observationHead ?head } } LIMIT 2`,
+          2,
+        );
+        if (live.length !== 1 || live[0]?.head?.value !== head.revision)
+          throw new WorkReadUnavailable('Target rating head changed during export');
+        const rating = await readTargetRatingRevision(session.deps.environment, principalId, head);
+        const context = await readTargetRatingContext(session.deps.environment, head.context);
+        if (!rating || !context)
+          throw new WorkReadUnavailable('Target rating export evidence unavailable');
+        // Preserve a withdrawal as provenance without fabricating an assessing body.
+        let target: string | Record<string, unknown> = head.target;
+        const residuals: Array<{ kind: string; path: string; detail: Record<string, unknown> }> = [];
+        if (context.targetGrain === 'projection') {
+          try { target = (await readProjectionResource(session, head.target)).representation; }
+          catch (error) {
+            if (!(error instanceof WorkReadMissing)) throw error;
+            // The owner can retain their own rating and known target IRI without
+            // revealing currently denied subject/frame descriptions.
+            residuals.push({ kind: 'private_dependency', path: '/annotation/oa:hasTarget',
+              detail: { reason: 'Projection parts are unavailable' } });
+          }
+        }
+        const annotation =
+          rating.value === null
+            ? null
+            : ratingAnnotation({
+                ...head,
+                question: context.question,
+                language: context.language,
+                value: Number(rating.value),
+                scale: context.scale,
+                target,
+              });
+        exported.push({
+          key: head.key,
+          row: {
+            ...row('retained', `target-rating:${head.key}`, null),
+            target: head.target,
+            raw: {
+              ratingContext: head.context,
+              observationRevision: head.revision,
+              ratingAvailability: rating.availability,
+              ...(annotation ? { annotation } : { residual: 'withdrawn-rating' }),
+              ...(residuals.length ? { residuals } : {}),
+            },
+          },
+        });
+      }
+      return exported;
+    }
     const result = await this.access.query<{ work: string; context: string; observation: string; revision: string; key: string }>(`
       SELECT work,context,observation,revision,context||':'||work AS key FROM access.rating_aggregate_head
       WHERE principal_id=$1 AND target_release IS NULL AND context||':'||work>$2

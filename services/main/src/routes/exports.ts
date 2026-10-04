@@ -14,6 +14,7 @@ import { RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../modul
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid } from './shared.ts';
+import { scopedSelectionSchemas } from '../modules/export/scoped.ts';
 import { WikiRevisionSetSchema } from '../modules/wiki/delta.ts';
 
 export const openApiOperations = {
@@ -24,6 +25,7 @@ export const openApiOperations = {
 const position = t.Object({ dataEpoch: t.String({ minLength: 1, maxLength: 100 }),
   sequence: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) }, { additionalProperties: false });
 const selection = t.Union([
+  ...scopedSelectionSchemas(position),
   t.Object({ kind: t.Literal('wiki-revision-set'), reference: groupAgent,
     revisions: WikiRevisionSetSchema, expectedPosition: position,
     scope: t.Optional(t.Object({ entity: t.Optional(groupAgent),

@@ -21,6 +21,16 @@ import type { WikiRevisionSet } from '../wiki/delta.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { aggregateMeasurement, rollupMeasurement, readProjectionResource } from './scoped.ts';
+import { targetRead } from '../target/resolve.ts';
+import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
+import { queryRatingRollup } from '../rating/rollup-read.ts';
+import { resolveRatingTarget } from '../rating/target.ts';
+import { workRead, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { RatingObservationUnavailable } from '../rating/observation.ts';
+import { RatingTargetGrainMismatch } from '../rating/release.ts';
+import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
+import { RatingAggregateUnavailable } from '../rating/aggregate.ts';
 import type { Viewer } from '../suitability/policy.ts';
 
 export class ExportStale extends Error {}
@@ -39,6 +49,9 @@ export type ExportSelection =
   | { kind: 'fixed-release' | 'assessment'; reference: string; expectedPosition: OwnerPosition }
   | { kind: 'composition-seal'; reference: string; structure: string; expectedPosition: OwnerPosition }
   | { kind: 'semantic-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
+  | { kind: 'projection-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
+  | { kind: 'rating-aggregate'; reference: string; target: string; expectedPosition: OwnerPosition }
+  | { kind: 'rating-rollup'; reference: string; targets: string[]; formula: import('../rating/rollup.ts').RollupFormula; expectedPosition: OwnerPosition }
   | { kind: 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
 
 export interface ExportReaderDependencies {
@@ -124,6 +137,121 @@ function portable(value: SemanticValue | { kind: 'unavailable-reference' }): Por
 /** Exact readers decide the member payload. No caller-provided member or basis is trusted. */
 async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
   actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
+  if (
+    selection.kind === 'projection-revision' ||
+    selection.kind === 'rating-aggregate' ||
+    selection.kind === 'rating-rollup'
+  ) {
+    const work = deps.wiki;
+    if (!work) throw new ExportSourceUnavailable('Scoped owner readers unavailable');
+    try {
+      let data: Record<string, unknown>, position: OwnerPosition;
+      let residuals: ExportLoss[] = [];
+      if (selection.kind === 'projection-revision') {
+        const exact = await targetRead(
+          deps.env,
+          { principal, actingSubject, access: work.access, readers: work },
+          (session) => readProjectionResource(session, selection.resource, selection.reference),
+        );
+        position = exact.sourcePosition;
+        data = { ...exact, exportActor: actingSubject };
+      } else {
+        if (!work.targetRatingInventory)
+          throw new ExportSourceUnavailable('Rating inventory unavailable');
+        // Account verification belongs to the export operation. Reuse that verified
+        // principal in the ordinary read envelope without requiring another OAuth scope.
+        const readDeps = { ...work, account: { verify: async () => principal } };
+        const request = new Request('http://main.local/v1/exports', {
+          headers: { authorization: 'Bearer owner-read' },
+        });
+        const read = <T>(
+          operation: (session: import('../work/read-session.ts').WorkReadSession) => Promise<T>,
+        ) => workRead(readDeps, request, { actingSubject }, operation);
+        if (selection.kind === 'rating-aggregate') {
+          const aggregate = await read(async (session) => {
+            await resolveRatingTarget(session, selection.reference, selection.target);
+            return queryTargetRatingAggregate(deps.env, work.targetRatingInventory!, {
+              context: selection.reference,
+              target: selection.target,
+            });
+          });
+          position = aggregate.sourcePosition;
+          data = {
+            resource: selection.target,
+            context: selection.reference,
+            exportActor: actingSubject,
+            representation: aggregateMeasurement(aggregate),
+          };
+        } else {
+          const rollup = await queryRatingRollup(read, work.targetRatingInventory, {
+            context: selection.reference,
+            targets: selection.targets,
+            formula: selection.formula,
+            rank: false,
+          });
+          position = rollup.sourcePosition;
+          data = {
+            resource: selection.reference,
+            context: selection.reference,
+            targets: selection.targets,
+            formula: selection.formula,
+            exportActor: actingSubject,
+            representation: rollupMeasurement(rollup),
+          };
+          residuals = rollup.members.flatMap((member, index) =>
+            member.status === 'unavailable'
+              ? [
+                  {
+                    memberOrdinal: 1,
+                    kind: 'unavailable' as const,
+                    path: `/representation/rv:members/${index}`,
+                    detail: { reason: member.reason },
+                  },
+                ]
+              : [],
+          );
+        }
+      }
+      pinned(position, selection.expectedPosition, deps.env.lineage.dataEpoch, 'scoped export');
+      const member: VerifiedExportMember = {
+        sourceOwner: 'graph',
+        sourceNamespace: 'product',
+        sourceGrain: 'value',
+        exactRef: selection.reference,
+        contentRevisionId: null,
+        refDigest: sha(data),
+        ownerDataEpoch: position.dataEpoch,
+        ownerSequence: position.sequence,
+        sourcePosition: null,
+        targetGrain: selection.kind === 'projection-revision' ? 'Projection' : 'QualityMeasurement',
+        mapping: 'exact',
+        data,
+      };
+      return planFromOwner(
+        {
+          targetProfile:
+            selection.kind === 'projection-revision'
+              ? 'rezics-projection-v1'
+              : selection.kind === 'rating-aggregate'
+                ? 'rezics-rating-aggregate-v1'
+                : 'rezics-rating-rollup-v1',
+          useScope,
+          members: [member],
+          residuals,
+        },
+        deps.rights,
+      );
+    } catch (error) {
+      if (error instanceof WorkReadMoved) throw new ExportStale(error.message, { cause: error });
+      if (error instanceof WorkReadMissing)
+        throw new ExportSourceNotFound(error.message, { cause: error });
+      if (error instanceof RatingTargetGrainMismatch || error instanceof RatingTargetNotAccepted)
+        throw new InvalidExportPlan(error.message, { cause: error });
+      if (error instanceof WorkReadUnavailable || error instanceof RatingAggregateUnavailable || error instanceof RatingObservationUnavailable)
+        throw new ExportSourceUnavailable(error.message, { cause: error });
+      throw error;
+    }
+  }
   if (selection.kind === 'wiki-revision-set') {
     if (!deps.wiki) throw new ExportSourceUnavailable('Wiki owner is unavailable');
     if (selection.expectedPosition.dataEpoch !== deps.env.lineage.dataEpoch) throw new ExportStale('Wiki epoch changed');

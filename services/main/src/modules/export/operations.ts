@@ -106,7 +106,9 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   const selected = profile === 'rezics-verification-v1' ? assessment
     : profile === 'rezics-vndb-concept-source-v1' ? saved.plan.members.at(-1) : first;
   const data = selected?.data;
-  const reference = profile === 'rezics-main-version-v1' ? data?.release
+  const reference = profile === 'rezics-projection-v1' ? data?.revision
+    : ['rezics-rating-aggregate-v1', 'rezics-rating-rollup-v1'].includes(profile) ? data?.context
+    : profile === 'rezics-main-version-v1' ? data?.release
     : profile === 'rezics-verification-v1' ? assessment?.exactRef
       : profile === 'rezics-composition-v1' ? data?.seal
         : profile === 'rezics-semantic-values-v1' ? data?.revision
@@ -118,7 +120,15 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   }
   const expectedPosition = { dataEpoch: selected.ownerDataEpoch, sequence: selected.ownerSequence };
   let selection: ExportSelection;
-  if (profile === 'rezics-main-version-v1') selection = { kind: 'fixed-release', reference,
+  if (profile === 'rezics-projection-v1' && typeof data?.resource === 'string') {
+    selection = { kind: 'projection-revision', reference, resource: data.resource, expectedPosition };
+  } else if (profile === 'rezics-rating-aggregate-v1' && typeof data?.resource === 'string') {
+    selection = { kind: 'rating-aggregate', reference, target: data.resource, expectedPosition };
+  } else if (profile === 'rezics-rating-rollup-v1' && Array.isArray(data?.targets)
+    && data.targets.every(target => typeof target === 'string')
+    && (data.formula === 'pooled' || data.formula === 'mean-of-means')) {
+    selection = { kind: 'rating-rollup', reference, targets: data.targets, formula: data.formula, expectedPosition };
+  } else if (profile === 'rezics-main-version-v1') selection = { kind: 'fixed-release', reference,
     expectedPosition };
   else if (profile === 'rezics-verification-v1') selection = { kind: 'assessment', reference,
     expectedPosition };
