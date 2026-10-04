@@ -22,6 +22,14 @@ export const qaResourceClasses = {
 } as const;
 export type QaResourceClass = keyof typeof qaResourceClasses;
 
+/** Compare JDK diagnostics with the declared class, including large tmpfs probes. */
+export function qaResourceHeapBytes(name: QaResourceClass): number {
+  const maximum = /(?:^|\s)-Xmx(\d+)([kmg])(?:\s|$)/i.exec(qaResourceClasses[name].jvmArgs);
+  if (!maximum) throw new Error(`Missing heap maximum for ${name}`);
+  const units: Record<string, number> = { k: 1024, m: 1024 ** 2, g: 1024 ** 3 };
+  return Number(maximum[1]) * units[maximum[2]!.toLowerCase()]!;
+}
+
 /** Heavy files own one project each; retained data cannot accumulate in a 2 GiB shard. */
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
   ...[

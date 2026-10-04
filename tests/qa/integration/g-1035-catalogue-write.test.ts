@@ -15,7 +15,11 @@ import {
   type CorpusCommand,
 } from '../../../scripts/load/work-profile-corpus.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
-import { runBoundedIndices } from '../../../scripts/load/schedule.ts';
+import { seedCatalogueProfileWorks } from '../../../scripts/load/catalogue-work.ts';
+import {
+  CATALOGUE_IMPORT_SCOPE,
+  type CatalogueImportInput,
+} from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { qaTdbStorage, tdbGrowth } from '../../../scripts/load/tdb-growth.ts';
 import { scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.ts';
 
@@ -24,7 +28,7 @@ import { scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.
  * with raw storage rows or turn a throughput estimate into measured capacity. */
 test('G1035: disk-backed catalogue exposes public Work/classification write cost and storage growth', async () => {
   const scales = (Bun.env.G1035_SCALES ?? '100').split(',').map(Number);
-  const cohort = Number(Bun.env.G1035_COHORT ?? '8');
+  const cohort = Number(Bun.env.G1035_COHORT ?? '4');
   if (![4, 8, 32].includes(cohort)) throw new Error('Invalid G1035_COHORT');
   if (
     scales.some(
@@ -49,7 +53,8 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
     stackMode: Bun.env.REZICS_QA_STACK_MODE,
     buildBudgetMs,
     totalPreparationBudgetMs: 600_000,
-    workers: 2,
+    batchSize: 128,
+    writeCohort: cohort,
     backup: null,
     restore: null,
     samples: [],
@@ -62,7 +67,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
     );
   const home = await startHomeStack('g-1035-write');
   const { stack, author } = home;
-  const works: Awaited<ReturnType<typeof seedPublicProfileWork>>[] = [];
+  const works: { work: string; mainVersion: string }[] = [];
   let commands = 0,
     pendingRetries = 0,
     profiling = false,
@@ -157,6 +162,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
       },
     });
     for (const [scope, action] of [
+      [CATALOGUE_IMPORT_SCOPE, 'work.create'],
       ['classification:define:global', 'classification.proposition.define'],
       ['classification:decide:global', 'classification.decision.set'],
     ]) {
@@ -175,7 +181,11 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         [randomUUID(), actor.agent, scope, action],
       );
     }
-    const definition = await api.command<{ concept: string; sense: string }>(`${key}:topic`, {
+    const definition = await api.command<{
+      concept: string;
+      sense: string;
+      definitionRevision: string;
+    }>(`${key}:topic`, {
       method: 'POST',
       path: '/v1/classification-vocabulary',
       body: {
@@ -190,21 +200,45 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
     });
     const seed = async (index: number) => {
       signal.throwIfAborted();
-      works[index] = await seedPublicProfileWork(api, `${key}:work:${index}`, {
+      const work = await seedPublicProfileWork(api, `${key}:work:${index}`, {
         actingSubject: actor.agent,
         title: `Catalogue common Work ${index}`,
         body: `Catalogue selected text ${index}`,
       });
+      works[index] = work;
+      return work;
     };
+    const catalogueInput = (index: number): CatalogueImportInput => ({
+      profile: 'work-catalogue-import-v1',
+      expectedWorkHead: null,
+      title: `Catalogue common Work ${index}`,
+      language: 'en',
+      evidence: 'G1035 public catalogue preparation',
+      aliases: [],
+      semanticTypes: [],
+      credits: [{ agent: actor.agent, role: 'author' }],
+      classifications: [
+        {
+          sense: definition.sense,
+          expectedSenseHead: definition.definitionRevision,
+          expectedDecisionHead: null,
+          outcome: 'accepted',
+        },
+      ],
+    });
     const grow = async (target: number) => {
       while (works.length < target) {
         const first = works.length;
-        await runBoundedIndices(
-          Math.min(32, target - first),
-          2,
-          (offset) => seed(first + offset),
-          () => {},
+        const rows = await seedCatalogueProfileWorks(
+          rawApi,
+          actor.agent,
+          Array.from({ length: Math.min(128, target - first) }, (_, offset) => ({
+            key: `${key}:background:${first + offset}`,
+            input: catalogueInput(first + offset),
+          })),
+          signal,
         );
+        works.push(...rows);
         const relayStarted = performance.now();
         await home.projectRelay();
         relayMs += performance.now() - relayStarted;
@@ -223,9 +257,12 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
       const cohortStarted = performance.now(),
         beforeCollection = collectionMs;
       profiling = true;
-      await seed(first);
+      const selectedWork = await seed(first);
       profiling = false;
-      await grow(first + cohort);
+      for (let offset = 1; offset < cohort; offset++) await seed(first + offset);
+      const workRelayStarted = performance.now();
+      await home.projectRelay();
+      relayMs += performance.now() - workRelayStarted;
       const workMs = performance.now() - cohortStarted - (collectionMs - beforeCollection);
       const afterWork = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
       const classifyStarted = performance.now(),
@@ -284,7 +321,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         profiles: profiles.slice(beforeProfiles),
       };
       (evidence.samples as unknown[]).push(sample);
-      const work = works[first]!;
+      const work = selectedWork;
       const selected = await api.read<{
         contribution: string;
         selectedDraft: string;
@@ -295,6 +332,75 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         selectedDraft: work.draftRevision,
         body: `Catalogue selected text ${first}`,
       });
+      for (const [name, count] of [
+        ['compound', 1],
+        ['bulk', cohort],
+      ] as const) {
+        const before = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
+        const items = Array.from({ length: count }, (_, offset) => ({
+          key: `${key}:${name}:${scale}:${offset}`,
+          input: catalogueInput(works.length + offset),
+        }));
+        const { profile } = await profileRequest(
+          sink,
+          async (headers) => {
+            const measuredApi = {
+              ...rawApi,
+              command: <T>(
+                commandKey: string,
+                command: CorpusCommand,
+                commandSignal?: AbortSignal,
+              ) => rawApi.command<T>(commandKey, { ...command, headers }, commandSignal),
+            };
+            if (name === 'bulk') {
+              works.push(
+                ...(await seedCatalogueProfileWorks(measuredApi, actor.agent, items, signal)),
+              );
+            } else {
+              const result = await measuredApi.command<{
+                receipt: { outcome: string; work: string; mainVersion: string };
+              }>(
+                items[0]!.key,
+                {
+                  method: 'POST',
+                  path: '/v1/work-imports',
+                  body: { actingSubject: actor.agent, input: items[0]!.input },
+                },
+                signal,
+              );
+              expect(result.receipt.outcome).toBe('succeeded');
+              works.push(result.receipt);
+            }
+          },
+          {
+            service: 'g-1035-write',
+            peers: { fuseki: Bun.env.FUSEKI_URL! },
+            flush: flushTelemetryTraces,
+          },
+        );
+        expect(profile.postgresStatements).toBeGreaterThan(0);
+        expect(profile.fusekiRequests).toBeGreaterThan(0);
+        assertWorkCost(profile, {
+          fusekiRequests: 64,
+          postgresStatements: 400 * count,
+          accountCalls: 0,
+        });
+        const commits = profile.fusekiCalls.reduce(
+          (sum, call) => sum + (call.nativeWork?.durable_commits ?? 0),
+          0,
+        );
+        expect(commits).toBe(1);
+        (evidence.samples as unknown[]).push({
+          name,
+          catalogueScale: scale,
+          catalogueWorksBefore: works.length - count,
+          count,
+          profile,
+          growth: tdbGrowth(before, qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!), count),
+        });
+        sink.clear();
+        await home.projectRelay();
+      }
       evidence.elapsedMs = performance.now() - started;
       save();
     }

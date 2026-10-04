@@ -12,6 +12,7 @@ import { startMediaStack } from './media-support.ts';
 import { fusekiMemoryProbe } from './g-1022-fuseki-memory.ts';
 import { projectName } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
+import { integrationResourceClass, qaResourceClasses } from '../../../scripts/qa/resource-classes.ts';
 
 type Page = { items: Array<{ occurrence: string; ordinal: number }>; nextCursor: string | null;
   complete: boolean; resolved: string };
@@ -30,11 +31,13 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
   const stack = await startMediaStack('g-1022-reading-cost');
   try {
     let measuringCount = 0, projectionCommands = 0, heapMs = 0;
-    const memory = await fusekiMemoryProbe();
+    const resourceClass = integrationResourceClass(['tests/qa/integration/g-1022-reading-cost.test.ts']);
+    const allocation = qaResourceClasses[resourceClass];
+    const memory = await fusekiMemoryProbe(resourceClass);
     const heap = async (phase: string, collect = false) => {
       const started = performance.now(), reading = await memory(collect);
       heapMs += performance.now() - started;
-      expect(reading.containerLimit).toBe(2 * 1024 ** 3);
+      expect(reading.containerLimit).toBe(Number.parseInt(allocation.memory, 10) * 1024 ** 3);
       console.log('G1022 heap', JSON.stringify({ revision: 'lucene-after', count: measuringCount, phase, memory: reading }));
     };
     const member = await stack.member('reading-cost-editor');
