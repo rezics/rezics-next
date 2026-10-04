@@ -335,7 +335,7 @@ test('QA08: backend WORK01 needs the API owner result and cannot borrow browser 
 });
 
 test('QA08: CLP01 needs the API journey and the browser journey, and backend completion cannot borrow the browser', () => {
-  const loopCase = [{ id: 'CLP01', page: 'docs/goals/tasks/G-704.md' }];
+  const loopCase = [{ id: 'CLP01', page: 'docs/contracts/editorial-protection.md' }];
   const native = { tier: 'integration' as const,
     file: 'tests/qa/integration/g-704-contribution-loop.test.ts',
     name: 'CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted',

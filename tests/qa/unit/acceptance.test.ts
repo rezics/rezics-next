@@ -23,7 +23,7 @@ test('QA04: every migrated acceptance scenario and required result retains its I
   for (const item of declaredCases) {
     const caseModule = item.page === 'docs/operations/trust-and-safety.md'
       ? 'scripts/qa/cases/launch-safety.ts'
-      : item.page === 'docs/goals/tasks/G-704.md'
+      : item.page === 'docs/contracts/editorial-protection.md'
         ? 'scripts/qa/cases/contribution-loop.ts'
         : item.page.replace('docs/testing/', 'scripts/qa/cases/').replace(/\.md$/, '.ts');
     expect(existsSync(join(root, caseModule))).toBe(true);
@@ -37,7 +37,7 @@ test('QA04: every migrated acceptance scenario and required result retains its I
   expect(contributionCases.map(item => item.id)).toEqual([
     'CLP01', 'CLP02', 'CLP03', 'CLP04', 'CLP05', 'CLP06', 'CLP07',
   ]);
-  expect(contributionCases.every(item => item.page === 'docs/goals/tasks/G-704.md')).toBe(true);
+  expect(contributionCases.every(item => item.page === 'docs/contracts/editorial-protection.md')).toBe(true);
   const originalCases = declaredCases.filter(item => !item.id.startsWith('SAFETY') && !item.id.startsWith('CLP'));
   expect(originalCases).toHaveLength(277);
   const digest = createHash('sha256').update(originalCases.map(item =>
@@ -49,7 +49,7 @@ test('QA04: every migrated acceptance scenario and required result retains its I
   expect(safetyDigest).toBe('4e682b1a041b8f53ee1b049f3fc5732cc0d2a520421abb2a717419f112a7c175');
   const contributionDigest = createHash('sha256').update(contributionCases.map(item =>
     `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
-  expect(contributionDigest).toBe('7c182c33b1354171e144ec01a6aac0c988c321b32ee6e2afeaddbea417075ba6');
+  expect(contributionDigest).toBe('db8c45d621de025b553065bf31c82a0981622645bbcf68b32a3836b3d5bdf4fe');
 });
 
 test('QA04: backend scope freezes every owner row and excludes only rendered VIEW04', () => {

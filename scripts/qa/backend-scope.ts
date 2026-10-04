@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Case } from './acceptance.ts';
 
-// Reviewed on 2026-10-01 to include SAFETY01–08 and CLP01–07 as backend obligations.
+// Reviewed on 2026-10-01 to include SAFETY01–08 and CLP01–07 as backend obligations, and on 2026-10-04 when CLP01–07
+// moved from their task brief to the editorial-protection owner page with the same IDs and scenarios.
 // Adding, removing, renaming or moving an acceptance row
 // requires an explicit backend-scope review before the Goal denominator changes.
-export const inventoryFingerprint = '2b6b83e7a3550040846c8388f1829bdfc41d723e740b473f81fec9faee43fa57';
+export const inventoryFingerprint = '627efc1346544f28f8c4f349da2076406b1aded9c3a45c54acb73218ce5a69ab';
 
 export const excludedFrontendCases = {
   VIEW04: 'Historical Block rendering and executable-markup isolation are rendered-client behavior; the backend still preserves unknown Block data under its model and export contracts.',

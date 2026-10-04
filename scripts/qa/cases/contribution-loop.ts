@@ -3,9 +3,9 @@ import { defineCases } from './types.ts';
 /**
  * M7's exit clauses, each proven through the API (`tests/qa/integration/g-704-contribution-loop.test.ts`) and in a
  * browser (`apps/web/tests/g-704-contribution-loop.e2e.ts`). Each clause is a case; a test carries its IDs as a title
- * prefix. The page is the Goal brief that states the exit.
+ * prefix. The page is the collaboration lifecycle's owner, which states the exit.
  */
-export const cases = defineCases('docs/goals/tasks/G-704.md', [
+export const cases = defineCases('docs/contracts/editorial-protection.md', [
   {
     id: 'CLP01',
     scenario:

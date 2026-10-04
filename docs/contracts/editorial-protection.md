@@ -61,3 +61,12 @@ alternative revisions. [GitHub protected reviews](https://docs.github.com/en/rep
 and its [notification inbox](https://docs.github.com/en/subscriptions-and-notifications/how-tos/viewing-and-triaging-notifications/managing-notifications-from-your-inbox)
 are the precedents. The installed correction schema above already owns exact
 candidate binding; this decision extends that lifecycle across contribution kinds.
+
+The lifecycle's exit is executable: the
+[contribution-loop cases](../../scripts/qa/cases/contribution-loop.ts) CLP01–CLP07
+pass through the API and in a real browser. A catalogue correction, a wiki
+bundle and a wiki chapter delta are proposed, reviewed, revised, decided,
+notified and recovered by withdrawal or revert; changed candidates invalidate
+approval; historical wiki rendering and export survive dependency changes; and a
+replaced or revoked assistant credential keeps the artifacts it was authorized
+to make.
