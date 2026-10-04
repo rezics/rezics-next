@@ -55,7 +55,10 @@ export function semanticError(error: unknown): Response {
   }
   if (error instanceof InvalidSemanticValue) return problem(400, 'invalid_semantic_value', 'Semantic value is invalid');
   if (error instanceof UnsupportedSemanticValue) return problem(400, 'unsupported_semantic_value', 'Semantic value is not admitted');
-  if (error instanceof StaleSemanticHead) return problem(409, 'stale_head', 'Expected semantic revision is stale');
+  if (error instanceof StaleSemanticHead) return Response.json({
+    type: 'https://rezics.com/problems/stale_head', title: 'Expected semantic revision is stale',
+    status: 409, code: 'stale_head', ...(error.currentHead ? { currentHead: error.currentHead } : {}),
+  }, { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
   if (error instanceof ModelGenerationChanged) return problem(409, 'generation_changed', 'Model generation changed during preparation');
   if (error instanceof SemanticStageRejected) {
     return problem(error.reason === 'too-large' ? 413 : 422, `semantic_stage_${error.reason.replaceAll('-', '_')}`,

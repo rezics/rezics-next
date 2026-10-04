@@ -330,11 +330,12 @@ async function resultOf(env: WorkActivationEnvironment, terminal: SemanticTermin
     receipt: terminal.receipt, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed };
 }
 
-async function assertPredicatesUnowned(env: WorkActivationEnvironment, target: string, predicates: readonly string[]) {
+async function assertPredicatesUnowned(env: WorkActivationEnvironment, target: string, predicates: readonly string[],
+  headGuard: string) {
   if (!predicates.length) return;
   const overlap = await env.fuseki.query(`SELECT ?predicate WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(target)} ?predicate ?value . VALUES ?predicate { ${predicates.map(predicate => `<${predicate}>`).join(' ')} }
-  } } LIMIT 1`);
+  } ${headGuard} } LIMIT 1`);
   if (overlap.results?.bindings.length) fail('reserved-owner', 'predicate already belongs to another component');
 }
 
@@ -394,6 +395,13 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     return sealStale(env, intent, receipt, digest, target, state);
   }
   if (current && current.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
+  // Ownership is invalid only at the head this request names. A successor may
+  // claim the same predicate/type after the head read; let the write CAS seal
+  // that loss as stale instead of treating the successor's claim as permanent.
+  const ownershipHeadGuard = current
+    ? `GRAPH ${iri(GRAPHS.current)} { ${iri(target)} <${RV}${state.component === 'resource' ? 'semanticHead' : 'definitionHead'}> ${iri(current.head)} }`
+    : workHead?.[0]?.head ? `GRAPH ${iri(GRAPHS.current)} { ${iri(target)} <${RV}head> ${iri(workHead[0].head.value)} }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} <${RV}semanticHead> ?semanticHead } }` : '';
   if (current?.state.component === 'definition' && state.component === 'definition'
     && current.state.kind !== state.kind) fail('invalid', 'a definition keeps its kind');
   const addedTypes = state.component === 'resource' ? state.types.filter(type =>
@@ -401,7 +409,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   if (intent.target && addedTypes.length) {
     const overlap = await env.fuseki.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(target)} a ?type . VALUES ?type { ${addedTypes.map(type => `<${type}>`).join(' ')} }
-    } } LIMIT 1`);
+    } ${ownershipHeadGuard} } LIMIT 1`);
     if (overlap.results?.bindings.length) fail('reserved-owner', 'semantic type already belongs to another component');
   }
   if (current?.state.component === 'definition' && state.component === 'definition'
@@ -416,7 +424,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   const addedPredicates = state.component === 'resource' ? [...new Set(state.properties
     .map(property => property.predicate).filter(predicate => !prior.some(property => property.predicate === predicate)))] : [];
   if (intent.target && addedPredicates.length) {
-    await assertPredicatesUnowned(env, target, addedPredicates);
+    await assertPredicatesUnowned(env, target, addedPredicates, ownershipHeadGuard);
   }
   const { stored, rdf } = state.component === 'resource' ? propertyRdf(state.properties, prior)
     : { stored: [], rdf: [] };
@@ -497,7 +505,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     }
     const now = await readCurrentComponent(env, target, state.component).catch(() => null);
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
-    await assertPredicatesUnowned(env, target, addedPredicates);
+    await assertPredicatesUnowned(env, target, addedPredicates, ownershipHeadGuard);
   }
   if (state.component === 'definition' && state.notation) {
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
@@ -529,7 +537,7 @@ async function sealStale(env: WorkActivationEnvironment, intent: SemanticChangeI
      ${state.component === 'resource' ? `UNION { GRAPH ${iri(GRAPHS.current)} {
        ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ?currentHead .
        FILTER NOT EXISTS { ${iri(target)} rv:semanticHead ?semanticHead } } }` : ''}
-     FILTER(?currentHead != ${iri(intent.expectedHead!)})`);
+     FILTER(?currentHead != ${iri(intent.expectedHead!)})`, 'rv:currentHead ?currentHead ;');
   if (!terminal) throw new PendingActivation('stale semantic outcome is not sealed');
   return checkedResult(env, terminal, intent, false);
 }

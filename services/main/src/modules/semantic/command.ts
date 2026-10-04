@@ -27,7 +27,9 @@ export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
     | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large', message: string) { super(message); }
 }
-export class StaleSemanticHead extends Error {}
+export class StaleSemanticHead extends Error {
+  constructor(message: string, readonly currentHead?: string) { super(message); }
+}
 export class SemanticTargetUnavailable extends Error {}
 
 export interface SemanticTerminal {
@@ -43,6 +45,8 @@ export interface SemanticTerminal {
   component?: string;
   revision?: string;
   expectedHead?: string;
+  /** The head observed when a stale rejection was sealed, retained for replay. */
+  currentHead?: string;
 }
 
 const REASONS: Record<string, SemanticRejection> = {
@@ -60,7 +64,7 @@ export function familyReceiptIri(admissionId: string, family: string): string {
 
 export async function readSemanticTerminal(env: WorkActivationEnvironment, receipt: string): Promise<SemanticTerminal | null> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?outcome ?reason ?kind ?digest ?admissionId ?authorityEpoch ?scope ?sequence ?epoch ?component ?revision ?expected WHERE {
+    SELECT ?outcome ?reason ?kind ?digest ?admissionId ?authorityEpoch ?scope ?sequence ?epoch ?component ?revision ?expected ?currentHead WHERE {
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:admissionId ?admissionId ;
           rv:authorityEpoch ?authorityEpoch ; rv:admittedScope ?scope ; rv:sequence ?sequence ; rv:dataEpoch ?epoch .
@@ -68,6 +72,7 @@ export async function readSemanticTerminal(env: WorkActivationEnvironment, recei
         OPTIONAL { ${iri(receipt)} rv:rejectionKind ?kind }
         OPTIONAL { ${iri(receipt)} rv:component ?component ; rv:revision ?revision }
         OPTIONAL { ${iri(receipt)} rv:expectedHead ?expected }
+        OPTIONAL { ${iri(receipt)} rv:currentHead ?currentHead }
       }
     }`);
   const rows = result.results?.bindings ?? [];
@@ -87,7 +92,8 @@ export async function readSemanticTerminal(env: WorkActivationEnvironment, recei
     requestDigest: row.digest.value, authorityEpoch: row.authorityEpoch.value, scope: row.scope.value,
     dataEpoch: row.epoch.value, sequence: row.sequence.value,
     ...(row.component ? { component: row.component.value, revision: row.revision!.value } : {}),
-    ...(row.expected ? { expectedHead: row.expected.value } : {}) };
+    ...(row.expected ? { expectedHead: row.expected.value } : {}),
+    ...(row.currentHead ? { currentHead: row.currentHead.value } : {}) };
 }
 
 /** Same key, same intent: the one terminal receipt; any other binding conflicts. */
@@ -101,7 +107,7 @@ export function checkedSemanticTerminal(terminal: SemanticTerminal, admission: P
     if (terminal.reason === 'generation-changed') {
       throw new ModelGenerationChanged('model generation changed after semantic preparation');
     }
-    if (terminal.reason === 'stale-head') throw new StaleSemanticHead('expected semantic head is stale');
+    if (terminal.reason === 'stale-head') throw new StaleSemanticHead('expected semantic head is stale', terminal.currentHead);
     if (terminal.reason === 'retired-definition') {
       throw new SemanticChangeRejected('retired-definition', 'relation definition revision is not current');
     }
@@ -129,7 +135,7 @@ const controlGuard = (env: WorkActivationEnvironment) =>
  */
 export async function sealSemanticRejection(env: WorkActivationEnvironment, receipt: string, digest: string,
   admission: Pick<SemanticAdmission, 'id' | 'scope' | 'authorityEpoch'>, reason: SemanticRejection,
-  condition: string): Promise<SemanticTerminal | null> {
+  condition: string, receiptFields = ''): Promise<SemanticTerminal | null> {
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0${reason}`)}`;
   const update = `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
@@ -137,7 +143,7 @@ export async function sealSemanticRejection(env: WorkActivationEnvironment, rece
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
         rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
-        rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Cancelled ; rv:reason ${REASON_TERMS[reason]} ;
+        rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Cancelled ; rv:reason ${REASON_TERMS[reason]} ; ${receiptFields}
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:sequence ?next ; rv:eventCount 0 . }
