@@ -78,7 +78,10 @@ export class DisclosureStore implements DisclosureReader {
       const rows = (await this.pool.query<{ ordinal: number;
           open: boolean; restricted: boolean; assessments: Labels[]
         }>(`
-          WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
+          -- The boolean primary key/check makes this a singleton. Spell out its
+          -- bound before joining the batch: fresh owner statistics otherwise
+          -- estimate thousands of fence rows and trigger costly per-read JIT.
+          WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE),
           requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
             ordinal int, owner text, resource text, component text, revision text, context text, work text, "workRevision" text))
           SELECT wanted.ordinal, fence.open,
