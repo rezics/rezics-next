@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '@rezics/observability/runtime';
 import { profileRequest, startWorkProfileSink } from '../../../tests/qa/support/work-profile.ts';
 import { workProfileCorpusApi, workProfileDimensions, WORK_PROFILE_SCALES,
@@ -21,9 +21,27 @@ const { readZoneConfiguration } = await import('../src/modules/zone/configuratio
 const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
 const { captureFusekiQueryPlan } = await import('../../../scripts/load/fuseki-plan.ts');
 const { startFusekiMeter } = await import('../../../scripts/load/measurement.ts');
+const { cloneOwners, requireQa } = await import('../../../tests/qa/integration/recommendation-support.ts');
 
 const started = performance.now();
-const home = await startHomeStack('g-1026-community', { projectionStart: 'current' });
+const corpusKey = `g1026:${randomUUID()}`;
+const artifacts = process.env.G1026_ARTIFACT_DIR ?? '.temp/work-profiles';
+// The platform role is an immutable singleton. Each probe owns its SQL owners;
+// the shared graph remains intact, and both projections start at its current cut.
+const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
+Object.assign(process.env, {
+  ACCESS_DATABASE_URL: owners.urls.access,
+  CONTENT_DATABASE_URL: owners.urls.content,
+  ACCOUNT_RELAY_DATABASE_URL: owners.urls.relay,
+});
+const home = await startHomeStack(`g-1026-community-${randomUUID()}`, { projectionStart: 'current' })
+  .catch(async error => {
+    await owners.close();
+    await shutdownTelemetry();
+    await sink.stop();
+    throw error;
+  });
+try {
 const { stack } = home;
 // This corpus measures community/site APIs, which do not consume Home target
 // indexes. Refresh its feed/ranking references without unrelated author backfill.
@@ -56,7 +74,8 @@ const deps = { ...home.deps, realmAdmin: admin, realmJoining: joining, realmRost
     { capture: async () => { throw new Error('Evidence is outside this corpus'); } },
     { current: async () => null }, rules) } };
 const app = createMainApp(stack.fuseki, deps);
-const apiFor = (token: string) => workProfileCorpusApi('http://main.local', token,
+const apiFor = (token: string) => {
+  const api = workProfileCorpusApi('http://main.local', token,
   { fetch: (async (input, init) => {
     const response = await app.handle(new Request(input, init));
     if (response.status >= 202 && response.status !== 204) {
@@ -64,6 +83,13 @@ const apiFor = (token: string) => workProfileCorpusApi('http://main.local', toke
     }
     return response;
   }) as typeof fetch });
+  return { ...api, command: <T>(key: string, command: Parameters<typeof api.command>[1], signal?: AbortSignal) => {
+    const body = command.body;
+    return api.command<T>(`${corpusKey}:${key}`, { ...command,
+      body: body && typeof body === 'object' && 'idempotencyKey' in body
+        ? { ...body, idempotencyKey: `${corpusKey}:${body.idempotencyKey}` } : body }, signal);
+  } };
+};
 const authorApi = apiFor(home.author.token), readerApi = apiFor(home.reader.token);
 const actor = (await authorApi.command<{ agent: string }>('g1026:author', { method: 'POST', path: '/v1/agents',
   body: { profile: 'agent-provision-v1', kind: 'person', displayName: 'Community cost author' } })).agent;
@@ -130,14 +156,14 @@ async function measure(dimension: string, scale: string, operation: string, path
   }
 }
 
-try {
   // Authorization prerequisite only; workload entities/relationships/revisions
   // still come exclusively from public commands. The reader remains an ordinary
   // person. Use the existing operator role rather than changing product quotas.
+  const administratorDigest = createHash('sha256').update(corpusKey).digest('hex');
   await stack.accessPool.query(`INSERT INTO access.platform_administrator
     (principal_id,role,receipt,request_digest,idempotency_key)
     VALUES ($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
-  [home.author.principalId,`urn:rezics:access-receipt:${'a'.repeat(64)}`,'a'.repeat(64)]);
+  [home.author.principalId,`urn:rezics:access-receipt:${administratorDigest}`,administratorDigest]);
   const community = await createRealm('g1026:community');
   await join(community.realm, 'g1026:community:join');
   const root = `/v1/realms/${community.realm.slice(-36)}` as const;
@@ -340,14 +366,19 @@ try {
       'content-type': 'application/sparql-query', accept: 'application/sparql-results+json' }, body: selectedQuery });
     assert.equal(result.status, 200); await result.json();
     const captured = meter.endCapture();
-    const plan = captureFusekiQueryPlan(captured[0]!, { label: 'g-1026-realm-selection', directory: '.temp/work-profiles/g-1026-plans' });
+    const plan = captureFusekiQueryPlan(captured[0]!, { label: 'g-1026-realm-selection', directory: `${artifacts}/plans` });
     evidence.push({ plan });
   } finally { await meter.stop(); }
-  mkdirSync('.temp/work-profiles', { recursive: true });
-  writeFileSync(`.temp/work-profiles/g-1026-${process.env.G1026_PHASE ?? 'after'}-${selectedDimensions.join('-')}-${process.env.G1026_GROUP ?? 'all'}.json`, JSON.stringify({ evidence, profiles }, null, 2));
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(`${artifacts}/g-1026-${process.env.G1026_PHASE ?? 'after'}-${selectedDimensions.join('-')}-${process.env.G1026_GROUP ?? 'all'}.json`, JSON.stringify({ evidence, profiles }, null, 2));
   console.log(JSON.stringify({ evidence, profiles: profiles.length }));
 } finally {
-  await home.stop();
-  await shutdownTelemetry();
-  await sink.stop();
+  try { await home.stop(); }
+  finally {
+    try { await owners.close(); }
+    finally {
+      await shutdownTelemetry();
+      await sink.stop();
+    }
+  }
 }

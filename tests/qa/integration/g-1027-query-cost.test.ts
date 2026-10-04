@@ -10,6 +10,7 @@ import {
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceListQuery } from '../../../services/main/src/modules/query/resource-contract.ts';
 import type { FilterCondition } from '../../../model/definitions/filter-document-v1.ts';
+import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
 
 interface Page {
   sourcePosition: { dataEpoch: string; sequence: string };
@@ -21,6 +22,7 @@ interface Page {
 interface Definition {
   concept: string;
   sense: string;
+  definitionRevision: string;
 }
 interface SqlPlan {
   'Node Type': string;
@@ -36,9 +38,13 @@ const planNodes = (node: SqlPlan): SqlPlan[] => [node, ...(node.Plans ?? []).fla
  * scale changes unrelated vocabulary/corpus only; the target relation stays
  * fixed. Cold below means first read after writes, not restarted storage. */
 test('G1027: unified Query keeps ranked joins, chip resolution and page hydration bounded across three scales', async () => {
+  if (Bun.env.G1053_QUERY_CHILD !== 'g-1027-query-cost.test.ts')
+    return queryProfileProcess('g-1027-query-cost.test.ts');
   const sink = startWorkProfileSink({ settleMs: 50 });
   startTelemetry('g-1027-query', { ...process.env, ...sink.env });
-  const { startHomeStack, meterStatements } = await import('./feed-read-support.ts');
+  const { meterStatements } = await import('./feed-read-support.ts');
+  const { startQueryHome, advanceQueryPopulation } =
+    await import('../../../services/main/tests/g-1053-query-fixture.ts');
   const { createMainApp } = await import('../../../services/main/src/app.ts');
   const { DiscoveryProjection, discoveryResourceSeekSql } =
     await import('../../../services/main/src/modules/discovery/store.ts');
@@ -52,7 +58,7 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     await import('../../../services/main/src/modules/work/select-main.ts');
   const { MANAGE_SCOPE, MANAGE_ACTION } =
     await import('../../../services/main/src/modules/recommendation/derived-generation.ts');
-  const home = await startHomeStack('g-1027-query');
+  const home = await startQueryHome('g-1027-query');
   const { stack, author, reader } = home;
   const projection = new DiscoveryProjection(stack.accessPool);
   const app = createMainApp(stack.fuseki, {
@@ -67,6 +73,7 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
   const baseline = process.env.G1027_BASELINE === '1';
   const token = `g1027${randomUUID().replaceAll('-', '')}`;
   const works: { work: string; mainVersion: string }[] = [];
+  const backgroundWorks: string[] = [];
   const definitions: Definition[] = [];
   const call = (path: string, body?: unknown, bearer?: string, extra?: Headers) => {
     const headers = new Headers(extra);
@@ -98,11 +105,10 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     );
     while (!row.complete) {
       const previous = row.checkpoint;
-      row = await json(
-        `/v1/discovery/generations/${row.generation}/advance`,
-        { actingSubject: author.actor, expectedCheckpoint: previous },
-        author.token,
-      );
+      row = await advanceQueryPopulation(home, projection, row, [
+        ...works.map((work) => work.work),
+        ...backgroundWorks,
+      ]);
       expect(row.complete || row.checkpoint !== previous).toBe(true);
     }
     const head = await json<{ activeHeadRevision: string | null }>(
@@ -125,6 +131,7 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     await author.grant('classification:define:global', 'classification.proposition.define');
     await author.grant('classification:decide:global', 'classification.decision.set');
+    await author.grant('work:create:catalogue-import', 'work.create');
     for (let i = 0; i < 8; i++)
       definitions.push(
         await json<Definition>(
@@ -143,12 +150,8 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
         ),
       );
     // Fifty-two results make page 50 a real continuation, not an OFFSET probe.
-    for (let i = 0; i < 52; i++) {
-      const title = `${token} common 小說 mixed ${i === 51 ? `${token}rare` : ''} ${i}`;
-      if (i !== 0) {
-        works.push(await stack.publicWork(author.actor, ['en'], title));
-        continue;
-      }
+    {
+      const title = `${token} common 小說 mixed 0`;
       const book = 'https://schema.org/Book';
       const created = await activateMetadataWork(stack.env, {
         title,
@@ -192,25 +195,68 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
       ).toBe('succeeded');
       works.push(created);
     }
+    const imported = await json<{
+      complete: boolean;
+      partial: boolean;
+      items: { status: string; receipt: { work: string; mainVersion: string } }[];
+    }>(
+      '/v1/work-imports/bulk',
+      {
+        actingSubject: author.actor,
+        items: Array.from({ length: 51 }, (_, offset) => {
+          const index = offset + 1;
+          return {
+            key: randomUUID(),
+            input: {
+              profile: 'work-catalogue-import-v1',
+              expectedWorkHead: null,
+              title: `${token} common 小說 mixed ${index === 51 ? `${token}rare` : ''} ${index}`,
+              language: 'en',
+              evidence: 'G1027 public bulk cost cohort',
+              aliases: [],
+              semanticTypes: [],
+              credits: [],
+              classifications: (index === 51
+                ? definitions
+                : index % 2 === 0
+                  ? definitions.slice(0, 1)
+                  : []
+              ).map((term) => ({
+                sense: term.sense,
+                expectedSenseHead: term.definitionRevision,
+                expectedDecisionHead: null,
+                outcome: 'accepted',
+              })),
+            },
+          };
+        }),
+      },
+      author.token,
+    );
+    expect(imported.complete).toBe(true);
+    expect(imported.partial).toBe(false);
+    expect(imported.items).toHaveLength(51);
+    expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
+    works.push(...imported.items.map((row) => row.receipt));
     const privateWork = await stack.privateWork(author.actor, `${token} common hidden`);
-    for (const [index, work] of works.entries()) {
-      const terms = index === 51 ? definitions : index % 2 === 0 ? definitions.slice(0, 1) : [];
-      for (const term of terms)
-        await json(
-          '/v1/classification-decisions',
-          {
-            profile: 'classification-direct-decision-v1',
-            context: { kind: 'global' },
-            work: work.work,
-            mainVersion: work.mainVersion,
-            sense: term.sense,
-            expectedDecisionHead: null,
-            outcome: 'accepted',
-            actingSubject: author.actor,
-          },
-          author.token,
-          201,
-        );
+    {
+      const work = works[0]!,
+        term = definitions[0]!;
+      await json(
+        '/v1/classification-decisions',
+        {
+          profile: 'classification-direct-decision-v1',
+          context: { kind: 'global' },
+          work: work.work,
+          mainVersion: work.mainVersion,
+          sense: term.sense,
+          expectedDecisionHead: null,
+          outcome: 'accepted',
+          actingSubject: author.actor,
+        },
+        author.token,
+        201,
+      );
     }
     const workType = { facet: 'type', any: ['https://schema.org/CreativeWork'] };
     const base: ResourceListQuery = {
@@ -323,8 +369,38 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     ];
     let unrelated = 0;
     for (const scale of [0, 16, 80]) {
+      if (unrelated < scale) {
+        const background = await json<{
+          complete: boolean;
+          partial: boolean;
+          items: { status: string; receipt: { work: string } }[];
+        }>(
+          '/v1/work-imports/bulk',
+          {
+            actingSubject: author.actor,
+            items: Array.from({ length: scale - unrelated }, (_, offset) => ({
+              key: randomUUID(),
+              input: {
+                profile: 'work-catalogue-import-v1',
+                expectedWorkHead: null,
+                title: `Unrelated ${token} vocabulary ${unrelated + offset}`,
+                language: 'en',
+                evidence: 'G1027 public bulk background',
+                aliases: [],
+                semanticTypes: [],
+                credits: [],
+                classifications: [],
+              },
+            })),
+          },
+          author.token,
+        );
+        expect(background.complete).toBe(true);
+        expect(background.partial).toBe(false);
+        expect(background.items.every((row) => row.status === 'succeeded')).toBe(true);
+        backgroundWorks.push(...background.items.map((row) => row.receipt.work));
+      }
       while (unrelated < scale) {
-        await stack.publicWork(author.actor, ['en'], `Unrelated ${token} vocabulary ${unrelated}`);
         // Eight aliases per unrelated Concept challenge Work-only retrieval.
         await json(
           '/v1/classification-vocabulary',

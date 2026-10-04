@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { assertWorkCostAtScales, type WorkProfile } from '../support/work-profile.ts';
 import {
   COMMUNITY_PROFILE_COST,
@@ -11,12 +12,16 @@ export async function communityCostDimension(
   group: 'threads' | 'surfaces',
 ) {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
-  mkdirSync('.temp/work-profiles', { recursive: true });
+  const directory = join(
+    process.env.REZICS_QA_ARTIFACT_DIR ?? '.temp/work-profiles',
+    `community-cost-${dimension}-${group}`,
+  );
+  mkdirSync(directory, { recursive: true });
   const operations: CommunityProfileOperation[] =
     group === 'threads'
       ? ['threads-best', 'threads-new', 'threads-top', 'thread']
       : ['header', 'roster', 'zone-home', 'zone-presentation', 'header-rules', 'zone-banners'];
-  const log = `.temp/work-profiles/g-1026-${dimension}-${group}.log`;
+  const log = join(directory, 'child.log');
   writeFileSync(log, '');
   const child = Bun.spawn([process.execPath, 'services/main/tests/g-1026-profile-child.ts'], {
     env: {
@@ -24,6 +29,7 @@ export async function communityCostDimension(
       G1026_DIMENSIONS: dimension,
       G1026_GROUP: group,
       G1026_OPERATIONS: operations.join(','),
+      G1026_ARTIFACT_DIR: directory,
     },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -46,7 +52,7 @@ export async function communityCostDimension(
     throw new Error(`Community cost probe failed (${exit}): ${errors}\n${output.slice(-2000)}`);
   const measured = JSON.parse(
     readFileSync(
-      `.temp/work-profiles/g-1026-${process.env.G1026_PHASE ?? 'after'}-${dimension}-${group}.json`,
+      join(directory, `g-1026-${process.env.G1026_PHASE ?? 'after'}-${dimension}-${group}.json`),
       'utf8',
     ),
   ) as {
