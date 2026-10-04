@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon.ts';
-import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import type { RelationRendering } from '../../../services/main/src/modules/lexicon/render.ts';
 
 const uiLocales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
@@ -20,9 +19,8 @@ type Page = { items: { rendering: RelationRendering | null }[] };
 
 test('identity links: credited names, star refusals and seeded definitions through the API', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
-  // Definitions are canonical across files in this QA shard; share their immutable bytes like the lexicon tests.
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
-    resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID), scopes, undefined, { readingPositions: true });
+    resolve('.temp', 'identity-links-qa', Bun.env.REZICS_QA_RUN_ID), scopes, undefined, { readingPositions: true });
   try {
     await f.grant('semantic:create:root', 'semantic.change');
     await f.grant('classification:define:global', 'classification.proposition.define');
@@ -34,23 +32,25 @@ test('identity links: credited names, star refusals and seeded definitions throu
         await f.grant(`semantic:edit:${receipt.component}`, 'lexicon.presentation.change');
       },
     };
+    // Private copies under unique keys: canonical keys, their Concepts and their retained bytes belong to
+    // whichever file seeded them first, and this file must not depend on that.
     const namespace = `il-${randomUUID()}`;
-    for (const key of keys) {
-      if (!await readDefinitionByKey(f.env, key)) {
-        await seedRelationLexicon(client, f.actor, namespace, relationLexiconSeed.filter(item => item.key === key));
-      }
-    }
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
+    const keyOf = (key: string) => `${key}-${suffix}`;
+    const kinds = await seedVariantKindConcepts(client, f.actor, namespace);
+    const seeded = await seedRelationLexicon(client, f.actor, namespace,
+      relationLexiconSeed.filter(item => keys.includes(item.key)).map(item => ({ ...item, key: keyOf(item.key) })),
+      undefined, kinds);
     const definitions = new Map<string, { definition: string; revision: string }>();
     for (const key of keys) {
-      const read = (await readDefinitionByKey(f.env, key))!;
-      await client.authorizeDefinition({ component: read.definition });
-      definitions.set(key, read);
+      const saved = seeded.find(item => item.key === keyOf(key))!;
+      definitions.set(key, { definition: saved.component, revision: saved.revision });
     }
 
     // The four definitions resolve by key; the star is definition metadata.
     const byKey = async (key: string) => f.json<{ roles: { key: string }[]; star: { leaf: string; hub: string } | null;
       workSubjectRole: string | null }>(await f.call('GET',
-      `/v1/lexicon/definitions/${key}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      `/v1/lexicon/definitions/${keyOf(key)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(await byKey('variant-of')).toMatchObject({ star: { leaf: 'variant', hub: 'hub' }, workSubjectRole: null });
     expect((await byKey('variant-of')).roles.map(role => role.key)).toEqual(['hub', 'kind', 'variant']);
     expect((await byKey('holds-title')).star).toBeNull();
@@ -85,7 +85,6 @@ test('identity links: credited names, star refusals and seeded definitions throu
       profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null,
       state: { component: 'resource', types: ['https://schema.org/Person'], properties: [] } }), 201)).component;
     const [hub, alter, second, other] = [await person(), await person(), await person(), await person()];
-    const kinds = await seedVariantKindConcepts(client, f.actor, namespace);
     const readGrants = new Map<string, string>();
     for (const ref of [hub, alter, second, other, kinds.persona, kinds.counterpart]) {
       readGrants.set(ref, await f.grant(`semantic:read:${ref}`, 'semantic.read'));
@@ -99,6 +98,10 @@ test('identity links: credited names, star refusals and seeded definitions throu
     const write = (body: object, key = randomUUID()) => f.call('POST', '/v1/relations/changes', body, key);
     const path = (occurrence: string, revision?: string) => `/v1/relations/${shortId(occurrence)}${revision
       ? `/revisions/${shortId(revision)}` : ''}?actingSubject=${encodeURIComponent(f.actor)}`;
+
+    // The seeded kind role takes only the two seeded Concepts.
+    expect((await write({ ...link(alter, hub), participations: [{ role: 'variant', participant: resource(alter) },
+      { role: 'hub', participant: resource(hub) }, { role: 'kind', participant: resource(other) }] })).status).toBe(400);
 
     // Credited names: validated, retained per participation and carried by the relation read and the traversal.
     for (const bad of [{ lexical: '', language: 'en' }, { lexical: 'Saber', language: 'not a tag' },
