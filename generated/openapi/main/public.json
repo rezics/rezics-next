@@ -153814,6 +153814,13 @@
                                         "maxParticipants": {
                                           "type": "integer"
                                         },
+                                        "members": {
+                                          "items": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
                                         "minParticipants": {
                                           "type": "integer"
                                         },
@@ -154176,6 +154183,13 @@
                                 },
                                 "maxParticipants": {
                                   "type": "integer"
+                                },
+                                "members": {
+                                  "items": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  },
+                                  "type": "array"
                                 },
                                 "minParticipants": {
                                   "type": "integer"
@@ -154967,6 +154981,13 @@
                                           },
                                           "maxParticipants": {
                                             "type": "integer"
+                                          },
+                                          "members": {
+                                            "items": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "type": "array"
                                           },
                                           "minParticipants": {
                                             "type": "integer"
@@ -422664,6 +422685,24 @@
                   "profile": {
                     "const": "relation-change-v1",
                     "type": "string"
+                  },
+                  "revealedAt": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "occurrence": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "work",
+                      "occurrence"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -422770,6 +422809,24 @@
                   "profile": {
                     "const": "relation-change-v1",
                     "type": "string"
+                  },
+                  "revealedAt": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "occurrence": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "work",
+                      "occurrence"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -422876,6 +422933,24 @@
                   "profile": {
                     "const": "relation-change-v1",
                     "type": "string"
+                  },
+                  "revealedAt": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "occurrence": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "work": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "work",
+                      "occurrence"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -431030,6 +431105,13 @@
                                                 },
                                                 "maxParticipants": {
                                                   "type": "integer"
+                                                },
+                                                "members": {
+                                                  "items": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
                                                 },
                                                 "minParticipants": {
                                                   "type": "integer"
@@ -439404,6 +439486,13 @@
                                         },
                                         "maxParticipants": {
                                           "type": "integer"
+                                        },
+                                        "members": {
+                                          "items": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "type": "array"
                                         },
                                         "minParticipants": {
                                           "type": "integer"
