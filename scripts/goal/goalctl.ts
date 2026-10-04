@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
   renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -24,8 +24,25 @@ export interface Task extends Omit<Brief, 'worktree'> {
   /** Set when the task works in a shared worktree. */
   worktreeName?: string;
   mergedCommit?: string; closedAt?: string;
+  /** The Goal that owns the task. Tasks dispatched before several Goals ran at once have none. */
+  goal?: string;
+  /** Merge refuses files and lines that name tasks (`historyIntroductions`). Unset on tasks dispatched before
+   * 2026-10-04, whose briefs still asked for task-named tests. */
+  historyGate?: boolean;
 }
-export interface Ledger { startedAt?: string; manager?: string; tasks: Record<string, Task> }
+/** One running Goal. Its intent and areas live in `docs/goals/<slug>/GOAL.md`; the ledger keeps only runtime state. */
+export interface GoalRecord { manager: string; startedAt: string; closedAt?: string; archive?: string }
+export interface Ledger {
+  startedAt?: string;
+  /** The single manager of the ledger's first Goal; GoalRecord.manager replaces it. */
+  manager?: string;
+  goals?: Record<string, GoalRecord>;
+  /** IDs handed out by `new` and not yet dispatched, with the Goal each belongs to. */
+  reserved?: Record<string, string>;
+  /** The highest ID ever used, so IDs stay unique after closed Goals leave the ledger. */
+  lastId?: number;
+  tasks: Record<string, Task>;
+}
 export interface UsageWindow { used_percentage?: number; resets_at?: string | number }
 export interface UsageSnapshot {
   at?: number; rate_limits?: { five_hour?: UsageWindow | null; seven_day?: UsageWindow | null } | null;
@@ -88,23 +105,42 @@ const engineEnv = (engine: Engine): Record<string, string> =>
   engine === 'codex-1' ? { CODEX_HOME: CODEX_1_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
 
-export function parseBrief(text: string): Brief {
+/** The leading `---` block of a brief or Goal file as flat `key: value` fields. `#` at the start of a line or after a
+ * space begins a comment. A key with no value may be followed by `- item` lines, read as the list `[item, ...]`. */
+export function parseFrontmatter(text: string): Record<string, string> | undefined {
   const block = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text);
-  if (!block) throw new Error('Brief needs a leading --- frontmatter block');
+  if (!block) return undefined;
   const fields: Record<string, string> = {};
+  const items: Record<string, string[]> = {};
+  let last: string | undefined;
   for (const line of block[1]!.split(/\r?\n/)) {
-    const clean = line.replace(/\s+#.*$/, '').trim();
+    const clean = line.replace(/(?:^|\s+)#.*$/, '').trim();
     if (!clean) continue;
+    const item = /^-\s+(.+)$/.exec(clean);
+    if (item && last !== undefined && (fields[last] === '' || items[last])) {
+      (items[last] ??= []).push(item[1]!.trim());
+      continue;
+    }
     const at = clean.indexOf(':');
     if (at < 1) throw new Error(`Bad frontmatter line: ${line}`);
-    fields[clean.slice(0, at).trim()] = clean.slice(at + 1).trim();
+    last = clean.slice(0, at).trim();
+    fields[last] = clean.slice(at + 1).trim();
   }
-  const list = (key: string): string[] => {
-    const value = fields[key];
-    if (!value) return [];
-    if (!value.startsWith('[') || !value.endsWith(']')) throw new Error(`${key} must be a [a, b] list`);
-    return value.slice(1, -1).split(',').map(item => item.trim()).filter(Boolean);
-  };
+  for (const [key, list] of Object.entries(items)) fields[key] = `[${list.join(', ')}]`;
+  return fields;
+}
+
+function listField(fields: Record<string, string>, key: string): string[] {
+  const value = fields[key];
+  if (!value) return [];
+  if (!value.startsWith('[') || !value.endsWith(']')) throw new Error(`${key} must be a [a, b] list`);
+  return value.slice(1, -1).split(',').map(item => item.trim()).filter(Boolean);
+}
+
+export function parseBrief(text: string): Brief {
+  const fields = parseFrontmatter(text);
+  if (!fields) throw new Error('Brief needs a leading --- frontmatter block');
+  const list = (key: string): string[] => listField(fields, key);
   return {
     id: fields.id ?? '', title: fields.title ?? '', effort: fields.effort ?? 'medium',
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
@@ -231,6 +267,106 @@ export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
 export function outOfScope(files: string[], patterns: string[]): string[] {
   const globs = patterns.map(pattern => new Bun.Glob(pattern));
   return files.filter(file => !globs.some(glob => glob.match(file)));
+}
+
+// Several Goals run at once, one manager each. A Goal is the directory docs/goals/<slug>/: GOAL.md states it and
+// lists its areas, state.md keeps its checkpoint, and tasks/ holds its open briefs. The whole directory leaves the
+// tree when the Goal closes; docs/goals/{README,manager,worker}.md are the program and stay.
+export const GOALS_DIR = 'docs/goals';
+const GOAL_SLUG = /^[a-z][a-z0-9-]{1,40}$/;
+
+export function validGoalSlug(slug: string): boolean {
+  return GOAL_SLUG.test(slug) && slug !== 'tasks';
+}
+
+export const goalFile = (slug: string): string => `${GOALS_DIR}/${slug}/GOAL.md`;
+export const goalBriefFile = (slug: string, id: string): string => `${GOALS_DIR}/${slug}/tasks/${id}.md`;
+
+/** The Goal a repository-relative brief path belongs to; undefined for briefs outside a Goal directory. */
+export function goalOfBriefPath(path: string): string | undefined {
+  const slug = /^docs\/goals\/([^/]+)\/tasks\/G-\d{3,}\.md$/.exec(path)?.[1];
+  return slug && validGoalSlug(slug) ? slug : undefined;
+}
+
+/** A Goal's areas: coarse path globs that other Goals' briefs may not claim. Brace and bracket globs compare as
+ * overlapping almost everything (`pathsOverlap` errs on the safe side), so list each directory instead. */
+export function goalAreas(goalText: string): string[] {
+  const fields = parseFrontmatter(goalText);
+  return fields ? listField(fields, 'areas') : [];
+}
+
+/** Claims that fall in another active Goal's areas. Paths in no Goal's areas belong to whoever claims them. */
+export function areaConflicts(paths: string[], goal: string | undefined, areas: Record<string, string[]>): string[] {
+  const conflicts: string[] = [];
+  for (const [other, globs] of Object.entries(areas)) {
+    if (other === goal) continue;
+    for (const path of paths) {
+      for (const area of globs) if (pathsOverlap(path, area)) conflicts.push(`path ${path} lies in Goal ${other}'s area ${area}`);
+    }
+  }
+  return conflicts;
+}
+
+/** The next task ID after every one in use, reserved or recorded as the high-water mark. */
+export function nextTaskId(ids: Iterable<string>, lastId = 0): string {
+  let highest = lastId;
+  for (const id of ids) {
+    const number = /^G-(\d{3,})$/.exec(id)?.[1];
+    if (number) highest = Math.max(highest, Number(number));
+  }
+  return `G-${String(highest + 1).padStart(3, '0')}`;
+}
+
+// Task IDs are history: they belong in commit messages, branches, the ledger and archive/goals. In the tree they
+// become dangling pointers once a brief is archived (comments citing G-051 or G-314 outlived their briefs), and
+// files named after tasks organize code by when it was written instead of what it covers.
+export const HISTORY_EXEMPT = ['GOAL.md', `${GOALS_DIR}/**`, 'scripts/goal/**'];
+const TASK_ID = /\bG-\d{3,}\b/g;
+const taskSegment = (path: string): boolean => path.split('/').some(segment => /^g-\d{3,}(?!\d)/i.test(segment));
+
+export interface ChangedFile {
+  path: string; status: 'A' | 'M' | 'D' | 'R';
+  /** The previous path of a rename. */
+  from?: string;
+  before?: string; after?: string;
+}
+
+function idCounts(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const id of text.match(TASK_ID) ?? []) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return counts;
+}
+
+/** What a change adds that names a task: new task-named files and task IDs a file did not carry before.
+ * Existing names and mentions may stay or be moved within their file; renaming them away is always allowed. */
+export function historyIntroductions(files: readonly ChangedFile[]): string[] {
+  const exempt = HISTORY_EXEMPT.map(pattern => new Bun.Glob(pattern));
+  const found: string[] = [];
+  for (const file of files) {
+    if (file.status === 'D' || exempt.some(glob => glob.match(file.path))) continue;
+    const renamedFromTask = file.status === 'R' && !!file.from && taskSegment(file.from);
+    if ((file.status === 'A' || file.status === 'R') && taskSegment(file.path) && !renamedFromTask) {
+      found.push(`${file.path}: named after a task; name it by the capability it covers`);
+    }
+    if (file.after === undefined || file.after.includes('\0')) continue;
+    const before = idCounts(file.before ?? '');
+    const added = [...idCounts(file.after)].filter(([id, count]) => count > (before.get(id) ?? 0)).map(([id]) => id);
+    if (added.length) found.push(`${file.path}: adds ${added.join(', ')}; state the reason itself instead of citing the task`);
+  }
+  return found;
+}
+
+/** A state-changing command on another Goal's task. GOAL_ID is set in each manager's environment. */
+export function ownerRefusal(task: Pick<Task, 'id' | 'goal'>, caller = process.env.GOAL_ID): string | undefined {
+  return caller && task.goal && task.goal !== caller
+    ? `${task.id} belongs to Goal ${task.goal}; ask its manager (GOAL_ID is ${caller})` : undefined;
+}
+
+/** A QA run heavy enough that only one may run on the host at a time: affected sets, whole tiers, or `--heavy`. */
+export function isHeavyTest(args: readonly string[]): boolean {
+  if (args.includes('--heavy')) return true;
+  if (args.includes('--list')) return false;
+  return args[0] === '--tier' || args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
 }
 
 const FIVE_HOURS = 5 * 3600;
@@ -409,14 +545,68 @@ function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(tas
       + ' and browser runs to the manager unless your brief asks you to run them. Run the unit and integration'
       + ' files (and any stories) your task adds or fixes through'
       + ' `bun scripts/goal/goalctl.ts test <files>`, one run at a time; an unverified fix is not done.'] : [],
-    `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
+    `${task.goal ? `Your Goal is ${task.goal}; its manager` : 'The manager'} session is "${manager}".`
+      + ' End with the handoff that the worker protocol specifies.',
   ].join('\n');
 }
 
-function git(cwd: string, args: string[], allowFail = false): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+function git(cwd: string, args: string[], allowFail = false, options: { env?: Record<string, string>; input?: string } = {}): string {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', input: options.input, maxBuffer: 256 * 1024 * 1024,
+    env: options.env ? { ...process.env, ...options.env } : undefined });
   if (result.status !== 0 && !allowFail) throw new Error(`git ${args.join(' ')} failed:\n${result.stderr}`);
   return result.status === 0 ? result.stdout.trim() : '';
+}
+
+export const ARCHIVE_BRANCH = 'archive/goals';
+
+/** Adds files to the orphan archive branch without a checkout: the main checkout's HEAD never moves (the shared
+ * stack hot-reloads from it). The ref update compares against the parent read, so a concurrent writer fails
+ * instead of being overwritten. */
+export function archiveFiles(repo: string, files: readonly { path: string; content: string }[], message: string,
+  branch = ARCHIVE_BRANCH): string {
+  const ref = `refs/heads/${branch}`;
+  const parent = git(repo, ['rev-parse', '--verify', '--quiet', ref], true);
+  const dir = mkdtempSync(join(tmpdir(), 'goalctl-archive-'));
+  const env = { GIT_INDEX_FILE: join(dir, 'index') };
+  try {
+    git(repo, ['read-tree', ...parent ? [parent] : ['--empty']], false, { env });
+    for (const file of files) {
+      const blob = git(repo, ['hash-object', '-w', '--stdin'], false, { input: file.content });
+      git(repo, ['update-index', '--add', '--cacheinfo', `100644,${blob},${file.path}`], false, { env });
+    }
+    const tree = git(repo, ['write-tree'], false, { env });
+    const commit = git(repo, ['commit-tree', tree, ...parent ? ['-p', parent] : [], '-m', message]);
+    git(repo, ['update-ref', '-m', message, ref, commit, parent]);
+    return commit;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Deletes files from the working tree and commits only their removal, leaving whatever else peers have staged. */
+export function removeFromTree(repo: string, paths: readonly string[], message: string): string | undefined {
+  const tracked = paths.filter(path => git(repo, ['ls-files', '--', path], true) !== '');
+  for (const path of paths) {
+    rmSync(join(repo, path), { force: true });
+    // A closed Goal leaves no empty directory behind.
+    for (let dir = dirname(path); dir !== '.' && existsSync(join(repo, dir)) && !readdirSync(join(repo, dir)).length; dir = dirname(dir)) {
+      rmSync(join(repo, dir), { recursive: true });
+    }
+  }
+  if (!tracked.length) return undefined;
+  git(repo, ['commit', '-q', '--only', '-m', message, '--', ...tracked]);
+  return git(repo, ['rev-parse', 'HEAD']);
+}
+
+/** `file:line:text` of tracked files that mention any of `needles` (fixed strings), outside `exclude` globs
+ * (the history-exempt paths by default). */
+export function treeMentions(repo: string, needles: readonly string[],
+  options: { words?: boolean; exclude?: readonly string[] } = {}): string[] {
+  if (!needles.length) return [];
+  const excludes = (options.exclude ?? HISTORY_EXEMPT).map(pattern => `:(exclude,glob)${pattern}`);
+  const found = git(repo, ['grep', '-n', '-I', '-F', ...options.words ? ['-w'] : [],
+    ...needles.flatMap(needle => ['-e', needle]), '--', '.', ...excludes], true);
+  return found.split('\n').filter(Boolean);
 }
 
 const root = dirname(git(process.cwd(), ['rev-parse', '--path-format=absolute', '--git-common-dir']));
@@ -432,6 +622,95 @@ function readLedger(): Ledger {
 function writeLedger(ledger: Ledger): void {
   writeFileSync(`${ledgerPath}.tmp`, `${JSON.stringify(ledger, null, 2)}\n`);
   renameSync(`${ledgerPath}.tmp`, ledgerPath);
+}
+
+const activeGoals = (ledger: Ledger): string[] =>
+  Object.entries(ledger.goals ?? {}).filter(([, goal]) => !goal.closedAt).map(([slug]) => slug);
+
+function managerOf(ledger: Ledger, goal: string | undefined): string {
+  return (goal && ledger.goals?.[goal]?.manager) || ledger.manager || process.env.GOAL_MANAGER || 'goal-manager';
+}
+
+/** The Goal a brief belongs to: its directory, else the caller's GOAL_ID, else the only active Goal. Briefs in the
+ * pre-Goal `docs/goals/tasks/` keep working while one Goal runs. */
+function briefGoal(ledger: Ledger, absolute: string): string | undefined {
+  const active = activeGoals(ledger);
+  const path = relative(root, absolute);
+  const fromPath = goalOfBriefPath(path);
+  const caller = process.env.GOAL_ID;
+  const goal = fromPath ?? caller ?? (active.length > 1 ? undefined : active[0]);
+  if (!goal && active.length > 1) {
+    throw new Error(`Several Goals are active (${active.join(', ')}); put the brief in ${GOALS_DIR}/<slug>/tasks/ (\`new\` writes it there)`);
+  }
+  if (goal && !active.includes(goal)) throw new Error(`Goal ${goal} is not started; run \`goal start ${goal} --manager <session>\``);
+  if (fromPath && caller && fromPath !== caller) throw new Error(`${path} belongs to Goal ${fromPath}, not ${caller}`);
+  return goal;
+}
+
+/** Areas are read from each Goal file at every check, so the maintainer's edits apply at once. */
+function areasOf(slugs: readonly string[]): Record<string, string[]> {
+  return Object.fromEntries(slugs.map(slug => {
+    const path = join(root, goalFile(slug));
+    return [slug, existsSync(path) ? goalAreas(readFileSync(path, 'utf8')) : []];
+  }));
+}
+
+function assertOwner(task: Task): void {
+  const refusal = ownerRefusal(task);
+  if (refusal) throw new Error(refusal);
+}
+
+/** Where a task's brief is now: its recorded path, else its Goal directory, else the pre-Goal tasks directory. */
+function briefPathOf(task: Task): string | undefined {
+  const candidates = [task.brief, ...task.goal ? [join(root, goalBriefFile(task.goal, task.id))] : [],
+    join(root, GOALS_DIR, 'tasks', `${task.id}.md`)];
+  return candidates.find(path => path && existsSync(path));
+}
+
+/** A Goal's directory on archive/goals, named like the earlier `frontend-goal-2026-09-27`. */
+function archiveDirOf(ledger: Ledger, goal: string): string {
+  return ledger.goals?.[goal]?.archive ?? `${goal}-${(ledger.goals?.[goal]?.startedAt ?? new Date().toISOString()).slice(0, 10)}`;
+}
+
+function handoffText(task: Task): string {
+  return [`# ${task.id} handoffs: ${task.title}`, '',
+    ...task.attempts.flatMap(attempt => [`## Attempt ${attempt.n} (${modelOf(engineOf(attempt))}/${attempt.effort}, `
+      + `${attempt.startedAt})`, '', readResult(attempt).text.trim(), ''])].join('\n');
+}
+
+/** Moves the briefs and handoffs of closed tasks to archive/goals and removes the briefs from the tree in one commit.
+ * Briefs that tracked files still cite are kept and reported: the citing file must point at an owner first.
+ * Idempotent, so `tidy` repairs a close that stopped part-way. */
+function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], legacyDir?: string): string[] {
+  const notes: string[] = [];
+  const files: { path: string; content: string }[] = [];
+  const removed: string[] = [];
+  const goals = new Set<string>();
+  const candidates = tasks.flatMap(task => {
+    const path = ['verified', 'cancelled'].includes(task.state) ? briefPathOf(task) : undefined;
+    return path?.startsWith(`${join(root, GOALS_DIR)}/`) ? [{ task, path, relativePath: relative(root, path) }] : [];
+  });
+  // One search for every candidate: the cost follows the tree once, not once per brief.
+  const citations = treeMentions(root, candidates.map(item => item.relativePath), { exclude: [`${GOALS_DIR}/**`, 'scripts/goal/**'] });
+  for (const { task, path, relativePath } of candidates) {
+    const dir = task.goal ? archiveDirOf(ledger, task.goal) : legacyDir;
+    if (!dir) { notes.push(`${task.id}: no Goal; pass tidy --legacy <archive directory>`); continue; }
+    const cited = citations.filter(line => line.includes(relativePath));
+    if (cited.length) { notes.push(`${task.id}: kept; cited by\n    ${cited.join('\n    ')}`); continue; }
+    files.push({ path: `${dir}/tasks/${task.id}.md`, content: readFileSync(path, 'utf8') },
+      { path: `${dir}/handoffs/${task.id}.md`, content: handoffText(task) });
+    removed.push(relativePath);
+    if (task.goal) goals.add(task.goal);
+  }
+  if (!removed.length) return notes;
+  if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
+  const subject = removed.length === 1 ? `Archive the closed brief ${basename(removed[0]!, '.md')}`
+    : `Archive ${removed.length} closed briefs`;
+  const trailer = goals.size ? `\n\n${[...goals].map(goal => `Goal: ${goal}`).join('\n')}` : '';
+  archiveFiles(root, files, `${subject}${trailer}`);
+  removeFromTree(root, removed, `${subject}\n\nThey are on ${ARCHIVE_BRANCH}.${trailer}`);
+  notes.push(`${subject} (on ${ARCHIVE_BRANCH}, removed from the tree)`);
+  return notes;
 }
 
 function pidAlive(pid: number, program?: string): boolean {
@@ -590,6 +869,20 @@ function changedFiles(task: Task): { committed: string[]; dirty: string[]; ahead
   return { committed, dirty, ahead };
 }
 
+/** The branch's changes since it left main, with each file's content on both sides for `historyIntroductions`. */
+function branchChanges(task: Task): ChangedFile[] {
+  const base = git(root, ['merge-base', 'main', task.branch]);
+  const show = (revision: string, path: string) => git(root, ['show', `${revision}:${path}`], true);
+  return git(root, ['diff', '--name-status', '-M', `${base}..${task.branch}`]).split('\n').filter(Boolean).map(line => {
+    const [code = 'M', first = '', second] = line.split('\t');
+    const status = (['A', 'D', 'R'].includes(code[0]!) ? code[0] : 'M') as ChangedFile['status'];
+    const path = second ?? first;
+    const from = status === 'R' ? first : undefined;
+    return { path, status, from, before: status === 'A' ? undefined : show(base, from ?? path),
+      after: status === 'D' ? undefined : show(task.branch, path) };
+  });
+}
+
 function describe(task: Task): string {
   const { committed, dirty, ahead } = changedFiles(task);
   const violations = outOfScope([...new Set([...committed, ...dirty])], task.paths);
@@ -649,8 +942,12 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   await withLedger(ledger => {
     if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
+    const goal = briefGoal(ledger, absolute);
+    const reservedBy = ledger.reserved?.[brief.id];
+    if (reservedBy && reservedBy !== goal) throw new Error(`${brief.id} is reserved for Goal ${reservedBy}; take an ID with \`new\``);
     const tasks = Object.values(ledger.tasks);
     const conflicts = claimConflicts(brief, tasks);
+    if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     for (const id of brief.depends) {
       const dependency = ledger.tasks[id];
@@ -696,12 +993,15 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const { worktree: _shared, ...claims } = brief;
     const task: Task = { ...claims, brief: absolute, worktree, branch,
       base: reuse ? git(worktree, ['merge-base', 'HEAD', 'main']) : git(root, ['rev-parse', 'main']),
-      state: 'running', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {} };
+      state: 'running', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {},
+      ...goal ? { goal } : {}, historyGate: true };
     copyFileSync(absolute, join(worktree, briefFile({ ...task, shared: !!task.worktreeName })));
-    const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
+    const manager = managerOf(ledger, goal);
     task.attempts.push(launch(task, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
       workerPrompt(task, manager, engine), false, manager, engine));
     ledger.tasks[brief.id] = task;
+    if (ledger.reserved) delete ledger.reserved[brief.id];
+    ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
     ledger.startedAt ??= new Date().toISOString();
     console.log(`${brief.id} started: ${modelOf(engine)}/${brief.effort} pid ${lastAttempt(task).pid} in ${worktree}`);
     console.log(`Next: run \`bun scripts/goal/goalctl.ts wait ${brief.id}\` in the background.`);
@@ -749,6 +1049,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
   if (!message.trim()) throw new Error('resume needs -m <message> or --file <path>');
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
+    assertOwner(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
@@ -757,7 +1058,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
-    const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
+    const manager = managerOf(ledger, task.goal);
     // A session continues only on its own engine: switching back resumes that engine's latest session,
     // and an engine without one starts fresh on the same worktree.
     const sameEngine = [...task.attempts].reverse().find(attempt => engineOf(attempt) === nextEngine
@@ -819,6 +1120,7 @@ export function preserveWorktreeArtifacts(worktree: string, runDir: string): str
 }
 
 async function stopTask(id: string): Promise<void> {
+  assertOwner(taskOf(readLedger(), id));
   const attempt = lastAttempt(taskOf(readLedger(), id));
   const program = programOf(engineOf(attempt));
   if (pidAlive(attempt.pid, program)) {
@@ -1065,6 +1367,7 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const failure = await withLedger((ledger): string | undefined => {
     const task = taskOf(ledger, id);
+    assertOwner(task);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (!['exited', 'conflict', 'stopped'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
@@ -1098,6 +1401,10 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     const violations = outOfScope(committed.filter(file => !union.has(file)), task.paths);
     if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
+    }
+    const history = task.historyGate && !flags.has('--allow-ids') ? historyIntroductions(branchChanges(task)) : [];
+    if (history.length) {
+      throw new Error(`${task.id} names tasks in the tree; task IDs belong in commit messages:\n  ${history.join('\n  ')}`);
     }
     const rebase = spawnSync('git', ['rebase', 'main'], { cwd: task.worktree, encoding: 'utf8' });
     if (rebase.status !== 0) {
@@ -1163,10 +1470,12 @@ async function reclaimTask(id: string, briefPath: string): Promise<void> {
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
+    assertOwner(task);
     if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
-    const conflicts = claimConflicts(brief, Object.values(ledger.tasks));
+    const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
+      ...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger)))];
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
       migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute });
@@ -1175,8 +1484,23 @@ async function reclaimTask(id: string, briefPath: string): Promise<void> {
   });
 }
 
-async function closeTask(id: string, outcome: string): Promise<void> {
+/** Closes the tasks in order, stopping at the first that cannot close, then moves the briefs and handoffs of those
+ * closed to archive/goals in one commit. */
+async function closeTasks(ids: string[], outcome: string): Promise<void> {
   if (outcome !== 'verified' && outcome !== 'cancelled') throw new Error('close needs verified or cancelled');
+  if (!ids.length) throw new Error('close needs a task ID');
+  const ledger = readLedger();
+  for (const id of ids) assertOwner(taskOf(ledger, id));
+  try {
+    for (const id of ids) await closeTask(id, outcome);
+  } finally {
+    await withLedger(current => {
+      for (const note of archiveClosedBriefs(current, ids.map(id => taskOf(current, id)))) console.log(note);
+    });
+  }
+}
+
+async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise<void> {
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first`);
@@ -1203,6 +1527,113 @@ async function closeTask(id: string, outcome: string): Promise<void> {
   });
 }
 
+const valueOf = (args: readonly string[], flag: string): string | undefined => {
+  const at = args.indexOf(flag);
+  return at >= 0 ? args[at + 1] : undefined;
+};
+
+/** Registers a Goal whose file exists, or records its manager's new session after a restart. `--adopt` gives it the
+ * open tasks that have no Goal: the tasks of the single manager that ran before Goals had names. */
+async function startGoal(slug: string, args: string[]): Promise<void> {
+  if (!validGoalSlug(slug)) throw new Error(`Goal slug must be lower-case words joined by hyphens: ${slug || '(missing)'}`);
+  const manager = valueOf(args, '--manager');
+  if (!manager) throw new Error('goal start needs --manager <session name>');
+  if (!existsSync(join(root, goalFile(slug)))) throw new Error(`${goalFile(slug)} is missing; write the Goal first`);
+  await withLedger(ledger => {
+    const existing = ledger.goals?.[slug];
+    if (existing?.closedAt) throw new Error(`Goal ${slug} closed at ${existing.closedAt}; choose another slug`);
+    const own = areasOf([slug])[slug] ?? [];
+    const overlaps = areaConflicts(own, slug, areasOf(activeGoals(ledger).filter(other => other !== slug)));
+    if (overlaps.length && !args.includes('--allow-area')) {
+      throw new Error(`Goal ${slug}'s areas overlap another Goal's:\n  ${overlaps.join('\n  ')}`);
+    }
+    ledger.goals = { ...ledger.goals, [slug]: { ...existing, manager, startedAt: existing?.startedAt ?? new Date().toISOString() } };
+    const adopted = args.includes('--adopt')
+      ? Object.values(ledger.tasks).filter(task => !task.goal && !['verified', 'cancelled'].includes(task.state)) : [];
+    for (const task of adopted) task.goal = slug;
+    console.log(`Goal ${slug} ${existing ? 'resumed' : 'started'}; manager ${manager}; ${own.length} area(s)`
+      + (adopted.length ? `; adopted ${adopted.map(task => task.id).join(', ')}` : ''));
+  });
+}
+
+/** Ends a Goal once nothing of it remains in the tree: no open task, no brief, no file or line naming its tasks and no
+ * link into its directory. Then its directory and ledger entries move to archive/goals. */
+async function closeGoal(slug: string, flags: Set<string>): Promise<number> {
+  const caller = process.env.GOAL_ID;
+  if (caller && caller !== slug) throw new Error(`Goal ${slug} is not this manager's (GOAL_ID is ${caller})`);
+  return withLedger(ledger => {
+    const goal = ledger.goals?.[slug];
+    if (!goal || goal.closedAt) throw new Error(`Goal ${slug} is not active`);
+    const tasks = Object.values(ledger.tasks).filter(task => task.goal === slug);
+    const problems = tasks.filter(task => !['verified', 'cancelled'].includes(task.state))
+      .map(task => `${task.id} is ${task.state}; merge and close or cancel it`);
+    if (!problems.length && !flags.has('--dry-run')) for (const note of archiveClosedBriefs(ledger, tasks)) console.log(note);
+    const dir = `${GOALS_DIR}/${slug}`;
+    const tasksDir = join(root, dir, 'tasks');
+    problems.push(...(existsSync(tasksDir) ? readdirSync(tasksDir) : []).map(name => `${dir}/tasks/${name} remains`));
+    const ids = tasks.map(task => task.id);
+    problems.push(...treeMentions(root, ids, { words: true }).map(line => `names a task: ${line}`));
+    const numbers = new Set(ids.map(id => id.slice(2)));
+    const exempt = HISTORY_EXEMPT.map(pattern => new Bun.Glob(pattern));
+    problems.push(...git(root, ['ls-files']).split('\n').filter(path => !exempt.some(glob => glob.match(path)) && path.split('/')
+      .some(segment => numbers.has(/^g-(\d{3,})(?!\d)/i.exec(segment)?.[1] ?? ''))).map(path => `named after a task: ${path}`));
+    problems.push(...treeMentions(root, [`goals/${slug}/`], { exclude: [`${GOALS_DIR}/*/**`, 'scripts/goal/**'] })
+      .map(line => `links into the Goal: ${line}`));
+    if (problems.length) {
+      console.log(`Goal ${slug} has not converged:\n  ${problems.join('\n  ')}`);
+      return 1;
+    }
+    if (flags.has('--dry-run')) { console.log(`Goal ${slug} has converged; close would archive ${dir}`); return 0; }
+    const archive = archiveDirOf(ledger, slug);
+    const files = git(root, ['ls-files', '--', dir]).split('\n').filter(Boolean)
+      .concat(git(root, ['ls-files', '--others', '--exclude-standard', '--', dir]).split('\n').filter(Boolean));
+    archiveFiles(root, [...files.map(path => ({ path: `${archive}/${relative(dir, path)}`, content: readFileSync(join(root, path), 'utf8') })),
+      { path: `${archive}/ledger.json`, content: `${JSON.stringify({ goal: { slug, ...goal }, tasks }, null, 2)}\n` }],
+    `Archive Goal ${slug}\n\nGoal: ${slug}`);
+    removeFromTree(root, files, `Close Goal ${slug}\n\nIts directory and ledger entries are on ${ARCHIVE_BRANCH} under ${archive}/.\n\nGoal: ${slug}`);
+    ledger.lastId = Math.max(ledger.lastId ?? 0, ...ids.map(id => Number(id.slice(2))));
+    for (const id of ids) delete ledger.tasks[id];
+    Object.assign(goal, { closedAt: new Date().toISOString(), archive });
+    console.log(`Goal ${slug} closed; ${ARCHIVE_BRANCH}:${archive}/ holds its directory, briefs, handoffs and ledger`);
+    return 0;
+  });
+}
+
+/** Reserves the next task ID for a Goal and writes its brief skeleton, so two managers never take the same number. */
+async function newBrief(args: string[]): Promise<void> {
+  const goalArg = valueOf(args, '--goal');
+  const title = args.filter((arg, at) => arg !== '--goal' && args[at - 1] !== '--goal').join(' ').trim();
+  if (!title) throw new Error('new needs a title');
+  await withLedger(ledger => {
+    const active = activeGoals(ledger);
+    const goal = goalArg ?? process.env.GOAL_ID ?? (active.length === 1 ? active[0] : undefined);
+    if (!goal || !active.includes(goal)) throw new Error(`new needs an active Goal (--goal <slug>): ${active.join(', ') || 'none started'}`);
+    const goalsDir = join(root, GOALS_DIR);
+    const onDisk = readdirSync(goalsDir).flatMap(entry => {
+      const dir = entry === 'tasks' ? join(goalsDir, 'tasks') : join(goalsDir, entry, 'tasks');
+      return existsSync(dir) ? readdirSync(dir).map(name => name.replace(/\.md$/, '')) : [];
+    });
+    const id = nextTaskId([...Object.keys(ledger.tasks), ...Object.keys(ledger.reserved ?? {}), ...onDisk], ledger.lastId);
+    const path = join(root, goalBriefFile(goal, id));
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, ['---', `id: ${id}`, `title: ${title}`, `engine: ${DEFAULT_ENGINE}`, 'effort: high', 'cases: []',
+      'paths: []                             # name new files by capability, never g-NNN', 'migrations: []', 'shared: []',
+      'depends: []', '---', '', '## Outcome', '', '## Checks', ''].join('\n'));
+    ledger.reserved = { ...ledger.reserved, [id]: goal };
+    console.log(`${id} reserved for Goal ${goal}: ${relative(root, path)}`);
+  });
+}
+
+/** Archives the briefs of closed tasks still in the tree: a close that stopped part-way, or pre-Goal briefs. */
+async function tidy(args: string[]): Promise<void> {
+  const caller = process.env.GOAL_ID;
+  await withLedger(ledger => {
+    const tasks = Object.values(ledger.tasks).filter(task => !caller || !task.goal || task.goal === caller);
+    const notes = archiveClosedBriefs(ledger, tasks, valueOf(args, '--legacy'));
+    console.log(notes.length ? notes.join('\n') : 'Nothing to tidy');
+  });
+}
+
 async function status(): Promise<void> {
   const ledger = await withLedger(current => {
     for (const task of Object.values(current.tasks)) {
@@ -1226,9 +1657,16 @@ async function status(): Promise<void> {
       + `${usage.weekAdvice}`);
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
+  const heavy = heavyHolder();
+  console.log(heavy ? `heavy QA: ${heavy}` : 'heavy QA: free');
+  for (const slug of activeGoals(ledger)) {
+    const own = tasks.filter(task => task.goal === slug);
+    console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
+      + `${own.filter(task => !['verified', 'cancelled'].includes(task.state)).length} open`);
+  }
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
-    console.log(`${task.id} ${task.state.padEnd(8)} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
+    console.log(`${task.id} ${task.state.padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`);
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
@@ -1254,34 +1692,73 @@ export function reapStaleQaStacks(now = Date.now(), maxAgeMs = 3 * 3_600_000): s
   return stale;
 }
 
-async function withSlot(command: string[]): Promise<number> {
+const heavyLock = join(stateDir, 'qa-slots', 'heavy');
+
+/** Who holds the heavy QA lock, or undefined when it is free (a dead holder's lock is free). */
+function heavyHolder(): string | undefined {
+  try {
+    const info = JSON.parse(readFileSync(join(heavyLock, 'info.json'), 'utf8')) as
+      { pid: number; goal?: string; command: string; startedAt: string };
+    return pidAlive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command}` : undefined;
+  } catch { return undefined; }
+}
+
+/** Heavy runs (affected sets, whole tiers, wave and browser suites) are host-wide exclusive: two managers' waves
+ * together would put four or more QA stacks beside the workers, past what a 62 GB host held on 2026-09-27/28. A heavy
+ * run still takes an ordinary slot, so the host carries at most one heavy run and two light ones, as with one manager.
+ * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it. */
+async function acquireHeavy(command: string[]): Promise<() => void> {
+  const deadline = Date.now() + 6 * 3_600_000;
+  let announced = false;
+  mkdirSync(dirname(heavyLock), { recursive: true });
+  for (;;) {
+    try {
+      await acquireDir(heavyLock, 0, 'heavy QA');
+      break;
+    } catch {
+      if (Date.now() > deadline) throw new Error('The heavy QA lock stayed held for six hours');
+      if (!announced) { console.error(`waiting for heavy QA held by ${heavyHolder() ?? 'a starting run'}`); announced = true; }
+      await Bun.sleep(10_000);
+    }
+  }
+  writeFileSync(join(heavyLock, 'info.json'), JSON.stringify({ pid: process.pid, goal: process.env.GOAL_ID,
+    command: command.join(' '), startedAt: new Date().toISOString() }));
+  return () => rmSync(heavyLock, { recursive: true, force: true });
+}
+
+async function withSlot(command: string[], heavy = false): Promise<number> {
   const slots = Number(process.env.GOAL_QA_SLOTS ?? 3);
   const dir = join(stateDir, 'qa-slots');
   mkdirSync(dir, { recursive: true });
-  let held: string | undefined;
-  const deadline = Date.now() + 3_600_000;
-  while (!held) {
-    for (let k = 0; k < slots && !held; k++) {
-      const path = join(dir, String(k));
-      try { await acquireDir(path, 0, 'slot'); held = path; } catch { /* busy */ }
-    }
-    if (!held) {
-      if (Date.now() > deadline) throw new Error('No QA slot became free within one hour');
-      await Bun.sleep(3000);
-    }
-  }
-  const slot = held;
-  const release = () => rmSync(slot, { recursive: true, force: true });
-  reapStaleQaStacks();
+  // Take the heavy lock before a slot, so a waiting heavy run never holds a slot that light runs need.
+  const releaseHeavy = heavy ? await acquireHeavy(command) : undefined;
   try {
-    const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit',
-      env: { ...process.env, GOAL_IN_SLOT: '1' } });
-    const forward = (signal: NodeJS.Signals) => child.kill(signal);
-    process.on('SIGINT', forward);
-    process.on('SIGTERM', forward);
-    return await new Promise<number>(done => child.on('exit', code => done(code ?? 1)));
+    let held: string | undefined;
+    const deadline = Date.now() + 3_600_000;
+    while (!held) {
+      for (let k = 0; k < slots && !held; k++) {
+        const path = join(dir, String(k));
+        try { await acquireDir(path, 0, 'slot'); held = path; } catch { /* busy */ }
+      }
+      if (!held) {
+        if (Date.now() > deadline) throw new Error('No QA slot became free within one hour');
+        await Bun.sleep(3000);
+      }
+    }
+    const slot = held;
+    reapStaleQaStacks();
+    try {
+      const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit',
+        env: { ...process.env, GOAL_IN_SLOT: '1' } });
+      const forward = (signal: NodeJS.Signals) => child.kill(signal);
+      process.on('SIGINT', forward);
+      process.on('SIGTERM', forward);
+      return await new Promise<number>(done => child.on('exit', code => done(code ?? 1)));
+    } finally {
+      rmSync(slot, { recursive: true, force: true });
+    }
   } finally {
-    release();
+    releaseHeavy?.();
   }
 }
 
@@ -1290,44 +1767,54 @@ async function main(argv: string[]): Promise<number> {
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
   const positional = rest.filter(arg => !arg.startsWith('--'));
   switch (command) {
-    case 'init': {
-      const at = rest.indexOf('--manager');
-      await withLedger(ledger => {
-        if (at >= 0) ledger.manager = rest[at + 1];
-        ledger.startedAt ??= new Date().toISOString();
-        console.log(`program started ${ledger.startedAt}; manager ${ledger.manager ?? 'goal-manager'}`);
-      });
-      return 0;
+    case 'init':
+      throw new Error('init is replaced by `goal start <slug> --manager <session>`; see docs/goals/README.md');
+    case 'goal': {
+      const [action, slug = ''] = positional;
+      if (action === 'start') { await startGoal(slug, rest.slice(2)); return 0; }
+      if (action === 'close') return closeGoal(slug, flags);
+      throw new Error('goal needs start <slug> --manager <session> [--adopt] [--allow-area] | close <slug> [--dry-run]');
     }
+    case 'new': await newBrief(rest); return 0;
+    case 'tidy': await tidy(rest); return 0;
     case 'dispatch': await dispatch(positional[0] ?? '', flags); return 0;
     case 'wait': await waitFor(positional[0] ?? ''); return 0;
     case 'resume': await resumeTask(rest[0] ?? '', rest.slice(1)); return 0;
     case 'stop': await stopTask(positional[0] ?? ''); return 0;
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
-    case 'close': await closeTask(positional[0] ?? '', positional[1] ?? ''); return 0;
+    case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? ''); return 0;
     case 'owner': {
       // Read-only: which open task claims a repository path (workers check before editing outside their claim).
       const path = positional[0] ?? '';
-      const holders = Object.values(readLedger().tasks).filter(task => HOLDING.includes(task.state)
+      const ledger = readLedger();
+      const holders = Object.values(ledger.tasks).filter(task => HOLDING.includes(task.state)
         && task.paths.some(pattern => new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path)));
-      console.log(holders.length ? `${path}: claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}`
-        : `${path}: unclaimed`);
+      const areas = Object.entries(areasOf(activeGoals(ledger)))
+        .filter(([, globs]) => globs.some(glob => pathsOverlap(glob, path))).map(([slug]) => slug);
+      console.log((holders.length ? `${path}: claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}`
+        : `${path}: unclaimed`) + (areas.length ? `; in Goal ${areas.join(', ')}'s area` : ''));
       return holders.length ? 1 : 0;
     }
     case 'status': await status(); return 0;
     case 'usage':
       console.log(JSON.stringify({ claude: { ...currentUsage(), file: usagePath }, codex: codexAccounts() }, null, 2));
       return 0;
-    case 'test': return withSlot(['bun', 'scripts/qa/test.ts', ...rest]);
-    case 'slot': return withSlot(rest[0] === '--' ? rest.slice(1) : rest);
+    case 'test': return withSlot(['bun', 'scripts/qa/test.ts', ...rest.filter(arg => arg !== '--heavy')], isHeavyTest(rest));
+    case 'slot': {
+      const heavy = rest[0] === '--heavy';
+      const command = heavy ? rest.slice(1) : rest;
+      return withSlot(command[0] === '--' ? command.slice(1) : command, heavy);
+    }
     default:
-      console.error('Usage: goalctl init [--manager <name>] | dispatch <brief.md> [--dry-run] [--force-usage]'
+      console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
+        + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh]`
-        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--landed] | close <id> verified|cancelled'
-        + ' | status | usage | test <task test args> | slot -- <command>');
+        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed]'
+        + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
+        + ' | status | usage | test [--heavy] <task test args> | slot [--heavy] -- <command>');
       return 2;
   }
 }

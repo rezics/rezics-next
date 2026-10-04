@@ -3,9 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
-  parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
-  validateBrief } from './goalctl.ts';
+import { archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas, goalOfBriefPath,
+  historyIntroductions, isHeavyTest, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal, parseBrief, parseCodexUsage,
+  pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL, type Task, treeMentions,
+  usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -355,5 +356,136 @@ describe('goalctl close', () => {
       expect(second).not.toBe(first);
       expect(preserveWorktreeArtifacts(worktree, runDir)).toBeNull();
     } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+});
+
+describe('goalctl Goals', () => {
+  test('a brief belongs to the Goal whose directory holds it; the pre-Goal tasks directory has none', () => {
+    expect(goalOfBriefPath('docs/goals/addresses-discovery/tasks/G-1065.md')).toBe('addresses-discovery');
+    expect(goalOfBriefPath('docs/goals/tasks/G-1064.md')).toBeUndefined();
+    expect(goalOfBriefPath('docs/goals/tasks/tasks/G-1064.md')).toBeUndefined();
+    expect(goalOfBriefPath('docs/goals/addresses-discovery/GOAL.md')).toBeUndefined();
+  });
+
+  test('another active Goal\'s areas refuse a claim; the own Goal\'s and unowned paths do not', () => {
+    const areas = { discovery: goalAreas('---\nareas: [services/main/src/modules/discovery/**, apps/web/features/discover/**]\n---\n# Goal\n'),
+      production: [] };
+    expect(areas.discovery).toEqual(['services/main/src/modules/discovery/**', 'apps/web/features/discover/**']);
+    expect(areaConflicts(['services/main/src/modules/discovery/read.ts'], 'production', areas))
+      .toEqual(['path services/main/src/modules/discovery/read.ts lies in Goal discovery\'s area services/main/src/modules/discovery/**']);
+    expect(areaConflicts(['apps/web/features/**'], 'production', areas)).toHaveLength(1);
+    expect(areaConflicts(['services/main/src/modules/discovery/**'], 'discovery', areas)).toEqual([]);
+    expect(areaConflicts(['services/main/src/modules/poll/**'], 'production', areas)).toEqual([]);
+    expect(goalAreas('# A Goal without frontmatter\n')).toEqual([]);
+    expect(goalAreas('---\n# areas: other Goals keep out\nareas:\n  - services/main/src/modules/feed/**  # the feeds\n  - apps/web/features/shell/**\n---\n'))
+      .toEqual(['services/main/src/modules/feed/**', 'apps/web/features/shell/**']);
+  });
+
+  test('IDs continue after every used, reserved and archived number', () => {
+    expect(nextTaskId(['G-1063', 'G-999', 'G-040', 'notes'], 1064)).toBe('G-1065');
+    expect(nextTaskId(['G-1066'], 1064)).toBe('G-1067');
+    expect(nextTaskId([])).toBe('G-001');
+  });
+
+  test('a manager may change only its own Goal\'s tasks', () => {
+    expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, 'production')).toContain('belongs to Goal discovery');
+    expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, 'discovery')).toBeUndefined();
+    expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, undefined)).toBeUndefined();
+    expect(ownerRefusal({ id: 'G-900' }, 'production')).toBeUndefined();
+  });
+
+  test('affected sets, whole tiers and --heavy runs are heavy; explicit files and plans are not', () => {
+    expect(isHeavyTest(['--affected'])).toBe(true);
+    expect(isHeavyTest(['--affected=main~3'])).toBe(true);
+    expect(isHeavyTest(['--tier', 'integration'])).toBe(true);
+    expect(isHeavyTest(['--heavy', 'tests/qa/integration/a.test.ts'])).toBe(true);
+    expect(isHeavyTest(['--affected', '--list'])).toBe(false);
+    expect(isHeavyTest(['tests/qa/integration/a.test.ts'])).toBe(false);
+  });
+});
+
+describe('goalctl history gate', () => {
+  test('refuses new task-named files and task IDs a file did not carry', () => {
+    expect(historyIntroductions([
+      { path: 'tests/qa/integration/g-1065-discover.test.ts', status: 'A', after: 'test()' },
+      { path: 'apps/web/tests/g-1065/run.e2e.ts', status: 'A', after: '' },
+      { path: 'services/main/src/modules/feed/read.ts', status: 'M', before: '// G-314 keeps it', after: '// G-314 keeps it\n// see G-1065' },
+    ])).toEqual([
+      'tests/qa/integration/g-1065-discover.test.ts: named after a task; name it by the capability it covers',
+      'apps/web/tests/g-1065/run.e2e.ts: named after a task; name it by the capability it covers',
+      'services/main/src/modules/feed/read.ts: adds G-1065; state the reason itself instead of citing the task',
+    ]);
+  });
+
+  test('allows existing mentions to move, task-named files to be renamed and the Goal program to name tasks', () => {
+    expect(historyIntroductions([
+      { path: 'services/main/src/a.ts', status: 'M', before: 'x // G-314\ny', after: 'y\nx // G-314' },
+      { path: 'tests/qa/integration/contribution-loop.test.ts', status: 'R', from: 'tests/qa/integration/g-704-contribution-loop.test.ts',
+        before: "test('G-704 loop')", after: "test('G-704 loop')" },
+      { path: 'tests/qa/integration/discovery/g-939-reads.test.ts', status: 'R', from: 'tests/qa/integration/g-939-reads.test.ts' },
+      { path: 'docs/goals/production/tasks/G-1066.md', status: 'A', after: 'depends: [G-1065]' },
+      { path: 'scripts/goal/goalctl.test.ts', status: 'M', before: '', after: "id: 'G-1065'" },
+      { path: 'services/main/src/b.ts', status: 'D', before: 'G-1' },
+      { path: 'assets/cover.png', status: 'A', after: 'PNG\0G-1065' },
+      { path: 'apps/web/tests/agenda-1065.test.ts', status: 'A', after: 'GG-1065x' },
+    ])).toEqual([]);
+  });
+});
+
+describe('goalctl archive', () => {
+  const repo = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'goalctl-archive-test-'));
+    const run = (...args: string[]) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    run('init', '-q', '-b', 'main');
+    run('config', 'user.email', 'goal@example.invalid');
+    run('config', 'user.name', 'goalctl test');
+    mkdirSync(join(dir, 'docs/goals/g/tasks'), { recursive: true });
+    writeFileSync(join(dir, 'docs/goals/g/tasks/G-001.md'), 'brief');
+    writeFileSync(join(dir, 'code.ts'), '// cites docs/goals/g/tasks/G-002.md\n');
+    run('add', '.');
+    run('commit', '-q', '-m', 'start');
+    return dir;
+  };
+  const git = (dir: string, ...args: string[]) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' }).stdout.trim();
+
+  test('adds files to the orphan archive branch without moving HEAD and keeps earlier entries', () => {
+    const dir = repo();
+    try {
+      const head = git(dir, 'rev-parse', 'HEAD');
+      archiveFiles(dir, [{ path: 'g-2026-10-04/tasks/G-001.md', content: 'brief' }], 'Archive G-001');
+      archiveFiles(dir, [{ path: 'g-2026-10-04/handoffs/G-001.md', content: 'handoff' }], 'Archive its handoff');
+      expect(git(dir, 'rev-parse', 'HEAD')).toBe(head);
+      expect(git(dir, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(git(dir, 'ls-tree', '-r', '--name-only', 'archive/goals').split('\n'))
+        .toEqual(['g-2026-10-04/handoffs/G-001.md', 'g-2026-10-04/tasks/G-001.md']);
+      expect(git(dir, 'rev-list', '--count', 'archive/goals')).toBe('2');
+      expect(git(dir, 'merge-base', 'main', 'archive/goals')).toBe('');
+      expect(git(dir, 'status', '--porcelain')).toBe('');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('commits only the removed briefs and leaves what peers staged', () => {
+    const dir = repo();
+    try {
+      writeFileSync(join(dir, 'peer.ts'), 'staged by a peer');
+      git(dir, 'add', 'peer.ts');
+      removeFromTree(dir, ['docs/goals/g/tasks/G-001.md'], 'Archive the closed brief G-001');
+      expect(existsSync(join(dir, 'docs/goals/g'))).toBe(false);
+      expect(existsSync(join(dir, 'docs'))).toBe(false);
+      expect(git(dir, 'show', '--name-status', '--format=%s', 'HEAD').split('\n'))
+        .toEqual(['Archive the closed brief G-001', '', 'D\tdocs/goals/g/tasks/G-001.md']);
+      expect(git(dir, 'diff', '--cached', '--name-only')).toBe('peer.ts');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('finds citations of a brief outside the excluded paths', () => {
+    const dir = repo();
+    try {
+      expect(treeMentions(dir, ['docs/goals/g/tasks/G-002.md'], { exclude: ['docs/goals/**'] }))
+        .toEqual(['code.ts:1:// cites docs/goals/g/tasks/G-002.md']);
+      expect(treeMentions(dir, ['G-001'], { words: true })).toEqual([]);
+      expect(treeMentions(dir, ['G-001'], { words: true, exclude: [] })).toEqual([]);
+      expect(treeMentions(dir, [])).toEqual([]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
