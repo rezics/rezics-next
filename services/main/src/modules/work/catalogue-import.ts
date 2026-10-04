@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { CatalogueBulkEnvelope, CommandValidation } from '../../infrastructure/fuseki.ts';
-import { WorkFileStaging } from '../../infrastructure/work-file-staging.ts';
+import { WorkFileStaging } from './file-staging.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { AdmissionConflict, type RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';

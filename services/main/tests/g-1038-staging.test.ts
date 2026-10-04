@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { WorkFileStaging } from '../src/infrastructure/work-file-staging.ts';
+import { WorkFileStaging } from '../src/modules/work/file-staging.ts';
 import { stagedWorkObjectCandidates, discardUnpublishedWorkObjects } from '../src/modules/work/object-gc.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 

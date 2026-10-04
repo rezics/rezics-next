@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CommandRejected, FusekiClient, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -22,6 +22,7 @@ class InMemoryCommandFuseki extends FusekiClient {
   private receipt?: Record<string, { type: string; value: string }>;
   private invalidReceipt = false;
   commands = 0;
+  cleanupQueries = 0;
 
   constructor() { super('http://localhost:1/rezics'); }
   override async commandHealth() { return { moduleVersion: COMMAND_MODULE_VERSION,
@@ -37,6 +38,12 @@ class InMemoryCommandFuseki extends FusekiClient {
       return { results: { bindings: this.invalidReceipt ? [{ digest: literal(this.capturedCommand!.digest),
         outcome: uri('https://rezics.com/vocab/Cancelled'),
         kind: uri('https://rezics.com/vocab/InvalidProfile') }] : [] } };
+    }
+    if (sparql.includes('ASK') && sparql.includes('GRAPH <urn:rezics:graph:revisions>')
+      && sparql.includes('rv:manifest') && sparql.includes('VALUES ?manifest')) {
+      this.cleanupQueries += 1;
+      // Invalid validation rolls back graph references before candidate cleanup.
+      return { boolean: false };
     }
     if (!sparql.includes('SELECT ?outcome ?digest')) throw new Error('unexpected query');
     return { results: { bindings: this.receipt ? [this.receipt] : [] } };
@@ -113,6 +120,9 @@ test('SYS02 invalid native Work validation leaves a terminal cancellation for se
         requestDigest: metadataWorkRequestDigest('Rejected Work'),
         expiresAt: new Date(Date.now() + 60_000).toISOString() } };
     await expect(activateMetadataWork(env, intent)).rejects.toBeInstanceOf(CommandRejected);
+    expect(fuseki.commands).toBe(2); // Rejected activation, then terminal cancellation.
+    expect(fuseki.cleanupQueries).toBe(1);
+    expect(readdirSync(env.objectDirectory)).toEqual([]);
     const commands = fuseki.commands;
     const terminal = await sealMetadataWorkAdmission(env, { ...intent.admission, principalId: 'principal',
       actingSubject: 'principal', state: 'claimed', dispatchEligible: true, replayed: false } satisfies RegisteredAdmission);
@@ -120,8 +130,12 @@ test('SYS02 invalid native Work validation leaves a terminal cancellation for se
     expect(terminal.admissionId).toBe(intent.admission.id);
     expect(terminal.requestDigest).toBe(intent.admission.requestDigest);
     expect(terminal.scope).toBe(intent.admission.scope);
+    expect(terminal.authorityEpoch).toBe(intent.admission.authorityEpoch);
+    expect(terminal.work).toBeUndefined();
     expect(fuseki.commands).toBe(commands);
     await expect(activateMetadataWork(env, intent)).rejects.toBeInstanceOf(CommandRejected);
     expect(fuseki.commands).toBe(commands);
+    expect(fuseki.cleanupQueries).toBe(1);
+    expect(readdirSync(env.objectDirectory)).toEqual([]);
   } finally { rmSync(state, { recursive: true, force: true }); }
 });

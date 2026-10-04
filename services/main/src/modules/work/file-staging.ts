@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
-import { hash, PROFILE } from '../modules/work/activate.ts';
-import type { StagedWorkObjectCandidates } from '../modules/work/object-gc.ts';
+import { hash, PROFILE } from './activate.ts';
+import type { StagedWorkObjectCandidates } from './object-gc.ts';
 
 /** Same file-before-directory durability as ordinary immutable staging, with
  * asynchronous file syncs and one final directory sync for the bounded group.

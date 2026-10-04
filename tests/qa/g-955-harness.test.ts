@@ -25,7 +25,8 @@ import {
   integrationOwnerResetStatements,
   resetIntegrationState,
 } from '../../scripts/qa/integration-reset.ts';
-import { qaStackEnvironment } from '../../scripts/qa/stack-environment.ts';
+import { commandOnlyIntegrationFiles } from '../../scripts/qa/isolated-integration-files.ts';
+import { qaStackEnvironment, scaleIntegrationFiles } from '../../scripts/qa/stack-environment.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const scratch = join(root, '.temp');
@@ -34,16 +35,24 @@ const suite = (file: string) =>
   `<testsuite name="${file}" file="${file}"><testcase name="one" file="${file}" time="1" /></testsuite>`;
 
 test('G-955: integration balances all files onto bounded reusable stacks and preserves fresh-state boundaries', () => {
+  const dedicated = new Set([
+    ...commandOnlyIntegrationFiles,
+    ...scaleIntegrationFiles,
+    'tests/qa/integration/g-854-large-library.test.ts',
+    'tests/qa/integration/g-852-zones.test.ts',
+    'tests/qa/integration/g-556-ranked-large.test.ts',
+    'tests/qa/integration/g-939-discovery.test.ts',
+  ]);
   const fresh = [...isolatedIntegrationFiles]
-    .filter((file) => !file.includes('growth-search-refresh'))
+    .filter((file) => !dedicated.has(file))
     .slice(0, 15);
   const estimates = new Map([
     ...Array.from({ length: 24 }, (_, index) => [`shared-${index}.test.ts`, 30_000] as const),
     ...fresh.map((file) => [file, 20_000] as const),
-    ['tests/qa/integration/growth-search-refresh.test.ts', 40_000] as const,
+    ...[...dedicated].map((file) => [file, 40_000] as const),
   ]);
   const plan = planIntegrationShards(estimates, 6);
-  expect(plan).toHaveLength(7);
+  expect(plan).toHaveLength(6 + dedicated.size);
   expect(plan.flatMap((shard) => shard.files).sort()).toEqual([...estimates.keys()].sort());
   expect(planIntegrationShards(new Map([...estimates].reverse()), 6)).toEqual(plan);
   for (const shard of plan) {
@@ -56,7 +65,9 @@ test('G-955: integration balances all files onto bounded reusable stacks and pre
     .slice(0, 6)
     .map((shard) => shard.files.reduce((sum, file) => sum + estimates.get(file)!, 0));
   expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(30_000);
-  expect(plan.at(-1)!.files).toEqual(['tests/qa/integration/growth-search-refresh.test.ts']);
+  expect(plan.slice(6)).toEqual(
+    [...dedicated].sort().map((file) => ({ files: [file], batches: [[file]] })),
+  );
 });
 
 test('G-955: fresh SQL state clones all four retained templates without modifying them', () => {
