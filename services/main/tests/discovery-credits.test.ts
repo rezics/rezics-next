@@ -11,8 +11,8 @@ test('discovery projects native and source credits with bounded order, then reso
     queried.push(body);
     if (body.includes('NativeAgentCredit')) {
       expect(limit).toBe(3);
-      return [{ id: field(id(1)), agent: field(id(2)) },
-        { id: field(id(3)), key: field('/authors/OL1A'), ordinal: field('2') }];
+      return [{ work: field(id(4)), id: field(id(1)), agent: field(id(2)) },
+        { work: field(id(4)), id: field(id(3)), key: field('/authors/OL1A'), ordinal: field('2') }];
     }
     expect(limit).toBe(2);
     return [{ agent: field(id(2)), displayName: field('Jane Austen'), handle: field('agent-old') }];

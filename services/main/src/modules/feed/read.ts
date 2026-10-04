@@ -5,7 +5,7 @@ import type { followTarget } from '../follows/contract.ts';
 import { readFollowTarget } from '../follows/read.ts';
 import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { readWorkClassifications } from '../work/read-classifications.ts';
+import { readPublicWorkClassifications, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './contract.ts';
@@ -289,18 +289,29 @@ function feedItem(source: FeedSource, row: FeedRow, actor: AgentCard, target: Fo
       vote: `/v1/feed/${source.id.slice(-36)}/vote` } };
 }
 
-/** Distinct Work/Realm classification reads run together, each in its own Realm scope. */
+/** Page batches share owner work within each requested classification scope. */
 async function readTagSets(session: WorkReadSession, language: string | undefined,
   sources: readonly FeedSource[], senses: string[]) {
   const keys = new Map<string, FeedSource>();
   for (const source of sources) if (source.work && !keys.has(tagKey(source))) keys.set(tagKey(source), source);
-  return new Map(await Promise.all([...keys].map(async ([key, source]) => {
+  const realms = new Map<string | null, FeedSource[]>();
+  for (const source of keys.values()) {
+    const realm = source.realm ?? null;
+    realms.set(realm, [...(realms.get(realm) ?? []), source]);
+  }
+  const results = new Map<string, Settled<string[]>>();
+  for (const [realm, sources] of realms) {
     const tagSession = new WorkReadSession(session.deps, session.request, { language,
       languages: session.displayLanguages.join(','), limit: 3,
-      ...(source.realm ? { scope: 'realm', realm: source.realm } : {}) }, session.position);
-    return [key, await settle(readWorkClassifications(tagSession, source.work!, senses)
-      .then(tags => tags.items.map(item => item.sense)))] as const;
-  })));
+      ...(realm ? { scope: 'realm', realm } : {}) }, session.position);
+    for (let start = 0; start < sources.length; start += WORK_CLASSIFICATION_BATCH_COST.works) {
+      const page = sources.slice(start, start + WORK_CLASSIFICATION_BATCH_COST.works);
+      const batch = await settle(readPublicWorkClassifications(tagSession, page.map(source => source.work!), senses));
+      for (const source of page) results.set(tagKey(source), await settle(Promise.resolve().then(() =>
+        unwrap(batch).get(source.work!)?.items.map(item => item.sense) ?? [])));
+    }
+  }
+  return results;
 }
 const tagKey = (source: Pick<FeedSource, 'work' | 'realm'>) => JSON.stringify([source.work, source.realm]);
 const reduced = (source: FeedSource, rule: { kind: string; target: string; strength: string }) => rule.strength !== 'fewer'

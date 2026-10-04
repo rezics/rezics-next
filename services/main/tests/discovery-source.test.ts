@@ -8,6 +8,7 @@ const field = (value: string) => ({ type: 'literal', value });
 test('Discovery source advances past an unavailable classified Work without losing later candidates', async () => {
   const session = { position: { dataEpoch: 'epoch', sequence: '9' }, options: {}, deps: {},
     scope: async () => ({ kind: 'global', realm: null }),
+    summaries: async (works: string[]) => works.map(reference => ({ reference, status: 'unavailable' })),
     query: async (query: string) => {
       if (query.includes('SELECT ?epoch ?prior')) return [];
       if (query.includes('SELECT DISTINCT ?work WHERE')) return [1, 2].map(n => ({ work: field(id(n)) }));
@@ -15,8 +16,8 @@ test('Discovery source advances past an unavailable classified Work without losi
         work: field(id(n)), head: field(id(n + 10)), main: field(id(n + 20)),
         sequence: field('1'), epochOrder: field('0'), classified: field(n === 1 ? 'true' : 'false'), credited: field('false'),
       }));
-      // readWorkClassifications repeats the Work owner's disclosure admission.
-      expect(query).toContain('SELECT ?head ?main ?mainHead');
+      // The public classification batch repeats the Work disclosure admission.
+      expect(query).toContain('SELECT ?work ?main WHERE');
       return [];
     } } as unknown as WorkReadSession;
   const result = await projectDiscoveryBatch(session, { scope: 'global', realm: null, context: null }, '');
