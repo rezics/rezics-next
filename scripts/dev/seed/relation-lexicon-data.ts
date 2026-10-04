@@ -14,6 +14,8 @@ export interface LexiconSeedDefinition {
   extraRoles?: readonly string[];
   /** Role keys of the star constraint, repeated into the definition state. */
   star?: { leaf: string; hub: string };
+  /** Roles that accept only these seeded Concepts (by `variantKindConcepts` key), repeated into the definition state. */
+  roleMembers?: Readonly<Record<string, readonly string[]>>;
   /** `false` leaves the relation open to any relation editor instead of a Work's editor. */
   workAuthority?: false;
   editorRecordable?: boolean;
@@ -349,6 +351,7 @@ export const relationLexiconSeed = [
     roles: ['hub', 'variant'],
     extraRoles: ['kind'],
     star: { leaf: 'variant', hub: 'hub' },
+    roleMembers: { kind: ['persona', 'counterpart'] },
     labels: [
       ['en', 'Variant', 'Variants', 'Variant of', 'Variants of'],
       ['zh-Hant', '變體', '變體', '變體本體', '變體本體'],

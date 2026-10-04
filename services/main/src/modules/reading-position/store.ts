@@ -93,6 +93,24 @@ export class ReadingPositionStore {
         RETURNING record`, [...values, expectedReceipt]);
     if (result.rowCount !== 1) throw new RevelationConflict('Revelation receipt changed');
   }
+  /** Position-require one record and reveal it at one occurrence, in one transaction. Replaying the same
+   * receipt is a no-op; a different position for the same record and continuity is a conflict, never a move. */
+  async publish(row: Revelation): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`INSERT INTO wiki.revelation_record(record) VALUES ($1) ON CONFLICT DO NOTHING`, [row.record]);
+      const existing = await client.query<{ occurrence: string }>(`SELECT occurrence FROM reading_position.revelation
+        WHERE record = $1 AND continuity_work = $2 FOR UPDATE`, [row.record, row.continuityWork]);
+      if (existing.rows[0]) {
+        if (existing.rows[0].occurrence !== row.occurrence) throw new RevelationConflict('Revelation position changed');
+      } else await this.write(client, row, null);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+  }
   async completed(principal: VerifiedPrincipal, structures: readonly string[]): Promise<Set<string>> {
     if (!structures.length) return new Set();
     const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence

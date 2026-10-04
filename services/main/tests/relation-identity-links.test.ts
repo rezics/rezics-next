@@ -6,6 +6,8 @@ import { canonicalRelation, relationChangeDigest, type ExactDefinition } from '.
 import { PARTICIPATION_FORMAT_V2, checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
 import { checkedComponentState } from '../src/modules/semantic/change.ts';
 import { SemanticChangeRejected } from '../src/modules/semantic/command.ts';
+import { selectedProjection } from '../src/modules/lexicon/render.ts';
+import { seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
 
 const DEFINITION = 'https://rezics.com/id/01990000-0000-7000-8000-0000000000d1';
 const ref = (n: number) => ({ kind: 'resource' as const, ref: `https://rezics.com/id/01990000-0000-7000-8000-${String(n).padStart(12, '0')}` });
@@ -80,4 +82,96 @@ test('canonical routing: participations with the v2 format take the v2 shape, ot
   expect(routes.map(route => route.profile)).toEqual(['relation-occurrence-v2', 'relation-occurrence-v1']);
   expect(routes[0]!.when).toEqual([{ path: 'https://rezics.com/vocab/participationFormat', value: PARTICIPATION_FORMAT_V2 }]);
   expect(routes[1]!.when).toEqual([]);
+});
+
+const native = (n: number) => `https://rezics.com/id/01990000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+
+test('revelation position: validated, part of the command digest and kept out of the stored occurrence', () => {
+  const state = (revealedAt?: unknown) => canonicalRelation(definition, { ...input(ref(1), ref(2)),
+    ...(revealedAt === undefined ? {} : { revealedAt: revealedAt as never }) });
+  const at = { work: native(40), occurrence: native(41) };
+  expect(state(at).revealedAt).toEqual(at);
+  expect(state().revealedAt).toBeUndefined();
+  const plain = relationChangeDigest(undefined, null, state());
+  expect(relationChangeDigest(undefined, null, state(at))).not.toBe(plain);
+  expect(relationChangeDigest(undefined, null, state(at)))
+    .not.toBe(relationChangeDigest(undefined, null, state({ ...at, occurrence: native(42) })));
+  for (const bad of [{ work: native(40) }, { work: 'https://example.test/w', occurrence: native(41) }, { ...at, extra: 1 }, 'x', null]) {
+    expect(() => state(bad)).toThrow();
+  }
+});
+
+test('role members: a role with declared members takes only those native resources', () => {
+  const roles = [{ ...role('kind'), members: [native(50), native(51)] }, role('variant')];
+  const write = (kind: unknown) => checkedParticipations(roles, [{ role: roles[0]!.role, participant: kind },
+    { role: roles[1]!.role, participant: ref(1) }]);
+  expect(write({ kind: 'resource', ref: native(51) })).toHaveLength(2);
+  expect(() => write({ kind: 'resource', ref: native(52) })).toThrow('admitted member');
+  expect(() => write({ kind: 'external', provider: 'p', namespace: 'n', key: 'k' })).toThrow('admitted member');
+  // A role without members stays open.
+  expect(checkedParticipations([role('variant')], [{ role: roles[1]!.role, participant: ref(7) }])).toHaveLength(1);
+});
+
+test('definition state: role members are bounded native resources and the star hub takes exactly one participant', () => {
+  const roles = (extra: object = {}, hub: object = {}) => ['variant', 'hub', 'kind'].map(key => ({ key,
+    minParticipants: 1, maxParticipants: 1, ordered: false, ...(key === 'kind' ? extra : {}), ...(key === 'hub' ? hub : {}) }));
+  const base = (r: unknown[], star: object | null = { leaf: 'variant', hub: 'hub' }) => ({ component: 'definition',
+    kind: 'relation', roles: r, ...(star ? { star } : {}) });
+  const checked = checkedComponentState(base(roles({ members: [native(51), native(50)] })));
+  const stored = (checked as { roles: { key: string; members?: string[] }[] }).roles;
+  expect(stored.find(item => item.key === 'kind')!.members).toEqual([native(50), native(51)]);
+  expect(stored.find(item => item.key === 'hub')!.members).toBeUndefined();
+  for (const members of [[], [native(50), native(50)], ['not-an-iri'], 'x', Array.from({ length: 9 }, (_, i) => native(60 + i))]) {
+    expect(() => checkedComponentState(base(roles({ members })))).toThrow(SemanticChangeRejected);
+  }
+  expect(() => checkedComponentState(base(roles({}, { minParticipants: 0 })))).toThrow('exactly one participant');
+  expect(() => checkedComponentState(base(roles({}, { maxParticipants: 2 })))).toThrow('exactly one participant');
+  // Without a star the hub role is an ordinary role.
+  expect(checkedComponentState(base(roles({}, { maxParticipants: 2 }), null))).toMatchObject({ component: 'definition' });
+});
+
+test('seed: the variant-of kind role is bound to the two seeded Concepts', () => {
+  const seed = relationLexiconSeed.find(item => item.key === 'variant-of')!;
+  expect([...seed.roleMembers!.kind!]).toEqual(variantKindConcepts.map(kind => kind.key));
+  expect(relationLexiconSeed.filter(item => item.key !== 'variant-of').some(item => 'roleMembers' in item)).toBe(false);
+});
+
+test('rendered arguments never carry the credited name of an unavailable participant', () => {
+  const credit = { lexical: 'Saber Alter', language: 'en' };
+  const projection = selectedProjection([], 'variant', 'hub', ['en'], [
+    { role: 'variant', participant: { kind: 'unavailable-reference' }, creditedName: credit },
+    { role: 'hub', participant: ref(2), creditedName: credit }]);
+  expect(projection.arguments.find(item => item.role === 'variant')).not.toHaveProperty('creditedName');
+  expect(projection.arguments.find(item => item.role === 'hub')!.creditedName).toEqual(credit);
+});
+
+test('seed: kind members reach the definition state, and an older revision without them is revised', async () => {
+  const concepts = { persona: native(70), counterpart: native(71) };
+  const data = [{ ...relationLexiconSeed.find(item => item.key === 'variant-of')!, labels: [] as const }];
+  const file = `/tmp/relation-identity-links-${Bun.randomUUIDv7()}.json`;
+  const posted: { target?: string; state: { roles: { key: string; members?: string[] }[] } }[] = [];
+  const component = native(72), head = native(73);
+  const roleState = (members?: string[]) => ['hub', 'kind', 'variant'].map(key => ({ key, minParticipants: 1,
+    maxParticipants: 1, ordered: false, ...(key === 'kind' && members ? { members } : {}) }));
+  const client = (current: { members?: string[] } | null): SeedLexiconClient => ({
+    post: async <T>(_path: string, body: object) => { posted.push(body as never); return { component, revision: native(74) } as T; },
+    authorizeDefinition: async () => {},
+    currentDefinition: async () => current && { component, revision: head, state: { component: 'definition',
+      kind: 'relation', lifecycle: 'active', successor: null, notation: 'variant-of', star: { leaf: 'variant', hub: 'hub' },
+      roles: roleState(current.members) } as never },
+  });
+  await seedRelationLexicon(client(null), native(75), 'ns-members', data, file, concepts);
+  expect(posted.at(-1)!.state.roles.find(item => item.key === 'kind')!.members).toEqual([concepts.persona, concepts.counterpart].sort());
+  expect(posted.at(-1)!.state.roles.find(item => item.key === 'hub')!.members).toBeUndefined();
+  posted.length = 0;
+  await seedRelationLexicon(client({}), native(75), 'ns-members', data, file, concepts);
+  expect(posted).toHaveLength(1);
+  expect(posted[0]!.target).toBe(component);
+  expect(posted[0]!.state.roles.find(item => item.key === 'kind')!.members).toHaveLength(2);
+  posted.length = 0;
+  await seedRelationLexicon(client({ members: [concepts.persona, concepts.counterpart].sort() }), native(75), 'ns-members', data, file, concepts);
+  expect(posted).toHaveLength(0);
+  // Without the Concepts the role stays open, as before.
+  await seedRelationLexicon(client(null), native(75), 'ns-members', data, file);
+  expect(posted.at(-1)!.state.roles.find(item => item.key === 'kind')!.members).toBeUndefined();
 });

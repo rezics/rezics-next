@@ -31,6 +31,7 @@ import { sourceChildOccurrence } from '../../../services/main/src/modules/source
 import { provisionFixtureAuthor } from './authored-work.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 
 export const shortId = (uri: string) => uri.split('/').at(-1)!;
@@ -40,7 +41,7 @@ export const author = (key: string, role: string | null = '/type/author_role') =
 
 export async function authorCreditFixture(apps: Record<string, string>, objectDirectory: string,
   scopes = 'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read',
-  deletionFence?: (issuer: string, subject: string) => Promise<void>) {
+  deletionFence?: (issuer: string, subject: string) => Promise<void>, options: { readingPositions?: boolean } = {}) {
   const account = await ratingAccount(apps, scopes, deletionFence);
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const pool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
@@ -147,7 +148,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   let source: Record<string, unknown> = {};
   const catalogueIntake = new CatalogueIntakeStore(accessPool, env);
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
-    catalogueIntake,
+    ...(options.readingPositions ? { readingPositions: new ReadingPositionStore(pool) } : {}), catalogueIntake,
     actingContexts: new AccessActingContexts(accessPool),
     mediaAccess: new MediaAccessBatchReader(accessPool, fuseki),
     accessPolicy: new AccessPolicyOwner(accessPool),

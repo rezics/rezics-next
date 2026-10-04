@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
@@ -22,7 +22,7 @@ test('identity links: credited names, star refusals and seeded definitions throu
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   // Definitions are canonical across files in this QA shard; share their immutable bytes like the lexicon tests.
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
-    resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID), scopes);
+    resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID), scopes, undefined, { readingPositions: true });
   try {
     await f.grant('semantic:create:root', 'semantic.change');
     await f.grant('classification:define:global', 'classification.proposition.define');
@@ -86,8 +86,9 @@ test('identity links: credited names, star refusals and seeded definitions throu
       state: { component: 'resource', types: ['https://schema.org/Person'], properties: [] } }), 201)).component;
     const [hub, alter, second, other] = [await person(), await person(), await person(), await person()];
     const kinds = await seedVariantKindConcepts(client, f.actor, namespace);
+    const readGrants = new Map<string, string>();
     for (const ref of [hub, alter, second, other, kinds.persona, kinds.counterpart]) {
-      await f.grant(`semantic:read:${ref}`, 'semantic.read');
+      readGrants.set(ref, await f.grant(`semantic:read:${ref}`, 'semantic.read'));
     }
     const resource = (ref: string) => ({ kind: 'resource', ref });
     const variantOf = definitions.get('variant-of')!.revision;
@@ -120,6 +121,17 @@ test('identity links: credited names, star refusals and seeded definitions throu
     expect(rendered.projections.flatMap(item => item.arguments).find(item => item.role === 'variant')!.creditedName)
       .toEqual({ lexical: 'Saber', language: 'en' });
 
+    // The credited name belongs to its participant: a reader who loses the participant loses the name with it.
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [readGrants.get(alter)]);
+    const redacted = await f.json<Relation>(await f.call('GET', path(first.occurrence)), 200);
+    const variant = redacted.participations.find(item => item.role === 'variant')! as typeof redacted.participations[number] & {
+      participant: { kind: string }; availability: string };
+    expect(variant.availability).toBe('unavailable');
+    expect(variant.participant).toEqual({ kind: 'unavailable-reference' });
+    expect(variant.creditedName).toBeUndefined();
+    expect(JSON.stringify(redacted)).not.toContain('Saber');
+    readGrants.set(alter, await f.grant(`semantic:read:${alter}`, 'semantic.read'));
+
     // Occurrences without a credited name read as having none.
     const plain = await f.json<Written>(await write({ ...link(second, hub) }), 201);
     await f.grant(`semantic:read:${plain.occurrence}`, 'semantic.read');
@@ -142,6 +154,20 @@ test('identity links: credited names, star refusals and seeded definitions throu
       { role: 'variant', participant: { kind: 'external', provider: 'x', namespace: 'y', key: 'z' } },
       { role: 'hub', participant: resource(hub) }, { role: 'kind', participant: resource(kinds.persona) }] })).status)
       .toBe(400);
+    // A refusal names a link only when the caller can read it; a hidden link answers like any unavailable reference.
+    const quiet = await person();
+    readGrants.set(quiet, await f.grant(`semantic:read:${quiet}`, 'semantic.read'));
+    const quietLink = await f.json<Written>(await write(link(quiet, hub)), 201); // its occurrence is not granted
+    const problemOf = async (response: Response) => (await response.json() as { code: string }).code;
+    const hiddenRefusal = await write(link(quiet, other));
+    expect(hiddenRefusal.status).toBe(422);
+    const hiddenCode = await problemOf(hiddenRefusal);
+    expect(hiddenCode).toBe('unavailable_reference');
+    const missing = await write(link(nativeId(), other));
+    expect([missing.status, await problemOf(missing)]).toEqual([422, hiddenCode]);
+    await f.grant(`semantic:read:${quietLink.occurrence}`, 'semantic.read');
+    await refused(link(quiet, other));
+
     // The occurrence that holds the leaf may itself be revised.
     await f.grant(`relation:edit:${first.occurrence}`, 'relation.change');
     await f.json<Written>(await write(link(alter, hub, { occurrence: first.occurrence, expectedHead: first.revision },
@@ -168,5 +194,76 @@ test('identity links: credited names, star refusals and seeded definitions throu
         definition: holds, participations: [{ role: 'holder', participant: resource(alter) },
           { role: 'title', participant: resource(target) }] }), 201);
     }
+
+    // A link can be a spoiler: it is recorded at a position of a Work's reading order, as Statements record theirs.
+    const spoilerWork = (await f.json<{ work: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({
+      profile: 'metadata-only-v1', language: 'en', title: `Spoiler Work ${randomUUID()}`, actingSubject: f.actor })), 201)).work;
+    await f.grant(`work:read:${spoilerWork}`, 'work.read');
+    const chapter = nativeId();
+    await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH <urn:rezics:graph:current> {
+      <${nativeId()}> a rv:OccurrencePlacement ; rv:occurrence <${chapter}> } }`);
+    const [spoilerLeaf, spoilerHub] = [await person(), await person()];
+    for (const ref of [spoilerLeaf, spoilerHub]) await f.grant(`semantic:read:${ref}`, 'semantic.read');
+    const revealedAt = { work: spoilerWork, occurrence: chapter };
+    const spoilerKey = randomUUID();
+    const spoiler = await f.json<Written>(await write(link(spoilerLeaf, spoilerHub, { revealedAt }), spoilerKey), 201);
+    await f.grant(`semantic:read:${spoiler.occurrence}`, 'semantic.read');
+    const at = (occurrence: string, position: string) => f.call('GET', `${path(occurrence)}&position=${position}`);
+    expect((await at(spoiler.occurrence, 'start')).status).toBe(404); // before the revealing chapter
+    expect((await at(spoiler.occurrence, 'all')).status).toBe(200);
+    expect((await at(plain.occurrence, 'start')).status).toBe(200); // links without a position stay visible
+    expect((await write(link(spoilerLeaf, spoilerHub, { revealedAt }), spoilerKey)).status).toBe(201); // replay
+    // The position pins the command: it cannot be reused for another position, and an unknown one is refused.
+    expect((await write(link(spoilerLeaf, spoilerHub, { revealedAt: { ...revealedAt, occurrence: nativeId() } }), spoilerKey))
+      .status).toBe(409);
+    const unplaced = await write(link(await person(), spoilerHub, { revealedAt: { ...revealedAt, occurrence: nativeId() } }));
+    expect([unplaced.status, await problemOf(unplaced)]).toEqual([422, 'unavailable_reference']);
+    expect((await write(link(await person(), spoilerHub, { revealedAt: { work: nativeId(), occurrence: chapter } }))).status).toBe(422);
+    expect((await write(link(await person(), spoilerHub, { revealedAt: { work: spoilerWork } }))).status).toBeGreaterThanOrEqual(400);
+    // An occurrence's position never moves.
+    await f.grant(`relation:edit:${spoiler.occurrence}`, 'relation.change');
+    const movedPosition = await write(link(spoilerLeaf, spoilerHub, { occurrence: spoiler.occurrence, expectedHead: spoiler.revision,
+      revealedAt: { ...revealedAt, occurrence: nativeId() } }));
+    expect(movedPosition.status).toBeGreaterThanOrEqual(400);
+
+    // Role members and the star are definition data: no code names `variant-of`.
+    const roles = ['variant', 'hub', 'kind'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false,
+      ...(key === 'kind' ? { members: [kinds.persona, kinds.counterpart] } : {}) }));
+    const defineBound = async () => {
+      const notation = `bound-${randomUUID()}`;
+      return { notation, ...await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', {
+        profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null,
+        state: { component: 'definition', kind: 'relation', notation, roles, star: { leaf: 'variant', hub: 'hub' } } }), 201) };
+    };
+    const bound = await defineBound();
+    const onBound = (kind: string, leaf: string, hubRef: string) => ({ profile: 'relation-change-v1', actingSubject: f.actor,
+      expectedHead: null, definition: bound.revision, participations: [{ role: 'variant', participant: resource(leaf) },
+        { role: 'hub', participant: resource(hubRef) }, { role: 'kind', participant: resource(kind) }] });
+    expect((await write(onBound(alter, second, other))).status).toBe(400); // a person is not a kind
+    expect((await write(onBound(hub, second, other))).status).toBe(400);
+    const counterpart = await f.json<Written>(await write(onBound(kinds.counterpart, second, other)), 201);
+    // A hub is one participant; a star definition with two hub slots is not admitted.
+    const twoHubs = await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1', actingSubject: f.actor,
+      expectedHead: null, state: { component: 'definition', kind: 'relation', notation: `bound-${randomUUID()}`,
+        roles: roles.map(role => role.key === 'hub' ? { ...role, maxParticipants: 2 } : role),
+        star: { leaf: 'variant', hub: 'hub' } } });
+    expect(twoHubs.status).toBe(400);
+    // Occurrences rely on the star: a revision keeps it.
+    await f.grant(`semantic:edit:${bound.component}`, 'semantic.change');
+    await f.grant(`semantic:read:${bound.component}`, 'semantic.read');
+    const revise = (target: Changed & { notation: string }, state: object = {}) => f.call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', actingSubject: f.actor, target: target.component, expectedHead: target.revision,
+      state: { component: 'definition', kind: 'relation', notation: target.notation, roles, ...state } });
+    const dropped = await revise(bound);
+    expect([dropped.status, (await dropped.json() as { code: string }).code]).toEqual([400, 'invalid_semantic_change']);
+    expect((await revise(bound, { star: { leaf: 'hub', hub: 'variant' } })).status).toBe(400);
+    const kept = await f.json<Changed>(await revise(bound, { star: { leaf: 'variant', hub: 'hub' } }), 200);
+    expect(kept.revision).not.toBe(bound.revision);
+    expect(counterpart.occurrence).toBeTruthy();
+    // With no occurrence to protect, the star may go.
+    const fresh = await defineBound();
+    await f.grant(`semantic:edit:${fresh.component}`, 'semantic.change');
+    await f.grant(`semantic:read:${fresh.component}`, 'semantic.read');
+    expect((await revise(fresh)).status).toBe(200);
   } finally { await f.close(); }
 }, 600_000);

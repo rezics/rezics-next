@@ -10,8 +10,10 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
 import { checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
 import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
-import { checkedApplicability, checkedParticipations, InvalidRelationOccurrence, PARTICIPATION_FORMAT_V2,
-  RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition } from './schema.ts';
+import { checkedApplicability, checkedParticipations, checkedRevealedAt, InvalidRelationOccurrence,
+  PARTICIPATION_FORMAT_V2, RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition,
+  type RevealedAt } from './schema.ts';
+import { RevelationConflict, type ReadingPositionStore } from '../reading-position/store.ts';
 import { targetRead, targetSummaries } from '../target/resolve.ts';
 
 export const RELATION_CHANGE_FAMILY = 'relation-change';
@@ -24,6 +26,8 @@ export interface RelationInput {
   applicability?: string[];
   lifecycle?: Lifecycle;
   evidence?: string;
+  /** Where in a Work's reading order the occurrence is first revealed; absent keeps it always visible. */
+  revealedAt?: RevealedAt;
 }
 
 export interface RelationChangeIntent {
@@ -33,6 +37,8 @@ export interface RelationChangeIntent {
   input: RelationInput;
   /** Server-only publication hook; complete disclosure metadata before graph visibility. */
   beforeCommit?: (component: string, receipt: string) => Promise<void>;
+  /** The caller's read authority; a star refusal names only links this reader may see. */
+  canRead?: (resource: string) => Promise<boolean>;
 }
 
 /** Stored occurrence revision state; participation and value node identities are exact. */
@@ -43,6 +49,9 @@ export interface OccurrenceState {
   evidence?: string;
   participations: (Participation & { iri: string; node?: string })[];
 }
+
+/** Canonical command state: the stored occurrence plus the revelation it publishes beside the graph write. */
+export type CanonicalRelation = OccurrenceState & { revealedAt?: RevealedAt };
 
 export interface ExactDefinition extends EditorRecording {
   revision: string;
@@ -98,11 +107,12 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
     ...(state.star ? { star: state.star } : {}),
     roles: state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
-      minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered })),
+      minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
+      ...(role.members ? { members: role.members } : {}) })),
     roleKeys: Object.fromEntries(state.roles.map(role => [roleIri(definition, role.key), role.key])) };
 }
 
-export function canonicalRelation(definition: ExactDefinition, input: RelationInput): OccurrenceState {
+export function canonicalRelation(definition: ExactDefinition, input: RelationInput): CanonicalRelation {
   try {
     if (input.evidence !== undefined && !/^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/.test(input.evidence)) {
       throw new InvalidRelationOccurrence('invalid relation evidence');
@@ -115,7 +125,9 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
     }
     if (definition.star) checkedStarParticipants(definition, participations);
     const key = (item: Participation) => JSON.stringify([item.role, item.position ?? -1, item.participant]);
-    return { ...(input.evidence === undefined ? {} : { evidence: input.evidence }), definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
+    return { ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
+      ...(input.revealedAt === undefined ? {} : { revealedAt: checkedRevealedAt(input.revealedAt) }),
+      definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
       applicability: checkedApplicability(input.applicability ?? []),
       participations: participations.sort((a, b) => key(a).localeCompare(key(b))).map(item => ({ ...item, iri: '' })) };
   } catch (error) {
@@ -180,29 +192,55 @@ function checkedStarParticipants(definition: ExactDefinition, participations: re
 /**
  * Observed star conflict for a new active occurrence: another active occurrence of the same definition in
  * which a leaf already holds the leaf or hub role, or a hub already holds the leaf role. Retired occurrences
- * hold nothing. The same pattern guards the write and, restated, seals the typed refusal.
+ * hold nothing. The same pattern guards the write and, restated, seals the typed refusal. It starts from the
+ * participations of the written participants, so its graph work follows their own history, never the number
+ * of occurrences in the graph.
  */
-function starConflict(definition: ExactDefinition, occurrence: string, state: OccurrenceState): string {
+export function starConflict(definition: ExactDefinition, occurrence: string, state: OccurrenceState): string {
   const roles = starRoles(definition);
   const refs = (role: string) => state.participations.flatMap(item =>
     item.role === role && item.participant.kind === 'resource' ? [item.participant.ref] : []);
   const pairs = [...refs(roles.leaf).flatMap(ref => [[roles.leaf, ref], [roles.hub, ref]]),
     ...refs(roles.hub).map(ref => [roles.leaf, ref])];
   if (!pairs.length) return '';
-  return `{ VALUES (?conflictRole ?conflictParticipant) { ${pairs.map(([role, ref]) =>
-      `(${iri(role!)} ${iri(ref!)})`).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?other a rv:RelationOccurrence ; rv:occurrenceHead ?otherHead }
-    GRAPH ${iri(GRAPHS.revisions)} { ?otherHead rv:lifecycle rv:Active ; rv:relationDefinition ?otherDefinition ;
-      rv:participation ?otherParticipation .
-      ?otherDefinition rv:component ${iri(definition.definition)} .
-      ?otherParticipation rv:role ?conflictRole ; rv:participant ?conflictParticipant }
+  // One branch per written (role, participant): the participant leads each branch because it is the selective
+  // term; a role alone matches every occurrence of the definition.
+  return `{ ${pairs.map(([role, ref]) => `{ GRAPH ${iri(GRAPHS.revisions)} {
+      ?otherParticipation rv:participant ${iri(ref!)} ; rv:role ${iri(role!)} ; rv:occurrence ?other } }`).join(' UNION ')}
+    GRAPH ${iri(GRAPHS.revisions)} { ?otherHead rv:participation ?otherParticipation ; rv:lifecycle rv:Active ;
+        rv:relationDefinition ?otherDefinition .
+      ?otherDefinition rv:component ${iri(definition.definition)} }
+    GRAPH ${iri(GRAPHS.current)} { ?other rv:occurrenceHead ?otherHead }
     FILTER(?other != ${iri(occurrence)}) }`;
 }
 
+export const STAR_REFUSAL_COST = { conflicts: 32 } as const;
+
+/** A star refusal names a link only when the caller can read one of the conflicting occurrences with every
+ * participant; otherwise the refusal must look like any unavailable reference. */
+async function visibleStarConflict(env: WorkActivationEnvironment, conflict: string,
+  canRead: (resource: string) => Promise<boolean>): Promise<boolean> {
+  const others = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?other WHERE ${conflict}
+    LIMIT ${STAR_REFUSAL_COST.conflicts}`)).results?.bindings ?? [];
+  for (const row of others) {
+    const other = row.other!.value;
+    if (!await canRead(other)) continue;
+    const current = await readCurrentOccurrence(env, other).catch(() => null);
+    if (!current) continue;
+    const refs = current.state.participations.flatMap(item =>
+      item.participant.kind === 'resource' ? [item.participant.ref] : []);
+    let readable = true;
+    for (const ref of refs) if (!await canRead(ref)) { readable = false; break; }
+    if (readable) return true;
+  }
+  return false;
+}
+
 export function relationChangeDigest(occurrence: string | undefined, expectedHead: string | null,
-  state: OccurrenceState): string {
+  state: CanonicalRelation): string {
   return hash(JSON.stringify({ family: 'relation-change-v1', occurrence: occurrence ?? null, expectedHead,
-    ...(state.evidence === undefined ? {} : { evidence: state.evidence }), definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
+    ...(state.evidence === undefined ? {} : { evidence: state.evidence }),
+    ...(state.revealedAt ? { revealedAt: state.revealedAt } : {}), definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
     participations: state.participations.map(({ role, participant, position, creditedName }) =>
       ({ role, participant, ...(position === undefined ? {} : { position }),
         ...(creditedName ? { creditedName } : {}) })) }));
@@ -287,7 +325,8 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
     if (rdf.node) nodes.push([rdf.node.iri, ...rdf.node.triples.map(triple => `${triple} .`)]);
     return { ...item, iri: participation, ...(rdf.node ? { node: rdf.node.iri } : {}), object: rdf.object };
   });
-  const exact: OccurrenceState = { ...state, participations: participations.map(({ object: _object, ...item }) => item) };
+  const { revealedAt: _revealedAt, ...retained } = state;
+  const exact: OccurrenceState = { ...retained, participations: participations.map(({ object: _object, ...item }) => item) };
   const manifest = await sealComponentState(env, occurrence, PROFILES.relation, exact);
   const revision = `${ID}${Bun.randomUUIDv7()}`;
   const operation = `${ID}${Bun.randomUUIDv7()}`;
@@ -358,8 +397,9 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
     if (missing) return checkedResult(missing, intent, false);
   }
   if (conflict) {
-    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'star-violation',
-      `FILTER EXISTS ${conflict}`);
+    const visible = intent.canRead ? await visibleStarConflict(env, conflict, intent.canRead) : true;
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission,
+      visible ? 'star-violation' : 'unavailable-reference', `FILTER EXISTS ${conflict}`);
     if (refused) return checkedResult(refused, intent, false);
   }
   throw new PendingActivation('relation change guard did not match');
@@ -382,6 +422,32 @@ function checkedResult(terminal: SemanticTerminal, intent: RelationChangeIntent,
   }
   return { occurrence: checked.component!, revision: checked.revision!, predecessor: checked.expectedHead ?? null,
     receipt: checked.receipt, dataEpoch: checked.dataEpoch, sequence: checked.sequence, replayed };
+}
+
+/**
+ * Publish an occurrence's revelation position the way the wiki publisher records its own: the occurrence becomes
+ * position-required and is revealed at the named occurrence of the Work's composition. It runs before the graph
+ * write so the occurrence is never visible unguarded. A position already recorded for the occurrence never moves.
+ */
+export function relationRevelation(env: WorkActivationEnvironment, store: Pick<ReadingPositionStore, 'publish'> | undefined,
+  revealedAt: RevealedAt) {
+  return async (component: string, receipt: string) => {
+    if (!store) throw new SemanticChangeRejected('unsupported', 'revelation positions are unavailable');
+    const placed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(revealedAt.work)} a <https://schema.org/CreativeWork> .
+        ?placement a rv:OccurrencePlacement ; rv:occurrence ${iri(revealedAt.occurrence)} .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removed } } }`);
+    if (placed.boolean !== true) throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
+    try {
+      await store.publish({ record: component, recordKind: 'relation', continuityWork: revealedAt.work,
+        occurrence: revealedAt.occurrence, receipt });
+    } catch (error) {
+      if (error instanceof RevelationConflict) {
+        throw new SemanticChangeRejected('invalid', 'the occurrence already has a revelation position');
+      }
+      throw error;
+    }
+  };
 }
 
 export async function readRelationChangeTerminal(env: WorkActivationEnvironment, admissionId: string) {

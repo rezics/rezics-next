@@ -109,6 +109,7 @@ export const relationRenderingSchema = t.Object({
         minParticipants: t.Integer(),
         maxParticipants: t.Integer(),
         ordered: t.Boolean(),
+        members: t.Optional(t.Array(native)),
       }),
     ),
   }),

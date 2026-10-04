@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { relationStar } from './lexicon.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { readCurrentOccurrence, readExactDefinition, readExactOccurrence } from '../modules/relation/change.ts';
+import { readCurrentOccurrence, readExactDefinition, readExactOccurrence, relationRevelation } from '../modules/relation/change.ts';
 import { admittedRelationChange, canReadSemantic, referenceReader, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { RevisionCorrupt } from '../modules/work/history.ts';
@@ -63,7 +63,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
           participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
           ...(item.position === undefined ? {} : { position: item.position }),
-          ...(item.creditedName ? { creditedName: item.creditedName } : {}), availability };
+          // The credited name belongs to its participant: hidden with it.
+          ...(item.creditedName && availability !== 'unavailable' ? { creditedName: item.creditedName } : {}), availability };
       })),
       applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
     });
@@ -76,6 +77,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           position: t.Optional(t.Integer()), creditedName: t.Optional(creditedName) },
           { additionalProperties: false }), { maxItems: 64 }),
         evidence: t.Optional(t.String({ maxLength: 2048 })),
+        revealedAt: t.Optional(t.Object({ work: native, occurrence: native }, { additionalProperties: false })),
         applicability: t.Optional(t.Array(native, { maxItems: 8 })),
         lifecycle: t.Optional(t.Union([t.Literal('active'), t.Literal('retired')])), actingSubject: native },
       { additionalProperties: false }),
@@ -91,7 +93,9 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const change = definition?.workSubjectRole ? admittedWorkRelationChange : admittedRelationChange;
         const result = await change(work.environment, work.account, work.access, request, {
           ...(body.occurrence ? { occurrence: body.occurrence } : {}), expectedHead: body.expectedHead,
+          ...(body.revealedAt ? { beforeCommit: relationRevelation(work.environment, work.readingPositions, body.revealedAt) } : {}),
           input: { ...(body.evidence === undefined ? {} : { evidence: body.evidence }), definition: body.definition, participations: body.participations,
+            ...(body.revealedAt ? { revealedAt: body.revealedAt } : {}),
             ...(body.applicability ? { applicability: body.applicability } : {}),
             ...(body.lifecycle ? { lifecycle: body.lifecycle } : {}) },
           actingSubject: body.actingSubject, idempotencyKey });

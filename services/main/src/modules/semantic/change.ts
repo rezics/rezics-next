@@ -43,7 +43,11 @@ export interface ResourceState {
   lifecycle: Lifecycle;
 }
 
-export interface RelationRole { key: string; minParticipants: number; maxParticipants: number; ordered: boolean }
+export interface RelationRole { key: string; minParticipants: number; maxParticipants: number; ordered: boolean;
+  /** The only native resources the role accepts; absent leaves it open. */
+  members?: string[] }
+
+const MAX_ROLE_MEMBERS = 8;
 
 function checkedSubjectRole(value: unknown, roles: RelationRole[]): string {
   if (typeof value !== 'string' || !roles.some(role => role.key === value && role.minParticipants === 1 && role.maxParticipants === 1)) {
@@ -61,6 +65,9 @@ function checkedStar(value: unknown, roles: RelationRole[]): RelationStar {
     || !roles.some(role => role.key === row.leaf) || !roles.some(role => role.key === row.hub)) {
     fail('invalid', 'star names two distinct roles of the definition');
   }
+  const hub = roles.find(role => role.key === row.hub)!;
+  // One hub per occurrence: a second hub would make the star a graph.
+  if (hub.minParticipants !== 1 || hub.maxParticipants !== 1) fail('invalid', 'the star hub role takes exactly one participant');
   return { leaf: row.leaf as string, hub: row.hub as string };
 }
 export interface DefinitionState extends EditorRecording {
@@ -174,7 +181,7 @@ export function checkedComponentState(input: unknown): ComponentInput {
     const checkedRoles = roles.map(item => {
       const role = item as Record<string, unknown>;
       if (!role || typeof role !== 'object' || Object.keys(role).some(key =>
-        !['key', 'minParticipants', 'maxParticipants', 'ordered'].includes(key))
+        !['key', 'minParticipants', 'maxParticipants', 'ordered', 'members'].includes(key))
         || typeof role.key !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(role.key)
         || !Number.isInteger(role.minParticipants) || !Number.isInteger(role.maxParticipants)
         || (role.minParticipants as number) < 0 || (role.maxParticipants as number) < 1
@@ -183,7 +190,8 @@ export function checkedComponentState(input: unknown): ComponentInput {
         return fail('invalid', 'relation role is invalid');
       }
       return { key: role.key, minParticipants: role.minParticipants as number,
-        maxParticipants: role.maxParticipants as number, ordered: role.ordered };
+        maxParticipants: role.maxParticipants as number, ordered: role.ordered,
+        ...(role.members === undefined ? {} : { members: checkedRoleMembers(role.members) }) };
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(checkedRoles.map(role => role.key)).size !== checkedRoles.length) fail('invalid', 'role repeats');
     return { component: 'definition', kind: row.kind as DefinitionKind, lifecycle: lifecycle as Lifecycle,
@@ -193,6 +201,14 @@ export function checkedComponentState(input: unknown): ComponentInput {
       ...(row.star === undefined ? {} : { star: checkedStar(row.star, checkedRoles) }) };
   }
   return fail('invalid', 'component is invalid');
+}
+
+function checkedRoleMembers(value: unknown): string[] {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_ROLE_MEMBERS || new Set(value).size !== value.length
+    || value.some(item => typeof item !== 'string' || !checkedNative(item))) {
+    return fail('invalid', `role members are 1-${MAX_ROLE_MEMBERS} distinct native resources`);
+  }
+  return [...value as string[]].sort();
 }
 
 function checkedNative(value: string): boolean {
@@ -404,6 +420,14 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} <${RV}semanticHead> ?semanticHead } }` : '';
   if (current?.state.component === 'definition' && state.component === 'definition'
     && current.state.kind !== state.kind) fail('invalid', 'a definition keeps its kind');
+  // Occurrences were admitted under the star; a revision cannot silently release it.
+  const releasesStar = current?.state.component === 'definition' && state.component === 'definition'
+    && current.state.star !== undefined
+    && (state.star?.leaf !== current.state.star.leaf || state.star?.hub !== current.state.star.hub);
+  const definitionOccurrences = `{ GRAPH ${iri(GRAPHS.revisions)} { ?relied a rv:DefinitionRevision ; rv:component ${iri(target)} }
+    GRAPH ${iri(GRAPHS.current)} { ?occurrence rv:relationDefinition ?relied } }`;
+  const starRelied = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK ${definitionOccurrences}`)).boolean === true;
+  if (releasesStar && await starRelied()) fail('invalid', 'a definition with occurrences keeps its star');
   const addedTypes = state.component === 'resource' ? state.types.filter(type =>
     current?.state.component !== 'resource' || !current.state.types.includes(type)) : [];
   if (intent.target && addedTypes.length) {
@@ -470,6 +494,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
       ${state.component === 'definition' && state.notation ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ?key a rv:DefinitionKey ; rv:keyDefinition ?other ; <${KEY_NOTATION}> ${lit(state.notation)} .
         FILTER(?other != ${iri(target)}) } }` : ''}
+      ${releasesStar ? `FILTER NOT EXISTS ${definitionOccurrences}` : ''}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
         : workHead ? `GRAPH ${iri(GRAPHS.current)} {
             ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ${iri(intent.expectedHead!)} . }
@@ -507,6 +532,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
     await assertPredicatesUnowned(env, target, addedPredicates, ownershipHeadGuard);
   }
+  if (releasesStar && await starRelied()) fail('invalid', 'a definition with occurrences keeps its star');
   if (state.component === 'definition' && state.notation) {
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
       `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {

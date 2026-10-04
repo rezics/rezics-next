@@ -72,6 +72,8 @@ export interface RelationRoleDefinition {
   minParticipants: number;
   maxParticipants: number;
   ordered: boolean;
+  /** When present, the only native resources the role accepts; absent leaves the role open. */
+  members?: readonly string[];
 }
 
 export class InvalidRelationOccurrence extends Error {}
@@ -125,6 +127,9 @@ export function checkedParticipations(roles: readonly RelationRoleDefinition[],
       || (position as number) < 0 || (position as number) > RELATION_LIMITS.position))) {
       throw new InvalidRelationOccurrence('participation position does not match the role order');
     }
+    if (role.members && (participant.kind !== 'resource' || !role.members.includes(participant.ref))) {
+      throw new InvalidRelationOccurrence('participant is not an admitted member of the role');
+    }
     const creditedName = row.creditedName === undefined ? undefined : checkedCreditedName(row.creditedName);
     const key = JSON.stringify([role.role, participant]);
     if (seen.has(key)) throw new InvalidRelationOccurrence('participant repeats within one role');
@@ -140,6 +145,18 @@ export function checkedParticipations(roles: readonly RelationRoleDefinition[],
     }
   }
   return checked;
+}
+
+/** The reading position at which an occurrence is first revealed: an occurrence of a Work's composition. */
+export interface RevealedAt { work: string; occurrence: string }
+
+export function checkedRevealedAt(value: unknown): RevealedAt {
+  const row = value as Record<string, unknown>;
+  if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).length !== 2
+    || typeof row.work !== 'string' || typeof row.occurrence !== 'string') {
+    throw new InvalidRelationOccurrence('revelation position names a Work and an occurrence');
+  }
+  return { work: checkedNativeIri(row.work), occurrence: checkedNativeIri(row.occurrence) };
 }
 
 export function checkedApplicability(values: readonly string[]): string[] {

@@ -278,6 +278,13 @@ export async function executeBootstrap(input: {
     }
     result.zones.push({ id: spec.id, zone, realm: realm.realm, collections });
   }
+  const vocabularyClient = {
+    post: <T>(path: string, body: object, label: string) => journal.command<T>(api, label, 'POST', path, body),
+    authorizeDefinition: async (receipt: { component: string }) => {
+      await api.read(`/v1/semantic/resources/${short(receipt.component)}?actingSubject=${encodeURIComponent(actor)}`);
+    },
+  };
+  const variantKinds = await seedVariantKindConcepts(vocabularyClient, actor, plan.namespace);
   result.definitions = await seedRelationLexicon(
     {
       post: (path, body, label) =>
@@ -302,14 +309,9 @@ export async function executeBootstrap(input: {
     plan.namespace,
     relationLexiconSeed,
     inside(root, `.temp/bootstrap/${plan.namespace}/lexicon.v3.json`),
+    variantKinds,
   );
-  const vocabularyClient = {
-    post: <T>(path: string, body: object, label: string) => journal.command<T>(api, label, 'POST', path, body),
-    authorizeDefinition: async (receipt: { component: string }) => {
-      await api.read(`/v1/semantic/resources/${short(receipt.component)}?actingSubject=${encodeURIComponent(actor)}`);
-    },
-  };
-  result.vocabulary = { variantKinds: await seedVariantKindConcepts(vocabularyClient, actor, plan.namespace),
+  result.vocabulary = { variantKinds,
     canonicity: await seedCanonicity(vocabularyClient, actor, plan.namespace) };
   const effects: { target: string; receipt: string }[] = [];
   for (const source of plan.sources.filter((source) => source.enabled)) {

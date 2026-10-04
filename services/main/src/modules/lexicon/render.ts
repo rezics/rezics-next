@@ -153,7 +153,8 @@ export function selectedProjection(
         type: item.participant.kind,
         value: item.participant,
         ...(item.position === undefined ? {} : { position: item.position }),
-        ...(item.creditedName ? { creditedName: item.creditedName } : {}),
+        ...(item.creditedName && item.participant.kind !== 'unavailable-reference'
+          ? { creditedName: item.creditedName } : {}),
       })),
   };
 }
@@ -239,16 +240,16 @@ export async function renderRelation(
     meaning = read ? await readExactDefinition(env, read.state.definition) : null;
     if (read && meaning) {
       occurrence = { component: subject.occurrence, revision: read.revision };
-      for (const item of read.state.participations)
+      for (const item of read.state.participations) {
+        const hidden = item.participant.kind === 'resource' && !(await canRead(item.participant.ref));
         bindings.push({
           role: meaning.roleKeys[item.role]!,
-          participant:
-            item.participant.kind === 'resource' && !(await canRead(item.participant.ref))
-              ? { kind: 'unavailable-reference' }
-              : item.participant,
+          participant: hidden ? { kind: 'unavailable-reference' } : item.participant,
           ...(item.position === undefined ? {} : { position: item.position }),
-          ...(item.creditedName ? { creditedName: item.creditedName } : {}),
+          // The credited name belongs to its participant: hidden with it.
+          ...(item.creditedName && !hidden ? { creditedName: item.creditedName } : {}),
         });
+      }
     }
   }
   if (!meaning) throw new SemanticTargetUnavailable('relation meaning is unavailable');

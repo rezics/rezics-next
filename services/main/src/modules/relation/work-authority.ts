@@ -55,10 +55,11 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
       if (!await access.canReadWork(principal, input.actingSubject, subject)) {
         throw new SemanticChangeRejected('unavailable-reference', 'subject Work is unavailable');
       }
-      return [definition.definition, ...new Set(state.participations.flatMap(item =>
-        item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+      return [definition.definition, ...new Set([...state.participations.flatMap(item =>
+        item.participant.kind === 'resource' ? [item.participant.ref] : []),
+      ...state.revealedAt ? [state.revealedAt.work] : []])];
     },
-    dispatch: admission => changeRelationOccurrence(env, { admission, ...input }),
+    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead, ...input }),
     readTerminal: id => readRelationChangeTerminal(env, id),
     result: (terminal, dispatched) => ({ occurrence: terminal.component!, revision: terminal.revision!,
       predecessor: terminal.expectedHead ?? null, receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,

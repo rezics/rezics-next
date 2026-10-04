@@ -54,7 +54,7 @@ interface AdmittedCall<T> {
   scope: string;
   digest: string;
   references: (principal: VerifiedPrincipal) => Promise<string[]>;
-  dispatch: (admission: SemanticAdmission) => Promise<T>;
+  dispatch: (admission: SemanticAdmission, canRead: (resource: string) => Promise<boolean>) => Promise<T>;
   readTerminal: (admissionId: string) => Promise<SemanticTerminal | null>;
   result: (terminal: SemanticTerminal, dispatched?: T) => T | Promise<T>;
 }
@@ -86,7 +86,7 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     } else if (!admission.dispatchEligible || admission.state === 'registered') {
       await cancelSemanticAdmission(call.env, familyReceiptIri(registered.id, call.family), admission);
     } else {
-      try { dispatched = await call.dispatch(admission); }
+      try { dispatched = await call.dispatch(admission, readable); }
       catch (error) {
         if (error instanceof IdempotencyConflict || error instanceof SemanticChangeRejected
           || error instanceof CommandRejected || error instanceof SemanticTargetUnavailable) throw error;
@@ -135,6 +135,8 @@ export interface AdmittedRelationChangeInput {
   occurrence?: string;
   expectedHead: string | null;
   input: RelationInput;
+  /** Server-only: publishes the revelation position before the graph write. */
+  beforeCommit?: (component: string, receipt: string) => Promise<void>;
   actingSubject: string;
   idempotencyKey: string;
 }
@@ -150,10 +152,12 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
     scope: input.occurrence ? `relation:edit:${input.occurrence}` : 'relation:create:root', digest,
     references: async principal => {
       await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
-      return [...new Set(state.participations.flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+      return [...new Set([...state.participations.flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : []),
+        ...state.revealedAt ? [state.revealedAt.work] : []])];
     },
-    dispatch: admission => changeRelationOccurrence(env, { admission,
-      ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input }),
+    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead,
+      ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input,
+      ...(input.beforeCommit ? { beforeCommit: input.beforeCommit } : {}) }),
     readTerminal: id => readRelationChangeTerminal(env, id),
     result: (terminal, dispatched) => ({ occurrence: terminal.component!, revision: terminal.revision!,
       predecessor: terminal.expectedHead ?? null, receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,

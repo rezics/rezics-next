@@ -28,6 +28,8 @@ export async function seedRelationLexicon(
   namespace: string,
   data: readonly LexiconSeedDefinition[] = relationLexiconSeed,
   mappingFile = relationLexiconSeedMapPath(namespace),
+  /** Concept IRIs by `variantKindConcepts` key. Without them a definition's `roleMembers` stay unenforced. */
+  concepts?: Readonly<Record<string, string>>,
 ) {
   if (!/^[A-Za-z0-9:_./-]{1,48}$/.test(namespace))
     throw new Error('lexicon seed namespace is invalid');
@@ -43,12 +45,21 @@ export async function seedRelationLexicon(
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
+  const membersOf = (definition: LexiconSeedDefinition, role: string): string[] | undefined => {
+    const keys = definition.roleMembers?.[role];
+    return keys && concepts && keys.every(key => concepts[key])
+      ? keys.map(key => concepts[key]!).sort() : undefined;
+  };
   for (const definition of data) {
     // Recording metadata changes the admitted digest; never reuse earlier seed receipts.
     const key = `${namespace}:lexicon:v3:${definition.key}`;
     const current = await client.currentDefinition?.(definition.key);
     if (current && current.state.lifecycle !== 'active') throw new Error('Bootstrap cannot reactivate a retired definition');
-    const metadataMatches = current && (definition.editorRecordable === undefined && definition.writePath === undefined
+    const membersMatch = !current || current.state.roles.every(role => {
+      const expected = membersOf(definition, role.key);
+      return !expected || JSON.stringify(role.members ?? null) === JSON.stringify(expected);
+    });
+    const metadataMatches = current && membersMatch && (definition.editorRecordable === undefined && definition.writePath === undefined
       || (current.state.editorRecordable ?? false) === (definition.editorRecordable ?? false)
         && current.state.writePath === definition.writePath);
     // A metadata upgrade is a normal expected-head revision. Keep editor-authored
@@ -62,6 +73,8 @@ export async function seedRelationLexicon(
         expectedHead: current?.revision ?? null,
         ...(current ? { target: current.component } : {}),
         state: current ? { ...current.state,
+          roles: current.state.roles.map(role => membersOf(definition, role.key)
+            ? { ...role, members: membersOf(definition, role.key) } : role),
           ...(definition.editorRecordable === undefined ? {} : { editorRecordable: definition.editorRecordable }),
           ...(definition.writePath === undefined ? {} : { writePath: definition.writePath }),
         } : {
@@ -78,6 +91,7 @@ export async function seedRelationLexicon(
             minParticipants: 1,
             maxParticipants: 1,
             ordered: false,
+            ...(membersOf(definition, role) ? { members: membersOf(definition, role) } : {}),
           })),
         },
       },

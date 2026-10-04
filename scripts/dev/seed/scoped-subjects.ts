@@ -173,8 +173,10 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
       return { ...current, state: retained.state };
     },
   };
+  const variants = await seedVariantKindConcepts(lexicon, actor, namespace);
   for (const saved of await seedRelationLexicon(lexicon, actor, namespace,
-    relationLexiconSeed.filter(spec => ['variant-of', 'holds-title', 'represents', 'in-continuity'].includes(spec.key)))) {
+    relationLexiconSeed.filter(spec => ['variant-of', 'holds-title', 'represents', 'in-continuity'].includes(spec.key)),
+    undefined, variants)) {
     definitions.set(saved.key, saved);
   }
   let appearance = await currentDefinition('appearance');
@@ -185,7 +187,6 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   }, key('definition:appearance'));
   await authorize(`semantic:read:${appearance.component}`, 'semantic.read');
   definitions.set('appearance', appearance);
-  const variants = await seedVariantKindConcepts(lexicon, actor, namespace);
   for (const concept of Object.values(variants)) await authorize(`semantic:read:${concept}`, 'semantic.read');
   result.variantKind = variants.persona;
   const vocabulary = await seedCanonicity({ ...lexicon, post: async <T>(path: string, body: object, requestKey: string) => {
