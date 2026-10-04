@@ -134937,6 +134937,149 @@
                             "type": "object"
                           },
                           "kind": {
+                            "const": "projection-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "rating-aggregate",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "target": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "target",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "formula": {
+                            "enum": [
+                              "pooled",
+                              "mean-of-means"
+                            ],
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "rating-rollup",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "targets": {
+                            "items": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "maxItems": 200,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "targets",
+                          "formula",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
                             "const": "wiki-revision-set",
                             "type": "string"
                           },
@@ -135253,6 +135396,149 @@
                             "type": "object"
                           },
                           "kind": {
+                            "const": "projection-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "rating-aggregate",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "target": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "target",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "formula": {
+                            "enum": [
+                              "pooled",
+                              "mean-of-means"
+                            ],
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "rating-rollup",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "targets": {
+                            "items": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "maxItems": 200,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "targets",
+                          "formula",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
                             "const": "wiki-revision-set",
                             "type": "string"
                           },
@@ -135546,6 +135832,149 @@
                   },
                   "selection": {
                     "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "projection-revision",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "resource": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "resource",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "kind": {
+                            "const": "rating-aggregate",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "target": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "target",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedPosition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "dataEpoch": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "sequence": {
+                                "pattern": "^(0|[1-9][0-9]*)$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dataEpoch",
+                              "sequence"
+                            ],
+                            "type": "object"
+                          },
+                          "formula": {
+                            "enum": [
+                              "pooled",
+                              "mean-of-means"
+                            ],
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "rating-rollup",
+                            "type": "string"
+                          },
+                          "reference": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "targets": {
+                            "items": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "maxItems": 200,
+                            "minItems": 1,
+                            "type": "array",
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reference",
+                          "targets",
+                          "formula",
+                          "expectedPosition"
+                        ],
+                        "type": "object"
+                      },
                       {
                         "additionalProperties": false,
                         "properties": {
