@@ -211,10 +211,35 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     }
     const raceBody = { expectedHead: head, target: collection, routeSegment: 'race',
       disclosure: 'public', actingSubject: editor.actor };
-    const racing = await Promise.all([editor.send('POST', `${root}/mounts`, raceBody),
-      editor.send('POST', `${root}/mounts`, raceBody)]);
-    expect(racing.map(response => response.status).sort()).toEqual([200, 409]);
+    const raceKeys = [randomUUID(), randomUUID()];
+    const racing = await Promise.all(raceKeys.map(key => editor.send('POST', `${root}/mounts`, raceBody, key)));
+    expect(racing.filter(response => response.status === 200)).toHaveLength(1);
     const winner = await json<{ revision: string; occurrences: string[] }>(racing.find(response => response.status === 200)!);
+    const loserIndex = racing.findIndex(response => response.status !== 200);
+    let loser = racing[loserIndex]!;
+    expect([202, 409]).toContain(loser.status);
+    // An in-flight admission may need reconciliation; its retry must keep the
+    // original head and key so it cannot become a second successful mount.
+    const raceDeadline = Date.now() + 60_000;
+    let operationId: string | undefined;
+    while (loser.status === 202) {
+      const pending = await json<{ operationId: string; status: string; phase: string; result: null;
+        retry: { allowed: boolean; afterMs: number } }>(loser, 202);
+      expect(pending).toMatchObject({ status: 'reconciling', phase: 'work-edit', result: null,
+        retry: { allowed: true } });
+      expect(pending.operationId).toBeString();
+      operationId ??= pending.operationId;
+      expect(pending.operationId).toBe(operationId);
+      expect(Number.isFinite(pending.retry.afterMs)).toBe(true);
+      expect(pending.retry.afterMs).toBeGreaterThanOrEqual(0);
+      if (Date.now() + pending.retry.afterMs >= raceDeadline) {
+        throw new Error('Racing mount did not reconcile to a conflict within 60 seconds');
+      }
+      await Bun.sleep(pending.retry.afterMs);
+      loser = await editor.send('POST', `${root}/mounts`, raceBody, raceKeys[loserIndex]!);
+    }
+    expect(await json(loser, 409)).toMatchObject({ code: 'zone_conflict' });
+    expect(await json(await editor.read(root))).toMatchObject({ revision: winner.revision });
     head = (await json<{ revision: string }>(await editor.send('DELETE',
       `${root}/mounts/${short(winner.occurrences[0]!)}`, { expectedHead: winner.revision, actingSubject: editor.actor }))).revision;
     expect((await editor.send('POST', `${root}/mounts`, { expectedHead: head, target: guide.work,
