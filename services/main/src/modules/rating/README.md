@@ -81,9 +81,10 @@ capacity. Registration and claim still use the short Context authority gate.
 
 Aggregate evidence is the Context's `contextRevision` and the target components'
 `lastAdmissionId` (null for an unrated target). A roll-up returns the same Context
-revision and each available member's last admission. `sourcePosition` identifies
-the latest contributing admission, or the Context admission when no member has
-ratings; it is owner evidence rather than the dataset's current sequence.
+revision and each available member's last admission. `sourcePosition` is an owner
+admission witness, including the Context admission when no member has ratings;
+it is independent of the dataset's current sequence. Pin the Context revision
+and every member's last admission to identify the complete aggregate evidence.
 Unrelated writes therefore leave these responses unchanged.
 
 A Context shows a target's mean only from its display threshold, 5 ratings by
