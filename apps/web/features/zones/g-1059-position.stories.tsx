@@ -7,13 +7,14 @@ import { zoneContentText } from '../language/untagged.ts';
 import { copyOf } from '../wiki/messages.ts';
 import { PositionControl } from '../wiki/position-control.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
+import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 
 const chapter = 'Chapter 51: 遠方 — The last lantern';
 const occurrence = '00000000-0000-4000-8000-000000000051';
 const requests = fn();
 
-/** Exercise the remote chooser inside its sheet, including the selection event
- * that clears the search input before navigation. */
+/** Exercise the remote chooser inside its sheet, preserving the search input
+ * through selection and navigation. */
 function Chooser({ locale = 'en' }: { locale?: UiLocale }) {
   const [destination, setDestination] = useState('all');
   const copy = copyOf(locale);
@@ -21,6 +22,7 @@ function Chooser({ locale = 'en' }: { locale?: UiLocale }) {
     <StoryRouteContext value={{ pathname: `/${locale}/wiki`, onPush: setDestination }}>
       <PositionControl
         copy={copy}
+        navigate={setDestination}
         locale={locale}
         at={
           destination === 'all'
@@ -104,6 +106,8 @@ export const LaterChapter: Story = {
     const input = await page.findByRole('combobox', {
       name: browseMessages[locale].searchChapters,
     });
+    await waitFor(() => expect(input).toBeEnabled());
+    await focusForTyping(input);
     await userEvent.type(input, chapter);
     const result = await page.findByRole('option', { name: chapter });
     await capture('found');
@@ -134,10 +138,11 @@ export const LaterChapterPhone: Story = {
 export const LaterChapterChinese: Story = {
   ...LaterChapter,
   args: { locale: 'zh-Hant' },
+  globals: { locale: 'zh-Hant' },
   parameters: { selection: 'keyboard' },
 };
 
 export const LaterChapterChinesePhone: Story = {
   ...LaterChapterChinese,
-  globals: { viewport: { value: 'phone' } },
+  globals: { locale: 'zh-Hant', viewport: { value: 'phone' } },
 };

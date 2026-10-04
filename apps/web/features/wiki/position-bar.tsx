@@ -4,14 +4,13 @@ import { type PositionChoice, withPosition } from './position.ts';
 import { PositionControl } from './position-control.tsx';
 import { type PositionState, positionLabel, positionOptions, progressLabel } from './state.ts';
 import { reader } from '../work-page/read.ts';
-import { positionPickerPage, readReadingPositionPage } from './position-picker.ts';
 import { idOf } from '../work-page/route.ts';
 
 /**
  * The position control for a page of the Zone at `here` (its address without the choice). The choices are links
  * to the same page at another position; the server words them so the control carries no data of its own.
  */
-export function PositionBar({
+export async function PositionBar({
   state,
   here,
   locale,
@@ -26,24 +25,12 @@ export function PositionBar({
   const choice = (value: PositionChoice) => withPosition(here, value);
   const { work, main, mode, at } = state;
   const current = mode === 'chosen' && at ? idOf(at) : null;
+  const { actingSubject } = await reader();
   return (
     <PositionControl
       key={`${state.work}:${state.main ?? ''}:${here}:${locale}`}
       locale={locale}
-      load={async ({ q, cursor }) => {
-        'use server';
-        const { main: client, actingSubject } = await reader();
-        const page = await readReadingPositionPage(client, {
-          work,
-          position: main,
-          actingSubject,
-          q,
-          cursor: cursor ?? undefined,
-          limit: 50,
-          language: locale,
-        });
-        return positionPickerPage(page, here, locale, current);
-      }}
+      search={{ work, position: main, actingSubject, here, current }}
       copy={{
         region: t.region,
         upTo: t.upTo,
