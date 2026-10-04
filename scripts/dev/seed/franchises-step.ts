@@ -107,7 +107,7 @@ async function seedRequest(state: SeedState, token: string, method: string, path
   }
 }
 
-async function grantSeedAuthority(pool: Pool, input: LocalOperatorInput, scope: string, action: string) {
+export async function grantSeedAuthority(pool: Pool, input: LocalOperatorInput, scope: string, action: string) {
   const url = new URL(input.accessDatabaseUrl);
   if (!['127.0.0.1', 'localhost'].includes(url.hostname) || !url.port) {
     throw new Error('Franchise seed grants require a loopback database');

@@ -15,6 +15,7 @@ import { seedCommunityRealms } from './community-step.ts';
 import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
 import { seedFranchises } from './franchises-step.ts';
+import { seedScopedSubjects } from './scoped-subjects-step.ts';
 import { seedLnVnZones } from './ln-vn-zones-step.ts';
 import { seedBookConcepts } from './genres-step.ts';
 import { seedLibrary } from './library-step.ts';
@@ -42,16 +43,17 @@ import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedVnCatalogue } from './vn-catalogue-step.ts';
 import { seedWorks } from './works-step.ts';
 
-interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean; wikiOnly: boolean }
+interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean; wikiOnly: boolean; scopedSubjectsOnly: boolean }
 
 export function parseOptions(args: string[]): Options {
-  if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only', '--wiki-only'].includes(arg))
+  if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only', '--wiki-only', '--scoped-subjects-only'].includes(arg))
     || new Set(args).size !== args.length
-    || args.filter(arg => ['--themes-only', '--zones-only', '--wiki-only'].includes(arg)).length > 1) {
-    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only | --wiki-only]');
+    || args.filter(arg => ['--themes-only', '--zones-only', '--wiki-only', '--scoped-subjects-only'].includes(arg)).length > 1) {
+    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only | --wiki-only | --scoped-subjects-only]');
   }
   return { dryRun: args.includes('--dry-run'), resetOwn: args.includes('--reset-own'),
-    themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only'), wikiOnly: args.includes('--wiki-only') };
+    themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only'), wikiOnly: args.includes('--wiki-only'),
+    scopedSubjectsOnly: args.includes('--scoped-subjects-only') };
 }
 
 function commonRoot(): string {
@@ -127,7 +129,7 @@ function describe(error: unknown): string {
 // the classics readable and publish the Works they discuss and rate. Votes wait
 // a few steps for Home's projection; co-readers are built from all of it, last.
 export const steps: readonly SeedStep[] = [
-  seedAccounts, seedClassics, seedWorks, seedFranchises, seedVnCatalogue, seedLnVnZones, seedReleases, seedContributions, seedRealms, seedAdoptions,
+  seedAccounts, seedClassics, seedWorks, seedFranchises, seedScopedSubjects, seedVnCatalogue, seedLnVnZones, seedReleases, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedZoneSites, seedBookConcepts,
   seedOfficialThemes,
@@ -175,7 +177,8 @@ async function run(options: Options): Promise<boolean> {
     commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
   const timings: string[] = [];
   const started = performance.now();
-  const plan: readonly SeedStep[] = options.wikiOnly ? [seedAccounts, seedOfficialWiki] : options.themesOnly
+  const plan: readonly SeedStep[] = options.scopedSubjectsOnly ? [seedAccounts, seedScopedSubjects]
+    : options.wikiOnly ? [seedAccounts, seedOfficialWiki] : options.themesOnly
     ? [seedAccounts, state => seedOfficialThemes(state, realms.map(realm => realm.id))]
     : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
   for (const step of plan) {

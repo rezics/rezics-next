@@ -7,6 +7,7 @@ import { checkedPlan, loadPlan } from '../bootstrap/plan.ts';
 import { executeBootstrap, resource, verifyBootstrap } from '../bootstrap/execute.ts';
 import { baselineTarget } from '../../../services/main/src/modules/access/baseline.ts';
 import { relationLexiconSeed } from '../../dev/seed/relation-lexicon-data.ts';
+import { scopedSubjectQuestions, scopedSubjectLocales } from '../../dev/seed/scoped-subjects-questions.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = (name: string) => resource('test', name);
@@ -38,6 +39,8 @@ async function fixture() {
     { structure: string; revision: string; occurrences: { target: string }[] }
   >();
   const definitions = new Map<string, { definition: string }>();
+  const questions = new Map<string, Record<string, unknown>>();
+  const presentations = new Map<string, Map<string, Record<string, unknown>>>();
   let writes = 0,
     searches = 0,
     stop = false,
@@ -59,6 +62,14 @@ async function fixture() {
         } as T;
       if (path.startsWith('/v1/lexicon/definitions/'))
         return definitions.get(path.split('/').at(-1)!) as T;
+      if (path.startsWith('/v1/rating-contexts/')) {
+        const question = questions.get(path.split('/').at(-1)!)!;
+        const language = url.searchParams.get('languages') ?? 'en';
+        const presented = presentations.get(question.context as string)?.get(language);
+        return { ...question, displayQuestion: presented
+          ? { value: presented.question, language, reviewStatus: 'reviewed' }
+          : { value: question.question, language: 'en', reviewStatus: 'authored' } } as T;
+      }
       if (path === '/v1/addresses/resolve') {
         const id = url.searchParams.get('key')!;
         return { capabilities: { zone: resource(plan.namespace, `zone:${id}`) } } as T;
@@ -101,6 +112,20 @@ async function fixture() {
       }
       if (path === '/v1/works' && remoteWorks.has(key)) return remoteWorks.get(key) as T;
       writes++;
+      if (path === '/v1/rating-contexts') {
+        const context = native(key);
+        const saved = { context, contextRevision: native(`${key}:head`), question: body.question,
+          displayThreshold: body.targetGrain === 'projection' ? 10 : 5, owner: { kind: 'global' } };
+        questions.set(context.slice(-36), saved);
+        return saved as T;
+      }
+      if (path === '/v1/rating-question-presentations') {
+        const state = body.state as Record<string, unknown>;
+        const languages = presentations.get(state.context as string) ?? new Map();
+        languages.set(state.language as string, state);
+        presentations.set(state.context as string, languages);
+        return { component: native(key), revision: native(`${key}:head`) } as T;
+      }
       if (path === '/v1/spaces')
         return { realm: native(`realm:${body.name}`), space: native(`space:${body.name}`) } as T;
       if (path === '/v1/zones') {
@@ -227,6 +252,13 @@ test('G-724 one API journey creates empty mounts, vocabulary and bounded intake;
     await verifyBootstrap(h.api, first, h.zones);
     expect(first.zones).toHaveLength(3);
     expect(first.definitions).toHaveLength(relationLexiconSeed.length);
+    expect(Object.keys(first.questions!)).toEqual(scopedSubjectQuestions.map(spec => spec.key));
+    for (const spec of scopedSubjectQuestions) {
+      expect(Object.keys(first.questions![spec.key].presentations)).toEqual(scopedSubjectLocales.filter(locale => locale !== 'en'));
+    }
+    expect(h.requests.filter(request => request.path === '/v1/rating-contexts')).toHaveLength(3);
+    expect(h.requests.filter(request => request.path === '/v1/rating-question-presentations')).toHaveLength(21);
+    expect(h.requests.some(request => request.path === '/v1/global-rating-contexts')).toBe(false);
     expect(Object.keys(first.vocabulary!.variantKinds)).toEqual(['persona', 'counterpart']);
     expect(Object.keys(first.vocabulary!.canonicity.concepts)).toEqual(['canon', 'legends', 'semi-canon', 'non-canon']);
     expect(first.counts).toEqual({ 'https://schema.org/VideoGame': 1 });
@@ -396,7 +428,8 @@ test('G-724 bootstrap class guard excludes database writes and demo seed steps',
     expect(
       imports.every(
         (path) =>
-          path?.endsWith('/relation-lexicon.ts') || path?.endsWith('/relation-lexicon-data.ts'),
+          path?.endsWith('/relation-lexicon.ts') || path?.endsWith('/relation-lexicon-data.ts')
+          || path?.endsWith('/scoped-subjects-questions.ts'),
       ),
     ).toBe(true);
   }

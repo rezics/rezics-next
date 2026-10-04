@@ -6,6 +6,8 @@ import { BootstrapJournal, digest } from './journal.ts';
 import { inside, type BootstrapPlan, type ZoneManifest } from './plan.ts';
 import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from '../../dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../dev/seed/relation-lexicon-data.ts';
+import { seedScopedSubjectQuestions, scopedSubjectQuestions, scopedSubjectLocales,
+  type GlobalQuestions } from '../../dev/seed/scoped-subjects-questions.ts';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import {
   operationOutcome,
@@ -25,6 +27,7 @@ export interface BootstrapResult {
   zones: { id: string; zone: string; realm: string; collections: Record<string, string> }[];
   definitions: { key: string; component: string; revision: string }[];
   vocabulary?: { variantKinds: Record<string, string>; canonicity: Awaited<ReturnType<typeof seedCanonicity>> };
+  questions: GlobalQuestions;
   sources: {
     id: string;
     version: string;
@@ -146,6 +149,9 @@ export async function executeBootstrap(input: {
     zones: [],
     definitions: [],
     sources: [],
+    questions: await seedScopedSubjectQuestions({
+      post: (path, body, label) => journal.command(api, label, 'POST', path, body),
+    }, actor, plan.namespace),
   };
   for (const spec of zones) {
     const realm = await command<{ space: string; realm: string }>(
@@ -488,6 +494,21 @@ export async function verifyBootstrap(
   result: BootstrapResult,
   zones: ZoneManifest[],
 ): Promise<void> {
+  if (!result.questions) throw new Error('Bootstrap result has no Global questions; rerun bootstrap before verification');
+  for (const spec of scopedSubjectQuestions) {
+    const question = result.questions[spec.key];
+    for (const language of scopedSubjectLocales) {
+      const read = await api.read<{ context: string; question: string; displayThreshold: number;
+        owner: { kind: string }; displayQuestion: { value: string; language: string; reviewStatus: string } }>(
+        `/v1/rating-contexts/${short(question.context)}?languages=${language}`, true);
+      if (read.context !== question.context || read.question !== spec.labels.en || read.owner.kind !== 'global'
+        || read.displayThreshold !== (spec.targetGrain === 'projection' ? 10 : 5)
+        || read.displayQuestion.value !== spec.labels[language] || read.displayQuestion.language !== language
+        || read.displayQuestion.reviewStatus !== (language === 'en' ? 'authored' : 'reviewed')) {
+        throw new Error(`Global question ${spec.key}/${language} differs`);
+      }
+    }
+  }
   if (result.vocabulary) {
     for (const concept of [...Object.values(result.vocabulary.variantKinds), ...Object.values(result.vocabulary.canonicity.concepts)]) {
       await api.read(`/v1/resources/${short(concept)}`, true);

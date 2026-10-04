@@ -20,8 +20,12 @@ Provision the operator's Person Agent through Main's Agent API. Put its native
 IRI and the Account subject in a local copy of
 [the launch plan](../../tests/fixtures/launch/plan.yaml). Use the operator's
 Account session cookie and a consented Main bearer token for that same subject.
-Include `classification:define` in the token's scopes: bootstrap installs the
-variant-kind and canonicity Concept schemes through the vocabulary API.
+Include `classification:define` and `rating:configure` in the token's scopes:
+bootstrap installs the variant-kind and canonicity Concept schemes and the three
+Global questions for Characters, performances within a position or event, and
+units within a release. Each question is authored once in English, with reviewed
+presentations in the other seven UI locales. Resource means start at five ratings;
+projection means start at ten. Bootstrap creates no observations.
 Supply them as `BOOTSTRAP_ACCOUNT_COOKIE` and `BOOTSTRAP_MAIN_TOKEN`; neither is
 written to the journal. Renew the token through Account if it expires, then
 repeat the command with the same plan and namespace.
@@ -122,7 +126,9 @@ then admits the bounded source records. Every catalogue creation first obtains
 a candidate receipt and declares `new-creative-scope`; the executor never calls
 the `own-work` authoring path for imported material. A nonempty candidate result
 requires adjudication and stops the import. Verification then confirms the
-catalogue receipt, public Zones, definition keys and public Work reads.
+catalogue receipt, public Zones, definition keys, public Work reads and each
+question's wording in all eight UI locales. Question presentations preserve the
+English measurement and its rating population.
 
 For an isolated QA environment, use `--mode qa` and its loopback service origins.
 That mode relaxes production environment and steward prerequisites; it does not
