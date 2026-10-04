@@ -1,3 +1,4 @@
+// sql-relations-allow: access.agent_handle -- G937 verifies that the former Agent bridge is absent after migration.
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { GRAPHS, iri, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';

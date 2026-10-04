@@ -1,3 +1,4 @@
+// sql-relations-allow: source.fixture -- The bulk fixture creates this table in an isolated replacement schema.
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';

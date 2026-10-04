@@ -1,3 +1,4 @@
+// sql-relations-allow: access.agent_handle -- G961 verifies that the historical bridge is absent at the current head.
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';

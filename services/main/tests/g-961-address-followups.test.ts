@@ -1,3 +1,4 @@
+// sql-relations-allow: access.agent_handle -- G961 asserts the migration text that removes the historical bridge.
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';

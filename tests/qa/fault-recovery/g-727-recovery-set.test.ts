@@ -1,3 +1,4 @@
+// sql-relations-allow: access.g727_inflight -- G727 creates a disposable writer table to verify maintenance fencing and backup capture.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';

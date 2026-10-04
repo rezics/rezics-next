@@ -1,3 +1,5 @@
+// sql-relations-allow: access.g924_audit -- G924 creates this disposable audit view to verify dependency preservation.
+// sql-relations-allow: access.g924_unknown_audit -- G924 creates an unknown disposable view to verify refusal before rewriting.
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
