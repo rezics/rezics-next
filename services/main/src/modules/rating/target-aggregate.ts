@@ -1,4 +1,4 @@
-import { readComponentState } from '../work/history.ts';
+import { readComponentState, type RevisionReadBudget } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { MAX_RATING_AGGREGATE_SLOTS, type RatingAggregateInventory, type RatingInventoryHead, type TargetRatingComponents,
   type TargetRatingSnapshot } from '../access/rating-aggregate-inventory.ts';
@@ -23,8 +23,9 @@ interface VerifiedHead { slot: string; revision: string; value: number | null }
 export async function queryTargetRatingAggregate(env: WorkActivationEnvironment, access: TargetRatingInventoryStore,
   input: { context: string; target: string }) {
   const signal = AbortSignal.timeout(TARGET_AGGREGATE_COST.deadlineMs);
+  const manifestBudget = { bytesLeft: TARGET_AGGREGATE_COST.manifestBytes as number, signal };
   const snapshot = await access.read(input.context, input.target, signal);
-  const context = await readTargetRatingContext(env, input.context);
+  const context = await readTargetRatingContext(env, input.context, manifestBudget);
   if (!context || context.contextRevision !== snapshot.contextRevision || context.realm !== snapshot.realm) {
     throw new RatingAggregateUnavailable('Target Context seal differs');
   }
@@ -32,7 +33,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
   if (components && components.unvalued > 0)
     throw new RatingAggregateUnavailable('Target components need reconstruction');
   const verified = snapshot.heads !== null
-    ? await verifyTargetRatingHeads(env, snapshot, snapshot.heads, components, input, context, signal) : null;
+    ? await verifyTargetRatingHeads(env, snapshot, snapshot.heads, components, input, context, signal, false, manifestBudget) : null;
   let figures: RatingComponents & { slots: number };
   if (verified) {
     ({ figures } = verified);
@@ -103,6 +104,7 @@ export async function verifyTargetRatingHeads(env: WorkActivationEnvironment, sn
   input: { context: string; target: string }, context: NonNullable<Awaited<ReturnType<typeof readTargetRatingContext>>>,
   signal: AbortSignal,
   partial = false,
+  budget: RevisionReadBudget = { bytesLeft: TARGET_AGGREGATE_COST.manifestBytes, signal },
 ) {
   if (inventory.length > TARGET_AGGREGATE_COST.verifiedHeads) throw new RatingAggregateUnavailable('Target population exceeds verification');
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?population
@@ -151,7 +153,6 @@ export async function verifyTargetRatingHeads(env: WorkActivationEnvironment, sn
     || population === 0 && rows.length !== 1) throw new RatingAggregateUnavailable('Target population incomplete');
   const sealed = new Map(inventory.map(head => [head.observation, head]));
   const seen = new Set<string>(), histogram = Array.from({ length: 10 }, () => 0), heads: VerifiedHead[] = [];
-  const budget = { bytesLeft: TARGET_AGGREGATE_COST.manifestBytes as number, signal };
   let withdrawnCount = 0, sum = 0;
   for (const row of observations) {
     signal.throwIfAborted();

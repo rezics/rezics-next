@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import {
   RatingInventoryConflict,
   MAX_RATING_AGGREGATE_SLOTS,
@@ -26,7 +27,7 @@ export interface LegacyRatingCursor {
  * are updated. Revisions racing the job already record their own new values. */
 export const LEGACY_RECONSTRUCTION_COST = {
   heads: MAX_RATING_AGGREGATE_SLOTS,
-  graphCalls: 2,
+  graphCalls: 3,
   accessCheckouts: 2,
   manifestBytes: TARGET_AGGREGATE_COST.manifestBytes,
   graphBytes: TARGET_AGGREGATE_COST.graphBytes,
@@ -40,64 +41,75 @@ export async function reconstructLegacyTargetRatings(
 ) {
   const batchSize = input.batchSize ?? LEGACY_RECONSTRUCTION_COST.heads;
   const signal = AbortSignal.timeout(LEGACY_RECONSTRUCTION_COST.deadlineMs);
-  const cursor = input.cursor;
-  if (cursor && (cursor.context !== input.context || cursor.target !== input.target)) {
-    throw new RatingInventoryConflict('Reconstruction cursor names another target');
-  }
-  const snapshot = await readTargetRatingReconstructionBatch(
-    pool,
-    input.context,
-    input.target,
-    cursor?.afterSlot ?? '',
-    batchSize,
-    signal,
+  const manifestBudget = { bytesLeft: LEGACY_RECONSTRUCTION_COST.manifestBytes as number, signal };
+  return fusekiReadBudget.run(
+    {
+      signal,
+      callsLeft: LEGACY_RECONSTRUCTION_COST.graphCalls,
+      bytesLeft: LEGACY_RECONSTRUCTION_COST.graphBytes,
+    },
+    async () => {
+      const cursor = input.cursor;
+      if (cursor && (cursor.context !== input.context || cursor.target !== input.target)) {
+        throw new RatingInventoryConflict('Reconstruction cursor names another target');
+      }
+      const snapshot = await readTargetRatingReconstructionBatch(
+        pool,
+        input.context,
+        input.target,
+        cursor?.afterSlot ?? '',
+        batchSize,
+        signal,
+      );
+      if (
+        cursor &&
+        (cursor.recoveryGeneration !== snapshot.recoveryGeneration ||
+          cursor.contextRevision !== snapshot.contextRevision)
+      ) {
+        throw new RatingInventoryConflict('Reconstruction cursor is stale');
+      }
+      const context = await readTargetRatingContext(env, input.context, manifestBudget);
+      if (
+        !context ||
+        context.contextRevision !== snapshot.contextRevision ||
+        context.realm !== snapshot.realm
+      ) {
+        throw new RatingAggregateUnavailable('Target Context seal differs');
+      }
+      const verified = await verifyTargetRatingHeads(
+        env,
+        snapshot,
+        snapshot.heads,
+        null,
+        input,
+        context,
+        signal,
+        true,
+        manifestBudget,
+      );
+      const recorded = await recordTargetRatingValues(
+        pool,
+        input.context,
+        input.target,
+        snapshot.recoveryGeneration,
+        verified.heads,
+        signal,
+      );
+      const complete = snapshot.heads.length < batchSize;
+      return {
+        complete,
+        scanned: snapshot.heads.length,
+        recorded,
+        cursor: complete
+          ? null
+          : {
+              context: input.context,
+              target: input.target,
+              contextRevision: snapshot.contextRevision,
+              recoveryGeneration: snapshot.recoveryGeneration,
+              afterSlot: snapshot.heads.at(-1)!.slot,
+            },
+      };
+    },
   );
-  if (
-    cursor &&
-    (cursor.recoveryGeneration !== snapshot.recoveryGeneration ||
-      cursor.contextRevision !== snapshot.contextRevision)
-  ) {
-    throw new RatingInventoryConflict('Reconstruction cursor is stale');
-  }
-  const context = await readTargetRatingContext(env, input.context);
-  if (
-    !context ||
-    context.contextRevision !== snapshot.contextRevision ||
-    context.realm !== snapshot.realm
-  ) {
-    throw new RatingAggregateUnavailable('Target Context seal differs');
-  }
-  const verified = await verifyTargetRatingHeads(
-    env,
-    snapshot,
-    snapshot.heads,
-    null,
-    input,
-    context,
-    signal,
-    true,
-  );
-  const recorded = await recordTargetRatingValues(
-    pool,
-    input.context,
-    input.target,
-    snapshot.recoveryGeneration,
-    verified.heads,
-    signal,
-  );
-  const complete = snapshot.heads.length < batchSize;
-  return {
-    complete,
-    scanned: snapshot.heads.length,
-    recorded,
-    cursor: complete
-      ? null
-      : {
-          context: input.context,
-          target: input.target,
-          contextRevision: snapshot.contextRevision,
-          recoveryGeneration: snapshot.recoveryGeneration,
-          afterSlot: snapshot.heads.at(-1)!.slot,
-        },
-  };
 }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startRatingStack, type Person } from './rating-components-support.ts';
-import { reconstructLegacyTargetRatings } from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
+import { reconstructLegacyTargetRatings, LEGACY_RECONSTRUCTION_COST } from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
 
 let r: Awaited<ReturnType<typeof startRatingStack>>;
 beforeAll(async () => { r = await startRatingStack('rating-components'); }, 300_000);
@@ -181,7 +181,8 @@ test('a component that no longer equals its heads makes a verifiable target unav
 }, 300_000);
 
 test('legacy heads remain unavailable on read and are reconstructed by resumable idempotent batches', async () => {
-  const context = (await r.context({ displayThreshold: 1 })).context;
+  const context = (await r.context({ profile: 'realm-target-rating-context-v4', displayThreshold: 1,
+    acceptedSubjectTypes: ['https://rezics.com/vocab/Character'] })).context;
   const target = await r.resource('Leafa');
   const [a, b, c] = await raters('legacy', 3) as [Person, Person, Person];
   const opinions = new Map<string, { observationRevision: string }>();
@@ -225,11 +226,14 @@ test('legacy heads remain unavailable on read and are reconstructed by resumable
   ).rejects.toThrow();
   expect((await r.components(context, target)).row.unvalued).toBe(3);
   await r.stack.fuseki.update(lost.replace('DELETE DATA', 'INSERT DATA'));
-  const first = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
+  const measured = await r.measure(() => reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
     context,
     target,
     batchSize: 2,
-  });
+  }));
+  const first = measured.result;
+  expect(measured.graph).toBe(LEGACY_RECONSTRUCTION_COST.graphCalls);
+  expect(measured.access).toBe(LEGACY_RECONSTRUCTION_COST.accessCheckouts);
   expect(first).toMatchObject({ complete: false, scanned: 2, recorded: 2 });
   await expect(
     reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {

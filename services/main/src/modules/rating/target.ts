@@ -7,7 +7,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type R
   from '../access/admission.ts';
 import { resolveTargets, type TargetReadSession } from '../target/resolve.ts';
 import type { Base, ResolvedTarget } from '../target/contract.ts';
-import { readComponentState } from '../work/history.ts';
+import { readComponentState, type RevisionReadBudget } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, CancelledActivation,
@@ -125,7 +125,7 @@ export function targetContextPattern(context: string, realm = '?realm', revision
   }
   FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${revision} a rv:ErasedRevision } }`;
 }
-export async function readTargetRatingContext(env: WorkActivationEnvironment, context: string) {
+export async function readTargetRatingContext(env: WorkActivationEnvironment, context: string, budget?: RevisionReadBudget) {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest ?profile ?threshold WHERE {
     ${targetContextPattern(context)}
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} rv:displayThreshold ?threshold } }
@@ -147,7 +147,7 @@ export async function readTargetRatingContext(env: WorkActivationEnvironment, co
   // v1 manifests did not carry language. Recover the recorded RDF tag, never
   // infer it from the question text or the requesting client's locale.
   const language = row.question['xml:lang'];
-  const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile!);
+  const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile!, budget);
   const accepted = profile === ACCEPTED_TARGET_CONTEXT_PROFILE;
   const tagged = profile !== LEGACY_TARGET_CONTEXT_PROFILE, scoped = accepted || profile === SCOPED_TARGET_CONTEXT_PROFILE;
   const acceptance = accepted ? await readContextAcceptance({ query: async (body, limit) => {
