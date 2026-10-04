@@ -25,7 +25,7 @@ export async function publishAdmittedContent(
     || await content.owningResourceForRevision(publication.revisionId) !== publication.resourceId) {
     throw new RevisionNotFound('Content revision is unavailable');
   }
-  await assertContentPublicationBody(content, publication);
+  await assertContentPublicationBody(content, publication, env);
   const registered = await access.register({ principal, actingSubject,
     scope: `content:publish:${publication.resourceId}`, action: 'content.publish',
     idempotencyKey, requestDigest: digest });

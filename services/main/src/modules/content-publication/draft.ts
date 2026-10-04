@@ -8,7 +8,8 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
-import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
+import { authoredDocumentBody, authoredPostNotes, POST_CONTENT_MODEL,
+  type PostNotesInput, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 
 export class ContentDraftDenied extends Error {}
 export class ContentDraftRightsDenied extends ContentDraftDenied {}
@@ -23,6 +24,7 @@ export interface AuthoredContentDraftInput extends AuthoredBodyInput {
   variant: VariantIdentity;
   expectedHead: string | null;
   embeds?: string[];
+  notes?: PostNotesInput;
   actingSubject: string;
   idempotencyKey: string;
   publicDomain?: { assessmentId: string; source: PublicDomainTextSource };
@@ -51,7 +53,8 @@ export async function sealContentDraftAdmission(content: ContentCore,
 }
 
 async function assertCurrentTarget(env: WorkActivationEnvironment,
-  resourceId: string, variantId: string, targetProfile: AuthoredContentDraftInput['targetProfile']): Promise<void> {
+  resourceId: string, variantId: string, targetProfile: AuthoredContentDraftInput['targetProfile'],
+  hasNotes: boolean): Promise<void> {
   const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/> ASK {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -59,12 +62,16 @@ async function assertCurrentTarget(env: WorkActivationEnvironment,
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
       GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} ${targetProfile === 'catalog-description'
-        ? 'a schema:Organization .' : 'a ?kind ; rv:head ?head . VALUES ?kind { schema:CreativeWork rv:Post }'} }
+        ? 'a schema:Organization .' : hasNotes ? 'a rv:Post ; rv:head ?head .'
+          : 'a ?kind ; rv:head ?head . VALUES ?kind { schema:CreativeWork rv:Post }'} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(variantId)} rv:resource ?other .
         FILTER(?other != ${iri(resourceId)}) } }
     }`);
-  if (result.boolean !== true) throw new ContentDraftUnavailable('current Work is unavailable');
+  if (result.boolean !== true) {
+    if (hasNotes) throw new ContentConflict('notes require a current Post target');
+    throw new ContentDraftUnavailable('current Work is unavailable');
+  }
 }
 
 /** Account, Access and current Work admit a draft before Content's local CAS. */
@@ -74,9 +81,16 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   request: Request, input: AuthoredContentDraftInput,
   rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<SaveDraftResult & { byteDigest: string }> {
   let body;
+  let notes;
   // Content's text API retains its 65,536 UTF-16-unit budget. UTF-8 custody
   // permits up to three bytes per unit; Contribution and reply limits differ.
-  try { body = authoredDocumentBody(input, 3 * 65_536); }
+  try {
+    body = authoredDocumentBody(input, 3 * 65_536);
+    notes = authoredPostNotes(input.notes);
+    if (notes !== undefined && input.targetProfile === 'catalog-description') {
+      throw new Error('notes require a Post');
+    }
+  }
   catch { throw new ContentConflict('invalid authored Content body'); }
   if (body.body.length > 65_536 || input.variant.resourceId !== input.resourceId
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.resourceId)
@@ -91,17 +105,19 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   }
   const embeds = directContentEmbeds(input.embeds);
   const serializedJson = JSON.stringify({ ...body,
+    ...(notes !== undefined ? { notes } : {}),
     ...(embeds.length ? { embeds } : {}) });
   const command: SaveDraftCommand = { operationId: '', variant: input.variant,
     expectedHead: input.expectedHead,
-    model: input.targetProfile === 'catalog-description' ? 'catalog-description-v1' : 'content-shape-v1',
+    model: input.targetProfile === 'catalog-description' ? 'catalog-description-v1'
+      : notes !== undefined ? POST_CONTENT_MODEL : 'content-shape-v1',
     sourceRevision: null,
     provenance: {}, serializedJson };
   const publicDomain = input.publicDomain;
   const digest = contentDraftIntentDigest(command, input.actingSubject,
     publicDomain ? { rightsAssessmentId: publicDomain.assessmentId, source: publicDomain.source } : undefined);
   const principal = await account.verify(request, ['work:edit']);
-  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile);
+  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile, notes !== undefined);
   const scope = `content:draft:${input.resourceId}`;
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: 'content.draft', idempotencyKey: input.idempotencyKey,
@@ -132,7 +148,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
       }
     }
   }
-  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile);
+  await assertCurrentTarget(env, input.resourceId, input.variant.id, input.targetProfile, notes !== undefined);
   const saved = await content.saveDraft(command);
   await access.recordGraphOutcome(registered.id, terminalProof(registered, saved));
   if (saved.outcome === 'cancelled') throw new ContentDraftDenied('draft admission was fenced');

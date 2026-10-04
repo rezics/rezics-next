@@ -1,4 +1,5 @@
 import type { ContentCore, ExactContentReference } from '../../../../content/src/core.ts';
+import { POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
@@ -37,7 +38,7 @@ export async function projectPrivateContentDraft(env: WorkActivationEnvironment,
   const exact = (await content.readExactBatch([expectedRevision],
     async () => new Set([expectedRevision])))[0];
   if (exact?.status !== 'available' || exact.reference.resourceId !== resource
-    || exact.reference.variantId !== variant || exact.reference.model !== 'content-shape-v1'
+    || exact.reference.variantId !== variant || !['content-shape-v1', POST_CONTENT_MODEL].includes(exact.reference.model)
     || exact.reference.language.kind !== 'tag') {
     throw new ContentPrivateProjectionUnavailable('exact private Content body is unavailable');
   }

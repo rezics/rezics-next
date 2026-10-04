@@ -2,6 +2,57 @@ import { documentText, parseDocument, serializeDocument, type DocumentSnapshot }
 
 export interface AuthoredBodyInput { body?: string; document?: DocumentSnapshot }
 export interface DocumentBody { body: string; document?: DocumentSnapshot }
+export interface PostNotesInput { before?: AuthoredBodyInput; after?: AuthoredBodyInput }
+export interface PostNotes { before?: DocumentBody; after?: DocumentBody }
+
+/** Notes are language-local Post parts; body/document remain the text projection. */
+export const POST_NOTES_COST = { parts: 2, textUnitsPerPart: 8192,
+  documentBytesPerPart: 1_000_000 } as const;
+export const POST_CONTENT_MODEL = 'content-shape-v2' as const;
+
+function noteParts(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some(key => key !== 'before' && key !== 'after')) {
+    throw new Error('invalid Post notes');
+  }
+  return value as Record<string, unknown>;
+}
+
+function noteBody(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some(key => key !== 'body' && key !== 'document')) {
+    throw new Error('invalid Post note body');
+  }
+  return value as Record<string, unknown>;
+}
+
+/** At most two bounded documents, with no reads of another variant or revision. */
+export function authoredPostNotes(value: PostNotesInput | undefined): PostNotes | undefined {
+  if (value === undefined) return undefined;
+  const parts = noteParts(value);
+  const notes: PostNotes = {};
+  for (const key of ['before', 'after'] as const) {
+    if (parts[key] === undefined) continue;
+    const input = noteBody(parts[key]);
+    const part = authoredDocumentBody(input as AuthoredBodyInput, 3 * POST_NOTES_COST.textUnitsPerPart);
+    if (part.body.length > POST_NOTES_COST.textUnitsPerPart) throw new Error('Post note exceeds text bound');
+    notes[key] = part;
+  }
+  return notes;
+}
+
+export function retainedPostNotes(value: unknown): PostNotes | undefined {
+  if (value === undefined) return undefined;
+  const parts = noteParts(value);
+  const notes: PostNotes = {};
+  for (const key of ['before', 'after'] as const) {
+    if (parts[key] === undefined) continue;
+    const part = retainedDocumentBody(noteBody(parts[key]));
+    if (part.body.length > POST_NOTES_COST.textUnitsPerPart) throw new Error('Post note exceeds text bound');
+    notes[key] = part;
+  }
+  return notes;
+}
 
 /** Ingress accepts one source of truth. The stored text is always an owner projection. */
 export function authoredDocumentBody(input: AuthoredBodyInput, maxTextBytes = 65_536): DocumentBody {

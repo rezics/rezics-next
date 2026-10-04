@@ -3,7 +3,7 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import { RevisionNotFound } from '../work/history.ts';
 import { hasDocumentContent } from '@rezics/document';
-import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
+import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
@@ -74,9 +74,9 @@ function checkedInput(input: PublishPinnedContentInput): void {
   }
 }
 
-/** One exact body read, bounded by Content's revision limit; no admission or pin is created. */
+/** One bounded exact body read and, for v2, one current Post proof; no admission or pin is created. */
 export async function assertContentPublicationBody(content: Pick<ContentCore, 'readExactBatch'>,
-  input: PublishPinnedContentInput): Promise<void> {
+  input: PublishPinnedContentInput, env?: WorkActivationEnvironment): Promise<void> {
   const exact = (await content.readExactBatch([input.revisionId], async ids => new Set(ids)))[0];
   if (!exact || exact.status === 'missing' || exact.status === 'denied' || exact.status === 'erased') {
     throw new RevisionNotFound('Content revision is unavailable');
@@ -88,6 +88,17 @@ export async function assertContentPublicationBody(content: Pick<ContentCore, 'r
     || exact.reference.resourceId !== input.resourceId || exact.reference.variantId !== input.variantId
     || exact.reference.byteDigest !== input.expectedDigest) {
     throw new ContentPublicationConflict('Content revision differs from publication intent');
+  }
+  if (exact.body.notes !== undefined || exact.reference.model === POST_CONTENT_MODEL) {
+    try { retainedPostNotes(exact.body.notes); }
+    catch { throw new ContentPublicationConflict('Content notes are invalid'); }
+    if (exact.reference.model !== POST_CONTENT_MODEL || input.targetProfile === 'catalog-description') {
+      throw new ContentPublicationConflict('notes require the Post Content model');
+    }
+    if (!env) throw new ContentPublicationConflict('Post target owner is unavailable');
+    const post = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a rv:Post } }`);
+    if (post.boolean !== true) throw new ContentPublicationConflict('notes require a Post target');
   }
   // Structured Content has owner-defined fields rather than a text body.
   let empty = typeof exact.body.body === 'string' && !exact.body.body.trim();
@@ -152,7 +163,8 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0content`)}`;
   const ref = preparation.reference;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization'
+    : ref.model === POST_CONTENT_MODEL ? 'rv:Post' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
   const languageTag = ref.language.kind === 'tag' ? `rv:contentLanguage ${lit(ref.language.tag)} ;` : '';
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
@@ -217,7 +229,8 @@ function rejectedUpdate(env: WorkActivationEnvironment, admission: RegisteredAdm
   const receipt = contentPublicationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0rejected-content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0rejected-content`)}`;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization'
+    : preparation.reference.model === POST_CONTENT_MODEL ? 'rv:Post' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
   const guard = reason === 'StaleHead'
     ? `FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expectedHeadTerm(input)})`
     : `FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})
@@ -401,7 +414,7 @@ async function candidateValidations(env: WorkActivationEnvironment, admissionId:
 export async function publishPinnedContent(env: WorkActivationEnvironment, content: ContentCore,
   admission: RegisteredAdmission, input: PublishPinnedContentInput): Promise<ContentPublicationResult> {
   const digest = checkedAdmission(admission, input);
-  await assertContentPublicationBody(content, input);
+  await assertContentPublicationBody(content, input, env);
   // The existing graph writer rejects unknown current types and unvalidated
   // product writes. Do not create a pin until both reviewed shape bindings exist.
   const validations = await candidateValidations(env, admission.id, input.variantId);

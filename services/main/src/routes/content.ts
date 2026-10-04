@@ -23,6 +23,8 @@ import { authoredBodySchema } from '../api-document.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 
 const textDraftFields = {
+  notes: t.Optional(t.Object({ before: t.Optional(authoredBodySchema({}, 8192)),
+    after: t.Optional(authoredBodySchema({}, 8192)) }, { additionalProperties: false })),
   resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
   variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
   language: t.Object({ kind: t.Literal('tag'), tag: t.String(),
@@ -75,6 +77,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             expectedHead: body.expectedHead,
             ...('document' in body ? { document: body.document as DocumentSnapshot } : { body: body.body }),
             embeds: body.embeds,
+            notes: body.notes,
             actingSubject: body.actingSubject, idempotencyKey,
             ...(body.profile === 'content-public-domain-text-v1' ? {
               publicDomain: { assessmentId: body.assessmentId, source: body.source },

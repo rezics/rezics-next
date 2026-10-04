@@ -3,6 +3,7 @@ import type { ExactContentReference } from '../../../../content/src/core.ts';
 import { summarizeJudgments, type JudgmentCounts } from '../judgment/policy.ts';
 import type { ConceptHint } from '../judgment/schema.ts';
 import { publicTitleProjectionRecipe } from './title-projection.ts';
+import { POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
 
 /** Work metadata uses its own public title field on selected body MatchUnits. */
 export const titleProjectionRecipes = [publicTitleProjectionRecipe] as const;
@@ -33,6 +34,7 @@ function extractContentBody(body: Record<string, unknown>, reference: ExactConte
 
 const builtIn: readonly ProjectionRecipe[] = [
   { model: 'content-shape-v1', kind: 'text', extract: extractContentBody },
+  { model: POST_CONTENT_MODEL, kind: 'text', extract: extractContentBody },
   { model: 'media-set-v1', kind: 'skip' },
 ];
 

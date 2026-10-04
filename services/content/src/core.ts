@@ -4,13 +4,19 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Pool, PoolClient } from 'pg';
 import { outbox, ownerControl, receipt } from './typed-schema.ts';
 import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
-import { retainedDocumentBody } from './document-body.ts';
+import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from './document-body.ts';
 import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
 
 export class ContentConflict extends Error {}
 export class ContentUnavailable extends Error {}
 export class ContentLimitExceeded extends Error {}
+
+function revisionImageUses(body: Record<string, unknown>) {
+  const notes = retainedPostNotes(body.notes);
+  return [body.document, notes?.before?.document, notes?.after?.document]
+    .flatMap(document => documentImageUses(document as Parameters<typeof documentImageUses>[0]));
+}
 
 export type LanguageIdentity =
   | { kind: 'tag'; tag: string; originalTag: string }
@@ -474,7 +480,7 @@ export class ContentCore {
     }
     if (command.provenance.kind === 'admitted-public-domain-v1') {
       const proof = command.provenance as unknown as AdmittedPublicDomainProvenance;
-      if (command.model !== 'content-shape-v1'
+      if (!['content-shape-v1', POST_CONTENT_MODEL].includes(command.model)
         || !/^[0-9a-f-]{36}$/i.test(proof.admissionId)
         || !/^[0-9a-f-]{36}$/i.test(proof.rightsAssessmentId)
         || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch)
@@ -491,6 +497,16 @@ export class ContentCore {
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new ContentConflict('body must be a JSON object');
+    if (body.notes !== undefined && command.model !== POST_CONTENT_MODEL) {
+      throw new ContentConflict('notes require the Post Content model');
+    }
+    if (command.model === POST_CONTENT_MODEL) {
+      try {
+        const text = retainedDocumentBody(body);
+        if (text.body.length > 65_536) throw new Error('text exceeds Content bound');
+        retainedPostNotes(body.notes);
+      } catch { throw new ContentConflict('invalid Post Content body or notes'); }
+    }
     if (body.document !== undefined) {
       try { retainedDocumentBody(body); }
       catch { throw new ContentConflict('invalid document or text projection'); }
@@ -510,7 +526,7 @@ export class ContentCore {
           : body.document !== undefined ? !hasDocumentContent(retainedDocumentBody(body).document!) : body.body.length === 0))) {
       throw new ContentConflict('invalid author-bound reply draft');
     }
-    if (command.model === 'content-shape-v1') {
+    if (command.model === 'content-shape-v1' || command.model === POST_CONTENT_MODEL) {
       try { directContentEmbeds(body.embeds); }
       catch (error) {
         if (error instanceof ContentEmbedInvalid) throw new ContentConflict(error.message);
@@ -522,7 +538,7 @@ export class ContentCore {
     if (bytes.length < 1 || bytes.length > MAX_BODY_BYTES) throw new ContentLimitExceeded('body exceeds 1 MiB');
     const byteDigest = hash(bytes);
     let imageUses: ReturnType<typeof documentImageUses>;
-    try { imageUses = documentImageUses(body.document as Parameters<typeof documentImageUses>[0]); }
+    try { imageUses = revisionImageUses(body); }
     catch (error) {
       if (error instanceof DocumentMediaInvalid) throw new ContentConflict(error.message);
       throw error;
@@ -582,7 +598,7 @@ export class ContentCore {
       if (variant?.draft_head) {
         const head = (await client.query(`SELECT model, availability, body, provenance
           FROM content.revision WHERE id = $1 FOR SHARE`, [variant.draft_head])).rows[0];
-        try { priorImageUses = documentImageUses(head?.body?.document); }
+        try { priorImageUses = head?.body ? revisionImageUses(head.body) : []; }
         catch (error) { if (!(error instanceof DocumentMediaInvalid)) throw error; }
         if (head?.model === 'member-reply-v1' && (command.model !== head.model
           || head.provenance.author !== command.provenance.author
@@ -790,6 +806,12 @@ export class ContentCore {
           return { revisionId, status: 'corrupt' };
         }
         if (body.document !== undefined) retainedDocumentBody(body);
+        if (body.notes !== undefined && row.model !== POST_CONTENT_MODEL) return { revisionId, status: 'corrupt' };
+        if (row.model === POST_CONTENT_MODEL) {
+          const text = retainedDocumentBody(body);
+          if (text.body.length > 65_536) return { revisionId, status: 'corrupt' };
+          retainedPostNotes(body.notes);
+        }
         return { revisionId, status: 'available', reference: referenceFromRow(row), serializedJson, body };
       } catch { return { revisionId, status: 'corrupt' }; }
     });
