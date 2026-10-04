@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { assertCommandRace } from './command-race.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -158,11 +159,13 @@ export async function exerciseRatingAggregates(f: Fixture) {
   await env.fuseki.update(`PREFIX rv: <${RV}> WITH ${iri(GRAPHS.current)}
     DELETE { ${iri(context)} rv:ratingPolicyHead ${iri(created.contextRevision)} }
     INSERT { ${iri(context)} rv:ratingPolicyHead ${iri(changed.policyRevision)} } WHERE {}`);
-  const contenders = await Promise.all([
-    post(policyPath, policyBody(changed.policyRevision, 'latest-per-rater-mean')),
-    post(policyPath, policyBody(changed.policyRevision, 'pooled-observation-mean')),
-  ]);
-  expect(contenders.map(result => result.status).sort()).toEqual([201, 409]);
+  const policyRace = (['latest-per-rater-mean', 'pooled-observation-mean'] as const).map(policy => {
+    const key = randomUUID();
+    const body = policyBody(changed.policyRevision, policy);
+    return () => post(policyPath, body, key);
+  });
+  const contenders = await assertCommandRace(await Promise.all(policyRace.map(send => send())), 201,
+    index => policyRace[index]!());
   const winner = await contenders.find(result => result.status === 201)!.json() as { policyRevision: string };
   changed = await success(await post(policyPath, policyBody(winner.policyRevision, 'mean-per-rater')));
   expect((await success<Result>(await aggregate(EXPERIENCE_CONTEXT_DEFAULT_PROFILE), 200)).mean).toBe(5);

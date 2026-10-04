@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { assertCommandRace } from '../support/command-race.ts';
 import { readFileSync } from 'node:fs';
 import { realmPermissions } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -482,12 +483,16 @@ test('Rating question presentations preserve meaning across locales, permission 
       ),
     ).toMatchObject({ displayQuestion: { language: 'eo', fallback: null } });
     const french = writes.get('fr')!;
-    const race = await Promise.all(
-      ['Aimez-vous cette œuvre ?', 'Cette œuvre vous a-t-elle plu ?'].map((text) =>
-        post(state('fr', text), owner, french),
-      ),
+    // Each revision keeps its own key. A reconciling loser is retried until it is terminally stale.
+    const frenchRace = ['Aimez-vous cette œuvre ?', 'Cette œuvre vous a-t-elle plu ?'].map((text) => {
+      const key = randomUUID();
+      return () => post(state('fr', text), owner, french, key);
+    });
+    const race = await assertCommandRace(
+      await Promise.all(frenchRace.map((send) => send())),
+      200,
+      (index) => frenchRace[index]!(),
     );
-    expect(race.map((response) => response.status).sort()).toEqual([200, 409]);
     const winner = await json<Write>(race.find((response) => response.status === 200)!);
     expect(winner.predecessor).toBe(french.revision);
     expect((await post(state('fr', translated.fr), owner, french)).status).toBe(409);
@@ -556,10 +561,15 @@ test('Rating question presentations preserve meaning across locales, permission 
       ),
     ).toMatchObject({ code: 'unavailable_reference' });
 
-    const creationRace = await Promise.all(
-      ['Да ли сте уживали?', 'Да ли вам се свиђа?'].map((text) => post(state('sr-Cyrl', text))),
+    const creationRace = ['Да ли сте уживали?', 'Да ли вам се свиђа?'].map((text) => {
+      const key = randomUUID();
+      return () => post(state('sr-Cyrl', text), owner, undefined, key);
+    });
+    await assertCommandRace(
+      await Promise.all(creationRace.map((send) => send())),
+      201,
+      (index) => creationRace[index]!(),
     );
-    expect(creationRace.map((response) => response.status).sort()).toEqual([201, 409]);
     const sparse = await json<Context>(
       await call(owner, 'POST', '/v1/global-rating-contexts', {
         profile: 'global-rating-standing-context-v1',

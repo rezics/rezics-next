@@ -108,6 +108,17 @@ function fixture(realmValues: (number | null)[], globalValues: (number | null)[]
 const synthesis = (f: Fixture, realmContext = REALM_CONTEXT, globalContext = GLOBAL_CONTEXT) =>
   queryRealmGlobalSynthesis(f.env, f.access, { realmContext, globalContext, work: WORK, mainVersion: MAIN });
 
+/** One sealed population, copied in memory. Rebuilding the manifests repeats directory
+ * fsyncs, and that setup is what pushes a dozen identical cases past the default limit. */
+function reseal(base: Fixture): Fixture {
+  const rows = structuredClone(base.rows);
+  const inventories = structuredClone(base.inventories);
+  const graph = new FakeGraph();
+  graph.rows = [...rows.realm, ...rows.global];
+  return { env: { ...base.env, fuseki: graph } as unknown as WorkActivationEnvironment,
+    access: new FakeAccess(inventories), graph, rows, inventories, close: () => {} };
+}
+
 test('RATE06: synthesis keeps Realm and Global components separate and returns 17/24, never the pooled 5.2', async () => {
   const f = fixture([8, 6], [5, 3, 4]);
   try {
@@ -200,14 +211,15 @@ test('RATE06: stale, unsealed, damaged or fenced evidence makes the synthesis un
     ['mixed recovery generations', f => { f.inventories[GLOBAL_CONTEXT]!.recoveryGeneration = '8'; }],
     ['missing Context root', f => { f.graph.rows = f.graph.rows.filter(row => row !== f.rows.global[0]); }],
   ];
-  for (const [name, damage] of cases) {
-    const f = fixture([8, 6], [5, 3, 4]);
-    try {
+  const base = fixture([8, 6], [5, 3, 4]);
+  try {
+    for (const [name, damage] of cases) {
+      const f = reseal(base);
       damage(f);
       const outcome = await synthesis(f).then(() => 'complete', error => error.constructor.name);
       expect({ name, outcome }).toEqual({ name, outcome: RatingAggregateUnavailable.name });
-    } finally { f.close(); }
-  }
+    }
+  } finally { base.close(); }
 });
 
 test('RATE06: swapped or duplicated Context kinds are rejected and oversized populations get a budget outcome', async () => {

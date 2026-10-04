@@ -4,9 +4,24 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
+import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import type { ScopedSubjectApi } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { startMediaStack } from './media-support.ts';
+
+const sharedDefinitionKeys = new Set(['variant-of', 'holds-title', 'represents', 'in-continuity', 'appearance']);
+
+/** Identity-link keys are project-wide. Read them from the shared object directory,
+ * not from this fixture's work prefix, so a later file can open the same revision. */
+export async function sharedDefinition(env: WorkActivationEnvironment, key: string) {
+  const retained = env.workObjects;
+  delete env.workObjects;
+  try {
+    const found = await readDefinitionByKey(env, key);
+    return found ? { component: found.definition, revision: found.revision } : null;
+  } finally { if (retained) env.workObjects = retained; }
+}
 
 export async function scopedSubjectsFixture() {
   const stack = await startMediaStack('scoped-subjects');
@@ -28,14 +43,39 @@ export async function scopedSubjectsFixture() {
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     projections: new ProjectionStore(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
   });
-  const call = (person: Person | null, method: string, path: string, body?: object, key: string = randomUUID()) =>
-    app.handle(new Request(`http://main.local${path}`, { method, headers: {
-      ...(person ? { authorization: `Bearer ${person.token}` } : {}), 'idempotency-key': key,
-      ...(body ? { 'content-type': 'application/json' } : {}),
-    }, ...(body ? { body: JSON.stringify(body) } : {}) })).then(response => {
+  // A keyed definition sealed under the work prefix is invisible to later files
+  // that read the shared object directory. Keep those bytes in that directory.
+  const sharedComponents = new Set<string>();
+  const sharesDefinitionBytes = (path: string, body?: object) => {
+    if (!body) return false;
+    if (path === '/v1/semantic/changes') {
+      const state = (body as { state?: { component?: string; notation?: string } }).state;
+      return state?.component === 'definition' && typeof state.notation === 'string'
+        && sharedDefinitionKeys.has(state.notation);
+    }
+    if (path === '/v1/lexicon/presentations') {
+      const definition = (body as { state?: { definition?: string } }).state?.definition;
+      return typeof definition === 'string' && sharedComponents.has(definition);
+    }
+    return false;
+  };
+  const call = async (person: Person | null, method: string, path: string, body?: object, key: string = randomUUID()) => {
+    const shared = method === 'POST' && sharesDefinitionBytes(path, body);
+    const retained = stack.env.workObjects;
+    if (shared) delete stack.env.workObjects;
+    try {
+      const response = await app.handle(new Request(`http://main.local${path}`, { method, headers: {
+        ...(person ? { authorization: `Bearer ${person.token}` } : {}), 'idempotency-key': key,
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      }, ...(body ? { body: JSON.stringify(body) } : {}) }));
       response.headers.set('x-scoped-request', `${method} ${path} (${key})`);
+      if (shared && path === '/v1/semantic/changes' && response.ok) {
+        const saved = await response.clone().json() as { component?: unknown };
+        if (typeof saved.component === 'string') sharedComponents.add(saved.component);
+      }
       return response;
-    });
+    } finally { if (shared && retained) stack.env.workObjects = retained; }
+  };
   const json = async <T>(response: Response): Promise<T> => {
     const text = await response.text();
     if (!response.ok || response.status === 202) throw new SeedApiError(response.headers.get('x-scoped-request')!, response.status, text);
@@ -69,5 +109,6 @@ export async function scopedSubjectsFixture() {
     [randomUUID(), actor, scope, action]);
     authorities.add(tuple);
   };
-  return { stack, call, json, api, person, owner, authorize, stop: () => stack.stop() };
+  return { stack, call, json, api, person, owner, authorize,
+    findDefinition: (key: string) => sharedDefinition(stack.env, key), stop: () => stack.stop() };
 }

@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import { SeedApiError } from './api.ts';
 import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
-import { relationLexiconSeed, CANONICITY_PROPERTY } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, CANONICITY_PROPERTY, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
 import { seedScopedSubjectQuestions, type ScopedSubjectApi, type GlobalQuestions } from './scoped-subjects-questions.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
-import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
 import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
 
@@ -23,6 +22,9 @@ export interface ScopedSubjectPort {
    * write below is a normal public command. Production bootstrap uses no grants. */
   authorize(scope: string, action: string, actor?: string): Promise<void>;
   raters: readonly ScopedSubjectRater[];
+  /** A definition key already registered in this project. The acceptance fixture
+   * resolves it from shared object bytes; the dev seed uses the public read. */
+  findDefinition?(key: string): Promise<Written | null>;
 }
 interface Work { work: string; mainVersion: string; mainRevision: string; workRevision: string }
 interface Written { component: string; revision: string }
@@ -164,19 +166,21 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
       await authorize(`semantic:read:${saved.component}`, 'semantic.read');
       await authorize(`semantic:edit:${saved.component}`, 'lexicon.presentation.change');
     },
-    currentDefinition: async (notation: string) => {
-      const current = await currentDefinition(notation);
-      if (!current) return null;
-      await authorize(`semantic:read:${current.component}`, 'semantic.read');
-      const retained = await api.get<{ state: DefinitionState }>(
-        `/v1/semantic/resources/${short(current.component)}?actingSubject=${encodeURIComponent(actor)}`);
-      return { ...current, state: retained.state };
-    },
   };
   const variants = await seedVariantKindConcepts(lexicon, actor, namespace);
-  for (const saved of await seedRelationLexicon(lexicon, actor, namespace,
-    relationLexiconSeed.filter(spec => ['variant-of', 'holds-title', 'represents', 'in-continuity'].includes(spec.key)),
-    undefined, variants)) {
+  // These four keys are canonical across a project. Reuse a registered key and
+  // install only a missing one, without pinning this namespace's Concepts as
+  // the only admitted kind members.
+  const identityLinkKeys = new Set(['variant-of', 'holds-title', 'represents', 'in-continuity']);
+  const missing: LexiconSeedDefinition[] = [];
+  for (const spec of relationLexiconSeed) {
+    if (!identityLinkKeys.has(spec.key)) continue;
+    const current = port.findDefinition ? await port.findDefinition(spec.key) : await currentDefinition(spec.key);
+    if (!current) { missing.push(spec); continue; }
+    await authorize(`semantic:read:${current.component}`, 'semantic.read');
+    definitions.set(spec.key, current);
+  }
+  for (const saved of missing.length ? await seedRelationLexicon(lexicon, actor, namespace, missing) : []) {
     definitions.set(saved.key, saved);
   }
   let appearance = await currentDefinition('appearance');

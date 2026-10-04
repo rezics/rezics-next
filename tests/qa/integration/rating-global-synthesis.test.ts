@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -164,8 +165,12 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(await (await globalSet('a2', 1)).json()).toMatchObject({ code: 'stale_head' });
     const b = await success<Opinion>(await globalSet('b', 3));
     // Concurrent first writes by one principal: one winner, one terminal stale loser.
-    const race = await Promise.all([globalSet('c', 4), globalSet('c', 4)]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    // A loser may still be reconciling; the same body and key must settle to 409.
+    const globalRace = [0, 1].map(() => {
+      const key = randomUUID();
+      return () => globalSet('c', 4, null, key);
+    });
+    await assertCommandRace(await Promise.all(globalRace.map(send => send())), 201, index => globalRace[index]!());
     await accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [principals.b]);
     expect((await globalSet('b', 2, b.observationRevision)).status).toBe(403);
     await accessPool.query('UPDATE access.principal SET active = true WHERE id = $1', [principals.b]);

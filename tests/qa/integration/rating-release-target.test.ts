@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { assertCommandRace } from '../support/command-race.ts';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -250,9 +251,12 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     expect(await success<Aggregate>(await aggregate(releaseContext, 'realm-release-latest-mean-v1',
       { release: second }), 200)).toMatchObject({ population: 2, count: 2, sum: 13, mean: 6.5 });
 
-    const race = await Promise.all([set('a', releaseContext, first, 8, firstA.observationRevision),
-      set('a', releaseContext, first, 6, firstA.observationRevision)]);
-    expect(race.map(response => response.status).sort()).toEqual([201, 409]);
+    const releaseRace = [8, 6].map(value => {
+      const key = randomUUID();
+      return () => set('a', releaseContext, first, value, firstA.observationRevision, key);
+    });
+    const race = await assertCommandRace(await Promise.all(releaseRace.map(send => send())), 201,
+      index => releaseRace[index]!());
     const winner = await success<Opinion>(race.find(response => response.status === 201)!, 201);
     expect((await set('a', releaseContext, first, 5, firstA.observationRevision)).status).toBe(409);
     const withdrawn = await success<Opinion>(await set('b', releaseContext, first, null, firstB.observationRevision));

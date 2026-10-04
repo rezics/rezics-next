@@ -49,7 +49,15 @@ beforeAll(async () => {
   readers = [h.owner];
   for (let index = 1; index < 50; index++) readers.push(await h.person(`Map reader ${index + 1}`));
   data = await loadScopedSubjects({ api: h.api(h.owner), actor: h.owner.actor, namespace: `scoped-${randomUUID().slice(0, 8)}`,
-    authorize: h.authorize, raters: readers.map(reader => ({ actor: reader.actor, api: h.api(reader) })) });
+    authorize: h.authorize, findDefinition: h.findDefinition,
+    raters: readers.map(reader => ({ actor: reader.actor, api: h.api(reader) })) });
+  // Later files open these keys from the shared object directory. A miss or an
+  // unreadable revision here is the same failure they would see.
+  for (const key of ['variant-of', 'holds-title', 'represents', 'in-continuity', 'appearance']) {
+    const found = await h.findDefinition(key);
+    expect(found?.component).toBeString();
+    expect(found?.revision).toBeString();
+  }
 }, 600_000);
 afterAll(async () => { await h?.stop(); });
 
