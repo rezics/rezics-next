@@ -156,13 +156,16 @@ export function workProfileCorpusId(
   recipe: WorkProfileCorpusRecipe,
   dimension: WorkProfileDimension,
   scale: WorkProfileScale,
+  compatibility = loadCompatibility(root),
 ): string {
   if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(recipe.version))
     throw new Error('Invalid corpus recipe version');
   const dimensions = workProfileDimensions(dimension, scale, recipe.fixed);
   const canonical = WORK_PROFILE_DIMENSIONS.map((key) => [key, dimensions[key]]);
   const digest = createHash('sha256')
-    .update(JSON.stringify([recipe.version, dimension, canonical]))
+    // A retained corpus is a schema/model cut, not just a recipe and size.
+    // New owner migrations must select a new backup before any restore writes.
+    .update(JSON.stringify([recipe.version, dimension, canonical, compatibility.digest]))
     .digest('hex');
   return `work-profile-${digest.slice(0, 16)}`;
 }
@@ -188,7 +191,7 @@ export async function prepareWorkProfileCorpus(input: {
   const dimensions = workProfileDimensions(dimension, scale, recipe.fixed);
   if (dimensions[dimension] < recipe.fixed[dimension])
     throw new Error('Fixed dimension exceeds the smallest requested scale');
-  const id = workProfileCorpusId(recipe, dimension, scale);
+  const id = workProfileCorpusId(recipe, dimension, scale, compatibility);
   const directory = resolve(input.directory);
   if (
     relative(root, directory).startsWith('..') &&

@@ -22,7 +22,7 @@ import {
   publishTextContribution,
   textPublicationDigest,
 } from '../../../services/main/src/modules/contribution/publish.ts';
-import { ID, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, ID, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import {
   selectMainDefault,
   mainSelectionDigest,
@@ -42,6 +42,8 @@ import { dockerEnvironment, root, run } from '../../../scripts/fixture/stack.ts'
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { buildRankedFixture, rankedCorpus, rankedFixtureOwners } from './g-556-ranked-fixture.ts';
 import { rankedLuceneOracle } from './g-556-ranked-oracle.ts';
+import { RANKED_BILINGUAL_MAINS } from '../support/ranked-bilingual-fixture.ts';
+import { integrationOrderPrelude } from '../support/integration-order.ts';
 
 interface Page {
   population: number;
@@ -66,6 +68,7 @@ class MeasuredFuseki extends FusekiClient {
 }
 
 test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 HTTP results inside every request budget', async () => {
+  await integrationOrderPrelude('g-556-ranked');
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.REZICS_QA_ARTIFACT_DIR)
     throw new Error('Run through goalctl integration QA');
   const retained = Bun.env.REZICS_G556_RANKED_FIXTURE_ID;
@@ -88,7 +91,7 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
     fixture: fixture.id,
     publicUnits: rankedCorpus.publicUnits,
     phrase: 'fixture body',
-    bilingualMains: 100,
+    bilingualMains: RANKED_BILINGUAL_MAINS,
     pages: measurements,
   };
   let pool: Pool | undefined;
@@ -191,7 +194,12 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
       if (selected.outcome !== 'succeeded') throw new Error('bilingual selection failed');
     }
     const preparationStart = performance.now();
-    for (let n = 0; n < 100; n++) await addLanguage(n + 1025);
+    const bilingual =
+      await fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(DISTINCT ?main) AS ?n) WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?first, ?french }
+      GRAPH ${iri(GRAPHS.revisions)} { ?first rv:language ?language . ?french rv:language "fr" . FILTER(?language != "fr") }
+    }`);
+    expect(Number(bilingual.results?.bindings[0]?.n?.value)).toBe(RANKED_BILINGUAL_MAINS);
     evidence.bilingualPreparationMs = performance.now() - preparationStart;
     expect(Number(evidence.bilingualPreparationMs) + restored.elapsedMs!).toBeLessThan(600_000);
 

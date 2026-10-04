@@ -7,17 +7,28 @@ export interface IntegrationShard {
   batches: string[][];
 }
 
+// Complete pagination/import assertions intentionally do substantial real API
+// work after their bulk setup. Give them a whole command budget: combining two
+// 200-second populations with ordinary files exhausts a 480-second shard.
+const largeFixtureFiles: ReadonlySet<string> = new Set([
+  'tests/qa/integration/g-854-large-library.test.ts',
+  'tests/qa/integration/g-852-zones.test.ts',
+  'tests/qa/integration/g-556-ranked-large.test.ts',
+  'tests/qa/integration/g-939-discovery.test.ts',
+]);
+
 /** One stack/bootstrap per worker. Fresh-state files reset that stack between
  * commands; product-assembler probes retain their own persistent project. */
 export function planIntegrationShards(
   estimates: ReadonlyMap<string, number>,
   count: number,
 ): IntegrationShard[] {
-  const ownProject = (file: string) => commandOnlyIntegrationFiles.has(file) || scaleIntegrationFiles.has(file);
+  const ownProject = (file: string) =>
+    commandOnlyIntegrationFiles.has(file) ||
+    scaleIntegrationFiles.has(file) ||
+    largeFixtureFiles.has(file);
   const reusable = new Map([...estimates].filter(([file]) => !ownProject(file)));
-  const persistent = [...estimates.keys()]
-    .filter(ownProject)
-    .sort();
+  const persistent = [...estimates.keys()].filter(ownProject).sort();
   const plans = planShards(reusable, count).map((files) => {
     const shared = files.filter((file) => !isolatedIntegrationFiles.has(file));
     const isolated = files

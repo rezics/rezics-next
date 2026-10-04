@@ -2,12 +2,28 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { CONTINUITY, DATASET, GRAPHS, PROFILE, PUBLIC_SEARCH_ANCHOR, RV }
-  from '../../../services/main/src/modules/work/activate.ts';
+import {
+  CONTINUITY,
+  DATASET,
+  GRAPHS,
+  PROFILE,
+  PUBLIC_SEARCH_ANCHOR,
+  RV,
+} from '../../../services/main/src/modules/work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { SELECTION_POLICY } from '../../../services/main/src/modules/space/create.ts';
-import { type Corpus, type FixtureWork, IMPORT_SEQUENCE, RecordDigest, corpusWorks, publicUnitAt,
-  fixtureRealm, sampleIndices, sha256, workAt } from '../corpus.ts';
+import {
+  type Corpus,
+  type FixtureWork,
+  IMPORT_SEQUENCE,
+  RecordDigest,
+  corpusWorks,
+  publicUnitAt,
+  fixtureRealm,
+  sampleIndices,
+  sha256,
+  workAt,
+} from '../corpus.ts';
 import { componentObjects } from './objects.ts';
 import type { FixtureOwner, LoadTarget } from './types.ts';
 
@@ -62,7 +78,10 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
     [work.mainRevision, work.mainVersion, objects.mainManifest],
   ] as const) {
     const anchor = (p: string, o: string) =>
-      ['revisions', `${node(revision)} ${node(p)} ${o} ${node(GRAPHS.revisions)} .`] as [GraphKind, string];
+      ['revisions', `${node(revision)} ${node(p)} ${o} ${node(GRAPHS.revisions)} .`] as [
+        GraphKind,
+        string,
+      ];
     yield anchor(RDF_TYPE, node(`${RV}RevisionAnchor`));
     yield anchor(`${RV}component`, node(component));
     yield anchor(`${RV}operation`, node(corpus.importOperation));
@@ -90,26 +109,37 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
   yield revision(selected.decision, `${RV}contribution`, node(selected.contribution));
   yield revision(selected.decision, `${RV}selectedDraft`, node(selected.draft));
   for (const [predicate, object] of [
-    [RDF_TYPE, node(`${RV}MatchUnit`)], [`${RV}work`, node(work.work)],
-    [`${RV}mainVersion`, node(work.mainVersion)], [`${RV}context`, node(work.mainVersion)],
-    [`${RV}contribution`, node(selected.contribution)], [`${RV}revision`, node(selected.draft)],
-    [`${RV}selection`, node(selected.selection)], [`${RV}language`, text(work.language)],
-    [`${RV}field`, node(`${RV}Body`)], [`${RV}disclosure`, node(`${RV}Public`)],
+    [RDF_TYPE, node(`${RV}MatchUnit`)],
+    [`${RV}work`, node(work.work)],
+    [`${RV}mainVersion`, node(work.mainVersion)],
+    [`${RV}context`, node(work.mainVersion)],
+    [`${RV}contribution`, node(selected.contribution)],
+    [`${RV}revision`, node(selected.draft)],
+    [`${RV}selection`, node(selected.selection)],
+    [`${RV}language`, text(work.language)],
+    [`${RV}field`, node(`${RV}Body`)],
+    [`${RV}disclosure`, node(`${RV}Public`)],
     [`${RV}searchBody`, `${text(selected.body)}@${work.language}`],
-  ]) yield publicQuad(selected.unit, predicate!, object!);
+  ])
+    yield publicQuad(selected.unit, predicate!, object!);
 }
 
 async function* nquads(corpus: Corpus): AsyncGenerator<string> {
   let chunk = '';
   for (const work of corpusWorks(corpus)) {
     for (const [, quad] of workQuads(corpus, work)) chunk += `${quad}\n`;
-    if (chunk.length > 1_048_576) { yield chunk; chunk = ''; }
+    if (chunk.length > 1_048_576) {
+      yield chunk;
+      chunk = '';
+    }
   }
   if (chunk) yield chunk;
 }
 
 async function count(fuseki: FusekiClient, graph: string): Promise<number> {
-  const result = await fuseki.query(`SELECT (COUNT(*) AS ?n) WHERE { GRAPH <${graph}> { ?s ?p ?o } }`);
+  const result = await fuseki.query(
+    `SELECT (COUNT(*) AS ?n) WHERE { GRAPH <${graph}> { ?s ?p ?o } }`,
+  );
   return Number(result.results?.bindings[0]?.n?.value ?? Number.NaN);
 }
 
@@ -123,13 +153,22 @@ export const graphOwner: FixtureOwner = {
       jena: /^ARG FUSEKI_VERSION=(\d+\.\d+\.\d+)$/m.exec(dockerfile)?.[1] ?? 'unknown',
       'infra/jena/fuseki-text.ttl': sha256(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'))),
       'profile:work-metadata-v1': profileRegistry['work-metadata-v1'].sha256,
+      'generated/model/manifest.json': sha256(
+        readFileSync(join(root, 'generated/model/manifest.json')),
+      ),
     };
   },
   summarize(corpus) {
     const digest = new RecordDigest();
-    digest.add('graph:public', `${node(PUBLIC_SEARCH_ANCHOR)} ${node(RDF_TYPE)} ${node(`${RV}SearchGraphAnchor`)} ${node(PUBLIC_SEARCH_GRAPH)} .`);
+    digest.add(
+      'graph:public',
+      `${node(PUBLIC_SEARCH_ANCHOR)} ${node(RDF_TYPE)} ${node(`${RV}SearchGraphAnchor`)} ${node(PUBLIC_SEARCH_GRAPH)} .`,
+    );
     // PublicNameProjection.refresh also commits this policy fence on bootstrap.
-    digest.add('graph:public', `${node('urn:rezics:search:name:policy-state')} ${node(`${RV}complete`)} "true"^^<http://www.w3.org/2001/XMLSchema#boolean> ${node(PUBLIC_SEARCH_GRAPH)} .`);
+    digest.add(
+      'graph:public',
+      `${node('urn:rezics:search:name:policy-state')} ${node(`${RV}complete`)} "true"^^<http://www.w3.org/2001/XMLSchema#boolean> ${node(PUBLIC_SEARCH_GRAPH)} .`,
+    );
     for (const work of corpusWorks(corpus)) {
       for (const [graph, quad] of workQuads(corpus, work)) digest.add(`graph:${graph}`, quad);
     }
@@ -149,40 +188,56 @@ export const graphOwner: FixtureOwner = {
       `rm -rf ${LUCENE} && mkdir -p ${LUCENE} && cd /fuseki ` +
         `&& java -Xmx${heap} -cp ${COMMAND_JAR}:${JAR} com.rezics.jena.ErasureTextIndexer --desc=/fuseki/fuseki-text.ttl`,
     );
-    return { elapsedMs: performance.now() - started, detail: {
-      loaderMs: Math.round(loaded - started), textIndexMs: Math.round(performance.now() - loaded),
-      loaderTail: loader.trim().split('\n').slice(-3), indexerTail: indexer.trim().split('\n').slice(-2) } };
+    return {
+      elapsedMs: performance.now() - started,
+      detail: {
+        loaderMs: Math.round(loaded - started),
+        textIndexMs: Math.round(performance.now() - loaded),
+        loaderTail: loader.trim().split('\n').slice(-3),
+        indexerTail: indexer.trim().split('\n').slice(-2),
+      },
+    };
   },
-  async verify(corpus, target: LoadTarget) {
-    const fuseki = new FusekiClient(target.apps.FUSEKI_URL!);
-    for (const index of sampleIndices(corpus)) {
-      const work = workAt(corpus, index);
-      const hit = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
+  verify: verifyGraphCorpus,
+};
+
+/** Extended background recipes retain the base samples and verify the complete
+ * indexed population, including any extra languages loaded in the same cut. */
+export async function verifyGraphCorpus(
+  corpus: Corpus,
+  target: LoadTarget,
+  publicUnits = corpus.publicUnits,
+) {
+  const fuseki = new FusekiClient(target.apps.FUSEKI_URL!);
+  for (const index of sampleIndices(corpus)) {
+    const work = workAt(corpus, index);
+    const hit = await fuseki.query(`PREFIX text: <http://jena.apache.org/text#>
         SELECT ?s WHERE { GRAPH <${GRAPHS.current}> {
           (?s ?score ?literal) text:query (<${RDFS_LABEL}> ${text(work.token)} 5) } }`);
-      const found = (hit.results?.bindings ?? []).map(row => row.s?.value);
-      if (found.length !== 1 || found[0] !== work.work) {
-        throw new Error(`text index does not resolve sample ${work.token} to its Work`);
-      }
+    const found = (hit.results?.bindings ?? []).map((row) => row.s?.value);
+    if (found.length !== 1 || found[0] !== work.work) {
+      throw new Error(`text index does not resolve sample ${work.token} to its Work`);
     }
-    for (const ordinal of [0, Math.floor(corpus.publicUnits / 2), corpus.publicUnits - 1]) {
-      const selected = publicUnitAt(corpus, ordinal);
-      const hit = await fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
+  }
+  for (const ordinal of [0, Math.floor(corpus.publicUnits / 2), corpus.publicUnits - 1]) {
+    const selected = publicUnitAt(corpus, ordinal);
+    const hit = await fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
         SELECT ?unit WHERE { GRAPH <${PUBLIC_SEARCH_GRAPH}> {
           (?unit ?score) text:query (rv:searchBody ${text(selected.work.token)} 2) .
           ?unit a rv:MatchUnit . } }`);
-      const found = (hit.results?.bindings ?? []).map(row => row.unit?.value);
-      if (found.length !== 1 || found[0] !== selected.unit) {
-        throw new Error(`public text index does not resolve sample ${selected.work.token}`);
-      }
+    const found = (hit.results?.bindings ?? []).map((row) => row.unit?.value);
+    if (found.length !== 1 || found[0] !== selected.unit) {
+      throw new Error(`public text index does not resolve sample ${selected.work.token}`);
     }
-    const population = await fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(?unit) AS ?n) WHERE {
+  }
+  const population = await fuseki.query(`PREFIX rv: <${RV}> SELECT (COUNT(?unit) AS ?n) WHERE {
       GRAPH <${PUBLIC_SEARCH_GRAPH}> { ?unit a rv:MatchUnit } }`);
-    if (Number(population.results?.bindings[0]?.n?.value) !== corpus.publicUnits) {
-      throw new Error('public MatchUnit population differs from fixture plan');
-    }
-    return { 'graph:current': await count(fuseki, GRAPHS.current),
-      'graph:revisions': await count(fuseki, GRAPHS.revisions),
-      'graph:public': await count(fuseki, PUBLIC_SEARCH_GRAPH) };
-  },
-};
+  if (Number(population.results?.bindings[0]?.n?.value) !== publicUnits) {
+    throw new Error('public MatchUnit population differs from fixture plan');
+  }
+  return {
+    'graph:current': await count(fuseki, GRAPHS.current),
+    'graph:revisions': await count(fuseki, GRAPHS.revisions),
+    'graph:public': await count(fuseki, PUBLIC_SEARCH_GRAPH),
+  };
+}
