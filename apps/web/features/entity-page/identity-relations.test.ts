@@ -52,6 +52,13 @@ describe('Identity relations', () => {
     expect(parseEntityCursors({ family: 'next' })).toEqual({ family: 'next' });
     expect(parseEntityCursors({ family: ['a', 'b'] })).toBeNull();
     expect(parseEntityCursors({ family: 'a'.repeat(2049) })).toBeNull();
+    expect(
+      identityContinuation(
+        `${path}?scope=realm&realm=r&position=chapter&family=stale`,
+        'family',
+        null,
+      ),
+    ).toBe(`${path}?scope=realm&realm=r&position=chapter#identity-family`);
   });
 });
 

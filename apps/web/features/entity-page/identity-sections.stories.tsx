@@ -137,3 +137,25 @@ export const Failed: Story = {
     />
   ),
 };
+
+export const StaleFamilyCursor: Story = {
+  render: () => (
+    <IdentitySectionsView
+      self={saber}
+      data={{ ok: false, failure: 'moved' }}
+      locale="en"
+      t={copyOf('en')}
+      messages={messages.en}
+      hrefFor={standaloneHrefFor(
+        { family: 'stale-family', relations: 'stale-own' },
+        resourceHref('/e/', saber.reference),
+      )}
+    />
+  ),
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'First page' })).toHaveAttribute(
+      'href',
+      `/en${resourceHref('/e/', saber.reference)}#identity-family`,
+    );
+  },
+};

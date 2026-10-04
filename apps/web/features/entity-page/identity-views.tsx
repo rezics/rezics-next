@@ -24,10 +24,11 @@ import { summaryHref } from './views.tsx';
 export function identityContinuation(
   href: string,
   section: 'family' | 'relations',
-  cursor: string,
+  cursor: string | null,
 ): string {
   const url = new URL(href, 'https://rezics.invalid');
-  url.searchParams.set(section, cursor);
+  if (cursor === null) url.searchParams.delete(section);
+  else url.searchParams.set(section, cursor);
   url.hash = section === 'family' ? 'identity-family' : 'relations';
   return url.pathname + url.search + url.hash;
 }
@@ -262,7 +263,11 @@ export function IdentitySectionsView({
           title={props.t.relationsUnavailable}
           failure={data.failure}
           messages={props.messages}
-          restartHref={props.hrefFor({ kind: 'continue', section: 'relations', cursor: null })}
+          restartHref={identityContinuation(
+            props.hrefFor({ kind: 'continue', section: 'relations', cursor: null }),
+            'family',
+            null,
+          )}
         />
       </Region>
     );
