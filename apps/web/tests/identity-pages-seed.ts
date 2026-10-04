@@ -117,7 +117,7 @@ try {
     [randomUUID(), publicConfig.issuer, web.operator.id],
   );
   editor.principalId = (
-    await stack.accessPool.query<{ id: string }>(
+    await stack.accessPool.query<{ id: typeof editor.principalId }>(
       'SELECT id FROM access.principal WHERE account_issuer=$1 AND account_subject=$2',
       [publicConfig.issuer, web.operator.id],
     )

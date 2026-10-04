@@ -7,12 +7,16 @@ export function browserProjectCount(selected = process.env.REZICS_E2E_PROJECTS):
 }
 
 export function browserBudgets(playwrightFiles: number, storyFiles: number, projects = 1) {
+  // Explicit matrices can contain dozens of journeys in one file. Their per-test deadlines still apply.
+  const minimum = Number(process.env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS ?? 300_000);
+  if (!Number.isSafeInteger(minimum) || minimum < 300_000 || minimum > 1_800_000)
+    throw new Error('REZICS_E2E_PLAYWRIGHT_BUDGET_MS must be an integer from 300000 to 1800000');
   for (const count of [playwrightFiles, storyFiles]) {
     if (!Number.isSafeInteger(count) || count < 1) throw new Error('Browser file counts must be positive integers');
   }
   return {
     setup: 30_000 + 90_000 + 30_000 + 240_000,
-    playwright: Math.max(300_000, 30_000 + playwrightFiles * 30_000) * projects,
+    playwright: Math.max(minimum, 30_000 + playwrightFiles * 30_000) * projects,
     // The 137-file browser tier took 156s on the shared host. Allow 3s/file
     // plus startup; individual story deadlines still bound a stuck interaction.
     storybook: Math.max(180_000, 60_000 + storyFiles * 3_000),
