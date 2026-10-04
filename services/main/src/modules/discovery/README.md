@@ -102,8 +102,8 @@ rows, not retained authorization.
 
 Measured on 2026-10-04, after versioned reads kept their bounded seeks: four
 graph calls/46 SQL statements for irrelevant events and eight/126 for a rating
-delta at 100, 1,000 and 10,000
-Works, with zero and 1,000 idle scopes. Both public and global-rating populations
+delta at 100, 1,000 and 10,000 Works, with zero and 1,000 idle scopes. Both
+public and global-rating populations
 rebuilt in 1.92, 14.20 and 141.34 seconds; the largest run again used 352 ticks
 and 1,807 graph calls. The prior 10,000-Work measurement was 135.15 seconds.
 These are repeated measurements on the shared host, within the five-minute
