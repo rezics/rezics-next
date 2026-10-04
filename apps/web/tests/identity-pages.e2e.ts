@@ -74,6 +74,7 @@ test('identity pages compare separate figures, preserve credits and show units a
     await page.screenshot({ path: info.outputPath(`unit-${width}.png`), fullPage: true });
     await page.goto(path(data.title));
     const holders = page.locator('section[aria-labelledby="identity-holders"]');
+    await expect(holders).toBeVisible();
     await expect(holders.locator('[data-identity-member]')).toHaveCount(2);
     await expect(holders).toContainText('Fate/stay night');
     await expect(holders).toContainText('Fate/Prototype');

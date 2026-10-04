@@ -57,7 +57,7 @@ async function reads(page: Page, answer: GrainAnswer, locale: UiLocale) {
     await expect(aggregate).toContainText(new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(answer.mean));
   }
   // Exactly that grain's reviews, as Main lists them.
-  const list = page.locator('section[aria-labelledby="work-reviews"] ol > li');
+  const list = page.locator('section[aria-labelledby="work-reviews"] article[id^="review-"]');
   await expect(list).toHaveCount(answer.reviews.length);
   for (const review of answer.reviews)
     await expect(page.locator(`#review-${review.id}`)).toContainText(review.text);
@@ -107,7 +107,7 @@ test('query 5: edition, story, translation, manga and anime reviews filter separ
   const web = page.locator(`[data-review-target="${uuid(data.manifest.works['sao.web']!.work)}"]`);
   await page.goto(hub('en'));
   await web.click();
-  await expect(page.locator('section[aria-labelledby="work-reviews"] ol > li')).toHaveCount(0);
+  await expect(page.locator('section[aria-labelledby="work-reviews"] article[id^="review-"]')).toHaveCount(0);
   await expect(page.getByText(grains.story.text)).toHaveCount(0);
 
   // Everyone's view has no rating question for an edition: the Work's own reviews do not appear to answer for it.

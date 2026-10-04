@@ -91,6 +91,7 @@ async function titleApplicability(
   );
   if (!read.ok) return null;
   const names = await namesOf(read.data.applicability);
+  if (read.data.applicability.some((ref) => names.get(ref)?.status !== 'available')) return null;
   return [...names.values()].filter(
     (item): item is AvailableSummary => item.status === 'available',
   );

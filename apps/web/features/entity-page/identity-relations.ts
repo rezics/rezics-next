@@ -1,4 +1,4 @@
-import type { AvailableSummary, RelationEntry, RelationBinding } from '../work-levels/types.ts';
+import type { AvailableSummary, RelationEntry } from '../work-levels/types.ts';
 import type { Loaded, RatingRead } from '../work-page/types.ts';
 
 export const identityKeys = ['variant-of', 'represents', 'holds-title'] as const;
@@ -68,11 +68,4 @@ export function fromRole(entry: RelationEntry, role: string): RelationEntry {
   return entry.rendering
     ? { ...entry, rendering: { ...entry.rendering, viewingRole: role } }
     : entry;
-}
-
-export function creditedBinding(
-  entry: RelationEntry,
-  role: string,
-): RelationBinding['creditedName'] {
-  return entry.rendering?.bindings.find((item) => item.role === role)?.creditedName;
 }
