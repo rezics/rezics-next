@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, type CommandResult, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations, COMMAND_MODULE_VERSION, type ProfileId } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
@@ -21,11 +21,11 @@ export type SemanticAdmission = Pick<RegisteredAdmission,
   'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
 
 export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference' | 'generation-changed'
-  | 'star-violation';
+  | 'star-violation' | 'question-presentation-language-limit';
 
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
-    | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large', message: string) { super(message); }
+    | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large' | 'question-presentation-language-limit', message: string) { super(message); }
 }
 export class StaleSemanticHead extends Error {
   constructor(message: string, readonly currentHead?: string) { super(message); }
@@ -53,6 +53,7 @@ const REASONS: Record<string, SemanticRejection> = {
   [`${RV}StaleHead`]: 'stale-head', [`${RV}RetiredDefinition`]: 'retired-definition',
   [`${RV}UnavailableReference`]: 'unavailable-reference', [`${RV}GenerationChanged`]: 'generation-changed',
   [`${RV}StarViolation`]: 'star-violation',
+  [`${RV}QuestionPresentationLanguageLimit`]: 'question-presentation-language-limit',
 };
 const REASON_TERMS = Object.fromEntries(Object.entries(REASONS).map(([term, reason]) =>
   [reason, `rv:${term.slice(RV.length)}`])) as
@@ -104,6 +105,9 @@ export function checkedSemanticTerminal(terminal: SemanticTerminal, admission: P
     throw new IdempotencyConflict('semantic receipt does not match its admission');
   }
   if (terminal.outcome === 'cancelled') {
+    if (terminal.reason === 'question-presentation-language-limit') {
+      throw new SemanticChangeRejected(terminal.reason, 'Context already has 64 reviewed presentation languages');
+    }
     if (terminal.reason === 'generation-changed') {
       throw new ModelGenerationChanged('model generation changed after semantic preparation');
     }
@@ -199,7 +203,7 @@ export interface SemanticWrite {
 }
 
 /** Compose and send the one guarded update; outcomes resolve from the receipt. */
-export async function sendSemanticWrite(env: WorkActivationEnvironment, write: SemanticWrite): Promise<void> {
+export async function sendSemanticWrite(env: WorkActivationEnvironment, write: SemanticWrite): Promise<CommandResult | undefined> {
   const eventKind = write.event ?? (write.admission.action === 'relation.change' ? 'RelationChangedEvent' : 'SemanticChangedEvent');
   if (!/^[A-Z][A-Za-z0-9]*Event$/.test(eventKind)) throw new Error('invalid semantic event class');
   const batch = `urn:rezics:outbox:${hash(write.receipt)}`;
@@ -233,6 +237,7 @@ export async function sendSemanticWrite(env: WorkActivationEnvironment, write: S
     const result = await validatedCommand(env, { receipt: write.receipt, digest: write.digest, update,
       validations: write.validations, deadlineMs: 10_000 }, write.admission);
     if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
+    return result;
   } catch (error) {
     if (error instanceof CommandRejected) throw error;
     /* a lost response resolves from the receipt */

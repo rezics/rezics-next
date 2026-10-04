@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { realmPermissions } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
@@ -510,6 +512,50 @@ test('Rating question presentations preserve meaning across locales, permission 
     expect(costs.length).toBeGreaterThan(8);
     expect(outboxEventHandlers[0]!.actions).toContain(QUESTION_PRESENTATION_ACTIONS[1]);
 
+    // A native guard refusal whose basis is no longer visible on reconciliation
+    // still needs a terminal result, rather than retries until admission expiry.
+    let refuseGuard = true;
+    s.fuseki.commandWithReceipt = async (envelope) => {
+      if (refuseGuard && envelope.update.includes('RatingQuestionPresentationChangedEvent')) {
+        refuseGuard = false;
+        const refused = await nativeCommand({
+          ...envelope,
+          update: envelope.update.replace(
+            'BIND(?n + 1 AS ?next)',
+            'FILTER(false) BIND(?n + 1 AS ?next)',
+          ),
+        });
+        expect(refused.status).toBe('guard-unmatched');
+        return refused;
+      }
+      return nativeCommand(envelope);
+    };
+    const mismatchedKey = randomUUID();
+    try {
+      expect(
+        await json(
+          await post(state('fr', 'A mismatched projection?'), owner, winner, mismatchedKey),
+          422,
+        ),
+      ).toMatchObject({ code: 'unavailable_reference' });
+      expect(
+        (
+          await s.accessPool.query(
+            'SELECT state,graph_outcome FROM access.admission WHERE principal_id=$1 AND idempotency_key=$2',
+            [owner.principalId, mismatchedKey],
+          )
+        ).rows,
+      ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+    } finally {
+      s.fuseki.commandWithReceipt = nativeCommand;
+    }
+    expect(
+      await json(
+        await post(state('fr', 'A mismatched projection?'), owner, winner, mismatchedKey),
+        422,
+      ),
+    ).toMatchObject({ code: 'unavailable_reference' });
+
     const creationRace = await Promise.all(
       ['Да ли сте уживали?', 'Да ли вам се свиђа?'].map((text) => post(state('sr-Cyrl', text))),
     );
@@ -538,6 +584,87 @@ test('Rating question presentations preserve meaning across locales, permission 
         fallback: { crossedScript: true, usedLanguage: 'zh-Hans', conversion: null },
       },
     });
+
+    // The cap counts retained reviews even while editorial heads are drafts.
+    // Two new languages compete for the final slot inside the native write.
+    const bounded = new Map<string, Write>();
+    for (let index = 0; index < 62; index++) {
+      const language = `qaa-x-${index}`;
+      bounded.set(
+        language,
+        await json<Write>(
+          await post(state(language, 'A bounded review?', 'reviewed', sparse.context)),
+          201,
+        ),
+      );
+    }
+    const lastSlot = await Promise.all(
+      ['qaa-x-62', 'qaa-x-63'].map((language) =>
+        post(state(language, 'The final reviewed language?', 'reviewed', sparse.context)),
+      ),
+    );
+    expect(lastSlot.map((response) => response.status).sort()).toEqual([201, 422]);
+    expect(
+      await json(
+        lastSlot.find((response) => response.status === 422)!,
+        422,
+      ),
+    ).toMatchObject({ code: 'question_presentation_language_limit' });
+    const heldReview = bounded.get('qaa-x-0')!;
+    const heldDraft = await json<Write>(
+      await post(
+        state('qaa-x-0', 'A replacement draft?', 'draft', sparse.context),
+        owner,
+        heldReview,
+      ),
+    );
+    expect(
+      await json(
+        await call(
+          null,
+          'GET',
+          `/v1/global-rating-contexts/${short(sparse.context)}?languages=qaa-x-0`,
+        ),
+      ),
+    ).toMatchObject({
+      displayQuestion: {
+        value: 'A bounded review?',
+        presentation: { revision: heldReview.revision },
+      },
+    });
+    await json(
+      await post(
+        state('qaa-x-0', 'A replacement review?', 'reviewed', sparse.context),
+        owner,
+        heldDraft,
+      ),
+    );
+    const extraDraft = await json<Write>(
+      await post(state('qaa-x-extra', 'An extra draft?', 'draft', sparse.context)),
+      201,
+    );
+    const refusedKey = randomUUID();
+    for (let retry = 0; retry < 2; retry++) {
+      expect(
+        await json(
+          await post(
+            state('qaa-x-extra', 'An extra review?', 'reviewed', sparse.context),
+            owner,
+            extraDraft,
+            refusedKey,
+          ),
+          422,
+        ),
+      ).toMatchObject({ code: 'question_presentation_language_limit' });
+    }
+    expect(
+      (
+        await s.accessPool.query(
+          `SELECT state,graph_outcome FROM access.admission WHERE principal_id=$1 AND idempotency_key=$2`,
+          [owner.principalId, refusedKey],
+        )
+      ).rows,
+    ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
 
     const eventId = `urn:rezics:event:${hash(`${winner.receipt}\0semantic-write`)}`;
     const terminalRows = (
@@ -610,7 +737,7 @@ test('Rating question presentations preserve meaning across locales, permission 
     );
     expect(reviewed.predecessor).toBe(draft.revision);
 
-    // Realm managers use their Realm role proof for both independent actions,
+    // Realm configurers draft; review needs its own selected, revocable grant,
     // including language-tagged targets that are not rv:RatingContext subjects.
     const realm = (
       await json<{ realm: string }>(
@@ -682,6 +809,23 @@ test('Rating question presentations preserve meaning across locales, permission 
       ),
       201,
     );
+    await json(
+      await post(state('fr', 'Une question relue ?', 'reviewed', realmContext.context), owner),
+      201,
+    );
+    expect(
+      (
+        await post(
+          state('en', 'How do you rate this character?', 'reviewed', realmContext.context),
+          manager,
+          realmDraft,
+        )
+      ).status,
+    ).toBe(403);
+    const reviewGrant = await manager.grant(
+      `governance:realm:${realm}`,
+      'rating.question-presentation.review',
+    );
     const realmReviewBody = body(
       state('en', 'How do you rate this character?', 'reviewed', realmContext.context),
       manager,
@@ -715,6 +859,32 @@ test('Rating question presentations preserve meaning across locales, permission 
         reviewStatus: 'reviewed',
       },
     });
+    const nextDraft = await json<Write>(
+      await post(
+        state('en', 'A draft replacement?', 'draft', realmContext.context),
+        manager,
+        realmReviewed,
+      ),
+    );
+    expect(
+      await json(
+        await call(null, 'GET', `/v1/rating-contexts/${short(realmContext.context)}?languages=en`),
+      ),
+    ).toMatchObject({
+      displayQuestion: {
+        value: 'How do you rate this character?',
+        presentation: { revision: realmReviewed.revision },
+      },
+    });
+    expect(
+      await json(
+        await call(
+          null,
+          'GET',
+          `/v1/rating-question-presentations/${short(realmReviewed.component)}`,
+        ),
+      ),
+    ).toMatchObject({ revision: realmReviewed.revision });
     const targetPage = await json<{ items: Presented[] }>(
       await call(
         owner,
@@ -751,9 +921,10 @@ test('Rating question presentations preserve meaning across locales, permission 
       };
       pending.push({ request, admission: await s.access.register(request) });
     }
-    await s.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
-      grant,
-    ]);
+    await s.accessPool.query(
+      'UPDATE access.permission_grant SET active = false WHERE id = ANY($1::uuid[])',
+      [[grant, reviewGrant]],
+    );
     for (const entry of pending) {
       await expect(s.access.claim(entry.admission.id, entry.request.requestDigest)).rejects.toThrow(
         'Realm rating authority changed',
@@ -769,13 +940,13 @@ test('Rating question presentations preserve meaning across locales, permission 
         await post(
           state('en', 'New wording?', 'reviewed', realmContext.context),
           manager,
-          realmReviewed,
+          nextDraft,
         )
       ).status,
     ).toBe(403);
     // Platform administration is limited to Global presentation ownership.
     await s.accessPool.query(
-      "UPDATE access.permission_grant SET active = false WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'rating.configure'",
+      "UPDATE access.permission_grant SET active = false WHERE recipient_subject = $1 AND scope_id = $2 AND action IN ('rating.configure','rating.question-presentation.review')",
       [owner.actor, `governance:realm:${realm}`],
     );
     expect(
@@ -787,8 +958,62 @@ test('Rating question presentations preserve meaning across locales, permission 
         )
       ).status,
     ).toBe(403);
+    const upgradeRealm = (
+      await json<{ realm: string }>(
+        await call(owner, 'POST', '/v1/spaces', {
+          profile: 'space-realm-v1',
+          name: 'Prior question review owner',
+          capabilities: ['realm'],
+          actingSubject: owner.actor,
+        }),
+        201,
+      )
+    ).realm;
+    await json(
+      await call(owner, 'POST', `/v1/realms/${short(upgradeRealm)}/management`, {
+        actingSubject: owner.actor,
+      }),
+    );
+    const migrationClient = await s.accessPool.connect();
+    try {
+      await migrationClient.query('BEGIN');
+      await migrationClient.query(
+        "DELETE FROM access.permission_grant WHERE recipient_subject=$1 AND scope_id=$2 AND action='rating.question-presentation.review'",
+        [owner.actor, `governance:realm:${upgradeRealm}`],
+      );
+      const migration = readFileSync(
+        new URL(
+          '../../../services/main/migrations/access/1075_question_presentation_review.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      );
+      await migrationClient.query(migration);
+      await migrationClient.query(migration);
+      const grants = (
+        await migrationClient.query<{ scope_id: string; active: boolean }>(
+          `SELECT scope_id,active FROM access.permission_grant
+        WHERE recipient_subject=$1 AND scope_id=ANY($2::text[]) AND action='rating.question-presentation.review'`,
+          [owner.actor, [realm, upgradeRealm].map((value) => `governance:realm:${value}`)],
+        )
+      ).rows;
+      expect(grants).toHaveLength(2);
+      expect(grants.find((grant) => grant.scope_id === `governance:realm:${realm}`)?.active).toBe(
+        false,
+      );
+      expect(
+        grants.find((grant) => grant.scope_id === `governance:realm:${upgradeRealm}`)?.active,
+      ).toBe(true);
+      await migrationClient.query(
+        "INSERT INTO access.realm_admin_role(realm,id,name,permissions) VALUES($1,$2,'Complete permission vocabulary',$3)",
+        [upgradeRealm, randomUUID(), [...realmPermissions]],
+      );
+    } finally {
+      await migrationClient.query('ROLLBACK');
+      migrationClient.release();
+    }
     s.fuseki.commandWithReceipt = nativeCommand;
   } finally {
     await s.stop();
   }
-}, 120_000);
+}, 240_000);

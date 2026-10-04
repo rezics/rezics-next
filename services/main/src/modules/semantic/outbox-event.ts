@@ -56,7 +56,7 @@ export async function readChangedEvent(input: EventInput,
   action: 'semantic.change' | 'relation.change' | 'lexicon.presentation.change' | 'lexicon.presentation.review'
     | 'rating.question-presentation.change' | 'rating.question-presentation.review',
   family: 'semantic-change' | 'relation-change' | 'lexicon-presentation-change' | 'rating-question-presentation-change',
-  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision' | 'PresentationRevision' | 'RatingQuestionPresentationRevision')[],
+  revisionKinds: readonly ('SemanticRevision' | 'DefinitionRevision' | 'RelationOccurrenceRevision' | 'PresentationRevision' | 'RatingQuestionPresentationRevision' | 'RatingQuestionPresentationV2Revision')[],
   type: string, ownerProof?: (component: string, revision: string) =>
     Promise<{ scope: string; fields: Record<string, string> }>) {
   const { fuseki, batch, eventId, value, ordinal } = input;

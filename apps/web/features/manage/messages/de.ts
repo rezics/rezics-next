@@ -262,6 +262,7 @@ export default {
   permRules: 'Regeln veröffentlichen', permRulesHelp: 'Neue Fassungen der Community-Regeln veröffentlichen.',
   permSettings: 'Einstellungen ändern', permSettingsHelp: 'Ändern, wer Werke einreichen darf, und weitere Einstellungen der Community anpassen.',
   permRatings: 'Bewertungen konfigurieren', permRatingsHelp: 'Bewertungsfragen erstellen und festlegen, wie diese Community Bewertungen zusammenfasst.',
+  permQuestionReview: 'Übersetzungen von Bewertungsfragen prüfen', permQuestionReviewHelp: 'Übersetzungen von Bewertungsfragen für Leser freigeben. Entwürfe erfordern die Berechtigung zur Bewertungskonfiguration.',
   permRoles: 'Rollen verwalten', permRolesHelp: 'Rollen erstellen, ihre Berechtigungen ändern und sie Personen zuweisen.',
   permReview: 'Einreichungen prüfen', permReviewHelp: 'Werke und Kapitel, die dieser Community angeboten werden, genehmigen, ablehnen oder zur Überarbeitung zurückgeben.',
   permAdopt: 'In die Community übernehmen', permAdoptHelp: "Angenommene Werke in die Sammlung der Community aufnehmen und ihre Auswahl veröffentlichen.",

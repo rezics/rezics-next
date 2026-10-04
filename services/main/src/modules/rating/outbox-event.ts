@@ -4,7 +4,7 @@ import { GRAPHS, RV, hash, iri } from '../work/activate.ts';
 import {
   QUESTION_PRESENTATION_ACTIONS,
   QUESTION_PRESENTATION_FAMILY,
-  QUESTION_PRESENTATION_PROFILE_IRI,
+  QUESTION_PRESENTATION_REVISION_PROFILES,
   questionPresentationScope,
 } from './question-presentation-schema.ts';
 
@@ -34,15 +34,16 @@ export const outboxEventHandlers: OwnerOutboxEventHandler[] = [
           ? QUESTION_PRESENTATION_ACTIONS[0]
           : QUESTION_PRESENTATION_ACTIONS[1],
         QUESTION_PRESENTATION_FAMILY,
-        ['RatingQuestionPresentationRevision'],
+        ['RatingQuestionPresentationRevision', 'RatingQuestionPresentationV2Revision'],
         eventType,
         async (component, revision) => {
           const rows =
             (
               await fuseki.query(`PREFIX rv: <${RV}> SELECT ?context ?status WHERE {
-          GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RatingQuestionPresentationRevision ;
+          ${QUESTION_PRESENTATION_REVISION_PROFILES}
+          GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a ?presentationRevisionKind ;
             rv:component ${iri(component)} ; rv:presentationContext ?context ; rv:reviewStatus ?status ;
-            rv:modelRevision ${iri(QUESTION_PRESENTATION_PROFILE_IRI)} ; rv:shapeRevision ${iri(QUESTION_PRESENTATION_PROFILE_IRI)} }
+            rv:modelRevision ?presentationProfile ; rv:shapeRevision ?presentationProfile }
         } LIMIT 2`)
             ).results?.bindings ?? [];
           const context = rows[0]?.context?.value;

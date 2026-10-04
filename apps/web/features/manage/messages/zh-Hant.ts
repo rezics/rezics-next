@@ -251,6 +251,7 @@ export default {
   permRules: '發布規範', permRulesHelp: '發布社群規範的新版本。',
   permSettings: '變更設定', permSettingsHelp: '變更投稿權限及其他社群設定。',
   permRatings: '設定評分', permRatingsHelp: '建立評分問題，並選擇此社群如何彙總評分。',
+  permQuestionReview: '審核評分問題譯文', permQuestionReviewHelp: '核准評分問題的譯文，供讀者查看。起草譯文需要評分設定權限。',
   permRoles: '管理角色', permRolesHelp: '建立角色、變更權限並授予成員角色。',
   permReview: '審核投稿', permReviewHelp: '核准、拒絕或退回投稿至社群的作品與章節。',
   permAdopt: '收錄至社群', permAdoptHelp: '將獲接受的作品加入社群收藏，並發布精選結果。',

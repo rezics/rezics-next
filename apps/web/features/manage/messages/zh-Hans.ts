@@ -280,6 +280,7 @@ export default {
   permRules: '发布规则', permRulesHelp: '发布领域规则的新修订。',
   permSettings: '更改设置', permSettingsHelp: '更改谁可以投稿等领域设置。',
   permRatings: '配置评分', permRatingsHelp: '创建评分问题，并选择此领域如何汇总评分。',
+  permQuestionReview: '审核评分问题译文', permQuestionReviewHelp: '批准评分问题的译文，供读者查看。起草译文需要评分配置权限。',
   permRoles: '管理角色', permRolesHelp: '创建角色、调整其权限并授予他人。',
   permReview: '审核投稿', permReviewHelp: '批准、拒绝或退回提交给本 Realm 的作品和章节。',
   permAdopt: '收录作品', permAdoptHelp: '将通过审核的作品收入本 Realm，并发布其精选。',

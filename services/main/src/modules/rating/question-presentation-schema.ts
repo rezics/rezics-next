@@ -9,12 +9,21 @@ import { ratingQuestionPresentationActions } from '../access/rating-question-pre
 
 export const QUESTION_PRESENTATION_PROFILE = 'rating-question-presentation-v1';
 export const QUESTION_PRESENTATION_PROFILE_IRI = `https://rezics.com/definition/${QUESTION_PRESENTATION_PROFILE}`;
+export const QUESTION_PRESENTATION_STORAGE_PROFILE = 'rating-question-presentation-v2';
+export const QUESTION_PRESENTATION_STORAGE_PROFILE_IRI = `https://rezics.com/definition/${QUESTION_PRESENTATION_STORAGE_PROFILE}`;
+export const QUESTION_PRESENTATION_KINDS =
+  'rv:RatingQuestionPresentation rv:RatingQuestionPresentationV2';
+export const QUESTION_PRESENTATION_REVISION_PROFILES = `VALUES (?presentationRevisionKind ?presentationProfile) {
+  (rv:RatingQuestionPresentationRevision <${QUESTION_PRESENTATION_PROFILE_IRI}>)
+  (rv:RatingQuestionPresentationV2Revision <${QUESTION_PRESENTATION_STORAGE_PROFILE_IRI}>) }`;
 export const QUESTION_PRESENTATION_FAMILY = 'rating-question-presentation-change';
 export const QUESTION_PRESENTATION_ACTIONS = ratingQuestionPresentationActions;
 /** Writes touch two focuses and one language row. Reads inspect O(L) index rows
  * for each of at most 20 Contexts, resolve only selected objects, and share the
- * Work read's byte/call/deadline budget. Stored languages have no cardinality cap. */
+ * Work read's byte/call/deadline budget. At most 64 reviewed languages per Context. */
 export const QUESTION_PRESENTATION_COST = {
+  reviewedLanguagesPerContext: 64,
+  reviewedIndexRows: 65,
   requestBytes: 8192,
   languagesPerRequest: 20,
   contextBatch: 20,

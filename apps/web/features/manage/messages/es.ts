@@ -261,6 +261,7 @@ export default {
   permRules: 'Publicar reglas', permRulesHelp: 'Publicar nuevas versiones de las reglas de la comunidad.',
   permSettings: 'Cambiar la configuración', permSettingsHelp: 'Cambiar quién puede enviar propuestas y otros ajustes de la comunidad.',
   permRatings: 'Configurar valoraciones', permRatingsHelp: 'Crear preguntas de valoración y elegir cómo esta comunidad combina las valoraciones.',
+  permQuestionReview: 'Revisar traducciones de preguntas', permQuestionReviewHelp: 'Aprobar traducciones de preguntas de valoración para los lectores. Crear borradores requiere permiso para configurar valoraciones.',
   permRoles: 'Gestionar roles', permRolesHelp: 'Crear roles, cambiar sus permisos y asignárselos a otras personas.',
   permReview: 'Revisar propuestas', permReviewHelp: 'Aprobar, rechazar o devolver obras y capítulos enviados a esta comunidad.',
   permAdopt: 'Adoptar en la comunidad', permAdoptHelp: 'Añadir las obras aceptadas a la colección de la comunidad y publicar su selección.',

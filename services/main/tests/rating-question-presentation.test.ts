@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
-import { selectQuestionPresentation } from '../src/modules/rating/question-presentation-read.ts';
+import {
+  readDisplayRatingQuestion,
+  selectQuestionPresentation,
+} from '../src/modules/rating/question-presentation-read.ts';
+import { FusekiReadBudgetExceeded } from '../src/infrastructure/fuseki.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { ratingQuestionPresentationPermission } from '../src/modules/access/rating-question-presentation.ts';
 import {
   checkedQuestionPresentation,
   questionPresentationAction,
@@ -30,6 +36,32 @@ const row = (language: string, question?: string) => ({
   component: native(),
   revision: native(),
   state: state(language, question),
+});
+
+test('Question drafting and review select independent Realm grants', () => {
+  expect(ratingQuestionPresentationPermission('rating.question-presentation.change')).toBe(
+    'rating.configure',
+  );
+  expect(ratingQuestionPresentationPermission('rating.question-presentation.review')).toBe(
+    'rating.question-presentation.review',
+  );
+});
+
+test('Question display reads use LIMIT 65 and refuse an overflowing review index', async () => {
+  let query = '';
+  const env = {
+    fuseki: {
+      query: async (sparql: string) => {
+        query = sparql;
+        return { results: { bindings: Array.from({ length: 65 }, () => ({})) } };
+      },
+    },
+  } as unknown as WorkActivationEnvironment;
+  await expect(readDisplayRatingQuestion(env, authored, ['fr'])).rejects.toBeInstanceOf(
+    FusekiReadBudgetExceeded,
+  );
+  expect(query).toContain('LIMIT 65');
+  expect(query).toContain('questionPresentationReviewedHead');
 });
 
 test('Rating question selection uses reader order, arbitrary BCP 47 languages and authored fallback', () => {

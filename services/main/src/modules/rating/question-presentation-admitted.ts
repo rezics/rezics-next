@@ -107,8 +107,13 @@ export async function admittedQuestionPresentationChange(
       error instanceof StaleSemanticHead ||
       error instanceof ModelGenerationChanged ||
       error instanceof CommandRejected
-    )
+    ) {
+      // A graph refusal is terminal too. Seal Access before returning it so a
+      // refused command never remains claimed until its lease expires.
+      const terminal = await readQuestionPresentationTerminal(env, registered.id);
+      if (terminal) await access.recordGraphOutcome(registered.id, terminal);
       throw error;
+    }
     throw new PendingAdmittedWork(registered.id);
   }
 }

@@ -6,6 +6,7 @@ import { admittedQuestionPresentationChange } from '../modules/rating/question-p
 import {
   findQuestionPresentation,
   readQuestionPresentationCurrent,
+  readReviewedQuestionPresentation,
   readQuestionPresentationRevision,
 } from '../modules/rating/question-presentation.ts';
 import { readAuthoredRatingQuestion } from '../modules/rating/question-presentation-context.ts';
@@ -15,6 +16,8 @@ import {
   QUESTION_PRESENTATION_ACTIONS,
   questionPresentationScope,
   QUESTION_PRESENTATION_COST,
+  QUESTION_PRESENTATION_KINDS,
+  QUESTION_PRESENTATION_REVISION_PROFILES,
 } from '../modules/rating/question-presentation-schema.ts';
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { fusekiReadBudget } from '../infrastructure/fuseki.ts';
@@ -46,7 +49,10 @@ const read = t.Object({
   sourcePosition,
 });
 export const openApiOperations = {
-  '/v1/rating-question-presentations': { post: { bearer: true, idempotencyKey: true }, get: { bearer: false } },
+  '/v1/rating-question-presentations': {
+    post: { bearer: true, idempotencyKey: true },
+    get: { bearer: false },
+  },
   '/v1/rating-question-presentations/{id}': { get: { bearer: false } },
   '/v1/rating-question-presentations/{id}/revisions/{revision}': { get: { bearer: false } },
 } as const;
@@ -66,9 +72,11 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
         revision
           ? `BIND(${iri(revision)} AS ?head)`
           : `GRAPH ${iri(GRAPHS.current)} {
-        ${iri(component)} a rv:RatingQuestionPresentation ; rv:questionPresentationHead ?head }`
+        ${iri(component)} a ?presentationKind ; rv:questionPresentationHead ?head }
+        VALUES ?presentationKind { ${QUESTION_PRESENTATION_KINDS} }`
       }
-      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RatingQuestionPresentationRevision, rv:RevisionAnchor ;
+      ${QUESTION_PRESENTATION_REVISION_PROFILES}
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a ?presentationRevisionKind, rv:RevisionAnchor ;
         rv:component ${iri(component)} ; rv:presentationContext ?context ; rv:reviewStatus ?review .
         FILTER NOT EXISTS { ?head a rv:ErasedRevision } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:protectionHead ?protection } }
@@ -104,7 +112,26 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
     component: string,
     revision?: string,
   ) => {
-    const context = await allowed(request, actor, component, revision);
+    let context: string;
+    try {
+      context = await allowed(request, actor, component, revision);
+    } catch (error) {
+      if (revision || !(error instanceof SemanticTargetUnavailable)) throw error;
+      const current = await readQuestionPresentationCurrent(work.environment, component);
+      if (!current) throw error;
+      await readAuthoredRatingQuestion(work.environment, current.state.context);
+      const reviewed = await readReviewedQuestionPresentation(
+        work.environment,
+        current.state.context,
+        component,
+      );
+      if (!reviewed) throw error;
+      await allowed(request, actor, component, reviewed.revision);
+      return Response.json(
+        { profile: QUESTION_PRESENTATION_PROFILE, ...reviewed },
+        { headers: { 'cache-control': 'no-store' } },
+      );
+    }
     const result = revision
       ? await readQuestionPresentationRevision(work.environment, component, revision)
       : await readQuestionPresentationCurrent(work.environment, component);
@@ -117,37 +144,76 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
     );
   };
   return new Elysia()
-    .get('/v1/rating-question-presentations', {
-      query: t.Object({ context: readId, language: languageTagSchema(255), actingSubject: t.Optional(readId) },
-        { additionalProperties: false }),
-      response: { 200: t.Object({ presentation: t.Nullable(read) }), ...authorizedReadProblems },
-    }, async ({ request, query }) => {
-      try {
-        return await fusekiReadBudget.run({ callsLeft: QUESTION_PRESENTATION_COST.lookupGraphCalls,
-          bytesLeft: QUESTION_PRESENTATION_COST.lookupGraphBytes,
-          signal: AbortSignal.any([request.signal, AbortSignal.timeout(QUESTION_PRESENTATION_COST.lookupDeadlineMs)]),
-        }, async () => {
-          await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
-          await readAuthoredRatingQuestion(work.environment, query.context);
-          const found = await findQuestionPresentation(work.environment, query.context, query.language);
-          if (!found) return Response.json({ presentation: null }, { headers: { 'cache-control': 'no-store' } });
-          try {
-            // Hydrate the immutable head captured by the tuple lookup. Reading
-            // current again can mix a concurrent review's projection with the
-            // prior manifest; the caller's next write already uses head CAS.
-            const response = await readRoute(request, query.actingSubject, found.component, found.revision);
-            const presentation = await response.json();
-            if (presentation.revision !== found.revision) throw new SemanticTargetUnavailable('Presentation moved during lookup');
-            return Response.json({ presentation }, { headers: { 'cache-control': 'no-store' } });
-          } catch (error) {
-            if (!(error instanceof SemanticTargetUnavailable)) throw error;
-            // A draft or protected head must be indistinguishable from an empty
-            // language slot to a caller without editorial authority.
-            return Response.json({ presentation: null }, { headers: { 'cache-control': 'no-store' } });
-          }
-        });
-      } catch (error) { return semanticError(error); }
-    })
+    .get(
+      '/v1/rating-question-presentations',
+      {
+        query: t.Object(
+          { context: readId, language: languageTagSchema(255), actingSubject: t.Optional(readId) },
+          { additionalProperties: false },
+        ),
+        response: { 200: t.Object({ presentation: t.Nullable(read) }), ...authorizedReadProblems },
+      },
+      async ({ request, query }) => {
+        try {
+          return await fusekiReadBudget.run(
+            {
+              callsLeft: QUESTION_PRESENTATION_COST.lookupGraphCalls,
+              bytesLeft: QUESTION_PRESENTATION_COST.lookupGraphBytes,
+              signal: AbortSignal.any([
+                request.signal,
+                AbortSignal.timeout(QUESTION_PRESENTATION_COST.lookupDeadlineMs),
+              ]),
+            },
+            async () => {
+              await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
+              await readAuthoredRatingQuestion(work.environment, query.context);
+              const found = await findQuestionPresentation(
+                work.environment,
+                query.context,
+                query.language,
+              );
+              if (!found)
+                return Response.json(
+                  { presentation: null },
+                  { headers: { 'cache-control': 'no-store' } },
+                );
+              try {
+                // Hydrate the immutable head captured by the tuple lookup. Reading
+                // current again can mix a concurrent review's projection with the
+                // prior manifest; the caller's next write already uses head CAS.
+                let response: Response;
+                try {
+                  response = await readRoute(
+                    request,
+                    query.actingSubject,
+                    found.component,
+                    found.revision,
+                  );
+                } catch (error) {
+                  if (!(error instanceof SemanticTargetUnavailable)) throw error;
+                  response = await readRoute(request, query.actingSubject, found.component);
+                }
+                const presentation = await response.json();
+                return Response.json(
+                  { presentation },
+                  { headers: { 'cache-control': 'no-store' } },
+                );
+              } catch (error) {
+                if (!(error instanceof SemanticTargetUnavailable)) throw error;
+                // A draft or protected head must be indistinguishable from an empty
+                // language slot to a caller without editorial authority.
+                return Response.json(
+                  { presentation: null },
+                  { headers: { 'cache-control': 'no-store' } },
+                );
+              }
+            },
+          );
+        } catch (error) {
+          return semanticError(error);
+        }
+      },
+    )
     .post(
       '/v1/rating-question-presentations',
       {

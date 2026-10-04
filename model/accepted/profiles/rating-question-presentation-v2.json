@@ -1,0 +1,8 @@
+{
+  "sha256": "627c0879d09b1e05286536be5830f582e9a6a4cabc4620c1adf3a9ee0b84134e",
+  "binding": {
+    "required": ["presentation", "revision", "context", "language"],
+    "optional": [],
+    "roles": ["presentation", "revision"]
+  }
+}

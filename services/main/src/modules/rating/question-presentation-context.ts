@@ -75,3 +75,32 @@ export async function readAuthoredRatingQuestion(env: WorkActivationEnvironment,
     owner: row.questionOwner.value,
   };
 }
+
+/** Commit from the exact retained source and owner, rather than joining every
+ * owner alternative and filtering its bindings after the fact. */
+export function questionContextCommitGuard(
+  authored: Awaited<ReturnType<typeof readAuthoredRatingQuestion>>,
+) {
+  const owner = iri(authored.owner),
+    context = iri(authored.context);
+  return `GRAPH ${iri(GRAPHS.current)} {
+    ${context} rv:contextState rv:Active ; rv:head ${iri(authored.revision)} ;
+      rv:question ${JSON.stringify(authored.question)}@${authored.language} .
+    ${
+      authored.owner === GLOBAL_RATING_POPULATION_OWNER
+        ? `${context} rv:ratingPopulationOwner ${owner} .
+        { ${context} a rv:GlobalRatingContext }
+        UNION { ${context} a rv:AcceptedTargetRatingContext ; rv:realm ${owner} .
+          ${owner} a rv:GlobalRatingPopulation ; rv:ratingContext ${context} }`
+        : `${context} a ?guardContextKind ; rv:realm ${owner} .
+        VALUES ?guardContextKind { rv:RatingContext rv:TargetRatingContext rv:ReleaseRatingContext }
+        ${owner} a rv:Realm ; rv:realmState rv:Active ; rv:space ?guardSpace ; rv:ratingContext ${context} .
+        ?guardSpace a rv:Space ; rv:realmCapability ${owner} ; rv:disclosure rv:Public .
+        FILTER NOT EXISTS { ?guardSpace rv:disclosure rv:Private }
+        FILTER NOT EXISTS { ${owner} rv:protectionHead ?guardOwnerProtection }`
+    }
+    FILTER NOT EXISTS { ${context} rv:protectionHead ?guardContextProtection }
+  }
+  GRAPH ${iri(GRAPHS.revisions)} { ${iri(authored.revision)} a rv:RevisionAnchor ; rv:component ${context} .
+    FILTER NOT EXISTS { ${iri(authored.revision)} a rv:ErasedRevision } }`;
+}

@@ -4,14 +4,16 @@ import {
   parseLanguage,
   selectDisplayName,
 } from '../display-language/select.ts';
-import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { RV, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import { FusekiReadBudgetExceeded } from '../../infrastructure/fuseki.ts';
 import {
-  readQuestionPresentationCurrent,
+  readQuestionPresentationRevision,
   type QuestionPresentationRead,
 } from './question-presentation.ts';
 import { QUESTION_PRESENTATION_COST } from './question-presentation-schema.ts';
 import { readAuthoredRatingQuestion } from './question-presentation-context.ts';
+import { reviewedQuestionPresentationPattern } from './question-presentation-index.ts';
 
 interface AuthoredQuestion {
   context: string;
@@ -73,8 +75,8 @@ export function selectQuestionPresentation(
   };
 }
 
-/** O(L) metadata for this Context only, then three exact graph reads and one
- * immutable object for its selected language. No fixed prefix of languages. */
+/** At most 65 index rows detect overflow instead of selecting a truncated
+ * language prefix. Only the chosen immutable reviewed revision is hydrated. */
 export async function readDisplayRatingQuestion(
   env: WorkActivationEnvironment,
   authored: AuthoredQuestion,
@@ -83,15 +85,11 @@ export async function readDisplayRatingQuestion(
   const rows =
     (
       await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?presentation ?head ?language WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?presentation a rv:RatingQuestionPresentation ;
-      rv:presentationContext ${iri(authored.context)} ; rv:questionPresentationHead ?head ; rv:presentationLanguage ?language .
-      FILTER NOT EXISTS { ?presentation rv:protectionHead ?protection } }
-    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RatingQuestionPresentationRevision, rv:RevisionAnchor ;
-      rv:component ?presentation ; rv:presentationContext ${iri(authored.context)} ;
-      rv:presentationLanguage ?language ; rv:reviewStatus rv:Reviewed ; rv:sequence ?sequence .
-      FILTER NOT EXISTS { ?head a rv:ErasedRevision } }
-  }`)
+    ${reviewedQuestionPresentationPattern(authored.context)}
+  } LIMIT ${QUESTION_PRESENTATION_COST.reviewedIndexRows}`)
     ).results?.bindings ?? [];
+  if (rows.length > QUESTION_PRESENTATION_COST.reviewedLanguagesPerContext)
+    throw new FusekiReadBudgetExceeded('Rating question reviewed language index exceeds its bound');
   const index = rows.map((row) => {
     if (
       !row.presentation ||
@@ -116,7 +114,11 @@ export async function readDisplayRatingQuestion(
   });
   const choice = selectQuestionPresentation(authored, index, languages);
   if (!choice.presentation) return choice;
-  const selected = await readQuestionPresentationCurrent(env, choice.presentation.component);
+  const selected = await readQuestionPresentationRevision(
+    env,
+    choice.presentation.component,
+    choice.presentation.revision,
+  );
   if (
     !selected ||
     selected.revision !== choice.presentation.revision ||

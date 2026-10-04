@@ -497,6 +497,11 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
 }, 180_000);
 
 test('G-987: migration upgrades prior Realm owners, preserves every role permission and never resurrects revoked rating authority', async () => {
+  // This fixture replays 1026, whose eight-permission vocabulary predates
+  // independent question review. Later permissions belong to forward migrations.
+  const migrationPermissions = realmPermissions.filter(
+    (permission) => permission !== 'rating.question-presentation.review',
+  );
   const s = await startMediaStack('g-987-upgrade');
   try {
     const owner = await s.member('prior-owner');
@@ -563,14 +568,14 @@ test('G-987: migration upgrades prior Realm owners, preserves every role permiss
       await client.query(
         `INSERT INTO access.realm_admin_role (realm,id,name,permissions)
         VALUES ($1,$2,'Every preserved permission',$3)`,
-        [realms[0], randomUUID(), [...realmPermissions]],
+        [realms[0], randomUUID(), migrationPermissions],
       );
       expect(
         (
           await client.query(
             `SELECT count(*)::int AS n FROM access.realm_admin_role
         WHERE realm = $1 AND permissions @> $2::text[]`,
-            [realms[0], [...realmPermissions]],
+            [realms[0], migrationPermissions],
           )
         ).rows[0].n,
       ).toBe(1);

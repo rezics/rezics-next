@@ -66,12 +66,13 @@ export const NewRole: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'New role' }));
     const dialog = within(await body().findByRole('dialog', { name: 'New role' }, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Role name' }), 'Translators 译者');
-    await userEvent.click(dialog.getByRole('checkbox', { name: /Moderate the queue/ }));
+    await userEvent.click(dialog.getByRole('checkbox', { name: /Review question translations/ }));
+    await expect(dialog.getByRole('checkbox', { name: /Configure ratings/ })).not.toBeChecked();
     await expect(await dialog.findByText('No one’s permissions change.')).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'A team for translation reviews.');
     await userEvent.click(dialog.getByRole('button', { name: 'Create role' }));
     await waitFor(() => expect(record.roles).toEqual([expect.objectContaining({
-      change: expect.objectContaining({ kind: 'role', name: 'Translators 译者', permissions: ['governance.moderate'] }) })]));
+      change: expect.objectContaining({ kind: 'role', name: 'Translators 译者', permissions: ['rating.question-presentation.review'] }) })]));
   },
 };
 

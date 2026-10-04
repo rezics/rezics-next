@@ -1,11 +1,16 @@
 import type { PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri, RV } from '../work/activate.ts';
-import { ratingQuestionPresentationAction } from './rating-question-presentation.ts';
+import {
+  ratingQuestionPresentationAction,
+  ratingQuestionPresentationPermission,
+} from './rating-question-presentation.ts';
 
 export function ratingConfigurationAction(action: string): boolean {
-  return ['rating.context.create', 'rating.context.policy.set'].includes(action)
-    || ratingQuestionPresentationAction(action);
+  return (
+    ['rating.context.create', 'rating.context.policy.set'].includes(action) ||
+    ratingQuestionPresentationAction(action)
+  );
 }
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -36,7 +41,9 @@ async function targetRealm(
       ? 'rating:context:'
       : action === 'rating.context.policy.set'
         ? 'rating:policy:'
-        : ratingQuestionPresentationAction(action) ? 'rating:presentation:' : null;
+        : ratingQuestionPresentationAction(action)
+          ? 'rating:presentation:'
+          : null;
   if (!graph || !prefix || !scope.startsWith(prefix)) return null;
   const target = scope.slice(prefix.length);
   if (!native.test(target)) return null;
@@ -76,6 +83,7 @@ export async function realmRatingProof(
   selected?: RealmRatingProof,
 ): Promise<RealmRatingProof | null> {
   const realm = await targetRealm(graph, action, scope);
+  const permission = ratingQuestionPresentationPermission(action);
   if (!realm || (selected && selected.realm !== realm)) return null;
   const gate = (
     await client.query<{ authority_epoch: string }>(
@@ -92,10 +100,10 @@ export async function realmRatingProof(
     g.id AS grant_id,g.generation::text AS grant_generation,
     s.generation::text AS subject_generation,p.enforcement_epoch::text AS principal_epoch
     FROM access.principal p JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $2
-      AND r.action IN ('agent.control','rating.configure') AND r.active AND r.valid_until > clock_timestamp()
+      AND r.action IN ('agent.control',$12) AND r.active AND r.valid_until > clock_timestamp()
     JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
     JOIN access.permission_grant g ON g.recipient_subject = s.id AND g.scope_id = $5
-      AND g.action = 'rating.configure' AND g.active AND g.valid_until > clock_timestamp()
+      AND g.action = $12 AND g.active AND g.valid_until > clock_timestamp()
       AND (g.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership m
         WHERE m.id = g.membership_id AND m.member_subject = s.id AND m.state = 'joined'
           AND m.generation = g.membership_generation))
@@ -120,6 +128,7 @@ export async function realmRatingProof(
         selected?.grant_generation ?? null,
         selected?.subject_generation ?? null,
         selected?.principal_epoch ?? null,
+        permission,
       ],
     )
   ).rows[0];
