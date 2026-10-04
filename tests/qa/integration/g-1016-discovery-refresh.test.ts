@@ -68,15 +68,20 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
       // Model the real graph's outbox retention boundary: the durable relay
       // handoff is the only remaining evidence for every intervening write.
       await f.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.outbox)} { ?s ?p ?o } }`);
-      expect(await tick()).toBe(i === 4 ? 'activated' : 'advanced');
+      expect(await tick()).toBe('advanced');
       const row = (await f.accessPool.query(`SELECT d.generation_id,d.source_sequence::text,d.checkpoint,
         d.work_count::text,g.state,i.checkpoint_sequence::text AS validated
         FROM access.discovery_generation d JOIN access.derived_generation g ON g.id=d.generation_id
         JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE d.generation_id=$1`, [pending.generation_id])).rows[0];
       expect(row.generation_id).toBe(pending.generation_id);
-      expect(row.source_sequence).toBe(pending.source_sequence);
-      expect(row.checkpoint > checkpoint).toBe(true);
+      if (i < 4) {
+        expect(row.source_sequence).toBe(pending.source_sequence);
+        expect(row.checkpoint > checkpoint).toBe(true);
+      } else {
+        expect(BigInt(row.source_sequence)).toBeGreaterThan(BigInt(pending.source_sequence));
+        expect(row.checkpoint).toBe('');
+      }
       checkpoint = row.checkpoint;
       expect(BigInt(row.validated)).toBeGreaterThan(BigInt(pending.validated));
       pending.validated = row.validated;
@@ -87,14 +92,14 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     expect(projected).toEqual(originals.map(work => work.work).sort());
     expect(projected.some((work: string) => appended.some(item => item.work === work))).toBe(false);
     expect((await f.accessPool.query(`SELECT state,count(*)::text AS count FROM access.derived_generation
-      WHERE family='discovery' GROUP BY state`)).rows).toEqual([{ state: 'ready', count: '1' }]);
+      WHERE family='discovery' GROUP BY state`)).rows).toEqual([{ state: 'building', count: '1' }]);
     const measurements = { ticks, appendedWorks: appended.length, projectedWorks: projected.length,
       generations: 1, cancelled: 0, maxCalls, maxMs: Math.ceil(maxMs) };
     console.log(`G1016 Discovery measured: ${JSON.stringify(measurements)}`);
     await Bun.write(new URL(`../../../.temp/g-1016-refresh-${Bun.env.REZICS_QA_RUN_ID}.json`, import.meta.url), JSON.stringify(measurements));
 
-    // Incremental reuse also reads retained input, so graph pruning does not
-    // turn the next refresh into an unnecessary full rebuild.
+    // The same generation reconciles its durable changed-Work journal after
+    // the original scan, even when graph outbox coverage has been pruned.
     projection.commitBatch = originalCommit;
     expect(await tick()).toBe('activated');
     const active = (await f.accessPool.query(`SELECT d.generation_id,d.work_count::text,d.changed_works FROM access.discovery_generation d
@@ -135,8 +140,8 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     expect(unchanged).toEqual({ checkpoint: building.checkpoint, work_count: building.work_count,
       validated: building.validated, released: true });
     await drain();
-    // An edit to an original Work changes the pinned inputs. It must cancel
-    // instead of activating a population assembled from incompatible cuts.
+    // Edits to original Works join the catch-up journal instead of cancelling
+    // the scan. Reconciliation prevents mixed-position activation.
     const originalHead = (await f.fuseki.query(`SELECT ?head WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(originals[0]!.work)} <https://rezics.com/vocab/head> ?head }
     } LIMIT 1`)).results!.bindings[0]!.head!.value;
@@ -149,7 +154,7 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     await f.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.outbox)} { ?s ?p ?o } }`);
     expect(await tick()).toBe('advanced');
     expect((await f.accessPool.query('SELECT state FROM access.derived_generation WHERE id=$1',
-      [building.generation_id])).rows[0].state).toBe('cancelled');
+      [building.generation_id])).rows[0].state).toBe('building');
     expect(await tick()).toBe('activated');
     // A stale refresh claim cannot overwrite validation evidence.
     await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 second' WHERE scope_key=$1`, [key]);

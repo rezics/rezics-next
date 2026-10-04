@@ -170,6 +170,35 @@ liquid routing is a separately qualified bounded job.
   buckets incrementally, bound interval intersections and run exact analytics
   asynchronously.
 
+### Discovery refresh
+
+G-1063 replaces catalogue copies with versioned changed-Work posting lists and
+term/Concept counters. Irrelevant events advance coverage only. Global browse
+and rating scopes have an indexed foreground lane; eight foreground claims give
+one background opportunity, so idle Realm count does not set reader catch-up
+latency. Full builds finish their pinned population scan and reconcile a durable
+change journal before publication. Named scope-wide changes, unknown/gapped
+input and safety invalidation retain a full-build fallback. Opaque composition
+changes still need better owner receipt effects to avoid harmless rebuilds.
+
+QA `20261004t124611-ff1da1` measured the public and global-rating populations
+together at 100/1,000/10,000 Works: 1.90/13.59/135.15 seconds, under a five-minute
+10,000-Work budget. At each scale, with zero and 1,000 queued idle scopes,
+irrelevant refreshes used four graph calls/46 SQL statements and one-Work rating
+refreshes used eight/126. No generation was allocated for an irrelevant event;
+one posting version was added for the rated Work. These are per-serving-basis
+costs, not a constant total across every genuinely affected scope. Real-command
+tests check a ten-second rating-readiness recovery budget after rating/follow
+writes and continued Discover availability.
+
+The unrelated background is a native, sparse projection corpus; the target,
+Context and rating writes use public commands. It does not qualify command
+preparation, dense classification/rating fanout, the medium fixture or global
+capacity. Projection rows and unreferenced terminal metadata retire after six
+minutes, with three 1,000-row purge limits per tick; audit receipts/activations
+remain. The owner [cost model and decisions](../../services/main/src/modules/discovery/README.md)
+record the executable probes, source-consistency boundary and post-merge behavior.
+
 ## Catalogue write qualification
 
 G-1038, 2026-10-04: disk-backed Jena 6.2.0, one native author and one global

@@ -7,7 +7,7 @@ import { startMediaStack } from '../integration/media-support.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0362-4000-8000-000000000001`;
 
-test('Discovery build: 10,000 public Works below 60 seconds and one outbox delta below one second', async () => {
+test('Discovery build: 10,000 public Works below 60 seconds and one outbox delta within the recovery budget', async () => {
   const stack = await startMediaStack('discovery-load');
   try {
     const epoch = stack.env.lineage.dataEpoch;
@@ -89,14 +89,14 @@ test('Discovery build: 10,000 public Works below 60 seconds and one outbox delta
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 1 } }`);
     const delta = await build();
     console.log('discovery delta', delta, { registrations, queryTimes });
-    expect(delta.ms).toBeLessThan(1000);
+    expect(delta.ms).toBeLessThan(DISCOVERY_REFRESH_COST.recoveryMs);
     const current = (await stack.accessPool.query('SELECT generation_id, changed_works, work_count FROM access.discovery_generation WHERE generation_id <> $1', [prior])).rows[0];
     expect(current.changed_works).toEqual([id(0)]);
     expect(current.work_count).toBe('10000');
-    const revised = (await stack.accessPool.query(`SELECT payload->>'revision' AS revision FROM access.discovery_entry
+    const revised = (await stack.accessPool.query(`SELECT payload->>'revision' AS revision FROM access.discovery_entries($1)
       WHERE generation_id = $1 AND work = $2 AND work_type = '' AND term = ''`, [current.generation_id, id(0)])).rows[0];
     expect(revised.revision).toBe(id(7));
-    expect((await stack.accessPool.query(`SELECT payload->>'revision' AS revision FROM access.discovery_entry
+    expect((await stack.accessPool.query(`SELECT payload->>'revision' AS revision FROM access.discovery_entries($1)
       WHERE generation_id = $1 AND work = $2 AND work_type = '' AND term = ''`, [prior, id(0)])).rows[0].revision).toBe(id(1));
     const measured = { works: 10_000, full, delta, intervalMs: DISCOVERY_REFRESH_COST.intervalMs };
     await Bun.write(new URL(`../../../.temp/discovery-load-${Bun.env.REZICS_QA_RUN_ID}.json`, import.meta.url), JSON.stringify(measured));

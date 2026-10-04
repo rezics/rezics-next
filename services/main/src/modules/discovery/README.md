@@ -17,8 +17,8 @@ the authenticated Account principal, independently of its acting Agent.
 1. Register `generation-builds` with an idempotency key and a basis. Select an
    explicit standing rating Context for top-rated or Mine.
 2. Advance the returned generation with its last checkpoint until complete.
-   Management advances one candidate at a time; the scheduler uses bounded
-   batches. A checkpoint race returns 409. A process lost during a step leaves a
+   Advances use bounded batches (250 candidates, or 64 with a rating Context).
+   A checkpoint race returns 409. A process lost during a step leaves a
    30-second lease, after which another process can resume.
 3. Activate with the returned `activeHeadRevision` and a new idempotency key.
    Activation compares the head revision atomically. A completed generation
@@ -31,29 +31,64 @@ including Mine, enroll on activation. GET never starts a build. Check the queue'
 `last_outcome`, `attempts` and `last_duration_ms` when diagnosing a delayed refresh;
 timing and work limits are defined in [`refresh-store.ts`](refresh-store.ts).
 
-## Why reuse is conservative
+## Refresh effects and retained cuts
 
-[`changes.ts`](changes.ts) requires contiguous outbox batches, complete event
-counts and ordinals, and a known command whose discovery effects belong to one
-Work. Gaps, unknown commands and cross-Work definition/protection changes cause
-a full rebuild. Access source-fence changes also prevent reuse. A changed Work
-that is no longer public is removed from the new generation.
+[`effects.ts`](effects.ts) classifies every owner relay action; a registry test
+requires an explicit classification for newly registered actions. Both the
+retained relay reader and graph fallback require contiguous batches, complete
+event counts and ordinals. The fallback reads Work/Context identities from the
+terminal receipt as well as the event, and rejects conflicting fields.
 
-Reuse copies unchanged SQL entries and hydrates only changed Works. The copy is
-bounded by `DISCOVERY_COST.reuseEntries`; larger populations use resumable full
-builds. This preserves the existing immutable generation and cursor semantics
-without introducing chains of dependent projections. It saves graph work, but
-still performs O(entries) SQL work within that fixed copy bound. Frequent writes
-and five-minute row retention need separate storage-capacity qualification.
+- Unrelated events advance the serving generation's coverage watermark without
+  allocating a generation or hydrating Works. This includes follows, Zone/theme
+  presentation, content bodies, staged structure projection, empty composition
+  creation, sealing and measurement changes. Account creation/assertion refresh
+  no longer advances the global Access fence.
+- Work creation/editing, publication selection and classifications refresh their
+  explicit Works. A rating observation affects only its standing Context;
+  unranked bases ignore it, and Mine additionally matches its exact person slot.
+  Mine ignores classification/semantic changes because it has no tag population.
+- Named scope-wide changes include classification/semantic definition and rule
+  changes, model cutovers, identity merge, source-conversion attribution,
+  erasure, opaque composition changes/activation/restore and safety fences.
+  Rating policy changes affect their Context; Realm policy changes affect their
+  Realm. Gaps, unknown actions and exceeded delta budgets also require a full
+  pass. Composition receipts do not yet prove a bounded membership delta, so
+  even a harmless label/move inside `composition.change` uses that conservative
+  fallback. This is a remaining owner-event precision limitation.
 
-A partial build can survive new-Work creation: complete outbox coverage proves
-that all intervening changes affect Works born after its cut, and enumeration
-excludes those births. It restarts for changes to existing Works because separate
-Fuseki HTTP queries do not share a retained transaction. This follows Jena's
+[`versions.ts`](versions.ts) replaces only changed Work posting lists and affected
+term/Concept counters. Logical generations share a storage root with validity
+intervals; SQL functions resolve each generation's immutable version directly,
+without recursive generation chains or catalogue copies. Work updates use
+partial live-row indexes; cursor reads retain the original version. Concept
+counts reduce distinct Concepts per Work, including tags beyond the three-card
+display limit. Cancelled staged deltas restore their older intervals before a
+later delta can reuse the root.
+
+A running scan keeps its population checkpoint when the graph moves. Later births
+remain outside its pin, while a durable, bounded changed-Work journal records
+every validated interval. On finishing the scan, it reconciles those Works at a
+new fenced cut before becoming ready. A named scope-wide change finishes the
+scan and then starts a full pass at the newer cut. Separate Fuseki HTTP queries
+cannot retain the old mutable heads across batches; this follows Jena's
 [remote transaction boundary](https://jena.apache.org/documentation/rdfconnection/#remote-transactions)
-(consulted 2026-09-28). Rows commit only after the read envelope validates its
+(reviewed 2026-10-04). The journal-and-reconcile approach is our consistency
+strategy, not a retained remote transaction. Rows commit only after the read envelope validates its
 graph, principal, Realm and source-attribution fences. A moved read releases its
 own step lease and retries promptly; it cannot publish mixed-position rows.
+Recovery, source-profile and Access safety invalidation still close obsolete
+work that cannot safely activate.
+
+Global browse/rating jobs use a separate indexed due lane. Eight foreground
+claims alternate with one background opportunity; idle foreground jobs poll
+after one second, background jobs after 30 seconds. Queue length does not add
+idle Realm batches to a foreground claim. Every tick also purges at most 1,000
+posting rows, 1,000 term rows and 1,000 Concept rows from one due retirement.
+Six minutes cover cursor retention plus in-flight reads. Failed/cancelled,
+expired and superseded projection metadata is removed when no longer referenced;
+one storage root remains for its live logical generations. Immutable derived
+activation/receipt records remain as the audit ledger.
 
 Completed generations may activate while newer changes wait for the next job.
 Browse responses mark old generations `stale`; current disclosure checks still
@@ -63,6 +98,43 @@ an expired or recovered basis requires a restart. These are retained projection
 rows, not retained authorization.
 
 ## Measurements and limits
+
+G-1063 (QA `20261004t124611-ff1da1`) refreshed both the public and global-rating
+populations at 100, 1,000 and 10,000 Works in 1.90, 13.59 and 135.15 seconds,
+respectively. The 10,000-Work run included 1,000 queued background scopes and
+finished in 352 ticks/1,807 graph calls, below the five-minute owner budget.
+At each scale, with both zero and 1,000 idle scopes, an irrelevant event used
+exactly four graph calls/46 SQL statements, allocated no generation and took
+36–85 ms. A real one-Work rating write refreshed with eight graph calls/126 SQL
+statements, added one posting version and took 88–149 ms. Logical Work probes
+used native PostgreSQL Index Scans. The executable G-1024 trace assertions and
+SQL plans live in `tests/qa/integration/g-1063-cost.test.ts`; the run's complete
+profiles are in `.temp/g-1063/cost-20261004t124611-ff1da1-1.json`.
+
+The corpus isolates projection cost with native unrelated public Works; the
+Context, target and rating writes use real commands. It is sparse (one standing
+rating, no background classifications/credits), and does not qualify catalogue
+write throughput, dense fanout or the medium fixture. The bounds are per serving
+basis: actually affected Realm/Mine populations still incur their own delta work.
+Background scope metadata is a queue/index probe, not Realm-policy acceptance.
+The trace isolates an already enrolled serving basis; catalogue enrollment and
+due retention cleanup retain their separate fixed batch limits.
+
+The real-command regression verifies `rating-ready` within ten seconds after a
+rating write and a follow, while `discovery-ready` remains available through both.
+Discover readiness belongs to the separate retained public ranking; its 200
+does not promise that every standing projection is fresh. Additional regressions
+cover edits during a partial build, pruned graph outbox, moved reads, leases,
+counter fanout, retained cursors and cancelled-version cleanup.
+
+After migrations 1043–1044 and a Main restart, the shared stack resumes global
+jobs ahead of its idle Realm backlog, finishes/reconciles graph-moved builds,
+and drains old retirement rows in bounded chunks. An obsolete Access fence can
+require one initial rebuild. Follow-only traffic creates no new generation;
+rating writes update their Work in the matching Context. The shared stack has
+not been changed by this worktree; its actual post-merge timing needs observation.
+
+Earlier measurements below describe the previous implementation.
 
 The G-362 pre-change refresh fixture (QA `20260928t031801-3bc7ce`) measured 40
 ticks, at most 28 graph queries and 411 ms per measured tick, with one Work per
@@ -74,7 +146,7 @@ credits, Access invalidation, activation recovery and Mine isolation.
 The native load probe (QA `20260928t034147-00045f`) rebuilt 10,000 public Works in
 33.534 seconds (221 graph queries, 40 ticks) and refreshed one changed Work in
 721 ms (five queries, including the scheduler delay). It asserts targets of
-60 seconds and one second. That fixture uses one semantic type, no classification
+60 seconds and the current ten-second recovery budget. That fixture uses one semantic type, no classification
 or credit fanout and no rating Context; it qualifies this projection workload,
 not dense rated/classified populations or the full retained medium corpus.
 Fixture creation is outside the measurement. The executable probe and its

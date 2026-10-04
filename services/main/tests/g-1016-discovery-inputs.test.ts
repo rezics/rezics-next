@@ -35,7 +35,7 @@ test('G1016: retained Discovery inputs read only the bounded new interval and ve
 });
 
 test('G1016: a missing, malformed, duplicate or unknown retained event cannot admit checkpoint reuse', async () => {
-  for (const rows of [[event(11)], [event(11), event(12, 'classification.decision.set')],
+  for (const rows of [[event(11)], [event(11), event(12, 'future.unclassified')],
     [event(11), event(12), event(12)]]) expect(await reader(rows).inputs.read(position, '10')).toBeNull();
   const bad = event(12);
   bad.envelope.data.ordinal = 1;
