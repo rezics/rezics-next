@@ -27,6 +27,10 @@ const TABLES = [
   'rezics_account_email_change',
   'rezics_policy_acceptance', 'rezics_mail_suppression', 'rezics_content_preferences',
 ] as const;
+// Direct provider/owner bootstrap predates the release migration ledger and
+// can omit it. When present, its names and completion times are recovery state:
+// digest and restore them with the owner rows, never exclude them as metadata.
+const OPTIONAL_TABLES = ['rezics_local_migration'] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim',
@@ -34,6 +38,7 @@ const UUID_ID_TABLES = new Set<string>([
   'rezics_account_operator_note', 'rezics_account_operator_job',
 ]);
 const KEYS: Record<string, [string, string][]> = {
+  rezics_local_migration: [['name', 'text']],
   rezics_account_rate_limit: [['key', 'text']],
   rezics_account_step_up: [['session_id', 'text']],
   rezics_account_security: [['user_id', 'text']],
@@ -61,7 +66,8 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name`);
     const actual = new Set(schema.rows.map(row => row.table_name));
-    const expected = new Set<string>(TABLES);
+    const tables = [...TABLES, ...OPTIONAL_TABLES.filter(table => actual.has(table))];
+    const expected = new Set<string>(tables);
     const missing = [...expected].filter(table => !actual.has(table)).sort();
     const unexpected = [...actual].filter(table => !expected.has(table)).sort();
     if (missing.length || unexpected.length) {
@@ -71,7 +77,7 @@ export async function accountRecoveryCoverage(pool: Pool): Promise<AccountRecove
     }
     const digest = createHash('sha256');
     let count = 0n;
-    for (const table of TABLES) {
+    for (const table of tables) {
       const keys = KEYS[table] ?? [['id', UUID_ID_TABLES.has(table) ? 'uuid' : 'text']];
       const columns = keys.map(([name]) => `"${name}"`).join(', ');
       let lastKey: unknown[] | null = null;
