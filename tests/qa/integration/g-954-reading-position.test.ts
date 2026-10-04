@@ -7,11 +7,13 @@ import { activateMetadataWork, metadataWorkRequestDigest } from '../../../servic
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { StructureStageStore, type StructureStage } from '../../../services/main/src/modules/structure/stage.ts';
+import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
 import { startMediaStack } from './media-support.ts';
 
 type Composition = { structure: string; revision: string; occurrences: string[] };
 type Page = { items: Array<{ occurrence: string; ordinal: number; labels: Array<{ value: string; language: string }> }>;
-  nextCursor: string | null; complete: boolean; resolved: string };
+  nextCursor: string | null; complete: boolean; resolved: string;
+  search?: { status: 'indexing' | 'current' }; count: { value: number; kind: string } };
 const short = (resource: string) => resource.slice(-36);
 async function json<T>(response: Response, expected = 200): Promise<T> {
   if (response.status !== expected) throw new Error(`${response.status} (expected ${expected}): ${await response.text()}`);
@@ -65,18 +67,24 @@ test('G954: 1000-chapter chooser searches CJK and chapter numbers before paging 
                 ? { value: '再会', language: 'ja' } : { value: `Chapter ${number}`, language: 'en' } };
         }) }));
     }
-    // No rebuild or migration is needed: search reads the existing owner projection.
     expect(Date.now() - started).toBeLessThan(600_000);
     const read = (query: Record<string, string> = {}, signed = false, resource = work.work) => {
       const params = new URLSearchParams(query);
       if (signed) params.set('actingSubject', member.actor);
       return call('GET', `/v1/reading-positions/${short(resource)}?${params}`, undefined, signed);
     };
+    // This in-process app has no relay worker. Observe the honest pending
+    // response, then drive the same durable projection the service runs.
+    expect(await json<Page>(await read({ q: '重逢', limit: '1' }))).toMatchObject({
+      items: [], complete: false, search: { status: 'indexing' }, count: { kind: 'at-least' },
+    });
+    await backfillOccurrenceLabels(stack.env);
     for (const [q, ordinal] of [['重逢', 1000], ['１０００', 1000], ['再会', 999], ['999', 999]] as const) {
       const before = stack.fuseki.queries;
       const page = await json<Page>(await read({ q, language: 'en', limit: '1' }));
       expect(page.items).toHaveLength(1); expect(page.items[0]!.ordinal).toBe(ordinal);
       expect(page.nextCursor).toBeNull(); expect(page.complete).toBe(true); expect(page.resolved).toBe('start');
+      expect(page.search).toEqual({ status: 'current' });
       expect(stack.fuseki.queries - before).toBeLessThan(12);
     }
     const inventory: string[] = [];
@@ -195,9 +203,26 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       await json(await call('POST', `${path}/${stage.id}/seal`,
         { actingSubject: member.actor, holder: stage.holder, fence: stage.fence }));
       const activateStarted = performance.now(), activateQueries = stack.fuseki.queries;
-      const activated = await json<StructureStage>(await call('POST', `${path}/${stage.id}/activate`, { actingSubject: member.actor }));
+      let activationAttempts = 0, operationId: string | undefined, activated: StructureStage;
+      const activationDeadline = Date.now() + 60_000;
+      for (;;) {
+        activationAttempts++;
+        const response = await call('POST', `${path}/${stage.id}/activate`, { actingSubject: member.actor });
+        if (response.status !== 202) { activated = await json<StructureStage>(response); break; }
+        // Stage identity fixes the admission key. A lost/uncertain graph reply
+        // resumes its durable projection checkpoints through the same API.
+        const pending = await json<{ operationId: string; status: string; phase: string;
+          retry: { allowed: boolean; afterMs: number } }>(response, 202);
+        expect(pending).toMatchObject({ status: 'reconciling', phase: 'work-edit',
+          retry: { allowed: true, afterMs: 1000 } });
+        operationId ??= pending.operationId;
+        expect(pending.operationId).toBe(operationId);
+        if (Date.now() >= activationDeadline) throw new Error('Stage activation did not reconcile within 60 seconds');
+        await Bun.sleep(pending.retry.afterMs);
+      }
       expect(activated.status).toBe('activated'); expect(activated.placementCount).toBe(3500);
-      expect(targetChecks - checksBefore).toBe(2);
+      expect(targetChecks - checksBefore).toBeGreaterThanOrEqual(2);
+      expect(targetChecks - checksBefore).toBeLessThanOrEqual(1 + activationAttempts);
       timings.push({ volume: volumeIndex + 1, uploadMs: sealStarted - uploadStarted,
         sealMs: activateStarted - sealStarted, activateMs: performance.now() - activateStarted,
         sealQueries: activateQueries - sealQueries, activateQueries: stack.fuseki.queries - activateQueries,
@@ -209,6 +234,10 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
     expect(Date.now() - started).toBeLessThan(600_000);
     const read = (query: Record<string, string> = {}) => app.handle(new Request(
       `http://main.local/v1/reading-positions/${short(series.work)}?${new URLSearchParams(query)}`));
+    expect(await json<Page>(await read({ q: '重逢', limit: '1' }))).toMatchObject({
+      items: [], complete: false, search: { status: 'indexing' }, count: { kind: 'at-least' },
+    });
+    await backfillOccurrenceLabels(stack.env);
     const actual: string[] = [];
     let cursor: string | undefined;
     do {
@@ -220,6 +249,7 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
     for (const q of ['重逢', 'Chapter 10001', '１０００１']) {
       const page = await json<Page>(await read({ q, language: 'en', limit: '1', position: expected.at(-1)! }));
       expect(page.items).toHaveLength(1); expect(page.complete).toBe(true); expect(page.nextCursor).toBeNull();
+      expect(page.search).toEqual({ status: 'current' });
       expect(page.resolved).toBe(expected.at(-1)!);
       expect(page.items[0]!.occurrence).toBe(q === '重逢' ? expected.at(-1)! : expected[10_003]!);
     }

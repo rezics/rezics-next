@@ -527,7 +527,10 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     }
     expect(capabilities.sort()).toEqual([community.realm, zone].sort());
     const first = await query('http://www.w3.org/2004/02/skos/core#Concept', undefined, 3);
-    expect(first.items[0]?.id).toBe(child.concept);
+    // Earlier files can contribute used Concepts to this global page. The
+    // fixture's own usage is checked above; this probe fences its cursor.
+    expect(first.items).toHaveLength(3);
+    expect(first.items.every(item => item.kind === 'concept')).toBe(true);
     expect(first.complete).toBe(false);
     await stack.catalogueWork(authorAgent, `${token} changed`);
     expect(
