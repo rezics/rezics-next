@@ -1,0 +1,14 @@
+{
+  "sha256": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
+  "binding": {
+    "required": [
+      "projection",
+      "revision"
+    ],
+    "optional": [],
+    "roles": [
+      "projection",
+      "revision"
+    ]
+  }
+}

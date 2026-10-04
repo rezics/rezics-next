@@ -3,7 +3,7 @@ import { reservedNamespaces, type ProfileDefinition, type Term } from './ir.ts';
 import { expand } from './outputs.ts';
 
 export const typeLocales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
-export const typeBases = ['work', 'resource', 'record'] as const;
+export const typeBases = ['work', 'resource', 'record', 'projection'] as const;
 export const typePresentations = [
   'book',
   'recipe',
@@ -19,6 +19,8 @@ export const typeInterests = ['books', 'software', 'ai', 'recipes', 'media'] as 
 export const typePrimaryActions = ['read', 'install', 'copy', 'watch', 'visit'] as const;
 export const typeCreationPolicies = ['administrator', 'contributor'] as const;
 export const typeWikiSegments = ['characters', 'places', 'events'] as const;
+/** Frame dimensions of a projection; a structural base fixes its own, so only these two are declared per type. */
+export const typeFrameDimensions = ['continuity', 'event'] as const;
 
 export interface TypeBrowseCategory {
   id: string;
@@ -37,6 +39,8 @@ export interface TypeMetadata {
   priority: number;
   /** Optional franchise-wiki placement for a descriptive resource type. */
   wikiSegment?: (typeof typeWikiSegments)[number];
+  /** The one projection frame dimension an instance of this descriptive type can be; absent means it cannot be a frame. */
+  frameDimension?: (typeof typeFrameDimensions)[number];
   /** Structural browse selection, independent of descriptive Work subtypes. */
   browse?: TypeBrowseCategory;
   labels: Readonly<Record<(typeof typeLocales)[number], { one: string; other: string }>>;
@@ -138,6 +142,7 @@ export function compileTypes(
           'cover',
           'priority',
           'wikiSegment',
+          'frameDimension',
           'browse',
           'labels',
         ],
@@ -153,7 +158,9 @@ export function compileTypes(
         !Number.isSafeInteger(metadata.priority) ||
         metadata.priority < 0 ||
         (metadata.wikiSegment !== undefined &&
-          (metadata.base !== 'resource' || !typeWikiSegments.includes(metadata.wikiSegment)))
+          (metadata.base !== 'resource' || !typeWikiSegments.includes(metadata.wikiSegment))) ||
+        (metadata.frameDimension !== undefined &&
+          (metadata.base !== 'resource' || !typeFrameDimensions.includes(metadata.frameDimension)))
       )
         throw new Error(`Invalid Type metadata for ${type}`);
       knownFields(metadata.labels, typeLocales, `${type} labels`);
@@ -178,6 +185,7 @@ export function compileTypes(
         cover: metadata.cover,
         priority: metadata.priority,
         ...(metadata.wikiSegment ? { wikiSegment: metadata.wikiSegment } : {}),
+        ...(metadata.frameDimension ? { frameDimension: metadata.frameDimension } : {}),
         ...(metadata.browse !== undefined ? { browse: checkedBrowse(metadata.browse, type) } : {}),
         labels: Object.fromEntries(
           typeLocales.map((locale) => [locale, metadata.labels[locale]]),
@@ -233,6 +241,7 @@ export function renderTypeRegistry(
     `export const typePrimaryActions = ${JSON.stringify(typePrimaryActions)} as const;\n` +
     `export const typeCreationPolicies = ${JSON.stringify(typeCreationPolicies)} as const;\n` +
     `export const typeWikiSegments = ${JSON.stringify(typeWikiSegments)} as const;\n` +
+    `export const typeFrameDimensions = ${JSON.stringify(typeFrameDimensions)} as const;\n` +
     '/** Owner profile order, retained by Main admission enums and catalogue consumers. */\n' +
     `export const workSemanticTypeOrder = ${JSON.stringify(profileWorkTypes(workKind).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +
     `export const creatableWorkTypeOrder = ${JSON.stringify(profileWorkTypes(workType).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +

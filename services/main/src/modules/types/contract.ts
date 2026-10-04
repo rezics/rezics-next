@@ -4,6 +4,7 @@ import {
   typeBases,
   typeCovers,
   typeCreationPolicies,
+  typeFrameDimensions,
   typeInterests,
   typeLocales,
   typePresentations,
@@ -48,6 +49,13 @@ export const typeDefinition = t.Object(
     priority: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
     wikiSegment: t.Optional(
       t.Unsafe<(typeof typeWikiSegments)[number]>({ type: 'string', enum: [...typeWikiSegments] }),
+    ),
+    /** The projection frame dimension an instance of this type has; absent means it cannot be a frame. */
+    frameDimension: t.Optional(
+      t.Unsafe<(typeof typeFrameDimensions)[number]>({
+        type: 'string',
+        enum: [...typeFrameDimensions],
+      }),
     ),
     browse: t.Optional(typeBrowseCategory),
     labels: t.Object(

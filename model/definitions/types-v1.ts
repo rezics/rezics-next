@@ -37,7 +37,12 @@ const browse = (
 // Creation policy feeds Access's baseline gate; Access authorizes every operation.
 export const typesV1 = {
   id: 'types-v1',
-  defaults: { work: 'schema:CreativeWork', resource: 'rdfs:Resource', record: 'rv:Record' },
+  defaults: {
+    work: 'schema:CreativeWork',
+    resource: 'rdfs:Resource',
+    record: 'rv:Record',
+    projection: 'rv:Projection',
+  },
   types: {
     'schema:Book': {
       base: 'work',
@@ -602,6 +607,7 @@ export const typesV1 = {
     },
     'schema:Event': {
       wikiSegment: 'events',
+      frameDimension: 'event',
       base: 'resource',
       interest: null,
       primaryAction: 'visit',
@@ -618,6 +624,89 @@ export const typesV1 = {
         ['Ereignis', 'Ereignisse'],
         ['Événement', 'Événements'],
         ['Suceso', 'Sucesos'],
+      ),
+    },
+    // A Projection names one subject within frame coordinates; it is created only through
+    // POST /v1/projections, so no creation policy applies to it.
+    'rv:Projection': {
+      base: 'projection',
+      interest: null,
+      primaryAction: 'visit',
+      creation: 'administrator',
+      presentation: 'default',
+      cover: 'document',
+      priority: 100,
+      labels: labels(
+        ['Projection', 'Projections'],
+        '投影',
+        '投影',
+        '投影',
+        '투영',
+        ['Projektion', 'Projektionen'],
+        ['Projection', 'Projections'],
+        ['Proyección', 'Proyecciones'],
+      ),
+    },
+    // A story continuity such as Canon, Legends or Earth-616. It is not the Work continuity that
+    // scopes reading progress and Main Versions.
+    'rv:NarrativeContinuity': {
+      frameDimension: 'continuity',
+      base: 'resource',
+      interest: null,
+      primaryAction: 'visit',
+      creation: 'contributor',
+      presentation: 'default',
+      cover: 'document',
+      priority: 100,
+      labels: labels(
+        ['Narrative continuity', 'Narrative continuities'],
+        '故事世界線',
+        '故事世界线',
+        '物語の世界線',
+        '이야기 세계선',
+        ['Handlungskontinuität', 'Handlungskontinuitäten'],
+        ['Continuité narrative', 'Continuités narratives'],
+        ['Continuidad narrativa', 'Continuidades narrativas'],
+      ),
+    },
+    // A playable unit with its own identifier and statistics that represents Characters.
+    'rv:GameUnit': {
+      base: 'resource',
+      interest: null,
+      primaryAction: 'visit',
+      creation: 'contributor',
+      presentation: 'default',
+      cover: 'document',
+      priority: 100,
+      labels: labels(
+        ['Game unit', 'Game units'],
+        '遊戲單位',
+        '游戏单位',
+        'ゲームユニット',
+        '게임 유닛',
+        ['Spieleinheit', 'Spieleinheiten'],
+        ['Unité de jeu', 'Unités de jeu'],
+        ['Unidad de juego', 'Unidades de juego'],
+      ),
+    },
+    // A name held by several individuals in turn or at once, such as Batman.
+    'rv:Title': {
+      base: 'resource',
+      interest: null,
+      primaryAction: 'visit',
+      creation: 'contributor',
+      presentation: 'default',
+      cover: 'document',
+      priority: 100,
+      labels: labels(
+        ['Held title', 'Held titles'],
+        '頭銜',
+        '头衔',
+        '称号',
+        '칭호',
+        ['Titel', 'Titel'],
+        ['Titre porté', 'Titres portés'],
+        ['Título', 'Títulos'],
       ),
     },
     'rv:Release': {
