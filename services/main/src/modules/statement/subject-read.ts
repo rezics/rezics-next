@@ -6,6 +6,7 @@ import {
   GLOBAL_CLASSIFICATION_CONTEXT,
 } from '../classification/context.ts';
 import { subjectStatementPage } from '../entity-page/contract.ts';
+import { isStructuralProperty } from '../entity-page/structural-properties.ts';
 import { visibleResourceReferences } from '../entity-page/read.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { resolveTargets } from '../target/resolve.ts';
@@ -228,6 +229,7 @@ export async function readSubjectStatements(
         ? component.state.properties
         : [];
     const keyed = properties
+      .filter((property) => !isStructuralProperty(property.predicate))
       .map((property) => ({ key: JSON.stringify([property.predicate, property.value]), property }))
       .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
       .filter((item) => !cursor || after.phase !== 'component' || item.key > cursor.after);

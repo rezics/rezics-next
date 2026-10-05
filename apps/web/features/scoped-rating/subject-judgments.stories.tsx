@@ -84,9 +84,12 @@ export const OwnRatingFromMain: Story = {
 export const NoPlacesYet: Story = {
   args: { scenario: fixture.empty },
   async play({ canvasElement }) {
-    await see(canvasElement, 'Nobody has rated this in a specific part yet.');
+    await expect(await within(canvasElement).findByRole('button', { name: 'Rate in a specific part' })).toBeVisible();
+    await waitFor(() => expect(within(canvasElement).queryByText('Loading…')).toBeNull());
+    await expect(canvasElement.querySelector('[data-subject-projections]')).toBeNull();
+    await expect(within(canvasElement).queryByText('Ratings by part')).toBeNull();
+    await expect(within(canvasElement).queryByText('Nobody has rated this in a specific part yet.')).toBeNull();
     await expect(canvasElement.querySelector('[data-subject-rollup]')).toBeNull();
-    await expect(within(canvasElement).getByRole('button', { name: 'Rate in a specific part' })).toBeVisible();
   },
 };
 

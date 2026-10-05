@@ -68,12 +68,14 @@ export const SummariesFailed: Story = {
   },
 };
 
-/** Nobody has rated the subject in any place yet. */
+/** Nobody has rated the subject in any place yet: the section is not drawn, neither its heading nor an empty note. */
 export const Empty: Story = {
   args: { scenario: fixture.empty },
   async play({ canvasElement }) {
-    await see(canvasElement, 'Nobody has rated this in a specific part yet.');
-    await expect(within(canvasElement).queryByRole('listitem')).toBeNull();
+    await waitFor(() => expect(within(canvasElement).queryByText('Loading…')).toBeNull());
+    await expect(canvasElement.querySelector('[data-subject-projections]')).toBeNull();
+    await expect(within(canvasElement).queryByText('Ratings by part')).toBeNull();
+    await expect(within(canvasElement).queryByText('Nobody has rated this in a specific part yet.')).toBeNull();
     await fits();
   },
 };

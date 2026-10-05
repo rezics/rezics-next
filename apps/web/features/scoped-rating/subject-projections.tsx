@@ -106,12 +106,13 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
       : { items: [...state?.items ?? [], ...page.data.items], next: page.data.nextCursor, busy: false, failed: false });
   }
 
+  // With nothing rated in any part there is no section: the "rate in a specific part" action already invites the first one.
+  if (first.state === 'ready' && items.length === 0 && !next) return null;
   return <section data-subject-projections className={cn('grid gap-4', className)}>
     <Heading className="font-semibold text-lg tracking-tight">{t.byPart}</Heading>
     {first.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : first.state === 'failed' ? <FailureNote failure={first.failure} locale={locale} messages={messages} retry={restart} />
         : <>
-            {items.length === 0 && !next ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p> : null}
             {visible.length ? <ul className="grid min-w-0 gap-3">
               {visible.map(({ read, row }) => <ProjectionRow key={read.projection.id} read={read} row={row!} retry={restart}
                 position={position} locale={locale} messages={messages} />)}

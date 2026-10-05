@@ -105,7 +105,7 @@ export const HomeFull: Story = {
     for (const heading of [/^Works/, /^Main characters/, /^Places/, /^Chapter guide/, /^Timeline/]) {
       await expect(canvas.getByRole('heading', { name: heading })).toBeVisible();
     }
-    await expect(canvas.getByText('Showing everything, including records from chapters you may not have read.')).toBeVisible();
+    await expect(canvas.getByText('Includes records from chapters you may not have read.')).toBeVisible();
     await expect(canvas.getAllByRole('list').some(list => list.classList.contains('fw-guide'))).toBe(true);
     await fits();
   },
