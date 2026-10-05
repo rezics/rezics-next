@@ -21,11 +21,11 @@ test('SAFETY07 G918: recorded Content notice owners receive moderation notificat
     queued = false;
   const client = {
     query: async (sql: string) => {
-      if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
+      if (sql.includes('FROM access.recovery_fence') && !sql.includes('FROM access.notification_producer_event')) return { rows: [{ open: true }] };
       if (sql.includes('FROM access.notification_producer_cursor'))
-        return { rows: [{ position: '0' }] };
+        return { rows: [{ position: '0', epoch: '0', xid: '0', id: '0' }] };
       if (sql.includes('FROM access.notification_producer_event'))
-        return { rows: [{ position: '1', kind: 'moderation_outcome', event_id: decision }] };
+        return { rows: [{ epoch: '0', xid: '42', id: '1', kind: 'moderation_outcome', event_id: decision }] };
       if (sql.includes('UPDATE access.notification_producer_cursor')) advanced = true;
       return { rows: [] };
     },

@@ -32,6 +32,18 @@ schema: Access migrations 062–064 and 440–441; cases GOV05–GOV08.
   late callbacks never reopen them. Provider evidence may settle `pending`.
 - Items pin an exact subject revision and store no rendered copy; erasure and
   disclosure are decided by the subject owner at delivery time.
+- Access producer appends insert an identity id and `pg_current_xact_id()` into
+  `notification_producer_event`, without a head row. Both inbox and safety
+  correspondence consumers read one snapshot, ordered by `(epoch, xid, id)` and
+  bounded below `pg_snapshot_xmin(pg_current_snapshot())` in the current epoch.
+  Only the consumer locks and advances its own cursor after intake; a partial
+  intake or lost acknowledgement retries the immutable event identity.
+- The producer epoch is `recovery_fence.generation`: the recovery fence drains
+  ordinary writers and release increments it before reopening. Older epochs
+  drain before new events without comparing their xids to the current horizon,
+  because a logical restore preserves event rows but resets the transaction
+  counter. Migrated events use xid zero and their original position as id;
+  migrated cursors resume after that id. Editorial retains its separate position.
 - Main registers owner readers by exact disclosure basis during composition.
   The selected reader is authoritative for that basis; denied or unavailable
   results never fall through to another owner's reader.
@@ -70,6 +82,8 @@ schema: Access migrations 062–064 and 440–441; cases GOV05–GOV08.
 | `runOnce(n)` | n ≤ 32 leased rows; ≤ 16 statements per row plus one provider call and at most one lookup. |
 | Subject reader selection | One map lookup and exactly one owner-specific read per delivery; registrations are fixed during Main startup. |
 | Scheduled delivery tick | At most 32 expired leases recovered plus 32 due rows dispatched; one active tick per Main process. |
+| Access producer append | One event insert, one identity allocation and one recovery generation read; no shared row update. |
+| Access producer tick (each consumer) | One cursor row lock and one `(epoch, xid, id)` index range of ≤ 16 committed events; unchanged ≤ 256 recipients per event. Active lower xids delay the current epoch without skipping late commits. |
 | `readStream` | 9 statements; one index range on `(principal_id, stream, generation, sequence)` of ≤ 51 rows, independent of other recipients (EXPLAIN checked at 100/1,000/10,000). |
 | Display read | The same ≤ 51-row page plus at most 50 exact owner disclosure reads, at most 50 current public Agent reads and avatar probes. A denied or unsupported subject yields no subject reference or display fields. Groups cover only the page and contain at most 10 visible items. |
 | `unreadCount` | One ≤ 257-row Access scan plus at most 256 exact owner disclosure reads. It returns the exact visible count through 99, `99+` at 100, or 503 when 256 candidates cannot prove either result. |
@@ -98,3 +112,9 @@ reviewed 2026-09-27). The content and listener tests exercise current Access
 authorization and real Bun WebSocket connections. Remaining Account-owned work
 is a verified-email resolver/endpoint flow and signed unsubscribe links; see the
 G-109 handoff proposal.
+
+The producer horizon uses PostgreSQL 18's full transaction ids and snapshot xmin
+([transaction and snapshot functions](https://www.postgresql.org/docs/18/functions-info.html#FUNCTIONS-PG-SNAPSHOT),
+reviewed 2026-10-05). `tests/qa/integration/notification-producer-log.test.ts`
+checks concurrent appends, late commit and rollback, epoch changes, independent
+consumers and indexed tick bounds against real Access PostgreSQL.

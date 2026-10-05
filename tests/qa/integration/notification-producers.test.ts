@@ -70,13 +70,13 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
         ? Promise.resolve({ rows: [{ principal_id: actorId }] }) : access.query(statement, params) } as unknown as Pool;
     const producer = new NotificationProducer(sourceAccess, relay, fakeContent, fakeGraph, sink, 'test-relay');
     await expect(producer.runAccessOnce()).rejects.toThrow('simulated Access write failure');
-    expect((await access.query<{ position: string }>(`SELECT position::text
-      FROM access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]?.position).toBeUndefined();
+    expect((await access.query(`SELECT epoch::text, xid::text, id::text
+      FROM access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]).toBeUndefined();
     expect(await producer.runAccessOnce()).toBe(1);
     const items = await access.query<{ principal_id: string; source_event: string }>(`
       SELECT principal_id, source_event FROM access.notification_item ORDER BY principal_id`);
     expect(items.rows).toEqual([{ principal_id: recipientId, source_event: `realm:${receipt}` }]);
-    await access.query(`UPDATE access.notification_producer_cursor SET position = 0
+    await access.query(`UPDATE access.notification_producer_cursor SET epoch = 0, xid = '0', id = 0
       WHERE consumer = 'notification-producer-v1'`);
     expect(await producer.runAccessOnce()).toBe(1);
     expect((await access.query(`SELECT 1 FROM access.notification_item`)).rowCount).toBe(1);
@@ -126,16 +126,16 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
       (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
       VALUES ($1,$2,$3,$4,$5,$6,'realm.members.manage','Member changed',$7)`,
     [bounded, realm, actorId, actor, `member-${bounded}`, '5'.repeat(64), { member }]);
-    const beforeBound = (await access.query<{ position: string }>(`SELECT position::text FROM
-      access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]!.position;
+    const beforeBound = (await access.query(`SELECT epoch::text, xid::text, id::text FROM
+      access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0];
     const tooMany = { connect: () => access.connect(), query: (statement: string, params: unknown[]) =>
       statement.includes('SELECT DISTINCT p.id FROM access.representation r')
         ? Promise.resolve({ rows: Array.from({ length: 257 }, () => ({ id: randomUUID() })) })
         : access.query(statement, params) } as unknown as Pool;
     await expect(new NotificationProducer(tooMany, null, fakeContent, fakeGraph, sink, null)
       .runAccessOnce()).rejects.toThrow('notification recipient bound exceeded');
-    expect((await access.query<{ position: string }>(`SELECT position::text FROM
-      access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]?.position).toBe(beforeBound);
+    expect((await access.query(`SELECT epoch::text, xid::text, id::text FROM
+      access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]).toEqual(beforeBound);
     expect(await producer.runAccessOnce()).toBe(1);
 
     // A retained, validated graph envelope is consumed only after its batch checkpoint.

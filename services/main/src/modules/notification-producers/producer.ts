@@ -14,8 +14,9 @@ import { recoverLibraryFollows } from '../library/follows.ts';
 import { resourceNotification } from './resources.ts';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import type { SavedViewNotifications } from './saved-views.ts';
+import { notificationProducerEventsSql } from './access-log.ts';
 
-/** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
+/** One indexed commit-safe source page, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
   recipientsPerEvent: 256, pollMs: 1_000 } as const;
 const cursorName = 'notification-producer-v1';
@@ -24,7 +25,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type AccessKind = 'submission_decision' | 'moderation_outcome' | 'realm_role_change'
   | 'realm_membership_change' | 'review_created' | 'review_helpful_milestone' | 'realm_invitation'
   | 'chapter_published' | 'feed_post_vote';
-interface AccessEvent { position: string; kind: AccessKind; event_id: string }
+interface AccessCursor { epoch: string; xid: string; id: string }
+interface AccessEvent extends AccessCursor { kind: AccessKind; event_id: string }
 interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<string, unknown> } }
 
 /** The follow owner can call this hook with its durable follow event. */
@@ -307,19 +309,18 @@ export class NotificationProducer {
       await client.query("SET LOCAL statement_timeout = '10s'");
       await client.query(`INSERT INTO access.notification_producer_cursor (consumer)
         VALUES ($1) ON CONFLICT DO NOTHING`, [cursorName]);
-      const cursor = (await client.query<{ position: string }>(`SELECT position::text
+      const cursor = (await client.query<AccessCursor>(`SELECT epoch::text, xid::text, id::text
         FROM access.notification_producer_cursor WHERE consumer = $1 FOR UPDATE SKIP LOCKED`,
       [cursorName])).rows[0];
       if (!cursor) { await client.query('COMMIT'); return 0; }
-      const events = (await client.query<AccessEvent>(`SELECT position::text, kind, event_id
-        FROM access.notification_producer_event WHERE position > $1 ORDER BY position LIMIT $2`,
-      [cursor.position, PRODUCER_COST.accessEventsPerTick])).rows;
+      const events = (await client.query<AccessEvent>(notificationProducerEventsSql,
+      [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick])).rows;
       for (const event of events) {
         const notice = await this.accessNotification(event);
         if (notice && (await this.notifications.enqueue(notice))?.complete === false) { count++; break; }
         await client.query(`UPDATE access.notification_producer_cursor
-          SET position = $2, updated_at = clock_timestamp() WHERE consumer = $1`,
-        [cursorName, event.position]);
+          SET epoch = $2, xid = $3, id = $4, updated_at = clock_timestamp() WHERE consumer = $1`,
+        [cursorName, event.epoch, event.xid, event.id]);
         count++;
       }
       await client.query('COMMIT');
@@ -349,8 +350,8 @@ export class NotificationProducer {
         [consumer],
       );
       const cursor = (
-        await client.query<{ position: string }>(
-          `SELECT position::text
+        await client.query<AccessCursor>(
+          `SELECT epoch::text, xid::text, id::text
         FROM access.notification_producer_cursor WHERE consumer = $1 FOR UPDATE SKIP LOCKED`,
           [consumer],
         )
@@ -361,18 +362,17 @@ export class NotificationProducer {
       }
       const events = (
         await client.query<AccessEvent>(
-          `SELECT position::text,kind,event_id
-        FROM access.notification_producer_event WHERE position > $1 ORDER BY position LIMIT $2`,
-          [cursor.position, PRODUCER_COST.accessEventsPerTick],
+          notificationProducerEventsSql,
+          [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick],
         )
       ).rows;
       for (const event of events) {
         if (event.kind === 'moderation_outcome')
           await this.safetyCorrespondence.enqueueDecision(event.event_id);
         await client.query(
-          `UPDATE access.notification_producer_cursor SET position = $2,
+          `UPDATE access.notification_producer_cursor SET epoch = $2, xid = $3, id = $4,
           updated_at = clock_timestamp() WHERE consumer = $1`,
-          [consumer, event.position],
+          [consumer, event.epoch, event.xid, event.id],
         );
       }
       await client.query('COMMIT');

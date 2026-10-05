@@ -1,4 +1,4 @@
-import { bigint, boolean, integer, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, customType, integer, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 // Access-owned notification tables (migrations 062-063, 440-441, 495, 883-884). The delivery row is
 // the bounded delivery work item; the producer event log only captures owner
@@ -6,6 +6,7 @@ import { bigint, boolean, integer, pgSchema, primaryKey, smallint, text, timesta
 // the DDL owner and tests/governance-schema.test.ts checks these declarations.
 const access = pgSchema('access');
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+const xid8 = customType<{ data: string }>({ dataType: () => 'xid8' });
 
 export const optionalPurposes = ['social', 'subscription'] as const;
 export const mandatoryPurposes = ['security', 'account', 'governance'] as const;
@@ -186,21 +187,22 @@ export const notificationProviderEvent = access.table('notification_provider_eve
   receivedAt: at('received_at').notNull(),
 }, table => [primaryKey({ columns: [table.provider, table.providerEventId] })]);
 
-export const notificationProducerHead = access.table('notification_producer_head', {
-  id: boolean('id').primaryKey(),
-  position: bigint('position', { mode: 'bigint' }).notNull(),
-});
 export const notificationProducerEvent = access.table('notification_producer_event', {
-  position: bigint('position', { mode: 'bigint' }).primaryKey(),
+  id: bigint('id', { mode: 'bigint' }).primaryKey().generatedAlwaysAsIdentity(),
+  epoch: bigint('epoch', { mode: 'bigint' }).notNull(),
+  xid: xid8('xid').notNull(),
   kind: text('kind', { enum: ['submission_decision', 'moderation_outcome',
     'realm_role_change', 'realm_membership_change', 'review_created',
-    'review_helpful_milestone', 'realm_invitation'] }).notNull(),
+    'review_helpful_milestone', 'realm_invitation', 'chapter_published', 'feed_post_vote'] }).notNull(),
   eventId: uuid('event_id').notNull(),
   createdAt: at('created_at').notNull(),
 });
 export const notificationProducerCursor = access.table('notification_producer_cursor', {
   consumer: text('consumer').primaryKey(),
   position: bigint('position', { mode: 'bigint' }).notNull(),
+  epoch: bigint('epoch', { mode: 'bigint' }).notNull(),
+  xid: xid8('xid').notNull(),
+  id: bigint('id', { mode: 'bigint' }).notNull(),
   updatedAt: at('updated_at').notNull(),
 });
 export const notificationRealmPending = access.table('notification_realm_pending', {
@@ -216,7 +218,7 @@ export const notificationRealmEffect = access.table('notification_realm_effect',
 export const notificationTables = [notificationPreference, notificationPreferenceChange,
   notificationEndpoint, notificationStream, notificationItem, notificationReadWatermark,
   notificationItemRead, notificationDisplayContext, notificationDelivery,
-  notificationAttempt, notificationProviderEvent, notificationProducerHead,
+  notificationAttempt, notificationProviderEvent,
   notificationProducerEvent, notificationProducerCursor, notificationRealmPending,
   notificationRealmEffect] as const;
 

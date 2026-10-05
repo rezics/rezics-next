@@ -115,14 +115,15 @@ async function expectDeclared(pool: Pool, tables: readonly PgTable[]): Promise<v
   for (const table of tables) {
     const config = getTableConfig(table);
     const qualified = `${config.schema}.${config.name}`;
-    const columns = (await pool.query<{ column_name: string; is_nullable: string; data_type: string }>(
-      `SELECT column_name, is_nullable, data_type FROM information_schema.columns
+    const columns = (await pool.query<{ column_name: string; is_nullable: string; data_type: string; udt_name: string }>(
+      `SELECT column_name, is_nullable, data_type, udt_name FROM information_schema.columns
        WHERE table_schema = $1 AND table_name = $2`, [config.schema, config.name])).rows;
     expect({ table: qualified, columns: columns.map(column => column.column_name).sort() })
       .toEqual({ table: qualified, columns: config.columns.map(column => column.name).sort() });
     for (const column of config.columns) {
       const actual = columns.find(row => row.column_name === column.name)!;
-      expect({ column: `${qualified}.${column.name}`, notNull: actual.is_nullable === 'NO', type: actual.data_type })
+      expect({ column: `${qualified}.${column.name}`, notNull: actual.is_nullable === 'NO',
+        type: actual.data_type === 'USER-DEFINED' ? actual.udt_name : actual.data_type })
         .toEqual({ column: `${qualified}.${column.name}`, notNull: column.notNull || column.primary,
           type: column.getSQLType() });
     }

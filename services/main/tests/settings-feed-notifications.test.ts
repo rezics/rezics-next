@@ -11,9 +11,9 @@ const native = (last: number) => `https://rezics.com/id/${id(last)}`;
 async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = false) {
   const events: NotificationEvent[] = [];
   const client = { query: async (sql: string) => {
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('FROM access.notification_producer_cursor')) return { rows: [{ position: '0' }] };
-    if (sql.includes('FROM access.notification_producer_event')) return { rows: [{ position: '1',
+    if (sql.includes('FROM access.recovery_fence') && !sql.includes('FROM access.notification_producer_event')) return { rows: [{ open: true }] };
+    if (sql.includes('FROM access.notification_producer_cursor')) return { rows: [{ position: '0', epoch: '0', xid: '0', id: '0' }] };
+    if (sql.includes('FROM access.notification_producer_event')) return { rows: [{ epoch: '0', xid: '42', id: '1',
       event_id: id(1), kind }] };
     return { rows: [] };
   }, release: () => {} };
