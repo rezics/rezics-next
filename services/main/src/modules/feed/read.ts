@@ -513,8 +513,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
    * it assigns only to the group cards it creates. */
   const select = (disclosed: readonly FeedItem[]) => {
     const groups = page.flatMap(row => {
-      // The stable voting/group anchor must remain public. Never expose a hidden
-      // anchor through a surviving sibling's card, count or timestamp.
+      // A surviving sibling keeps its own public identity, count and timestamp
+      // when the anchor is hidden. Votes still belong to the group internally.
       let entries = disclosed.filter(item => row.group_members.includes(item.id));
       if (!entries.length) return [];
       const anchorVisible = entries.some(item => item.id === row.id);
@@ -531,9 +531,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         id: anchorVisible ? row.id : latest.id,
         time: anchorVisible ? row.occurred_at.toISOString() : latest.time,
         timeBasis: anchorVisible ? row.time_basis : latest.timeBasis,
-        score: anchorVisible ? row.score : 0, vote: anchorVisible ? row.vote : 0,
-        voteRevision: anchorVisible ? row.vote_revision : null,
-        links: { ...latest.links, vote: anchorVisible ? `/v1/feed/${row.id.slice(-36)}/vote` : '#' },
+        score: row.score, vote: row.vote, voteRevision: row.vote_revision,
+        links: { ...latest.links, vote: `/v1/feed/${(anchorVisible ? row.id : latest.id).slice(-36)}/vote` },
         group: { key: anchorVisible ? row.group_key : digest(entries.map(item => item.id)), count: entries.length, actors,
           ...(chapters.length === entries.length && new Set(entries.map(item => item.card.kind === 'chapter' ? item.card.parent : null)).size === 1 ? { range: { kind: 'chapters' as const,
             from: Math.min(...chapters), to: Math.max(...chapters) } } : {}) } }];

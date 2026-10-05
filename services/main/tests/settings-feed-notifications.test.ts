@@ -98,19 +98,23 @@ test('a current follower sees only a chapter whose exact Content revision remain
   expect(sourceReads).toBe(2);
 });
 
-test('each direction of vote appends its notification fact in the vote transaction', async () => {
+test('each direction of a group-member vote appends its leader notification fact in the vote transaction', async () => {
   for (const value of [1, -1] as const) {
     const statements: string[] = [];
     let appendKind = '';
+    const storedTargets: unknown[] = [];
     const client = { query: async (sql: string, args?: unknown[]) => {
       statements.push(sql);
+      if (sql.includes('INSERT INTO access.feed_vote (') || sql.includes('INSERT INTO access.feed_post_vote_event')) {
+        storedTargets.push(args?.[1]);
+      }
       if (sql.includes('access.append_notification_producer_event')) appendKind = String(args?.[0]);
       if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
       if (sql.includes('FROM access.principal WHERE account_issuer')) return { rows: [{ id: id(11) }] };
       if (sql.includes('FROM access.agent_provision')) return { rows: [{ provision_id: id(12) }] };
       if (sql.includes('SELECT * FROM access.feed_checkpoint')) return { rows: [{ data_epoch: 'epoch' }] };
-      if (sql.includes('SELECT score, occurred_at FROM access.feed_item')) {
-        return { rows: [{ score: 3, occurred_at: new Date('2026-09-28T00:00:00Z') }] };
+      if (sql.includes('FROM access.feed_item member JOIN access.feed_item leader')) {
+        return { rows: [{ id: native(20), score: 3, occurred_at: new Date('2026-09-28T00:00:00Z') }] };
       }
       return { rows: [], rowCount: 1 };
     }, release: () => {} };
@@ -119,6 +123,8 @@ test('each direction of vote appends its notification fact in the vote transacti
       'epoch', { profile: 'feed-vote-command-v1', actingSubject: native(6), value,
         expectedRevision: null }, 'vote:1', async () => ({ actor: native(4), work: native(3) }));
     expect(result.score).toBe(3 + value);
+    expect(result.target).toBe(native(2));
+    expect(storedTargets).toEqual([native(20), native(20)]);
     expect(statements.some(sql => sql.includes('INSERT INTO access.feed_post_vote_event'))).toBe(true);
     expect(appendKind).toBe('feed_post_vote');
     expect(statements.at(-1)).toBe('COMMIT');

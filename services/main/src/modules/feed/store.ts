@@ -316,7 +316,10 @@ export class FeedStore {
   }
 
   /** The target is a feed activity, not its Work's quality rating or a ballot.
-   * One principal-target PK across all their Agents; a vote flips by its delta.
+   * One principal-group-anchor PK across all their Agents; a vote flips by its delta.
+   * A visible member can stand in for a filtered or hidden anchor. Resolve it
+   * only for storage: receipts keep the requested target and intent so retries
+   * remain stable across projection refreshes, without disclosing the anchor.
    * The rank row and receipt share the transaction, including lost-response replay.
    * Disclosure is a graph and Content read, so it runs before the transaction
    * rather than while it holds the projection's checkpoint: a slow admission
@@ -350,20 +353,26 @@ export class FeedStore {
       // Lock order matches projection refresh, so refresh/vote cannot deadlock.
       const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
       if (checkpoint?.data_epoch !== epoch) throw new WorkReadUnavailable('Feed is recovering');
-      const item = (await client.query<{ score: number; occurred_at: Date }>(
-        'SELECT score, occurred_at FROM access.feed_item WHERE data_epoch = $1 AND id = $2 AND group_leader FOR UPDATE', [epoch, target])).rows[0];
+      // Two indexed seeks: the member PK and the group's leader index. The
+      // checkpoint lock prevents refresh changing membership during the vote.
+      const item = (await client.query<{ id: string; score: number; occurred_at: Date }>(`SELECT leader.id, leader.score, leader.occurred_at
+        FROM access.feed_item member JOIN access.feed_item leader
+          ON leader.data_epoch = member.data_epoch AND leader.group_key = member.group_key
+        WHERE member.data_epoch = $1 AND member.id = $2 AND leader.group_leader
+          AND member.id = ANY(leader.group_members)
+        LIMIT 1 FOR UPDATE OF leader`, [epoch, target])).rows[0];
       if (!item) throw new WorkReadUnavailable('Feed activity is unavailable');
       const prior = (await client.query<{ value: number; revision: string }>(
-        'SELECT value, revision FROM access.feed_vote WHERE principal_id = $1 AND target = $2', [owner, target])).rows[0];
+        'SELECT value, revision FROM access.feed_vote WHERE principal_id = $1 AND target = $2', [owner, item.id])).rows[0];
       if ((prior?.revision ?? null) !== input.expectedRevision) throw new ControlStale('Vote changed; refresh its state');
       const revision = randomUUID();
       const score = item.score + input.value - (prior?.value ?? 0);
       await client.query(`INSERT INTO access.feed_vote (principal_id, target, acting_subject, value, revision)
         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (principal_id, target) DO UPDATE SET
         value = EXCLUDED.value, acting_subject = EXCLUDED.acting_subject, revision = EXCLUDED.revision`,
-      [owner, target, input.actingSubject, input.value, revision]);
+      [owner, item.id, input.actingSubject, input.value, revision]);
       await client.query('UPDATE access.feed_item SET score = $3, best_key = $4 WHERE data_epoch = $1 AND id = $2',
-        [epoch, target, score, bestKey(score, item.occurred_at.getTime())]);
+        [epoch, item.id, score, bestKey(score, item.occurred_at.getTime())]);
       await client.query('UPDATE access.feed_checkpoint SET revision = $1 WHERE id', [randomUUID()]);
       const result: FeedVoteResult = { profile: 'feed-vote-receipt-v1', target, value: input.value, revision, score, replayed: false };
       await client.query(`INSERT INTO access.feed_vote_receipt (principal_id, idempotency_key, request_digest, result)
@@ -372,7 +381,7 @@ export class FeedStore {
         const eventId = randomUUID();
         await client.query(`INSERT INTO access.feed_post_vote_event
           (id, target, author, voter, voter_principal, vote_revision, work)
-          VALUES ($1,$2,$3,$4,$5,$6,$7)`, [eventId, target, source.actor, input.actingSubject,
+          VALUES ($1,$2,$3,$4,$5,$6,$7)`, [eventId, item.id, source.actor, input.actingSubject,
           owner, revision, source.work]);
         await client.query(`SELECT access.append_notification_producer_event($1,$2)`, ['feed_post_vote', eventId]);
       }
