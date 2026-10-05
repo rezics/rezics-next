@@ -50,6 +50,7 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
     let graphRows = 0, graphBytes = 0, indexReads = 0;
     const graphWork: Array<{ name: string; ms: number }> = [];
     stack.fuseki.query = async (sparql, bytes) => {
+      if (stack.fuseki.isBackgroundContext) return query(sparql, bytes);
       const start = performance.now(), result = await query(sparql, bytes);
       if (sparql.includes('# reading-position:label-index')) {
         const page = result.results?.bindings[0]?.page?.value;

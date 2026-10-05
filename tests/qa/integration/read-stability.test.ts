@@ -77,10 +77,12 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     let writes: Promise<unknown[]> | undefined;
     stack.fuseki.query = async (sparql, bytes) => {
+      if (stack.fuseki.isBackgroundContext) return originalQuery(sparql, bytes);
       const result = await originalQuery(sparql, bytes);
       if (!writes && sparql.includes('SELECT ?epoch ?sequence WHERE')) {
-        writes = fusekiReadBudget.exit(() => Promise.all(Array.from({ length: 8 }, (_, n) =>
-          stack.privateWork(agent.agent, `Concurrent private Work ${n}`))));
+        writes = fusekiReadBudget.exit(() => stack.fuseki.runBackground(() =>
+          Promise.all(Array.from({ length: 8 }, (_, n) =>
+            stack.privateWork(agent.agent, `Concurrent private Work ${n}`)))));
         await writes;
       }
       return result;
@@ -125,9 +127,11 @@ test('G323 first pages survive a concurrent command burst; discovery retains its
     // quiet graph interval. A bounded failure must contain no partial page.
     let churn = 0;
     stack.fuseki.query = async (sparql, bytes) => {
+      if (stack.fuseki.isBackgroundContext) return originalQuery(sparql, bytes);
       const result = await originalQuery(sparql, bytes);
       if (sparql.includes('SELECT ?epoch ?sequence WHERE')) {
-        await fusekiReadBudget.exit(() => stack.privateWork(agent.agent, `Sustained private Work ${++churn}`));
+        await fusekiReadBudget.exit(() => stack.fuseki.runBackground(() =>
+          stack.privateWork(agent.agent, `Sustained private Work ${++churn}`)));
       }
       return result;
     };

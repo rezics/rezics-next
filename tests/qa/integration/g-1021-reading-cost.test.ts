@@ -37,6 +37,7 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
     let graphRows = 0, graphBytes = 0;
     const graphWork: Array<{ name: string; ms: number }> = [];
     stack.fuseki.query = async (sparql, bytes) => {
+      if (stack.fuseki.isBackgroundContext) return query(sparql, bytes);
       const start = performance.now(), result = await query(sparql, bytes);
       graphRows += result.results?.bindings.length ?? 0; graphBytes += Buffer.byteLength(JSON.stringify(result));
       graphWork.push({ name: sparql.match(/# reading-position:([\w-]+)/)?.[1] ?? 'fence/disclosure', ms: performance.now() - start });

@@ -1,10 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/counting-fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
@@ -36,15 +37,15 @@ import type { SearchContinuation }
 
 const root = resolve(import.meta.dir, '../../..');
 
-class CountingFusekiClient extends FusekiClient {
+class CountingFusekiClient extends CountingFuseki {
   inventories = 0;
   readinessReads = 0;
-  queryCalls = 0;
+  get queryCalls(): number { return this.queries; }
   phraseQueries = 0;
   healthCalls = 0;
   joinedQueries = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.queryCalls++;
+    if (this.isBackgroundContext) return super.query(sparql, maxResponseBytes);
     if (sparql.includes('?probeScore')) this.readinessReads++;
     if (sparql.includes('?candidateCount') && sparql.includes('text:query')) this.phraseQueries++;
     if (sparql.includes('rv:publicTextInventory()')) this.inventories++;
@@ -52,10 +53,36 @@ class CountingFusekiClient extends FusekiClient {
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth() {
-    this.healthCalls++;
+    if (!this.isBackgroundContext) this.healthCalls++;
     return super.commandHealth();
   }
 }
+
+test('search counters exclude background queries and health probes while retaining foreground calls', async () => {
+  const query = spyOn(FusekiClient.prototype, 'query').mockResolvedValue({ boolean: true });
+  const health = spyOn(FusekiClient.prototype, 'commandHealth').mockResolvedValue({
+    moduleVersion: 'test', instanceId: randomUUID(), publicSearchWriteEpoch: '0',
+    publicSearchWriteActive: false, profiles: {},
+  });
+  const fuseki = new CountingFusekiClient('http://fuseki.test/');
+  const sparql = '?probeScore ?candidateCount text:query rv:publicTextInventory() ratingPopulation';
+  const counts = () => [fuseki.queryCalls, fuseki.readinessReads, fuseki.phraseQueries,
+    fuseki.inventories, fuseki.joinedQueries, fuseki.healthCalls];
+  try {
+    await Promise.all([
+      fuseki.runBackground(async () => {
+        await Promise.resolve();
+        await fuseki.query(sparql, 4096);
+        await fuseki.commandHealth();
+      }),
+      fuseki.query(sparql), fuseki.commandHealth(),
+    ]);
+    expect(counts()).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledWith(sparql, 4096);
+    expect(health).toHaveBeenCalledTimes(2);
+  } finally { query.mockRestore(); health.mockRestore(); }
+});
 
 test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rated Realm join, bounded paging, Access mute and author switch', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
@@ -68,6 +95,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
   const actor = ID + randomUUID();
   const otherAuthor = ID + randomUUID();
   const phrase = `scale${randomUUID().replaceAll('-', '')}`;
+  attributeDirectoryRefreshQueries();
   const fuseki = new CountingFusekiClient(Bun.env.FUSEKI_URL);
   const env: WorkActivationEnvironment = {
     fuseki,
