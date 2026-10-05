@@ -3,6 +3,8 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { settled } from '../../../../packages/ui/src/stories/support.tsx';
+import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import * as fixture from './fixtures.ts';
@@ -138,8 +140,16 @@ export const WriteReview: Story = {
       within(form).getByRole('button', { name: 'Review language: Language not specified' }),
     ).toBeVisible();
     await userEvent.click(within(form).getByRole('button', { name: /^Review language:/ }));
-    await userEvent.type(await within(document.body).findByRole('searchbox'), 'korean');
-    await userEvent.click(await within(document.body).findByRole('button', { name: /한국어/ }));
+    // The choices sit in a dialog that makes the page behind it inert. Wait until
+    // that dialog has finished opening, then search and choose inside it.
+    const dialog = await settled(
+      await within(document.body).findByRole('dialog', { name: 'Review language' }),
+    );
+    await waitFor(() => expect(dialog).toHaveAttribute('data-state', 'open'));
+    const search = within(dialog).getByRole('searchbox');
+    await focusForTyping(search);
+    await userEvent.type(search, 'korean');
+    await userEvent.click(await within(dialog).findByRole('button', { name: /한국어/ }));
     await expect(within(form).getByRole('textbox', { name: 'Your review' })).toHaveAttribute(
       'lang',
       'ko',
