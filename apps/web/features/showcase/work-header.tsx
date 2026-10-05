@@ -43,6 +43,7 @@ const heroCss = stageWindows
     (window) => `@media ${window.media} {
   .work-hero { --hero-height: ${heights[window.shape]}; --hero-lead: ${leads[window.shape]}; }
   .work-hero .showcase-art { object-fit: var(--fit-${window.shape}); object-position: var(--focal-${window.shape}); }
+  .work-hero .showcase-art, .work-hero .showcase-ambient img { object-view-box: var(--view-${window.shape}, none); }
 }`,
   )
   .join('\n');

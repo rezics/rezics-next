@@ -345,4 +345,7 @@ export default {
   aggregateGrain: insert('Gezählt pro {{grain}}', { grain: String }),
   aggregateMean: insert('Mittel {{mean}} von {{max}}', { mean: String, max: String }),
   signInForParts: 'Melde dich an, um die Teile und Verbindungen dieses Werks zu sehen.',
+  wantToPlay: 'Möchte ich spielen', playing: 'Spiele ich gerade', played: 'Gespielt',
+  wantToUse: 'Möchte ich nutzen', using: 'Wird genutzt', used: 'Genutzt',
+  wantToCook: 'Möchte ich kochen', cooking: 'Koche ich gerade', cooked: 'Gekocht',
 } satisfies WorkPageMessages;

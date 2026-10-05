@@ -31,7 +31,7 @@ export function logoSvg(svg: string, name: string, language: 'en' | 'ja'): strin
 }
 
 /** A PNG of the fixture at the size the role needs, hue-shifted so each Work looks like its own. */
-export async function renderArt(work: ShowcaseWork, key: ShowcaseRoleKey): Promise<Uint8Array> {
+export async function renderArt(work: Pick<ShowcaseWork, 'hue' | 'names'>, key: ShowcaseRoleKey): Promise<Uint8Array> {
   const { width, height } = sizes[key.role];
   const source = await Bun.file(new URL(file(key), art)).text();
   const svg = key.role === 'logo' ? logoSvg(source, work.names[key.language], key.language) : source;

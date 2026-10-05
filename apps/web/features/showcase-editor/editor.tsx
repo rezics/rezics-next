@@ -266,7 +266,8 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
   const loadPreviewTitle = useCallback((language: string) => loadTitle(work.id, language), [loadTitle, work.id]);
 
   return <div className="grid gap-8 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] xl:items-start">
-    <div className="order-1 xl:sticky xl:top-20 xl:order-2">
+    {/* A phone or tablet window is taller than the screen; the panel scrolls within the space under the header, so its controls stay reachable. */}
+    <div className="order-1 xl:sticky xl:top-20 xl:order-2 xl:-mx-1 xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto xl:px-1">
       <ShowcasePreview work={work.card} title={work.title} tagline={work.tagline} art={stage} trailer={trailerShown}
         locale={locale} languages={logoLanguages} loadTitle={loadPreviewTitle} t={t} />
     </div>

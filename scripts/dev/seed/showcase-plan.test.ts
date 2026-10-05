@@ -8,7 +8,7 @@ import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { realms } from './plan.ts';
 import { softwareCatalogue } from './software-catalogue.ts';
 import { focal, logoSvg, renderArt, sizes, wholeImage } from './showcase-art.ts';
-import { retainedSlides, showcaseSlides, showcaseUnarted, showcaseWorks, showcaseZone } from './showcase-plan.ts';
+import { retainedSlides, showcaseCampaigns, showcaseSlides, showcaseUnarted, showcaseWorks, showcaseZone } from './showcase-plan.ts';
 
 const known = new Set([...demoClassics.map(work => work.id), ...gamesCatalogue.map(game => game.id),
   ...softwareCatalogue.map(app => app.id)]);
@@ -57,6 +57,32 @@ describe('Showcase seed plan', () => {
     expect(logoSvg(svg, 'Hades', 'en')).toContain('>Hades</text>');
     expect(logoSvg(svg, 'Pride and Prejudice', 'en')).toMatch(/font-size="4\d"/);
     expect(logoSvg(svg, 'Krita', 'en')).toContain('font-size="70"');
+  });
+});
+
+describe('Showcase campaign art', () => {
+  test('belongs to link slides, which have no Work to carry it, and renders art Main admits', async () => {
+    const slides = showcaseSlides(workOf);
+    for (const campaign of showcaseCampaigns) {
+      expect(slides.find(slide => slide.id === campaign.id && 'href' in slide)).toBeDefined();
+      for (const key of campaign.slots) {
+        const metadata = await sharp(await renderArt(campaign, key)).metadata();
+        expect(admitShowcaseImage({ role: key.role, crop: wholeImage, focalArea: focal[key.role] },
+          { width: metadata.width!, height: metadata.height!, hasAlpha: metadata.hasAlpha })).toEqual(sizes[key.role]);
+      }
+    }
+  });
+
+  test('reaches the slide as the Uses its campaign holds, and a slide holding none keeps no art', () => {
+    const use = (name: string) => id(name);
+    const withArt = showcaseSlides(workOf, new Map([['autumn-contest', { 'background-landscape': use('aaaa'), 'background-portrait': use('bbbb') }]]));
+    const slide = withArt.find(item => item.id === 'autumn-contest')!;
+    expect(slide.art).toEqual({ landscape: { use: use('aaaa') }, portrait: { use: use('bbbb') } });
+    const presentation = officialPresentation(showcaseZone, realms.find(item => item.id === showcaseZone)!.preset, undefined, withArt);
+    expect(checkZonePresentation(presentation, [])).toBe(presentation);
+    expect(showcaseSlides(workOf).find(item => item.id === 'autumn-contest')).not.toHaveProperty('art');
+    // The realms step's replay keeps the art a seed run attached.
+    expect(retainedSlides(presentation)).toEqual(withArt);
   });
 });
 

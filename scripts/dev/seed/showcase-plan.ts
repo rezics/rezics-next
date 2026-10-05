@@ -38,6 +38,18 @@ export const showcaseWorks: readonly ShowcaseWork[] = [
     slots: [{ role: 'background-landscape' }, ...logos(['en', 'light'])] },
 ];
 
+/**
+ * A link slide has no Work to carry art, so its art is a Use of the Zone's Realm that Main creates
+ * through the Zone's campaign-art command. `id` is the slide's.
+ */
+export interface ShowcaseCampaign extends Pick<ShowcaseWork, 'id' | 'hue' | 'names'> {
+  slots: readonly { role: CampaignRole }[];
+}
+export const showcaseCampaigns: readonly ShowcaseCampaign[] = [
+  { id: 'autumn-contest', hue: 35, names: { en: 'Autumn serial contest', ja: '秋の連載コンテスト' },
+    slots: [{ role: 'background-landscape' }, { role: 'background-portrait' }] },
+];
+
 /** Works with slides in the Zone but no art: their slides compose from the cover. */
 export const showcaseUnarted = ['game-celeste'] as const;
 
@@ -45,13 +57,25 @@ export const showcaseUnarted = ['game-celeste'] as const;
 export const showcaseZone = 'games' as const;
 
 type Slides = ZonePresentation['slides'];
+export type CampaignRole = 'background-landscape' | 'background-portrait';
+/** The Uses a campaign slide holds by role, as IRIs. */
+export type CampaignUses = Partial<Record<CampaignRole, string>>;
+/** The campaign art each slide holds, by slide id. */
+export type CampaignArt = ReadonlyMap<string, CampaignUses>;
+
+/** A slide's art as the Zone's configuration stores it; none while it holds no Use. */
+export function campaignSlideArt(uses: CampaignUses | undefined): Pick<Slides[number], 'art'> {
+  const landscape = uses?.['background-landscape'], portrait = uses?.['background-portrait'];
+  return landscape || portrait
+    ? { art: { ...landscape ? { landscape: { use: landscape } } : {}, ...portrait ? { portrait: { use: portrait } } : {} } } : {};
+}
 
 /**
  * v2 slides mixing the Works above: a game with a trailer, a book, a piece of
  * software, a link slide for a campaign, and a scheduled slide for a Work
  * with no art. The fixed window keeps the plan the same on every run.
  */
-export function showcaseSlides(workOf: (id: string) => string | undefined): Slides {
+export function showcaseSlides(workOf: (id: string) => string | undefined, campaignArt: CampaignArt = new Map()): Slides {
   const work = (id: string) => workOf(id);
   const hades = work('game-hades'), pride = work('pride'), krita = work('app-krita'), celeste = work('game-celeste');
   return [
@@ -61,8 +85,9 @@ export function showcaseSlides(workOf: (id: string) => string | undefined): Slid
       kickers: { 'zh-Hans': '读书会选书', 'zh-Hant': '讀書會選書', ja: '読書会の一冊' } }] : [],
     ...krita ? [{ id: 'make-something', work: krita, kicker: 'Make something',
       kickers: { 'zh-Hans': '动手创作', 'zh-Hant': '動手創作', ja: '作ってみよう' } }] : [],
-    // A campaign has no Work: it links into a Realm. Its art waits for an API that lets a Zone's editors upload it.
+    // A campaign has no Work: it links into a Realm, and its art is its own campaign Uses.
     { id: 'autumn-contest', href: '/r/fiction', title: 'Autumn serial contest',
+      ...campaignSlideArt(campaignArt.get('autumn-contest')),
       titles: { 'zh-Hans': '秋季连载征文', 'zh-Hant': '秋季連載徵文', ja: '秋の連載コンテスト' },
       kicker: 'Open until October 31',
       kickers: { 'zh-Hans': '十月三十一日截止', 'zh-Hant': '十月三十一日截止', ja: '10月31日まで' } },

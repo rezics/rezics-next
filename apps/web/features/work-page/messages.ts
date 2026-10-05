@@ -293,6 +293,10 @@ const en = {
   aggregateGrain: insert('Counted per {{grain}}', { grain: String }),
   aggregateMean: insert('Mean {{mean}} of {{max}}', { mean: String, max: String }),
   ratingScaleRange: insert('Scale {{min}}–{{max}}', { min: String, max: String }),
+  // The shelf words in the Work's own verb: the stored statuses are the same three whatever the kind.
+  wantToPlay: 'Want to play', playing: 'Playing', played: 'Played',
+  wantToUse: 'Want to use', using: 'Using', used: 'Used',
+  wantToCook: 'Want to cook', cooking: 'Cooking', cooked: 'Cooked',
 };
 
 export const englishMessages = en;

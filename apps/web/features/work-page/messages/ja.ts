@@ -297,4 +297,7 @@ export default {
   aggregateGrain: insert('{{grain}}ごとに集計', { grain: String }),
   aggregateMean: insert('平均 {{mean}}／{{max}}', { mean: String, max: String }),
   signInForParts: 'ログインすると、この作品の構成と関連作品を表示できます。',
+  wantToPlay: '遊びたい', playing: 'プレイ中', played: 'プレイ済み',
+  wantToUse: '使いたい', using: '使用中', used: '使用済み',
+  wantToCook: '作りたい', cooking: '調理中', cooked: '作った',
 } satisfies WorkPageMessages;

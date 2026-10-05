@@ -297,4 +297,7 @@ export default {
   aggregateGrain: insert('{{grain}} 기준으로 집계', { grain: String }),
   aggregateMean: insert('평균 {{mean}}/{{max}}', { mean: String, max: String }),
   signInForParts: '로그인하면 이 작품의 구성과 연결을 볼 수 있습니다.',
+  wantToPlay: '플레이하고 싶어요', playing: '플레이 중', played: '플레이했어요',
+  wantToUse: '사용하고 싶음', using: '사용 중', used: '사용함',
+  wantToCook: '만들고 싶어요', cooking: '만드는 중', cooked: '만들었어요',
 } satisfies WorkPageMessages;

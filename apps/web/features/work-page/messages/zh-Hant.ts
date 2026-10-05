@@ -293,4 +293,7 @@ export default {
   aggregateGrain: insert('以{{grain}}計算', { grain: String }),
   aggregateMean: insert('平均 {{mean}}／{{max}}', { mean: String, max: String }),
   signInForParts: '登入後即可查看這部作品的組成部分與關聯。',
+  wantToPlay: '想玩', playing: '正在玩', played: '玩過',
+  wantToUse: '想使用', using: '使用中', used: '用過',
+  wantToCook: '想煮', cooking: '正在煮', cooked: '煮過',
 } satisfies WorkPageMessages;

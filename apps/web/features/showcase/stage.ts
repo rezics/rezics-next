@@ -40,6 +40,7 @@ export const stageWindowCss = stageWindows
   .showcase .showcase-arrows, .showcase .showcase-rotation { display: none; }
   .showcase .showcase-item { width: var(--showcase-width); }
   .showcase-art { object-fit: var(--fit-portrait); object-position: var(--focal-portrait); }
+  .showcase-art, .showcase-ambient img { object-view-box: var(--view-portrait); }
   .showcase-copy { width: 100%; padding: 1.25rem; gap: .5rem; }
   .showcase-title { font-size: clamp(1.5rem, min(7cqw, 4.2svh), 2.5rem); }
   .showcase-cutout-layer { inset-block: -3% 45%; inset-inline: 45% 10%; }
@@ -99,6 +100,18 @@ export function focalPosition(image: ZoneShowcaseImage) {
   return focal
     ? `${Math.max(0, Math.min(1, focal.x + focal.width / 2)) * 100}% ${Math.max(0, Math.min(1, focal.y + focal.height / 2)) * 100}%`
     : '50% 50%';
+}
+
+/**
+ * `object-view-box` for an original whose cropped renditions are pending: the authored frame cut
+ * from it, so `object-fit` and the focal position work on the frame, as they do on a rendition.
+ * Absent when the image already is the frame.
+ */
+export function viewBox(image: ZoneShowcaseImage): string {
+  const view = image.view;
+  if (!view) return 'none';
+  const percent = (fraction: number) => `${+(fraction * 100).toFixed(3)}%`;
+  return `inset(${percent(view.y)} ${percent(1 - view.x - view.width)} ${percent(1 - view.y - view.height)} ${percent(view.x)})`;
 }
 
 /** A cover crop is safe only if every point in the authored focal rectangle survives. */

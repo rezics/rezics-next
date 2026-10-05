@@ -1,10 +1,10 @@
 import { SeedApiError } from './api.ts';
 import { digest, focal, renderArt, wholeImage } from './showcase-art.ts';
 import { grantShowcaseSeedAuthority } from './showcase-authority.ts';
-import { showcaseSlides, showcaseWorks, showcaseZone, type ShowcaseRoleKey, type ShowcaseWork }
-  from './showcase-plan.ts';
+import { type CampaignArt, type CampaignUses, retainedSlides, showcaseCampaigns, showcaseSlides, showcaseWorks, showcaseZone,
+  type CampaignRole, type ShowcaseRoleKey, type ShowcaseWork } from './showcase-plan.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
-import { grantOfficialZoneSeed } from './operator.ts';
+import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { realms, seedKey } from './plan.ts';
 import { refreshSeedTokens, stableId, type SeedState, type Session } from './state.ts';
 import { readOrCreateOfficialZone, updateOfficialZonePresentation } from './zones.ts';
@@ -40,7 +40,10 @@ const wanted = (key: ShowcaseRoleKey) => ({
 const present = (key: ShowcaseRoleKey, current: readonly Current[]) => current.find(image => image.role === key.role
   && (key.role !== 'logo' || image.language === key.language && image.tone === key.tone));
 
-async function upload(state: SeedState, session: Session, work: ShowcaseWork, key: ShowcaseRoleKey) {
+/** Whatever supplies art: a Work, or a campaign slide. */
+type ArtOwner = Pick<ShowcaseWork, 'id' | 'hue' | 'names'>;
+
+async function upload(state: SeedState, session: Session, work: ArtOwner, key: ShowcaseRoleKey) {
   const bytes = await renderArt(work, key);
   const sha256 = digest(bytes);
   const reserved = await state.api.post<{ asset: string; upload: string }>('/v1/media/uploads', {
@@ -51,12 +54,12 @@ async function upload(state: SeedState, session: Session, work: ShowcaseWork, ke
     headers: { authorization: `Bearer ${session.token}` }, body: new Blob([new Uint8Array(bytes)]) });
   if (!sent.ok) throw new SeedApiError('Showcase art bytes', sent.status, (await sent.text()).slice(0, 500));
   await sent.body?.cancel();
-  return reserved.asset;
+  return reserved;
 }
 
 async function select(state: SeedState, session: Session, work: ShowcaseWork, target: string, key: ShowcaseRoleKey,
   current: Current | undefined) {
-  const asset = current?.asset ?? await upload(state, session, work, key);
+  const asset = current?.asset ?? (await upload(state, session, work, key)).asset;
   const label = `${work.id}:${key.role}${'language' in key ? `:${key.language}:${key.tone}` : ''}`;
   await state.api.put(`/v1/resources/${short(target)}/showcase/art`, {
     profile: 'work-showcase-selection-v1', expectedSelection: current?.selection ?? null, role: key.role,
@@ -77,13 +80,23 @@ interface Described { status: string; representation: string; nsfw: string;
   controls: { nsfw: { basis: unknown; valueHead: string | null } } }
 
 /** Public metadata of every planned image, in one batch: the viewer's mask follows its NSFW label. */
-async function readLabels(state: SeedState, images: readonly Current[], uses: ReadonlyMap<string, string>) {
+async function readLabels(state: SeedState, images: readonly { representation: string; use: string }[]) {
   if (!images.length) return [];
   const response = await fetch(`${state.endpoints.main}/v1/media/metadata`, { method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ items: images.map(image => ({ representation: image.representation, use: uses.get(image.selection) })) }) });
+    body: JSON.stringify({ items: images }) });
   if (!response.ok) throw new SeedApiError('Showcase metadata', response.status, (await response.text()).slice(0, 500));
   return (await response.json() as { items: Described[] }).items.filter(item => item.status === 'available');
+}
+
+/** Unassessed images stay masked for readers, so the demo art is labelled as the curator's own safe work. */
+async function markSafe(state: SeedState, session: Session, items: readonly Described[]) {
+  for (const item of items) {
+    await state.optional(`Showcase art label ${item.representation}`, () => state.api.post(
+      `/v1/media/representations/${item.representation}/labels`, { actingSubject: session.actingSubject,
+        field: 'nsfw', basis: item.controls.nsfw.basis, expectedValueHead: item.controls.nsfw.valueHead,
+        value: 'sfw', mode: 'edit', authority: 'author' }, session.token, seedKey('showcase-sfw', item.representation)));
+  }
 }
 
 export async function seedShowcaseArt(state: SeedState) {
@@ -102,9 +115,8 @@ export async function seedShowcaseArt(state: SeedState) {
   const plannedImages = (read: ReadonlyMap<string, Read>) => targets.flatMap(({ work, target }) =>
     (read.get(target)?.images ?? []).filter(image => work.slots.some(key => present(key, [image]))));
   const unlabelled = async (read: ReadonlyMap<string, Read>) => {
-    const images = plannedImages(read);
-    const uses = new Map(images.map(image => [image.selection, image.use]));
-    return readLabels(state, images, uses).then(items => items.filter(item => item.nsfw === 'unknown'));
+    const images = plannedImages(read).map(image => ({ representation: image.representation, use: image.use }));
+    return readLabels(state, images).then(items => items.filter(item => item.nsfw === 'unknown'));
   };
   let current = await readCurrent(state, targets.map(item => item.target));
   const missing = targets.filter(({ work, target }) => {
@@ -132,18 +144,54 @@ export async function seedShowcaseArt(state: SeedState) {
     });
   }
   current = await readCurrent(state, targets.map(item => item.target));
-  // Unassessed images stay masked for readers, so the demo art is labelled as the curator's own safe work.
-  for (const item of await unlabelled(current)) {
-    await state.optional(`Showcase art label ${item.representation}`, () => state.api.post(
-      `/v1/media/representations/${item.representation}/labels`, { actingSubject: session.actingSubject,
-        field: 'nsfw', basis: item.controls.nsfw.basis, expectedValueHead: item.controls.nsfw.valueHead,
-        value: 'sfw', mode: 'edit', authority: 'author' }, session.token, seedKey('showcase-sfw', item.representation)));
-  }
+  await markSafe(state, session, await unlabelled(current));
   for (const { work, target } of targets) {
     const images = current.get(target)?.images ?? [];
     const absent = work.slots.filter(key => !present(key, images));
     if (absent.length) state.findings.add(`Showcase art ${work.id}: ${absent.map(key => key.role).join(', ')} not selected`);
   }
+}
+
+/**
+ * The Uses a campaign slide's art needs, created through the Zone's campaign-art command as the
+ * Zone's steward, who uploads the images. A role the slide already holds is kept and uploads
+ * nothing, so a replay writes nothing.
+ */
+async function seedCampaignArt(state: SeedState, steward: Session, input: LocalOperatorInput, zone: string, realm: string,
+  retained: ReturnType<typeof retainedSlides>): Promise<CampaignArt> {
+  const art = new Map<string, CampaignUses>();
+  for (const campaign of showcaseCampaigns) {
+    const held = retained.find(slide => slide.id === campaign.id)?.art;
+    const uses: CampaignUses = {};
+    const missing: { role: CampaignRole }[] = [];
+    for (const { role } of campaign.slots) {
+      const use = (role === 'background-landscape' ? held?.landscape : held?.portrait)?.use;
+      if (use) uses[role] = use; else missing.push({ role });
+    }
+    if (missing.length) {
+      const owner = `media:owner:${steward.actingSubject}` as const;
+      await grantShowcaseSeedAuthority({ ...input, ownerAccountSubject: steward.accountId, actingSubject: steward.actingSubject },
+        [{ action: 'media.upload', scope: owner }, { action: 'media.labels', scope: owner }]);
+      await refreshSeedTokens(state);
+      const created: { representation: string; use: string }[] = [];
+      for (const key of missing) {
+        await state.optional(`Showcase campaign art ${campaign.id}:${key.role}`, async () => {
+          const reserved = await upload(state, steward, campaign, key);
+          const result = await state.api.post<{ id: string | null }>(`/v1/zones/${short(zone)}/campaign-art`, {
+            profile: 'zone-campaign-art-v1', realm, asset: reserved.asset, role: key.role, crop: wholeImage,
+            focalArea: focal[key.role], actingSubject: steward.actingSubject },
+          steward.token, seedKey('showcase-campaign-art', `${campaign.id}:${key.role}:${reserved.asset}`));
+          if (!result.id) throw new SeedApiError('Showcase campaign art', 500, 'no Use was created');
+          uses[key.role] = `https://rezics.com/id/${result.id}`;
+          const status = await state.api.get<{ representation: string | null }>(`/v1/media/uploads/${reserved.upload}`, steward.token);
+          if (status.representation) created.push({ representation: status.representation, use: result.id });
+        });
+      }
+      await markSafe(state, steward, (await readLabels(state, created)).filter(item => item.nsfw === 'unknown'));
+    }
+    art.set(campaign.id, uses);
+  }
+  return art;
 }
 
 /**
@@ -160,11 +208,13 @@ export async function seedShowcaseSlides(state: SeedState) {
     return;
   }
   const zone = `https://rezics.com/id/${stableId(`zone:${showcaseZone}`)}`;
-  const slides = showcaseSlides(id => state.created.get(id)?.work ?? state.publicWorks.get(id)?.work.work);
   await grantOfficialZoneSeed({ ...operatorInput, ownerAccountSubject: realm.steward.accountId,
     actingSubject: realm.steward.actingSubject }, zone);
   const head = await readOrCreateOfficialZone(state.api, { zone, space: realm.receipt.space,
     actor: realm.steward.actingSubject, token: realm.steward.token, key: seedKey('zone', showcaseZone) });
+  const campaignArt = await seedCampaignArt(state, realm.steward, operatorInput, zone, realm.receipt.realm,
+    retainedSlides(head.configuration.presentation));
+  const slides = showcaseSlides(id => state.created.get(id)?.work ?? state.publicWorks.get(id)?.work.work, campaignArt);
   const presentation = officialPresentation(showcaseZone, plan.preset, undefined, slides);
   await updateOfficialZonePresentation(operatorSession.api, { zone, actor: realm.steward.actingSubject,
     token: operatorSession.token, head, defaultRealm: realm.receipt.realm,

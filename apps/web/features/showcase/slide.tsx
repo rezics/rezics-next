@@ -8,7 +8,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { catalogueWork, WhyHere } from '../zones/card.tsx';
 import { PrimaryAction } from './work-action.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
-import { focalFrame, focalPosition, logoFor, pictureSources, slideArt } from './stage.ts';
+import { focalFrame, focalPosition, logoFor, pictureSources, slideArt, viewBox } from './stage.ts';
 import { Trailer } from './trailer.tsx';
 
 export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
@@ -38,9 +38,13 @@ export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolea
   const fallback = art.landscape ?? art.portrait;
   if (!fallback) return null;
   const portrait = focalFrame(art.portrait ?? fallback, 3 / 4);
+  const views = {
+    '--view-landscape': viewBox(art.landscape ?? fallback),
+    '--view-portrait': viewBox(art.portrait ?? fallback),
+  } as CSSProperties;
   // Both copies pass through the media policy, so a mask also removes the ambient backdrop.
   return (
-    <div aria-hidden="true" className="showcase-background">
+    <div aria-hidden="true" className="showcase-background" style={views}>
       <picture className="showcase-ambient">
         {sources.map((source) => (
           <source

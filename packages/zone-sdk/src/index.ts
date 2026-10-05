@@ -141,6 +141,8 @@ export interface ZoneShowcaseImage extends ZoneImage {
   focal?: ZoneFocalArea;
   /** Only art authored for this frame may be cropped; covers and posters stay whole. */
   framed?: boolean;
+  /** The frame to draw from `url` when that is the uncropped original, because the cropped renditions are not ready. */
+  view?: ZoneFocalArea;
 }
 
 export type ZoneLogoAnchor = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'

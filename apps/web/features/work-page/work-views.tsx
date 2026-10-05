@@ -50,6 +50,7 @@ import { type HubSection, hubLabels, hubPlan } from './hub.ts';
 import { WikiSection, WikiShortcut } from './wiki-server.tsx';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
+import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
@@ -138,7 +139,8 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages }: Com
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
   return <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
-    messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null} />;
+    messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null}
+    words={shelfWords(experience, messages)} />;
 }
 
 /** The hub sections the Work's projection binds, in the documented order. */

@@ -103,16 +103,25 @@ function useStatus(work: string) {
   return { actions, status, state, choose };
 }
 
-function statusLabel(status: ReadingStatus, t: ReturnType<typeof materializeData<typeof messages.en>>) {
-  return status === 'want-to-read' ? t.wantToRead : status === 'reading' ? t.reading : t.read;
+/**
+ * The words for the three status shelves when the Work is not read: the stored statuses stay
+ * `want-to-read`, `reading` and `read`, and a page names them in its Work's own verb.
+ */
+export type StatusWords = Record<'wantToRead' | 'reading' | 'read', string>;
+
+type Copy = ReturnType<typeof materializeData<typeof messages.en>>;
+
+function statusLabel(status: ReadingStatus, t: Copy, words?: StatusWords) {
+  const named = words ?? t;
+  return status === 'want-to-read' ? named.wantToRead : status === 'reading' ? named.reading : named.read;
 }
 
-function StatusMenuItems({ status, t, details }: {
-  status: ReadingStatus | null; t: ReturnType<typeof materializeData<typeof messages.en>>; details?: string;
+function StatusMenuItems({ status, t, words, details }: {
+  status: ReadingStatus | null; t: Copy; words?: StatusWords; details?: string;
 }) {
   return <>
     <MenuRadioGroup value={status ?? ''}>
-      {readingStatuses.map(item => <MenuRadioItem key={item} value={item}>{statusLabel(item, t)}</MenuRadioItem>)}
+      {readingStatuses.map(item => <MenuRadioItem key={item} value={item}>{statusLabel(item, t, words)}</MenuRadioItem>)}
     </MenuRadioGroup>
     {status ? <><MenuSeparator /><MenuItem value="remove">{t.removeFromShelf}</MenuItem></> : null}
     {details ? <><MenuSeparator /><MenuItem value="details">{details}</MenuItem></> : null}
@@ -157,8 +166,10 @@ export function ShelfMark({ work, title, locale }: { work: string; title: string
  * The primary shelf action: "Want to read" in one press, the other status
  * shelves and removal in its menu. Signed out, it leads to sign-in.
  */
-export function ShelfButton({ work, title, locale, size = 'lg', variant = 'default', className }: {
+export function ShelfButton({ work, title, locale, size = 'lg', variant = 'default', className, words }: {
   work: string; title: string; locale: UiLocale; size?: 'sm' | 'md' | 'lg';
+  /** The Work's own verb for the shelves ("Want to play"); the reading words when left out. */
+  words?: StatusWords;
   /** `outline` where another action leads, such as Read on the Work page. */
   variant?: 'default' | 'outline'; className?: string;
 }) {
@@ -169,7 +180,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   if (actions.kind === 'unavailable') return null;
   if (actions.kind === 'signed-out') {
     return <Link href={actions.signInHref} className={cn(buttonVariants({ size, variant, pill: true }), className)}>
-      <BookmarkPlusIcon aria-hidden="true" />{t.wantToRead}<span className="sr-only"> — {t.signInToShelve}</span></Link>;
+      <BookmarkPlusIcon aria-hidden="true" />{words?.wantToRead ?? t.wantToRead}<span className="sr-only"> — {t.signInToShelve}</span></Link>;
   }
   const tracking = actions.tracking ?? null;
   const details = tracking ? trackingCopy(locale).details : undefined;
@@ -183,11 +194,11 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
     return <div className={cn('grid gap-1.5', className)}>
       <Menu onSelect={onSelect}>
         <MenuTrigger className={cn(buttonVariants({ size, variant: 'outline', pill: true }), 'w-full')}
-          aria-label={`${statusLabel(status, t)} — ${t.shelve({ title })}`} aria-busy={state === 'saving' || undefined}>
-          <CheckIcon aria-hidden="true" className="text-primary" />{statusLabel(status, t)}
+          aria-label={`${statusLabel(status, t, words)} — ${t.shelve({ title })}`} aria-busy={state === 'saving' || undefined}>
+          <CheckIcon aria-hidden="true" className="text-primary" />{statusLabel(status, t, words)}
           <ChevronDownIcon aria-hidden="true" className="ms-auto" />
         </MenuTrigger>
-        <MenuContent className="w-56"><StatusMenuItems status={status} t={t} details={details} /></MenuContent>
+        <MenuContent className="w-56"><StatusMenuItems status={status} t={t} words={words} details={details} /></MenuContent>
       </Menu>
       {failure}
       {sheet}
@@ -197,13 +208,13 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
     <ButtonGroup className="w-full">
       <Button size={size} variant={variant} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
         onClick={() => void choose('want-to-read')}>
-        <BookmarkPlusIcon aria-hidden="true" />{t.wantToRead}</Button>
+        <BookmarkPlusIcon aria-hidden="true" />{words?.wantToRead ?? t.wantToRead}</Button>
       <Menu onSelect={onSelect}>
         <MenuTrigger aria-label={t.shelfOptions}
           className={cn(buttonVariants({ variant, size: size === 'lg' ? 'icon-lg' : size === 'md' ? 'icon-md' : 'icon-sm' }),
             'w-11 flex-none rounded-e-full', variant === 'default' && 'border-s border-s-primary-foreground/25')}>
           <ChevronDownIcon aria-hidden="true" /></MenuTrigger>
-        <MenuContent className="w-56"><StatusMenuItems status={status} t={t} details={details} /></MenuContent>
+        <MenuContent className="w-56"><StatusMenuItems status={status} t={t} words={words} details={details} /></MenuContent>
       </Menu>
     </ButtonGroup>
     {failure}

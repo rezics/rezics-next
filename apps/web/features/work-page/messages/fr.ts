@@ -344,4 +344,7 @@ export default {
   aggregateGrain: insert('Compté par {{grain}}', { grain: String }),
   aggregateMean: insert('Moyenne {{mean}} sur {{max}}', { mean: String, max: String }),
   signInForParts: 'Connectez-vous pour voir les parties et les liens de cette œuvre.',
+  wantToPlay: 'À jouer', playing: 'En cours de jeu', played: 'Joué',
+  wantToUse: 'À utiliser', using: 'En cours d’utilisation', used: 'Utilisé',
+  wantToCook: 'À cuisiner', cooking: 'En cours de préparation', cooked: 'Cuisiné',
 } satisfies WorkPageMessages;

@@ -28,7 +28,8 @@ function Preview({
     | 'trailer'
     | 'poster'
     | 'failed-logo'
-    | 'wide-focal';
+    | 'wide-focal'
+    | 'pending-crop';
   effect: 'plain' | 'outline' | 'gradient' | 'glow';
 }) {
   const theme = zoneTheme(presetTokens.vibrant, { reader: 'dark', enabled: true });
@@ -43,6 +44,18 @@ function Preview({
         ...fixtureArt,
         portrait: null,
         landscape: { ...fixtureArt.landscape!, focal: { x: 0.1, y: 0.2, width: 0.8, height: 0.5 } },
+      },
+    };
+  // The author framed the middle half of the original, and its renditions are not made yet.
+  if (variant === 'pending-crop')
+    slides[0] = {
+      ...slides[0]!,
+      art: {
+        landscape: {
+          ...fixtureArt.landscape!,
+          focal: undefined,
+          view: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+        },
       },
     };
   if (variant === 'foreign-logo')
@@ -184,6 +197,16 @@ export const ForeignLanguageLogo: Story = {
   args: { variant: 'foreign-logo' },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('heading', { name: 'Astral Tide' })).toBeVisible();
+  },
+};
+/** Until renditions exist the stage draws the authored crop from the original, so the frame shows what the author chose. */
+export const PendingRenditionCrop: Story = {
+  args: { variant: 'pending-crop' },
+  async play({ canvasElement }) {
+    const image = canvasElement.querySelector<HTMLImageElement>('img.showcase-art');
+    await waitFor(() => expect(image?.naturalWidth).toBeGreaterThan(0));
+    if (!CSS.supports('object-view-box', 'inset(0)')) return;
+    await expect(getComputedStyle(image!).getPropertyValue('object-view-box')).toBe('inset(25%)');
   },
 };
 export const WholePoster: Story = { args: { variant: 'poster' } };

@@ -54,34 +54,44 @@ export function bannerImage(
     : null;
 }
 
+/** A `xywh=percent:` fragment as fractions of its image; null for anything else. */
+function percentArea(area: string | null | undefined) {
+  if (!area?.startsWith('xywh=percent:')) return null;
+  const values = area.slice(13).split(',').map(Number);
+  if (values.length !== 4 || values.some(number => !Number.isFinite(number))) return null;
+  const [x, y, width, height] = values as [number, number, number, number];
+  return { x: x / 100, y: y / 100, width: width / 100, height: height / 100 };
+}
+
 /** Main's percent rectangle is normalized relative to the selected crop's image. */
 export function showcaseFocal(value: string | null | undefined, crop?: string | null) {
-  const parse = (area: string | null | undefined) => {
-    if (!area?.startsWith('xywh=percent:')) return null;
-    const values = area.slice(13).split(',').map(Number);
-    if (values.length !== 4 || values.some(number => !Number.isFinite(number))) return null;
-    const [x, y, width, height] = values as [number, number, number, number];
-    return { x: x / 100, y: y / 100, width: width / 100, height: height / 100 };
-  };
-  const focal = parse(value);
+  const focal = percentArea(value);
   if (!focal) return undefined;
-  const selected = parse(crop) ?? { x: 0, y: 0, width: 1, height: 1 };
+  const selected = percentArea(crop) ?? { x: 0, y: 0, width: 1, height: 1 };
   return { x: (focal.x - selected.x) / selected.width, y: (focal.y - selected.y) / selected.height,
     width: focal.width / selected.width, height: focal.height / selected.height };
 }
 
 const showcaseUrl = (url: string) => url.startsWith('/v1/') ? `${BFF_PREFIX}${url}` : url;
 
-/** Delivery candidates name their codec; a srcset cannot contain duplicate widths for two codecs. */
+/**
+ * Delivery candidates name their codec; a srcset cannot contain duplicate widths for two codecs.
+ * Candidates already hold the authored crop. While they are pending the URL is the original, so the
+ * crop travels as `view` for the stage to draw from it; the frame then never shows more or less
+ * than the author chose.
+ */
 export function deliveredShowcaseImage(image: {
   url: string; width: number; height: number; focalArea?: string | null; crop?: string | null;
   cropWidth?: number; cropHeight?: number;
   srcset: readonly { url: string; width: number; type: string }[];
 }): ZoneShowcaseImage {
   const codec = image.srcset.some(candidate => candidate.type === 'image/webp') ? 'image/webp' : 'image/avif';
+  const crop = percentArea(image.crop);
+  const cropped = crop && (crop.x > 0 || crop.y > 0 || crop.width < 1 || crop.height < 1);
   return { url: showcaseUrl(image.url), width: image.cropWidth ?? image.width,
     height: image.cropHeight ?? image.height, framed: true,
     focal: showcaseFocal(image.focalArea, image.crop),
+    ...!image.srcset.length && cropped ? { view: crop } : {},
     candidates: image.srcset.filter(candidate => candidate.type === codec)
       .map(candidate => ({ url: showcaseUrl(candidate.url), width: candidate.width })) };
 }
@@ -103,8 +113,11 @@ export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
 export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia']): ZoneShowcaseArt | null {
   const art = media.find(item => item.id === slideId)?.art;
   if (!art) return null;
-  const background = (image: NonNullable<typeof art.landscape> | null, ratio: number) => image
-    ? { ...deliveredShowcaseImage(image), framed: Math.abs(image.width / image.height - ratio) < .001 } : null;
+  // Art is framed for the stage when its selected crop, not its original, has the stage's ratio.
+  const background = (image: NonNullable<typeof art.landscape> | null, ratio: number) => {
+    const delivered = image ? deliveredShowcaseImage(image) : null;
+    return delivered ? { ...delivered, framed: Math.abs(delivered.width / delivered.height - ratio) < .001 } : null;
+  };
   return { landscape: background(art.landscape, 16 / 9),
     portrait: background(art.portrait, 3 / 4),
     cutout: art.cutout ? deliveredShowcaseImage(art.cutout) : null,

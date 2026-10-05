@@ -79,6 +79,10 @@
   object-fit: var(--fit-landscape);
   object-position: var(--focal-landscape);
 }
+.showcase-art,
+.showcase-ambient img {
+  object-view-box: var(--view-landscape, none);
+}
 .showcase-background .showcase-ambient {
   position: absolute;
   inset: -8%;

@@ -344,4 +344,7 @@ export default {
   aggregateGrain: insert('Contado por {{grain}}', { grain: String }),
   aggregateMean: insert('Media {{mean}} de {{max}}', { mean: String, max: String }),
   signInForParts: 'Inicia sesión para ver las partes y conexiones de esta obra.',
+  wantToPlay: 'Quiero jugar', playing: 'Jugando', played: 'Jugado',
+  wantToUse: 'Quiero usarlo', using: 'Usando', used: 'Usado',
+  wantToCook: 'Quiero cocinarla', cooking: 'Cocinando', cooked: 'Cocinada',
 } satisfies WorkPageMessages;
