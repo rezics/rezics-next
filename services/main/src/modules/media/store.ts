@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import { advanceContentSequence } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
+import { MediaRenditionStore } from '../media-rendition/store.ts';
 import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
@@ -231,8 +232,10 @@ export function assetManifest(asset: string, representation: { id: string; sha25
 
 export class MediaStore {
   readonly presentation: MediaPresentationStore;
+  readonly renditions: MediaRenditionStore;
   constructor(private readonly pool: Pool, private readonly content: ContentCore) {
     this.presentation = new MediaPresentationStore(pool);
+    this.renditions = new MediaRenditionStore(pool);
   }
 
   /** Create the asset when absent, then reserve one bounded quarantine upload. */

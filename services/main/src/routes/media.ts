@@ -172,7 +172,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     // Public profile avatar targets are Agents rather than Work/semantic resources.
     const agentTargets=[...groups.get(DEFAULT_MEDIA_CONTEXT)??[]].filter(target=>!available.has(`${DEFAULT_MEDIA_CONTEXT}\0${target}`));
     if (agentTargets.length) {
-      const agents=(await fuseki.query(`PREFIX rv: <${RV}> SELECT ?agent WHERE {
+      const agents=(await fuseki.query(`PREFIX rv: <${RV}>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?agent WHERE {
         VALUES ?agent { ${agentTargets.map(iri).join(' ')} } ${publicAgent('?agent')} } LIMIT 65`,64*1024)).results?.bindings??[];
       for (const agent of agents) if (agent.agent) available.add(`${DEFAULT_MEDIA_CONTEXT}\0${agent.agent.value}`);
     }

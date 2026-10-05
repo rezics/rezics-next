@@ -90,6 +90,7 @@ export type WorkerName =
   | 'main.library.backfill'
   | 'main.post.backfill'
   | 'main.media.screen'
+  | 'main.media.rendition'
   | 'main.verification.correction'
   | 'main.notification.producer'
   | 'main.notification.digest'

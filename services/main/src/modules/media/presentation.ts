@@ -136,7 +136,9 @@ export class MediaPresentationStore {
       LEFT JOIN media.use selected_use ON selected_use.id = selection.use_id AND selection_slot.target IS NOT NULL
       JOIN media.representation p ON p.id = COALESCE(q.representation::uuid,selected_use.representation_id)
       JOIN media.asset a ON a.id = p.asset_id JOIN media.asset_state s ON s.id = a.state_head
-      LEFT JOIN media.use u ON u.id = COALESCE(q.use::uuid,selected_use.id) AND u.representation_id = p.id
+      LEFT JOIN media.use u ON u.id = COALESCE(q.use::uuid,selected_use.id)
+        AND (u.representation_id = p.id OR (p.kind = 'rendition' AND p.source_id = u.representation_id
+          AND p.crop IS NOT DISTINCT FROM u.crop))
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head
       LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id

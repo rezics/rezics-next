@@ -19,35 +19,42 @@ selection history stay out of TDB2, where
 | Immutable guard | `content.no_mutation()` | Used for `asset_state`, `use` and `selection_revision`. |
 | Object adapter | `S3ImmutableObjects` | Prefix `media/asset/<asset>/`. Quarantine key: `media-quarantine/<upload>`. |
 
-## Tables and invariants
+Table shapes live in [typed-schema.ts](typed-schema.ts); lifecycle, exact Use
+bases and activation fences live in the owner migrations and their tests.
 
-- `asset`: identity, owner, one object namespace per asset, and a `state_head`.
-  Retention domains never deduplicate across assets. Identity is immutable, and
-  the head moves only to a recorded successor.
-- `asset_state`: append-only CAS history of `private|public` disclosure,
-  `none|suppressed` moderation and `active|deleted|erased` lifecycle.
-  Deletion and erasure advance `erasure_epoch`. `erased` is terminal.
-- `upload`: reservation bound to the asset's current erasure epoch. It has an
-  expiry of at most one day and a declared type/size/digest. The only way to
-  reach `activated` is the matching original representation insert. Expiry
-  requires the reservation to have lapsed.
-- `representation`: activated exact bytes; immutable except
-  `available -> erased|unavailable`. An original activates only an unexpired
-  reservation at the current epoch with the declared bytes. A rendition needs its
-  job's `succeeded` settlement from the same operation. There is one available
-  rendition per `(source, profile, crop)`.
-- `transform_job`: binds input digest, profile, crop, authority epoch and erasure
-  epoch. A lease replaces only an expired lease and rotates the token. Success
-  needs the held, unexpired token at the current epoch.
-- `use`: immutable attachment of an exact `media-asset-v1` revision and a
-  representation listed in its manifest to a target, context and role
-  (`avatar`, `publication-item`, `document-image`). Document images bind a stable block occurrence UUID; `(target, occurrence)` cannot be rebound. The crop is a percent `xywh` media fragment.
-- `selection_slot` and `selection_revision`: the avatar head per
-  `(target, context, 'avatar')` under policy `avatar-selection-v1`.
-  - A NULL expected head is explicit.
-  - A revision whose use is NULL records removal.
-  - FKs keep a selected use on the slot's own target, context and role.
-  - The slot head moves only to a successor of the current head.
+## Width rendition lifecycle
+
+[Showcase art](../../../../../docs/contracts/media.md#showcase-art) needs
+responsive bytes for one authored crop, including transparent logos and cutouts.
+The media owner calls
+[requestUseRenditions](../media-rendition/request.ts) after admitting an exact
+Use. Selection commands do not call it yet; showcase and slide selection owners
+will wire that producer. It shares retained jobs across Uses of the same source
+and crop, rather than creating another selection or asset revision.
+
+Main runs the [rendition worker](../media-rendition/worker.ts) beside its existing
+workers. Orientation is inspected before queueing because JPEG header dimensions
+can address the wrong axes; [Sharp's oriented metadata](https://sharp.pixelplumbing.com/api-input/)
+and [operation ordering](https://sharp.pixelplumbing.com/api-operation/) support
+the orientation-before-crop pipeline. The versioned encoding and capacity choices
+are in [policy.ts](../media-rendition/policy.ts). Tests exercise actual AVIF/WebP
+alpha, crop and orientation output, child termination and database lease recovery.
+
+Readers pass Uses whose targets they have already resolved through disclosure
+and Access to `MediaStore.renditions.candidatesBatch`. Its URLs retain each
+requesting Use, so sharing derived bytes never shares target authority.
+The existing representation metadata/bytes route applies that Use's concealment
+and the rendition's own exact label basis. Source labels are not evidence for a
+different digest. Missing or pending renditions leave the candidate list empty;
+selection readers can keep delivering their admitted original while work finishes.
+
+Interrupted transforms retry under the existing lease protocol. Byte persistence
+holds the asset/source fence through settlement, so an erasure sweep cannot
+finish before a late put recreates bytes. Unpublished bytes after a crash stay
+inside the same asset namespace and follow its existing erasure sweep. Live
+source availability, staff restrictions and exact-copy suppression remain the
+delivery authority even after a rendition has settled. The integration test is
+[media-rendition.test.ts](../../../../../tests/qa/integration/media-rendition.test.ts).
 
 ## Read contract for summaries
 
@@ -227,8 +234,6 @@ holds still prevent erasure. All MediaStore positions use `advanceContentSequenc
   its receipt.
 - **Activated original with no asset revision.** Reconcile with
   `saveDraft` under operation `media-asset-revision:<upload>`.
-- **Transform lease loss.** An expired lease can be re-leased. A stale token or
-  an advanced epoch cannot activate output.
 - **Erasure.** After the state becomes erased, a sweep marks representations
   `erased` and deletes the asset namespace plus quarantine keys. Asset revisions
   follow the Content erasure procedure.
