@@ -15,6 +15,7 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
+import { refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
@@ -343,19 +344,22 @@ const overridesFile = join(root, '.env.dev');
 /** Variable names whose values are masked in output and passed to Aspire as secrets. */
 const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP_HEADERS$/;
 
-async function prepareDevOwners(apps: Record<string, string>): Promise<void> {
-  await migrateFixtureOwners(apps);
+async function prepareDevOwners(apps: Record<string, string>): Promise<string[]> {
+  const applied = await migrateFixtureOwners(apps);
   await initializeGraph(apps);
   assertOwnerMigrationsComplete(await migrateOwnerData(apps));
+  return applied;
 }
 
 /** Start storage, apply migrations, check graph lineage and register the local
  * web OAuth client. Returns the application environment: the stack's derived
  * variables, the values the web auth fixture issued and personal overrides from
  * the repository-root .env.dev. */
-async function prepareDev(options: StackOptions): Promise<Record<string, string>> {
+async function prepareDev(options: StackOptions,
+  onMigrations?: (applied: string[]) => void): Promise<Record<string, string>> {
   const { apps } = await stackUp(options);
-  await prepareDevOwners(apps);
+  const applied = await prepareDevOwners(apps);
+  onMigrations?.(applied);
   const search = new FusekiClient(apps.FUSEKI_URL);
   const health = await search.commandHealth() as { textIndexUncertain?: boolean };
   if (health.textIndexUncertain === true) {
@@ -563,6 +567,10 @@ async function main(): Promise<void> {
   if (command === 'dev') { await devStart(args); return; }
   if (command === 'dev:stop') { devStop(args); return; }
   if (command === 'dev:reset') { await devReset(args); return; }
+  if (command === 'dev:refresh') {
+    await refreshSharedStack(root, args, { prepare: onMigrations => prepareDev({ profile: 'dev' }, onMigrations) });
+    return;
+  }
   if (command === 'dev:urls') { devUrls(); return; }
   if (command === 'dev:env') { devEnv(args); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }

@@ -75,6 +75,11 @@ tasks:
     cmds:
       - bun scripts/dev/cli.ts dev:prepare {{.CLI_ARGS}}
 
+  dev:refresh:
+    desc: Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan.
+    cmds:
+      - bun scripts/dev/cli.ts dev:refresh {{.CLI_ARGS}}
+
   dev:seed:
     desc: Seed this checkout's local demo through its public APIs.
     cmds:

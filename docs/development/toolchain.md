@@ -350,6 +350,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task env:example` | Regenerate each workspace's .env.example from its envalid config specs. |
 | `task zones:digest` | Compute the digest of an installed official Zone source package. |
 | `task dev:prepare` | Start storage, apply migrations and write the application environment without starting processes. |
+| `task dev:refresh` | Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan. |
 | `task dev:seed` | Seed this checkout's local demo through its public APIs. |
 | `task dev:typecheck` | Type-check the development scripts. |
 | `task aspire` | Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...). |
