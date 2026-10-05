@@ -46,7 +46,12 @@ export const AllEightLabels: Story = { render: () => <div className="grid gap-8"
   {uiLocales.map(locale => <ChapterTextResults key={locale} read={read} locale={locale} />)}
 </div>, async play({ canvasElement }) {
   const canvas = within(canvasElement);
-  for (const locale of uiLocales) await expect(canvas.getByRole('region', { name: chapterTextMessages[locale].title })).toBeVisible();
+  for (const locale of uiLocales) {
+    const region = canvas.getByRole('region', { name: chapterTextMessages[locale].title });
+    await expect(region).toBeVisible();
+    await expect(within(region).getByRole('link', { name: 'The Lantern Road' })).toBeVisible();
+    await expect(within(region).getByRole('link', { name: 'At the harbour' })).toBeVisible();
+  }
 } };
 export const IndependentOfResourceCount: Story = { render: () => <DiscoverView state={{ ...emptyBrowse, q: 'lanternroad' }}
   locale="en" topics={[]} sections={null} chapterText={read} topicLoad={fixtureTopicLoader()}
