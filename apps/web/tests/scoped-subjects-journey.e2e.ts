@@ -186,7 +186,8 @@ test('a player is rated on a map chosen from their page, and Main ranks the maps
   await expect(trigger).toBeEnabled({ timeout: 60_000 });
   await trigger.click();
   const dialog = page.getByRole('dialog');
-  // A player's Work has no reading order to offer, so the picker offers the matches and maps alone.
+  // The broadcast Work also offers a position source; choose its events and maps.
+  await dialog.getByRole('tab', { name: 'Match or event' }).click();
   const search = dialog.getByRole('combobox', { name: 'Match or event' });
   await search.click();
   await search.fill('Haven');
