@@ -54,11 +54,13 @@ test('a chapter written in Studio keeps its old address: it moves for good to th
 
   // The address a chapter Work once had still opens the chapter in its Book's reader, in every locale.
   for (const locale of ['en', 'zh-Hant']) {
+    // ast-grep-ignore: web-links-use-address -- The old chapter address is the UUID path no builder produces for a Post.
     await page.goto(`/${locale}/w/${post}`);
     // ast-grep-ignore: web-links-use-address -- Independent SID expectation keeps the route exact without reusing the link builder.
     await page.waitForURL(url => url.pathname === `/${locale}/w/${uuidToSid(book)}/read/${occurrence}`);
   }
   // The Book's reader also accepts the Post, so a link can name the chapter and its Book together.
+  // ast-grep-ignore: web-links-use-address -- A Post in a named Book is an address no builder produces.
   await page.goto(`/en/w/${book}/read/${post}`);
   // ast-grep-ignore: web-links-use-address -- Independent SID expectation keeps the route exact without reusing the link builder.
   await page.waitForURL(url => url.pathname === `/en/w/${uuidToSid(book)}/read/${occurrence}`);
