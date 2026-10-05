@@ -93,6 +93,9 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     ['fate-zero', 'Fate/Zero', 'https://schema.org/TVSeries'],
     ['canon', 'Star Wars: The Force Awakens', 'https://schema.org/Movie'],
     ['legends', 'Heir to the Empire', 'https://schema.org/Book'],
+    // The franchise itself belongs to both continuities, so a Zone built on it offers the switch.
+    ['saga', 'Star Wars — the saga', 'https://schema.org/Movie'],
+    ['saga-episode-4', 'Star Wars — Episode IV', 'https://schema.org/Movie'],
     ['match', 'Harbor Invitational — exhibition match broadcast', 'https://schema.org/VideoObject'],
     ['railgun-episode-3', 'A Certain Scientific Railgun — Season 1, episode 3', 'https://schema.org/VideoObject'],
     ['railgun-episode-4', 'A Certain Scientific Railgun — Season 1, episode 4', 'https://schema.org/VideoObject'],
@@ -150,6 +153,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     ['railgun-episode', 'railgun', 'railgun-episode-3', 'Season 1, episode 3'],
     ['heavens-feel', 'fate-vn', 'heavens-feel-route', "Heaven's Feel route"],
     ['fate-zero-episode', 'fate-zero', 'fate-zero-episode-24', 'Episode 24'],
+    ['saga-episode', 'saga', 'saga-episode-4', 'Episode IV'],
   ]) {
     const work = result.works[workKey!]!;
     const base = await api.post<{ structure: string; revision: string }>('/v1/compositions', {
@@ -274,8 +278,10 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   await relation('saber-title', 'holds-title', [{ role: 'holder', ref: subject('alter') }, { role: 'title', ref: subject('saber-title') }],
     [result.positions['heavens-feel']!.occurrence]);
   await relation('swimsuit-unit', 'represents', [{ role: 'unit', ref: subject('swimsuit') }, { role: 'character', ref: subject('hoshino') }]);
-  for (const continuity of ['canon', 'legends']) await relation(`${continuity}-work`, 'in-continuity',
-    [{ role: 'work', ref: result.works[continuity]!.work }, { role: 'continuity', ref: subject(continuity) }]);
+  for (const continuity of ['canon', 'legends']) {
+    for (const work of [continuity, 'saga']) await relation(`${continuity}-${work === 'saga' ? 'saga' : 'work'}`, 'in-continuity',
+      [{ role: 'work', ref: result.works[work]!.work }, { role: 'continuity', ref: subject(continuity) }]);
+  }
   // Each predicate pins its own labelled meaning, as wiki claims do, rather
   // than borrowing one anonymous definition for unrelated assertions.
   const predicates = new Map<string, Written>();

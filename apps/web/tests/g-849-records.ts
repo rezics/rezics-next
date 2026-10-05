@@ -32,10 +32,10 @@ interface Manifest {
   id: string; name: string; language: string; routeSegment: string; preset: 'editorial';
   navigation: { label: string; href: string }[]; mounts: { id: string; name: string; routeSegment: string }[];
 }
-const manifest = (): Manifest => JSON.parse(readFileSync(join(root, 'config/zones/franchise-wiki.json'), 'utf8')) as Manifest;
+export const manifest = (): Manifest => JSON.parse(readFileSync(join(root, 'config/zones/franchise-wiki.json'), 'utf8')) as Manifest;
 
 /** The digest the web build computes for a package: `packageDigest` over every file of its directory. */
-function sourceDigest(slug: string): Promise<string> {
+export function sourceDigest(slug: string): Promise<string> {
   const directory = resolve(import.meta.dir, '../zones/official', slug);
   const files: Record<string, string> = {};
   const walk = (current: string) => {

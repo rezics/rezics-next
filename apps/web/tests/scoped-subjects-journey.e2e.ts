@@ -1,11 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { resourceHref } from '../features/address/path.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 // Scoped judgments from the pages people already visit: a character rated in an episode, a player on a map and the ranking,
-// a character read in Canon and in Legends, and a variant's family. Each step is captured on a desktop and on a phone.
+// a character read in Canon and in Legends, inside a franchise wiki Zone too, and a variant's family. Each step is captured on a desktop and on a phone.
 
 interface Seeded {
   works: Record<string, { work: string }>;
@@ -39,6 +40,20 @@ function watch(page: Page) {
       console.log(`[${response.status()}] ${response.request().method()} ${response.url()} ${response.url().includes('graph') ? response.request().postData()?.slice(0, 300) : ''}`);
     if (response.status() === 422) void response.text().then(text => console.log(`[422 body] ${text.slice(0, 300)}`), () => undefined);
   });
+}
+
+
+/**
+ * The franchise wiki Zone around the demo, written once per stack the first time a step needs it, or null when another journey
+ * in the same stack already holds the official route segment (the Zone's package is found by that segment alone).
+ */
+function franchiseZone(): { zone: string; realm: string; segment: string; character: string } | null {
+  const retained = resolve('.temp/scoped-subjects-journey', process.env.REZICS_QA_RUN_ID!, 'zone.json');
+  if (existsSync(retained)) return JSON.parse(readFileSync(retained, 'utf8'));
+  const made = spawnSync('bun', ['apps/web/tests/scoped-subjects-journey-zone.ts'], { env: process.env, encoding: 'utf8', timeout: 480_000 });
+  if (made.status === 3) { console.log(made.stderr); return null; }
+  if (made.status !== 0 || made.error) throw new Error(`franchise wiki Zone seed failed: ${made.stderr || made.error?.message || made.status}`);
+  return JSON.parse(made.stdout.trim().split('\n').at(-1)!);
 }
 
 const web = () => JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH!, 'utf8')) as { actingSubject: string };
@@ -211,10 +226,25 @@ test('a player is rated on a map chosen from their page, and Main ranks the maps
   expect(body.rank.minimumRatings).toBe(50);
   expect(body.rank.items.map(item => [item.target, item.count])).toEqual([[data.projections['player-map-a'], 51]]);
 
-  // A map's own page opens without error; it ranks the people who have a place in it where Main can name them.
+  // A map's own page ranks the people who have a place in it, by the same figures the rollup gave.
   await page.goto(at(data.subjects['map-a']!));
   await expect(page.getByRole('heading', { level: 1, name: /Haven/ })).toBeVisible({ timeout: 60_000 });
+  const ranking = page.locator('[data-ranking]');
+  await expect(ranking).toBeVisible({ timeout: 60_000 });
+  await expect(ranking.locator('[data-rank="1"]')).toContainText('Alex Chen');
+  await expect(ranking.locator('[data-rank="1"]')).toContainText('51 ratings');
+  await expect(ranking.locator('[data-rank]')).toHaveCount(1);
+  await expect(ranking).not.toContainText(/projection/i);
   await capture(page, '10-map-page');
+});
+
+test('a reader who is not signed in sees the event without a ranking and without an error', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto(at(data.subjects['map-a']!));
+  await expect(page.getByRole('heading', { level: 1, name: /Haven/ })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('[data-ranking]')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('#main-content')).not.toContainText(/unavailable|went wrong/i);
 });
 
 // These only read, so a page that stalls on a loaded host is tried once more.
@@ -269,5 +299,58 @@ test.describe('reading', () => {
     await expect(family.locator('[data-identity-hub]')).toContainText('Artoria Pendragon');
     await expect(family.locator('[data-identity-member]')).toHaveCount(2);
     await capture(page, '14-saber-alter-family');
+  });
+
+  test('a place read with a continuity chosen keeps its own facts', async ({ page }) => {
+    test.setTimeout(300_000);
+    await signIn(page);
+    // Misaka in an episode, opened with Canon chosen: a place is already framed by its coordinates, so the choice neither removes
+    // its own facts nor its ratings.
+    await page.goto(at(data.projections['misaka-episode']!, `&continuity=${data.subjects.canon!.slice(-36)}`));
+    const main = page.locator('#main-content');
+    await expect(main.locator('[data-projection-header]')).toBeVisible({ timeout: 60_000 });
+    await expect(main.locator('[data-fact-reach="wider"]')).toContainText('Electromaster', { timeout: 60_000 });
+    await expect(question(page, data.questions.performance.context)).toContainText('ratings', { timeout: 60_000 });
+    await expect(main).not.toContainText(/projection/i);
+    await capture(page, '15-misaka-place-with-continuity');
+  });
+
+  test('a Character read in the franchise wiki Zone offers the continuity switch, says what is applied and clears it', async ({ page }) => {
+    test.setTimeout(600_000);
+    const zone = franchiseZone();
+    test.skip(!zone, 'another journey already holds the official franchise-wiki route segment in this stack');
+    await signIn(page);
+    // The Zone's package runs only once Main reports it approved, and the Realm's header trails the Zone.
+    const mainUrl = (path: string) => `http://127.0.0.1:${process.env.MAIN_PORT}${path}`;
+    await expect.poll(async () => (await fetch(mainUrl(`/v1/zones/${zone!.zone.slice(-36)}/presentation`)).then(
+      async response => response.ok ? ((await response.json()) as { execution: { state: string } }).execution.state : '', () => '')),
+    { timeout: 120_000 }).toBe('package');
+    await expect.poll(async () => (await fetch(mainUrl(`/v1/realms/${zone!.realm.slice(-36)}`)).then(response => response.ok, () => false)),
+      { timeout: 120_000 }).toBe(true);
+    const character = `/en${spaceHref(zone!.segment, 'site', ['characters', zone!.character.slice(-36)])}?position=all`;
+    await page.goto(character);
+    // The Zone frames the page, so its switch sits outside the page's own main region.
+    const main = page.locator('body');
+    await expect(main.getByRole('heading', { level: 1, name: 'Anakin Skywalker' })).toBeVisible({ timeout: 60_000 });
+    await expect(main.getByText('Grandfather of Ben Solo').first()).toBeVisible({ timeout: 60_000 });
+    await expect(main.getByText('Father of Luke Skywalker').first()).toBeVisible();
+    const choose = async (name: string) => {
+      const trigger = main.locator('[data-continuity-switch] [data-hydrated="true"]').first();
+      await expect(trigger).toBeEnabled({ timeout: 60_000 });
+      await trigger.click();
+      await page.getByRole('dialog').getByRole('link', { name }).click();
+    };
+    await choose('Star Wars Canon');
+    await expect(page).toHaveURL(/continuity=/, { timeout: 60_000 });
+    await expect(main.locator('[data-continuity-note]').first()).toContainText('Star Wars Canon', { timeout: 60_000 });
+    await expect(main.getByText('Grandfather of Ben Solo').first()).toBeVisible();
+    await expect(main.getByText('Father of Luke Skywalker')).toHaveCount(0);
+    await expect(main.locator('[data-continuity-clear]')).toContainText('Show all continuities');
+    await expect(main).not.toContainText(/projection/i);
+    await capture(page, '16-anakin-in-the-wiki-canon');
+    await main.locator('[data-continuity-clear]').click();
+    await expect(main.getByText('Father of Luke Skywalker').first()).toBeVisible({ timeout: 60_000 });
+    await expect(page).not.toHaveURL(/continuity=Star/);
+    await capture(page, '17-anakin-in-the-wiki-all-continuities');
   });
 });

@@ -2,6 +2,7 @@ import type { ZoneChapter, ZoneEntity, ZoneEvidence, ZoneFact, ZoneNeighbour, Zo
   from '@rezics/zone-sdk';
 import { entryLabel } from '../catalogue/types.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { readPredicateLabels } from '../entity-page/predicate-labels.ts';
 import { readEntityProjection, readRelations, readStatements, sectionOf } from '../entity-page/read.ts';
 import type { EntityProjection, StatementItem } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
@@ -95,6 +96,8 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     const valueIris = groups.flatMap(group => group.items.flatMap(item =>
       item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : []));
     const names = await namesOf(predicates, main);
+    // A relation definition is named by its reviewed label, as the generic page reads it; its summary name is only a placeholder.
+    const lexicon = await readPredicateLabels(statements.data, locale);
     // Their own call: a batch with a vocabulary predicate in it is refused whole, and would leave the Works unnamed.
     const continuityNames = await namesOf(groups.flatMap(group => group.items.flatMap(item => item.qualifiers.applicability)), main);
     const named = new Map(await Promise.all([...new Set(valueIris)].map(async iri => {
@@ -104,6 +107,8 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     })));
     for (const group of groups) {
       const label = (() => {
+        const labelled = lexicon.get(group.predicate);
+        if (labelled) return labelled.value;
         const summaryOfPredicate = names.get(group.predicate);
         if (summaryOfPredicate?.status === 'available') return summaryOfPredicate.name.value;
         const word = localName(group.predicate);
