@@ -6,6 +6,7 @@ import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
 import { editorValue } from '../document-editor/body.ts';
+import { chapterNoteEditors } from './chapter-draft.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
 import {
   canonicalLanguage,
@@ -658,6 +659,8 @@ export interface StudioChapter {
   basis: 'main' | 'address' | 'none';
   head: string | null;
   body: string;
+  notes?: import('./chapter-draft.ts').ChapterNotes;
+  embeds?: string[];
   digest: string | null;
   epoch: string | null;
   publication: string | null;
@@ -742,6 +745,8 @@ export async function readStudioChapter(
       basis: known ? 'main' : 'address',
       head,
       body: editorValue(body, exact.data.body.document),
+      notes: chapterNoteEditors(exact.data.body.notes),
+      embeds: exact.data.body.embeds,
       digest: exact.data.reference.byteDigest,
       epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null,
     },

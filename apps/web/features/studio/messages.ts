@@ -1,6 +1,9 @@
 import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
+  authorNoteBefore: "Author’s note before the chapter", authorNoteAfter: "Author’s note after the chapter",
+  authorNotePlaceholder: "Optional note for this language.", noAuthorNote: "No note",
+  authorNotesHelp: "Notes don’t count toward the chapter’s length or appear in published editions of the book.",
   studio: 'Studio',
   // The acting Agent, shown before every submit.
   writingAs: 'Writing as', switchIdentity: 'Switch identity', manageIdentities: 'Manage identities',

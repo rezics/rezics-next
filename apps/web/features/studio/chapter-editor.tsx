@@ -31,6 +31,7 @@ import { ChapterPublishDialog } from './publish-dialog.tsx';
 import type { StudioChapter } from './read.ts';
 import { studioAgentName } from './studio-frame.tsx';
 import type { MainClient } from './types.ts';
+import { chapterDraft, chapterDraftValue } from './chapter-draft.ts';
 
 export interface ChapterEditorProps {
   agent: AgentOption;
@@ -86,21 +87,22 @@ export function ChapterEditor({
 
   /** Publishing names the exact saved bytes: the last save's, or the saved head's as Main reads it. */
   const open = async (slot: PublishSlot) => {
-    if (!(await slot.prepare()) || !slot.head) return;
-    let known = basis.current?.head === slot.head ? basis.current : null;
+    const prepared = await slot.prepare();
+    if (!prepared) return;
+    let known = basis.current?.head === prepared.head ? basis.current : null;
     const epoch = known?.epoch || readChapterMemory(storage, memoryKey)?.epoch || data.epoch;
     if (!known?.digest) {
-      const read = await readChapterRevision(agent.iri, slot.head, main).catch(() => null);
-      known = read ? { head: slot.head, digest: read.digest, epoch: epoch ?? '' } : null;
+      const read = await readChapterRevision(agent.iri, prepared.head, main).catch(() => null);
+      known = read ? { head: prepared.head, digest: read.digest, epoch: epoch ?? '' } : null;
     }
     if (!known || !epoch) {
       slot.say(t.publishNeedsSave);
       return;
     }
-    setPublishing({ ...known, epoch, body: slot.body });
+    setPublishing({ ...known, epoch, body: chapterDraft(prepared.body).body });
   };
 
-  // Main does not yet let a writer read their variant heads. When the address named none, reopen this device's last save.
+  // If the variant list is unavailable and the address named no head, reopen this device's last exact save.
   useEffect(() => {
     const known = readChapterMemory(storage, memoryKey);
     if (!current && known?.publication)
@@ -130,7 +132,7 @@ export function ChapterEditor({
             head: saved.head,
             digest: saved.digest,
             epoch: saved.epoch,
-            length: manuscriptLength(bodyText(body), data.chapter.language).value,
+            length: manuscriptLength(bodyText(chapterDraft(body).body), data.chapter.language).value,
             savedAt: new Date().toISOString(),
           });
         },
@@ -139,7 +141,7 @@ export function ChapterEditor({
     theirs: async (head) => {
       if (!head) return null;
       const read = await readChapterRevision(agent.iri, head, main);
-      return read ? { head, body: read.body } : null;
+      return read ? { head, body: chapterDraftValue(read.body, read.notes, read.embeds) } : null;
     },
   }));
 
@@ -162,7 +164,8 @@ export function ChapterEditor({
         `${t.writingAs} ${studioAgentName(agent, t)}`,
       ].join(' · ')}
       title={data.chapter.title}
-      initial={{ head: data.head, body: data.body }}
+      initial={{ head: data.head, body: chapterDraftValue(data.body, data.notes, data.embeds) }}
+      authorNotes
       label={t.chapterLabel}
       locale={locale}
       messages={messages}

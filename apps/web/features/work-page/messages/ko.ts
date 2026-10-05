@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  authorNote: "작가의 말",
   loading: '작품을 불러오는 중…', loadingRegion: '불러오는 중…',
   notFoundTitle: '작품을 찾을 수 없습니다',
   notFoundBody: '이 주소에 해당하는 작품이 없거나 볼 수 없는 작품입니다.',

@@ -2,6 +2,9 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { StudioMessages } from '../messages.ts';
 
 export default {
+  authorNoteBefore: "Anmerkung des Autors vor dem Kapitel", authorNoteAfter: "Anmerkung des Autors nach dem Kapitel",
+  authorNotePlaceholder: "Optionale Anmerkung in dieser Sprache.", noAuthorNote: "Keine Anmerkung",
+  authorNotesHelp: "Anmerkungen zählen nicht zur Kapitellänge und erscheinen nicht in Buchausgaben.",
   studio: 'Studio',
   writingAs: 'Schreiben als', switchIdentity: 'Identität wechseln', manageIdentities: 'Identitäten verwalten',
   identities: 'Identitäten, in denen du schreiben kannst',

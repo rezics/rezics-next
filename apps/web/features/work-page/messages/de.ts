@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  authorNote: "Anmerkung des Autors",
   loading: 'Werk wird geladen…', loadingRegion: 'Wird geladen…',
   notFoundTitle: 'Werk nicht gefunden',
   notFoundBody: 'Unter dieser Adresse gibt es kein Werk oder du kannst es nicht sehen.',

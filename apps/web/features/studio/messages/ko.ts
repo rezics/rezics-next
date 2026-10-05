@@ -2,6 +2,9 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { StudioMessages } from '../messages.ts';
 
 export default {
+  authorNoteBefore: "장 앞의 작가의 말", authorNoteAfter: "장 뒤의 작가의 말",
+  authorNotePlaceholder: "이 언어의 말을 선택적으로 남겨 주세요.", noAuthorNote: "작가의 말 없음",
+  authorNotesHelp: "작가의 말은 장의 분량에 포함되지 않으며 책의 출판본에도 실리지 않습니다.",
   studio: '스튜디오',
   writingAs: '작성 프로필', switchIdentity: '프로필 전환', manageIdentities: '프로필 관리',
   identities: '글을 쓸 수 있는 프로필',

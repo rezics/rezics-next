@@ -11,7 +11,7 @@ export interface LocalDraft {
   body: string;
   base: string | null;
   changedAt: string;
-  format?: 'document';
+  format?: 'document' | 'post';
 }
 
 /** Storage the browser offers; a test or a private window may lack it. */
@@ -33,9 +33,10 @@ export function readLocalDraft(storage: DraftStorage | null, key: string): Local
     )
       return null;
     return {
-      body: restoreCachedBody(value.body, value.format),
+      body: value.format === 'post' ? value.body : restoreCachedBody(value.body, value.format),
       base: value.base,
       changedAt: value.changedAt,
+      ...(value.format === 'post' ? { format: 'post' as const } : {}),
     };
   } catch {
     return null;
@@ -94,10 +95,9 @@ export function restoreDecision(
 
 /**
  * What this device learned about one chapter variant from its own saves and
- * publications. Main does not yet let a writer read a variant's heads, so the
- * editor starts from these on the device that wrote them; elsewhere the first
- * save meets the head that won as a conflict, and publishing an update needs
- * the publication this device made.
+ * publications. Main's current variant heads take precedence; this memory
+ * supplies an exact saved address and publication basis when that list is
+ * temporarily unavailable. It never shares notes across variants.
  */
 export interface ChapterMemory {
   head: string | null;

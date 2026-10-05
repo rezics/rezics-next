@@ -9,7 +9,8 @@ import { useState } from 'react';
 import { diffParagraphs } from './diff.ts';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { parseStoredDocument } from '@rezics/document';
-import { bodyText } from '../document-editor/body.ts';
+import { bodyText, hasBodyContent } from '../document-editor/body.ts';
+import { chapterDraft } from './chapter-draft.ts';
 import { messages as documentMessages } from '../document-editor/messages.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 
@@ -27,6 +28,9 @@ export interface ConflictLabels {
   copyMine: string;
   copied: string;
   theirsUnavailable: string;
+  authorNoteBefore: string;
+  authorNoteAfter: string;
+  noAuthorNote: string;
 }
 
 /**
@@ -44,6 +48,7 @@ export function ConflictView({
   onTakeTheirs,
   labels,
   locale = 'en',
+  authorNotes = false,
 }: {
   mine: string;
   /** The version saved elsewhere; undefined while it is read, null when Main cannot give it. */
@@ -55,19 +60,40 @@ export function ConflictView({
   onTakeTheirs: () => void;
   labels: ConflictLabels;
   locale?: UiLocale;
+  authorNotes?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const parts = (value: string) => authorNotes ? chapterDraft(value) : { body: value, notes: {} };
+  const bodyAt = (side: 'mine' | 'theirs') => parts(side === 'mine' ? mine : theirs ?? '').body;
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(bodyText(mine));
+      const draft = parts(mine);
+      await navigator.clipboard.writeText([
+        draft.notes.before ? `${labels.authorNoteBefore}\n${bodyText(draft.notes.before)}` : '',
+        bodyText(draft.body),
+        draft.notes.after ? `${labels.authorNoteAfter}\n${bodyText(draft.notes.after)}` : '',
+      ].filter(Boolean).join('\n\n'));
       setCopied(true);
     } catch {
       setCopied(false);
     }
   };
-  const runs = typeof theirs === 'string' ? diffParagraphs(bodyText(mine), bodyText(theirs)) : null;
+  const runs = typeof theirs === 'string' ? diffParagraphs(bodyText(bodyAt('mine')), bodyText(bodyAt('theirs'))) : null;
   const rich = (side: 'mine' | 'theirs') =>
-    parseStoredDocument(side === 'mine' ? mine : (theirs ?? ''));
+    parseStoredDocument(bodyAt(side));
+  const note = (side: 'mine' | 'theirs', key: 'before' | 'after') => {
+    if (!authorNotes) return null;
+    const value = parts(side === 'mine' ? mine : theirs ?? '').notes[key];
+    const document = value ? parseStoredDocument(value) : null;
+    return <section className="grid gap-2 rounded-lg bg-muted/40 p-3">
+      <h4 className="font-sans font-medium text-sm">{key === 'before' ? labels.authorNoteBefore : labels.authorNoteAfter}</h4>
+      {!value || !hasBodyContent(value) ? <p className="text-muted-foreground text-sm">{labels.noAuthorNote}</p>
+        : document ? <DocumentBody document={document}
+          unknownComponentLabel={documentMessages[locale].unknownComponent}
+          spoilerLabel={documentMessages[locale].revealSpoiler} />
+          : <p className="whitespace-pre-wrap">{value}</p>}
+    </section>;
+  };
   const column = (side: 'mine' | 'theirs') => (
     <div className="grid min-w-0 content-start gap-2">
       <h3 className="font-medium text-sm">{side === 'mine' ? labels.yours : labels.theirs}</h3>
@@ -77,6 +103,7 @@ export function ConflictView({
         className="grid max-h-[50dvh] gap-2 overflow-y-auto rounded-2xl border border-border/60
       bg-background p-4 font-work-title text-base/[1.8] [overflow-wrap:anywhere] [text-autospace:normal]"
       >
+        {note(side, 'before')}
         {rich(side) ? (
           <DocumentBody
             document={rich(side)!}
@@ -107,6 +134,7 @@ export function ConflictView({
               )),
             )
         )}
+        {note(side, 'after')}
       </div>
     </div>
   );

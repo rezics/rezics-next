@@ -1,10 +1,11 @@
 import { browserMainApi } from '../api/browser.ts';
-import { bodyInput, editorValue } from '../document-editor/body.ts';
+import { editorValue } from '../document-editor/body.ts';
 import type { SaveOutcome } from './autosave.ts';
+import { chapterDraftInput, chapterNoteEditors, type ChapterNotes } from './chapter-draft.ts';
 import { directionOf, idOf, type MainClient } from './types.ts';
 
 // The browser side of a Book's chapters: the Book's composition orders them,
-// each chapter is a Work of its own, and its text is a Content draft in one
+// each chapter is a Post, and its text is a Content draft in one
 // language (`content-text-v1`), published as a Content publication that
 // readers can open once it is also eligible for public search. Every command
 // acts as the Studio Agent and carries its own idempotency key.
@@ -58,7 +59,7 @@ export async function chapterVariant(chapter: string, language: string): Promise
 
 export interface ChapterTarget {
   actingSubject: string;
-  /** The chapter Work. */
+  /** The chapter Post. */
   chapter: string;
   variant: string;
   language: string;
@@ -90,7 +91,7 @@ export async function saveChapterDraft(
       language: { kind: 'tag', tag: target.language, originalTag: target.language },
       direction: target.direction,
       expectedHead,
-      ...bodyInput(body),
+      ...chapterDraftInput(body),
       actingSubject: target.actingSubject,
     },
     { headers: { 'idempotency-key': key } },
@@ -110,13 +111,15 @@ export async function readChapterRevision(
   actingSubject: string,
   revision: string,
   main: MainClient = browserMainApi(),
-): Promise<{ body: string; digest: string } | null> {
+): Promise<{ body: string; notes: ChapterNotes; embeds?: string[]; digest: string } | null> {
   if (!uuid.test(revision)) return null;
   const read = await main.v1['content-revisions']({ revision }).get({ query: { actingSubject } });
   const body = read.data?.body.body;
   return read.data && typeof body === 'string'
     ? {
         body: editorValue(body, read.data.body.document),
+        notes: chapterNoteEditors(read.data.body.notes),
+        embeds: read.data.body.embeds,
         digest: read.data.reference.byteDigest,
       }
     : null;

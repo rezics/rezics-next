@@ -195,3 +195,93 @@ export const EmptyDraftSaves: Story = {
     await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, args.chapter.chapter.id, args.chapter.variant))).toBeNull();
   },
 };
+
+/** Notes share the exact chapter save and publish basis, while the chapter length stays text-only. */
+export const AuthorNotes: Story = {
+  args: page(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Author’s note before the chapter' }), '章前的话。');
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Author’s note after the chapter' }), '章后的话。');
+    await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
+    await expect(canvas.getByText('26 characters')).toBeInTheDocument();
+    const head = args.story!.chapterHead(args.chapter.variant)!;
+    const read = await args.main!.v1['content-revisions']({ revision: head }).get({ query: { actingSubject: agents[0]!.iri } });
+    await expect(read.data?.body).toMatchObject({ body: opening, notes: {
+      before: { body: '章前的话。' }, after: { body: '章后的话。' },
+    } });
+    await userEvent.click(canvas.getByRole('button', { name: 'Publish' }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await expect(dialog.getByText(/26 characters/)).toBeInTheDocument();
+    await userEvent.click(dialog.getByRole('checkbox', { name: /I wrote this text/ }));
+    await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(within(dialog.getByRole('list', { name: 'Publish' })).getAllByText('Done')).toHaveLength(2));
+    await expect(readChapterMemory(localStorage, chapterMemoryKey(agents[0]!.iri, args.chapter.variant)))
+      .toMatchObject({ publishedHead: head, length: 26 });
+    await userEvent.click(dialog.getAllByRole('button', { name: 'Close' }).at(-1)!);
+  },
+};
+
+export const AuthorNoteConflictTakeSaved: Story = {
+  args: page(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    args.story!.writeChapterElsewhere(args.chapter.chapter.id, args.chapter.variant, opening,
+      { before: { body: 'Saved before note' }, after: { body: 'Saved after note' } });
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Author’s note after the chapter' }), 'My after note');
+    await expect(await canvas.findByRole('alert', {}, { timeout: 3000 })).toHaveTextContent('This text was changed somewhere else');
+    await expect(await canvas.findByText('Saved before note')).toBeVisible();
+    await expect(await canvas.findByText('Saved after note')).toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: 'Chapter text' })).toHaveAttribute('contenteditable', 'false');
+    await expect(canvas.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveAttribute('contenteditable', 'false');
+    await userEvent.click(canvas.getByRole('button', { name: 'Use the saved one' }));
+    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'Author’s note before the chapter' })).toHaveTextContent('Saved before note'));
+    await expect(canvas.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveTextContent('Saved after note');
+    await expect(editorText(canvas.getByRole('textbox', { name: 'Chapter text' }))).toBe(opening);
+    await expect(canvas.getByText('26 characters')).toBeVisible();
+  },
+};
+
+export const AuthorNotesPhone: Story = { ...AuthorNotes, globals: { viewport: { value: 'phone' } } };
+
+export const AuthorNoteConflictKeepMine: Story = {
+  args: (() => {
+    const opened = page();
+    const head = opened.story!.seedChapter(opened.chapter.chapter.id, opened.chapter.variant, opening,
+      { before: { body: 'My opening note' }, after: { body: 'My closing note' } });
+    return { ...opened, chapter: { ...opened.chapter, head,
+      notes: { before: 'My opening note', after: 'My closing note' } } };
+  })(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    args.story!.writeChapterElsewhere(args.chapter.chapter.id, args.chapter.variant, opening,
+      { before: { body: 'Their opening note' }, after: { body: 'Their closing note' } });
+    const editor = canvas.getByRole('textbox', { name: 'Author’s note after the chapter' });
+    await userEvent.clear(editor);
+    await userEvent.type(editor, 'My closing note updated');
+    await expect(await canvas.findByText('Their opening note')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Keep mine' }));
+    await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
+    const head = args.story!.chapterHead(args.chapter.variant)!;
+    const read = await args.main!.v1['content-revisions']({ revision: head }).get({ query: { actingSubject: agents[0]!.iri } });
+    await expect(read.data?.body).toMatchObject({ body: opening,
+      notes: { before: { body: 'My opening note' }, after: { body: 'My closing note updated' } } });
+  },
+};
+
+export const PublishFlushesLatestNote: Story = {
+  args: { ...page(), delay: 60_000 },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Author’s note after the chapter' }), 'Just typed before publishing');
+    // Clicking Publish also blurs the field; the dialog must pin that save's new head.
+    await userEvent.click(canvas.getByRole('button', { name: 'Publish' }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await userEvent.click(dialog.getByRole('checkbox', { name: /I wrote this text/ }));
+    await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(within(dialog.getByRole('list', { name: 'Publish' })).getAllByText('Done')).toHaveLength(2));
+    await expect(readChapterMemory(localStorage, chapterMemoryKey(agents[0]!.iri, args.chapter.variant)))
+      .toMatchObject({ publishedHead: args.story!.chapterHead(args.chapter.variant) });
+    await userEvent.click(dialog.getAllByRole('button', { name: 'Close' }).at(-1)!);
+  },
+};

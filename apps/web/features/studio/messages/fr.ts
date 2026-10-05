@@ -2,6 +2,9 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { StudioMessages } from '../messages.ts';
 
 export default {
+  authorNoteBefore: "Note de l’auteur avant le chapitre", authorNoteAfter: "Note de l’auteur après le chapitre",
+  authorNotePlaceholder: "Note facultative dans cette langue.", noAuthorNote: "Aucune note",
+  authorNotesHelp: "Les notes ne comptent pas dans la longueur du chapitre et ne figurent pas dans les éditions du livre.",
   studio: 'Studio',
   writingAs: 'Vous écrivez en tant que', switchIdentity: 'Changer d’identité', manageIdentities: 'Gérer les identités',
   identities: 'Identités sous lesquelles vous pouvez écrire',

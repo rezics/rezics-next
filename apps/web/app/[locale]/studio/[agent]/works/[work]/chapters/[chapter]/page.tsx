@@ -35,7 +35,7 @@ export default async function ChapterPage({ params, searchParams }: {
   if (!opened.ok) {
     return <WriteUnavailable agent={agent} failure={opened.failure} work={book.data.id} locale={locale} messages={messages} />;
   }
-  return <ChapterEditor key={opened.data.head ?? 'new'} agent={agent}
+  return <ChapterEditor key={`${opened.data.variant}:${opened.data.head ?? 'new'}`} agent={agent}
     book={{ id: book.data.id, title: { value: book.data.title.value, language: book.data.title.language } }}
     chapter={opened.data} locale={locale} messages={messages} />;
 }

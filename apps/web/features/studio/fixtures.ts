@@ -3,6 +3,7 @@ import type { StudioChapter, InventoryView, RealmOption, ReviewPage, StudioWork,
 import type { ClassificationPage, ContentsPage, InventoryWork, MainClient, NativeVariants, Submission, WorkHeader }
   from './types.ts';
 import { documentText, parseDocument, type DocumentSnapshot } from '@rezics/document';
+import type { ChapterNotes } from './chapter-draft.ts';
 
 // Stand-in data and an in-memory Main for Studio stories: the same response
 // shapes Main returns, so stories exercise the real components and adapters.
@@ -138,22 +139,24 @@ export const tags: ClassificationPage = { items: [
 ], scope: { kind: 'global' }, nextCursor: null, sourcePosition: position,
 count: { value: 2, kind: 'exact-page', total: null } } as unknown as ClassificationPage;
 
-export const chapterOpened = (body = '', head: string | null = null): StudioChapter => ({
+export const chapterOpened = (body = '', head: string | null = null, notes?: ChapterNotes): StudioChapter => ({
   chapter: { id: ids.chapters[2]!, title: { value: '第三章 最后一班车', language: 'zh-Hans' }, language: 'zh-Hans',
     direction: 'ltr' }, variant: `urn:rezics:variant:${id(1300).slice(-36)}`, basis: head ? 'address' : 'none', head,
-  body, digest: head ? 'a'.repeat(64) : null, epoch: head ? 'story-epoch' : null, publication: null, eligibility: null });
+  body, notes, digest: head ? 'a'.repeat(64) : null, epoch: head ? 'story-epoch' : null, publication: null, eligibility: null });
 
 type Answer = { data: unknown; error: { status: number; value: unknown } | null };
 const ok = (data: unknown): Answer => ({ data, error: null });
 const fail = (status: number, code: string, extra: Record<string, unknown> = {}): Answer =>
   ({ data: null, error: { status, value: { code, status, ...extra } } });
-interface FixtureBody { body: string; document?: DocumentSnapshot }
-interface FixtureBodyInput { body?: string; document?: DocumentSnapshot }
+interface FixtureBody { body: string; document?: DocumentSnapshot; notes?: Partial<Record<'before' | 'after', FixtureBody>> }
+interface FixtureBodyInput { body?: string; document?: DocumentSnapshot;
+  notes?: Partial<Record<'before' | 'after', Omit<FixtureBodyInput, 'notes'>>> }
 const bodyOf = (input: FixtureBodyInput): FixtureBody => {
   if ((input.body === undefined) === (input.document === undefined)) throw new TypeError('one body or document is required');
-  if (!input.document) return { body: input.body! };
+  const notes = input.notes ? Object.fromEntries(Object.entries(input.notes).map(([key, note]) => [key, bodyOf(note)])) : undefined;
+  if (!input.document) return { body: input.body!, ...(notes ? { notes } : {}) };
   const document = parseDocument(structuredClone(input.document));
-  return { body: documentText(document), document };
+  return { body: documentText(document), document, ...(notes ? { notes } : {}) };
 };
 const seedBody = (body: string | DocumentSnapshot) => bodyOf(typeof body === 'string' ? { body } : { document: body });
 
@@ -404,8 +407,9 @@ export function storyMain(options: StoryMainOptions = {}) {
       const revision = revisions.get(params.revision);
       return revision ? ok({ reference: { owner: 'content', resourceId: revision.resource, variantId: revision.variant,
         revisionId: params.revision, byteDigest: 'b'.repeat(64) },
-        serializedJson: JSON.stringify({ body: revision.body, ...(revision.document ? { document: revision.document } : {}) }),
-        body: { body: revision.body, ...(revision.document ? { document: revision.document } : {}) } })
+        serializedJson: JSON.stringify({ body: revision.body, document: revision.document, notes: revision.notes }),
+        body: { body: revision.body, ...(revision.document ? { document: revision.document } : {}),
+          ...(revision.notes ? { notes: revision.notes } : {}) } })
         : fail(404, 'revision_unavailable');
     } }),
     'content-publications': { post: async (body: { variantId: string; revisionId: string;
@@ -450,7 +454,8 @@ export function storyMain(options: StoryMainOptions = {}) {
     /** Seeds an existing text and returns its head. */
     seed: (text: string, body: string | DocumentSnapshot, language: string, work: string) => recordText(text, seedBody(body), language, work),
     /** Seeds a chapter's draft and returns its head (a bare revision ID, as Content names them). */
-    seedChapter: (chapter: string, variant: string, body: string | DocumentSnapshot) => recordDraft(chapter, variant, seedBody(body)),
+    seedChapter: (chapter: string, variant: string, body: string | DocumentSnapshot, notes?: FixtureBodyInput['notes']) =>
+      recordDraft(chapter, variant, bodyOf({ ...(typeof body === 'string' ? { body } : { document: body }), notes })),
     /** Seeds a Book's composition with chapters at its top level. */
     seedBook: (book: string, chapters: Array<{ target: string; title: string }>) => {
       const structure = next();
@@ -485,7 +490,8 @@ export function storyMain(options: StoryMainOptions = {}) {
       const current = texts.get(text);
       if (current) recordText(text, seedBody(body), current.language, current.work);
     },
-    writeChapterElsewhere: (chapter: string, variant: string, body: string | DocumentSnapshot) => recordDraft(chapter, variant, seedBody(body)),
+    writeChapterElsewhere: (chapter: string, variant: string, body: string | DocumentSnapshot, notes?: FixtureBodyInput['notes']) =>
+      recordDraft(chapter, variant, bodyOf({ ...(typeof body === 'string' ? { body } : { document: body }), notes })),
     head: (text: string) => texts.get(text)?.head ?? null,
     chapterHead: (variant: string) => variants.get(variant)?.head ?? null,
     /** A Book's outline: its head, its top level (`items`) and every node. */

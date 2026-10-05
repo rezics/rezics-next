@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  authorNote: "作者的话",
   loading: '正在加载作品…', loadingRegion: '正在加载…',
   notFoundTitle: '找不到作品',
   notFoundBody: '没有与此地址对应的作品，或者您无权查看。',

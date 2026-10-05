@@ -2,6 +2,9 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { StudioMessages } from '../messages.ts';
 
 export default {
+  authorNoteBefore: "作者のことば（章の前）", authorNoteAfter: "作者のことば（章の後）",
+  authorNotePlaceholder: "この言語の任意のコメント。", noAuthorNote: "コメントなし",
+  authorNotesHelp: "コメントは章の分量に数えず、書籍の刊行版にも含めません。",
   studio: 'スタジオ',
   writingAs: '執筆名義', switchIdentity: 'エージェントを切り替え', manageIdentities: 'エージェントを管理',
   identities: '執筆に使えるエージェント',

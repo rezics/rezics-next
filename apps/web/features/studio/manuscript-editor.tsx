@@ -31,6 +31,7 @@ import type { StudioMessages } from './messages.ts';
 import { lengthLabel } from './parts.tsx';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import { bodyText, hasBodyContent } from '../document-editor/body.ts';
+import { chapterDraft, chapterDraftValue, restoreChapterDraft } from './chapter-draft.ts';
 
 /** Same-device announcement of a saved draft; the channel is same-origin, and drafts are the writer's own. */
 interface TabSave {
@@ -58,8 +59,8 @@ export interface ManuscriptStore {
 }
 
 export interface PublishSlot {
-  /** Saves what is typed; true when Main holds exactly the text on screen. */
-  prepare: () => Promise<boolean>;
+  /** Saves what is typed and returns the exact saved snapshot, including a head created by that save. */
+  prepare: () => Promise<{ head: string; body: string } | null>;
   head: string | null;
   body: string;
   /** Nothing stands in the way: saved at least once, no conflict, not refused, not empty. */
@@ -90,6 +91,8 @@ export interface ManuscriptEditorProps {
   messages: StudioMessages;
   /** Autosave pause in milliseconds; stories shorten it. */
   delay?: number;
+  /** Post-only augmentations share this draft's saves and conflict resolution. */
+  authorNotes?: boolean;
 }
 
 /**
@@ -115,6 +118,7 @@ export function ManuscriptEditor({
   locale,
   messages,
   delay = 2_500,
+  authorNotes = false,
 }: ManuscriptEditorProps) {
   const t = materializeData(messages, { locale });
   const storage = useMemo(browserStorage, []);
@@ -134,6 +138,7 @@ export function ManuscriptEditor({
             body,
             base,
             changedAt: new Date().toISOString(),
+            ...(authorNotes ? { format: 'post' as const } : {}),
           });
         },
         release: () => clearLocalDraft(storage, store.deviceKey()),
@@ -147,9 +152,11 @@ export function ManuscriptEditor({
 
   // Open with what this device kept: unsaved typing on the same head is restored; typing on an older head is a conflict.
   useEffect(() => {
+    const local = readLocalDraft(storage, store.deviceKey());
     const decision = restoreDecision(
       { head: initial.head, body: initial.body },
-      readLocalDraft(storage, store.deviceKey()),
+      authorNotes && local ? { ...local, body: restoreChapterDraft(local.body, chapterDraft(initial.body).notes,
+        local.format === 'post' ? 'post' : undefined, chapterDraft(initial.body).embeds) } : local,
     );
     if (decision.kind === 'restore') {
       setValue(decision.body);
@@ -275,14 +282,42 @@ export function ManuscriptEditor({
   };
   const prepare = async () => {
     await autosave.flush();
-    const saved = autosave.snapshot.state === 'saved' || autosave.snapshot.state === 'idle';
+    const saved = (autosave.snapshot.state === 'saved' || autosave.snapshot.state === 'idle')
+      && autosave.snapshot.saved === autosave.text && autosave.snapshot.head;
     if (!saved) setNotice(t.publishUnsaved);
-    return saved;
+    return saved ? { head: saved, body: autosave.snapshot.saved } : null;
   };
 
   const conflict = snapshot.state === 'conflict';
   const state = snapshot.denied ? 'error' : snapshot.state;
-  const ready = Boolean(snapshot.head && !conflict && !snapshot.denied && hasBodyContent(value));
+  const draft = authorNotes ? chapterDraft(value) : { body: value, notes: {} };
+  const ready = Boolean(snapshot.head && !conflict && !snapshot.denied && hasBodyContent(draft.body));
+  const noteEditor = (side: 'before' | 'after') => authorNotes ? (
+    <section className="grid gap-3 rounded-xl border border-border/60 bg-muted/30 p-4" data-author-note-editor={side}>
+      <h2 className="font-medium text-sm">{side === 'before' ? t.authorNoteBefore : t.authorNoteAfter}</h2>
+      {side === 'before' ? <p className="text-muted-foreground text-sm">{t.authorNotesHelp}</p> : null}
+      <BodyEditor
+        actingSubject={actingSubject}
+        mediaTarget={mediaTarget}
+        label={side === 'before' ? t.authorNoteBefore : t.authorNoteAfter}
+        locale={locale}
+        lang={language}
+        dir={direction}
+        value={draft.notes[side] ?? ''}
+        placeholder={t.authorNotePlaceholder}
+        placeholderDirection={placeholderDirection}
+        maxLength={8192}
+        compact
+        readOnly={conflict || snapshot.denied}
+        onChange={next => {
+          const current = chapterDraft(autosave.text);
+          change(chapterDraftValue(current.body, { ...current.notes, [side]: next }, current.embeds));
+        }}
+        onKeyDown={keyDown}
+        onBlur={() => void autosave.flush()}
+      />
+    </section>
+  ) : null;
   return (
     <div className="min-h-dvh bg-background [text-autospace:normal]">
       <div className="sticky top-0 z-10 border-border/60 border-b bg-background/90 backdrop-blur">
@@ -346,8 +381,10 @@ export function ManuscriptEditor({
             onTakeTheirs={resolveTheirs}
             labels={t}
             locale={locale}
+            authorNotes={authorNotes}
           />
         ) : null}
+        {noteEditor('before')}
         <BodyEditor
           actingSubject={actingSubject}
           mediaTarget={mediaTarget}
@@ -356,16 +393,20 @@ export function ManuscriptEditor({
           lang={language}
           dir={direction}
           allowAdvanced
-          value={value}
+          value={draft.body}
           placeholder={t.placeholder}
           placeholderDirection={placeholderDirection}
           maxLength={65536}
           readOnly={conflict || snapshot.denied}
-          onChange={change}
+          onChange={next => {
+            const current = chapterDraft(autosave.text);
+            change(authorNotes ? chapterDraftValue(next, current.notes, current.embeds) : next);
+          }}
           onKeyDown={keyDown}
           onBlur={() => void autosave.flush()}
-          autoFocus={!initial.body}
+          autoFocus={!hasBodyContent(authorNotes ? chapterDraft(initial.body).body : initial.body)}
         />
+        {noteEditor('after')}
       </div>
       {/* On phones the shell's bottom navigation covers the last 4rem; the counts sit above it. */}
       <div
@@ -373,7 +414,7 @@ export function ManuscriptEditor({
       backdrop-blur md:bottom-0"
       >
         <EditorFooter className="mx-auto w-full max-w-[44rem] px-4 py-2 sm:px-6">
-          <span>{lengthLabel(manuscriptLength(bodyText(value), language), t)}</span>
+          <span>{lengthLabel(manuscriptLength(bodyText(draft.body), language), t)}</span>
         </EditorFooter>
       </div>
     </div>

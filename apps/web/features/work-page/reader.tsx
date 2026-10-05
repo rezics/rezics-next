@@ -2,6 +2,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { checkDocument, documentParagraphs } from '@rezics/document';
+import { AuthorNote } from './author-note.tsx';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { messages as documentMessages } from '../document-editor/messages.ts';
 import {
@@ -341,6 +342,7 @@ export function ChapterReader({
   const lines =
     typeof body === 'string' ? bodyAfterTitle(paragraphs(body), chapter.label?.value) : null;
   const direction = chapter.content.reference.direction;
+  const notes = chapter.content.body.notes as { before?: unknown; after?: unknown } | undefined;
   const neighbour = (occurrence: string | null) => {
     const id = occurrence ? idOf(occurrence) : null;
     return id ? chapterHref(workRef, id, language) : null;
@@ -443,6 +445,7 @@ export function ChapterReader({
             </a>
           ) : null}
         </header>
+        <AuthorNote value={notes?.before} side="before" label={t.authorNote} locale={locale} />
         <ReaderText
           ratingTarget={chapter.content.reference.resourceId}
           lines={lines}
@@ -450,6 +453,7 @@ export function ChapterReader({
           formatNote={t.chapterFormat}
           locale={locale}
         />
+        <AuthorNote value={notes?.after} side="after" label={t.authorNote} locale={locale} />
       </article>
       <div className="mx-auto grid w-full max-w-(--reader-width) gap-6 border-border/60 border-t pt-6">
         <nav aria-label={t.chapterNavigation} className="flex flex-wrap items-center gap-2">

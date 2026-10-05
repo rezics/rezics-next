@@ -2,6 +2,9 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { StudioMessages } from '../messages.ts';
 
 export default {
+  authorNoteBefore: "章前作者的话", authorNoteAfter: "章后作者的话",
+  authorNotePlaceholder: "此语言的附言，可留空。", noAuthorNote: "没有附言",
+  authorNotesHelp: "附言不计入章节篇幅，也不会收录于书籍的出版版本。",
   studio: '创作室',
   writingAs: '署名身份', switchIdentity: '切换身份', manageIdentities: '管理身份',
   identities: '你可以使用的身份',
