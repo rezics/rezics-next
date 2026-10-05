@@ -13,7 +13,6 @@ import { localizedBilingual, people, profilePlan, seedKey, works } from './plan.
 import { seedReply } from './replies.ts';
 import { modsConcepts } from './realms-step.ts';
 import { onEarlierWork, replayEarlierWork } from './contributions-work.ts';
-import { demoSessions } from './library-people.ts';
 import { gamesCatalogue } from './games-catalogue.ts';
 import { softwareCatalogue } from './software-catalogue.ts';
 import { requiresSeedAdministrator } from './work-authority.ts';
@@ -736,7 +735,7 @@ async function joining(o: Official) {
         settings: { ...current.settings, selfJoin: true, rules }, expectedRulesRevision: current.ruleBasis.revision },
       steward.token, seedKey('official-settings', `${id}:${current.generation}`));
     }
-    for (const member of demoSessions(o.state.sessions).filter(session => session.id !== steward.id)) {
+    for (const member of o.state.sessions.filter(session => session.id !== steward.id)) {
       const result = await o.state.optional('Official Realm join', async () => {
         const policy = await o.read<{ selfJoin: boolean; open: boolean; state: string; membershipGeneration: string;
           policyRevision: string; termsRevision: string }>(

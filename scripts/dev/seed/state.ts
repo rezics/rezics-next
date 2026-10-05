@@ -17,6 +17,7 @@ export interface SeedState {
     accountDatabaseUrl: string | null; accountSecret: string | null; accessDatabaseUrl: string | null };
   optional<T>(label: string, operation: () => Promise<T>): Promise<T | null>;
   findings: Set<string>;
+  /** The plan's signed-in people. A step that signs in further accounts keeps those sessions on its own list. */
   sessions: Session[];
   penAgents: Map<string, string>;
   operatorInput: LocalOperatorInput | null;
@@ -45,9 +46,10 @@ export interface SeedState {
 
 export type SeedStep = (state: SeedState) => Promise<void>;
 
-/** OAuth access tokens are short lived; long demo phases renew their own sessions. */
-export async function refreshSeedTokens(state: SeedState): Promise<void> {
-  for (const session of state.sessions) {
+/** OAuth access tokens are short lived; long demo phases renew their own sessions.
+ * `also` renews sessions a step keeps off `state.sessions`, such as the ranking's extra raters. */
+export async function refreshSeedTokens(state: SeedState, also: readonly Session[] = []): Promise<void> {
+  for (const session of new Set([...state.sessions, ...also])) {
     if (Date.now() - session.issuedAt > 120_000) {
       session.token = await state.api.token(session.cookie);
       session.issuedAt = Date.now();
