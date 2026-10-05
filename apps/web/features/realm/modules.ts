@@ -22,6 +22,7 @@ import { chipHref } from '../zones/browse-state.ts';
 import {
   type AdaptContext,
   bannerImage,
+  bannerSlide,
   liveBanners,
   type ModuleCredit,
   workLink,
@@ -128,6 +129,7 @@ export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): Zone
     cover: work.cover ?? known.cover,
     decision: work.decision ?? known.decision,
     hub: work.hub ?? known.hub ?? null,
+    showcaseArt: work.showcaseArt ?? known.showcaseArt ?? null,
   };
 }
 
@@ -191,7 +193,7 @@ async function hero(
     href: banner.href,
     image: bannerImage(banner, bannerMedia),
   }));
-  if (banners.length) return { state: 'ready', data: { banners } };
+  if (banners.length) return { state: 'ready', data: { slides: banners.slice(0, 5).map(bannerSlide) } };
   // Without art-directed banners the hero shows the newest picks, covers first.
   const feed = feedOf(module.source) ?? 'new-adoptions';
   if (feed === 'recent-decisions') return unsupported;
@@ -199,16 +201,16 @@ async function hero(
   if (!works.ok) return failed;
   const picks = [...works.data]
     .sort((a, b) => Number(Boolean(b.cover)) - Number(Boolean(a.cover)))
-    .slice(0, module.options?.limit ?? 5);
+    .slice(0, Math.min(5, module.options?.limit ?? 5));
   return picks.length
     ? {
         state: 'ready',
         data: {
-          banners: picks.map((work) => ({
+          slides: picks.map((work) => ({
             id: work.id,
             title: work.title ?? zoneContentText(''),
             href: work.href,
-            image: null,
+            tagline: work.tagline,
             work,
           })),
         },

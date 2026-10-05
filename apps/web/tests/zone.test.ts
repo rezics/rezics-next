@@ -283,6 +283,7 @@ const zoneWorkKeys = [
   'latestChapter',
   'decision',
   'hub',
+  'showcaseArt',
 ] as const;
 type ExactZoneWorkKeys<Keys extends readonly (keyof ZoneWork)[]> = [
   Exclude<keyof ZoneWork, Keys[number]>,
@@ -311,6 +312,7 @@ describe('Zone Work cards from Main', () => {
       latestChapter: null,
       decision: null,
       hub: null,
+      showcaseArt: null,
     } satisfies ZoneWork;
     expect(Object.keys(work).sort()).toEqual([...zoneWorkKeys].sort());
   });
@@ -418,7 +420,7 @@ describe('Zone page content security policy', () => {
     expect(first).toMatch(/^[A-Za-z0-9+/]{24}$/);
     expect(zoneCsp(first)).toBe(
       `script-src 'nonce-${first}' 'strict-dynamic'; object-src 'none'; base-uri 'none'; ` +
-        "frame-ancestors 'none'",
+        "frame-ancestors 'none'; frame-src https://www.youtube-nocookie.com https://player.bilibili.com",
     );
     expect(zoneCsp(first, true)).toStartWith(
       `script-src 'nonce-${first}' 'strict-dynamic' 'unsafe-eval';`,

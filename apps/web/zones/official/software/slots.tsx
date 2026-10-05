@@ -1,6 +1,5 @@
 import { WorkCover } from '@rezics/ui/work-cover';
-import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneWork } from '@rezics/zone-sdk';
+import { type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
 /** A cover, its title and its hook. */
@@ -18,33 +17,9 @@ export function SoftwareCard({ zone, work, layout, rank, Link }: WorkCardSlotPro
   </article>;
 }
 
-function Lead({ work, locale, Link, whyHere }: {
-  work: ZoneWork; locale: string; Link: HeroSlotProps['Link']; whyHere: HeroSlotProps['whyHere'];
-}) {
-  const t = strings(locale);
-  return <div className="sz-lead">
-    <Link href={work.href} tabIndex={-1} aria-hidden="true" className="sz-lead-icon">
-      <WorkCover {...workCoverProps(work)} loading="eager" /></Link>
-    <div className="sz-lead-copy">
-      <h3 lang={work.title?.lang} dir={work.title?.dir}><Link href={work.href}>
-        {work.title?.value ?? t.untitled}</Link></h3>
-      {work.tagline ? <p lang={work.tagline.lang} dir={work.tagline.dir}>{work.tagline.value}</p> : null}
-      <div className="sz-lead-actions">{whyHere(work)}</div>
-    </div>
-  </div>;
-}
-
-export function SoftwareHero({ zone, banners, card, whyHere, Link, fallback }: HeroSlotProps) {
-  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
-  const [lead, ...others] = picks;
-  if (!lead || picks.length !== banners.length) return fallback;
-  const t = strings(zone.locale);
-  return <section className="sz-hero" aria-labelledby="sz-featured"><div className="sz-page">
-    <h2 id="sz-featured" className="sz-section-title">{t.featured}</h2>
-    <div className="sz-hero-grid"><Lead work={lead} locale={zone.locale} Link={Link} whyHere={whyHere} />
-      {others.length ? <ul className="sz-hero-others">{others.map(work =>
-        <li key={work.id}>{card(work, { layout: 'row' })}</li>)}</ul> : null}</div>
-  </div></section>;
+/** The shared showcase retains the platform's media and rotation behavior. */
+export function SoftwareHero({ fallback }: HeroSlotProps) {
+  return <div className="sz-showcase">{fallback}</div>;
 }
 
 export function SoftwareShelf({ zone, module, data, card, Link }: ModuleSlotProps<'shelf'>) {

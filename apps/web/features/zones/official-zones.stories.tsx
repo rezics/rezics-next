@@ -155,14 +155,14 @@ export const Books: Story = {
     await expect(canvas.getByText('Official REZICS Zone')).toBeVisible();
     // Platform controls stay in the package's nameplate.
     await expect(canvas.getByRole('button', { name: 'Page style' })).toBeVisible();
-    const cover = canvas.getByRole('region', { name: 'Cover story' });
-    await expect(within(cover).getByRole('heading', { level: 3, name: 'Jane Eyre' })).toBeVisible();
-    await expect(within(cover).getByText('by Charlotte Brontë')).toBeVisible();
+    const cover = canvas.getByRole('region', { name: 'Featured' });
+    await expect(within(cover).getByRole('heading', { level: 2, name: 'Jane Eyre' })).toBeVisible();
+    await expect(cover.querySelector('.showcase-author')).toHaveTextContent('Charlotte Brontë');
     await expect(
       within(cover).getByRole('link', { name: 'Why Jane Eyre is here' }),
     ).toHaveAttribute('href', `${localizedPath(spaceHref('books', 'community', ['decisions']), 'en')}#decision-jane-eyre`);
-    const contents = canvas.getByRole('region', { name: 'In this issue' });
-    await expect(within(contents).getAllByRole('listitem')).toHaveLength(3);
+    await expect(cover).toHaveAttribute('aria-roledescription', 'carousel');
+    await expect(cover.querySelectorAll('[data-slot="carousel-item"]')).toHaveLength(4);
     const shelf = canvas.getByRole('region', { name: 'Latest' });
     await expect(within(shelf).getByRole('list', { name: 'Newly added' }).children).toHaveLength(
       10,
@@ -196,9 +196,9 @@ export const BooksChinese: Story = {
   async play(context) {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '图书' })).toBeVisible();
-    await expect(canvas.getByRole('region', { name: '封面故事' })).toBeVisible();
-    await expect(canvas.getByText('Charlotte Brontë 著')).toBeVisible();
-    await expect(canvas.getByRole('region', { name: '本期目录' })).toBeVisible();
+    const featured = canvas.getByRole('region', { name: '精选' });
+    await expect(featured.querySelector('.showcase-author')).toHaveTextContent('Charlotte Brontë');
+    await expect(featured).toHaveAttribute('aria-roledescription', 'carousel');
     await holds('books')(context);
   },
 };
@@ -215,7 +215,7 @@ export const BooksPhoneChineseDark: Story = {
 export const BooksAsSeeded: Story = {
   args: { catalogue: 'seeded' },
   async play(context) {
-    const cover = within(context.canvasElement).getByRole('region', { name: 'Cover story' });
+    const cover = within(context.canvasElement).getByRole('region', { name: 'Featured' });
     await expect(within(cover).queryByText(/^by /)).toBeNull();
     await holds('books')(context);
   },
@@ -262,9 +262,9 @@ export const Mods: Story = {
     await expect(canvas.queryByRole('link', { name: /Fabric \d/ })).toBeNull();
     const featured = canvas.getByRole('region', { name: 'Featured' });
     const lumen = within(featured)
-      .getByRole('heading', { level: 3, name: /Lumen Lanterns/ })
+      .getByRole('heading', { level: 2, name: /Lumen Lanterns/ })
       .closest('article')!;
-    await expect(within(lumen).getByText('Updated yesterday')).toBeVisible();
+    await expect(within(lumen).getByRole('link', { name: 'Install' })).toBeVisible();
     await expect(within(lumen).getByText(/Warm lantern light/)).toBeVisible();
     await expect(lumen.querySelector('[data-release-state]')).toBeNull();
     await expect(within(lumen).queryByText('Fabric')).toBeNull();
@@ -311,7 +311,7 @@ export const ModsChinese: Story = {
       within(featured).queryByText('选择游戏版本、加载器和运行端，查看兼容版本'),
     ).toBeNull();
     await expect(featured.querySelector('[data-release-state]')).toBeNull();
-    await expect(within(featured).getByText('昨天更新')).toBeVisible();
+    await expect(within(featured).getByRole('link', { name: '安装' })).toBeVisible();
     await expect(canvas.getByRole('tab', { name: '今日' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -415,19 +415,15 @@ export const AiWorkshop: Story = {
       canvas.getByRole('link', { name: 'Browse every prompt and skill' }),
     ).toHaveAttribute('href', localizedPath(spaceHref('ai-workshop', 'site', ['browse']), 'en'));
     const featured = canvas.getByRole('region', { name: 'Featured' });
-    const spotlight = within(featured.querySelector<HTMLElement>('.aw-spotlight')!);
-    await expect(spotlight.getByText('Prompt')).toBeVisible();
-    await expect(spotlight.getByText(/^Read the following book club notes\./)).toBeVisible();
-    await expect(spotlight.getByRole('list', { name: 'Tested with' })).toHaveTextContent(
-      'claude-sonnet-5gpt-6-luna',
-    );
+    const spotlight = within(featured.querySelector<HTMLElement>('.showcase-slide')!);
+    await expect(spotlight.getByRole('heading', { level: 2, name: 'Book club discussion prompt' })).toBeVisible();
     const copied = clipboard();
-    const copy = spotlight.getByRole('button', { name: 'Copy prompt Book club discussion prompt' });
+    const copy = spotlight.getByRole('button', { name: 'Copy prompt' });
     await userEvent.click(copy);
     await waitFor(() => expect(copy.nextElementSibling).toHaveTextContent('Prompt copied'));
     await expect(copied).toEqual([workshopPick('club-prompt-v1').hub!.copyText]);
     await expect(
-      spotlight.getByRole('link', { name: 'Try it Book club discussion prompt' }),
+      spotlight.getByRole('link', { name: 'Book club discussion prompt' }),
     ).toHaveAttribute('href', localizedPath(zoneMemberHref('ai-workshop', 'w',
       '00000000-0000-7000-8003-000000000000'), 'en'));
     const collections = canvas.getByRole('region', { name: 'Editors’ picks' });
@@ -465,12 +461,12 @@ export const AiWorkshopChinese: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'AI 工作坊' })).toBeVisible();
     const featured = within(canvas.getByRole('region', { name: '精选' }));
     await expect(
-      featured.getByRole('button', { name: '复制提示词 Book club discussion prompt' }),
+      featured.getByRole('button', { name: '复制提示词' }),
     ).toBeVisible();
     await expect(
-      featured.getByRole('link', { name: '试一试 Book club discussion prompt' }),
+      featured.getByRole('link', { name: 'Book club discussion prompt' }),
     ).toBeVisible();
-    await expect(featured.getAllByText('提示词').length).toBeGreaterThan(0);
+    await expect(featured.getByRole('heading', { level: 2, name: 'Book club discussion prompt' })).toBeVisible();
     const copied = clipboard();
     const link = within(canvas.getByRole('region', { name: '编辑推荐' }))
       .getByRole('button', { name: '复制链接 Book club notes assistant' });

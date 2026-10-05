@@ -23,7 +23,7 @@ export function FictionHeader({ zone, actions, members }: HeaderSlotProps) {
   </header>;
 }
 
-/** Editorial picks keep the platform's cover-first carousel. */
+/** The shared showcase retains the platform's media and rotation behavior. */
 export function FictionHero({ fallback }: HeroSlotProps) {
   return <div className="fz-hero">{fallback}</div>;
 }

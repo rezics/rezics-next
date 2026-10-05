@@ -1,9 +1,7 @@
-import { buttonVariants } from '@rezics/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
-import { WorkCover, workCoverRatio } from '@rezics/ui/work-cover';
+import { workCoverRatio } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps,
-  workCoverProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
-import { BookOpenIcon } from 'lucide-react';
+  type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { Fragment, type ReactNode } from 'react';
 import { ShelfCarousel } from './carousel.tsx';
 import { strings } from './strings.ts';
@@ -53,48 +51,9 @@ export function BooksHeader({ zone, actions, members }: HeaderSlotProps) {
   </header>;
 }
 
-/**
- * The cover story: the newest pick set large with its hook as the standfirst,
- * and the rest of the picks as the issue's contents. Art-directed banners
- * keep the platform carousel.
- */
-export function BooksHero({ zone, banners, card, whyHere, Link, fallback }: HeroSlotProps) {
-  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
-  const [lead, ...rest] = picks;
-  if (!lead || picks.length !== banners.length) return fallback;
-  const t = strings(zone.locale);
-  return <section aria-labelledby="bz-cover-story" className="bz-issue">
-    <div className="bz-page bz-issue-grid">
-      <article className="bz-lead">
-        <Link href={lead.href} tabIndex={-1} aria-hidden="true" className="bz-lead-cover">
-          <WorkCover {...workCoverProps(lead)} loading="eager" /></Link>
-        <div className="bz-lead-copy">
-          <h2 id="bz-cover-story" className="bz-kicker">{t.coverStory}</h2>
-          <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="bz-lead-title">
-            <Link href={lead.href}>{lead.title?.value ?? t.untitled}</Link></h3>
-          {lead.author ? <p lang={lead.author.lang || undefined} className="bz-byline">
-            {t.byline('\u2063').split('\u2063')[0]}
-            {lead.authorHref ? <Link href={lead.authorHref} className="rounded-sm outline-none hover:underline
-              focus-visible:ring-2 focus-visible:ring-ring">{lead.author.value}</Link> : lead.author.value}
-            {t.byline('\u2063').split('\u2063')[1]}</p> : null}
-          {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="bz-dek">
-            {lead.tagline.value}</p> : null}
-          {facts(lead, zone.locale).length ? <p className="bz-facts">{facts(lead, zone.locale).join(' · ')}</p> : null}
-          <div className="bz-lead-actions">
-            <Link href={lead.href} className={buttonVariants({ size: 'md', pill: true })}>
-              <BookOpenIcon aria-hidden="true" />{t.startReading}</Link>
-            <span className="bz-stamp">{whyHere(lead)}</span>
-          </div>
-        </div>
-      </article>
-      {rest.length ? <section aria-labelledby="bz-contents" className="bz-contents">
-        <h2 id="bz-contents" className="bz-contents-title">{t.inThisIssue}</h2>
-        <ol className="bz-contents-list">
-          {rest.map(work => <li key={work.id}>{card(work, { layout: 'rail' })}</li>)}
-        </ol>
-      </section> : null}
-    </div>
-  </section>;
+/** The shared showcase retains the platform's media and rotation behavior. */
+export function BooksHero({ fallback }: HeroSlotProps) {
+  return <div className="bz-showcase">{fallback}</div>;
 }
 
 /** Shelves as "Readers also enjoyed" rows: covers first, page marks and a turning button. */

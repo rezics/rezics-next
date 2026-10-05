@@ -1,3 +1,4 @@
+import { bannerSlide } from '../realm/adapt.ts';
 import { realmHref, siteHref, realmWorkHref } from '../realm/route.ts';
 import type {
   RankingInterval,
@@ -445,7 +446,7 @@ export function fictionModules(locale: UiLocale): PlacedModule[] {
   }));
   return [
     // Art-directed banners; a Zone without them gets picks instead (communityModules), never both.
-    place(module('hero', 'hero-carousel', t.picks), ready<'hero-carousel'>({ banners })),
+    place(module('hero', 'hero-carousel', t.picks), ready<'hero-carousel'>({ slides: banners.map(bannerSlide) })),
     place(
       module('genres', 'chip-nav', t.genres),
       ready<'chip-nav'>({
@@ -633,7 +634,7 @@ export function communityModules(locale: UiLocale): PlacedModule[] {
     place(
       module('picks', 'hero-carousel', t.picks),
       ready<'hero-carousel'>({
-        banners: classics.slice(0, 3).map((work) => ({
+        slides: classics.slice(0, 3).map((work) => ({
           id: work.id,
           title: work.title!,
           href: work.href,

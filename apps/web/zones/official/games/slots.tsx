@@ -19,30 +19,9 @@ export function GamesCard({ zone, work, layout, rank, Link }: WorkCardSlotProps)
   </article>;
 }
 
-/** A lead capsule followed by a horizontally browsable rail of other picks. */
-export function GamesHero({ zone, banners, card, whyHere, Link, fallback }: HeroSlotProps) {
-  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
-  const [lead, ...others] = picks;
-  if (!lead || picks.length !== banners.length) return fallback;
-  const t = strings(zone.locale);
-  return <section className="gz-hero" aria-labelledby="gz-featured">
-    <div className="gz-page">
-      <h2 id="gz-featured" className="gz-section-title">{t.featured}</h2>
-      <div className="gz-featured">
-        <Link href={lead.href} tabIndex={-1} aria-hidden="true" className="gz-featured-art">
-          <WorkCover {...workCoverProps(lead)} loading="eager" /></Link>
-        <div className="gz-featured-copy">
-          <h3 lang={lead.title?.lang} dir={lead.title?.dir}>
-            <Link href={lead.href}>{lead.title?.value ?? t.untitled}</Link></h3>
-          {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir}>{lead.tagline.value}</p> : null}
-          <div className="gz-featured-actions">
-            <Link href={lead.href}>{t.details}</Link>{whyHere(lead)}</div>
-        </div>
-      </div>
-      {others.length ? <ul className="gz-featured-rail">{others.map(work =>
-        <li key={work.id}>{card(work, { layout: 'cover' })}</li>)}</ul> : null}
-    </div>
-  </section>;
+/** The shared showcase retains the platform's media and rotation behavior. */
+export function GamesHero({ fallback }: HeroSlotProps) {
+  return <div className="gz-showcase">{fallback}</div>;
 }
 
 export function GamesShelf({ zone, module, data, card, Link }: ModuleSlotProps<'shelf'>) {

@@ -31,7 +31,7 @@ function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
   const modules = [
     { module: { id: 'picks', type: 'hero-carousel', title: zh ? '精选应用' : 'Featured apps',
       rail: false, layout: 'covers', shuffle: false, more: null }, state: { state: 'ready', data: {
-      banners: works.map(work => ({ id: work.id, title: work.title!, href: work.href, image: null, work })) } } },
+      slides: works.map(work => ({ id: work.id, title: work.title!, href: work.href, image: null, work })) } } },
     { module: { id: 'creative', type: 'shelf', title: zh ? '开始创作' : 'Create something',
       rail: false, layout: 'covers', shuffle: false, more: `${home}/browse` }, state: { state: 'ready', data: {
       tabs: [{ id: 'creative', label: zh ? '开始创作' : 'Create something', items: works }] } } },
@@ -46,13 +46,13 @@ type Story = StoryObj<typeof meta>;
 
 export const Desktop: Story = { async play({ canvasElement }) {
   const canvas = within(canvasElement);
-  await expect(canvas.getByRole('heading', { name: 'Featured apps', level: 2 })).toBeVisible();
+  await expect(canvas.getByRole('region', { name: 'Featured apps' })).toHaveAttribute('aria-roledescription', 'carousel');
   await expect(canvas.getAllByText('Browse the web.')[0]).toBeVisible();
   await expect(canvas.queryByText(/Version not tracked/)).toBeNull();
   await expect(canvas.queryByRole('link', { name: 'Project website' })).toBeNull();
   await expect(canvas.getAllByRole('link', { name: 'Why Firefox is here' })[0]).toBeVisible();
 } };
 export const Chinese: Story = { args: { locale: 'zh-Hans' }, async play({ canvasElement }) {
-  await expect(within(canvasElement).getByRole('heading', { name: '精选应用', level: 2 })).toBeVisible();
+  await expect(within(canvasElement).getByRole('region', { name: '精选应用' })).toHaveAttribute('aria-roledescription', 'carousel');
   await expect(within(canvasElement).queryByText(/暂无版本记录/)).toBeNull();
 } };

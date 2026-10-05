@@ -33,7 +33,7 @@ function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
   const modules = [
     { module: { id: 'picks', type: 'hero-carousel', title: zh ? '精选游戏' : 'Featured games',
       rail: false, layout: 'covers', shuffle: false, more: null }, state: { state: 'ready', data: {
-      banners: works.map(work => ({ id: work.id, title: work.title!, href: work.href, image: null, work })) } } },
+      slides: works.map(work => ({ id: work.id, title: work.title!, href: work.href, image: null, work })) } } },
     { module: { id: 'recent', type: 'shelf', title: zh ? '新近推荐' : 'Newly picked',
       rail: false, layout: 'covers', shuffle: false, more: `${home}/browse` }, state: { state: 'ready', data: {
       tabs: [{ id: 'recent', label: zh ? '新近推荐' : 'Newly picked', items: works }] } } },
@@ -48,7 +48,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Desktop: Story = { async play({ canvasElement }) {
   const canvas = within(canvasElement);
-  await expect(canvas.getByRole('heading', { name: 'Featured games', level: 2 })).toBeVisible();
+  await expect(canvas.getByRole('region', { name: 'Featured games' })).toHaveAttribute('aria-roledescription', 'carousel');
   await expect(canvas.getAllByText('Build a farm and settle into a small town.')[0]).toBeVisible();
   await expect(canvas.queryByText(/Very positive/)).toBeNull();
   await expect(canvas.queryByRole('link', { name: 'Browse mods' })).toBeNull();
@@ -56,6 +56,6 @@ export const Desktop: Story = { async play({ canvasElement }) {
   await expect(canvas.getAllByRole('link', { name: 'Why Stardew Valley is here' })[0]).toBeVisible();
 } };
 export const Chinese: Story = { args: { locale: 'zh-Hans' }, async play({ canvasElement }) {
-  await expect(within(canvasElement).getByRole('heading', { name: '精选游戏', level: 2 })).toBeVisible();
+  await expect(within(canvasElement).getByRole('region', { name: '精选游戏' })).toHaveAttribute('aria-roledescription', 'carousel');
   await expect(within(canvasElement).queryByRole('link', { name: '浏览模组' })).toBeNull();
 } };

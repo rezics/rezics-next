@@ -23,5 +23,6 @@ export function zoneNonce(): string {
  */
 export function zoneCsp(nonce: string, development = false): string {
   return [`script-src 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ''}`, "object-src 'none'",
-    "base-uri 'none'", "frame-ancestors 'none'"].join('; ');
+    "base-uri 'none'", "frame-ancestors 'none'",
+    'frame-src https://www.youtube-nocookie.com https://player.bilibili.com'].join('; ');
 }

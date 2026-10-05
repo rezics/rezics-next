@@ -81,6 +81,8 @@ export interface ZoneWork {
   decision: string | null;
   /** A published prompt or Skill's card, when the Work is one. */
   hub?: ZoneHubItem | null;
+  /** Work-owned art, used when a slide supplies none of its own. */
+  showcaseArt?: ZoneShowcaseArt | null;
 }
 
 /** One release of a Work that met every condition of the release filter, with the facts a card states. */
@@ -118,14 +120,51 @@ export interface ZoneHubItem {
   testedModels: string[];
 }
 
+/** Legacy hero input. New hero consumers receive ZoneShowcaseSlide instead. */
 export interface ZoneBanner {
   id: string;
   title: ZoneText;
   kicker?: ZoneText | null;
   href: string;
   image: ZoneImage | null;
-  /** A banner built from a pick when the Zone has no art-directed banner. */
+  /** A Work associated with this legacy record. */
   work?: ZoneWork | null;
+}
+
+/** Coordinates are fractions of the original image, from 0 to 1. */
+export interface ZoneFocalArea { x: number; y: number; width: number; height: number }
+
+export interface ZoneShowcaseImage extends ZoneImage {
+  candidates?: readonly { url: string; width: number }[];
+  focal?: ZoneFocalArea;
+  /** Only art authored for this frame may be cropped; covers and posters stay whole. */
+  framed?: boolean;
+}
+
+export type ZoneLogoAnchor = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end';
+export interface ZoneShowcaseLogo extends ZoneShowcaseImage {
+  tone: 'light' | 'dark';
+  anchor: ZoneLogoAnchor;
+  /** Empty means language-neutral. Other-language logos never replace the live title. */
+  language: string;
+}
+export interface ZoneShowcaseArt {
+  landscape?: ZoneShowcaseImage | null;
+  portrait?: ZoneShowcaseImage | null;
+  cutout?: ZoneShowcaseImage | null;
+  logos?: readonly ZoneShowcaseLogo[];
+}
+export type ZoneTitleEffect = 'plain' | 'outline' | 'gradient' | 'glow';
+/** A layered showcase slide, distinct from a static banner upload. */
+export interface ZoneShowcaseSlide {
+  id: string;
+  href: string;
+  work?: ZoneWork | null;
+  kicker?: ZoneText | null;
+  title: ZoneText;
+  tagline?: ZoneText | null;
+  art?: ZoneShowcaseArt | null;
+  trailer?: { href: string } | null;
 }
 
 export interface ZoneChip { id: string; label: ZoneText; href: string }
@@ -149,7 +188,7 @@ export interface ZonePerson { id: string; name: ZoneText; href: string; avatar: 
 
 /** What each module type renders. */
 export interface ZoneModuleData {
-  'hero-carousel': { banners: ZoneBanner[] };
+  'hero-carousel': { slides: ZoneShowcaseSlide[] };
   'chip-nav': { chips: ZoneChip[] };
   announcement: { text: ZoneText; href: string | null };
   shelf: { tabs: ZoneShelfTab[] };
@@ -272,7 +311,7 @@ export interface ZoneWorkRenderers {
    */
   nextVolumes: (works: readonly Pick<ZoneWork, 'id' | 'href' | 'title'>[], heading: string) => ReactNode;
 }
-export interface HeroSlotProps extends ZoneSlotProps, ZoneWorkRenderers { banners: ZoneBanner[] }
+export interface HeroSlotProps extends ZoneSlotProps, ZoneWorkRenderers { slides: ZoneShowcaseSlide[] }
 export interface BrowseBarSlotProps extends ZoneSlotProps { browse: ZoneBrowseEntry }
 export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotProps, ZoneWorkRenderers {
   module: ZoneModule<Type>;

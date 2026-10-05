@@ -1,4 +1,4 @@
-import type { ZoneDecision, ZoneImage, ZonePerson, ZoneText, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneBanner, ZoneDecision, ZoneImage, ZonePerson, ZoneShowcaseSlide, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { resourceHref, siteMemberTarget } from '../address/path.ts';
@@ -51,6 +51,13 @@ export function bannerImage(
   return image
     ? { url: `${BFF_PREFIX}${image.url}`, width: image.width, height: image.height }
     : null;
+}
+
+/** Legacy uploads were not authored for a showcase frame, so the renderer must preserve the whole image. */
+export function bannerSlide(banner: ZoneBanner): ZoneShowcaseSlide {
+  return { id: banner.id, href: banner.href, title: banner.title, kicker: banner.kicker, work: banner.work,
+    art: banner.image ? { landscape: { ...banner.image, framed: false } } : null,
+    tagline: banner.work?.tagline };
 }
 
 export interface AdaptContext {

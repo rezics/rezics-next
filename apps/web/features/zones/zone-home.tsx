@@ -116,7 +116,7 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
   const rail = visible.filter(placed => placed !== hero && placed.module.rail);
   const HeroSlot = pkg?.slots.hero;
   const heroNode = hero ? renderModule(hero, zone, null, card, locale, messages, avatarQuery) : null;
-  const heroBanners = hero && isType(hero, 'hero-carousel') && hero.state.state === 'ready' ? hero.state.data.banners : [];
+  const heroSlides = hero && isType(hero, 'hero-carousel') && hero.state.state === 'ready' ? hero.state.data.slides : [];
   const BrowseSlot = pkg?.slots.browseBar;
   const bar = browse ? <ZoneBrowseBar browse={browse} messages={messages} /> : null;
   return <div className="grid grid-cols-1 gap-(--zone-gap) pt-4 pb-10 sm:pt-6">
@@ -125,7 +125,7 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
         <BrowseSlot zone={zone} browse={browse} fallback={bar} Link={LocalizedLink} /></SlotBoundary> : bar}
     </PageContainer> : null}
     {HeroSlot && heroNode ? <SlotBoundary slot="hero" fallback={heroNode}>
-      <HeroSlot zone={zone} banners={heroBanners} fallback={heroNode} Link={LocalizedLink}
+      <HeroSlot zone={zone} slides={heroSlides} fallback={heroNode} Link={LocalizedLink}
         {...workRenderers(card, locale, messages)} /></SlotBoundary> : heroNode}
     <PageContainer className="grid grid-cols-1 gap-(--zone-gap) py-0 sm:py-0 lg:grid-cols-[minmax(0,1fr)_18.5rem] lg:items-start
       lg:py-0">

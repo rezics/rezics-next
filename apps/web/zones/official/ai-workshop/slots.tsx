@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
   type ZoneHubItem, type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
-import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SparklesIcon, SquareTerminalIcon } from 'lucide-react';
+import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SquareTerminalIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { CopyButton } from './copy-button.tsx';
 import { strings } from './strings.ts';
@@ -115,40 +115,9 @@ export function WorkshopHeader({ zone, actions, members, Link }: HeaderSlotProps
   </header>;
 }
 
-/** The featured pick as a large card with its actions, and the other picks stacked beside it. */
-export function WorkshopHero({ zone, banners, card, whyHere, Link, fallback }: HeroSlotProps) {
-  const picks = banners.flatMap(banner => banner.work && !banner.image ? [banner.work] : []);
-  const [lead, ...rest] = picks;
-  if (!lead || picks.length !== banners.length) return fallback;
-  const t = strings(zone.locale);
-  const title = lead.title?.value ?? t.untitled;
-  return <section aria-labelledby="aw-featured" className="aw-featured">
-    <div className="aw-page">
-      <h2 id="aw-featured" className="aw-eyebrow aw-featured-title"><SparklesIcon aria-hidden="true" />{t.featured}</h2>
-      <div className="aw-featured-grid">
-        <article className="aw-spotlight">
-          <div className="aw-card-head">
-            <Thumb work={lead} Link={Link} />
-            <div className="min-w-0">
-              <h3 lang={lead.title?.lang} dir={lead.title?.dir} className="aw-spotlight-title">
-                <Link href={lead.href}>{title}</Link></h3>
-              <Byline work={lead} t={t} Link={Link} />
-            </div>
-          </div>
-          {lead.tagline ? <p lang={lead.tagline.lang} dir={lead.tagline.dir} className="aw-spotlight-hook">
-            {lead.tagline.value}</p> : null}
-          {lead.hub ? <Disclosed hub={lead.hub} t={t} /> : null}
-          <div className="aw-spotlight-foot">
-            <Actions zone={zone} work={lead} title={title} t={t} Link={Link} />
-            <span className="aw-stamp">{whyHere(lead)}</span>
-          </div>
-        </article>
-        {rest.length ? <ol className="aw-stack">
-          {rest.map(work => <li key={work.id}>{card(work, { layout: 'row' })}</li>)}
-        </ol> : null}
-      </div>
-    </div>
-  </section>;
+/** The shared showcase retains the platform's media and rotation behavior. */
+export function WorkshopHero({ fallback }: HeroSlotProps) {
+  return <div className="aw-showcase">{fallback}</div>;
 }
 
 function SectionHead({ id, title, more, t, Link }: {

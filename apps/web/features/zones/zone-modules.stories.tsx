@@ -2,7 +2,7 @@ import { spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { ZoneModuleType, ZonePreset } from '@rezics/zone-sdk';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import fiction from '../../zones/official/fiction/index.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import {
@@ -76,8 +76,8 @@ export const HeroBanners: Story = {
   async play({ canvasElement }) {
     const hero = within(canvasElement).getByRole('region', { name: 'Featured' });
     await expect(hero).toHaveAttribute('aria-roledescription', 'carousel');
-    await expect(within(hero).getAllByRole('listitem')).toHaveLength(3);
-    await expect(within(hero).getByRole('listitem', { name: '1 of 3' })).toBeVisible();
+    await expect(hero.querySelectorAll('[data-slot="carousel-item"]')).toHaveLength(3);
+    await expect(within(hero).getByRole('group', { name: /1 of 3$/ })).toBeVisible();
   },
 };
 
@@ -95,8 +95,8 @@ export const HeroPicks: Story = {
   },
   async play({ canvasElement }) {
     const hero = within(canvasElement).getByRole('region', { name: 'Featured' });
-    await expect(within(hero).getAllByRole('link', { name: /Start reading/ })).toHaveLength(3);
-    await expect(within(hero).getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(3);
+    await expect(within(hero).getAllByRole('link', { name: /Start reading/ })).toHaveLength(1);
+    await expect(within(hero).getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(1);
   },
 };
 
@@ -119,6 +119,7 @@ export const HeroPicksByKind: Story = {
       },
       { ...mod!, kind: 'package' as const },
       book!,
+      { ...works[4]!, kind: 'game' as const },
     ];
     const placed = {
       module: {
@@ -133,7 +134,7 @@ export const HeroPicksByKind: Story = {
       state: {
         state: 'ready',
         data: {
-          banners: picks.map((work) => ({
+          slides: picks.map((work) => ({
             id: work.id,
             title: work.title!,
             href: work.href,
@@ -149,16 +150,25 @@ export const HeroPicksByKind: Story = {
   },
   async play({ canvasElement }) {
     const hero = within(canvasElement).getByRole('region', { name: 'Featured' });
-    const slides = within(hero).getAllByRole('listitem');
+    const slides = [...hero.querySelectorAll<HTMLElement>('[data-slot="carousel-item"]')];
     await expect(within(slides[0]!).getByRole('link', { name: 'Open recipe' })).toBeVisible();
+    await userEvent.click(within(hero).getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(slides[1]).not.toHaveAttribute('inert'));
     await expect(
       within(slides[1]!).getByRole('button', { name: 'Copy prompt' }),
     ).toBeInTheDocument();
+    await userEvent.click(within(hero).getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(slides[2]).not.toHaveAttribute('inert'));
     await expect(within(slides[2]!).getByRole('link', { name: 'Install' })).toBeInTheDocument();
+    await userEvent.click(within(hero).getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(slides[3]).not.toHaveAttribute('inert'));
     await expect(
       within(slides[3]!).getByRole('link', { name: 'Start reading' }),
     ).toBeInTheDocument();
     await expect(hero).not.toHaveTextContent(/Start reading.*Start reading/);
+    await userEvent.click(within(hero).getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(slides[4]).not.toHaveAttribute('inert'));
+    await expect(within(slides[4]!).getByRole('link', { name: 'Play' })).toBeVisible();
   },
 };
 

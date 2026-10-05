@@ -612,7 +612,7 @@ export function officialModules(
       },
     );
   const hero = place(module('picks', 'hero-carousel', say(common.featured, locale)), {
-    banners: works
+    slides: works
       .slice(0, 4)
       .map((work) => ({ id: work.id, title: work.title!, href: work.href, image: null, work })),
   });

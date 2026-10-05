@@ -1,9 +1,8 @@
 import { initials } from '@rezics/ui/avatar-initials';
-import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import type { ZoneBanner, ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
+import type { ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
   from '@rezics/zone-sdk';
-import { BookOpenIcon, CookingPotIcon, DownloadIcon, MessageCircleIcon, PlusIcon, ScaleIcon,
+import { MessageCircleIcon, PlusIcon, ScaleIcon,
   TagIcon, XIcon }
   from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -11,13 +10,9 @@ import type { ReactNode } from 'react';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { CopyTextButton } from '../catalogue/copy-button.tsx';
-import { AuthorNames } from '../catalogue/author-names.tsx';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { slotRatio } from '../catalogue/work.ts';
-import { CoverLink } from '../catalogue/work-tile.tsx';
-import { catalogueWork, WhyHere, workTitle } from './card.tsx';
-import { HeroCarousel } from './carousel.tsx';
+import { workTitle } from './card.tsx';
+import { Showcase } from '../showcase/showcase.tsx';
 import { Announcement, ModuleTabs, ShuffleModule } from './islands.tsx';
 import type { ZoneMessages } from './messages.ts';
 import { ModuleFrame } from './module-frame.tsx';
@@ -36,77 +31,8 @@ export interface ModuleProps<Type extends ZoneModuleType> {
   avatarQuery?: string;
 }
 
-/**
- * A pick's one action, in its kind's verb: copy a published prompt, install
- * a package or Skill, open a recipe, or start reading anything else.
- */
-function PrimaryAction({ work, locale, messages }: { work: ZoneWork; locale: UiLocale; messages: ZoneMessages }) {
-  const t = catalogueMessages[locale];
-  if (work.hub?.kind === 'prompt') {
-    return <CopyTextButton text={work.hub.copyText} label={t.copyPrompt} copied={t.promptCopied} failed={t.copyFailed} />;
-  }
-  const [Icon, label] = work.hub?.kind === 'skill' || work.kind === 'package' ? [DownloadIcon, t.install]
-    : work.kind === 'recipe' ? [CookingPotIcon, t.openRecipe] : [BookOpenIcon, messages.read];
-  return <LocalizedLink href={work.href} className={buttonVariants({ size: 'sm', pill: true })}>
-    <Icon aria-hidden="true" />{label}</LocalizedLink>;
-}
-
-function PickSlide({ banner, work, locale, messages, avatarQuery }: {
-  banner: ZoneBanner; work: ZoneWork; locale: UiLocale; messages: ZoneMessages; avatarQuery?: string;
-}) {
-  const title = workTitle(work, messages);
-  return <article className="relative isolate flex h-full overflow-hidden rounded-(--zone-radius-card) bg-card
-    ring-1 ring-border/50">
-    {work.cover ? <WebMediaImage revealable={false} aria-hidden="true" alt="" src={work.cover.url} className="absolute inset-0 -z-20 size-full
-      scale-125 object-cover opacity-60 blur-2xl" />
-      : <span aria-hidden="true" className="absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_0%_0%,var(--zone-accent),transparent_60%)]
-        opacity-25" />}
-    <span aria-hidden="true" className="absolute inset-0 -z-10 bg-linear-to-r from-card via-card/88 to-card/55" />
-    <div className="flex w-full gap-4 p-4 sm:gap-6 sm:p-6">
-      <CoverLink work={catalogueWork(work)} avatarQuery={avatarQuery} className="w-26 shrink-0 self-center sm:w-36" />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-1">
-        <p className="font-semibold text-primary text-xs tracking-wide">{banner.kicker?.value ?? messages.heroLabel}</p>
-        <h2 lang={work.title?.lang} dir={work.title?.dir} className="line-clamp-2 text-balance font-semibold
-          font-work-title text-xl/tight sm:text-2xl/tight">
-          <LocalizedLink href={work.href} className="outline-none hover:text-primary focus-visible:underline">
-            {title}</LocalizedLink></h2>
-        {work.author ? <p lang={work.author.lang} className="text-muted-foreground text-sm">
-          <AuthorNames authors={catalogueWork(work).authors} /></p> : null}
-        {work.tagline ? <p lang={work.tagline.lang} className="line-clamp-3 text-pretty text-sm/relaxed">
-          {work.tagline.value}</p> : null}
-        <div className="mt-auto flex items-center gap-2 pt-2">
-          <PrimaryAction work={work} locale={locale} messages={messages} />
-          <WhyHere work={work} locale={locale} messages={messages} className="size-8" />
-        </div>
-      </div>
-    </div>
-  </article>;
-}
-
-function BannerSlide({ banner }: { banner: ZoneBanner }) {
-  return <LocalizedLink href={banner.href} className="group relative block aspect-[1.9] h-full w-full overflow-hidden
-    rounded-(--zone-radius-card) bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring">
-    {banner.image ? <WebMediaImage revealable={false} src={banner.image.url} alt="" width={banner.image.width} height={banner.image.height}
-      className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.02]
-        motion-reduce:transition-none" /> : null}
-    <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/75 via-black/35 to-transparent px-4 pt-10
-      pb-3 sm:px-5">
-      {banner.kicker ? <span className="block font-medium text-white/85 text-xs">{banner.kicker.value}</span> : null}
-      <span lang={banner.title.lang} className="line-clamp-2 font-semibold text-lg text-white sm:text-xl">
-        {banner.title.value}</span>
-    </span>
-  </LocalizedLink>;
-}
-
 export function HeroModule({ module, data, locale, messages, avatarQuery }: ModuleProps<'hero-carousel'>) {
-  const t = materializeData(messages, { locale });
-  const count = String(data.banners.length);
-  return <HeroCarousel label={module.title} previous={messages.previous} next={messages.next}
-    slideLabels={data.banners.map((_, index) => t.slide({ index: String(index + 1), count }))}>
-    {data.banners.map(banner => banner.image || !banner.work ? <BannerSlide key={banner.id} banner={banner} />
-      : <PickSlide key={banner.id} banner={banner} work={banner.work} locale={locale} messages={messages}
-        avatarQuery={avatarQuery} />)}
-  </HeroCarousel>;
+  return <Showcase label={module.title} slides={data.slides} locale={locale} messages={messages} avatarQuery={avatarQuery} />;
 }
 
 export function ChipModule({ module, data }: ModuleProps<'chip-nav'>) {
