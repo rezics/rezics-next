@@ -77,6 +77,11 @@ The existing export selection accepts an exact `projection-revision`, a
 `rating-aggregate` for one target and RatingContext, or a `rating-rollup` with
 explicit members and formula. GET replays each owner selection before returning
 its sealed manifest; stale positions and changed disclosure remain failures.
+Aggregate and roll-up positions come from their sealed owner evidence, never the
+current graph counter. Each member retains the Context revision and last sealed
+admission per contributing target. The export operation verifies `rating:read`
+from the caller's assertion for both creation and retrieval, then runs the owner
+read through `targetRead` with that principal and acting subject.
 Projection coordinates come from the selected immutable revision, with current
 part disclosure and dimension resolution. The resource uses
 `prov:specializationOf`; this does not give the projection its subject's type.
@@ -88,12 +93,20 @@ and roll-up values are absent, including withheld means inside roll-up members.
 Native aggregates and derived roll-ups carry distinct origin markers. Unavailable
 roll-up members stay in coverage and produce residuals. These readers do not
 convert imported source statistics into native observations.
+Every measurement has a deterministic IRI pinned to its owner evidence and
+formula. `dqv:computedOn` contains the available pooled contributors, or the
+members meeting the threshold for mean-of-means; unavailable and rejected
+members remain in the explicit member list.
 
 Personal library bundles retain own target ratings as `oa:Annotation` resources
 in `raw.annotation`, motivated by `oa:assessing`. Each body retains its value,
 scale, RatingContext and language-tagged question; projection targets include
 the exact resource's subject and coordinates. A withdrawn rating retains its
 revision and an explicit residual without inventing an annotation body. The
+person's value and revision survive an unavailable Context with a
+`context_unavailable` residual; a currently private projection dependency leaves
+the known target IRI and a `private_dependency` residual.
+The
 principal-filtered target-head inventory participates in the resumable bundle
 fence. Retained rows avoid importing a scoped opinion as a context-free Work
 score.
@@ -101,9 +114,15 @@ score.
 The projection reader adds one exact revision query of at most eight coordinates
 and a bounded target-resolution batch of the subject and frames. Aggregate and
 roll-up reads reuse their owners' sealed-component budgets; export adds one
-member and, for roll-ups, at most 200 member residuals. Library pages hydrate at
-most one scoped rating plus one lookahead, preserving continuation through all
-heads. Each costs one exact head query, one principal-bound immutable rating
-read, one Context read and, for projections, the bounded projection reader.
+member and, for roll-ups, at most 200 member residuals. Library pages hydrate up
+to twenty scoped ratings plus one lookahead. One live-head probe covers the
+page; the existing rating and Context owner readers share one bounded SELECT
+batch, with one further batch for v4 acceptance declarations. Context manifest
+reads share a 1 MiB budget. A SELECT batch may exceed the ordinary per-probe byte
+ceiling, but consumes the same enclosing 4 MiB graph budget and deadline.
+Projection hydration resolves all page projections
+together, reads their exact revisions in one query, then discloses distinct
+subjects and coordinates in batches of at most 64. A missing dependency affects
+only its own row. MainVersion ratings also share one hydration query per page.
 The library fence aggregates only the exporting principal's own rating heads;
 its work grows with that person's library, not the population of raters.

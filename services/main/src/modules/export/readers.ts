@@ -26,7 +26,9 @@ import { targetRead } from '../target/resolve.ts';
 import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import { queryRatingRollup } from '../rating/rollup-read.ts';
 import { resolveRatingTarget } from '../rating/target.ts';
-import { workRead, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadSession, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { ExportDenied } from './store.ts';
+import { AccountAssertionInsufficientScope } from '../account/verify-assertion.ts';
 import { RatingObservationUnavailable } from '../rating/observation.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
 import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
@@ -136,7 +138,7 @@ function portable(value: SemanticValue | { kind: 'unavailable-reference' }): Por
 
 /** Exact readers decide the member payload. No caller-provided member or basis is trusted. */
 async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
-  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
+  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope'], request?: Request): Promise<ExportPlan> {
   if (
     selection.kind === 'projection-revision' ||
     selection.kind === 'rating-aggregate' ||
@@ -151,22 +153,35 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
         const exact = await targetRead(
           deps.env,
           { principal, actingSubject, access: work.access, readers: work },
-          (session) => readProjectionResource(session, selection.resource, selection.reference),
+          (session) => readProjectionResource(request ? { ...session, request } : session, selection.resource, selection.reference),
         );
         position = exact.sourcePosition;
         data = { ...exact, exportActor: actingSubject };
       } else {
         if (!work.targetRatingInventory)
           throw new ExportSourceUnavailable('Rating inventory unavailable');
-        // Account verification belongs to the export operation. Reuse that verified
-        // principal in the ordinary read envelope without requiring another OAuth scope.
-        const readDeps = { ...work, account: { verify: async () => principal } };
-        const request = new Request('http://main.local/v1/exports', {
-          headers: { authorization: 'Bearer owner-read' },
+        if (!request) throw new ExportDenied('Rating export requires the caller assertion');
+        const reader = await work.account.verify(request, ['rating:read']).catch(error => {
+          if (error instanceof AccountAssertionInsufficientScope)
+            throw new ExportDenied('Rating export requires rating:read');
+          throw error;
         });
+        if (reader.issuer !== principal.issuer || reader.subject !== principal.subject
+          || !await work.access.activePrincipalId(reader)) {
+          throw new ExportDenied('Rating export authority is not current');
+        }
+        // Rollup callbacks use the ordinary session shape, but authorization is
+        // fenced by the owner adapter with the real caller's verified authority.
         const read = <T>(
-          operation: (session: import('../work/read-session.ts').WorkReadSession) => Promise<T>,
-        ) => workRead(readDeps, request, { actingSubject }, operation);
+          operation: (session: WorkReadSession) => Promise<T>,
+        ) => targetRead(deps.env, { principal: reader, actingSubject, access: work.access, readers: work },
+          targetSession => {
+            const session = new WorkReadSession(work, request, { actingSubject }, targetSession.position);
+            session.principal = reader;
+            session.query = targetSession.query;
+            session.checkDeadline = targetSession.checkDeadline;
+            return operation(session);
+          });
         if (selection.kind === 'rating-aggregate') {
           const aggregate = await read(async (session) => {
             await resolveRatingTarget(session, selection.reference, selection.target);
@@ -179,6 +194,7 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
           data = {
             resource: selection.target,
             context: selection.reference,
+            ownerEvidence: { contextRevision: aggregate.contextRevision, lastAdmissionId: aggregate.lastAdmissionId },
             exportActor: actingSubject,
             representation: aggregateMeasurement(aggregate),
           };
@@ -195,6 +211,9 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
             context: selection.reference,
             targets: selection.targets,
             formula: selection.formula,
+            ownerEvidence: { contextRevision: rollup.contextRevision,
+              members: rollup.members.flatMap(member => member.status === 'available'
+                ? [{ target: member.target, lastAdmissionId: member.lastAdmissionId }] : []) },
             exportActor: actingSubject,
             representation: rollupMeasurement(rollup),
           };
@@ -512,7 +531,7 @@ export async function discloseExportPlan(env: WorkActivationEnvironment, plan: E
 }
 
 export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
-  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
-  return discloseExportPlan(deps.env, await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope),
+  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope'], request?: Request): Promise<ExportPlan> {
+  return discloseExportPlan(deps.env, await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope, request),
     disclosureViewer(principal));
 }

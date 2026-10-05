@@ -2,15 +2,15 @@ import type { Pool } from 'pg';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
 import { importDigest, type RowMatch } from '../library-import/file-store.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadMissing,
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
-import { readProjectionResource, ratingAnnotation } from '../export/scoped.ts';
-import { readTargetRatingRevision, readTargetRatingContext } from '../rating/target.ts';
+import { readPersonalProjectionResources, ratingAnnotation } from '../export/scoped.ts';
+import { readPersonalRatingEvidence } from '../export/personal-evidence.ts';
 import type { SessionState } from '../session/contract.ts';
 
 export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
-  phases: 8, scopedRatingsPerPage: 1, responseBytes: FILE_IMPORT_COST.bytes } as const;
+  phases: 8, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
@@ -70,7 +70,7 @@ export class LibraryBundleExporter {
     let rowBytes = 0;
     while (phase < LIBRARY_EXPORT_COST.phases && rows.length < limit) {
       // Bound exact scoped-record hydration without limiting the traversable inventory.
-      const pageLimit = phase === 7 ? Math.min(limit, rows.length + LIBRARY_EXPORT_COST.scopedRatingsPerPage) : limit;
+      const pageLimit = limit;
       const page = await this.phase(session,agent,phase,after,pageLimit-rows.length+1);
       const accepted: typeof page = [];
       for (const item of page) {
@@ -182,33 +182,40 @@ export class LibraryBundleExporter {
           throw new WorkReadUnavailable('Rating export principal changed');
       }
       const exported: Array<{ key: string; row: CanonicalRow }> = [];
-      for (const head of result.rows) {
+      if (result.rows.length) {
         const live = await session.query(
-          `SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(head.observation)} rv:observationHead ?head } } LIMIT 2`,
-          2,
+          `SELECT ?observation ?head WHERE {
+          VALUES ?observation { ${result.rows.map(head => iri(head.observation)).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?observation rv:observationHead ?head } } LIMIT ${result.rows.length + 1}`,
+          result.rows.length,
         );
-        if (live.length !== 1 || live[0]?.head?.value !== head.revision)
+        if (live.length !== result.rows.length || result.rows.some(head =>
+          live.filter(row => row.observation?.value === head.observation && row.head?.value === head.revision).length !== 1))
           throw new WorkReadUnavailable('Target rating head changed during export');
-        const rating = await readTargetRatingRevision(session.deps.environment, principalId, head);
-        const context = await readTargetRatingContext(session.deps.environment, head.context);
-        if (!rating || !context)
+      }
+      const evidence = await readPersonalRatingEvidence(session, principalId, result.rows);
+      const projectionTargets = [...new Set(evidence.flatMap(({ head, context }) =>
+        context?.targetGrain === 'projection' ? [head.target] : []))];
+      const projections = await readPersonalProjectionResources(session, projectionTargets);
+      for (const { head, rating, context } of evidence) {
+        if (!rating)
           throw new WorkReadUnavailable('Target rating export evidence unavailable');
         // Preserve a withdrawal as provenance without fabricating an assessing body.
         let target: string | Record<string, unknown> = head.target;
         const residuals: Array<{ kind: string; path: string; detail: Record<string, unknown> }> = [];
-        if (context.targetGrain === 'projection') {
-          try { target = (await readProjectionResource(session, head.target)).representation; }
-          catch (error) {
-            if (!(error instanceof WorkReadMissing)) throw error;
-            // The owner can retain their own rating and known target IRI without
-            // revealing currently denied subject/frame descriptions.
+        if (!context) {
+          residuals.push({ kind: 'context_unavailable', path: '/annotation/oa:hasBody',
+            detail: { reason: 'RatingContext is unavailable' } });
+        } else if (context.targetGrain === 'projection') {
+          const representation = projections.get(head.target);
+          if (representation) target = representation;
+          else {
             residuals.push({ kind: 'private_dependency', path: '/annotation/oa:hasTarget',
               detail: { reason: 'Projection parts are unavailable' } });
           }
         }
         const annotation =
-          rating.value === null
+          rating.value === null || !context
             ? null
             : ratingAnnotation({
                 ...head,
@@ -227,7 +234,8 @@ export class LibraryBundleExporter {
               ratingContext: head.context,
               observationRevision: head.revision,
               ratingAvailability: rating.availability,
-              ...(annotation ? { annotation } : { residual: 'withdrawn-rating' }),
+              ratingValue: rating.value,
+              ...(annotation ? { annotation } : rating.value === null ? { residual: 'withdrawn-rating' } : {}),
               ...(residuals.length ? { residuals } : {}),
             },
           },
@@ -243,22 +251,28 @@ export class LibraryBundleExporter {
       const reader = await session.deps.account.verify(session.request,['rating:read']);
       if (reader.issuer !== principal.issuer || reader.subject !== principal.subject) throw new WorkReadUnavailable('Rating export principal changed');
     }
+    const values = result.rows.length ? await session.query(`SELECT ?observation ?value ?availability ?min ?max WHERE {
+      VALUES (?observation ?revision ?context) { ${result.rows.map(h => `(${iri(h.observation)} ${iri(h.revision)} ${iri(h.context)})`).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?observation rv:observationHead ?revision ; rv:ratingContext ?context .
+        OPTIONAL { ?context rv:contextState rv:Active ; rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max .
+          FILTER NOT EXISTS { ?context rv:protectionHead ?protection } } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:ratingAvailability ?availability .
+        OPTIONAL { ?revision rv:ratingValue ?value }
+        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+    } LIMIT ${result.rows.length * 2 + 1}`,result.rows.length * 2) : [];
     const rows: Array<{ key: string; row: CanonicalRow }> = [];
     for (const h of result.rows) {
-      const values = await session.query(`SELECT ?value ?availability ?min ?max WHERE {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(h.observation)} rv:observationHead ${iri(h.revision)} ; rv:ratingContext ${iri(h.context)} .
-          ${iri(h.context)} rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max . }
-        GRAPH ${iri(GRAPHS.revisions)} { ${iri(h.revision)} rv:ratingAvailability ?availability .
-          OPTIONAL { ${iri(h.revision)} rv:ratingValue ?value }
-          FILTER NOT EXISTS { ${iri(h.revision)} a rv:ErasedRevision } }
-      } LIMIT 2`,2);
-      if (values.length !== 1) throw new WorkReadUnavailable('Rating changed or is unavailable during export');
-      const v = values[0]!, min = Number(v.min!.value), max = Number(v.max!.value);
+      const own = values.filter(value => value.observation?.value === h.observation);
+      if (own.length !== 1) throw new WorkReadUnavailable('Rating changed or is unavailable during export');
+      const v = own[0]!, min = v.min ? Number(v.min.value) : null, max = v.max ? Number(v.max.value) : null;
+      const contextAvailable = min !== null && max !== null;
       // A withdrawn observation has no score to recreate. Keep its private
       // provenance; never invent a predecessor score to satisfy the rating API.
-      rows.push({ key: h.key,row: { ...row(v.value ? 'entry' : 'retained',`rating:${h.key}`,h.work,{ ratingContext: h.context,
-        ratingScaleMax: max,ratingAvailability: v.availability!.value === `${RV}Available` ? 'available' : 'withdrawn' }),
-        score: v.value ? { value: Number(v.value.value),min,max,step: 1 } : null } });
+      rows.push({ key: h.key,row: { ...row(v.value && contextAvailable ? 'entry' : 'retained',`rating:${h.key}`,h.work,{ ratingContext: h.context,
+        ratingScaleMax: max,ratingAvailability: v.availability!.value === `${RV}Available` ? 'available' : 'withdrawn',
+        ...(!contextAvailable ? { observationRevision: h.revision, ratingValue: v.value ? Number(v.value.value) : null,
+          residuals: [{ kind: 'context_unavailable', path: '/score', detail: { reason: 'RatingContext is unavailable' } }] } : {}) }),
+        score: v.value && min !== null && max !== null ? { value: Number(v.value.value),min,max,step: 1 } : null } });
     }
     return rows;
   }

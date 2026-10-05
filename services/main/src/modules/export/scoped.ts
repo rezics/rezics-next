@@ -1,8 +1,14 @@
 import { t } from 'elysia';
+import { createHash } from 'node:crypto';
+import { canonicalExport } from './planner.ts';
 import { readId } from '../work/read-contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
-import { resolveVisibleTargets, type TargetReadSession } from '../target/resolve.ts';
+import {
+  resolveVisibleTargets,
+  TARGET_RESOLVE_COST,
+  type TargetReadSession,
+} from '../target/resolve.ts';
 import { coordinateOf, type Coordinate } from '../projection/dimension.ts';
 import type { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import type { queryRatingRollup } from '../rating/rollup-read.ts';
@@ -12,6 +18,7 @@ export const SCOPED_EXPORT_COST = {
   revisionQueries: 1,
   revisionRows: 9,
   rollupMembers: 200,
+  personalProjections: 21,
 } as const;
 export const scopedSelectionSchemas = (position: ReturnType<typeof t.Object>) => [
   t.Object(
@@ -59,7 +66,12 @@ export const scopedContext = {
   type: '@type',
 } as const;
 const ref = (id: string) => ({ id });
-export function projectionResource(id: string, subject: string, frames: readonly Coordinate[], revision?: string) {
+export function projectionResource(
+  id: string,
+  subject: string,
+  frames: readonly Coordinate[],
+  revision?: string,
+) {
   return {
     '@context': scopedContext,
     id,
@@ -71,6 +83,94 @@ export function projectionResource(id: string, subject: string, frames: readonly
       'rv:dimension': frame.dimension,
     })),
   };
+}
+
+/** Personal pages disclose projections and their shared parts as an inventory,
+ * so one unavailable frame leaves only its own annotation target unexpanded. */
+export async function readPersonalProjectionResources(
+  session: TargetReadSession,
+  resources: readonly string[],
+) {
+  const result = new Map<string, Record<string, unknown>>();
+  if (!resources.length) return result;
+  if (resources.length > SCOPED_EXPORT_COST.personalProjections)
+    throw new WorkReadUnavailable('Personal projection page exceeds its bound');
+  const visible = (await resolveVisibleTargets(session, [...new Set(resources)], 'report')).filter(
+    (target) => target.base === 'projection',
+  );
+  if (!visible.length) return result;
+  const bound = visible.length * SCOPED_EXPORT_COST.revisionRows;
+  const rows = await session.query(
+    `SELECT ?resource ?revision ?subject ?frame ?epoch ?sequence WHERE {
+    VALUES (?resource ?revision) { ${visible.map((target) => `(${iri(target.resource)} ${iri(target.revision)})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ProjectionRevision ; rv:component ?resource ;
+      rv:projectionOf ?subject ; rv:frame ?frame ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+  } LIMIT ${bound + 1}`,
+    bound,
+  );
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const resource = row.resource?.value;
+    if (!resource) throw new WorkReadUnavailable('Personal projection revision is ambiguous');
+    const group = grouped.get(resource) ?? [];
+    group.push(row);
+    grouped.set(resource, group);
+  }
+  const candidates = visible.flatMap((target) => {
+    const group = grouped.get(target.resource) ?? [],
+      first = group[0];
+    if (
+      !first?.subject ||
+      !first.epoch ||
+      !first.sequence ||
+      group.length > SCOPED_EXPORT_COST.frames ||
+      group.some(
+        (row) =>
+          !row.frame ||
+          row.subject?.value !== first.subject!.value ||
+          row.revision?.value !== target.revision ||
+          row.epoch?.value !== first.epoch!.value ||
+          row.sequence?.value !== first.sequence!.value,
+      )
+    )
+      return [];
+    return [
+      {
+        ...target,
+        subject: first.subject.value,
+        frames: group.map((row) => row.frame!.value).sort(),
+      },
+    ];
+  });
+  const references = [
+    ...new Set(candidates.flatMap((target) => [target.subject, ...target.frames])),
+  ];
+  const parts = new Map<string, Awaited<ReturnType<typeof resolveVisibleTargets>>[number]>();
+  for (let start = 0; start < references.length; start += TARGET_RESOLVE_COST.batch) {
+    for (const part of await resolveVisibleTargets(
+      session,
+      references.slice(start, start + TARGET_RESOLVE_COST.batch),
+      'report',
+    ))
+      parts.set(part.resource, part);
+  }
+  for (const target of candidates) {
+    if (!parts.has(target.subject)) continue;
+    const frames = target.frames.map((resource) =>
+      parts.has(resource) ? coordinateOf(parts.get(resource)!) : null,
+    );
+    if (
+      frames.some((frame) => !frame) ||
+      new Set(frames.map((frame) => frame!.dimension)).size !== frames.length
+    )
+      continue;
+    result.set(
+      target.resource,
+      projectionResource(target.resource, target.subject, frames as Coordinate[], target.revision),
+    );
+  }
+  return result;
 }
 
 /** Resolve disclosure for every part, then read only the retained projection revision.
@@ -132,7 +232,12 @@ export async function readProjectionResource(
     revision: exact,
     subject: first.subject.value,
     sourcePosition: { dataEpoch: first.epoch.value, sequence: first.sequence.value },
-    representation: projectionResource(resource, first.subject.value, frames as Coordinate[], exact),
+    representation: projectionResource(
+      resource,
+      first.subject.value,
+      frames as Coordinate[],
+      exact,
+    ),
   };
 }
 
@@ -148,6 +253,14 @@ const metric = (context: string, question: string, language: string, scale: unkn
 export function aggregateMeasurement(aggregate: Aggregate) {
   return {
     '@context': scopedContext,
+    id: measurementId({
+      kind: 'aggregate',
+      context: aggregate.context,
+      target: aggregate.target,
+      contextRevision: aggregate.contextRevision,
+      lastAdmissionId: aggregate.lastAdmissionId,
+      position: aggregate.sourcePosition,
+    }),
     type: 'dqv:QualityMeasurement',
     'dqv:computedOn': ref(aggregate.target),
     'dqv:isMeasurementOf': metric(
@@ -173,8 +286,25 @@ export function aggregateMeasurement(aggregate: Aggregate) {
 export function rollupMeasurement(rollup: Rollup) {
   return {
     '@context': scopedContext,
+    id: measurementId({
+      kind: 'rollup',
+      context: rollup.context,
+      contextRevision: rollup.contextRevision,
+      formula: rollup.formula,
+      members: rollup.members.map((member) =>
+        member.status === 'available'
+          ? { target: member.target, lastAdmissionId: member.lastAdmissionId }
+          : member,
+      ),
+      position: rollup.sourcePosition,
+    }),
     type: 'dqv:QualityMeasurement',
-    'dqv:computedOn': rollup.members.map((member) => ref(member.target)),
+    'dqv:computedOn': rollup.members
+      .filter(
+        (member) =>
+          member.status === 'available' && (rollup.formula === 'pooled' || member.meetsThreshold),
+      )
+      .map((member) => ref(member.target)),
     'dqv:isMeasurementOf': {
       ...metric(rollup.context, rollup.scope.question, rollup.scope.language, rollup.scale),
       id: `${rollup.context}#rollup-${rollup.formula}`,
@@ -195,7 +325,11 @@ export function rollupMeasurement(rollup: Rollup) {
             meanDisplay: member.meanDisplay,
             ...(member.meanDisplay === 'shown' ? { mean: member.mean } : {}),
           }
-        : { target: ref(member.target), status: member.status, reason: member.reason },
+        : {
+            target: ref(member.target),
+            status: member.status,
+            ...(member.status === 'unavailable' ? { reason: member.reason } : {}),
+          },
     ),
     'rv:valueWithheld': rollup.valueWithheld,
     ...(rollup.valueWithheld === null && rollup.value !== null
@@ -203,6 +337,9 @@ export function rollupMeasurement(rollup: Rollup) {
       : {}),
   };
 }
+
+const measurementId = (basis: unknown) =>
+  `urn:rezics:quality-measurement:${createHash('sha256').update(canonicalExport(basis)).digest('hex')}`;
 
 export function ratingAnnotation(input: {
   observation: string;

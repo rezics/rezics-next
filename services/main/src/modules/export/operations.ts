@@ -45,7 +45,7 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
   const previous = await deps.store.readByAdmission(admission.principalId, admission.id);
   if (previous) {
     const current = await readExportPlan(deps.readers, principal, input.actingSubject,
-      input.selection, input.useScope);
+      input.selection, input.useScope, request);
     if (current.manifestDigest !== previous.manifestDigest) throw new ExportStale('export basis changed');
     await deps.access.recordGraphOutcome(admission.id, exportTerminal(admission, previous.position, 'succeeded'));
     return { ...previous, replayed: true };
@@ -66,9 +66,9 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
   let plan: ExportPlan;
   try {
     plan = await readExportPlan(deps.readers, principal, input.actingSubject,
-      input.selection, input.useScope);
+      input.selection, input.useScope, request);
   } catch (error) {
-    if (error instanceof ExportStale || error instanceof ExportSourceUnavailable
+    if (error instanceof ExportDenied || error instanceof ExportStale || error instanceof ExportSourceUnavailable
       || error instanceof ExportSourceNotFound
       || error instanceof RevisionNotFound
       || error instanceof InvalidExportPlan) {
@@ -143,7 +143,7 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
       revisions: data.revisions as import('../wiki/delta.ts').WikiRevisionSet,
       scope: data.scope as import('../wiki/history-read.ts').WikiHistoryScope };
   } else throw new ExportSourceUnavailable('export source locator is unavailable');
-  const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope);
+  const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope, request);
   if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');
   if (await deps.access.activePrincipalId(principal) !== principalId) {
     throw new ExportDenied('export principal is inactive');

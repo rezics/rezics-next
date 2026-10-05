@@ -7,6 +7,7 @@ import {
 } from '../src/modules/export/scoped.ts';
 import type { queryTargetRatingAggregate } from '../src/modules/rating/target-aggregate.ts';
 import type { queryRatingRollup } from '../src/modules/rating/rollup-read.ts';
+import { canonicalExport } from '../src/modules/export/planner.ts';
 
 type Aggregate = Awaited<ReturnType<typeof queryTargetRatingAggregate>>;
 const aggregate: Aggregate = {
@@ -81,6 +82,18 @@ test('DQV retains context meaning and additive components but never a withheld m
   );
 });
 
+test('each aggregate measurement IRI pins its Context, target and sealed admission evidence', () => {
+  const mapped = aggregateMeasurement(aggregate);
+  expect(mapped.id).toMatch(/^urn:rezics:quality-measurement:[a-f0-9]{64}$/);
+  expect(mapped.id).toBe(aggregateMeasurement({ ...aggregate }).id);
+  for (const changed of [
+    { ...aggregate, target: 'https://example.org/another-target' },
+    { ...aggregate, contextRevision: 'https://example.org/another-context-revision' },
+    { ...aggregate, lastAdmissionId: 'ad000000-0000-4000-8000-000000000001' },
+  ])
+    expect(mapped.id).not.toBe(aggregateMeasurement(changed).id);
+});
+
 test('derived rollups retain unavailable members and coverage without leaking member means', () => {
   const rollup: Awaited<ReturnType<typeof queryRatingRollup>> = {
     profile: 'rating-rollup-v1',
@@ -91,7 +104,7 @@ test('derived rollups retain unavailable members and coverage without leaking me
     formula: 'mean-of-means',
     contextRevision: aggregate.contextRevision,
     displayThreshold: 10,
-    memberCount: 2,
+    memberCount: 3,
     coverage: { members: 2, available: 1, meetingThreshold: 0 },
     value: null,
     valueWithheld: 'coverage-below-half',
@@ -112,6 +125,7 @@ test('derived rollups retain unavailable members and coverage without leaking me
         meetsThreshold: false,
       },
       { target: 'hidden', status: 'unavailable', reason: 'unavailable' },
+      { target: 'outside-question', status: 'not-accepted' },
     ],
     rank: null,
     sourcePosition: aggregate.sourcePosition,
@@ -125,6 +139,24 @@ test('derived rollups retain unavailable members and coverage without leaking me
   expect(mapped).not.toHaveProperty('dqv:value');
   expect(mapped['rv:members'][0]).not.toHaveProperty('mean');
   expect(mapped['rv:members'][1]).toMatchObject({ status: 'unavailable', reason: 'unavailable' });
+  expect(mapped['rv:members'][2]).toEqual({
+    target: { id: 'outside-question' },
+    status: 'not-accepted',
+  });
+  expect(() => canonicalExport(mapped)).not.toThrow();
+  expect(mapped['dqv:computedOn']).toEqual([]);
+  expect(rollupMeasurement({ ...rollup, formula: 'pooled' })['dqv:computedOn']).toEqual([
+    { id: aggregate.target },
+  ]);
+  const aboveThreshold = {
+    ...rollup,
+    members: rollup.members.map((member) =>
+      member.status === 'available' ? { ...member, meetsThreshold: true } : member,
+    ),
+  };
+  expect(rollupMeasurement(aboveThreshold)['dqv:computedOn']).toEqual([{ id: aggregate.target }]);
+  expect(mapped.id).not.toBe(aggregateMeasurement(aggregate).id);
+  expect(mapped.id).not.toBe(rollupMeasurement({ ...rollup, formula: 'pooled' }).id);
 });
 
 test('own ratings use assessing annotations and carry value, scale and language-tagged question', () => {
