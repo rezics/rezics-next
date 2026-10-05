@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
@@ -16,6 +15,7 @@ import { ExportStore } from '../../../services/main/src/modules/export/store.ts'
 import { exportRoutes } from '../../../services/main/src/routes/exports.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-concept.ts';
+import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
@@ -64,7 +64,7 @@ test('LIVE01/LIVE07: frozen VNDB concept evidence exports exact source dispositi
       Bun.env.FUSEKI_COMMAND_TOKEN);
     const dependencies = { environment: { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory },
-      account: account.verifier, access: new AccessAdmissionRegistry(accessPool),
+      account: account.verifier, access: accessWithBaseline(accessPool, fuseki),
       exports: new ExportStore(contentPool), sourceAcquisitions: source } as MainWorkDependencies;
     const app = exportRoutes(dependencies);
     const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation', selection };

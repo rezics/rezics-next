@@ -8,7 +8,6 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
 import { claimDigest, createClaim, readAssessment, readReceipt }
   from '../../../services/main/src/modules/verification/graph.ts';
@@ -18,6 +17,7 @@ import { exportRoutes } from '../../../services/main/src/routes/exports.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
@@ -43,7 +43,7 @@ test('FACT05: exact claim and assessment export retains method output while reda
       const environment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
         lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
         objectDirectory: directory };
-      const access = new AccessAdmissionRegistry(accessPool);
+      const access = accessWithBaseline(accessPool, environment.fuseki);
       const verification = new VerificationStore(contentPool);
       await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1,$2,$3)`, [principalId, account.issuer, account.a.id]);

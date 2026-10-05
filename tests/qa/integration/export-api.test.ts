@@ -6,7 +6,6 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
@@ -28,6 +27,7 @@ import { workRoutes } from '../../../services/main/src/routes/works.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { captureVndbFixtureRun, vndbConceptBodies } from '../fixtures/vndb-concept.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -59,7 +59,7 @@ test('LIVE07/LIVE10/LIVE17/COMP08: owner values and fixed manifests export exact
       accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
       prefix: 'semantic/structure/' });
     await structureObjects.initialize();
-    const registry = new AccessAdmissionRegistry(accessPool);
+    const registry = accessWithBaseline(accessPool, fuseki);
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1,$2,$3)`, [principalId, account.issuer, account.a.id]);
     await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')`, [actor]);
