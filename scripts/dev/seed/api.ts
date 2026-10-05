@@ -3,6 +3,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { assertSeedRequest } from './request-schema.ts';
 import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
 
+
+/** POST operations that read or compute and never record anything. */
+const LOOKUP_POSTS = new Set(['/v1/catalogue/candidates', '/v1/classification-resolutions', '/v1/rating-rollups']);
 export interface SeedWriteCounts { written: number; replayed: number; reconciled: number; lookups: number }
 
 export interface SeedEndpoints {
@@ -297,10 +300,10 @@ export class SeedApi {
         const result = await payload<T>(response, `Main ${path}`);
         if (this.endpoints.writeCounts) {
           // Like the catalogue fixture's createdWrites, count seed-record
-          // commands separately from candidate searches and their evidence.
+          // commands separately from candidate searches, their evidence and
+          // roll-up computations, which are POST reads that store nothing.
           const replayed = !!result && typeof result === 'object' && 'replayed' in result && result.replayed === true;
-          this.endpoints.writeCounts[path === '/v1/catalogue/candidates' || path === '/v1/classification-resolutions'
-            ? 'lookups' : replayed ? 'replayed' : 'written']++;
+          this.endpoints.writeCounts[LOOKUP_POSTS.has(path) ? 'lookups' : replayed ? 'replayed' : 'written']++;
         }
         return result;
       }
