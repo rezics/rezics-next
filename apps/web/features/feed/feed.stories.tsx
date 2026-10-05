@@ -433,7 +433,7 @@ export const FollowFromAll: Story = {
     await expect(calls[0]!.operation).toBe('follow');
     await expect(calls[0]!.body).toEqual({
       profile: 'follow-command-v1', actingSubject: storyId(801, 'bbbb'),
-      target: realms.kitchen.id, kind: 'realm', following: true, expectedRevision: null,
+      target: realms.kitchen.id, following: true, expectedRevision: null,
     });
     await expect(calls[0]!.key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     await expect(within(post).getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();

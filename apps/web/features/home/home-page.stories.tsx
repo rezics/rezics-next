@@ -310,9 +310,46 @@ export const TabMenu: Story = {
   },
 };
 
+/** The topic list is portaled beside the modal. A busy frame reports a harmless
+ * resize-observer loop while the tab strip and the popup settle, and Storybook
+ * would treat that window error as a failed render. */
+function ignoreResizeObserverLoop(): () => void {
+  const swallow = (event: ErrorEvent) => {
+    if (!event.message.includes('ResizeObserver loop')) return;
+    event.stopImmediatePropagation();
+  };
+  window.addEventListener('error', swallow, true);
+  return () => window.removeEventListener('error', swallow, true);
+}
+
+/** The picker stays disabled until it has hydrated, and the popup's entrance can
+ * leave an option present before the dialog's layer accepts a pointer. */
+async function openTopics(search: HTMLElement, name: string) {
+  await waitFor(async () => {
+    await expect(search).toBeEnabled();
+    await expect(getComputedStyle(search).pointerEvents).not.toBe('none');
+  });
+  await userEvent.click(search);
+  await waitFor(async () => {
+    const choice = screen.getByRole('option', { name, hidden: true });
+    await expect(choice).toBeVisible();
+    await expect(getComputedStyle(choice).pointerEvents).toBe('auto');
+  }, { timeout: 4_000 });
+}
+
+async function chooseTopic(name: string) {
+  await waitFor(async () => {
+    const choice = screen.getByRole('option', { name, hidden: true });
+    await expect(choice).toBeVisible();
+    await expect(getComputedStyle(choice).pointerEvents).toBe('auto');
+  }, { timeout: 4_000 });
+  await userEvent.click(screen.getByRole('option', { name }));
+}
+
 /** `+` searches topics in the reader's language, refines through broader and narrower ones, and pins one. */
 export const PinATopic: Story = {
   args: props(),
+  beforeEach: ignoreResizeObserverLoop,
   async play({ canvasElement, args }) {
     const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
@@ -320,22 +357,18 @@ export const PinATopic: Story = {
     // Before searching: the reader's unpinned topics and popular ones.
     await expect(dialog.getByRole('region', { name: 'Your topics' })).toHaveTextContent('Mystery');
     const search = dialog.getByRole('combobox', { name: 'Search topics' });
-    await userEvent.click(search);
-    // Presence precedes the popup's enter animation on a loaded browser.
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Cozy games' })).toBeVisible());
+    await openTopics(search, 'Cozy games');
     await userEvent.type(search, 'fan');
-    await userEvent.click(await screen.findByRole('option', { name: 'Fantasy' }));
+    await chooseTopic('Fantasy');
     await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();
     await expect(dialog.getByRole('region', { name: 'Broader' })).toHaveTextContent('Fiction');
     await userEvent.click(within(dialog.getByRole('region', { name: 'Narrower' })).getByRole('button', { name: '仙侠' }));
     await expect(await dialog.findByRole('heading', { name: '仙侠' })).toBeVisible();
     await userEvent.click(dialog.getByRole('button', { name: 'Back' }));
     const returnedSearch = dialog.getByRole('combobox', { name: 'Search topics' });
-    await userEvent.click(returnedSearch);
-    await userEvent.clear(returnedSearch);
-    // Returning to search remounts the popup inside the modal's pointer layer.
-    // Wait for that layer to admit the choice, as well as the choice being present.
-    await waitFor(() => expect(getComputedStyle(screen.getByRole('option', { name: 'Cozy games' })).pointerEvents).toBe('auto'));
+    await waitFor(() => expect(returnedSearch).toBeEnabled());
+    if (returnedSearch instanceof HTMLInputElement && returnedSearch.value) await userEvent.clear(returnedSearch);
+    await openTopics(returnedSearch, 'Cozy games');
     await userEvent.click(screen.getByRole('option', { name: 'Cozy games' }));
     await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
