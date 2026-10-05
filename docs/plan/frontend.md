@@ -306,6 +306,29 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   Works are the generic resource page inside the frame or the package's
   `entity` slot, chosen by Main's page projection and never by a type; their
   data are the reads Main returned, and a read that failed leaves its part out.
+- **Scoped judgments on pages** (2026-10-05, decisions 51–53 of the
+  [semantic model](../contracts/semantic-model.md#identities-variants-and-projections)).
+  A subject's page keeps its own question and every place it has been rated in
+  apart: one region holds the subject's figure, the choice of a place to rate it
+  in, each place's figure and, per Work, a combined view that names its formula
+  and coverage. A place has a page of its own (a projection) that leads with the
+  subject and where, then the facts that hold there grouped by how far each
+  reaches, most specific first (Main's `frameMatch`, never a web rule), then its
+  questions, reviews and discussion. Every score, on every page, is one figure
+  with one set of rules (`scoped-rating/score.ts`): the mean only when Main
+  published it, to two decimals; below the display threshold the count and how
+  many more ratings reveal it; with none, nothing drawn, never a zero or an empty
+  histogram. A person's own rating is read from Main (`scope=mine`) and a stale
+  write retries once on the head Main names, so no device remembers either.
+  A continuity is read as the address says (`?continuity=<id>`, `off` to turn a
+  default off), is off unless chosen, and reaches Main as the reads' `frame`; a
+  Zone package may name a default by the name its Work gives it
+  (`continuity: { default: 'Canon' }`), and the switch sits beside the position
+  control. Event pages look for their participants through Main's reverse
+  statement read (who takes part in the event or in one it belongs to), because
+  Main lists no projections by frame; where that read refuses or answers
+  nothing, or the reader is not signed in, the page ranks no one rather than
+  guess.
 - **Safety.** Each official Zone keeps a complete token-and-layout fallback, a
   reader opt-out and a safe-mode URL; a kill switch works globally, per theme
   and per viewer; a nonce CSP; gzipped budgets with Core Web Vitals and
