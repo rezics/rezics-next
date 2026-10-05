@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { AccountAssertionInsufficientScope, type AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { ContextCommandUnavailable, commitCommand, runAdmittedCommand,
@@ -10,11 +11,24 @@ import { targetRead } from '../target/resolve.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { PROJECTION_ACTION, PROJECTION_FAMILY, PROJECTION_PROFILE, PROJECTION_SCOPE, PROJECTION_WRITE_SCOPE,
+import { PROJECTION_ACTION, PROJECTION_FAMILY, PROJECTION_PROFILE, PROJECTION_SCOPE, PROJECTION_WRITE_SCOPES,
   ProjectionUnavailable, projectionDigest, type ProjectionKey, type ProjectionView } from './schema.ts';
 import { readProjectionViews } from './read.ts';
 import type { ProjectionStore } from './store.ts';
 import { resolveProjection } from './validate.ts';
+
+/** Try only the bounded judgment consents; invalid assertions and unavailable Account checks fail immediately.
+ * Return the selected scope so admission and its current-assertion checks enforce the same consent. */
+export async function verifyProjectionWriter(account: Pick<AccountAssertionVerifier, 'verify'>, request: Request) {
+  for (const scope of PROJECTION_WRITE_SCOPES) {
+    try { return { principal: await account.verify(request, [scope]), scope }; }
+    catch (error) {
+      if (!(error instanceof AccountAssertionInsufficientScope)) throw error;
+      if (scope === PROJECTION_WRITE_SCOPES.at(-1)) throw error;
+    }
+  }
+  throw new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
+}
 
 /** A referenced Resource has a type in the current graph; a fixed release is retained in the revisions graph. */
 const existsGuard = (resource: string) => `FILTER EXISTS {
@@ -80,7 +94,7 @@ export async function getOrCreateProjection(deps: MainWorkDependencies, request:
   const store = deps.projections;
   if (!store) throw new ProjectionUnavailable('Projection owner is unavailable');
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const principal = await deps.account.verify(request, [PROJECTION_WRITE_SCOPE]);
+  const { principal, scope: oauthScope } = await verifyProjectionWriter(deps.account, request);
   const authority = { access: deps.access, principal, actingSubject: input.actingSubject,
     readers: { account: deps.account, governance: deps.governance, media: deps.media, mediaAccess: deps.mediaAccess,
       contextSelections: deps.contextSelections } };
@@ -102,7 +116,7 @@ export async function getOrCreateProjection(deps: MainWorkDependencies, request:
   const digest = projectionDigest(key, input.actingSubject);
   try {
     const receipt = await runAdmittedCommand(env, deps.account, deps.access, request, { family: PROJECTION_FAMILY,
-      oauthScope: PROJECTION_WRITE_SCOPE, scope: PROJECTION_SCOPE, action: PROJECTION_ACTION,
+      oauthScope, scope: PROJECTION_SCOPE, action: PROJECTION_ACTION,
       actingSubject: input.actingSubject, digest, input: key, idempotencyKey: input.idempotencyKey,
       execute: async admission => {
         const committed = await createProjection(env, admission, store, key, digest);

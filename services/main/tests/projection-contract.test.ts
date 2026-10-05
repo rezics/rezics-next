@@ -8,6 +8,9 @@ import { discoverOutboxEventHandlers } from '../src/modules/outbox/event-handler
 import { MAX_FRAMES, MAX_PAGE, PROJECTION_COST, PROJECTION_FAMILY, PROJECTION_SCOPE, ProjectionRefused,
   projectionDigest, projectionKey, projectionPage, projectionQuery, projectionRequest, projectionWriteResponse }
   from '../src/modules/projection/schema.ts';
+import { AccountAssertionDenied, AccountAssertionInsufficientScope, AccountAssertionUnavailable }
+  from '../src/modules/account/verify-assertion.ts';
+import { verifyProjectionWriter } from '../src/modules/projection/command.ts';
 import { openApiOperations } from '../src/routes/projections.ts';
 import { projectionFrameListSql } from '../src/modules/projection/store.ts';
 
@@ -115,4 +118,31 @@ test('the cost contract holds for the largest page, whatever exists about the su
   expect(PROJECTION_COST.partPagesPerListPage).toBe(Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64));
   expect(PROJECTION_COST.partPagesPerListPage).toBe(3);
   expect(PROJECTION_COST.creationWrites.graphCommands).toBe(1);
+});
+
+
+test('projection writers need any existing judgment consent, including review and both reply paths', async () => {
+  const request = new Request('http://main.local/v1/projections');
+  const principal = { issuer: 'https://account.test', subject: 'writer' };
+  for (const granted of ['rating:submit', 'comment:create', 'work:edit'] as const) {
+    const checked: string[][] = [];
+    const account = { verify: async (_request: Request, required: readonly string[]) => {
+      checked.push([...required]);
+      if (required.some(scope => scope !== granted)) throw new AccountAssertionInsufficientScope();
+      return principal;
+    } };
+    expect(await verifyProjectionWriter(account, request)).toEqual({ principal, scope: granted });
+    expect(checked.at(-1)).toEqual([granted]);
+    expect(checked.length).toBeLessThanOrEqual(PROJECTION_COST.writerScopeChecks);
+  }
+  const refused = new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
+  let checks = 0;
+  await expect(verifyProjectionWriter({ verify: async () => { checks++; throw refused; } }, request))
+    .rejects.toBe(refused);
+  expect(checks).toBe(PROJECTION_COST.writerScopeChecks);
+  for (const error of [new AccountAssertionDenied(), new AccountAssertionUnavailable()]) {
+    checks = 0;
+    await expect(verifyProjectionWriter({ verify: async () => { checks++; throw error; } }, request)).rejects.toBe(error);
+    expect(checks).toBe(1);
+  }
 });

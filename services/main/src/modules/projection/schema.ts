@@ -9,8 +9,9 @@ export const PROJECTION_ACTION = 'projection.create';
 export const PROJECTION_FAMILY = 'projection-create-v1';
 /** One gate for every creation, as for Work and Space: any admitted Person may create a projection. */
 export const PROJECTION_SCOPE = 'projection:create:root';
-/** A projection exists to be rated, reviewed or discussed, so its creation asks for the coarsest of those consents. */
-export const PROJECTION_WRITE_SCOPE = 'rating:submit';
+/** Existing judgment-write consents: ratings/reviews, member reply drafts and realm reply identities.
+ * Creating their shared anchor requires any one of these, rather than rating consent from every writer. */
+export const PROJECTION_WRITE_SCOPES = ['rating:submit', 'comment:create', 'work:edit'] as const;
 export const MAX_FRAMES = 8;
 export const MAX_PAGE = 20;
 
@@ -18,6 +19,7 @@ export const MAX_PAGE = 20;
  * lookahead: at most 21 * 9 = 189 parts, or three summary pages of 64. Hidden candidates can require
  * additional batches; the read session's graph, byte and deadline budgets bound the whole request. */
 export const PROJECTION_COST = {
+  writerScopeChecks: PROJECTION_WRITE_SCOPES.length, admissionScopeChecks: 1,
   /** Subject summary, one target batch for the frames, one admission probe, one identity lookup and one
    * projection summary (itself one page of parts). */
   existingReads: { summaries: 2, targetBatches: 1, admissionProbes: 1, identityLookups: 1 },
