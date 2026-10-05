@@ -21,6 +21,8 @@ import {
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { SafetyQueue } from '../../../services/main/src/modules/safety-queue/store.ts';
+import { ORDERED_READ_RETENTION_COST } from '../../../services/main/src/modules/safety-queue/retention.ts';
+import { LibraryImportRetentionWorker } from '../../../services/main/src/modules/library-import/retention-worker.ts';
 import {
   GovernanceStore,
   GovernanceDenied,
@@ -318,6 +320,9 @@ for (const [name, write, read] of [
       await write(held, targets[0]!);
       await commitWithinSecond(later, () => write(later, targets[1]!));
       const before = await read();
+      await access.query('SELECT pg_current_xact_id()');
+      expect(await read()).toBe(before);
+      if (name === 'Realm count') await new RealmDirectoryIndex(access).fence(before);
       await held.query('COMMIT');
       expect(await read()).not.toBe(before);
       if (name === 'Realm count') {
@@ -396,6 +401,8 @@ test('bulk revelation writes append one change and an unrelated writer commits w
     for (let i = 0; i < 32; i++) await store.write(held, row(), null);
     await commitWithinSecond(later, () => store.write(later, high, null));
     const before = await store.generation();
+    await content.query('SELECT pg_current_xact_id()');
+    expect(await store.generation()).toBe(before);
     expect((await store.lookup([low.record, high.record])).has(low.record)).toBe(false);
     await held.query('COMMIT');
     expect(await store.generation()).not.toBe(before);
@@ -532,8 +539,8 @@ test('sequencer locks and rolled-back writers neither block appends nor leave de
   }
 });
 
-test('change fences use bounded index probes as histories grow', async () => {
-  for (const [pool, schema, table, basis, index] of [
+const fenceSignals = () =>
+  [
     [
       access,
       'access',
@@ -544,7 +551,197 @@ test('change fences use bounded index probes as histories grow', async () => {
     [access, 'access', 'realm_count_change', 'realm_count_basis', 'realm_count_change_order'],
     [access, 'access', 'realm_growth_change', 'realm_growth_basis', 'realm_growth_change_order'],
     [content, 'reading_position', 'change', 'current_generation', 'reading_position_change_order'],
-  ] as const) {
+  ] as const;
+
+function changeInsert(schema: string, table: string, xid?: string, size?: number) {
+  return schema === 'access'
+    ? `INSERT INTO access.${table}(epoch${xid ? ',xid' : ''}) SELECT generation${xid ? `,'${xid}'::xid8` : ''}
+      FROM access.recovery_fence ${size ? `CROSS JOIN generate_series(1,${size})` : ''} WHERE id`
+    : `INSERT INTO reading_position.change(data_epoch,epoch${xid ? ',xid' : ''})
+      SELECT o.data_epoch,g.version${xid ? `,'${xid}'::xid8` : ''}
+      FROM content.owner_control o CROSS JOIN reading_position.generation g
+      ${size ? `CROSS JOIN generate_series(1,${size})` : ''} WHERE o.singleton AND g.singleton`;
+}
+
+test('bounded pruning preserves all four fences, unsettled rows and late commits', async () => {
+  for (const [pool, schema, table, basis] of fenceSignals()) {
+    const read = async () =>
+      (await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis;
+    const prune = async () =>
+      (
+        await pool.query(
+          `SELECT ${schema}.${
+            schema === 'access' ? `prune_${table.replace('_change', '')}_changes` : 'prune_changes'
+          }() AS removed`,
+        )
+      ).rows[0]!.removed as number;
+    await pool.query(
+      changeInsert(schema, table, '0', ORDERED_READ_RETENTION_COST.rowsPerSignal * 3),
+    );
+    const oldest = await begin(pool),
+      held = await begin(pool),
+      later = await begin(pool);
+    try {
+      await held.query(changeInsert(schema, table));
+      await commitWithinSecond(later, () => later.query(changeInsert(schema, table)));
+      const before = await read();
+      expect(await prune()).toBe(ORDERED_READ_RETENTION_COST.rowsPerSignal);
+      expect(await read()).toBe(before);
+      for (let i = 0; i < 4; i++) {
+        const removed = await prune();
+        expect(removed).toBeLessThanOrEqual(ORDERED_READ_RETENTION_COST.rowsPerSignal);
+        expect(await read()).toBe(before);
+      }
+      expect(await prune()).toBe(0);
+      // The settled head and later committed row survive; the held row is invisible.
+      expect(
+        (await pool.query(`SELECT count(*)::integer AS count FROM ${schema}.${table}`)).rows[0]!
+          .count,
+      ).toBe(2);
+      await held.query('COMMIT');
+      expect(await read()).not.toBe(before);
+      await oldest.query('ROLLBACK');
+      const stable = await read();
+      expect(await prune()).toBe(2);
+      expect(await read()).toBe(stable);
+      expect(await prune()).toBe(0);
+    } finally {
+      await close(oldest);
+      await close(held);
+      await close(later);
+    }
+  }
+});
+
+test('the existing retention poll prunes each settled change log without moving its fence', async () => {
+  const signals = fenceSignals(),
+    before: string[] = [];
+  for (const [pool, schema, table, basis] of signals) {
+    await pool.query(changeInsert(schema, table, '0', 3));
+    before.push((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis);
+  }
+  await new LibraryImportRetentionWorker(content, access).poll();
+  for (const [i, [pool, schema, table, basis]] of signals.entries()) {
+    expect((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis).toBe(
+      before[i],
+    );
+    expect(
+      (await pool.query(`SELECT count(*)::integer AS count FROM ${schema}.${table}`)).rows[0]!
+        .count,
+    ).toBe(1);
+  }
+});
+
+test('restored high xids settle across Access recovery and the Content revelation restore epoch', async () => {
+  const signals = fenceSignals(),
+    before: string[] = [];
+  const contentEpoch = (
+    await content.query('SELECT data_epoch FROM content.owner_control WHERE singleton')
+  ).rows[0]!.data_epoch;
+  for (const [pool, schema, table, basis] of signals) {
+    await pool.query(changeInsert(schema, table, '9223372036854775808', 3));
+    const restored = (await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis;
+    await pool.query('SELECT pg_current_xact_id()');
+    // Even before recovery rotates the epoch, a logical copy's high xids cannot churn.
+    expect((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis).toBe(
+      restored,
+    );
+    before.push(restored);
+  }
+  const generation = await engageAccessRecoveryFence(access);
+  await content.query('SELECT reading_position.advance_restore_epoch()');
+  await releaseAccessRecoveryFence(access, generation);
+  expect(
+    (await content.query('SELECT data_epoch FROM content.owner_control WHERE singleton')).rows[0]!
+      .data_epoch,
+  ).toBe(contentEpoch);
+  for (const [i, [pool, schema, table, basis]] of signals.entries()) {
+    const restored = (await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis;
+    expect(restored).not.toBe(before[i]);
+    await pool.query('SELECT pg_current_xact_id()');
+    expect((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis).toBe(
+      restored,
+    );
+    await new LibraryImportRetentionWorker(content, access).poll();
+    expect((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis).toBe(
+      restored,
+    );
+    expect(
+      (await pool.query(`SELECT count(*)::integer AS count FROM ${schema}.${table}`)).rows[0]!
+        .count,
+    ).toBe(1);
+    await pool.query(changeInsert(schema, table));
+    expect((await pool.query(`SELECT ${schema}.${basis}() AS basis`)).rows[0]!.basis).not.toBe(
+      restored,
+    );
+  }
+});
+
+test('a revelation restore epoch drains open appenders and new-epoch writes still outdate the fence', async () => {
+  const writer = await begin(content),
+    restore = await begin(content);
+  try {
+    await new ReadingPositionStore(content).write(
+      writer,
+      {
+        record: native(),
+        recordKind: 'statement',
+        continuityWork: native(),
+        occurrence: native(),
+        receipt: randomUUID(),
+      },
+      null,
+    );
+    await expect(
+      restore.query('SELECT reading_position.advance_restore_epoch()'),
+    ).rejects.toMatchObject({ code: '55P03' });
+    await restore.query('ROLLBACK');
+    await writer.query('COMMIT');
+    await content.query('SELECT reading_position.advance_restore_epoch()');
+    const store = new ReadingPositionStore(content),
+      before = await store.generation();
+    await store.publish({
+      record: native(),
+      recordKind: 'statement',
+      continuityWork: native(),
+      occurrence: native(),
+      receipt: randomUUID(),
+    });
+    expect(await store.generation()).not.toBe(before);
+  } finally {
+    await close(writer);
+    await close(restore);
+  }
+});
+
+test('safety continuations stay current during unrelated writes while an older writer pins xmin', async () => {
+  const writer = await begin(access);
+  try {
+    await report(writer, native());
+    await writer.query('COMMIT');
+  } finally {
+    await close(writer);
+  }
+  const oldest = await begin(access),
+    later = await begin(access);
+  try {
+    await report(later, native());
+    await later.query('COMMIT');
+    const queue = new SafetyQueue(access, async () => ({ principalId }));
+    const filter = { actingSubject: actor, limit: 1 };
+    const first = await queue.page(principal, filter);
+    expect(first.nextCursor).not.toBeNull();
+    await access.query('SELECT pg_current_xact_id()');
+    const next = await queue.page(principal, { ...filter, cursor: first.nextCursor! });
+    expect(next.sourcePosition).toEqual(first.sourcePosition);
+  } finally {
+    await close(oldest);
+    await close(later);
+  }
+});
+
+test('change fence cost depends on the unsettled range rather than the settled history', async () => {
+  for (const [pool, schema, table, basis, index] of fenceSignals()) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -557,14 +754,8 @@ test('change fences use bounded index probes as histories grow', async () => {
       ).rows[0]!.sql;
       for (const size of [100, 1_000, 10_000]) {
         await client.query(`TRUNCATE ${schema}.${table}`);
-        await client.query(
-          schema === 'access'
-            ? `INSERT INTO access.${table}(epoch,xid) SELECT generation,'0'::xid8
-            FROM access.recovery_fence CROSS JOIN generate_series(1,$1) WHERE id`
-            : `INSERT INTO reading_position.change(data_epoch,xid) SELECT data_epoch,'0'::xid8
-            FROM content.owner_control CROSS JOIN generate_series(1,$1) WHERE singleton`,
-          [size],
-        );
+        await client.query(changeInsert(schema, table, '0', size));
+        await client.query(changeInsert(schema, table, '9223372036854775808', 7));
         await client.query(`ANALYZE ${schema}.${table}`);
         const plan = (await client.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${sql}`)).rows[0]![
           'QUERY PLAN'
@@ -577,9 +768,35 @@ test('change fences use bounded index probes as histories grow', async () => {
         visit(plan);
         const probes = nodes.filter((node) => node['Index Name'] === index);
         expect(probes).toHaveLength(2);
-        expect(probes.every((node) => Number(node['Actual Rows']) <= 1)).toBe(true);
+        expect(probes.map((node) => Number(node['Actual Rows'])).sort((a, b) => a - b)).toEqual([
+          1, 7,
+        ]);
         expect(probes.every((node) => node['Index Cond'] !== undefined)).toBe(true);
         expect(nodes.some((node) => node['Node Type'] === 'Sort')).toBe(false);
+        const pruneSql = (
+          await client.query<{ sql: string }>(
+            'SELECT prosrc AS sql FROM pg_proc WHERE oid = $1::regprocedure',
+            [
+              `${schema}.${schema === 'access' ? `prune_${table.replace('_change', '')}_changes` : 'prune_changes'}()`,
+            ],
+          )
+        ).rows[0]!.sql;
+        const pruning = (await client.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${pruneSql}`)).rows[0]![
+          'QUERY PLAN'
+        ][0].Plan;
+        nodes.length = 0;
+        visit(pruning);
+        const historyScans = nodes.filter(
+          (node) => node['Relation Name'] === table && /Scan/.test(String(node['Node Type'])),
+        );
+        expect(historyScans.length).toBeGreaterThanOrEqual(2);
+        for (const scan of historyScans) {
+          expect(
+            (Number(scan['Actual Rows']) + Number(scan['Rows Removed by Filter'] ?? 0)) *
+              Number(scan['Actual Loops']),
+            `${schema}.${table} prune: ${JSON.stringify(scan)}`,
+          ).toBeLessThanOrEqual(ORDERED_READ_RETENTION_COST.rowsPerSignal);
+        }
       }
     } finally {
       await client.query('ROLLBACK');
