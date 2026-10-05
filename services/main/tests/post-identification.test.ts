@@ -27,7 +27,7 @@ test('Identification refuses missing evidence, duplicate language slots and unsu
     { ...input, work: { ...input.work, titles: [] } }, { ...input, moveText: true },
   ]) expect(() => checkedIdentification(invalid)).toThrow(InvalidPostIdentification);
 });
-test('Chapter-reading behavior belongs to the composition profile, independently of a Work type', () => {
-  expect(structureProfileFor('book-composition').ownerType).toBe('https://schema.org/CreativeWork');
-  expect(POST_IDENTIFICATION_COST).toMatchObject({ ownerCommands: 5, placements: 1, relationParticipants: 2, titles: 20 });
+test('Identification composes the existing Book profile and publication commands', () => {
+  expect(structureProfileFor('book-composition').ownerType).toBe('https://schema.org/Book');
+  expect(POST_IDENTIFICATION_COST).toMatchObject({ ownerCommands: 8, placements: 1, relationParticipants: 2, titles: 20 });
 });

@@ -19,11 +19,12 @@ const result = t.Object({ profile: t.Literal('post-identification-v1'), identifi
   post: readId, work: readId, mainVersion: readId, structure: readId, occurrence: readId,
   relation: readId, relationRevision: readId, evidence: identificationEvidence, receipt: t.String(),
   receipts: t.Object({ work: t.Nullable(t.String()), metadata: t.Nullable(t.String()), structure: t.String(),
-    placement: t.String(), relation: t.String() }),
+    placement: t.String(), publication: t.Nullable(t.String()), relation: t.String() }),
   sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) });
-const item = t.Object({ ...result.properties, title: readName });
-const link = t.Object({ identification: readId, work: readId, mainVersion: readId,
-  structure: readId, occurrence: readId, title: item.properties.title, receipt: t.String() });
+const item = t.Object({ identification: readId, post: readId, work: readId, title: readName,
+  relationRevision: readId, evidence: identificationEvidence,
+  sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) });
+const link = t.Object({ work: readId, mainVersion: readId, structure: readId, occurrence: readId, title: readName });
 const query = { actingSubject: t.Optional(readId), language: t.Optional(readLanguage) };
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
@@ -51,13 +52,15 @@ export function postIdentificationRoutes(deps: MainWorkDependencies) {
     }
   }).get('/v1/posts/:id/identifications', {
     params: t.Object({ id: readUuid }), query: t.Object({ ...query,
+      operation: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })), kind: t.Optional(t.String()),
+      sourceKind: t.Optional(t.String()), source: t.Optional(t.String({ maxLength: 2048 })),
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })), cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
     response: { 200: t.Object({ profile: t.Literal('post-identifications-v1'), post: readId,
       items: t.Array(link, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
   }, async ({ request, params, query: options }) => {
     try { return Response.json(await workRead(deps, request, options,
-      session => readPostIdentifications(session, `https://rezics.com/id/${params.id}`)), { headers }); }
+      session => readPostIdentifications(session, `https://rezics.com/id/${params.id}`, options.operation)), { headers }); }
     catch (error) { return workReadError(error); }
   }).get('/v1/post-identifications/:id', {
     params: t.Object({ id: readUuid }), query: t.Object(query, { additionalProperties: false }),

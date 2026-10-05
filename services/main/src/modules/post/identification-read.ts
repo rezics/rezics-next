@@ -1,73 +1,86 @@
-import { GRAPHS, iri } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
+import { Value } from 'typebox/value';
+import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { readCurrentOccurrence, readExactDefinition } from '../relation/change.ts';
+import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
+import { readWorkHeader } from '../work/read-header.ts';
 import { readPost } from './read.ts';
-import { readMetadataHeader, selectedMetadata } from '../work/metadata-read.ts';
-import { POST_IDENTIFICATION_COST } from './identification-schema.ts';
-import type { IdentificationRecord } from './identification-store.ts';
+import { identificationEvidence, POST_IDENTIFICATION_COST } from './identification-schema.ts';
 
-const initial = '';
-async function visible(session: WorkReadSession, record: IdentificationRecord, evidence = false) {
-  if (!record.result) return null;
-  const result = record.result;
-  const [work, book] = await session.summaries(evidence ? [result.work, record.intent.placement.book] : [result.work]);
-  if (work?.status !== 'available' || evidence && book?.status !== 'available') return null;
-  const heads = await session.query(`SELECT ?metadata WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(result.work)} rv:head ?head . OPTIONAL { ${iri(result.work)} rv:descriptiveMetadataHead ?metadata }
-  } } LIMIT 2`, 2);
-  if (heads.length !== 1) throw new WorkReadMoved('Identification Work changed');
-  const metadata = await readMetadataHeader(session, result.work, heads[0]?.metadata?.value ?? null);
-  return { ...result, title: selectedMetadata(metadata, session.options.language).title ?? work.name };
+function evidenceOf(value: string | undefined) {
+  if (!value) return null;
+  const url = new URL(value);
+  const post = /^\/v1\/posts\/([0-9a-f-]{36})\/identifications$/.exec(url.pathname)?.[1];
+  const evidence = { kind: url.searchParams.get('kind'), ...(url.searchParams.has('sourceKind')
+    ? { source: { kind: url.searchParams.get('sourceKind'), value: url.searchParams.get('source') } } : {}) };
+  return url.origin === 'https://rezics.com' && post && Value.Check(identificationEvidence, evidence)
+    ? { post: `https://rezics.com/id/${post}`, evidence, operation: url.searchParams.get('operation') } : null;
 }
 
-/** A receipt remains evidence after retirement, but grants no disclosure. */
 export async function readPostIdentification(session: WorkReadSession, id: string) {
-  const record = await session.deps.postIdentifications?.read(id);
-  if (!record?.result) throw new WorkReadMissing('Identification is unavailable');
-  await readPost(session, record.post);
-  const result = await visible(session, record, true);
-  if (!result) throw new WorkReadMissing('Identification is unavailable');
-  return result;
+  const relation = await readCurrentOccurrence(session.deps.environment, `https://rezics.com/id/${id}`);
+  const evidence = evidenceOf(relation?.state.evidence);
+  if (!relation || !evidence) throw new WorkReadMissing('Identification is unavailable');
+  const definition = await readExactDefinition(session.deps.environment, relation.state.definition);
+  if (definition?.notation !== 'composition-part') throw new WorkReadMissing('Identification is unavailable');
+  const part = relation.state.participations.find(row => definition.roleKeys[row.role] === 'part')?.participant;
+  if (part?.kind !== 'resource') throw new WorkReadMissing('Identification is unavailable');
+  await readPost(session, evidence.post);
+  const work = await readWorkHeader(session, part.ref);
+  return { identification: `https://rezics.com/id/${id}`, post: evidence.post, work: work.id,
+    title: work.title, relationRevision: relation.head, evidence: evidence.evidence, sourcePosition: session.position };
 }
 
-/** O(scan) bounded visibility probes over an indexed receipt keyset; a continuation
- * includes only the last visible identity, never a suppressed Work or Book. */
-export async function readPostIdentifications(session: WorkReadSession, post: string) {
-  const store = session.deps.postIdentifications;
-  if (!store) throw new WorkReadUnavailable('Identification owner is unavailable');
+/** Indexed graph incidences, at most 100 candidates and 20 returned Works.
+ * A visibility budget failure is unavailable, never a silently truncated list. */
+export async function readPostIdentifications(session: WorkReadSession, post: string,
+  operation?: string) {
   await readPost(session, post);
-  const generation = await store.position(post), binding = ['post-identifications-v2', post,
-    session.options.actingSubject ?? null, session.options.language ?? null];
+  const binding = ['post-identifications', post, session.options.actingSubject ?? null,
+    session.options.language ?? null, operation ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  if (cursor && cursor.order !== generation) throw new WorkReadMoved('Identification inventory changed');
-  const rows = await store.page(post, cursor?.after ?? initial, POST_IDENTIFICATION_COST.scan + 1);
+  const rows = await session.query(`SELECT ?work ?main ?structure (MIN(STR(?placedOccurrence)) AS ?occurrence) WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(post)} a rv:Post . ?work a schema:Book ; rv:mainVersion ?main .
+      ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
+      ?generation rv:generationState rv:Active . ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
+        rv:occurrence ?placedOccurrence ; rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(post)} .
+      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+      ?relation a rv:RelationOccurrence ; rv:occurrenceHead ?head .
+      ?key a rv:DefinitionKey ; rv:keyDefinition ?definition ; skos:notation "composition-part" .
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?head rv:lifecycle rv:Active ; rv:relationDefinition ?definitionRef ; rv:participation ?part, ?whole .
+      ?definitionRef rv:component ?definition .
+      ?part rv:role ?partRole ; rv:participant ?work . ?whole rv:role ?wholeRole ; rv:participant ?book .
+    }
+    FILTER(?partRole=IRI(CONCAT(STR(?definition),"/role/part")) && ?wholeRole=IRI(CONCAT(STR(?definition),"/role/whole")))
+    FILTER(?work != ?book && STR(?work) > ${lit(cursor?.after ?? '')})
+  } GROUP BY ?work ?main ?structure ORDER BY ?work LIMIT ${POST_IDENTIFICATION_COST.scan + 1}`,
+  POST_IDENTIFICATION_COST.scan + 1);
   const items = [], limit = session.options.limit ?? POST_IDENTIFICATION_COST.page;
   let next: string | null = null;
-  for (const record of rows.slice(0, POST_IDENTIFICATION_COST.scan)) {
-    const result = record.result!;
-    // Retiring the part-of relation changes its Book membership, independently
-    // of the Work's realization. Only its live Post placement decides this link.
-    const active = await session.query(`SELECT ?structure ?occurrence WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(result.work)} a schema:CreativeWork ; rv:mainVersion ?main .
-      ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
-      ?generation rv:generationState rv:Active .
-      ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?occurrence ;
-        rv:occurrenceRole rv:ChapterRole ; <https://schema.org/item> ${iri(post)} .
-      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-    } } ORDER BY ?occurrence LIMIT 2`, 2);
-    if (!active[0]?.structure || !active[0]?.occurrence) continue;
-    const item = await visible(session, record);
-    if (!item) continue;
-    if (items.length === limit) { next = encodeReadCursor(binding, session.position,
-      items[items.length - 1]!.work, generation); break; }
-    // A private source Book's evidence is not needed to name the public Work.
-    items.push({ identification: item.identification, work: item.work, mainVersion: item.mainVersion,
-      structure: active[0].structure.value, occurrence: active[0].occurrence.value, title: item.title, receipt: item.receipt });
+  for (const row of rows.slice(0, POST_IDENTIFICATION_COST.scan)) {
+    if (!row.work || !row.main || !row.structure || !row.occurrence) throw new WorkReadUnavailable('Identification graph is incomplete');
+    if (operation) {
+      const relations = await session.query(`SELECT ?relation WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+        ?participation rv:participant ${iri(row.work.value)} ; rv:occurrence ?relation .
+      } GRAPH ${iri(GRAPHS.current)} { ?relation rv:occurrenceHead ?head } } LIMIT 101`, 101);
+      let found = false;
+      for (const candidate of relations) {
+        const state = await readCurrentOccurrence(session.deps.environment, candidate.relation!.value);
+        if (evidenceOf(state?.state.evidence)?.operation === operation) { found = true; break; }
+      }
+      if (!found) continue;
+    }
+    const summary = (await session.summaries([row.work.value]))[0];
+    if (summary?.status !== 'available') continue;
+    if (items.length === limit) { next = encodeReadCursor(binding, session.position, items.at(-1)!.work); break; }
+    const header = await readWorkHeader(session, row.work.value);
+    items.push({ work: row.work.value, mainVersion: row.main.value, structure: row.structure.value,
+      occurrence: row.occurrence.value, title: header.title });
   }
-  if (!next && rows.length > POST_IDENTIFICATION_COST.scan) {
-    throw new WorkReadUnavailable('Identification visibility scan exceeds its budget');
-  }
-  if (await store.position(post) !== generation) throw new WorkReadMoved('Identification inventory changed');
+  if (!next && rows.length > POST_IDENTIFICATION_COST.scan) throw new WorkReadUnavailable('Identification scan exceeds its budget');
   await readPost(session, post);
   return { profile: 'post-identifications-v1' as const, post, ...pageResult(session, items, next) };
 }

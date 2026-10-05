@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { PostIdentifications } from '../../../services/main/src/modules/post/identification-store.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { readCurrentOccurrence, readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { GLOBAL_CONTEXT_ID, GLOBAL_CONTEXT_SCOPE, GLOBAL_OBSERVATION_ID } from '../../../services/main/src/modules/rating/global.ts';
@@ -11,6 +10,7 @@ import { indexedLabels } from '../../../services/main/src/modules/search/labels.
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
+import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -37,18 +37,10 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
     const [writer, maintainer, stranger] = actors;
     if (!writer || !maintainer || !stranger) throw new Error('Missing fixture members');
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
-    class LostCheckpoint extends PostIdentifications {
-      losePlacement = false;
-      override async checkpoint<T>(id: string, step: string, value: T): Promise<T> {
-        if (this.losePlacement && step === 'placement') { this.losePlacement = false; throw new Error('Lost placement response'); }
-        return super.checkpoint(id, step, value);
-      }
-    }
-    const store = new LostCheckpoint(stack.accessPool);
     const dependencies: MainWorkDependencies = { environment: stack.env, access: stack.access,
       structureObjects: objects, content: stack.content, contentAuthoring: stack.content,
       follows: new FollowsStore(stack.accessPool), reviews: new ReaderReviews(stack.accessPool),
-      postIdentifications: store, account: { verify: async request => {
+      account: { verify: async request => {
         const actor = actors.find(value => request.headers.get('authorization') === `Bearer ${value.token}`);
         if (!actor) throw new Error('Unknown bearer');
         const principal = { ...actor.principal, emailVerified: true as const };
@@ -86,6 +78,12 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
       json<Work>(await send(actor, 'POST', '/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
         title, language: 'en', semanticTypes: [type], actingSubject: actor.actor }), 201);
     const book = await createWork(maintainer, 'Stories from the coast');
+    const introduction = await stack.contribution(book.work, maintainer.actor, 'en', 'The original Book introduction.');
+    const selection = { context: { kind: 'main-version-default' as const, id: book.mainVersion }, work: book.work,
+      contribution: introduction.contribution, publicationDecision: introduction.decision, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer' as const, actingSubject: maintainer.actor };
+    await selectMainDefault(stack.env, stack.admission(maintainer.actor, `publication:select:${book.mainVersion}`,
+      'publication.select', mainSelectionDigest(selection)), selection);
     const structure = await json<Structure>(await send(maintainer, 'POST', '/v1/compositions', {
       profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: maintainer.actor }), 201);
     await grant(writer, `work:edit:${book.work}`, 'work.edit');
@@ -112,13 +110,19 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
     const before = await snapshot();
     const intent = { profile: 'post-identification-v1', placement: { book: book.work, occurrence: post.occurrence },
       evidence: { kind: 'independent-citation', source: { kind: 'citation', value: 'Coastal Anthology, story 2' } },
-      work: { kind: 'new', type: 'https://schema.org/DigitalDocument', titles: [
+      work: { kind: 'new', type: 'https://schema.org/Book', titles: [
         { language: 'en', value: 'Coastal lantern' }, { language: 'hi', value: 'तट का दीपक' },
         { language: 'zh-Hans', value: '海边的灯' }] }, actingSubject: writer.actor };
     const path = `/v1/posts/${short(post.post)}/identifications`, key = randomUUID();
     expect((await send(stranger, 'POST', path, { ...intent, actingSubject: stranger.actor })).status).toBe(403);
-    expect((await stack.accessPool.query('SELECT id FROM access.post_identification WHERE post=$1', [post.post])).rowCount).toBe(0);
-    store.losePlacement = true;
+    const originalOutcome = stack.access.recordGraphOutcome.bind(stack.access);
+    let losePlacement = true;
+    stack.access.recordGraphOutcome = async (id, terminal) => {
+      if (losePlacement && 'action' in terminal && terminal.action === 'composition.change') {
+        losePlacement = false; throw new Error('Lost placement outcome response');
+      }
+      return originalOutcome(id, terminal);
+    };
     expect((await send(writer, 'POST', path, intent, key)).status).toBe(202);
     const identified = await json<Identification>(await send(writer, 'POST', path, intent, key));
     expect(identified.post).toBe(post.post);
@@ -128,12 +132,14 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
     expect(replay).toMatchObject({ work: identified.work, relation: identified.relation, receipt: identified.receipt, replayed: true });
     expect((await send(writer, 'POST', path, { ...intent, evidence: { kind: 'standalone-title' } }, key)).status).toBe(409);
     const retained = await readCurrentOccurrence(stack.env, identified.relation);
-    expect(retained?.state.evidence).toBe(identified.receipt);
+    expect(new URL(retained!.state.evidence!).searchParams.get('kind')).toBe('independent-citation');
     expect(retained?.state.participations.map(item => item.participant)).toEqual(expect.arrayContaining([
       { kind: 'resource', ref: book.work }, { kind: 'resource', ref: identified.work }]));
     const workPage = await json<{ disclosure: string; title: { value: string }; types: string[] }>(
       await publicGet(`/v1/works/${short(identified.work)}?language=zh-Hans`));
-    expect(workPage).toMatchObject({ disclosure: 'public', title: { value: '海边的灯' }, types: ['https://schema.org/DigitalDocument'] });
+    expect(workPage).toMatchObject({ disclosure: 'public', title: { value: '海边的灯' }, types: ['https://schema.org/Book'] });
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(identified.mainVersion)} rv:selectionHead ?selection } }`)).boolean).toBe(true);
     const links = await json<{ items: Array<{ title: { value: string } }> }>(await publicGet(`${path}?language=zh-Hans`));
     expect(links.items[0]?.title.value).toBe('海边的灯');
     const chapter = await json<{ content: { body: Record<string, unknown> }; target: string }>(
@@ -175,8 +181,8 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
     const attached = await json<Identification>(concurrent[0]!);
     expect(await json<Identification>(concurrent[1]!)).toMatchObject({ work: attached.work, relation: attached.relation });
     expect(attached.work).toBe(existing.work);
-    const repeatedEvidence = await json<Identification>(await send(maintainer, 'POST', path, existingIntent));
-    expect(repeatedEvidence.occurrence).toBe(attached.occurrence);
+    const nonBook = await createWork(maintainer, 'A document', 'https://schema.org/DigitalDocument');
+    expect((await send(maintainer, 'POST', path, { ...existingIntent, work: { kind: 'existing', id: nonBook.work } })).status).toBe(409);
     const paged = await json<{ items: Identification[]; nextCursor: string | null }>(
       await publicGet(`${path}?limit=1`));
     expect(paged.items).toHaveLength(1); expect(paged.nextCursor).not.toBeNull();
@@ -189,8 +195,7 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
       lifecycle: 'retired', evidence: current.state.evidence, participations: [
         { role: 'whole', participant: { kind: 'resource', ref: book.work } },
         { role: 'part', participant: { kind: 'resource', ref: identified.work } }], actingSubject: writer.actor }));
-    expect((await json<{ items: Identification[] }>(await publicGet(path))).items.map(item => item.work).sort())
-      .toEqual([existing.work, identified.work].sort());
+    expect((await json<{ items: Identification[] }>(await publicGet(path))).items.map(item => item.work)).toEqual([existing.work]);
     // Parent membership and realization are independent. Withdrawing only the
     // added occurrence hides its reader link; a retry never reactivates it.
     const ownComposition = await json<{ revision: string }>(await publicGet(`/v1/compositions/${short(identified.structure)}`));
@@ -205,5 +210,13 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
     expect((await send(maintainer, 'POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: post.post,
       variantId: post.variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       expectedHead: draft.revisionId, body: 'Changed by the Book maintainer', actingSubject: maintainer.actor })).status).toBe(403);
+    const privatePost = await json<Post>(await send(writer, 'POST', `/v1/works/${short(book.work)}/chapters`, {
+      profile: 'book-chapter-create-v1', title: 'Private chapter', language: 'en', direction: 'ltr',
+      parent: structure.structure, position: 'last', expectedCompositionHead: post.compositionRevision, actingSubject: writer.actor }));
+    const privateWork = await json<Identification>(await send(writer, 'POST', `/v1/posts/${short(privatePost.post)}/identifications`, {
+      ...intent, placement: { book: book.work, occurrence: privatePost.occurrence } }));
+    expect((await publicGet(`/v1/works/${short(privateWork.work)}`)).status).toBe(404);
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(privateWork.mainVersion)} rv:selectionHead ?selection } }`)).boolean).toBe(false);
   } finally { await stack.stop(); }
 }, 180_000);

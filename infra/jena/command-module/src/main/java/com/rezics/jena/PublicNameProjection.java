@@ -89,7 +89,7 @@ final class PublicNameProjection {
                 if (facts != null && facts.context().equals(facts.main()) && facts.main().equals(main)
                     && has(data, main, "selectionHead", facts.selection())) published = true;
             } } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
-            return published || publicComposition(data, main) || has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
+            return published || has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) ? "work" : null;
         }
         if (!listedPublic(data, resource, true)) return null;
@@ -101,64 +101,6 @@ final class PublicNameProjection {
         if (type(data, resource, RV + "Space")) return one(data, resource, "realmCapability") == null
             && one(data, resource, "zoneCapability") == null ? "space" : null;
         return null;
-    }
-    /** A chapter-reading realization follows the Post's current publication.
-     * Names never create a second text selection or a second custody record. */
-    private static boolean publicComposition(DatasetGraph data, Node main) {
-        if (main == null) return false;
-        var structures = data.find(CURRENT, Node.ANY, p("structureOf"), main);
-        try { while (structures.hasNext()) {
-            Node structure = structures.next().getSubject(), generation = one(data, structure, "selectedGeneration");
-            if (!has(data, structure, "structureProfile", p("BookComposition")) || generation == null
-                || !has(data, generation, "generationState", p("Active"))) continue;
-            var placements = data.find(CURRENT, Node.ANY, p("generation"), generation);
-            try { while (placements.hasNext()) {
-                Node placement = placements.next().getSubject();
-                if (!type(data, placement, RV + "OccurrencePlacement") || has(data, placement, "removedBy", Node.ANY)
-                    || !has(data, placement, "occurrenceRole", p("ChapterRole"))) continue;
-                var targets = data.find(CURRENT, placement, uri("https://schema.org/item"), Node.ANY);
-                try { while (targets.hasNext()) if (publicPost(data, targets.next().getObject())) return true; }
-                finally { org.apache.jena.atlas.iterator.Iter.close(targets); }
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(placements); }
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(structures); }
-        return false;
-    }
-    private static boolean publicPost(DatasetGraph data, Node post) {
-        Node revisions = uri(CommandPolicy.REVISIONS), head = one(data, post, "head");
-        if (!type(data, post, RV + "Post") || head == null || has(data, post, "protectionHead", Node.ANY)
-            || data.contains(revisions, head, RDF.type.asNode(), p("ErasedRevision"))) return false;
-        boolean visible = false;
-        var variants = data.find(CURRENT, Node.ANY, p("resource"), post);
-        try { while (variants.hasNext()) {
-            Node variant = variants.next().getSubject(), publication = one(data, variant, "contentPublicationHead");
-            Node eligibility = one(data, variant, "publicSearchEligibilityHead");
-            if (publication == null) continue;
-            var texts = data.find(revisions, publication, p("contentRevision"), Node.ANY);
-            try { while (texts.hasNext()) {
-                Node text = texts.next().getObject();
-                if (data.contains(revisions, text, RDF.type.asNode(), p("ErasedRevision"))) return false;
-                if (type(data, variant, RV + "ContentVariant") && eligibility != null
-                    && data.contains(revisions, eligibility, RDF.type.asNode(), p("ContentSearchEligibilityDecision"))
-                    && data.contains(revisions, eligibility, p("publicationDecision"), publication)
-                    && data.contains(revisions, eligibility, p("disclosure"), p("Public"))
-                    && data.contains(revisions, publication, RDF.type.asNode(), p("ContentPublicationDecision"))
-                    && data.contains(revisions, publication, p("resource"), post)) visible = true;
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(texts); }
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(variants); }
-        return visible;
-    }
-    /** Indexed inverse incidence walks propagate a Post's withdrawal to every
-     * realizing Work, including a removed placement's former owner. */
-    private static void postWorks(DatasetGraph data, Node post, Set<Node> resources) {
-        if (post == null || !type(data, post, RV + "Post")) return;
-        var placements = data.find(CURRENT, Node.ANY, uri("https://schema.org/item"), post);
-        try { while (placements.hasNext()) {
-            Node generation = one(data, placements.next().getSubject(), "generation");
-            Node structure = generation == null ? null : one(data, generation, "structure");
-            Node main = structure == null ? null : one(data, structure, "structureOf");
-            Node work = main == null ? null : one(data, main, "work");
-            if (work != null) resources.add(work);
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(placements); }
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes) {
         if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
@@ -175,13 +117,6 @@ final class PublicNameProjection {
         }
         for (var validation : validations) if (validation.graphs().contains(CommandPolicy.CURRENT))
             for (String value : validation.focus()) if (value.startsWith("https://rezics.com/id/")) resources.add(uri(value));
-        // Publication projections may use urn: variant identities. Follow only
-        // subjects actually mutated, never every validated/read Post target.
-        for (String value : plan.current()) {
-            Node changed = uri(value);
-            postWorks(data, changed, resources);
-            postWorks(data, one(data, changed, "resource"), resources);
-        }
         if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) {
             var names = data.find(uri(CommandPolicy.RECEIPTS), uri(receipt), p("nameResource"), Node.ANY);
             try { while (names.hasNext()) {
@@ -202,12 +137,6 @@ final class PublicNameProjection {
             }
             Node work = one(data, subject, "work");
             if (work != null) resources.add(work);
-            Node main = one(data, subject, "structureOf");
-            Node generation = one(data, subject, "generation");
-            Node placedStructure = generation == null ? null : one(data, generation, "structure");
-            if (main == null && placedStructure != null) main = one(data, placedStructure, "structureOf");
-            Node structureWork = main == null ? null : one(data, main, "work");
-            if (structureWork != null) resources.add(structureWork);
             Node space = one(data, subject, "space");
             if (space != null) resources.add(space);
             for (String capability : Set.of("realmCapability", "zoneCapability")) {
@@ -272,8 +201,6 @@ final class PublicNameProjection {
             } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         }
         if (kind.equals("work")) {
-            names.addAll(CatalogueNamePolicy.expected(data, resource));
-            while (names.size() > 64) names.pollLast();
             var units = data.find(PUBLIC, Node.ANY, p("work"), resource);
             try { while (units.hasNext()) {
                 var titles = data.find(PUBLIC, units.next().getSubject(), p("publicTitle"), Node.ANY);
