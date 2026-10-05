@@ -8,7 +8,7 @@ import { CancelledActivation, DATASET, GRAPHS, IdempotencyConflict, PendingActiv
   prepareComponent, prepareWorkComponent, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { MODEL_COMPONENT, PROFILES } from './schema.ts';
-import { ModelGenerationChanged } from './generation-guard.ts';
+import { ModelGenerationChanged, modelGenerationBootstrapGuard } from './generation-guard.ts';
 
 /**
  * Shared graph command path of the semantic families. It reuses the Work family
@@ -294,9 +294,7 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
     GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(ACTIVE_GENERATION)} } }`);
   if (present.boolean === true) return ACTIVE_GENERATION;
   const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
-  const bootstrapGuard = `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(ACTIVE_GENERATION)} ?p ?o } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?headP ?headO } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`;
+  const bootstrapGuard = modelGenerationBootstrapGuard(ACTIVE_GENERATION);
   const assertBootstrapAvailable = async () => {
     const blocked = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       FILTER NOT EXISTS { ${bootstrapGuard} } }`);

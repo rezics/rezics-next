@@ -14,6 +14,20 @@ export interface ActiveModelGeneration {
 export class ModelGenerationUnavailable extends Error {}
 export class ModelGenerationChanged extends Error {}
 
+/** Initial recording reserves all three slots; retained state requires maintenance. */
+export function modelGenerationBootstrapGuard(generation: string): string {
+  const receipt = `urn:rezics:receipt:${hash(`${generation}\0model-generation`)}`;
+  return `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} ?p ?o } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?headP ?headO } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`;
+}
+
+/** An empty model can still bootstrap; a complete concurrent winner can still dispatch. */
+export function modelGenerationRefusalGuard(generation: string): string {
+  return `FILTER NOT EXISTS { ${modelGenerationHeadGuard(generation)} }
+    FILTER NOT EXISTS { ${modelGenerationBootstrapGuard(generation)} }`;
+}
+
 /**
  * Main's active generation is the exact immutable revision named by the guarded
  * ModelComponent head, admitted by semantic-model-generation-v1, and committed

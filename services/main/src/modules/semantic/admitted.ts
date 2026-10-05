@@ -5,12 +5,12 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { ModelGenerationChanged } from './generation-guard.ts';
+import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generation-guard.ts';
 import { assertIdentityParticipants, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
-import { cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, SemanticChangeRejected,
+import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
   SemanticTargetUnavailable, StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from './command.ts';
 
 export type SemanticAccess = Pick<AccessAdmissionRegistry,
@@ -92,7 +92,15 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
           || error instanceof CommandRejected || error instanceof SemanticTargetUnavailable) throw error;
       }
     }
-    const terminal = await call.readTerminal(registered.id);
+    let terminal = await call.readTerminal(registered.id);
+    if (!terminal && admission.state === 'claimed' && admission.dispatchEligible) {
+      // Initialization and prepared writes can both lose their generation guard.
+      // Refuse under this command's receipt, racing any concurrent successful
+      // dispatch; an unchanged generation keeps transport failures pending.
+      terminal = await sealSemanticRejection(call.env, familyReceiptIri(registered.id, call.family),
+        call.digest, admission, 'generation-changed',
+        modelGenerationRefusalGuard(ACTIVE_GENERATION));
+    }
     if (!terminal) throw new PendingSemanticChange(registered.id, phase);
     await call.access.recordGraphOutcome(registered.id, terminal);
     checkedSemanticTerminal(terminal, registered, call.digest);
