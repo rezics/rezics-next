@@ -338,7 +338,7 @@ test('64 resolved Uses use one SQL batch and bounded exact source/crop index pro
   }
 }, 60_000);
 
-test('a shared rendition retains the requesting Use target, private media access and exact representation labels', async () => {
+test('a shared rendition retains the requesting Use target, private media access and labels derived from its source', async () => {
   const fixture = await selectedImage('authority');
   const { renditions, objects, use, worker, call, owner, image, store } = fixture;
   await owner.grant(`media:owner:${owner.actor}`, 'media.labels');
@@ -369,7 +369,9 @@ test('a shared rendition retains the requesting Use target, private media access
   const candidate = privateCandidates[0];
   const representation = new URL(candidate.url, 'http://main.local').pathname.split('/')[4];
   const [metadata] = await store.presentation.metadata([{ representation, use: privateUse }]);
-  expect(metadata?.metadata.nsfw).toBe('unknown');
+  // A rendition shows its source's label as derived until it is labelled itself (media contract).
+  expect(metadata?.metadata.nsfw).toBe('nsfw');
+  expect(metadata?.metadata.nsfwSourceId).toContain(image.representation);
   expect(metadata?.target).toBe(privateTarget.work);
   const conceal = await owner.send('POST', `/v1/media/uses/${privateUse}/conceal`, {
     actingSubject: owner.actor,
