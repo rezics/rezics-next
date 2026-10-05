@@ -35,20 +35,24 @@ function fixture(bodyCount: number, fieldCount: number, overlap = true, aliases 
               tagline: 'needle' }] })) } : { field: term('title'), text: term('needle') }) })) } };
     }
     if (query.includes('SELECT ?work ?head')) {
-      const refs = [...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)].map(match => match[0].slice(1, -1));
-      return { results: { bindings: refs.map(work => ({ work: term(work), head: term(id(10_000)) })) } };
+      const values = /VALUES \?work \{([^}]+)\}/u.exec(query)![1]!;
+      const refs = [...values.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
+        .map(match => match[0].slice(1, -1));
+      return { results: { bindings: refs.map(work => ({ work: term(work), head: term(id(10_000)),
+        ...(query.includes('?owningWork') ? { owningWork: term(work), owningHead: term(id(10_000)) } : {}),
+      })) } };
     }
     throw new Error(`Unexpected search read: ${query.slice(0, 100)}`);
   };
-  const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('WITH requested')) {
+  const pool = { query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes('jsonb_to_recordset')) {
+      expect(sql).toContain('WITH fence AS MATERIALIZED');
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       expect(targets.length).toBeLessThanOrEqual(64);
-      return { rows: targets.map(target => ({ ordinal: target.ordinal, restricted, assessments: [] })) };
+      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted, assessments: [] })) };
     }
-    return { rows: [] };
-  } }) } as unknown as Pool;
+    throw new Error(`Unexpected disclosure read: ${sql.slice(0, 100)}`);
+  } } as unknown as Pool;
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage };
   configureDisclosure(env, new DisclosureStore(pool));
   return { env, graph, restrict: (value: boolean) => { restricted = value; } };
