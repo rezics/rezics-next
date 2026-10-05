@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { localizedPath } from '../../i18n/locale.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import * as fixture from '../work-page/fixtures.ts';
 import { messages as workPageMessages } from '../work-page/messages.ts';
 import { WorkCredits } from '../work-page/credits.tsx';
+import { workHref } from '../work-page/route.ts';
 import { RatingLine } from '../work-page/ratings.tsx';
 import { WorkFrame } from '../work-page/work-frame.tsx';
 import { WorkAbout } from '../work-page/work-header.tsx';
@@ -49,7 +51,7 @@ const meta = {
   title: 'Showcase/Work header',
   component: Page,
   args: { showcase: art },
-  parameters: { route: { pathname: '/en/w/astral-tide' } },
+  parameters: { route: { pathname: localizedPath(workHref(fixture.workRef), 'en') } },
   async afterEach({ id }) {
     // Screenshots for review by eye; the run sets this flag, ordinary runs skip it.
     if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
