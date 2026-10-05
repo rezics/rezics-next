@@ -191,7 +191,20 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   const fields = input.publicFields ? await querySearchFields(env, input,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
-  const results = rankedSearchMatches([...await discloseSearchMatches(env, matches), ...fields]);
+  const disclosed = await discloseSearchMatches(env, matches);
+  // The qualified census counts MatchUnits, but one Content unit can reach
+  // several Book mains. Replace only disclosed matching Content units with
+  // their distinct Book mains; fences therefore gate the expansion too.
+  // O(512) identities from this relation, with no additional owner or graph read.
+  const contentUnits = new Set([...visibleContent].flatMap(row => row.unit ? [row.unit.value] : []));
+  const chapterUnits = new Set<string>(), chapterMains = new Set<string>();
+  for (const match of disclosed) {
+    if (!match.matchedChapter || !contentUnits.has(match.matchUnit)) continue;
+    chapterUnits.add(match.matchUnit);
+    chapterMains.add(match.mainVersion);
+  }
+  const population = index.population - chapterUnits.size + chapterMains.size;
+  const results = rankedSearchMatches([...disclosed, ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   if (contentPosition && content) {
     const [sourceAfter, checkpointAfter] = await Promise.all([
@@ -204,7 +217,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     }
   }
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
-    context: 'main-version-default' as const, complete: true as const, population: index.population,
+    context: 'main-version-default' as const, complete: true as const, population,
     indexGeneration: index.generation,
     total: results.length, results,
     sourcePosition: { datasetId: 'product' as const,

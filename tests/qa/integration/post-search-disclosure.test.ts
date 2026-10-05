@@ -96,7 +96,7 @@ test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue
       content: stack.content, contentProjection: { content: stack.content,
         cursor: stack.contentCursor, consumer: stack.contentConsumer }, governance: { store: governance, rules } });
     const query = async (profile: 'public-content-phrase-v1' | 'public-main-phrase-v1') =>
-      json<{ total: number; results: { resource?: string; work?: string;
+      json<{ total: number; population: number; results: { resource?: string; work?: string;
         matchedChapter?: { post: string; book: string } }[] }>(await app.handle(new Request('http://main.local/v1/queries', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ profile, phrase, language: 'en' }),
@@ -107,9 +107,19 @@ test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue
       expect(content.results.map(row => row.resource)).toEqual(books.map(() => chapter.post));
       const main = await query('public-main-phrase-v1');
       expect(main.total).toBe(books.length);
+      expect(main.population).toBeGreaterThanOrEqual(main.total);
       expect(main.results.map(row => row.work).sort()).toEqual([...books].sort());
       expect(main.results.every(row => row.matchedChapter?.post === chapter.post
         && row.matchedChapter.book === row.work)).toBe(true);
+      const page = await json<{ total: number; population: number; results: { work: string }[]; next: unknown }>(
+        await app.handle(new Request('http://main.local/v1/queries/page', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ profile: 'public-main-phrase-page-v1', phrase, language: 'en', pageSize: 1 }),
+        })));
+      expect(page).toMatchObject({ total: main.total, population: main.population });
+      expect(page.results).toHaveLength(Math.min(books.length, 1));
+      expect(page.results.every(row => books.includes(row.work))).toBe(true);
+      expect(page.next !== null).toBe(books.length > 1);
     };
     await check([first.work, second.work]);
     const scope = `governance:platform:${randomUUID()}`;
