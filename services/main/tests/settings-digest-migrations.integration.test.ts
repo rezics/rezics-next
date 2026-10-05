@@ -82,6 +82,7 @@ test('settings Access migrations preserve notification kinds, digest ledgers and
   }
   expect((await pool.query(`SELECT position::text FROM access.notification_producer_cursor
     WHERE consumer = 'editorial-notification-v1'`)).rows[0]?.position).toBe('17');
+  // sql-relations-allow: access.notification_producer_head -- asserts that migration 1130 dropped the shared head row
   expect((await pool.query("SELECT to_regclass('access.notification_producer_head') AS head")).rows[0]?.head).toBeNull();
   const appended = Bun.randomUUIDv7();
   await pool.query("SELECT access.append_notification_producer_event('moderation_outcome', $1)", [appended]);
