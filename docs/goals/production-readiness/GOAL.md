@@ -7,7 +7,8 @@ areas: []
 
 Status: no manager since 2026-10-04, when several Goals began to run at once
 and the addresses, relationships and discovery workstream (standing direction 9
-until then) became the [addresses-discovery Goal](../addresses-discovery/GOAL.md).
+until then) became the addresses-discovery Goal, closed on 2026-10-05 and archived on
+`archive/goals`.
 This Goal holds the rest of M4–M8. Its next manager starts it with
 `task goal -- goal start production-readiness --manager <session>`, chooses its
 areas and may split it into further Goals where the milestones below run in
