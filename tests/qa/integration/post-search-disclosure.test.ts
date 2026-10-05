@@ -20,7 +20,8 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-test('Chapter Post search gates each live Book use and restores hits without reprojecting Content', async () => {
+for (const nativeBookText of [false, true]) {
+test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue-only'} Book use and restores hits without reprojecting Content`, async () => {
   const stack = await startMediaStack('post-search-disclosure', { contentProjection: true });
   try {
     await stack.contentCursor.initialize(stack.contentConsumer);
@@ -35,12 +36,14 @@ test('Chapter Post search gates each live Book use and restores hits without rep
         semanticTypes: ['https://schema.org/Book'],
         admission: stack.admission(actor.actor, 'work:create:root', 'work.create',
           metadataWorkRequestDigest(title, ['https://schema.org/Book'], 'und', { catalogue })) });
-      const opening = await stack.contribution(work.work, actor.actor, 'en', 'Book opening');
-      const selection = { context: { kind: 'main-version-default' as const, id: work.mainVersion },
-        work: work.work, contribution: opening.contribution, publicationDecision: opening.decision,
-        expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: actor.actor };
-      await selectMainDefault(stack.env, stack.admission(actor.actor, `publication:select:${work.mainVersion}`,
-        'publication.select', mainSelectionDigest(selection)), selection);
+      if (nativeBookText) {
+        const opening = await stack.contribution(work.work, actor.actor, 'en', 'Book opening');
+        const selection = { context: { kind: 'main-version-default' as const, id: work.mainVersion },
+          work: work.work, contribution: opening.contribution, publicationDecision: opening.decision,
+          expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: actor.actor };
+        await selectMainDefault(stack.env, stack.admission(actor.actor, `publication:select:${work.mainVersion}`,
+          'publication.select', mainSelectionDigest(selection)), selection);
+      }
       await actor.grant(`work:edit:${work.work}`, 'work.edit');
       await actor.grant(`work:read:${work.work}`, 'work.read');
       const composition = await json<{ structure: string; revision: string }>(await actor.send('POST',
@@ -158,3 +161,4 @@ test('Chapter Post search gates each live Book use and restores hits without rep
     await check([first.work, second.work]);
   } finally { await stack.stop(); }
 }, 240_000);
+}
