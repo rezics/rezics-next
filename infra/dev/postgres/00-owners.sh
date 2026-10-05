@@ -10,6 +10,8 @@ CREATE ROLE account LOGIN PASSWORD :'account_password';
 CREATE ROLE access LOGIN PASSWORD :'access_password';
 CREATE ROLE content LOGIN PASSWORD :'content_password';
 CREATE ROLE relay LOGIN PASSWORD :'relay_password';
+-- Horizon lag gauges read other sessions' open transactions (read-only statistics).
+GRANT pg_read_all_stats TO access, content;
 CREATE DATABASE account OWNER account;
 CREATE DATABASE access OWNER access;
 CREATE DATABASE content OWNER content;

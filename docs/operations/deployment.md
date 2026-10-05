@@ -58,6 +58,8 @@ values and the reasons); restore, rebuild and migration jobs open their own
 connections. The server runs with `max_prepared_transactions=0`, as in
 [the local stack](../../infra/dev/compose.yaml): nothing uses two-phase commit,
 and a prepared transaction would hold locks and the snapshot horizon across restarts.
+The Access and Content owner roles hold `pg_read_all_stats`, so the horizon
+consumers' lag gauges can see the oldest open writing transaction in the cluster.
 
 ## Open decision: NixOS and Nomad
 
