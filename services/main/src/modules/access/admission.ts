@@ -21,7 +21,7 @@ import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, basel
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
-import { ensureBaselineScopeGate } from './scope-gates.ts';
+import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicSemantics, readReferenceDisclosure } from './semantic-disclosure.ts';
@@ -154,13 +154,11 @@ export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
 
-/** Observation register, claim and seal share the unchanged authority fence, so
- * raters of different targets of one Context never wait on one row. Their owner
- * takes an exclusive (Context, target) gate before it moves any inventory;
- * closing the scope and bumping its epoch keep the exclusive lock. */
-function observationGateLock(action: string): 'SHARE' | 'UPDATE' {
-  return action === 'rating.observation.set' ? 'SHARE' : 'UPDATE';
-}
+/** Register, claim and seal only check authority, so every action shares its
+ * gate. Closing, epoch bumps and group-generation changes remain exclusive.
+ * Receipt retries and inventory moves serialize on their own key or object;
+ * a scope gate must never become their incidental global mutex. */
+const admissionGateLock = 'SHARE';
 class AuthorityChecked extends Error {}
 
 interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
@@ -459,7 +457,8 @@ export class AccessAdmissionRegistry {
   }
 
   /** Register one private Contribution search before crossing into Content/Jena.
-   * The owning gate and principal serialize this admission with strong closure. */
+   * Shared authority fences exclude strong closure; the target inventory lock
+   * and principal lock bound concurrent private deliveries. */
   async admitContributionSearchRead(principal: VerifiedPrincipal,
     actingSubject: string, contribution: string): Promise<ContributionSearchReadLease> {
     if (!nativeContribution.test(contribution) || !nativeContribution.test(actingSubject)
@@ -474,9 +473,10 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL statement_timeout = '5s'");
       const recoveryGeneration = await requireRecoveryOpen(client);
       const gate = (await client.query<GateRow>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
         [scope])).rows[0];
       if (!gate || !gate.open || !gate.dispatch_open) throw new AdmissionDenied('private search scope is closed');
+      await lockAccessKey(client, `search-read-inventory:${scope}`);
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(
         `SELECT id, enforcement_epoch FROM access.principal
          WHERE account_issuer = $1 AND account_subject = $2 AND active FOR UPDATE`,
@@ -950,7 +950,7 @@ export class AccessAdmissionRegistry {
       }
       const gateResult = await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open
-         FROM access.scope_gate WHERE id = $1 FOR ${observationGateLock(request.action)}`, [request.scope]);
+         FROM access.scope_gate WHERE id = $1 FOR ${admissionGateLock}`, [request.scope]);
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
@@ -965,10 +965,7 @@ export class AccessAdmissionRegistry {
       const principalId = principal.id;
       await requirePlatformParticipation(client, principalId);
       // A shared gate no longer serializes retries of one key; this lock does.
-      if (observationGateLock(request.action) === 'SHARE') {
-        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-          [`admission:${principalId}:${request.action}:${request.idempotencyKey}`]);
-      }
+      await lockAdmissionKey(client, principalId, request.action, request.idempotencyKey);
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
@@ -1402,7 +1399,7 @@ export class AccessAdmissionRegistry {
       const scope = locator.rows[0]!.scope_id;
       const gateResult = await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open FROM access.scope_gate
-         WHERE id = $1 FOR ${observationGateLock(locator.rows[0]!.action)}`, [scope]);
+         WHERE id = $1 FOR ${admissionGateLock}`, [scope]);
       if (gateResult.rows[0]?.dispatch_open !== true) throw new AdmissionDenied('dispatch is fenced');
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
         `SELECT id, principal_id, acting_subject, authority_path, direct_grant_id,
@@ -1719,7 +1716,7 @@ export class AccessAdmissionRegistry {
       const scope = locator.rows[0]!.scope_id;
       const gate = await client.query<GateRow>(
         `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate
-         WHERE id = $1 FOR ${observationGateLock(locator.rows[0]!.action)}`, [scope]);
+         WHERE id = $1 FOR ${admissionGateLock}`, [scope]);
       if (gate.rowCount !== 1) throw new AdmissionUnavailable('scope gate is unavailable');
       const result = await client.query<AdmissionRow & {
         graph_receipt: string | null; graph_outcome: string | null;

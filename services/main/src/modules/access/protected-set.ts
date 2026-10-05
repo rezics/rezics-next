@@ -316,7 +316,7 @@ export class AccessProtectedChanges {
       throw new ControlInvalid('invalid protected change proposal');
     }
     return controlTransaction(this.pool, async client => {
-      const epoch = await lockGate(client, WORK_SCOPE, true);
+      const epoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<ProposalView>(client, actor.id, receipt, 'protected-change', 'propose',
         input.issuerSubject, input.proposalId, async () => {
@@ -707,6 +707,8 @@ export class AccessProtectedChanges {
       throw new ControlInvalid('invalid automation enrollment');
     }
     return controlTransaction(this.pool, async client => {
+      // Acquire the gate before the receipt key, matching all other controls.
+      await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       return receipted(client, actor.id, receipt, 'automation', 'enroll', input.ownerSubject,
         input.enrollmentId, async () => {

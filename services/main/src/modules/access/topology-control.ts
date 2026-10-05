@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { AuthorityControlFamily } from './topology-schema.ts';
+import { lockAccessKey } from './scope-gates.ts';
 
 /** Shared owner transaction, authority lookups and receipt replay for the
  * topology, protected-change, policy, Agent-control and invitation families. */
@@ -186,6 +187,7 @@ export async function receipted<T extends Record<string, unknown>>(client: PoolC
   principalId: string, receipt: ControlReceipt, family: AuthorityControlFamily,
   operation: string, subject: string | null, objectId: string,
   effect: () => Promise<{ epoch: string; result: T }>): Promise<T & { replayed: boolean }> {
+  await lockAccessKey(client, `authority-control:${principalId}:${receipt.idempotencyKey}`);
   const prior = await priorReceipt<T>(client, principalId, receipt, family, operation, objectId);
   if (prior) return { ...prior, replayed: true };
   const { epoch, result } = await effect();

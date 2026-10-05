@@ -69,7 +69,7 @@ export async function realmManager(client: PoolClient, principal: VerifiedPrinci
     validUntil: new Date(Math.min(identity.validUntil.getTime(),row.valid_until.getTime())) };
 }
 
-export async function membershipRoot(client: PoolClient) {
+export async function membershipRoot(client: PoolClient, changesEpoch = true) {
   if (!(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = 'work:create:root'
-    AND open AND dispatch_open FOR UPDATE`)).rowCount) throw new RealmAdminDenied('Membership authority is unavailable');
+    AND open AND dispatch_open FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`)).rowCount) throw new RealmAdminDenied('Membership authority is unavailable');
 }

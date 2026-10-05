@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { lockAccessKey } from '../access/scope-gates.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   type VerifiedPrincipal } from '../access/admission.ts';
 
@@ -7,7 +8,7 @@ const resourceId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const variantId = /^urn:rezics:variant:[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f-]{36}$/;
 const challenge = /^[0-9a-f]{64}$/;
-export const CONTENT_SEARCH_ACCESS_COST = { admitSqlStatements: 15, deliverySqlStatements: 14,
+export const CONTENT_SEARCH_ACCESS_COST = { admitSqlStatements: 16, deliverySqlStatements: 14,
   armSqlStatements: 14, finishSqlStatements: 2,
   pendingPerPrincipal: 16, pendingPerScope: 64 } as const;
 
@@ -56,8 +57,9 @@ export class ContentSearchReadAccess {
       await client.query("SET LOCAL statement_timeout = '5s'");
       const generation = await recovery(client);
       const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
         [scope])).rows[0];
+      await lockAccessKey(client, `search-read-inventory:${scope}`);
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(
         `SELECT id, enforcement_epoch FROM access.principal WHERE account_issuer = $1
           AND account_subject = $2 AND active FOR UPDATE`, [principal.issuer, principal.subject])).rows[0];

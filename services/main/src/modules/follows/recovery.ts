@@ -134,7 +134,7 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
     try {
       const identity = await prepareRealmFollow(pool,member.realm);
       await controlTransaction(pool, async (client) => {
-      await client.query("SELECT id FROM access.scope_gate WHERE id='work:create:root' FOR UPDATE");
+      await client.query("SELECT id FROM access.scope_gate WHERE id='work:create:root' FOR SHARE");
       if (!(await baselineMemberProof(client, member.owner, member.actor))) return;
       if (identity) await registerFollowSpace(client,identity);
       if (

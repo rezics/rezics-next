@@ -4,6 +4,7 @@ import type { VerifiedPrincipal } from './admission.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable } from './admission.ts';
 import { inAccessTransaction, requireRecoveryOpen } from './policy-transaction.ts';
 import { uuidPattern } from './policy-errors.ts';
+import { lockAccessKey } from './scope-gates.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const DOWNLOAD_LEASE_MS = 90_000;
@@ -39,7 +40,8 @@ export class AccessDownloadLeases {
     return inAccessTransaction(this.pool, 'read committed', async client => {
       const recovery = await requireRecoveryOpen(client, true);
       const gate = (await client.query<{ authority_epoch: string; open: boolean }>(
-        'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope])).rows[0];
+        'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope])).rows[0];
+      await lockAccessKey(client, `download-read-inventory:${scope}`);
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(
         `SELECT id, enforcement_epoch FROM access.principal WHERE account_issuer = $1
           AND account_subject = $2 AND active FOR UPDATE`, [principal.issuer, principal.subject])).rows[0];

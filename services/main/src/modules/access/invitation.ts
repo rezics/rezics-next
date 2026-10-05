@@ -201,7 +201,7 @@ export class AccessInvitations {
       throw new ControlInvalid('invalid Agent invitation offer');
     }
     return controlTransaction(this.pool, async (client) => {
-      const epoch = await lockGate(client, scope, true);
+      const epoch = await lockGate(client, scope, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<InvitationView>(
         client,
@@ -687,7 +687,7 @@ export class AccessInvitations {
       throw new ControlInvalid('invalid invitation');
     }
     return controlTransaction(this.pool, async (client) => {
-      const epoch = await lockGate(client, WORK_SCOPE, true);
+      const epoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       const mandate = await requireMandate(client, actor.id, input.issuerSubject, ISSUE_ACTION);
       return receipted<InvitationView>(

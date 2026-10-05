@@ -176,7 +176,7 @@ export class AccessEligibleOrgMemberSet {
       const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(`
         SELECT g.open, g.dispatch_open FROM access.org_roster_scope o
         JOIN access.scope_gate g ON g.id = o.scope_id
-        WHERE o.owner_subject = $1 AND o.scope_id = $2 FOR UPDATE OF g`,
+        WHERE o.owner_subject = $1 AND o.scope_id = $2 FOR SHARE OF g`,
       [context.issuerSubject, scope]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
         throw new MembershipDenied('B roster scope closed');

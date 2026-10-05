@@ -1,5 +1,17 @@
 import type { PoolClient } from 'pg';
 
+/** Serialize an absent receipt as well as an existing one. The key must cover
+ * the receipt's unique identity, not its scope: one retry key can cross scopes.
+ * This object lock is independent of the shared authority fence. */
+export async function lockAccessKey(client: PoolClient, key: string): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
+}
+
+export function lockAdmissionKey(client: PoolClient, principalId: string,
+  action: string, key: string): Promise<void> {
+  return lockAccessKey(client, `admission:${principalId}:${action}:${key}`);
+}
+
 const native = 'https://rezics\\.com/id/[0-9a-f-]{36}';
 const target = new RegExp(`^(${[
   'work:edit', 'contribution:create', 'contribution:edit', 'contribution:publish',

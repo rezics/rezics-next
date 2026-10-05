@@ -143,7 +143,7 @@ export class RealmJoinRequests {
     const recovery = await this.discoverableRequest(realm);
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
-      await membershipRoot(client);
+      await membershipRoot(client, false);
       await this.requestRecovery(client,recovery);
       const policy = await this.policy(client,realm);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`join-request:${actor.id}:${key}`]);
@@ -289,7 +289,7 @@ export class RealmJoinRequests {
       ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
-      await membershipRoot(client);
+      await membershipRoot(client, input.decision === 'accepted');
       const hash = digest(['decide',realm,request,input]);
       const replay = await this.replay(client,manager.id,key,hash);
       if (replay) return replay;

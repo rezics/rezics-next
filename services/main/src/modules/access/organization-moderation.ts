@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { lockAdmissionKey } from './scope-gates.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable,
   type GraphTerminalProof, type RegisteredAdmission, type VerifiedPrincipal } from './admission.ts';
 import { beginOrgRealm, normalizeOrgRealmError, OrgRealmStale, OrgRealmDenied,
@@ -54,15 +55,16 @@ export class AccessOrganizationModeration {
     });
     try {
       // Same first lock as G-012 transitions, then the exact Realm action gate.
-      await beginOrgRealm(client, true);
+      await beginOrgRealm(client, false);
       const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope])).rows[0];
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope])).rows[0];
       if (!gate?.open || !gate.dispatch_open) throw new AdmissionDenied('Realm action gate is closed');
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(`
         SELECT id, enforcement_epoch FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [principal.issuer, principal.subject])).rows[0];
       if (!identity) throw new AdmissionDenied('moderator principal is inactive');
+      await lockAdmissionKey(client, identity.id, ORGANIZATION_MODERATION_ACTION, key);
       const existing = (await client.query<AdmissionRow>(`SELECT *,
         expires_at > clock_timestamp() AS eligible FROM access.admission
         WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3 FOR UPDATE`,

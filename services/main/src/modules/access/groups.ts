@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { groupChangeIntentDigest } from './group-intent.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { currentMembershipDependency, validMembershipDependency,
   type MembershipDependency } from './memberships.ts';
 import { type OperationalBoundsProfile, readAccessBounds } from '../../operations/bounds.ts';
@@ -660,10 +661,11 @@ export class AccessGroups {
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
-        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
         [GROUP_SCOPE]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       const principalId = await this.authorize(client, context.principal, context.issuerSubject, false);
+      await lockAccessKey(client, `group-impact-proposal:${principalId}:${idempotencyKey}`);
       const prior = await this.proposal(client, proposalId);
       if (prior) {
         if (prior.requested_by !== principalId || prior.issuer_subject !== context.issuerSubject

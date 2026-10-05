@@ -67,10 +67,13 @@ export class AccessRealmJoining {
   }
 
   async policyFor(principal: VerifiedPrincipal, realm: string, actor: string) {
+    if (!realmIdPattern.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
+    // Graph preparation holds no Access locks. The transaction still checks the
+    // live policy and rejects a pending graph delivery before disclosing it.
+    const graph = await readRealmPolicy(this.env,realm);
     return realmTransaction(this.pool,realm,false,async client => {
       await realmActor(client,principal,actor,'access.membership.consent');
       const policy = await this.policy(client,realm);
-      const graph = await readRealmPolicy(this.env,realm);
       const member = await this.member(client,realm,actor);
       const invited = (await client.query(`SELECT 1 FROM access.realm_invitation WHERE realm = $1 AND member = $2
         AND state = 'pending' AND expires_at > clock_timestamp() LIMIT 1`,[realm,actor])).rowCount;
@@ -90,7 +93,7 @@ export class AccessRealmJoining {
       || input.expiresInSeconds < 60 || input.expiresInSeconds > REALM_JOIN_COST.maxLifetimeSeconds) throw new RealmAdminInvalid('Invalid invitation');
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
-      await membershipRoot(client);
+      await membershipRoot(client, false);
       return this.receipt(client,manager.id,key,['invite',realm,input],async () => {
         const policy = await this.policy(client,realm);
         const member = await this.member(client,realm,input.member);
@@ -188,7 +191,7 @@ export class AccessRealmJoining {
     const historyAdmission = input.action === 'accept' ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
-      await membershipRoot(client);
+      await membershipRoot(client, input.action === 'accept');
       return this.receipt(client,actor.id,key,['respond',realm,id,input],async () => {
         const row = (await client.query<Invitation>(`SELECT *,expires_at <= clock_timestamp() AS expired
           FROM access.realm_invitation WHERE id = $1 AND realm = $2 AND member = $3 FOR UPDATE`,[id,realm,input.actingSubject])).rows[0];

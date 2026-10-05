@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { lockAdmissionKey } from '../access/scope-gates.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable, type GraphTerminalProof,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { pollScopeId, voteOperationAction, type VoteOperation } from './schema.ts';
@@ -216,13 +217,14 @@ export class AccessVotes {
         await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
       }
       const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope])).rows[0];
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope])).rows[0];
       if (!gate?.open || !gate.dispatch_open) throw new AdmissionDenied('poll authority gate is closed');
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(`
         SELECT id, enforcement_epoch FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [principal.issuer, principal.subject])).rows[0];
       if (!identity) throw new AdmissionDenied('principal is inactive');
+      await lockAdmissionKey(client, identity.id, action, key);
       const existing = (await client.query<AdmissionRow>(`SELECT *, expires_at > clock_timestamp() AS eligible
         FROM access.admission WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3 FOR UPDATE`,
       [identity.id, action, key])).rows[0];
@@ -322,7 +324,7 @@ export class AccessVotes {
     const client = await this.connect();
     try {
       await begin(client);
-      const gate = await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR UPDATE', [admission.scope]);
+      const gate = await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE', [admission.scope]);
       if (gate.rowCount !== 1) throw new AdmissionUnavailable('poll gate is unavailable');
       const row = (await client.query<AdmissionRow & { graph_receipt: string | null; graph_outcome: string | null;
         graph_data_epoch: string | null; graph_sequence: string | null }>(`SELECT *, true AS eligible

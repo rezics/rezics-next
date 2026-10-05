@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { lockAdmissionKey } from '../access/scope-gates.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable,
   type GraphTerminalProof, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { governanceBodyScopeId, proposalExecutionAction } from './schema.ts';
@@ -118,13 +119,14 @@ export class AccessProposalExecutions {
       const scope = governanceBodyScopeId(basis.body);
       await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
       const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
+        'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
       [scope])).rows[0];
       if (!gate?.open || !gate.dispatch_open) throw new AdmissionDenied('body execution gate is closed');
       const identity = (await client.query<{ id: string; enforcement_epoch: string }>(`SELECT id,
         enforcement_epoch FROM access.principal WHERE account_issuer = $1 AND account_subject = $2
         AND active FOR SHARE`, [principal.issuer, principal.subject])).rows[0];
       if (!identity) throw new AdmissionDenied('principal is inactive');
+      await lockAdmissionKey(client, identity.id, proposalExecutionAction, key);
       const prior = await this.prior(client, principal, key, requestDigest, basis);
       if (prior) { await client.query('COMMIT'); return prior; }
       const mandate = (await client.query<{ id: string; generation: string; valid_until: Date;

@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { currentMembershipDependency, validMembershipDependency,
   type MembershipDependency } from './memberships.ts';
 
@@ -156,10 +157,11 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, true);
+      const authorityEpoch = await this.gate(client, false);
       const principalId = await this.authorize(client, context.principal,
         context.issuerSubject, 'access.role.manage',
         permissions.length ? new Date() : undefined);
+      await lockAccessKey(client, `role-revision:${principalId}:${context.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         family_id: string; revision: string }>(`SELECT request_digest, issuer_subject,
           family_id, revision FROM access.role_revision_receipt

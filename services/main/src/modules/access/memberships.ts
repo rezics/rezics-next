@@ -207,13 +207,13 @@ export class AccessMemberships {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async gate(client: PoolClient): Promise<string> {
+  private async gate(client: PoolClient, changesEpoch = true): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (!recovery.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-        FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [SCOPE]);
+        FROM access.scope_gate WHERE id = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [SCOPE]);
     if (!gate.rows[0]) throw new MembershipUnavailable('scope gate missing');
     if (!gate.rows[0].open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('scope closed');
@@ -545,7 +545,7 @@ export class AccessMemberships {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      await this.gate(client);
+      await this.gate(client, false);
       const row = await client.query<{ membership_id: string; result_generation: string;
         result_authority_epoch: string; action: MembershipAction; kind: MembershipKind;
         owner_subject: string; member_subject: string; state: 'joined' | 'left';

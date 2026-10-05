@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { lockAccessKey } from './scope-gates.ts';
 
 /** Local web-auth fixtures predate person provisioning's consent grant. Match
  * that provisioning once, using its original live controller; any prior grant,
  * including an inactive one, means this repair must preserve the owner's choice.
- * Cost: at most nine indexed SQL statements, no graph reads. */
+ * Cost: at most ten indexed SQL statements, no graph reads. */
 export async function repairJoiningFixtureConsent(
   pool: Pool,
   principalId: string,
@@ -20,10 +21,11 @@ export async function repairJoiningFixtureConsent(
         .rowCount ||
       !(
         await client.query(`SELECT 1 FROM access.scope_gate WHERE id = 'work:create:root'
-        AND open AND dispatch_open FOR UPDATE`)
+        AND open AND dispatch_open FOR SHARE`)
       ).rowCount
     )
       throw new Error('Local membership authority is unavailable');
+    await lockAccessKey(client, `fixture-membership-consent:${agent}`);
     const controller = (
       await client.query<{ valid_until: string }>(
         `SELECT r.valid_until::text

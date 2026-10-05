@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable, type MembershipKind } from './memberships.ts';
 
@@ -50,7 +51,7 @@ export class AccessMembershipConsents {
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (!recovery.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
-      'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [SCOPE]);
+      'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE', [SCOPE]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('consent scope closed');
     }
@@ -76,6 +77,7 @@ export class AccessMembershipConsents {
     try {
       if (!transaction) await this.begin(client);
       const principal = await this.principal(client, input.principal);
+      await lockAccessKey(client, `membership-consent:${principal.id}:${input.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; consent_id: string }>(`
         SELECT request_digest, consent_id FROM access.membership_consent_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`,

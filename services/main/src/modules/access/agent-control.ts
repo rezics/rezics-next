@@ -257,7 +257,7 @@ export class AccessAgentControl {
       throw new ControlInvalid('invalid Agent control policy');
     }
     return controlTransaction(this.pool, async (client) => {
-      await lockGate(client, WORK_SCOPE, true);
+      await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, input.subjectId, CONTROL_ACTION);
@@ -382,8 +382,8 @@ export class AccessAgentControl {
       throw new ControlInvalid('invalid Agent recovery');
     }
     return controlTransaction(this.pool, async (client) => {
-      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
-      await lockGate(client, TOPOLOGY_SCOPE, true);
+      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE");
+      await lockGate(client, TOPOLOGY_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<RecoveryView>(
         client,
