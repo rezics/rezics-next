@@ -8,6 +8,7 @@ import { editHref } from '../work-levels-edit/route.ts';
 import { ShowcaseEditor, type ShowcaseEditorProps } from './editor.tsx';
 import { answers, drawnFile, type FixtureArt, loadTitle, mainLike, opaquePng, savedFixture, uploads, work } from './fixtures.ts';
 import { messages } from './messages.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 type Args = { art: FixtureArt; locale: UiLocale; saveArt: ShowcaseEditorProps['saveArt'];
   upload: NonNullable<ShowcaseEditorProps['upload']> };
@@ -314,7 +315,7 @@ export const RightToLeftPreview: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Reader language' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: 'Arabic (right to left)' }));
+    await chooseOption(within(document.body), 'Arabic (right to left)');
     const doc = await stage(canvasElement);
     await waitFor(() => expect(doc.querySelector('.showcase-title')?.textContent).toBe('مدّ النجوم'));
     await expect(doc.querySelector('[dir="rtl"] .showcase')).toBeTruthy();

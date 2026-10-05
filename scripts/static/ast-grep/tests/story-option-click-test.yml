@@ -1,0 +1,12 @@
+id: story-option-click
+valid:
+  - "await chooseOption(within(document.body), 'Romance');"
+  - "await userEvent.click(canvas.getByRole('combobox', { name: 'Topics' }));"
+  - "await userEvent.click(within(menu).getByRole('menuitem', { name: item }));"
+  - "await expect(screen.getByRole('option', { name: 'Romance' })).toBeVisible();"
+  - "await userEvent.keyboard('{ArrowDown}{Enter}');"
+invalid:
+  - "await userEvent.click(await screen.findByRole('option', { name: 'Romance' }));"
+  - "await userEvent.click(within(document.body).getByRole('option', { name: /^Off$/ }));"
+  - 'await userEvent.dblclick(page.getByRole("option", { name }));'
+  - "await userEvent.click(await within(listbox).findByRole('option', { name: option, hidden: true }, { timeout: 4000 }));"

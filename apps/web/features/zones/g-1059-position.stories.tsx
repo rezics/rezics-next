@@ -8,6 +8,7 @@ import { copyOf } from '../wiki/messages.ts';
 import { PositionControl } from '../wiki/position-control.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const chapter = 'Chapter 51: 遠方 — The last lantern';
 const occurrence = '00000000-0000-4000-8000-000000000051';
@@ -109,10 +110,10 @@ export const LaterChapter: Story = {
     await waitFor(() => expect(input).toBeEnabled());
     await focusForTyping(input);
     await userEvent.type(input, chapter);
-    const result = await page.findByRole('option', { name: chapter });
+    await page.findByRole('option', { name: chapter });
     await capture('found');
     if (parameters.selection === 'keyboard') await userEvent.keyboard('{ArrowDown}{Enter}');
-    else await userEvent.click(result);
+    else await chooseOption(page, chapter);
     await waitFor(() =>
       expect(canvas.getByLabelText('Selected address')).toHaveTextContent(
         `/${locale}/wiki?position=${occurrence}`,

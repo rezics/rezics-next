@@ -23,6 +23,7 @@ import { PositionControl } from '../wiki/position-control.tsx';
 import { copyOf } from '../wiki/messages.ts';
 import { positionPickerPage } from '../wiki/position-picker.ts';
 import { browseMessages } from './browse-messages.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const translations = { en: {}, 'zh-Hant': zhHant, 'zh-Hans': zhHans, ja, ko, de, fr, es };
 const communities: RealmPickerItem[] = Array.from({ length: 2400 }, (_, index) => ({
@@ -129,10 +130,7 @@ export const Thousands: Story = {
     await waitFor(() => expect(topics).toBeEnabled());
     await userEvent.click(topics);
     const topicList = await screen.findByRole('listbox', { name: 'Topics' });
-    await waitFor(() =>
-      expect(within(topicList).getByRole('option', { name: /宇宙/ })).toBeVisible(),
-    );
-    await userEvent.click(within(topicList).getByRole('option', { name: /宇宙/ }));
+    await chooseOption(within(topicList), /宇宙/);
     await expect(canvas.getByRole('button', { name: /Exclude 宇宙/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: /Exclude 宇宙/ }));
     await expect(canvas.getByRole('button', { name: /Include 宇宙/ })).toBeVisible();

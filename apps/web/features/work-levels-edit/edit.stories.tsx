@@ -9,11 +9,12 @@ import { copyOf, messages } from './messages.ts';
 import { PartsEditor } from './parts-editor.tsx';
 import { RelationEditor } from './relation-editor.tsx';
 import type { WriteState } from './write.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 /** Opens a styled select and picks an option; the list is portalled, so options are found on the document. */
 async function choose(scope: ReturnType<typeof within>, name: string | RegExp, option: string) {
   await userEvent.click(scope.getByRole('combobox', { name }));
-  await userEvent.click(await within(document.body).findByRole('option', { name: option }));
+  await chooseOption(within(document.body), option);
 }
 
 type Answer = (form: FormData) => WriteState;
@@ -139,9 +140,7 @@ export const RecordRelation: Story = { args: { section: 'relations' },
     const form = canvas.getByRole('form', { name: 'Record a relation' });
     // Every relation's words are Main's rendering, none the page's own.
     await userEvent.click(within(form).getByRole('combobox', { name: 'This Work is' }));
-    const sequel = await within(document.body).findByRole('option', { name: 'Sequel to' });
-    await waitFor(() => expect(sequel).toBeVisible());
-    await userEvent.click(sequel);
+    await chooseOption(within(document.body), 'Sequel to');
     await userEvent.type(within(form).getByRole('textbox', { name: 'The other Work' }), '01944100-0000-7000-8000-000000000031');
     await userEvent.type(within(form).getByRole('textbox', { name: /Evidence/ }), 'https://example.com/sequel');
     await userEvent.click(within(form).getByRole('button', { name: 'Record relation' }));

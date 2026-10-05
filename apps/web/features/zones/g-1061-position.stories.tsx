@@ -9,6 +9,7 @@ import { copyOf } from '../wiki/messages.ts';
 import { PositionControl } from '../wiki/position-control.tsx';
 import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 import { spaceHref } from '../address/path.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const work = '00000000-0000-4000-8000-000000000001';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -165,14 +166,10 @@ export const CjkPhone: Story = {
     await waitFor(() => expect(pending.has(query)).toBe(true));
     await expect(page.queryByRole('option', { name: chapter })).toBeNull();
     pending.get(query)!();
-    const result = await page.findByRole('option', { name: chapter });
+    await page.findByRole('option', { name: chapter });
     await capture('found');
     if (parameters.selection === 'keyboard') await userEvent.keyboard('{ArrowDown}{Enter}');
-    else {
-      // The sheet's opening transition disables pointer events; a loaded run can reach the option before it ends.
-      await waitFor(() => expect(getComputedStyle(result).pointerEvents).not.toBe('none'));
-      await userEvent.click(result);
-    }
+    else await chooseOption(page, chapter);
     const destination = `/${locale}${here}?position=${occurrence}`;
     await waitFor(() =>
       expect(canvas.getByLabelText('Selected address')).toHaveTextContent(destination),

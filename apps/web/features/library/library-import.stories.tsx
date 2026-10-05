@@ -9,6 +9,7 @@ import { messages } from './messages.ts';
 import de from './messages/de.ts';
 import ja from './messages/ja.ts';
 import zhHans from './messages/zh-Hans.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 /** Each render gets its own Main and browser storage, so a story can be replayed. */
 function Harness({ make, entries = [], ...props }: Omit<React.ComponentProps<typeof LibraryImport>, 'api' | 'shelf'>
@@ -160,9 +161,9 @@ export const OtherCsv: Story = { async play({ canvasElement }) {
   await expect(await canvas.findByRole('heading', { name: 'Map your columns' })).toBeVisible();
   await expect(canvas.getByRole('button', { name: 'Check my books' })).toBeDisabled();
   await userEvent.click(canvas.getByRole('combobox', { name: 'Title (required)' }));
-  await userEvent.click(await within(document.body).findByRole('option', { name: 'Title' }));
+  await chooseOption(within(document.body), 'Title');
   await userEvent.click(canvas.getByRole('combobox', { name: 'Status' }));
-  await userEvent.click(await within(document.body).findByRole('option', { name: 'Status' }));
+  await chooseOption(within(document.body), 'Status');
   await expect(await canvas.findByText('“Dropped”')).toBeVisible();
   await userEvent.click(canvas.getByRole('button', { name: 'Check my books' }));
   await expect(await canvas.findByRole('button', { name: /^Matched/ })).toBeVisible();

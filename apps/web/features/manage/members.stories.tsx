@@ -6,6 +6,7 @@ import { MembersView } from './members-view.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmFrame } from './realm-frame.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const record: AdminRecord = { members: [], roles: [], settings: [] };
 const reset = () => { record.members.length = 0; record.roles.length = 0; };
@@ -52,7 +53,7 @@ async function openMenu(canvas: ReturnType<typeof within>, name: string, item: s
 async function choose(dialog: ReturnType<typeof within>, label: string, option: string) {
   const trigger = dialog.getByRole('combobox', { name: label });
   await userEvent.click(trigger);
-  await userEvent.click(body().getByRole('option', { name: option }));
+  await chooseOption(body(), option);
   await waitFor(() => expect(body().queryByRole('listbox')).toBeNull());
   await waitFor(() => expect(trigger).toHaveFocus());
 }

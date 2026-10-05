@@ -19,6 +19,7 @@ import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
@@ -322,28 +323,14 @@ function ignoreResizeObserverLoop(): () => void {
   return () => window.removeEventListener('error', swallow, true);
 }
 
-/** The picker stays disabled until it has hydrated, and the popup's entrance can
- * leave an option present before the dialog's layer accepts a pointer. */
+/** The picker stays disabled until it has hydrated, and the dialog's layer may not take a pointer at once. */
 async function openTopics(search: HTMLElement, name: string) {
   await waitFor(async () => {
     await expect(search).toBeEnabled();
     await expect(getComputedStyle(search).pointerEvents).not.toBe('none');
   });
   await userEvent.click(search);
-  await waitFor(async () => {
-    const choice = screen.getByRole('option', { name, hidden: true });
-    await expect(choice).toBeVisible();
-    await expect(getComputedStyle(choice).pointerEvents).toBe('auto');
-  }, { timeout: 4_000 });
-}
-
-async function chooseTopic(name: string) {
-  await waitFor(async () => {
-    const choice = screen.getByRole('option', { name, hidden: true });
-    await expect(choice).toBeVisible();
-    await expect(getComputedStyle(choice).pointerEvents).toBe('auto');
-  }, { timeout: 4_000 });
-  await userEvent.click(screen.getByRole('option', { name }));
+  await waitFor(() => expect(screen.getByRole('option', { name, hidden: true })).toBeVisible(), { timeout: 4_000 });
 }
 
 /** `+` searches topics in the reader's language, refines through broader and narrower ones, and pins one. */
@@ -363,7 +350,7 @@ export const PinATopic: Story = {
     await openTopics(search, 'Cozy games');
     await userEvent.type(search, 'fan');
     await waitFor(() => expect(search).toHaveValue('fan'));
-    await chooseTopic('Fantasy');
+    await chooseOption(screen, 'Fantasy');
     await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();
     await expect(dialog.getByRole('region', { name: 'Broader' })).toHaveTextContent('Fiction');
     await userEvent.click(within(dialog.getByRole('region', { name: 'Narrower' })).getByRole('button', { name: '仙侠' }));
@@ -373,7 +360,7 @@ export const PinATopic: Story = {
     await waitFor(() => expect(returnedSearch).toBeEnabled());
     if (returnedSearch instanceof HTMLInputElement && returnedSearch.value) await userEvent.clear(returnedSearch);
     await openTopics(returnedSearch, 'Cozy games');
-    await userEvent.click(screen.getByRole('option', { name: 'Cozy games' }));
+    await chooseOption(screen, 'Cozy games');
     await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());

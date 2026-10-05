@@ -14,6 +14,7 @@ import zhHans from './messages/zh-Hans.ts';
 import { StudioFrame } from './studio-frame.tsx';
 import { StudioWork, type WorkTabContent } from './studio-work.tsx';
 import type { ContentsPage, MyText } from './types.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 type Props = ComponentProps<typeof StudioWork>;
 
@@ -466,7 +467,7 @@ export const Realms: Story = {
     const choices = within(document.body);
     await expect(await choices.findByRole('option', { name: /Chinese Web Fiction/ })).toHaveAttribute('data-disabled');
     await expect(canvas.getByText('The Realm reviews your published Simplified Chinese text.')).toBeInTheDocument();
-    await userEvent.click(choices.getByRole('option', { name: /Classic Literature/ }));
+    await chooseOption(choices, /Classic Literature/);
     // The picker can retain its closing option list; scope the policy to the submission form.
     const submit = canvas.getByRole('button', { name: 'Submit' });
     await expect(within(submit.closest('form')!).getByText('Moderators review every submission'))
@@ -484,7 +485,7 @@ export const RealmOpen: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Find a community' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /Open Shelf/ }));
+    await chooseOption(within(document.body), /Open Shelf/);
     await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent('Submitted to Open Shelf · 开放书架 and accepted.');
   },
@@ -495,7 +496,7 @@ export const RealmRefused: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Find a community' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /Classic Literature/ }));
+    await chooseOption(within(document.body), /Classic Literature/);
     await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('This identity can’t submit to this Realm.');
   },

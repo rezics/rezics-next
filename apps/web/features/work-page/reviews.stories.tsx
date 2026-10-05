@@ -8,6 +8,7 @@ import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { ReviewsSection } from './reviews.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const signedOut = {
   kind: 'signed-out' as const,
@@ -101,7 +102,7 @@ export const SortAndFilter: Story = {
     );
     await waitFor(() => expect(canvas.getAllByRole('article')[0]).toHaveTextContent('林梅'));
     await userEvent.click(canvas.getByRole('combobox', { name: 'Rating' }));
-    await userEvent.click(within(document.body).getByRole('option', { name: '1 star' }));
+    await chooseOption(within(document.body), '1 star');
     await waitFor(() => expect(canvas.getByText('No reviews match these filters')).toBeVisible());
     await userEvent.click(canvas.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() => expect(canvas.getAllByRole('article')).toHaveLength(3));

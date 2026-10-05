@@ -16,6 +16,7 @@ import { workHref } from './route.ts';
 import { OverviewLayout, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { YourEdition } from './your-edition.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
@@ -174,7 +175,7 @@ export const EditionChoice: StoryObj<Meta<EditionArgs>> = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('combobox', { name: 'Edition' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: 'Sword Art Online 1 (audiobook)' }));
+    await chooseOption(within(document.body), 'Sword Art Online 1 (audiobook)');
     await userEvent.click(canvas.getByRole('button', { name: 'Save choice' }));
     await expect(await canvas.findByText('Saved.')).toBeVisible();
   },

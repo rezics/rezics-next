@@ -27,6 +27,7 @@ import zhHant from './messages/zh-Hant.ts';
 import zhHans from './messages/zh-Hans.ts';
 import ja from './messages/ja.ts';
 import ko from './messages/ko.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const zh = { ...messages, ...zhHans };
 const zhHantMessages: ConceptMessages = { ...messages, ...zhHant };
@@ -111,7 +112,7 @@ export const Concept: Story = {
     );
     await userEvent.click(bar.getByRole('combobox', { name: 'Topics' }));
     await userEvent.type(bar.getByRole('combobox', { name: 'Topics' }), 'rom');
-    await userEvent.click(await screen.findByRole('option', { name: 'Romance' }));
+    await chooseOption(screen, 'Romance');
     await expect(navigate).toHaveBeenLastCalledWith(
       localizedPath(`${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(3)}`, 'en'),
       { scroll: false },

@@ -10,11 +10,12 @@ import * as fixture from './fixtures.ts';
 import { createMemoryMain, type MemoryMain, memoryReader, memoryTracking } from './memory.ts';
 import { SeriesProgressPanel } from './series-progress-panel.tsx';
 import { TrackingControl } from './tracking-control.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 /** Opens a styled select and picks an option; the list is portalled, so options are found on the document. */
 async function choose(scope: ReturnType<typeof within>, name: string | RegExp, option: string) {
   await userEvent.click(scope.getByRole('combobox', { name }));
-  await userEvent.click(await within(document.body).findByRole('option', { name: option }));
+  await chooseOption(within(document.body), option);
 }
 
 interface Args {

@@ -23,6 +23,7 @@ import { actor, fixtureFollow, memoryRelationships, target } from './fixtures.ts
 import { FollowingManager } from './manager.tsx';
 import { messages } from './messages.ts';
 import { RelationshipWatch } from './watch.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const shellCopy = { en: shell, de: { ...shell, ...shellDe }, es: { ...shell, ...shellEs }, fr: { ...shell, ...shellFr },
   ja: { ...shell, ...shellJa }, ko: { ...shell, ...shellKo }, 'zh-Hans': { ...shell, ...shellHans }, 'zh-Hant': { ...shell, ...shellHant } };
@@ -82,7 +83,7 @@ export const Thousands: Story = {
     await expect(await inventory.findByText('Community 30')).toBeVisible();
     await expect(inventory.getByText('Selected: 1')).toBeVisible();
     await userEvent.click(inventory.getByRole('combobox', { name: 'Notification level for selected' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /^Off$/ }));
+    await chooseOption(within(document.body), /^Off$/);
     await expect(await inventory.findByRole('button', { name: 'Notifications: Off' })).toBeVisible();
     await expect(inventory.queryByText('Selected: 1')).toBeNull();
     const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
@@ -121,13 +122,13 @@ export const StyledFilters: Story = {
     const inventory = within(within(canvasElement).getByRole('region', { name: 'Following' }));
     await inventory.findByText('Community 29');
     await userEvent.click(inventory.getByRole('combobox', { name: /^Type$/ }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /^Works$/ }));
+    await chooseOption(within(document.body), /^Works$/);
     await expect(await inventory.findByText(messages.en.noResults)).toBeVisible();
     await userEvent.click(inventory.getByRole('combobox', { name: /^Type$/ }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /^All types$/ }));
+    await chooseOption(within(document.body), /^All types$/);
     await expect(await inventory.findByText('Community 29')).toBeVisible();
     await userEvent.click(inventory.getByRole('combobox', { name: /^Sort$/ }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: /^Pinned$/ }));
+    await chooseOption(within(document.body), /^Pinned$/);
     await expect(inventory.getByRole('combobox', { name: /^Sort$/ })).toHaveTextContent('Pinned');
     await expect(await inventory.findByText('中文网络小说')).toBeVisible();
   },

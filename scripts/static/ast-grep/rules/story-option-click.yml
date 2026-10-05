@@ -1,0 +1,21 @@
+id: story-option-click
+language: Tsx
+severity: error
+message: Stories click a combobox or listbox option through chooseOption, which waits for the popup to accept a pointer.
+note: |
+  A popup's entrance transition keeps pointer-events: none on its options, so a click found by role "option" fails
+  under load. Import chooseOption from apps/web/features/stories/choose-option.ts.
+files:
+  - apps/web/features/**/*.stories.tsx
+ignores:
+  - apps/web/features/stories/**
+rule:
+  pattern: userEvent.$METHOD($TARGET)
+constraints:
+  METHOD:
+    regex: ^(click|dblclick)$
+  TARGET:
+    any:
+      - kind: call_expression
+      - kind: await_expression
+    regex: (?s)^(await\s+)?[^,]*?\.(find|get|query)(All)?ByRole\(\s*['"]option['"]

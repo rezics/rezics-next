@@ -1,0 +1,26 @@
+id: story-option-click
+snapshots:
+  'await userEvent.click(await screen.findByRole(''option'', { name: ''Romance'' }));':
+    labels:
+    - source: 'userEvent.click(await screen.findByRole(''option'', { name: ''Romance'' }))'
+      style: primary
+      start: 6
+      end: 77
+  'await userEvent.click(await within(listbox).findByRole(''option'', { name: option, hidden: true }, { timeout: 4000 }));':
+    labels:
+    - source: 'userEvent.click(await within(listbox).findByRole(''option'', { name: option, hidden: true }, { timeout: 4000 }))'
+      style: primary
+      start: 6
+      end: 116
+  'await userEvent.click(within(document.body).getByRole(''option'', { name: /^Off$/ }));':
+    labels:
+    - source: 'userEvent.click(within(document.body).getByRole(''option'', { name: /^Off$/ }))'
+      style: primary
+      start: 6
+      end: 83
+  await userEvent.dblclick(page.getByRole("option", { name }));:
+    labels:
+    - source: userEvent.dblclick(page.getByRole("option", { name }))
+      style: primary
+      start: 6
+      end: 60

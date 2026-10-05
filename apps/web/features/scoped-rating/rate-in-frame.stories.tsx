@@ -11,6 +11,7 @@ import { messages } from './messages.ts';
 import { RateInFrame } from './rate-in-frame.tsx';
 import type { Viewer } from './question-rating.tsx';
 import type { FrameSource } from './sources.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 // Rating a character "in" an episode: choose the place, then the questions that accept it, with their own figures.
 // The sheet opens at once so each state can be reviewed; a phone gets it as a panel from the edge.
@@ -83,8 +84,7 @@ export const ChoosePlace: Story = {
       await userEvent.clear(search);
       await userEvent.type(search, query);
       // The list is briefly aria-hidden while a search is answered; the options are there either way.
-      const found = await screen.findByRole('option', { name: option, hidden: true }, { timeout: 4000 });
-      await userEvent.click(found);
+      await chooseOption(screen, option);
     };
     await choose('Hunsford', /Episode 3/);
     await seeRole(dialog, 'button', 'Remove Episode 3 · Hunsford');
@@ -320,7 +320,7 @@ export const ChooseAcrossWorks: Story = {
       }, { timeout: 5000 });
       await userEvent.clear(search);
       await userEvent.type(search, query);
-      await userEvent.click(await screen.findByRole('option', { name: option, hidden: true }, { timeout: 4000 }));
+      await chooseOption(screen, option);
     };
     await choose('Episodes', 'Hunsford', /Episode 3/);
     await choose('Releases', 'Blu-ray', /Blu-ray/);

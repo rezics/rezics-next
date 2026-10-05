@@ -5,6 +5,7 @@ import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { NewWorkForm } from './new-work-form.tsx';
 import { StudioFrame } from './studio-frame.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const meta = {
   title: 'Studio/New Work',
@@ -27,7 +28,7 @@ export const LanguageRequired: Story = {
     await expect(language).toHaveTextContent('Choose a language');
     await expect(canvas.getByText('Choose the language of this work, or select Undetermined.')).toBeVisible();
     await userEvent.click(language);
-    await userEvent.click(await screen.findByRole('option', { name: 'Undetermined' }));
+    await chooseOption(screen, 'Undetermined');
     await expect(language).toHaveTextContent('Undetermined');
   },
 };

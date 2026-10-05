@@ -9,6 +9,7 @@ import type { TypeaheadLoader } from './typeahead.tsx';
 import { SearchPage } from './search-page.tsx';
 import { searchHref, type SearchState } from './state.ts';
 import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from './types.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-4b5a-4c6d-8e7f-9a0b1c2d3e4f`;
 const realm = '3f0e1c2d-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
@@ -193,8 +194,7 @@ export const RealmClassified: Story = {
       { scroll: false },
     );
     await userEvent.click(canvas.getByRole('combobox', { name: 'Search in' }));
-    await waitFor(() => expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible());
-    await userEvent.click(within(document.body).getByRole('option', { name: 'All of REZICS' }));
+    await chooseOption(within(document.body), 'All of REZICS');
     await waitFor(() => expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('All of REZICS'));
   },
 };
