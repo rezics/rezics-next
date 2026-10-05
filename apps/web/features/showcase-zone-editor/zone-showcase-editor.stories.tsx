@@ -251,6 +251,30 @@ export const AddCampaignArt: Story = {
   },
 };
 export const AddCampaignArtPhone: Story = { ...AddCampaignArt, globals: phone };
+/** The author calls a new slide image adult content before adding it: the same choice and words as the Work's art editor, and the upload carries the mark. */
+const sent: (boolean | undefined)[] = [];
+export const AddAdultCampaignArt: Story = {
+  args: { case: 'full', upload: (async (input: Parameters<ReturnType<typeof uploads>>[0] & { adult?: boolean }) => {
+    sent.push(input.adult);
+    return uploads({ status: 'cleared', asset: '01a0e3d1-0000-7000-8000-0000000000ff' })(input);
+  }) as never },
+  globals: desktop,
+  async play({ canvasElement }) {
+    sent.length = 0;
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Edit Krita' }));
+    const landscape = within(canvas.getByRole('heading', { name: 'Landscape · 16:9' }).closest('section')!);
+    const input = landscape.getByRole('button', { name: 'Choose an image' }).parentElement!.querySelector('input[type=file]')!;
+    await userEvent.upload(input as HTMLInputElement, await drawnFile(1920, 1080, 'image/jpeg', 'sea.jpg'));
+    await userEvent.click(await landscape.findByRole('checkbox', { name: 'This image is adult content' }));
+    await expect(landscape.getByText(/hidden-image icon here instead of the image/)).toBeVisible();
+    await userEvent.click(landscape.getByRole('button', { name: 'Use for this slide' }));
+    await expect(await landscape.findByText(/Added to this slide/, {}, { timeout: 4000 })).toBeVisible();
+    await expect(sent).toEqual([true]);
+    await noOverflow();
+  },
+};
+
 export const AddCampaignArtTablet: Story = { ...AddCampaignArt, globals: tablet };
 export const AddCampaignArtTraditionalChinese: Story = { ...AddCampaignArt, args: { locale: 'zh-Hant' }, globals: { ...desktop, locale: 'zh-Hant' },
   async play({ canvasElement }) {

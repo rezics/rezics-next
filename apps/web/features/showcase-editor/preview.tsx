@@ -167,18 +167,20 @@ export function ShowcasePreview({ work, title, tagline, art, trailer, locale, la
         direction={direction(language)} rotation={false} />
     </div>
   </PreviewFrame>;
-  return <section aria-labelledby={`${ids}-heading`} className="grid gap-3">
+  return <section aria-labelledby={`${ids}-heading`} className="grid grid-cols-[minmax(0,1fr)] gap-3">
     <div className="grid gap-1">
       <h3 id={`${ids}-heading`} className="font-semibold text-lg">{t.previewHeading}</h3>
       <p className="text-muted-foreground text-sm">{t.previewHelp}</p>
     </div>
     <div className="flex flex-wrap items-end gap-3">
-      <SegmentGroup value={shape} onValueChange={details => details.value && setShape(details.value as PreviewWindow)}
-        aria-label={t.previewWindow}>
-        {previewWindows.map(item => <SegmentGroupItem key={item.id} value={item.id}>
-          <SegmentGroupItemText>{{ phone: t.previewPhone, tablet: t.previewTablet, desktop: t.previewDesktop }[item.id]}</SegmentGroupItemText>
-        </SegmentGroupItem>)}
-      </SegmentGroup>
+      <div className="max-w-full overflow-x-auto pb-1">
+        <SegmentGroup value={shape} onValueChange={details => details.value && setShape(details.value as PreviewWindow)}
+          aria-label={t.previewWindow}>
+          {previewWindows.map(item => <SegmentGroupItem key={item.id} value={item.id}>
+            <SegmentGroupItemText>{{ phone: t.previewPhone, tablet: t.previewTablet, desktop: t.previewDesktop }[item.id]}</SegmentGroupItemText>
+          </SegmentGroupItem>)}
+        </SegmentGroup>
+      </div>
       <label className="grid min-w-44 flex-1 gap-1 text-sm">
         <span className="font-medium">{t.previewLanguage}</span>
         <ChoiceSelect options={options} value={language} onValueChange={value => value && setLanguage(value)} label={t.previewLanguage} />

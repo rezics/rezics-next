@@ -110,6 +110,8 @@ export default {
   importReviewNeedsRating: '公開書評必須先有已儲存的評分。',
   importReviewFailed: '無法儲存這部作品的書評。', importShelfFailed: '無法將作品加入自訂書架。',
   using: '使用中', used: '用過', wantToUse: '想使用',
+  wantToPlay: '想玩', playing: '正在玩', played: '玩過',
+  wantToCook: '想煮', cooking: '正在煮', cooked: '煮過',
   usedDates: insert('使用期間：{{range}}', { range: String }),
   useDatesFor: insert('《{{title}}》的使用日期', { title: String }),
   startedUsing: '開始使用', finishedUsing: '最後使用', lastUsed: insert('最後使用：{{date}}', { date: String }),

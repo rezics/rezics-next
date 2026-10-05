@@ -25,6 +25,7 @@ void mock.module('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 const { SlotStatusView } = await import('../features/showcase-editor/status.tsx');
+const { LayerRow } = await import('../features/showcase-editor/cards.tsx');
 
 const roles: BackgroundRole[] = ['background-landscape', 'background-portrait'];
 const ratio = (role: BackgroundRole) => backgroundFrames[role].units;
@@ -273,6 +274,7 @@ describe('uploading and screening', () => {
       store: async () => { if (fail) throw fail; return { asset: 'asset-1', upload: 'upload-1', representation: 'r', clearance: first as 'screening' }; },
       check: async () => (clearances[looked++] ?? null) as never,
       wait: async () => {},
+      markAdult: async () => {},
     });
     return { result, stages };
   };
@@ -290,6 +292,64 @@ describe('uploading and screening', () => {
     expect(await run(['rejected']).result).toEqual({ status: 'refused', reason: 'rejected' });
     expect(await run([], 'screening', new ImageRefused('limited', 120)).result).toEqual({ status: 'refused', reason: 'limited', retryAfter: 120 });
     expect(await run([], 'screening', new Error('network')).result).toEqual({ status: 'refused', reason: 'failed' });
+  });
+});
+
+describe('an author calling an upload adult content', () => {
+  const file = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' });
+  const upload = (adult: boolean, markAdult: () => Promise<void>, clearance: 'cleared' | 'rejected' = 'cleared') => {
+    const marked: unknown[] = [];
+    const result = uploadShowcaseImage({ file, actingSubject: acting, key: 'k', adult, onStage: () => {} }, {
+      store: async () => ({ asset: 'asset-1', upload: 'upload-1', representation: 'rep-1', clearance }),
+      check: async () => null, wait: async () => {},
+      markAdult: async input => { marked.push(input); await markAdult(); },
+    });
+    return { result, marked };
+  };
+
+  test('a marked upload is labelled NSFW as its author on the stored representation, then selected', async () => {
+    const { result, marked } = upload(true, async () => {});
+    expect(await result).toEqual({ status: 'cleared', asset: 'asset-1' });
+    expect(marked).toEqual([{ representation: 'rep-1', actingSubject: acting }]);
+  });
+
+  test('an unmarked upload is left to the classification recorded on this device', async () => {
+    const { result, marked } = upload(false, async () => {});
+    expect(await result).toEqual({ status: 'cleared', asset: 'asset-1' });
+    expect(marked).toEqual([]);
+  });
+
+  test('when the label cannot be set the image is not used, so adult art never shows unmasked', async () => {
+    const { result } = upload(true, async () => { throw new Error('image-control-unavailable'); });
+    expect(await result).toEqual({ status: 'refused', reason: 'failed' });
+  });
+
+  test('an image screening rejected is refused before anything is labelled', async () => {
+    const { result, marked } = upload(true, async () => {}, 'rejected');
+    expect(await result).toEqual({ status: 'refused', reason: 'rejected' });
+    expect(marked).toEqual([]);
+  });
+});
+
+describe('the adult-content choice on a file waiting to be uploaded', () => {
+  const t = copyOf('en');
+  const chosen = (adult?: boolean, file: File | null = new File([new Uint8Array([1])], 'cutout.png', { type: 'image/png' })): ImageDraft =>
+    ({ kind: 'image', base: null, source: { url: 'blob:cutout', size: { width: 900, height: 1200 }, file, asset: null }, frame: null, focal: null,
+      anchor: null, framed: null, uploadKey: null, ...(adult === undefined ? {} : { adult }) });
+  const card = (draft: ImageDraft | undefined) => renderToStaticMarkup(createElement(LayerRow, { title: 'Cutout', tone: null, saved: undefined,
+    draft, status: undefined, busy: false, anchor: null,
+    actions: { onFile() {}, onRemove() {}, onDiscard() {}, onSave() {}, onReload() {}, onAdult() {} }, t }));
+
+  test('a new file offers it, and says what readers see either way', () => {
+    expect(card(chosen())).toContain(t.adultLabel);
+    expect(card(chosen())).toContain(t.adultUnmarked);
+    expect(card(chosen(true))).toContain(t.adultMarked);
+    expect(card(chosen(true))).not.toContain(t.adultUnmarked);
+  });
+
+  test('a slot with nothing chosen, or only re-framed, does not', () => {
+    expect(card(undefined)).not.toContain(t.adultLabel);
+    expect(card(chosen(undefined, null))).not.toContain(t.adultLabel);
   });
 });
 

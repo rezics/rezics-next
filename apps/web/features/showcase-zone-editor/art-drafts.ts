@@ -120,7 +120,7 @@ export function useArtDrafts({ zone, realm, actingSubject, registry, setRegistry
   }
 
   /** Changes the frame, focal area or anchor of an image that is not added yet. */
-  function adjust(slide: string, slot: SlotKey, change: Partial<Pick<ImageDraft, 'frame' | 'focal' | 'anchor'>>) {
+  function adjust(slide: string, slot: SlotKey, change: Partial<Pick<ImageDraft, 'frame' | 'focal' | 'anchor' | 'adult'>>) {
     const current = latest.current[slide]?.[slot];
     if (current?.kind === 'image') putDraft(slide, slot, { ...current, ...change });
     setStatus(slide, slot, undefined);
@@ -165,7 +165,7 @@ export function useArtDrafts({ zone, realm, actingSubject, registry, setRegistry
     setStatus(slide, slot, { kind: 'busy', stage: 'saving' });
     let asset = started.source.asset;
     if (!asset && started.source.file) {
-      const uploaded = await upload({ file: started.source.file, actingSubject, key: started.uploadKey ?? `showcase:${crypto.randomUUID()}`,
+      const uploaded = await upload({ file: started.source.file, actingSubject, adult: started.adult, key: started.uploadKey ?? `showcase:${crypto.randomUUID()}`,
         onStage: stage => setStatus(slide, slot, { kind: 'busy', stage }), cancelled: () => !same(latest.current[slide]?.[slot]) });
       const now = latest.current[slide]?.[slot];
       if (!same(now) || now?.kind !== 'image') return;

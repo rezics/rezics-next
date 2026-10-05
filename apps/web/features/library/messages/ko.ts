@@ -110,6 +110,8 @@ export default {
   importReviewNeedsRating: '리뷰를 공개하려면 평점을 먼저 저장해야 해요.',
   importReviewFailed: '리뷰를 저장하지 못했어요.', importShelfFailed: '사용자 지정 책장에 추가하지 못했어요.',
   using: '사용 중', used: '사용함', wantToUse: '사용하고 싶음',
+  wantToPlay: '플레이하고 싶어요', playing: '플레이 중', played: '플레이했어요',
+  wantToCook: '만들고 싶어요', cooking: '만드는 중', cooked: '만들었어요',
   usedDates: insert('사용 기간: {{range}}', { range: String }),
   useDatesFor: insert('“{{title}}” 사용 날짜', { title: String }),
   startedUsing: '사용 시작', finishedUsing: '마지막 사용', lastUsed: insert('마지막 사용: {{date}}', { date: String }),

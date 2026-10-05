@@ -91,6 +91,8 @@ export interface ImageDraft {
   frame: PixelRect | null;
   focal: PixelRect | null;
   anchor: LogoAnchor | null;
+  /** The author calls a new file adult content; unmarked, the check on their device decides. */
+  adult?: boolean;
   /** The frame drawn at preview size, for the stage, which cannot crop; `key` names the source and frame it shows. */
   framed: { url: string; size: Size; key: string } | null;
   /** Retrying an upload replays the same reservation. */

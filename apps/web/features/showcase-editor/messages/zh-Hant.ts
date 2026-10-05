@@ -104,6 +104,9 @@ export default {
   refusalInvalid: '這項內容未被接受。',
   refusalUnavailable: '無法連線至 REZICS。沒有變更任何內容；請再試一次。',
   reloadLatest: '重新載入最新版本', mainSays: '原因',
+  adultLabel: '這張圖片是成人內容',
+  adultUnmarked: '未標記：上傳時 REZICS 會在你的裝置上檢查圖片，並依結果標示。若檢查無法執行，讀者會看到「已隱藏」圖示，直到有人標示為止。',
+  adultMarked: '已標記：尚未選擇顯示成人圖片的讀者，這裡會看到「已隱藏」圖示，而不是圖片；其他讀者照常看到。你裝置上的檢查無法撤銷這個標記。',
 
   previewHeading: '預覽',
   previewHelp: '讀者看到的展示輪播，包含你尚未儲存的變更。讀者只會看到你儲存的內容。',

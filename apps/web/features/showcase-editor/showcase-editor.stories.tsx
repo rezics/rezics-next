@@ -140,6 +140,67 @@ export const ChooseAndSave: Story = {
   },
 };
 
+/** What each upload was told: whether the author called it adult content. */
+const sent: (boolean | undefined)[] = [];
+const recording = (outcome: Parameters<typeof uploads>[0]) => {
+  const upload = uploads(outcome);
+  return async (input: Parameters<typeof upload>[0] & { adult?: boolean }) => { sent.push(input.adult); return upload(input); };
+};
+const cleared = { status: 'cleared', asset: '01a0e3d1-0000-7000-8000-0000000000ff' } as const;
+
+/**
+ * An image the author leaves unmarked is classified on their device when it uploads, and what readers see follows that
+ * result; the editor says so, and the upload carries no adult mark.
+ */
+export const ClassifiedUpload: Story = {
+  args: { art: 'empty', saveArt: mainLike(savedFixture('empty')), upload: recording(cleared) as Args['upload'] },
+  globals: desktop,
+  async play({ canvasElement }) {
+    sent.length = 0;
+    const landscape = panel(within(canvasElement), 'Landscape · 16:9');
+    const input = landscape.getByRole('button', { name: 'Choose an image' }).parentElement!.querySelector('input[type=file]')!;
+    await userEvent.upload(input as HTMLInputElement, await drawnFile(1920, 1080, 'image/jpeg', 'sea.jpg'));
+    await expect(await landscape.findByRole('checkbox', { name: 'This image is adult content' })).not.toBeChecked();
+    await expect(landscape.getByText(/REZICS checks the image on your device when you upload it/)).toBeVisible();
+    await userEvent.click(landscape.getByRole('button', { name: 'Save' }));
+    await expect(await landscape.findByText(/Saved\. Every Zone/, {}, { timeout: 4000 })).toBeVisible();
+    await expect(sent).toEqual([false]);
+  },
+};
+
+/** The author calls the image adult content: the editor says readers who have not chosen to see such images get an icon, and the upload says so. */
+export const AuthorMarkedAdult: Story = {
+  args: { art: 'empty', saveArt: mainLike(savedFixture('empty')), upload: recording(cleared) as Args['upload'] },
+  globals: desktop,
+  async play({ canvasElement }) {
+    sent.length = 0;
+    const landscape = panel(within(canvasElement), 'Landscape · 16:9');
+    const input = landscape.getByRole('button', { name: 'Choose an image' }).parentElement!.querySelector('input[type=file]')!;
+    await userEvent.upload(input as HTMLInputElement, await drawnFile(1920, 1080, 'image/jpeg', 'sea.jpg'));
+    await userEvent.click(await landscape.findByRole('checkbox', { name: 'This image is adult content' }));
+    await expect(landscape.getByRole('checkbox', { name: 'This image is adult content' })).toBeChecked();
+    await expect(landscape.getByText(/hidden-image icon here instead of the image/)).toBeVisible();
+    await userEvent.click(landscape.getByRole('button', { name: 'Save' }));
+    await expect(await landscape.findByText(/Saved\. Every Zone/, {}, { timeout: 4000 })).toBeVisible();
+    await expect(sent).toEqual([true]);
+  },
+};
+export const AuthorMarkedAdultPhone: Story = { ...AuthorMarkedAdult, globals: phone };
+
+/** In Japanese at 390 px the preview's window switch scrolls inside its own row instead of widening the page. */
+export const JapanesePhone: Story = {
+  args: { locale: 'ja' },
+  globals: { ...phone, locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const windows = canvas.getByRole('radiogroup', { name: 'ウィンドウ' });
+    await expect(windows).toBeVisible();
+    await expect(windows.parentElement!.scrollWidth).toBeGreaterThan(0);
+    await noOverflow();
+    await expect((windows.parentElement as HTMLElement).getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
 /** An image smaller than the role's minimum is refused before upload, with its size and the minimum. */
 export const TooSmall: Story = {
   args: { art: 'partial' },

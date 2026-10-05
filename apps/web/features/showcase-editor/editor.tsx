@@ -149,7 +149,7 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
   }
 
   /** Changes the frame, focal area or anchor of a slot, starting a change from the saved image when there is none. */
-  function adjust(slot: SlotKey, change: Partial<Pick<ImageDraft, 'frame' | 'focal' | 'anchor'>>) {
+  function adjust(slot: SlotKey, change: Partial<Pick<ImageDraft, 'frame' | 'focal' | 'anchor' | 'adult'>>) {
     const current = latest.current[slot];
     const image = saved.images[slot];
     if (current?.kind === 'image') putDraft(slot, { ...current, ...change, base: baseOf(slot, current), savedAs: undefined });
@@ -198,7 +198,7 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
     if (started.kind === 'image') {
       asset = started.source.asset;
       if (!asset && started.source.file) {
-        const uploaded = await upload({ file: started.source.file, actingSubject, key: started.uploadKey ?? `showcase:${crypto.randomUUID()}`,
+        const uploaded = await upload({ file: started.source.file, actingSubject, adult: started.adult, key: started.uploadKey ?? `showcase:${crypto.randomUUID()}`,
           onStage: stage => setStatus(slot, { kind: 'busy', stage }), cancelled: () => !same(latest.current[slot]) });
         const now = latest.current[slot];
         if (!same(now) || now?.kind !== 'image') return;
@@ -238,7 +238,8 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
   }
 
   const actions = (slot: SlotKey, anchor?: LogoAnchor): SlotActions => ({ onFile: file => void choose(slot, file, anchor),
-    onRemove: () => remove(slot), onDiscard: () => discard(slot), onSave: () => void save(slot), onReload: () => reload(slot) });
+    onRemove: () => remove(slot), onDiscard: () => discard(slot), onSave: () => void save(slot), onReload: () => reload(slot),
+    onAdult: adult => adjust(slot, { adult }) });
 
   const stage = previewArt(saved, drafts, framed);
   /** A background a reader will get once the page's changes are saved: a pending change, else Main's selection. */

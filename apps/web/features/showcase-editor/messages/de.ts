@@ -104,6 +104,9 @@ export default {
   refusalInvalid: 'Das wurde nicht angenommen.',
   refusalUnavailable: 'REZICS war nicht erreichbar. Nichts wurde geändert; versuche es erneut.',
   reloadLatest: 'Neueste Fassung laden', mainSays: 'Grund',
+  adultLabel: 'Dieses Bild ist nicht jugendfrei',
+  adultUnmarked: 'Nicht markiert: REZICS prüft das Bild beim Hochladen auf deinem Gerät und kennzeichnet es nach dem Ergebnis. Läuft die Prüfung nicht, sehen Leser ein Symbol für ein verborgenes Bild, bis jemand es kennzeichnet.',
+  adultMarked: 'Markiert: Leser, die nicht-jugendfreie Bilder nicht anzeigen lassen, sehen hier statt des Bildes ein Symbol für ein verborgenes Bild. Alle anderen sehen es normal. Die Prüfung auf deinem Gerät kann das nicht rückgängig machen.',
 
   previewHeading: 'Vorschau',
   previewHelp: 'Die Präsentation, wie Leser sie sehen, mit deinen ungespeicherten Änderungen. Leser sehen nur, was du speicherst.',

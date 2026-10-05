@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { ratingsUntilMean, StarMeter } from '../catalogue/rating.tsx';
 import { messages as shelfMessages } from '../catalogue/messages.ts';
+import type { StatusWords } from '../catalogue/reader-actions.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { bars, figuresOfRating, scoreView, type Figures } from '../scoped-rating/score.ts';
@@ -16,6 +17,7 @@ import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
 import { ScopeOffer, type ScopeView } from './scope-bar.tsx';
 import { scopeName } from './scope-labels.ts';
+import { shelfWords } from './shelf-words.ts';
 import type { Loaded, RatingRead, StatCount, WorkStats } from './types.ts';
 
 export const RATINGS_REGION = 'work-ratings';
@@ -235,7 +237,7 @@ function ReadingNow({ count, locale, t }: { count: StatCount; locale: UiLocale; 
   );
 }
 
-function WantToRead({ count, locale }: { count: StatCount; locale: UiLocale }) {
+function WantToRead({ count, locale, words }: { count: StatCount; locale: UiLocale; words?: StatusWords }) {
   if (!count.value) return null;
   const shelf = materializeData(shelfMessages[locale], { locale });
   return (
@@ -245,7 +247,7 @@ function WantToRead({ count, locale }: { count: StatCount; locale: UiLocale }) {
         {formatNumber(count.value, locale)}
         {count.kind === 'lower-bound' ? '+' : ''}
       </span>
-      {shelf.wantToRead}
+      {words?.wantToRead ?? shelf.wantToRead}
     </p>
   );
 }
@@ -260,19 +262,22 @@ function WantToRead({ count, locale }: { count: StatCount; locale: UiLocale }) {
 export function RatingLine({
   ratings,
   stats,
+  experience,
   locale,
   messages,
 }: {
   ratings: Loaded<RatingRead>;
   /** Readers and reviews counted from public libraries, for the same question as `ratings`. */
   stats?: Loaded<WorkStats>;
+  /** The Work's kind, which words the shelf counts ('want to play'); books read when it is left out. */
+  experience?: Parameters<typeof shelfWords>[0];
   locale: UiLocale;
   messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
   const counts = stats?.ok ? stats.data : null;
   const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
-  const want = counts ? <WantToRead count={counts.wantToRead} locale={locale} /> : null;
+  const want = counts ? <WantToRead count={counts.wantToRead} locale={locale} words={experience && shelfWords(experience, messages)} /> : null;
   const group = 'grid justify-items-start gap-1.5';
   if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale)
     return (

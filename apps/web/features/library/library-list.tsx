@@ -21,7 +21,7 @@ import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
 import Link from '../shell/localized-link.tsx';
 import { TrackingControl } from '../tracking/tracking-control.tsx';
 import { formatDay } from './format.ts';
-import { isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
+import { hasKindWords, isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
 import type { LibraryMessages } from './messages.ts';
 import { OwnRating, PrivateReviewCell, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
@@ -93,7 +93,7 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
             </h3>
             {row.work.authors.length ? <p className="text-muted-foreground">
               <AuthorNames authors={row.work.authors} /></p> : null}
-            {isUseWork(row) && row.status ? <p className="text-muted-foreground text-xs">
+            {hasKindWords(row) && row.status ? <p className="text-muted-foreground text-xs">
               {rowStatusLabel(row, t)}</p> : null}
           </div>
           {row.status === 'reading' ? <ReadingProgress row={row} locale={locale} messages={messages} /> : null}

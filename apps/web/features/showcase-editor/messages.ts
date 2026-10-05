@@ -114,6 +114,9 @@ const en = {
   refusalInvalid: 'This wasn’t accepted.',
   refusalUnavailable: 'REZICS couldn’t be reached. Nothing was changed; try again.',
   reloadLatest: 'Reload latest', mainSays: 'Reason',
+  adultLabel: 'This image is adult content',
+  adultUnmarked: 'Not marked: REZICS checks the image on your device when you upload it and labels it from the result. If the check can’t run, readers see a hidden-image icon until someone labels it.',
+  adultMarked: 'Marked: readers who haven’t chosen to see adult images get a hidden-image icon here instead of the image. Everyone else sees it normally. The check on your device can’t undo this.',
 
   previewHeading: 'Preview',
   previewHelp: 'The showcase stage as readers see it, with your unsaved changes. Readers see only what you save.',

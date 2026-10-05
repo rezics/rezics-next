@@ -113,10 +113,10 @@ async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
  * Everyone's rating summary for the header, on the Work's first rating
  * question, with its reviews and the people reading the Work now.
  */
-async function RatingLineSlot({ id, locale, messages }: Common & { id: string }) {
+async function RatingLineSlot({ id, experience, locale, messages }: Common & { id: string; experience: WorkExperience }) {
   const ratings = await readRatings(id, EVERYONE, undefined);
   const stats = await readWorkStats(id, ratings.ok ? ratings.data.context?.context : undefined);
-  return <RatingLine ratings={ratings} stats={stats} locale={locale} messages={messages} />;
+  return <RatingLine ratings={ratings} stats={stats} experience={experience} locale={locale} messages={messages} />;
 }
 
 /**
@@ -172,7 +172,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       <Cover id={id} work={work} avatarQuery={avatarQuery} locale={locale} messages={messages} /></Suspense>}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
-    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
+    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} /></Suspense>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>

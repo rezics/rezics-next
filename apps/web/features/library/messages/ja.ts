@@ -112,6 +112,8 @@ export default {
   importReviewNeedsRating: 'レビューを公開するには、評価を保存してください。',
   importReviewFailed: 'レビューを保存できませんでした。', importShelfFailed: 'カスタム本棚に追加できませんでした。',
   using: '使用中', used: '使用済み', wantToUse: '使いたい',
+  wantToPlay: '遊びたい', playing: 'プレイ中', played: 'プレイ済み',
+  wantToCook: '作りたい', cooking: '調理中', cooked: '作った',
   usedDates: insert('使用期間：{{range}}', { range: String }),
   useDatesFor: insert('「{{title}}」の使用日', { title: String }),
   startedUsing: '使用開始', finishedUsing: '最終使用', lastUsed: insert('最終使用日：{{date}}', { date: String }),

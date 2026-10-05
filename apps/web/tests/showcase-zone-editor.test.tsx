@@ -1,12 +1,15 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { uiLocales } from '../i18n/define.ts';
 import { resourceHref } from '../features/address/path.ts';
 import type { ZonePresentationRead } from '../features/realm/types.ts';
-import { messages as editorMessages } from '../features/showcase-editor/messages.ts';
+import type { ImageDraft } from '../features/showcase-editor/art.ts';
+import { copyOf as editorCopy, messages as editorMessages } from '../features/showcase-editor/messages.ts';
 import { messages as pickerMessages } from '../features/work-levels-edit/messages.ts';
+import { ArtCard } from '../features/showcase-zone-editor/art-card.tsx';
 import { artSourceOf, missingSlots, previewSlides, registryOf, savedArtOf } from '../features/showcase-zone-editor/art.ts';
 import { configurationRefusalOf, configurationSaveOf } from '../features/showcase-zone-editor/refusal.ts';
 import { englishMessages, messages } from '../features/showcase-zone-editor/messages.ts';
@@ -437,5 +440,21 @@ describe('the editor on the server', () => {
   test('a Zone without a Realm says campaign art cannot be added', async () => {
     const html = await render([{ id: 'a', work: work(1) }], null);
     expect(html).toContain('has no default Realm');
+  });
+});
+
+describe('the adult-content choice on a slide\'s new image', () => {
+  const e = editorCopy('en');
+  const t = materializeData(messages.en, { locale: 'en' });
+  const draft = (file: File | null): ImageDraft => ({ kind: 'image', base: null, source: { url: 'blob:art', size: { width: 900, height: 1200 }, file, asset: null },
+    frame: null, focal: null, anchor: null, framed: null, uploadKey: null });
+  const card = (image: ImageDraft | undefined) => renderToStaticMarkup(createElement(ArtCard, { role: 'layer', title: 'Cutout', tone: null,
+    saved: undefined, missing: false, draft: image, status: undefined, busy: false, canAdd: true, anchor: null,
+    actions: { onFile() {}, onRemove() {}, onDiscard() {}, onAdd() {}, onAdult() {} }, t, e }));
+
+  test('a file waiting to be added offers it, the same words as the Work\'s art editor', () => {
+    expect(card(draft(new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })))).toContain(e.adultLabel);
+    expect(card(undefined)).not.toContain(e.adultLabel);
+    expect(card(draft(null))).not.toContain(e.adultLabel);
   });
 });

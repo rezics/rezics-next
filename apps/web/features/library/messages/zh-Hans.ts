@@ -50,6 +50,8 @@ export default {
   using: '使用中',
   used: '用过',
   wantToUse: '想使用',
+  wantToPlay: '想玩', playing: '在玩', played: '玩过',
+  wantToCook: '想做', cooking: '在做', cooked: '做过',
   usedDates: insert('{{range}} 使用', { range: String }),
   useDatesFor: insert('《{{title}}》的使用日期', { title: String }),
   startedUsing: '开始使用',

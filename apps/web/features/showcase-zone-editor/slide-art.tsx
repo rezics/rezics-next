@@ -36,7 +36,8 @@ export function SlideArtPanels({ slide, art, registry, realm, source, stage, loc
   const busy = (slot: SlotKey) => art.status(slide.key, slot)?.kind === 'busy';
   const actions = (slot: SlotKey, anchor?: LogoAnchor): ArtCardActions => ({
     onFile: file => void art.choose(slide.key, slot, file, anchor), onRemove: () => art.remove(slide.key, slot),
-    onDiscard: () => art.discard(slide.key, slot), onAdd: () => void art.add(slide.key, slot) });
+    onDiscard: () => art.discard(slide.key, slot), onAdd: () => void art.add(slide.key, slot),
+    onAdult: adult => art.adjust(slide.key, slot, { adult }) });
   const framedUrl = (slot: SlotKey) => { const image = saved.images[slot]; return image ? art.framed[image.selection]?.url : undefined; };
 
   // What a reader will get once the slide's changes are saved: a pending change, else the art the slide holds.

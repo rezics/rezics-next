@@ -6,12 +6,13 @@ import { Input } from '@rezics/ui/input';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { SegmentGroup, SegmentGroupItem, SegmentGroupItemText } from '@rezics/ui/segment-group';
 import { cn } from '@rezics/ui/utils';
-import { ImageUpIcon, PlayIcon, Trash2Icon, Undo2Icon } from 'lucide-react';
-import { type DragEvent, type ReactNode, useId, useRef, useState } from 'react';
+import { PlayIcon, Trash2Icon, Undo2Icon } from 'lucide-react';
+import { useId, useState } from 'react';
 import { uiLocales } from '../../i18n/define.ts';
 import {
   canonicalTag, type Draft, type LogoAnchor, logoAnchors, type LogoTone, logoTones, NEUTRAL_LANGUAGE, type SavedImage,
 } from './art.ts';
+import { AdultChoice, DropArea, FilePicker, LayerSwatch, Panel, SlotButtons } from './art-parts.tsx';
 import { FrameEditor } from './frame-editor.tsx';
 import type { BackgroundRole, PixelRect } from './frame.ts';
 import { acceptedTypes } from './image-file.ts';
@@ -23,19 +24,6 @@ import { trailerOpening, trailerProblem } from './trailer.ts';
 export const anchorLabel = (anchor: LogoAnchor, t: EditorCopy) => ({ 'start-bottom': t.anchorStartBottom,
   'center-top': t.anchorCenterTop, 'center-middle': t.anchorCenterMiddle, 'center-bottom': t.anchorCenterBottom })[anchor];
 export const toneLabel = (tone: LogoTone, t: EditorCopy) => tone === 'light' ? t.toneLight : t.toneDark;
-
-/** A visually plain file chooser: the button is the control; the native input only opens the picker. */
-function FilePicker({ accept, label, onFile, disabled, variant = 'outline' }: {
-  accept: readonly string[]; label: string; onFile: (file: File) => void; disabled?: boolean; variant?: 'outline' | 'default';
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  return <>
-    <input ref={input} type="file" hidden accept={accept.join(',')}
-      onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file); }} />
-    <Button type="button" variant={variant} size="sm" disabled={disabled} onClick={() => input.current?.click()}>
-      <ImageUpIcon aria-hidden="true" />{label}</Button>
-  </>;
-}
 
 /** What a slot holds against what is saved, as one short label. */
 function SlotBadge({ saved, draft, t }: { saved: boolean; draft: (Draft | { kind: 'trailer'; savedAs?: string }) | undefined; t: EditorCopy }) {
@@ -52,58 +40,23 @@ export interface SlotActions {
   onDiscard: () => void;
   onSave: () => void;
   onReload: () => void;
+  /** The author's own call on an image about to be uploaded. */
+  onAdult: (adult: boolean) => void;
 }
 
 /** The buttons under a slot: choose or replace, remove, and, with a change pending, discard and save. */
 function SlotFooter({ has, draft, busy, accept, actions, t, chooseLabel }: {
   has: boolean; draft: Draft | undefined; busy: boolean; accept: readonly string[]; actions: SlotActions; t: EditorCopy; chooseLabel?: string;
 }) {
-  return <div className="flex flex-wrap items-center justify-between gap-2">
-    <div className="flex flex-wrap gap-2">
-      <FilePicker accept={accept} label={has ? t.replaceImage : chooseLabel ?? t.chooseImage} onFile={actions.onFile} disabled={busy}
-        variant={has ? 'outline' : 'default'} />
-      {has && draft?.kind !== 'remove' ? <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={actions.onRemove}>
-        <Trash2Icon aria-hidden="true" />{t.remove}</Button> : null}
-    </div>
-    {draft && !draft.savedAs ? <div className="flex flex-wrap gap-2">
-      <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={actions.onDiscard}><Undo2Icon aria-hidden="true" />{t.discard}</Button>
-      <Button type="button" size="sm" disabled={busy} isLoading={busy} onClick={actions.onSave}>{busy ? t.saving : t.save}</Button>
-    </div> : null}
-  </div>;
+  return <SlotButtons has={has} canRemove={has && draft?.kind !== 'remove'} pending={Boolean(draft && !draft.savedAs)} busy={busy}
+    accept={accept} chooseLabel={chooseLabel} onFile={actions.onFile} onRemove={actions.onRemove} onDiscard={actions.onDiscard} t={t}
+    commit={<Button type="button" size="sm" disabled={busy} isLoading={busy} onClick={actions.onSave}>{busy ? t.saving : t.save}</Button>} />;
 }
 
-function Panel({ title, help, badge, children, labelledBy, level = 4 }: { title: string; help?: ReactNode; badge?: ReactNode;
-  children: ReactNode; labelledBy: string; level?: 3 | 4 }) {
-  const Heading = level === 3 ? 'h3' : 'h4';
-  return <section aria-labelledby={labelledBy} className="grid gap-4 rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-    <div className="grid gap-1">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <Heading id={labelledBy} className={level === 3 ? 'font-semibold text-lg' : 'font-semibold'}>{title}</Heading>
-        {badge}
-      </div>
-      {help ? <p className="text-pretty text-muted-foreground text-sm">{help}</p> : null}
-    </div>
-    {children}
-  </section>;
-}
-
-/** An empty slot: drop an image anywhere on it, or choose one. */
-function DropArea({ onFile, disabled, accept, label, types }: {
-  onFile: (file: File) => void; disabled: boolean; accept: readonly string[]; label: string; types: string;
-}) {
-  const [over, setOver] = useState(false);
-  const drop = (event: DragEvent) => {
-    event.preventDefault();
-    setOver(false);
-    const file = event.dataTransfer.files[0];
-    if (file && !disabled) onFile(file);
-  };
-  return <div onDragOver={event => { event.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}
-    className={cn('grid min-h-40 place-content-center justify-items-center gap-3 rounded-xl border-2 border-dashed p-5 text-center',
-      over ? 'border-primary bg-primary/5' : 'border-border')}>
-    <FilePicker accept={accept} label={label} onFile={onFile} disabled={disabled} variant="default" />
-    <span className="text-muted-foreground text-xs">{types}</span>
-  </div>;
+/** The adult-content choice of a file waiting to be uploaded. */
+function PendingAdult({ draft, busy, actions, t }: { draft: Draft | undefined; busy: boolean; actions: SlotActions; t: EditorCopy }) {
+  return draft?.kind === 'image' && draft.source.file && !draft.savedAs
+    ? <AdultChoice adult={Boolean(draft.adult)} disabled={busy} onChange={actions.onAdult} t={t} /> : null;
 }
 
 export function BackgroundCard({ role, saved, draft, status, busy, note, showPhone, actions, onFrame, t }: {
@@ -129,20 +82,11 @@ export function BackgroundCard({ role, saved, draft, status, busy, note, showPho
     </div> : <DropArea onFile={actions.onFile} disabled={busy} accept={acceptedTypes.background} label={t.chooseImage}
       types={t.backgroundTypes} />}
     {note ? <p className="rounded-lg bg-muted px-3 py-2 text-pretty text-muted-foreground text-sm">{note}</p> : null}
+    <PendingAdult draft={draft} busy={busy} actions={actions} t={t} />
     <SlotStatusView status={status} t={t} onReload={actions.onReload} />
     {source || draft ? <SlotFooter has={Boolean(source) || draft?.kind === 'remove'} draft={draft} busy={busy}
       accept={acceptedTypes.background} actions={actions} t={t} /> : null}
   </Panel>;
-}
-
-/** How a logo or cutout looks against what it will sit on: light logos on the dark scrim, dark ones on light. */
-function LayerSwatch({ url, tone }: { url: string; tone: LogoTone | null }) {
-  // A flex box of definite height, so the image's percentage limits resolve and a tall cutout fits whole.
-  return <div className={cn('flex h-24 w-full items-center justify-center overflow-hidden rounded-xl p-3 sm:w-40',
-    tone === 'light' ? 'bg-[#101b2c]' : tone === 'dark' ? 'bg-[#eef2f7]'
-      : 'bg-[repeating-conic-gradient(#8883_0_25%,transparent_0_50%)] bg-size-[16px_16px]')}>
-    <img src={url} alt="" className="max-h-full max-w-full object-contain" />
-  </div>;
 }
 
 /** A logo key or the cutout: the image on its backdrop, the logo's position, and the slot's actions. */
@@ -163,6 +107,7 @@ export function LayerRow({ title, help, tone, saved, draft, status, busy, anchor
           options={logoAnchors.map(value => ({ value, label: anchorLabel(value, t) }))} />
       </label> : null}
     </div> : <DropArea onFile={actions.onFile} disabled={busy} accept={acceptedTypes.layer} label={t.chooseImage} types={t.layerTypes} />}
+    <PendingAdult draft={draft} busy={busy} actions={actions} t={t} />
     <SlotStatusView status={status} t={t} onReload={actions.onReload} />
     {url || draft ? <SlotFooter has={Boolean(url)} draft={draft} busy={busy} accept={acceptedTypes.layer} actions={actions} t={t} /> : null}
   </Panel>;

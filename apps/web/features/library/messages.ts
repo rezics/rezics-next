@@ -158,6 +158,8 @@ export const messages = {
   using: 'Using',
   used: 'Used',
   wantToUse: 'Want to use',
+  wantToPlay: 'Want to play', playing: 'Playing', played: 'Played',
+  wantToCook: 'Want to cook', cooking: 'Cooking', cooked: 'Cooked',
   usedDates: insert('Used {{range}}', { range: String }),
   useDatesFor: insert('Usage dates for “{{title}}”', { title: String }),
   startedUsing: 'Started using',

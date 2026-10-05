@@ -104,6 +104,9 @@ export default {
   refusalInvalid: 'No se aceptó.',
   refusalUnavailable: 'No se pudo contactar con REZICS. No se cambió nada; vuelve a intentarlo.',
   reloadLatest: 'Recargar lo más reciente', mainSays: 'Motivo',
+  adultLabel: 'Esta imagen es contenido para adultos',
+  adultUnmarked: 'Sin marcar: REZICS comprueba la imagen en tu dispositivo al subirla y la etiqueta según el resultado. Si la comprobación no puede ejecutarse, los lectores ven un icono de imagen oculta hasta que alguien la etiquete.',
+  adultMarked: 'Marcada: los lectores que no han elegido ver imágenes para adultos ven aquí un icono de imagen oculta en lugar de la imagen. Los demás la ven con normalidad. La comprobación de tu dispositivo no puede deshacer esta marca.',
 
   previewHeading: 'Vista previa',
   previewHelp: 'El escaparate tal como lo ven los lectores, con tus cambios sin guardar. Los lectores solo ven lo que guardas.',

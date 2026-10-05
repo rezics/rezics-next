@@ -125,6 +125,8 @@ export default {
   using: "Wird genutzt",
   used: "Genutzt",
   wantToUse: "Möchte ich nutzen",
+  wantToPlay: 'Möchte ich spielen', playing: 'Spiele ich gerade', played: 'Gespielt',
+  wantToCook: 'Möchte ich kochen', cooking: 'Koche ich gerade', cooked: 'Gekocht',
   usedDates: insert("Genutzt {{range}}", { range: String }),
   useDatesFor: insert("Nutzungsdaten für „{{title}}“", { title: String }),
   startedUsing: "Nutzung begonnen",
