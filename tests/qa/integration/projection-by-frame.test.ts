@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { ProjectionStore, projectionFrameListSql } from '../../../services/main/src/modules/projection/store.ts';
-import { projectionKey } from '../../../services/main/src/modules/projection/schema.ts';
+import { PROJECTION_CREATION_QUOTA, projectionKey } from '../../../services/main/src/modules/projection/schema.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 
 interface Page { items: { id: string; subject: string; frames: string[]; disclosure: string }[]; nextCursor: string | null }
@@ -64,7 +64,10 @@ afterAll(async () => { await stack?.stop(); });
 test('frame listing traverses only the match participants and hides subjects and projections from continuation', async () => {
   for (const reader of [null, outsider]) {
     const page = await json<Page>(await read(reader, match));
-    expect(page).toMatchObject({ items: [{ id: first }], nextCursor: short(first) });
+    expect(page).toMatchObject({ items: [{ id: first }] });
+    // The continuation is opaque: it never exposes a Projection identity.
+    expect(page.nextCursor).toBeString();
+    expect(page.nextCursor).not.toContain(short(first));
     const rest = await json<Page>(await read(reader, match, { cursor: page.nextCursor! }));
     expect(rest).toMatchObject({ items: [{ id: second }], nextCursor: null });
     expect(page.items[0]!.frames).toEqual([match]);
@@ -118,15 +121,31 @@ test('frame candidate seeks and graph cost stay bounded as unrelated and same-fr
   const subject = (await json<Page>(await read(null, match))).items[0]!.subject;
   const graphCost = async () => {
     const before = stack.fuseki.queries;
-    expect(await json<Page>(await read(null, match))).toMatchObject({ items: [{ id: first }], nextCursor: short(first) });
+    expect(await json<Page>(await read(null, match))).toMatchObject({ items: [{ id: first }], nextCursor: expect.any(String) });
     expect(await json<Page>(await read(null, match, { subject }))).toMatchObject({ items: [{ id: first }], nextCursor: null });
     return stack.fuseki.queries - before;
   };
   const before = await graphCost();
+  // The inventory below is fixture SQL, but the creation quota still applies per principal: spread it over creators
+  // that each reserved a Projection through the API, and keep every one below the quota.
+  const perCreator = PROJECTION_CREATION_QUOTA - 10;
+  const creators: string[] = [];
+  const host = await semantic('https://schema.org/Event');
+  for (let index = 0; index < Math.ceil((5000 + 2 * 5000) / perCreator) + 1; index++) {
+    const creator = await stack.member(`creator-${index}`);
+    await creator.grant('projection:create:root', 'projection.create');
+    const created = await json<{ projection: { id: string } }>(await creator.send('POST', '/v1/projections',
+      { subject: host, frames: [await semantic('https://schema.org/Event')], actingSubject: creator.actor }), 201);
+    creators.push((await stack.accessPool.query('SELECT admission_id FROM access.projection_identity WHERE projection = $1',
+      [short(created.projection.id)])).rows[0].admission_id);
+  }
+  let reserved = 0;
+  // Ordinal `at` of the fixture belongs to the creator whose quota still has room for it.
+  const creatorOf = (at: string, creatorsParam: number, reservedParam: number) =>
+    `($${creatorsParam}::uuid[])[(($${reservedParam}::int + ${at} - 1) / ${perCreator})::int + 1]`;
   const client = await stack.accessPool.connect();
   try {
     await client.query('BEGIN');
-    const admission = (await client.query('SELECT admission_id FROM access.projection_identity WHERE projection = $1', [short(first)])).rows[0].admission_id;
     const frame = id();
     const measure = async () => {
       const plans: Plan[] = [];
@@ -142,23 +161,26 @@ test('frame candidate seeks and graph cost stay bounded as unrelated and same-fr
     // A bounded fixture bulk insert expands only owner identities, using the same trigger as reservations.
     const grow = async (count: number, inFrame: string, onSubject: string) => client.query(`
       INSERT INTO access.projection_identity (key, projection, subject, frames, admission_id)
-      SELECT encode(sha256(convert_to(s || E'\n' || $2, 'UTF8')), 'hex'), gen_random_uuid(), s, ARRAY[$2], $3::uuid
-      FROM (SELECT 'https://rezics.com/id/' || gen_random_uuid() AS s FROM generate_series(1, $1::int)) subjects
-      UNION ALL SELECT encode(sha256(convert_to($4 || E'\n' || array_to_string(fs, E'\n'), 'UTF8')), 'hex'),
-        gen_random_uuid(), $4, fs, $3::uuid
-      FROM (SELECT ARRAY(SELECT unnest(ARRAY[$2, f]) ORDER BY 1) AS fs FROM
-        (SELECT 'https://rezics.com/id/' || gen_random_uuid() AS f FROM generate_series(1, $1::int)) noise) frames`,
-    [count, inFrame, admission, onSubject]);
+      SELECT encode(sha256(convert_to(s || E'\n' || $2, 'UTF8')), 'hex'), gen_random_uuid(), s, ARRAY[$2], ${creatorOf('n', 4, 5)}
+      FROM (SELECT n, 'https://rezics.com/id/' || gen_random_uuid() AS s FROM generate_series(1, $1::int) n) subjects
+      UNION ALL SELECT encode(sha256(convert_to($3 || E'\n' || array_to_string(fs, E'\n'), 'UTF8')), 'hex'),
+        gen_random_uuid(), $3, fs, ${creatorOf('(n + $1::int)', 4, 5)}
+      FROM (SELECT n, ARRAY(SELECT unnest(ARRAY[$2, f]) ORDER BY 1) AS fs FROM
+        (SELECT n, 'https://rezics.com/id/' || gen_random_uuid() AS f FROM generate_series(1, $1::int) n) noise) frames`,
+    [count, inFrame, onSubject, creators, reserved]);
     // The hash matches the stored frame order, as the identity constraint requires.
     await client.query(`INSERT INTO access.projection_identity (key, projection, subject, frames, admission_id)
-      SELECT encode(sha256(convert_to(s || E'\n' || $1, 'UTF8')), 'hex'), gen_random_uuid(), s, ARRAY[$1], $2::uuid
-      FROM (SELECT 'https://rezics.com/id/' || gen_random_uuid() AS s FROM generate_series(1, 5000)) subjects`, [frame, admission]);
+      SELECT encode(sha256(convert_to(s || E'\n' || $2, 'UTF8')), 'hex'), gen_random_uuid(), s, ARRAY[$2], ${creatorOf('n', 3, 4)}
+      FROM (SELECT n, 'https://rezics.com/id/' || gen_random_uuid() AS s FROM generate_series(1, $1::int) n) subjects`,
+    [5000, frame, creators, reserved]);
+    reserved += 5000;
     await client.query('ANALYZE access.projection_frame_identity');
     const unrelated = await measure();
     await client.query('COMMIT');
     expect(await graphCost()).toBe(before);
     await client.query('BEGIN');
-    await grow(5000, match, subject);
+    await grow(5000, match, subject); // rolled back with its quota increments
+
     await client.query('ANALYZE access.projection_frame_identity');
     const grown = await measure();
     for (const [index, plan] of grown.entries()) {

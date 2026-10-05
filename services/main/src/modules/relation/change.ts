@@ -195,9 +195,21 @@ export async function relationReferences(env: WorkActivationEnvironment, definit
       projections.add(summary.reference);
     }
   }
+  // Applicability names typed coordinates (Structure positions, releases, Concepts), not only semantic Resources
+  // or Works; a Statement writer resolves them through the target reader, so a relation writer does too.
+  const coordinates = state.applicability.length
+    ? (await targetRead(env, authority, session => targetSummaries(session, state.applicability))).summaries : [];
   return [...new Set([definition.definition, ...participants.filter(ref => !projections.has(ref)),
-    ...definition.roles.flatMap(role => role.members ?? []), ...state.applicability,
+    ...definition.roles.flatMap(role => role.members ?? []), ...undisclosedReferences(state.applicability, coordinates),
     ...(state.revealedAt ? [state.revealedAt.work] : [])])];
+}
+
+/** References the target reader did not disclose; they stay for the semantic and Work readers, whose refusal is the
+ * one indistinct outcome a hidden or missing reference gets. */
+export function undisclosedReferences(references: readonly string[],
+  summaries: readonly { reference: string; status: string }[]): string[] {
+  const disclosed = new Set(summaries.flatMap(summary => summary.status === 'available' ? [summary.reference] : []));
+  return references.filter(ref => !disclosed.has(ref));
 }
 
 function starRoles(definition: ExactDefinition) {
@@ -241,7 +253,7 @@ export function starConflict(definition: ExactDefinition, occurrence: string, st
     FILTER(?other != ${iri(occurrence)}) }`;
 }
 
-export const RELATION_REFERENCE_COST = { applicability: 8, coordinateQueries: 2, roleMembers: 16 * 8,
+export const RELATION_REFERENCE_COST = { applicability: 8, coordinateQueries: 2, coordinateSummaryReads: 1, roleMembers: 16 * 8,
   revelationQueries: 1, starConflictQueries: 1 } as const;
 
 export const STAR_REFUSAL_COST = { conflicts: 32 } as const;

@@ -3,6 +3,10 @@ import { readId, readPosition } from '../work/read-contract.ts';
 
 export const readingPositionQuery = t.Optional(t.Union([readId, t.Literal('all'), t.Literal('mine'), t.Literal('start')]));
 
+/** Lives with the contract, not the store, so schemas can budget revelation reads without importing the store's
+ * dependency chain, which reaches the receipt-family loader and cycles back into them. */
+export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
+
 /** Legacy wiki-boundary budgets, retained in the served cost metadata.
  * The chooser uses READING_CHOOSER_COST's bounded seeks; occurrences is not a
  * chooser inventory ceiling. Search and ordering run before each store limit. */

@@ -5,8 +5,8 @@ import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
-import { REVELATION_COST, type Revelation } from './store.ts';
-import { READING_POSITION_COST } from './contract.ts';
+import type { Revelation } from './store.ts';
+import { READING_POSITION_COST, REVELATION_COST } from './contract.ts';
 import { compareReadingLocations, ReadingPositionTraversal } from './traversal.ts';
 import { chooserPosition } from './chooser-position.ts';
 export { READING_POSITION_COST } from './contract.ts';

@@ -3,8 +3,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { sourcePosition } from '../../api-contract.ts';
 import { readId, readLanguage, readPosition } from '../work/read-contract.ts';
-import { readingPositionQuery } from '../reading-position/contract.ts';
-import { REVELATION_COST } from '../reading-position/store.ts';
+import { readingPositionQuery, REVELATION_COST } from '../reading-position/contract.ts';
 
 export const PROJECTION_PROFILE = 'https://rezics.com/definition/projection-v1';
 export const PROJECTION_ACTION = 'projection.create';

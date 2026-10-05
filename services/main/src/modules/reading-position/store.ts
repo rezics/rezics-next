@@ -2,7 +2,9 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
-import { READING_POSITION_COST } from './contract.ts';
+import { READING_POSITION_COST, REVELATION_COST } from './contract.ts';
+
+export { REVELATION_COST };
 
 /** Analyzed label search across every carried label, independent of display
  * language. NFKC also lets a full-width chapter number find its Arabic ordinal. */
@@ -13,7 +15,6 @@ export function normalizePositionQuery(q?: string): string {
   return (q ?? '').normalize('NFKC').trim().toLowerCase();
 }
 
-export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
   record: string;
   recordKind: 'entity' | 'name' | 'alias' | 'statement' | 'relation';

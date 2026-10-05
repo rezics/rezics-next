@@ -2,7 +2,7 @@ import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS, MAX_SEARCH_RESPONSE_B
   PHRASE_HIT_PROBE } from '../work/search-readiness.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { MAX_FRAMES } from '../projection/schema.ts';
-import { REVELATION_COST } from '../reading-position/store.ts';
+import { REVELATION_COST } from '../reading-position/contract.ts';
 
 /** Relation graph reads never walk more than one admitted occurrence page. */
 export const GRAPH_QUERY_LIMITS = {
