@@ -297,6 +297,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   await post(`/v1/themes/${short(theme)}/first-party-activations`, { revision: revision.operation, expectedActivation: null,
     approvalExpiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), actingSubject: holder.actor });
   const current = await json<{ revision: string }>(await wiki('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(holder.actor)}`));
+  // The configuration write accepts the current presentation. A stored older document is only adapted when it is read.
   await post(`/v1/zones/${short(zone)}/configuration`, { expectedHead: current.revision, actingSubject: holder.actor,
     name: spec.name, language: spec.language, defaultRealm: space.realm, official: {},
     presentation: { profile: 'zone-presentation-v2', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],

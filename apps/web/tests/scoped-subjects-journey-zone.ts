@@ -1,8 +1,9 @@
 // The franchise wiki Zone built on the scoped-subjects demo: the saga Work, which belongs to Canon and to Legends, in its
 // franchise list, and Anakin in its characters list, so that a Character page read inside the Zone offers the continuity
 // switch. Written through Main's public commands into the browser QA stack after the demo itself, as the Zone's own
-// holder. The official franchise-wiki route segment is one per stack: when another journey has taken it this exits 3,
-// and the journey skips its Zone step instead of failing the other one.
+// holder. The official franchise-wiki route segment is one per stack. When another journey has taken it, the public
+// official list names that Zone, and the saga Work is placed first on its franchise list: the package reads positions
+// and continuities from the first Work on that list.
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -51,17 +52,109 @@ try {
         VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
     };
     const grantReader = (scope: string, action: string) => grantTo(web.principalId, web.actingSubject, scope, action);
+    /** The Zone another journey already published at this route segment, pointed at the saga Work. */
+    const adoptExisting = async () => {
+      const listed = async () => {
+        let after: string | undefined;
+        for (let page = 0; page < 20; page += 1) {
+          const query = new URLSearchParams({ official: 'true', limit: '50' });
+          if (after) query.set('after', after);
+          const response = await h.call(null, 'GET', `/v1/zones?${query}`);
+          const text = await response.text();
+          if (response.status === 503) return null;
+          if (!response.ok) throw new SeedApiError('GET /v1/zones?official=true', response.status, text);
+          const body = JSON.parse(text) as { items: { zone: string; realm: string; routeSegment: string }[]; next: string | null };
+          const match = body.items.find(item => item.routeSegment === spec.routeSegment);
+          if (match) return match;
+          if (!body.next) return null;
+          after = body.next;
+        }
+        return null;
+      };
+      interface Navigation { segment: string; target: string; kind: string }
+      let found: { zone: string; realm: string; franchise: string; characters: string } | null = null;
+      for (let attempt = 0; attempt < 90 && !found; attempt += 1) {
+        const zone = await listed();
+        if (zone) {
+          try {
+            const presentation = await h.api(null).get<{ realm: string | null; navigation: Navigation[] }>(
+              `/v1/zones/${short(zone.zone)}/presentation`);
+            const at = (segment: string) => presentation.navigation.find(item => item.segment === segment && item.kind === 'index')?.target;
+            const franchise = at('franchise');
+            const characters = at('characters');
+            if (franchise && characters) found = { zone: zone.zone, realm: presentation.realm ?? zone.realm, franchise, characters };
+          } catch (error) {
+            const waiting = error instanceof SeedApiError && [404, 503].includes(error.status);
+            if (!waiting) throw error;
+          }
+        }
+        if (!found) await Bun.sleep(1000);
+      }
+      if (!found) throw new Error('The franchise-wiki route segment is taken, and the public official Zone list has no Zone with that route segment and its lists');
+      const saga = demo.works.saga!.work;
+      const anakin = demo.subjects.anakin!;
+      await h.authorize(`work:read:${saga}`, 'work.read');
+      await h.authorize(`semantic:read:${anakin}`, 'semantic.read');
+      interface Occurrence { state?: string; role?: string; target?: string; occurrence?: string }
+      interface Members { structure: string; revision: string; occurrences: Occurrence[]; next: string | null }
+      const inventory = async (collection: string) => {
+        await h.authorize(`semantic:read:${collection}`, 'semantic.read');
+        const members: { occurrence: string; target: string }[] = [];
+        let after: string | undefined;
+        let structure = '';
+        let revision = '';
+        for (let page = 0; page < 20; page += 1) {
+          const query = new URLSearchParams({ actingSubject: holder.actor, limit: '100' });
+          if (after) query.set('after', after);
+          const body = await api.get<Members>(`/v1/collections/${short(collection)}?${query}`);
+          if (!structure) { structure = body.structure; revision = body.revision; }
+          else if (body.revision !== revision) throw new Error('A Zone list changed while it was read');
+          for (const item of body.occurrences)
+            if (item.state === 'active' && item.role === 'member' && item.target && item.occurrence)
+              members.push({ occurrence: item.occurrence, target: item.target });
+          if (!body.next) return { structure, revision, members };
+          after = body.next;
+        }
+        throw new Error('A Zone list did not finish');
+      };
+      // The same membership change a Zone owner posts. A stale head is read again; a missing edit grant is the principal's limit.
+      const place = async (collection: string, target: string, position: 'first' | 'last') => {
+        await h.authorize(`collection:edit:${collection}`, 'collection.edit');
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const page = await inventory(collection);
+          const index = page.members.findIndex(member => member.target === target);
+          if ((position === 'last' && index >= 0) || (position === 'first' && index === 0)) return;
+          try {
+            await post(`/v1/collections/${short(collection)}/changes`, { expectedHead: page.revision, actingSubject: holder.actor,
+              operations: index >= 0
+                ? [{ op: 'move', occurrence: page.members[index]!.occurrence, parent: page.structure, position: 'first' }]
+                : [{ op: 'insert', parent: page.structure, role: 'member', position, target }] });
+            return;
+          } catch (error) {
+            const denied = error instanceof SeedApiError && error.status === 403;
+            if (denied) throw new Error(`The journey's principal cannot change the franchise-wiki list ${collection}: ${error.detail}`);
+            if (!(error instanceof SeedApiError) || error.status !== 409 || attempt === 4) throw error;
+          }
+        }
+      };
+      await place(found.franchise, saga, 'first');
+      await place(found.characters, anakin, 'last');
+      await grantReader(`work:read:${saga}`, 'work.read');
+      await grantReader(`semantic:read:${anakin}`, 'semantic.read');
+      return { zone: found.zone, realm: found.realm, segment: spec.routeSegment, character: anakin, work: saga };
+    };
     await h.authorize('space:create:root', 'space.create');
     const space = await post<{ space: string; realm: string }>('/v1/spaces', { profile: 'space-realm-v2', handle: spec.routeSegment,
       name: spec.name, capabilities: ['realm'], actingSubject: holder.actor }).catch(error => {
-      if (error instanceof SeedApiError && [409, 422].includes(error.status)) {
-        console.error(`route segment held: ${error.detail}`);
-        process.exitCode = 3;
-        return null;
-      }
+      if (error instanceof SeedApiError && [409, 422].includes(error.status)) return null;
       throw error;
     });
-    if (!space) return;
+    if (!space) {
+      const zoneSeed = await adoptExisting();
+      writeFileSync(resolve(directory, 'zone.json'), JSON.stringify(zoneSeed));
+      console.log(JSON.stringify(zoneSeed));
+      return;
+    }
     const zone = id();
     for (const [scope, action] of [[`zone:edit:${zone}`, 'zone.edit'], [`semantic:read:${zone}`, 'semantic.read'],
       [`zone:official:${zone}`, 'zone.official']] as const) await h.authorize(scope, action);

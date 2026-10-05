@@ -44,14 +44,13 @@ function watch(page: Page) {
 
 
 /**
- * The franchise wiki Zone around the demo, written once per stack the first time a step needs it, or null when another journey
- * in the same stack already holds the official route segment (the Zone's package is found by that segment alone).
+ * The franchise wiki Zone around the demo, written once per stack the first time a step needs it. When another journey
+ * already holds the official route segment, the seed adopts that Zone instead of leaving this step out.
  */
-function franchiseZone(): { zone: string; realm: string; segment: string; character: string } | null {
+function franchiseZone(): { zone: string; realm: string; segment: string; character: string } {
   const retained = resolve('.temp/scoped-subjects-journey', process.env.REZICS_QA_RUN_ID!, 'zone.json');
   if (existsSync(retained)) return JSON.parse(readFileSync(retained, 'utf8'));
   const made = spawnSync('bun', ['apps/web/tests/scoped-subjects-journey-zone.ts'], { env: process.env, encoding: 'utf8', timeout: 480_000 });
-  if (made.status === 3) { console.log(made.stderr); return null; }
   if (made.status !== 0 || made.error) throw new Error(`franchise wiki Zone seed failed: ${made.stderr || made.error?.message || made.status}`);
   return JSON.parse(made.stdout.trim().split('\n').at(-1)!);
 }
@@ -318,16 +317,15 @@ test.describe('reading', () => {
   test('a Character read in the franchise wiki Zone offers the continuity switch, says what is applied and clears it', async ({ page }) => {
     test.setTimeout(600_000);
     const zone = franchiseZone();
-    test.skip(!zone, 'another journey already holds the official franchise-wiki route segment in this stack');
     await signIn(page);
     // The Zone's package runs only once Main reports it approved, and the Realm's header trails the Zone.
     const mainUrl = (path: string) => `http://127.0.0.1:${process.env.MAIN_PORT}${path}`;
-    await expect.poll(async () => (await fetch(mainUrl(`/v1/zones/${zone!.zone.slice(-36)}/presentation`)).then(
+    await expect.poll(async () => (await fetch(mainUrl(`/v1/zones/${zone.zone.slice(-36)}/presentation`)).then(
       async response => response.ok ? ((await response.json()) as { execution: { state: string } }).execution.state : '', () => '')),
     { timeout: 120_000 }).toBe('package');
-    await expect.poll(async () => (await fetch(mainUrl(`/v1/realms/${zone!.realm.slice(-36)}`)).then(response => response.ok, () => false)),
+    await expect.poll(async () => (await fetch(mainUrl(`/v1/realms/${zone.realm.slice(-36)}`)).then(response => response.ok, () => false)),
       { timeout: 120_000 }).toBe(true);
-    const character = `/en${spaceHref(zone!.segment, 'site', ['characters', zone!.character.slice(-36)])}?position=all`;
+    const character = `/en${spaceHref(zone.segment, 'site', ['characters', zone.character.slice(-36)])}?position=all`;
     await page.goto(character);
     // The Zone frames the page, so its switch sits outside the page's own main region.
     const main = page.locator('body');
