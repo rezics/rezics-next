@@ -25,9 +25,11 @@ export function TitleEffectField({ effect, sample, sampleLanguage, onChange, t }
       <h3 id={`${id}-title`} className="font-semibold text-lg">{t.effectHeading}</h3>
       <p className="max-w-3xl text-pretty text-muted-foreground text-sm">{t.effectHelp}</p>
     </div>
-    <SegmentGroup aria-labelledby={`${id}-title`} value={effect} onValueChange={details => details.value && onChange(details.value as ZoneTitleEffect)}>
-      {titleEffects.map(option => <SegmentGroupItem key={option} value={option}><SegmentGroupItemText>{labels[option]}</SegmentGroupItemText></SegmentGroupItem>)}
-    </SegmentGroup>
+    <div className="max-w-full overflow-x-auto pb-1">
+      <SegmentGroup aria-labelledby={`${id}-title`} value={effect} onValueChange={details => details.value && onChange(details.value as ZoneTitleEffect)}>
+        {titleEffects.map(option => <SegmentGroupItem key={option} value={option}><SegmentGroupItemText>{labels[option]}</SegmentGroupItemText></SegmentGroupItem>)}
+      </SegmentGroup>
+    </div>
     <div role="img" aria-label={`${t.effectSample}: ${labels[effect]}`}
       className="grid gap-2 rounded-2xl bg-[linear-gradient(135deg,#0b1c33,#07101d_60%,#1b3a63)] px-5 py-6 text-white sm:px-8">
       <span className="text-[#c9d6ea] text-xs uppercase tracking-wide">{t.effectSample}</span>

@@ -212,8 +212,8 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
     invalid: t.refusalInvalid, repeat: t.refusalRepeat, limited: t.refusalLimited, pending: t.refusalPending, unavailable: t.refusalUnavailable })[refusal];
 
   return <div className="grid gap-6">
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] xl:items-start">
-      <div className="order-2 grid min-w-0 gap-10 xl:order-1">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8 xl:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] xl:items-start">
+      <div className="order-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10 xl:order-1">
         <section aria-labelledby="zone-showcase-slides" className="grid gap-4">
           <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
             <div className="grid gap-1">

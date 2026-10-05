@@ -53,8 +53,13 @@ type Story = StoryObj<typeof meta>;
 
 const phone = { viewport: { value: 'phone' } };
 const desktop = { viewport: { value: 'desktop' } };
-const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-const slides = (canvas: ReturnType<typeof within>) => within(canvas.getByRole('list', { name: 'Slides in order' }));
+/** Nothing makes the page wider than its window; a failure names what sticks out. */
+const noOverflow = () => {
+  const wide = [...document.querySelectorAll<HTMLElement>('body *')].filter(element => element.getBoundingClientRect().right > window.innerWidth + 1
+    && !element.closest('.overflow-x-auto')).slice(0, 6).map(element => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 70)}`);
+  return expect(document.documentElement.scrollWidth, wide.join(' | ')).toBeLessThanOrEqual(window.innerWidth);
+};
+const slides = (canvas: ReturnType<typeof within>, locale: UiLocale = 'en') => within(canvas.getByRole('list', { name: copyOf(locale).listLabel }));
 const saveButton = (canvas: ReturnType<typeof within>) => canvas.getByRole('button', { name: 'Save showcase' });
 /** The stage inside the preview's iframe, once React has rendered into it. */
 async function stage(canvasElement: HTMLElement) {
@@ -124,10 +129,16 @@ export const FullTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, glob
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 2, name: '展示' })).toBeVisible();
-    await expect(slides(canvas).getAllByText('多數讀者會點這一張')).toHaveLength(1);
+    await expect(slides(canvas, 'zh-Hant').getAllByText('多數讀者會點這一張')).toHaveLength(1);
     await noOverflow();
   } };
-export const FullJapanesePhone: Story = { args: { locale: 'ja' }, globals: { ...phone, locale: 'ja' }, play: Full.play };
+export const FullJapanesePhone: Story = { args: { locale: 'ja' }, globals: { ...phone, locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(slides(canvas, 'ja').getAllByText('多くの読者が選ぶスライド')).toHaveLength(1);
+    await expect(canvas.getByRole('button', { name: 'ショーケースを保存' })).toBeDisabled();
+    await noOverflow();
+  } };
 
 /** A slide moves with its own buttons (which a keyboard reaches), and the order is announced. */
 export const Reorder: Story = {
@@ -135,18 +146,18 @@ export const Reorder: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const names = () => slides(canvas).getAllByRole('button', { name: /^Edit / }).map(button => button.getAttribute('aria-label'));
-    await expect(names().slice(0, 3)).toEqual(['Edit Game of the week', 'Edit Krita', 'Edit Autumn serial contest']);
-    await expect(canvas.getByRole('button', { name: 'Move Game of the week up' })).toBeDisabled();
-    const down = canvas.getByRole('button', { name: 'Move Game of the week down' });
+    await expect(names().slice(0, 3)).toEqual(['Edit Hades', 'Edit Krita', 'Edit Autumn serial contest']);
+    await expect(canvas.getByRole('button', { name: 'Move Hades up' })).toBeDisabled();
+    const down = canvas.getByRole('button', { name: 'Move Hades down' });
     down.focus();
     await userEvent.keyboard('{Enter}');
-    await expect(names().slice(0, 3)).toEqual(['Edit Krita', 'Edit Game of the week', 'Edit Autumn serial contest']);
-    await expect(await canvas.findByText('Game of the week is now slide 2 of 5')).toBeInTheDocument();
+    await expect(names().slice(0, 3)).toEqual(['Edit Krita', 'Edit Hades', 'Edit Autumn serial contest']);
+    await expect(await canvas.findByText('Hades is now slide 2 of 5')).toBeInTheDocument();
     await expect(slides(canvas).getAllByText('Most readers act on this slide')).toHaveLength(1);
     await expect(within(slides(canvas).getAllByRole('listitem')[0]!).getByText('Most readers act on this slide')).toBeVisible();
     await expect(canvas.getByText('Unsaved changes')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Discard changes' }));
-    await expect(names().slice(0, 2)).toEqual(['Edit Game of the week', 'Edit Krita']);
+    await expect(names().slice(0, 2)).toEqual(['Edit Hades', 'Edit Krita']);
     await expect(canvas.getByText('Everything is saved')).toBeVisible();
   },
 };
@@ -197,11 +208,11 @@ export const LinkSlide: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Add a link' }));
     await expect(await canvas.findByText('Enter an address.')).toBeVisible();
-    await userEvent.type(canvas.getByRole('textbox', { name: 'Address on this site' }), 'fiction');
+    await userEvent.type(canvas.getByRole('textbox', { name: /^Address on this site/ }), 'fiction');
     await expect(canvas.getByText(/Start with a single “\/”/)).toBeVisible();
-    await userEvent.clear(canvas.getByRole('textbox', { name: 'Address on this site' }));
-    await userEvent.type(canvas.getByRole('textbox', { name: 'Address on this site' }), '/discover');
-    await userEvent.type(canvas.getByRole('textbox', { name: 'Title' }), 'Autumn serial contest');
+    await userEvent.clear(canvas.getByRole('textbox', { name: /^Address on this site/ }));
+    await userEvent.type(canvas.getByRole('textbox', { name: /^Address on this site/ }), '/discover');
+    await userEvent.type(canvas.getByRole('textbox', { name: /^Title Shown/ }), 'Autumn serial contest');
     await expect(canvas.queryByText('Needs attention')).toBeNull();
     await expect(saveButton(canvas)).toBeEnabled();
     await expect(slides(canvas).getByText('No art')).toBeVisible();
@@ -317,14 +328,14 @@ export const Conflict: Story = {
   globals: desktop,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Move Game of the week down' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Move Hades down' }));
     await userEvent.click(saveButton(canvas));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(/Nothing was overwritten/);
     await userEvent.click(canvas.getByRole('button', { name: 'Reload latest' }));
     await expect(await canvas.findByText(/Reloaded\. The Zone’s latest showcase has 4 slides/)).toBeVisible();
     // The person's order stays, and the title effect they did not touch follows the Zone.
     await expect(slides(canvas).getAllByRole('button', { name: /^Edit / }).map(button => button.getAttribute('aria-label')).slice(0, 2))
-      .toEqual(['Edit Krita', 'Edit Game of the week']);
+      .toEqual(['Edit Krita', 'Edit Hades']);
     await expect(canvas.getByRole('radio', { name: 'Outline' })).toBeChecked();
     await expect(canvas.getByText('Unsaved changes')).toBeVisible();
     await expect(saveButton(canvas)).toBeEnabled();
