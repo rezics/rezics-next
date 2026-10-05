@@ -2,6 +2,7 @@ import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { findMenuItem } from '../stories/choose-option.ts';
 import { memoryReaderActions, storyWorkId } from '../catalogue/fixtures.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import * as fixture from './fixtures.ts';
@@ -61,8 +62,8 @@ export const Game: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Want to play' }));
     await expect(await canvas.findByRole('button', { name: /^Want to play — Shelve/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: /^Want to play — Shelve/ }));
-    await expect(await within(document.body).findByRole('menuitemradio', { name: 'Playing' })).toBeVisible();
-    await expect(within(document.body).getByRole('menuitemradio', { name: 'Played' })).toBeVisible();
+    await findMenuItem(within(document.body), 'menuitemradio', 'Playing');
+    await findMenuItem(within(document.body), 'menuitemradio', 'Played');
   },
 };
 export const Software: Story = {

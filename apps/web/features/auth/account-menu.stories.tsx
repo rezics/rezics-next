@@ -16,6 +16,7 @@ import shellEs from '../shell/messages/es.ts';
 import { isUiLocale, localeNames } from '../../i18n/define.ts';
 import { accountRowName, contentPreferenceValue } from './account-menu-items.ts';
 import { ShellProvider } from '../shell/shell-provider.tsx';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
 const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
@@ -177,15 +178,15 @@ export const DesktopSubmenus: Story = {
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Account menu' }));
-    await userEvent.click(await page.findByRole('menuitem', { name: 'Language: English' }));
+    await chooseMenuItem(page, 'menuitem', 'Language: English');
     await expect(await page.findByRole('menuitemradio', { name: 'English' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
     await userEvent.keyboard('{Escape}');
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Account menu' }));
-    await userEvent.click(await page.findByRole('menuitem', { name: /^Appearance:/ }));
-    await userEvent.click(await page.findByRole('menuitemradio', { name: 'Dark' }));
+    await chooseMenuItem(page, 'menuitem', /^Appearance:/);
+    await chooseMenuItem(page, 'menuitemradio', 'Dark');
     await expect(document.documentElement).toHaveClass('dark');
   },
 };

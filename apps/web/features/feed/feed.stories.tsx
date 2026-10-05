@@ -26,6 +26,7 @@ import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import type { FeedTab } from './state.ts';
 import type { FeedPage, FeedQuery, Loaded } from './types.ts';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 // Posts and the list around them, with an in-memory Main (fixtures.ts). These
 // stories carry the feed's rules: one anatomy for every kind, grouped updates,
@@ -373,7 +374,7 @@ export const HideAndUndo: Story = {
     await userEvent.click(
       within(article(canvas, 'Jane Eyre')).getByRole('button', { name: 'More options' }),
     );
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'Hide' }));
+    await chooseMenuItem(screen, 'menuitem', 'Hide');
     const status = await canvas.findByText('Post hidden. You won’t see it again.');
     await expect(canvas.queryByRole('article', { name: 'Jane Eyre' })).toBeNull();
     await userEvent.click(

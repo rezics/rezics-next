@@ -15,6 +15,7 @@ import { setUnread } from './unread.ts';
 import { spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { withZoneAddress } from './communities-relationships.ts';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 const zhHansShellMessages = { ...messages, ...zhHans };
 
@@ -176,7 +177,7 @@ export const Dark: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
     await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance: Dark' })).toBeVisible());
-    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance: Dark' }));
+    await chooseMenuItem(menu, 'menuitem', 'Appearance: Dark');
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: 'Dark' }))
       .toHaveAttribute('aria-checked', 'true'));
   },
@@ -187,15 +188,15 @@ export const ThemeChoice: Story = {
     const canvas = within(canvasElement);
     const trigger = canvas.getByRole('button', { name: 'Display mode' });
     await userEvent.click(trigger);
-    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Dark' }));
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'Dark');
     await expect(document.documentElement).toHaveClass('dark');
     await expect(document.cookie).toContain('rezics_theme=dark');
     await userEvent.click(trigger);
-    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Match system' }));
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'Match system');
     await expect(document.documentElement).not.toHaveClass('dark');
     await expect(document.documentElement).not.toHaveClass('light');
     await userEvent.click(trigger);
-    await userEvent.click(within(document.body).getByRole('menuitemradio', { name: 'Light' }));
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'Light');
     await expect(document.documentElement).toHaveClass('light');
   },
 };
@@ -209,7 +210,7 @@ export const Chinese: Story = {
     await expect(canvas.getByRole('navigation', { name: '主导航' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: '账户菜单' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: '语言: 简体中文' })).toBeVisible());
-    await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言: 简体中文' }));
+    await chooseMenuItem(within(document.body), 'menuitem', '语言: 简体中文');
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: '简体中文' }))
       .toHaveAttribute('aria-checked', 'true'));
     await expect(canvas.getByRole('searchbox', { name: '搜索所有内容' })).toBeVisible();
@@ -376,8 +377,8 @@ export const DisplayModeNotSaved: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
     await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance: Light' })).toBeVisible());
-    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance: Light' }));
-    await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'Dark' }));
+    await chooseMenuItem(menu, 'menuitem', 'Appearance: Light');
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'Dark');
     await expect(document.documentElement).toHaveClass('dark');
     // Storybook has no Account behind /api/preferences, so the save fails.
     const note = await canvas.findByText('Couldn’t save your display mode to your account. It still applies on this device.');

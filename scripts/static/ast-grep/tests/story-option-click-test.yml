@@ -2,7 +2,8 @@ id: story-option-click
 valid:
   - "await chooseOption(within(document.body), 'Romance');"
   - "await userEvent.click(canvas.getByRole('combobox', { name: 'Topics' }));"
-  - "await userEvent.click(within(menu).getByRole('menuitem', { name: item }));"
+  - "await chooseMenuItem(screen, 'menuitemradio', 'Dark');"
+  - "await userEvent.click(within(menu).getByRole('menu', { name: 'Alignment' }));"
   - "await expect(screen.getByRole('option', { name: 'Romance' })).toBeVisible();"
   - "await userEvent.keyboard('{ArrowDown}{Enter}');"
 invalid:
@@ -10,3 +11,6 @@ invalid:
   - "await userEvent.click(within(document.body).getByRole('option', { name: /^Off$/ }));"
   - 'await userEvent.dblclick(page.getByRole("option", { name }));'
   - "await userEvent.click(await within(listbox).findByRole('option', { name: option, hidden: true }, { timeout: 4000 }));"
+  - "await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Dark' }));"
+  - "await userEvent.click(within(menu).getByRole('menuitem', { name: item }));"
+  - "await userEvent.click(page.getByRole('menuitemcheckbox', { name: 'Compact cards' }));"

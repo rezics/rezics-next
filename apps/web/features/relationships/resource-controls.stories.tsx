@@ -6,6 +6,7 @@ import { RelationshipControl } from './control.tsx';
 import { actor, target } from './fixtures.ts';
 import { messages } from './messages.ts';
 import type { FollowEdit, FollowState } from './types.ts';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 type State = 'ready' | 'following' | 'loading' | 'unavailable' | 'signed-out';
 let reads: URL[] = [];
@@ -66,7 +67,7 @@ const followAndUnfollow: Story['play'] = async ({ canvasElement }) => {
     const notifications = await canvas.findByRole('button', { name: /^Notifications:/ });
     await waitFor(() => expect(notifications).toBeEnabled());
     await userEvent.click(notifications);
-    await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: level }));
+    await chooseMenuItem(within(document.body), 'menuitemradio', level);
     await expect(await canvas.findByRole('button', { name: `Notifications: ${level}` })).toBeVisible();
   }
   const unfollow = await canvas.findByRole('button', { name: 'Following · Misaka · Unfollow' });

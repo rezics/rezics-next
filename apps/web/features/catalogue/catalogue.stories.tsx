@@ -22,6 +22,7 @@ import {
 } from './reader-actions.tsx';
 import { WorkRow } from './work-row.tsx';
 import { WorkGrid, WorkShelf } from './work-shelf.tsx';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 type Args = ComponentProps<typeof WorkShelf> & { actions?: ReaderActions; signedIn?: boolean };
 
@@ -102,7 +103,7 @@ export const ShelvingFromACover: Story = {
     const canvas = within(canvasElement);
     const trigger = canvas.getByRole('button', { name: 'Shelve “Pride and Prejudice”' });
     await userEvent.click(trigger);
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Currently reading' }));
+    await chooseMenuItem(screen, 'menuitemradio', 'Currently reading');
     await waitFor(() =>
       expect(
         canvas.getByRole('button', { name: 'Shelve “Pride and Prejudice” · Currently reading' }),

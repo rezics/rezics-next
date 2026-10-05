@@ -1,5 +1,11 @@
 id: story-option-click
 snapshots:
+  'await userEvent.click(await screen.findByRole(''menuitemradio'', { name: ''Dark'' }));':
+    labels:
+    - source: 'userEvent.click(await screen.findByRole(''menuitemradio'', { name: ''Dark'' }))'
+      style: primary
+      start: 6
+      end: 81
   'await userEvent.click(await screen.findByRole(''option'', { name: ''Romance'' }));':
     labels:
     - source: 'userEvent.click(await screen.findByRole(''option'', { name: ''Romance'' }))'
@@ -12,12 +18,24 @@ snapshots:
       style: primary
       start: 6
       end: 116
+  'await userEvent.click(page.getByRole(''menuitemcheckbox'', { name: ''Compact cards'' }));':
+    labels:
+    - source: 'userEvent.click(page.getByRole(''menuitemcheckbox'', { name: ''Compact cards'' }))'
+      style: primary
+      start: 6
+      end: 84
   'await userEvent.click(within(document.body).getByRole(''option'', { name: /^Off$/ }));':
     labels:
     - source: 'userEvent.click(within(document.body).getByRole(''option'', { name: /^Off$/ }))'
       style: primary
       start: 6
       end: 83
+  'await userEvent.click(within(menu).getByRole(''menuitem'', { name: item }));':
+    labels:
+    - source: 'userEvent.click(within(menu).getByRole(''menuitem'', { name: item }))'
+      style: primary
+      start: 6
+      end: 73
   await userEvent.dblclick(page.getByRole("option", { name }));:
     labels:
     - source: userEvent.dblclick(page.getByRole("option", { name }))

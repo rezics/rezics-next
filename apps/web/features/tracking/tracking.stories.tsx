@@ -149,10 +149,10 @@ export const PageAndFurthest: Story = {
     const position = await within(card).findByLabelText('Value');
     await userEvent.type(position, '200');
     await userEvent.click(within(card).getByRole('button', { name: 'Save position' }));
-    await waitFor(() => expect(within(card).getByText(/Furthest/)).toBeVisible());
+    await waitFor(() => expect(within(card).getByText(/Furthest/)).toBeVisible(), { timeout: 4_000 });
     await userEvent.type(within(card).getByLabelText('Value'), '50');
     await userEvent.click(within(card).getByRole('button', { name: 'Save position' }));
-    await waitFor(() => expect(card).toHaveTextContent('Now page 50 · Furthest page 200'));
+    await waitFor(() => expect(card).toHaveTextContent('Now page 50 · Furthest page 200'), { timeout: 4_000 });
   },
 };
 

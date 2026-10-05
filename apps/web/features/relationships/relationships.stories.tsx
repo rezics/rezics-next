@@ -23,7 +23,7 @@ import { actor, fixtureFollow, memoryRelationships, target } from './fixtures.ts
 import { FollowingManager } from './manager.tsx';
 import { messages } from './messages.ts';
 import { RelationshipWatch } from './watch.tsx';
-import { chooseOption } from '../stories/choose-option.ts';
+import { chooseMenuItem, chooseOption } from '../stories/choose-option.ts';
 
 const shellCopy = { en: shell, de: { ...shell, ...shellDe }, es: { ...shell, ...shellEs }, fr: { ...shell, ...shellFr },
   ja: { ...shell, ...shellJa }, ko: { ...shell, ...shellKo }, 'zh-Hans': { ...shell, ...shellHans }, 'zh-Hant': { ...shell, ...shellHant } };
@@ -182,7 +182,7 @@ export const SharedControls: Story = { render: () => <Controls />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Notifications: Highlights' }));
-    await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'All' }));
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'All');
     await expect(await canvas.findByRole('button', { name: 'Notifications: All' })).toBeVisible();
     await expect(lastMemory.follows.get(target(10))?.source).toBe('library');
     await waitFor(() => expect(within(document.body).queryByRole('menu')).toBeNull());

@@ -29,6 +29,7 @@ import type { ReadStart } from './read.ts';
 import { hubLabels, hubSections } from './hub.ts';
 import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 
 interface OverviewArgs {
   work: WorkHeader; agentCredits: Loaded<AgentCreditPage>; credits: Loaded<CreditPage>; scope: WorkScope | null;
@@ -200,7 +201,7 @@ export const SignedInActions: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'More shelves' }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Currently reading' }));
+    await chooseMenuItem(screen, 'menuitemradio', 'Currently reading');
     await waitFor(() => expect(canvas.getByRole('button', { name: /^Currently reading — Shelve/ })).toBeVisible());
     await userEvent.click(canvas.getAllByRole('radio')[4]!);
     await waitFor(() => expect(canvas.getByText('Your rating')).toBeVisible());
