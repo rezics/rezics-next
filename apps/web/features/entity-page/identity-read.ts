@@ -90,13 +90,15 @@ async function titleApplicability(
   const { main, actingSubject } = await reader();
   const id = idOf(entry.relation),
     revision = entry.revision && idOf(entry.revision);
-  // The exact occurrence read requires an acting Agent. Do not guess context from the holder's other relations.
-  if (!actingSubject || !id || !revision) return null;
+  // The exact occurrence read requires an acting Agent. Signed out, a title row has no context to show, which is not a failure;
+  // and the holder's other relations are never a guess for it.
+  if (!actingSubject) return [];
+  if (!id || !revision) return null;
   const read = await settle(() =>
     main.v1.relations({ id }).revisions({ revision }).get({ query: { actingSubject, position } }),
   );
   if (!read.ok) return null;
-  const names = await namesOf(read.data.applicability);
+  const names = await namesOf(read.data.applicability, position);
   if (read.data.applicability.some((ref) => names.get(ref)?.status !== 'available')) return null;
   return [...names.values()].filter(
     (item): item is AvailableSummary => item.status === 'available',
@@ -147,7 +149,12 @@ export async function readIdentitySections(
   });
   const continuation = (source: AvailableSummary, cursor: string | null) =>
     cursor ? { resource: source, cursor } : null;
-  const variants = identityEntries(entries, definitions.data, 'variant-of');
+  // A continuation page lists later relations only: the variant-of relation that names the hub, and whether the page has
+  // any variants at all, are read from the first page, or a later page would lose the hub row.
+  const head = cursors.relations
+    ? await readIdentityRelations(self.reference, undefined, position, frame)
+    : own;
+  const variants = identityEntries(head.ok ? head.data.items : entries, definitions.data, 'variant-of');
   const asVariant = variants.find((entry) => entry.rendering?.viewingRole === 'variant');
   const hubSummary = asVariant ? bindingSummary(asVariant, 'hub', self) : self;
   const is = (type: string) => page.target.types.includes(`${namespaces.rv}${type}`);
@@ -214,7 +221,9 @@ export async function readIdentitySections(
     const rows = identityEntries(entries, definitions.data, key).filter(
       (entry) => entry.rendering?.viewingRole === from,
     );
-    if (!expected && !rows.length) continue;
+    // Rows that are not on this page may be on another: an empty section is only known to be empty on the last page of a
+    // list that began on its first.
+    if ((!expected || own.data.next || cursors.relations) && !rows.length) continue;
     const members: IdentityMember[] = [];
     for (const entry of rows) {
       const summary = bindingSummary(entry, to, self);

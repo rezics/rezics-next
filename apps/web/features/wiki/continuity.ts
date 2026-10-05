@@ -1,4 +1,5 @@
 import { iriOf } from '../work-page/route.ts';
+import type { ContinuityOption } from './continuity-switch.tsx';
 
 // The continuity a person reads a franchise in (Canon, Legends, a Work's own timeline). Like the reading position it
 // is carried in the address, so each page the reader moves to keeps it, and Main decides what every read returns for
@@ -39,6 +40,13 @@ export function continuityFrame(choice: ContinuityChoice): string[] {
   return choice.kind === 'at' ? [iriOf(choice.continuity)] : [];
 }
 
+/**
+ * The `frame` for a page's own reads. A place is already framed by its coordinates, which Main sets for its facts and
+ * relations; the reader's continuity would replace them rather than add to them, so a place page sends none.
+ */
+export const pageFrame = (choice: ContinuityChoice, place: boolean): string[] =>
+  place ? [] : continuityFrame(choice);
+
 /** The address value for `choice`: nothing where it is the host's default, `off` where it turns that default off. */
 export function continuityParam(
   choice: ContinuityChoice,
@@ -69,4 +77,19 @@ export function withContinuity(
   if (value) query.set(CONTINUITY_PARAM, value);
   const text = query.toString();
   return `${path}${text ? `?${text}` : ''}${fragment}`;
+}
+
+/**
+ * What the continuity bar lists, or null when it has nothing to say. A filter that is applied is always said, whatever the
+ * page offers: the chosen continuity joins the options when the page's own facts do not name it (a link from another
+ * page can carry it), so the reader can see which one hides what and clear it. With none applied the bar needs a choice.
+ */
+export function offeredContinuities(
+  current: ContinuityChoice,
+  options: readonly ContinuityOption[],
+  chosen: ContinuityOption | null,
+): readonly ContinuityOption[] | null {
+  if (current.kind === 'off') return options.length < 2 ? null : options;
+  const named = options.some((option) => option.id === current.continuity);
+  return named || !chosen ? options : [...options, chosen];
 }

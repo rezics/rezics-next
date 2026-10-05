@@ -80,7 +80,7 @@ async function worksOf(page: EntityProjection, cursors: EntityCursors, position?
         if (counterpart.status === 'available' && counterpart.base === 'work')
           found.add(counterpart.reference);
   const works = [...found].slice(0, MAX_WORKS);
-  const names = await namesOf(works);
+  const names = await namesOf(works, position);
   return works.flatMap((iri) => {
     const summary = names.get(iri);
     return summary?.status === 'available' ? [{ iri, name: summary.name }] : [];

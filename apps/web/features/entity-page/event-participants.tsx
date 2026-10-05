@@ -3,6 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
 import type { ProjectionRead, QuestionScope } from '../scoped-rating/api.ts';
 import { EventRanking } from '../scoped-rating/event-ranking.tsx';
+import { FailureNote } from '../scoped-rating/failure.tsx';
 import { reader, settle } from '../work-page/read.ts';
 import { idOf } from '../work-page/route.ts';
 import { readEntityProjection, readStatements, sectionOf } from './read.ts';
@@ -17,19 +18,26 @@ import type { EntityProjection } from './types.ts';
 const MAX_CONTAINERS = 6;
 const MAX_PEOPLE = 20;
 
-/** The registry's frame dimension of a resource, or null when it is not readable or not a frame. */
-async function dimensionOf(iri: string, position?: string): Promise<string | null> {
+/**
+ * What a resource is to a ranking, read at the reading position: its frame dimension (null for a person), or `hidden` when
+ * it cannot be read there. A resource that is withheld must not be taken for a person, or it would be ranked.
+ */
+async function dimensionOf(iri: string, position?: string): Promise<string | null | 'hidden'> {
   const id = idOf(iri);
   const page = id ? await readEntityProjection(id, position) : null;
-  return page?.ok ? (page.data.registry.frameDimension ?? null) : null;
+  return page?.ok && page.data.summary.status === 'available' ? (page.data.registry.frameDimension ?? null) : 'hidden';
 }
 
+/** The participants a reader may see at the position, and whether some could not be told apart from withheld ones. */
+export interface EventParticipants { participants: ProjectionRead[]; failed: boolean }
+const noParticipants: EventParticipants = { participants: [], failed: false };
+
 export const readEventParticipants = cache(
-  async (event: string, position?: string): Promise<ProjectionRead[]> => {
+  async (event: string, position?: string): Promise<EventParticipants> => {
     const { main, actingSubject } = await reader();
     const id = idOf(event);
     // Reading who points at an event needs the person's own authority, so a reader who is not signed in sees no participants.
-    if (!id || !actingSubject) return [];
+    if (!id || !actingSubject) return noParticipants;
     const own = await readEntityProjection(id, position);
     const section = own.ok ? sectionOf(own.data, 'statements') : undefined;
     const statements = section ? await readStatements(section, undefined, position) : null;
@@ -81,21 +89,26 @@ export const readEventParticipants = cache(
       }),
     );
     const views = found.flat();
-    if (!views.length) return [];
+    if (!views.length) return noParticipants;
     const batch = await settle(() =>
       main.v1.resources.summaries.post({
         profile: 'resource-summary-batch-v1',
         resources: views.map((view) => view.id),
+        position,
         actingSubject,
       }),
     );
-    const summaries = new Map(
-      batch.ok ? batch.data.summaries.map((summary) => [summary.reference, summary] as const) : [],
-    );
-    return views.map((projection) => ({
-      projection,
-      summary: summaries.get(projection.id) ?? null,
-    }));
+    // Only participants Main names at this position leave the server: a withheld one's subject is in its row, and a
+    // failed lookup cannot say which rows those are, so none is sent.
+    if (!batch.ok) return { participants: [], failed: true };
+    const summaries = new Map(batch.data.summaries.map((summary) => [summary.reference, summary] as const));
+    return {
+      participants: views.flatMap((projection) => {
+        const summary = summaries.get(projection.id);
+        return summary?.status === 'available' ? [{ projection, summary }] : [];
+      }),
+      failed: false,
+    };
   },
 );
 
@@ -114,7 +127,9 @@ export async function EventRankingSection({
   actingSubject: string | null;
 }) {
   if (page.summary.status !== 'available' || page.registry.frameDimension !== 'event') return null;
-  const participants = await readEventParticipants(page.summary.reference, position);
+  const { participants, failed } = await readEventParticipants(page.summary.reference, position);
+  const messages = await getMessages('scopedRating', locale);
+  if (failed) return <FailureNote failure="unavailable" locale={locale} messages={messages} />;
   if (!participants.length) return null;
   const scope: QuestionScope =
     ratingScope.scope === 'realm'
@@ -126,7 +141,7 @@ export async function EventRankingSection({
       scope={scope}
       actingSubject={actingSubject}
       locale={locale}
-      messages={await getMessages('scopedRating', locale)}
+      messages={messages}
     />
   );
 }

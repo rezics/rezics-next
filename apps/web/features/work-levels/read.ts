@@ -69,22 +69,27 @@ export async function readCollectionMembers(collection: string, query: { after?:
   return { ok: true, data: { collection: page.data.collection, members, next: page.data.next } };
 }
 
-/** Names and availability for up to 64 resources per Main call; a failed batch leaves its resources unnamed. */
-export const readNames = cache(async (resources: string): Promise<Names> => {
+/**
+ * Names and availability for up to 64 resources per Main call; a failed batch leaves its resources unnamed. `position` is
+ * the reading position (`all` or an occurrence IRI) Main withholds later names for; omitted, Main chooses.
+ */
+export const readNames = cache(async (resources: string, position?: string): Promise<Names> => {
   const refs = [...new Set(resources.split(' ').filter(Boolean))];
   const { main, actingSubject } = await reader();
   const names = new Map<string, Summary>();
   for (let offset = 0; offset < refs.length; offset += 64) {
     const batch = refs.slice(offset, offset + 64);
     const answer = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: batch, ...(actingSubject ? { actingSubject } : {}) }));
+      resources: batch, ...(position ? { position } : {}),
+      ...(actingSubject ? { actingSubject } : {}) }));
     if (answer.ok) for (const summary of answer.data.summaries) names.set(summary.reference, summary);
   }
   return names;
 });
 
-/** `readNames` over a list; the cache key is the sorted, joined list so one request shares one call. */
-export const namesOf = (resources: readonly string[]) => readNames([...new Set(resources)].sort().join(' '));
+/** `readNames` over a list; the cache key is the sorted, joined list and the position, so one request shares one call per position. */
+export const namesOf = (resources: readonly string[], position?: string) =>
+  readNames([...new Set(resources)].sort().join(' '), position);
 
 export async function readReleases(id: string, after?: string): Promise<Loaded<ReleasePage>> {
   const { main, actingSubject } = await reader();

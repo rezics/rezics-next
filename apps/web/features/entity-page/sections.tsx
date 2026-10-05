@@ -27,7 +27,7 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     ...item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : [],
     // An owner's own property can name a resource too (the Work a character belongs to).
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
-    ...item.qualifiers.applicability]))) : new Map();
+    ...item.qualifiers.applicability])), position) : new Map();
   return projection
     ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
     : <StatementsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}

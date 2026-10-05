@@ -16,8 +16,8 @@ import { RetryButton } from '../work-page/retry-button.tsx';
 import { EntityHeader } from './header.tsx';
 import { type Copy, copyOf } from './messages.ts';
 import { readEntityProjection, sectionOf } from './read.ts';
-import { ContinuitySwitch } from '../wiki/continuity-switch.tsx';
-import { type ContinuityChoice, continuityFrame, offContinuity, withContinuity } from '../wiki/continuity.ts';
+import { ContinuitySwitch, type ContinuityOption } from '../wiki/continuity-switch.tsx';
+import { type ContinuityChoice, offContinuity, offeredContinuities, pageFrame, withContinuity } from '../wiki/continuity.ts';
 import { readFrameTargets } from './frame-targets.ts';
 import { EventRankingSection } from './event-participants.tsx';
 import { judgmentSignals, SubjectJudgmentsSection } from './judgments.tsx';
@@ -34,6 +34,9 @@ import type { EntityProjection, EntitySection, HrefFor, SectionId } from './type
 import { readIdentitySections, type IdentityRatingScope } from './identity-read.ts';
 import { IdentitySectionsView } from './identity-views.tsx';
 import { entryLabel } from '../catalogue/types.ts';
+import { zoneText } from '../realm/adapt.ts';
+import { namesOf } from '../work-levels/read.ts';
+import { iriOf } from '../work-page/route.ts';
 import { RATINGS_REGION, TargetRatingsRegion } from '../work-page/ratings.tsx';
 import { inSentence } from './messages.ts';
 
@@ -104,10 +107,10 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
     // A host that maps the links (a Zone) keeps the continuity in its own addresses, where it knows the Zone's default.
     return hrefFor ? url.pathname + url.search + url.hash : withContinuity(url.pathname + url.search + url.hash, continuity);
   };
-  const frames = continuityFrame(continuity);
   const [{ avatarQuery }, { signedIn, actingSubject }] = await Promise.all([browseReader(), readingAgent()]);
   const ownName = page.summary.name.value;
   const isPlace = page.target.base === 'projection';
+  const frames = pageFrame(continuity, isPlace);
   const draw = page.sections.filter(section => drawnSections.includes(section.id)
     && (!only || only.includes(section.id)));
   const common = { hrefFor: address, locale, t, messages };
@@ -173,13 +176,20 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   return frame ? <PageContainer className="max-w-4xl [text-autospace:normal]">{body}</PageContainer> : body;
 }
 
-/** The switch for the continuity the page's facts are read in, offered when they hold in more than one. */
+/** The switch for the continuity the page's facts are read in: offered when they hold in more than one, and always while one is applied. */
 async function ContinuityBar({ id, position, here, current, locale }: {
   id: string; position?: string; here: string; current: ContinuityChoice; locale: UiLocale;
 }) {
   const { continuities } = await readFrameTargets(id, position);
-  if (continuities.length < 2) return null;
-  return <ContinuitySwitch here={here} current={current} options={continuities} locale={locale}
+  const applied = current.kind === 'at' ? current.continuity : null;
+  const iri = applied ? iriOf(applied) : null;
+  const summary = applied && iri && !continuities.some(option => option.id === applied)
+    ? (await namesOf([iri], position)).get(iri) : undefined;
+  const chosen: ContinuityOption | null = applied && summary?.status === 'available'
+    ? { id: applied, label: zoneText(summary.name), kind: summary.base === 'work' ? 'work' : 'narrative' } : null;
+  const options = offeredContinuities(current, continuities, chosen);
+  if (!options) return null;
+  return <ContinuitySwitch here={here} current={current} options={options} locale={locale}
     messages={await getMessages('scopedRating', locale)} />;
 }
 

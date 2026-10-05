@@ -30,6 +30,14 @@ export function keepReading(site: Pick<ZoneSite, 'choice' | 'continuity'>, href:
     site.continuity?.fallback ?? offContinuity);
 }
 
+/**
+ * `href` to a standalone page (outside the Zone's mounts), carrying the reader's position and, written out, the continuity
+ * they read in: a standalone page has no Zone default, so a choice equal to the Zone's would otherwise open it unfiltered.
+ */
+export function keepReadingStandalone(site: Pick<ZoneSite, 'choice' | 'continuity'>, href: string): string {
+  return withContinuity(withPosition(href, site.choice), site.continuity?.choice ?? offContinuity);
+}
+
 /** The segment found for each kind of thing already looked up in this request: its next lookup tries that first. */
 const learned = cache(() => new Map<string, string>());
 
@@ -56,7 +64,7 @@ export async function mountOf(site: ZoneSite, resource: string, kind: string | n
 export async function zoneLink(site: ZoneSite, resource: string, kind: string | null): Promise<string> {
   const segment = await mountOf(site, resource, kind);
   const id = idOf(resource) ?? resource;
-  return keepReading(site, segment ? zoneMemberHref(site.ref, segment, id) : entityHref(resource));
+  return segment ? keepReading(site, zoneMemberHref(site.ref, segment, id)) : keepReadingStandalone(site, entityHref(resource));
 }
 
 /** A page inside a mount, when the mount is known. */

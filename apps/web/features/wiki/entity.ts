@@ -5,7 +5,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { readEntityProjection, readRelations, readStatements, sectionOf } from '../entity-page/read.ts';
 import type { EntityProjection, StatementItem } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
-import { continuityFrame, offContinuity } from './continuity.ts';
+import { offContinuity, pageFrame } from './continuity.ts';
 import { zoneText } from '../realm/adapt.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { namesOf } from '../work-levels/read.ts';
@@ -76,7 +76,7 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   if (summary.status !== 'available') return null;
   const main = site.main;
   // The continuity the reader chose, which Main applies as the frame of the facts and relations it returns.
-  const frame = continuityFrame(site.continuity?.choice ?? offContinuity);
+  const frame = pageFrame(site.continuity?.choice ?? offContinuity, projection.target.base === 'projection');
   const statementsSection = sectionOf(projection, 'statements');
   const relationsSection = sectionOf(projection, 'relations');
   const [statements, relations] = await Promise.all([
@@ -94,9 +94,9 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     const predicates = groups.map(group => group.predicate).filter(predicate => predicate !== NAME && predicate !== ALTERNATE);
     const valueIris = groups.flatMap(group => group.items.flatMap(item =>
       item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : []));
-    const names = await namesOf(predicates);
+    const names = await namesOf(predicates, main);
     // Their own call: a batch with a vocabulary predicate in it is refused whole, and would leave the Works unnamed.
-    const continuityNames = await namesOf(groups.flatMap(group => group.items.flatMap(item => item.qualifiers.applicability)));
+    const continuityNames = await namesOf(groups.flatMap(group => group.items.flatMap(item => item.qualifiers.applicability)), main);
     const named = new Map(await Promise.all([...new Set(valueIris)].map(async iri => {
       const valueId = idOf(iri);
       const page = valueId ? await readEntityProjection(valueId, main) : null;
