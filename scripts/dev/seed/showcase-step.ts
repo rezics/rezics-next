@@ -1,6 +1,6 @@
 import { SeedApiError } from './api.ts';
 import { digest, focal, renderArt, wholeImage } from './showcase-art.ts';
-import { grantShowcaseSeedAuthority, type ShowcaseGrant } from './showcase-authority.ts';
+import { grantShowcaseSeedAuthority } from './showcase-authority.ts';
 import { showcaseSlides, showcaseWorks, showcaseZone, type ShowcaseRoleKey, type ShowcaseWork }
   from './showcase-plan.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
