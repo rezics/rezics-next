@@ -225,18 +225,18 @@ test.describe('reading', () => {
     await signIn(page);
     await page.goto(at(data.subjects.anakin!));
     const main = page.locator('#main-content');
-    const facts = page.locator('[data-statement-group]');
+    const facts = main.locator('[data-statement-group]');
     await expect(facts.filter({ hasText: 'Grandfather of Ben Solo' })).toBeVisible({ timeout: 60_000 });
     await expect(facts.filter({ hasText: 'Father of Luke Skywalker' })).toBeVisible();
     // Off by default, each claim says which continuity it holds in.
-    await expect(page.locator('[data-holds-in]')).toHaveCount(2);
-    await expect(page.locator('[data-continuity-current]')).toContainText('All continuities');
+    await expect(main.locator('[data-holds-in]')).toHaveCount(2);
+    await expect(main.locator('[data-continuity-current]')).toContainText('All continuities');
     await expect(page.locator('[data-projection]')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Family', exact: true })).toBeVisible();
     await capture(page, '11-anakin-all-continuities');
 
     const choose = async (name: RegExp | string) => {
-      const trigger = page.locator('[data-continuity-switch] [data-hydrated="true"]').first();
+      const trigger = main.locator('[data-continuity-switch] [data-hydrated="true"]').first();
       await expect(trigger).toBeEnabled({ timeout: 60_000 });
       await trigger.click();
       await page.getByRole('dialog').getByRole('link', { name }).click();
@@ -253,7 +253,7 @@ test.describe('reading', () => {
     await expect(main.getByText('Grandfather of Ben Solo')).toHaveCount(0);
     await capture(page, '13-anakin-legends');
 
-    await page.locator('[data-continuity-clear]').click();
+    await main.locator('[data-continuity-clear]').click();
     await expect(main.getByText('Grandfather of Ben Solo').first()).toBeVisible({ timeout: 60_000 });
     await expect(main.getByText('Father of Luke Skywalker').first()).toBeVisible();
     await expect(page).not.toHaveURL(/continuity=Star/);
