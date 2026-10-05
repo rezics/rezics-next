@@ -11,6 +11,7 @@ export interface PrivateGroupProof {
   grantId: string;
   grantGeneration: string;
   groupGeneration: string;
+  exactWitness?: boolean;
 }
 export interface PrivateRoleProof {
   bindingId: string;
@@ -38,7 +39,7 @@ export async function privateGroupWorkProof(client: PoolClient,
   }
   if (!members.rows.length) return null;
   const gate = await client.query<{ group_generation: string }>(
-    'SELECT group_generation FROM access.scope_gate WHERE id = $1 FOR SHARE', [SCOPE]);
+    'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
   if (!gate.rows[0]) throw new GroupUnavailable('group scope is unavailable');
   const paths = await client.query<{ member_id: string; member_generation: string;
     grant_id: string | null; grant_generation: string | null; depth: number;
@@ -78,8 +79,8 @@ export async function selectedPrivateGroupWorkProof(client: PoolClient,
   const bounds = await groupBounds(client);
   await privateGroupWorkProof(client, principalId, bounds); // enforce the same complete budget
   const gate = await client.query<{ group_generation: string }>(
-    'SELECT group_generation FROM access.scope_gate WHERE id = $1 FOR SHARE', [SCOPE]);
-  if (gate.rows[0]?.group_generation !== proof.groupGeneration) return false;
+    'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
+  if (!proof.exactWitness && gate.rows[0]?.group_generation !== proof.groupGeneration) return false;
   const row = await client.query(`WITH RECURSIVE path(id, parent_id, depth, visited) AS (
     SELECT g.id, g.parent_id, 0, ARRAY[g.id]
     FROM access.private_group_member m

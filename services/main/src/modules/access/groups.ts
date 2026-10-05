@@ -41,7 +41,7 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
   }
   if (members.rows.length === 0) return null;
   const gate = await client.query<{ group_generation: string }>(
-    'SELECT group_generation FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+    'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
   if (!gate.rows[0]) throw new GroupUnavailable('group scope is unavailable');
   const result = await client.query<{
     member_id: string; grant_id: string | null; depth: number;
@@ -250,9 +250,12 @@ export class AccessGroups {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      if (!(await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR SHARE', [GROUP_SCOPE])).rowCount) {
+        throw new GroupDenied('group scope is closed');
+      }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        [GROUP_SCOPE]);
+        ['access:group-inventory']);
       if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
         throw new GroupDenied('group scope is closed');
       }
@@ -320,9 +323,12 @@ export class AccessGroups {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      if (!(await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR SHARE', [GROUP_SCOPE])).rowCount) {
+        throw new GroupDenied('group scope is closed');
+      }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
-        [GROUP_SCOPE]);
+        ['access:group-inventory']);
       if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
         throw new GroupDenied('group scope is closed');
       }
@@ -660,9 +666,12 @@ export class AccessGroups {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      if (!(await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR SHARE', [GROUP_SCOPE])).rowCount) {
+        throw new GroupDenied('group scope is closed');
+      }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        [GROUP_SCOPE]);
+        ['access:group-inventory']);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       const principalId = await this.authorize(client, context.principal, context.issuerSubject, false);
       await lockAccessKey(client, `group-impact-proposal:${principalId}:${idempotencyKey}`);
@@ -727,9 +736,12 @@ export class AccessGroups {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      if (!(await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR SHARE', [GROUP_SCOPE])).rowCount) {
+        throw new GroupDenied('group scope is closed');
+      }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        [GROUP_SCOPE]);
+        ['access:group-inventory']);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       await this.authorize(client, principal, approverSubject, false, 'access.group.approve');
       const row = await this.proposal(client, proposalId);
@@ -761,9 +773,12 @@ export class AccessGroups {
       const recovery = await client.query<{ open: boolean }>(
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GroupUnavailable('Access recovery is held');
+      if (!(await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR SHARE', [GROUP_SCOPE])).rowCount) {
+        throw new GroupDenied('group scope is closed');
+      }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
-        [GROUP_SCOPE]);
+        ['access:group-inventory']);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       const approverId = await this.authorize(client, principal, approverSubject,
         false, 'access.group.approve');
@@ -861,7 +876,7 @@ export class AccessGroups {
 
   private async generation(client: PoolClient): Promise<string> {
     const row = await client.query<{ group_generation: string }>(
-      'SELECT group_generation FROM access.scope_gate WHERE id = $1', [GROUP_SCOPE]);
+      'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
     return row.rows[0]!.group_generation;
   }
 }

@@ -208,7 +208,7 @@ test('IAM29: revoking one of two independent grants keeps the other source and i
     expect(measured[0]!.decision.calls).toBeLessThanOrEqual(20);
     expect(measured[0]!.decision.writes).toBeLessThanOrEqual(8);
     expect(measured[0]!.revocation.calls).toBeLessThanOrEqual(20);
-    expect(measured[0]!.revocation.writes).toBe(4);
+    expect(measured[0]!.revocation.writes).toBe(3);
     expect(measured[0]!.publish.calls).toBeLessThanOrEqual(20);
     // Epoch, revision, three rules, head advance and receipt.
     expect(measured[0]!.publish.writes).toBe(7);

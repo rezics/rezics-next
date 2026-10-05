@@ -9,7 +9,7 @@ export interface RealmActor { id: string; epoch: string; representation: string;
   representationGeneration: string; subjectGeneration: string; validUntil: Date }
 export interface RealmManager extends RealmActor { grant: string; grantGeneration: string }
 
-/** Lock order matches Realm management: recovery, Realm, then membership root.
+/** Lock order matches Realm management: recovery, Realm, then shared membership scope.
  * All reads/writes are bounded; authority rows remain locked until disclosure or commit.
  * See https://www.postgresql.org/docs/current/explicit-locking.html (2026-09-28). */
 export async function realmTransaction<T>(pool: Pool, realm: string | null, write: boolean,
@@ -69,7 +69,7 @@ export async function realmManager(client: PoolClient, principal: VerifiedPrinci
     validUntil: new Date(Math.min(identity.validUntil.getTime(),row.valid_until.getTime())) };
 }
 
-export async function membershipRoot(client: PoolClient, changesEpoch = true) {
+export async function membershipRoot(client: PoolClient) {
   if (!(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = 'work:create:root'
-    AND open AND dispatch_open FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`)).rowCount) throw new RealmAdminDenied('Membership authority is unavailable');
+    AND open AND dispatch_open FOR SHARE`)).rowCount) throw new RealmAdminDenied('Membership authority is unavailable');
 }

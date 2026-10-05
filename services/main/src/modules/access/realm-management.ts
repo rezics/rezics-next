@@ -171,7 +171,8 @@ export class AccessRealmManagement {
       const id = randomUUID();
       const result = await run(client, actor.id, id, next, actor.validUntil);
       await client.query(`UPDATE access.realm_admin_revision SET generation = generation + 1 WHERE realm = $1`, [realm]);
-      await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = $1`, [realmAdminScope(realm)]);
+      if (action === 'realm.settings.manage') await client.query(`UPDATE access.scope_gate
+        SET authority_epoch = authority_epoch + 1 WHERE id = $1`, [realmAdminScope(realm)]);
       await client.query(`INSERT INTO access.realm_admin_receipt
         (id, realm, principal_id, acting_subject, idempotency_key, request_digest, action, reason, result)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -465,8 +466,6 @@ export class AccessRealmManagement {
           [realm, input.actingSubject, plan.permissions.map(action => realmPermissionScope(realm, action)), plan.assignments.map(a => a.member),
             plan.assignments.map(a => a.valid_until), plan.permissions, principalId, change.roleId]);
         }
-        await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
-          [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
         return { receiptId, generation, replayed: false, impact: plan.impact,
           auditDetail: { kind: change.kind,
             role: { id: change.roleId, name: change.kind === 'role' ? change.name.trim() : plan.role!.name },

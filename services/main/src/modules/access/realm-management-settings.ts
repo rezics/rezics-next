@@ -1,3 +1,4 @@
+import type { AuthoritySource } from './authority-witness.ts';
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -96,7 +97,7 @@ export async function saveRealmSettings(client: PoolClient, realm: string, princ
 /** This is an additional Access restriction on the existing submission grant,
  * never a replacement for admission or a grant manufactured by UI settings. */
 export async function requireRealmSubmissionPolicy(client: PoolClient, realm: string,
-  principal: string, actor: string, submission = true) {
+  principal: string, actor: string, submission = true): Promise<AuthoritySource[]> {
   await client.query(`SELECT id FROM access.scope_gate WHERE id = $1 FOR SHARE`, [`governance:realm:${realm}`]);
   const ban = await client.query(`SELECT 1 FROM access.membership_ban WHERE kind = 'realm'
     AND owner_subject = $1 AND member_subject = $2 AND active
@@ -111,20 +112,25 @@ export async function requireRealmSubmissionPolicy(client: PoolClient, realm: st
   }
   const needsMember = policy?.visibility === 'restricted' || policy?.visibility === 'private'
     || submission && policy?.who_may_submit === 'members';
-  const owner = needsMember && (await client.query(`SELECT 1 FROM access.permission_grant WHERE scope_id = $1
+  if (submission && policy?.who_may_submit === 'closed') throw new AdmissionDenied('Realm submission policy denies this request');
+  if (!needsMember) return [];
+  const owner = (await client.query<{ id: string; generation: string }>(`SELECT id,generation FROM access.permission_grant WHERE scope_id = $1
     AND recipient_subject = $2 AND action = 'realm.owner' AND active AND valid_until > clock_timestamp()
-    AND membership_id IS NULL LIMIT 1`, [`governance:realm:${realm}`, actor])).rowCount;
-  if (submission && policy?.who_may_submit === 'closed' || needsMember && !owner
-    && !await realmMemberProof(client, realm, principal, actor)) throw new AdmissionDenied('Realm submission policy denies this request');
+    AND membership_id IS NULL ORDER BY id LIMIT 1 FOR SHARE`, [`governance:realm:${realm}`, actor])).rows[0];
+  if (owner) return [{ table: 'permission_grant', id: owner.id, generation: owner.generation }];
+  const member = await realmMemberProof(client, realm, principal, actor);
+  if (!member) throw new AdmissionDenied('Realm submission policy denies this request');
+  const [kind,id,generation] = member.split(':');
+  return [{ table: kind === 'private' ? 'private_membership' : 'membership', id: id!, generation: generation! }];
 }
 
 /** Explicit grants must obey Realm participation bans too. Claim rechecks this
  * guard, so a ban invalidates an admission registered before the ban committed. */
 export async function requireRealmParticipation(client: PoolClient, scope: string, action: string,
-  principal: string, actor: string) {
+  principal: string, actor: string): Promise<AuthoritySource[]> {
   const prefix = action === 'submission.submit' ? 'submission:submit:'
     : action === 'reply.place' ? 'reply:place:' : action === 'publication.adopt' ? 'publication:adopt:' : null;
-  if (!prefix || !scope.startsWith(prefix)) return;
+  if (!prefix || !scope.startsWith(prefix)) return [];
   const realm = scope.slice(prefix.length);
   return requireRealmSubmissionPolicy(client, realm, principal, actor, action === 'submission.submit');
 }

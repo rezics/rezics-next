@@ -306,7 +306,7 @@ export class AccessAgentControl {
       throw new ControlInvalid('invalid controller change');
     }
     return controlTransaction(this.pool, async (client) => {
-      const workEpoch = await lockGate(client, WORK_SCOPE, true);
+      const workEpoch = await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<ControlView>(

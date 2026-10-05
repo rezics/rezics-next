@@ -18,7 +18,6 @@ import {
   type ControlReceipt,
   WORK_SCOPE,
   agentPattern,
-  bumpEpoch,
   controlTransaction,
   generationPattern,
   idPattern,
@@ -305,7 +304,7 @@ export class AccessInvitations {
       const initial = await invitationRow(client, input.invitationId);
       // Control and Work invitations always take Work before topology. Scoped
       // management creates no edges, so it needs no topology write lock.
-      const epoch = await lockGate(client, initial.scope_id, true);
+      const epoch = await lockGate(client, initial.scope_id, false);
       if (initial.offer !== 'manage') await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<InvitationView & { authorityEpoch: string }>(
@@ -448,7 +447,7 @@ export class AccessInvitations {
               input.representationId ?? null,
             ],
           );
-          const authorityEpoch = await bumpEpoch(client, row.scope_id);
+          const authorityEpoch = epoch;
           return { epoch: authorityEpoch, result: { ...view(input.invitationId,
             await invitationRow(client, input.invitationId)), authorityEpoch } };
         },
@@ -466,7 +465,7 @@ export class AccessInvitations {
       throw new ControlInvalid('revocation needs expected authority epoch');
     return controlTransaction(this.pool, async (client) => {
       const initial = await invitationRow(client, id);
-      const epoch = await lockGate(client, initial.scope_id, true);
+      const epoch = await lockGate(client, initial.scope_id, false);
       if (initial.offer !== 'manage') await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<InvitationView>(
@@ -483,7 +482,6 @@ export class AccessInvitations {
           if (epoch !== expectedEpoch)
             throw new ControlStale('scope authority epoch changed');
           if (row.revoked) throw new ControlStale('invitation already revoked');
-          await bumpEpoch(client, row.scope_id);
           const revocationIds: string[] = [];
           const grants = (
             await client.query<{ id: string }>(
@@ -558,7 +556,7 @@ export class AccessInvitations {
             `INSERT INTO access.agent_invitation_revocation (invitation_id,revoked_by_principal) VALUES ($1,$2)`,
             [id, actor.id],
           );
-          const authorityEpoch = await lockGate(client, row.scope_id, true);
+          const authorityEpoch = await lockGate(client, row.scope_id, false);
           return {
             epoch: authorityEpoch,
             result: { ...view(id, await invitationRow(client, id)), revocationIds },
@@ -793,7 +791,7 @@ export class AccessInvitations {
       throw new ControlInvalid('invalid invitation acceptance');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<InvitationView & { authorityEpoch: string }>(client, actor.id, receipt,
         'agent-invitation', 'accept', null, input.invitationId, async () => {
@@ -837,7 +835,7 @@ export class AccessInvitations {
           [input.invitationId, row.issuer_subject, row.recipient_subject, WORK_SCOPE, row.action,
             actor.id, acceptor.id, acceptor.generation, ACCEPT_ACTION,
             recipient.rows[0]!.generation, input.grantId]);
-          const authorityEpoch = await bumpEpoch(client, WORK_SCOPE);
+          const authorityEpoch = scopeEpoch;
           return { epoch: authorityEpoch, result: { ...view(input.invitationId,
             await invitationRow(client, input.invitationId)), authorityEpoch } };
         });

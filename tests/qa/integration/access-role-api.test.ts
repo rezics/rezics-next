@@ -275,7 +275,7 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
       .map(binding => binding.id)).toContain(bindingId);
     const concurrent = await Promise.all([randomUUID(), randomUUID()].map(id =>
       request('POST', '/v1/access/role-bindings', managerToken, bind(id, '1', epoch))));
-    expect(concurrent.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(concurrent.map(response => response.status)).toEqual([200, 200]);
     await expect(accessPool.query(`UPDATE access.role_binding_receipt
       SET result_authority_epoch = 0 WHERE idempotency_key = $1`,
     [bindingKey])).rejects.toThrow();

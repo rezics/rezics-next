@@ -335,8 +335,9 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
       await accessPool.query(`INSERT INTO access.org_realm_policy (realm, manager_subject, revision, terms_revision)
         VALUES ($1,$2,1,'terms-1')`, [unrelatedRealm, realmManager]);
       expect((await post(proposals, realmToken, proposalBody('0', unrelatedRealm))).status).toBe(200);
-      // Mutations require exclusive epoch fencing and fail within the owner lock budget.
-      expect((await post(changes, orgToken, changeBody('leave', '5', '4'))).status).toBe(503);
+      // Participation changes only its own episode, so an ordinary root
+      // scope reader does not hold it up.
+      expect((await post(changes, orgToken, changeBody('leave', '5', '4'))).status).toBe(200);
     } finally { await shared.query('ROLLBACK'); shared.release(); }
     await expect(accessPool.query('UPDATE access.org_realm_proposal SET terms_revision = $1 WHERE id = $2',
       ['changed', accepted])).rejects.toThrow();
@@ -354,7 +355,7 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
     await accountPool.query('DELETE FROM session WHERE "userId" = $1', [orgUser.id]);
     expect((await post(changes, orgToken, changeBody('leave', '5', '4'))).status).toBe(401);
     expect((await accessPool.query(`SELECT generation FROM access.org_realm_participation
-      WHERE realm = $1 AND organization_subject = $2`, [realm, org])).rows[0]?.generation).toBe('5');
+      WHERE realm = $1 AND organization_subject = $2`, [realm, org])).rows[0]?.generation).toBe('6');
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end()]);

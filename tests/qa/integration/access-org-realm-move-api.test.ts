@@ -220,7 +220,7 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
       const racing = move({ ...input, target: { ...input.target, proposalId: shortProposal } });
       expect(await Promise.race([reached, Bun.sleep(800).then(() => false)])).toBe(true);
       await Bun.sleep(1050); await expiryLock.query('COMMIT'); await must(await racing, 403);
-      expect(costs.writes).toBe(8); expect(await effectState()).toEqual(before);
+      expect(costs.writes).toBe(7); expect(await effectState()).toEqual(before);
     } finally { observe = undefined; await expiryLock.query('ROLLBACK'); expiryLock.release(); }
     // A still-valid explicit parent grant is independent of both participation policies.
     const epoch = (await pool.query("SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0].authority_epoch;
@@ -321,18 +321,18 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
       costs.calls = 0; costs.rows = 0; costs.writes = 0;
       const key = randomUUID(); await must(await move(fresh, key)); measurements.push({ ...costs });
       costs.calls = 0; costs.rows = 0; costs.writes = 0;
-      await must(await move(fresh, key)); expect(costs.writes).toBe(0); expect(costs.calls).toBeLessThanOrEqual(12);
+      await must(await move(fresh, key)); expect(costs.writes).toBe(0); expect(costs.calls).toBeLessThanOrEqual(14);
     }
     expect(measurements[1]).toEqual(measurements[0]); expect(measurements[2]).toEqual(measurements[0]);
     expect(measurements[0]!.calls).toBeLessThanOrEqual(33); expect(measurements[0]!.rows).toBeLessThanOrEqual(20);
-    expect(measurements[0]!.writes).toBe(8);
+    expect(measurements[0]!.writes).toBe(7);
     await pool.query('ANALYZE access.org_realm_proposal');
     expect(JSON.stringify((await pool.query('EXPLAIN (FORMAT JSON) SELECT id FROM access.org_realm_proposal WHERE id = $1',
       [input.target.proposalId])).rows)).toContain('org_realm_proposal_pkey');
     const blocked = await pool.connect();
     try {
       await blocked.query('BEGIN'); await blocked.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE");
-      await must(await move(input, winner.key), 503);
+      await must(await move(input, winner.key), 200);
     } finally { await blocked.query('ROLLBACK'); blocked.release(); }
     await accountPool.query('DELETE FROM session WHERE "userId" = $1', [account.b.id]);
     const before = await effectState(); await must(await move(input, winner.key), 401); expect(await effectState()).toEqual(before);

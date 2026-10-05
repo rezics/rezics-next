@@ -171,7 +171,7 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
     const created = await request('POST', path, managerToken1, create, createKey);
     expect(created.status).toBe(200);
     const createdEpoch = (await created.json() as { authorityEpoch: string }).authorityEpoch;
-    expect(createdEpoch).not.toBe(epoch);
+    expect(createdEpoch).toBe(epoch);
     expect((await request('POST', path, managerToken1, create, createKey)).status).toBe(200);
     expect((await request('POST', path, managerToken1,
       { ...create, grantId: randomUUID() }, createKey)).status).toBe(409);
@@ -198,7 +198,8 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
         grantId: randomUUID(), recipientSubject: otherRecipient,
         validUntil: new Date(Date.now() + 20 * 60_000).toISOString() }, createdEpoch)),
     ]);
-    expect([left.status, right.status].sort()).toEqual([200, 409]);
+    // Independent grants do not stale one another through a scope epoch.
+    expect([left.status, right.status]).toEqual([200, 200]);
     epoch = (await readPage(managerToken2)).authorityEpoch;
     await accessPool.query(`UPDATE access.representation SET active = false,
       generation = generation + 1 WHERE principal_id = $1

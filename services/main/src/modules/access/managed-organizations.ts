@@ -1,3 +1,4 @@
+import { lockAccessKey } from './scope-gates.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -106,8 +107,8 @@ export class AccessManagedOrganizations {
   }
 
   private async advance(client: PoolClient): Promise<string> {
-    const result = await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
-      SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`, [ORG_REALM_SCOPE]);
+    const result = await client.query<{ authority_epoch: string }>(
+      'SELECT authority_epoch FROM access.scope_gate WHERE id = $1', [ORG_REALM_SCOPE]);
     return result.rows[0]!.authority_epoch;
   }
 
@@ -158,6 +159,7 @@ export class AccessManagedOrganizations {
       throw new ManagedOrgDenied('invalid managed grant change');
     }
     return managedTransaction(this.pool, true, async (client, epoch) => {
+      await lockAccessKey(client, `managed-organization:${input.organizationSubject}`);
       const organization = await managedOrganization(client, input.organizationSubject);
       // Current issuer authority permits receipt recovery and revocation even
       // when the original assignment ceiling has been removed.
@@ -216,6 +218,7 @@ export class AccessManagedOrganizations {
       throw new ManagedOrgDenied('invalid organization roster policy intent');
     }
     return managedTransaction(this.pool, true, async (client) => {
+      await lockAccessKey(client, `managed-organization:${input.organizationSubject}`);
       const grant = await this.grant(client, input.grantId);
       if (grant.organization_subject !== input.organizationSubject || grant.recipient_kind !== input.recipient.kind
         || grant.recipient_id !== input.recipient.id || grant.action !== MANAGED_ORG_ACTION.roster

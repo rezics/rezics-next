@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { ControlDenied, ControlInvalid, ControlStale, type ControlReceipt,
-  WORK_SCOPE, agentPattern, bumpEpoch, controlTransaction, generationPattern, idPattern,
+  WORK_SCOPE, agentPattern, controlTransaction, generationPattern, idPattern,
   lockGate, receipted, requireAgent, requireCeiling, requireMandate, requirePrincipal,
   requireReceipt } from './topology-control.ts';
 
@@ -84,7 +84,7 @@ export class AccessRepresentativePolicies {
       throw new ControlInvalid('invalid representative policy');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, input.institutionSubject, MANAGE);
       return receipted<PolicyView>(client, actor.id, receipt, 'representative-policy',
@@ -98,7 +98,7 @@ export class AccessRepresentativePolicies {
             created_by_principal) VALUES ($1,1,$2,$3,$4,false,$5)`,
           [input.policyId, input.ceiling.actions, input.ceiling.maxRepresentatives,
             input.ceiling.maxMandateDays, actor.id]);
-          const epoch = await bumpEpoch(client, WORK_SCOPE);
+          const epoch = scopeEpoch;
           return { epoch, result: await activePolicy(client, input.policyId,
             input.institutionSubject, false) };
         });
@@ -115,7 +115,7 @@ export class AccessRepresentativePolicies {
       throw new ControlInvalid('invalid representative policy revision');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, input.institutionSubject, MANAGE);
       return receipted<PolicyView>(client, actor.id, receipt, 'representative-policy',
@@ -128,7 +128,7 @@ export class AccessRepresentativePolicies {
             throw new ControlDenied('widening requires the approval subject');
           }
           await appendPolicyRevision(client, policy, input.ceiling, actor.id, null);
-          const epoch = await bumpEpoch(client, WORK_SCOPE);
+          const epoch = scopeEpoch;
           return { epoch, result: await activePolicy(client, input.policyId,
             input.institutionSubject, false) };
         });
@@ -160,7 +160,7 @@ export class AccessRepresentativePolicies {
       throw new ControlInvalid('invalid roster acceptance');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, input.institutionSubject, MANAGE);
       return receipted(client, actor.id, receipt, 'representative-policy', 'accept-roster',
@@ -187,7 +187,7 @@ export class AccessRepresentativePolicies {
             representative_policy_revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [input.representationId, row.recipient_principal, input.institutionSubject, row.action,
             row.valid_until, actor.id, input.requestId, input.policyId, policy.activeRevision]);
-          const epoch = await bumpEpoch(client, WORK_SCOPE);
+          const epoch = scopeEpoch;
           return { epoch, result: { representationId: input.representationId,
             policyRevision: policy.activeRevision, authorityEpoch: epoch } };
         });

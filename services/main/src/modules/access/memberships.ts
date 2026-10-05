@@ -1,3 +1,4 @@
+import { lockAccessKey } from './scope-gates.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -207,13 +208,13 @@ export class AccessMemberships {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async gate(client: PoolClient, changesEpoch = true): Promise<string> {
+  private async gate(client: PoolClient): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (!recovery.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-        FROM access.scope_gate WHERE id = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [SCOPE]);
+        FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
     if (!gate.rows[0]) throw new MembershipUnavailable('scope gate missing');
     if (!gate.rows[0].open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('scope closed');
@@ -318,6 +319,8 @@ export class AccessMemberships {
       [input.principal.issuer, input.principal.subject]);
       if (!principal.rows[0]) throw new MembershipDenied('principal unavailable');
       const principalId = principal.rows[0].id;
+      await lockAccessKey(client, `membership-change:${principalId}:${input.idempotencyKey}`);
+      await lockAccessKey(client, `membership:${input.kind}:${input.ownerSubject}:${input.memberSubject}`);
       const selfLeave = input.kind === 'realm' && input.action === 'leave'
         && !input.represented && !input.selected
         && await this.controlsMember(client, principalId, input.memberSubject);
@@ -477,10 +480,7 @@ export class AccessMemberships {
             WHERE id = ANY($1::uuid[])`, [ids]);
         }
       }
-      const bumped = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
-      const authorityEpoch = bumped.rows[0]!.authority_epoch;
+      const authorityEpoch = currentEpoch;
       await client.query(`INSERT INTO access.membership_history
         (membership_id, generation, state, policy_revision, terms_revision,
           consent_reference, changed_by_principal, acting_subject, representation_id,
@@ -545,7 +545,7 @@ export class AccessMemberships {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      await this.gate(client, false);
+      await this.gate(client);
       const row = await client.query<{ membership_id: string; result_generation: string;
         result_authority_epoch: string; action: MembershipAction; kind: MembershipKind;
         owner_subject: string; member_subject: string; state: 'joined' | 'left';

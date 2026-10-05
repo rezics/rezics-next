@@ -45,6 +45,7 @@ export async function directWorkCreateProof(client: PoolClient, principalId: str
 /** Check the saved branch only. A newly acquired independent path cannot
  * reactivate an old admission after its original episode has ended. */
 export async function selectedDirectWorkProof(client: PoolClient, row: {
+  authority_witness?: unknown;
   principal_id: string; acting_subject: string; scope_id: string;
   direct_grant_id: string | null; direct_grant_generation: string | null;
   attribution_id: string | null; attribution_generation: string | null;
@@ -87,6 +88,7 @@ export async function selectedDirectWorkProof(client: PoolClient, row: {
       grantId: row.private_group_grant_id,
       grantGeneration: row.private_group_grant_generation,
       groupGeneration: row.private_group_generation,
+      exactWitness: !!row.authority_witness,
     });
   }
   if (row.private_role_binding_id && row.private_role_binding_generation

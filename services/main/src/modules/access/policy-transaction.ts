@@ -80,10 +80,10 @@ export async function requireGrant(client: PoolClient, recipient: string, scope:
   return grant.rows[0];
 }
 
-/** Locks the scope row that serializes this scope's authority changes. */
-export async function lockOpenScope(client: PoolClient, scope: string): Promise<string> {
+/** Scope-wide policy changes are exclusive; object authority shares the fence. */
+export async function lockOpenScope(client: PoolClient, scope: string, write = true): Promise<string> {
   const gate = await client.query<{ authority_epoch: string; open: boolean }>(
-    'SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+    `SELECT authority_epoch, open FROM access.scope_gate WHERE id = $1 FOR ${write ? 'UPDATE' : 'SHARE'}`, [scope]);
   if (!gate.rows[0]?.open) throw new PolicyDenied('scope is unavailable or closed');
   return gate.rows[0].authority_epoch;
 }
@@ -150,13 +150,13 @@ export async function drainRevokedAuthority(
     ],
   ] as const) {
     if (mode !== 'strong' || kind === 'representation_edge') continue;
-    const rows = (
-      await client.query<{ id: string }>(
-        `SELECT id FROM access.${table}
-      WHERE ${column} = $1 AND ${state} ORDER BY id LIMIT $2`,
-        [id, REVOCATION_AFFECTED_WORK_LIMIT + 1],
-      )
-    ).rows;
+    const source = table === 'admission'
+      ? `(${column} = $1 OR authority_witness @> jsonb_build_array(jsonb_build_object('table',$3::text,'id',$1::text)))`
+      : `${column} = $1`;
+    const rows = (await client.query<{ id: string }>(`SELECT id FROM access.${table}
+      WHERE ${source} AND ${state} ORDER BY id LIMIT $2 ${table === 'admission' ? 'FOR SHARE' : ''}`,
+    table === 'admission' ? [id, REVOCATION_AFFECTED_WORK_LIMIT + 1, kind]
+      : [id, REVOCATION_AFFECTED_WORK_LIMIT + 1])).rows;
     for (const row of rows)
       work.push({
         admission_id: null,

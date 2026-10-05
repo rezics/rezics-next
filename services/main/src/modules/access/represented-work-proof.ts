@@ -31,6 +31,7 @@ export interface SavedRepresentedWorkProof {
   group_member_id: string | null;
   group_grant_id: string | null;
   group_generation: string | null;
+  authority_witness?: unknown;
   role_binding_id: string | null;
   role_binding_generation: string | null;
   role_family_id: string | null;
@@ -235,7 +236,7 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
   }
   return !edit && saved.represented_grant_generation === null
     && saved.group_grant_id !== null && saved.group_member_id !== null
-    && saved.group_generation === groupGeneration
+    && (saved.authority_witness || saved.group_generation === groupGeneration)
     && await selectedGroupWorkProof(client, saved.acting_subject,
       saved.group_member_id, saved.group_grant_id);
 }

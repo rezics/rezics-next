@@ -202,7 +202,7 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
       status: 'accepted', representationId,
     });
     const acceptedEpoch = (await accepted.json() as { authorityEpoch: string }).authorityEpoch;
-    expect(BigInt(acceptedEpoch)).toBe(BigInt(priorEpoch) + 1n);
+    expect(acceptedEpoch).toBe(priorEpoch);
     expect((await request('POST', changePath, managerToken,
       acceptedBody, managerKey)).status).toBe(200);
     expect((await request('POST', changePath, managerToken,

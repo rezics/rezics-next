@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { lockAccessKey } from './scope-gates.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { AccessAgentControl } from './agent-control.ts';
 import { AccessInvitations } from './invitation.ts';
@@ -99,13 +100,13 @@ export class AccessGrants {
       agentControl: new AccessAgentControl(pool), invitations: new AccessInvitations(pool) };
   }
 
-  private async gate(client: PoolClient, write: boolean): Promise<string> {
+  private async gate(client: PoolClient): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (recovery.rows[0]?.open !== true) throw new GrantUnavailable('Access recovery is held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-      FROM access.scope_gate WHERE id = $1 ${write ? 'FOR UPDATE' : 'FOR SHARE'}`, [SCOPE]);
+      FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new GrantDenied('grant scope is closed');
     }
@@ -160,7 +161,7 @@ export class AccessGrants {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       await this.authorize(client, principal, issuerSubject);
       const rows = await client.query<GrantRow>(`SELECT id, issuer_subject,
         recipient_subject, valid_until, active, generation
@@ -186,7 +187,7 @@ export class AccessGrants {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       await this.authorize(client, principal, issuerSubject, undefined, needsCeiling);
       const rows = await client.query<GrantRow>(`SELECT id, issuer_subject,
         recipient_subject, valid_until, active, generation
@@ -227,7 +228,7 @@ export class AccessGrants {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const currentEpoch = await this.gate(client, true);
+      const currentEpoch = await this.gate(client);
       const principal = await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [context.principal.issuer, context.principal.subject]);
@@ -237,6 +238,7 @@ export class AccessGrants {
         await this.authorize(client, context.principal, context.issuerSubject,
           undefined, needsCeiling);
       }
+      await lockAccessKey(client, `grant-change:${principalId}:${receipt.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         action: string; grant_id: string; result_authority_epoch: string }>(`
         SELECT request_digest, issuer_subject, action, grant_id, result_authority_epoch
@@ -259,14 +261,8 @@ export class AccessGrants {
         await this.control.topology.consumeGrantRevokeAdmission(client, principalId,
           context.selectedAdmissionId, context.issuerSubject, grantId, currentEpoch);
       }
-      const changed = await work(client, principalId);
-      let resultEpoch = currentEpoch;
-      if (changed) {
-        const bumped = await client.query<{ authority_epoch: string }>(`
-          UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-          WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
-        resultEpoch = bumped.rows[0]!.authority_epoch;
-      }
+      await work(client, principalId);
+      const resultEpoch = currentEpoch;
       await client.query(`INSERT INTO access.grant_change_receipt
         (principal_id, idempotency_key, request_digest, issuer_subject,
         action, grant_id, result_authority_epoch, selected_admission_id)
@@ -313,7 +309,7 @@ export class AccessGrants {
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
       if (recovery.rows[0]?.open !== true) throw new GrantUnavailable('Access recovery is held');
       const gate = await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(`
-        SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [scope]);
+        SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE`, [scope]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
         throw new GrantDenied('Content draft grant scope is closed');
       }
@@ -338,6 +334,7 @@ export class AccessGrants {
         ORDER BY valid_until DESC LIMIT 1 FOR SHARE`,
       [context.issuerSubject, scope, CONTENT_DRAFT_ASSIGN, validUntil]);
       if (!ceiling.rows[0]) throw new GrantDenied('Organization Content assignment ceiling is missing');
+      await lockAccessKey(client, `grant-change:${principalId}:${receipt.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         grant_id: string; result_authority_epoch: string }>(`SELECT request_digest, issuer_subject,
         grant_id, result_authority_epoch FROM access.grant_change_receipt
@@ -368,15 +365,13 @@ export class AccessGrants {
       [grantId, context.issuerSubject, recipientSubject, scope, principalId,
         operator.rows[0].representation_id, operator.rows[0].representation_generation,
         CONTENT_DRAFT_ASSIGN, ceiling.rows[0].id, ceiling.rows[0].generation, CONTENT_DRAFT_ASSIGN]);
-      const bumped = await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
-        SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`, [scope]);
       await client.query(`INSERT INTO access.grant_change_receipt
         (principal_id, idempotency_key, request_digest, issuer_subject, action, grant_id, result_authority_epoch)
         VALUES ($1,$2,$3,$4,'create',$5,$6)`,
       [principalId, receipt.idempotencyKey, receipt.requestDigest, context.issuerSubject,
-        grantId, bumped.rows[0]!.authority_epoch]);
+        grantId, gate.rows[0]!.authority_epoch]);
       await client.query('COMMIT');
-      return bumped.rows[0]!.authority_epoch;
+      return gate.rows[0]!.authority_epoch;
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
       throw this.normalize(error);
@@ -497,7 +492,7 @@ export class AccessGrants {
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL statement_timeout = '5s'");
-      await this.gate(client, false);
+      await this.gate(client);
       const row = await client.query<{ grant_id: string; issuer_subject: string;
         result_authority_epoch: string; active: boolean }>(`SELECT r.grant_id,
         r.issuer_subject, r.result_authority_epoch, g.active

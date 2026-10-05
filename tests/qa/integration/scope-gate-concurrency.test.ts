@@ -1,3 +1,8 @@
+import { AccessRevocations } from '../../../services/main/src/modules/access/revocation-requests.ts';
+import { AccessAuthorityRead } from '../../../services/main/src/modules/access/authority-read.ts';
+import { AccessPolicyChanges, POLICY_SET_ADMISSION } from '../../../services/main/src/modules/access/policy-changes.ts';
+import { changeRealmMember } from '../../../services/main/src/modules/access/realm-management-members.ts';
+import { receiptFamilyFor } from '../../../services/main/src/modules/access/receipt-families.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -46,7 +51,7 @@ async function fixture() {
     await pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [actor]);
     await pool.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [scope]);
     for (const action of ['work.create', 'access.grant.assign.work.create', 'access.membership.consent',
-      'access.membership.manage.realm', 'access.role.manage']) {
+      'access.membership.manage.realm', 'access.role.manage', 'access.revoke', POLICY_SET_ADMISSION]) {
       await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
         VALUES ($1,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [randomUUID(), principalId, actor, action]);
       await pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
@@ -59,8 +64,8 @@ async function fixture() {
   const epoch = async () => (await pool.query<{ authority_epoch: string }>(
     'SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1', [scope])).rows[0]!.authority_epoch;
   const cancelled = (row: RegisteredAdmission) => registry.recordGraphOutcome(row.id, {
-    admissionId: row.id, scope, requestDigest: row.requestDigest, authorityEpoch: row.authorityEpoch,
-    receipt: `urn:rezics:receipt:${createHash('sha256').update(`${row.id}\0create-metadata-work`).digest('hex')}`,
+    admissionId: row.id, scope: row.scope, requestDigest: row.requestDigest, authorityEpoch: row.authorityEpoch,
+    receipt: `urn:rezics:receipt:${createHash('sha256').update(`${row.id}\0${receiptFamilyFor(row.action)}`).digest('hex')}`,
     outcome: 'cancelled', dataEpoch: 'scope-gate-fixture', sequence: '1',
   });
   return { pool, url: databases.urls.access, registry, actor, principal, principalId, request, epoch, cancelled,
@@ -266,72 +271,130 @@ test('Catalogue batch admissions and seals share their scope and order overlappi
   }
 }, 30_000);
 
-test('Realm joins and grant creation retain their exclusive global epoch fence', async () => {
+async function joiningFixture(f: Awaited<ReturnType<typeof fixture>>, realm = f.actor) {
+  const member = native();
+  await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [member]);
+  if (realm !== f.actor) {
+    await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [realm]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'access.membership.manage.realm',clock_timestamp() + interval '1 hour')`,
+    [randomUUID(), f.principalId, realm]);
+    await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'access.membership.manage.realm',clock_timestamp() + interval '1 hour')`, [randomUUID(), realm, scope]);
+  }
+  await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+    VALUES ($1,$2,$3,'access.membership.consent',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, member]);
+  await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+    VALUES ($1,$2,$3,$4,'access.membership.consent',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.actor, member, scope]);
+  await f.pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
+    VALUES ('realm',$1,1,'terms')`, [realm]);
+  const consent = await new AccessMembershipConsents(f.pool).issue({ principal: f.principal, kind: 'realm',
+    ownerSubject: realm, memberSubject: member, expectedGeneration: '0', expectedPolicyRevision: '1',
+    termsRevision: 'terms', idempotencyKey: randomUUID(), requestDigest: 'e'.repeat(64) });
+  const join: MembershipChange = { principal: f.principal, kind: 'realm', ownerSubject: realm,
+    memberSubject: member, action: 'join', expectedGeneration: '0', expectedPolicyRevision: '1',
+    termsRevision: 'terms', consentReference: consent.consentReference, idempotencyKey: randomUUID(), requestDigest: 'f'.repeat(64) };
+  return { member, join };
+}
+function memberships(pool: Pool) {
+  const owner = new AccessMemberships(pool);
+  owner.configureFollowGraph(new FusekiClient(Bun.env.FUSEKI_URL!));
+  return owner;
+}
+function heldCommit(pool: Pool) {
+  const written = barrier(), release = barrier();
+  pool.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = (async (sql: string, values?: unknown[]) => {
+      if (sql === 'COMMIT') { written.release(); await release.promise; }
+      return query(sql, values);
+    }) as typeof client.query;
+  });
+  return { written, release };
+}
+
+test('A Realm join held after its writes lets another Realm join, unrelated scope grant and Work admission commit within one second', async () => {
   const f = await fixture();
   const heldPool = new Pool({ connectionString: f.url, max: 1 });
-  const gateRead = barrier(), release = barrier();
+  const held = heldCommit(heldPool);
   const pending: Promise<unknown>[] = [];
   try {
-    const member = native();
-    await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [member]);
+    const a = await joiningFixture(f), b = await joiningFixture(f, native());
+    const org = native(), draftScope = `content:draft:${org}`;
+    await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution')`, [org]);
+    await f.pool.query(`INSERT INTO access.org_participation_subject (subject) VALUES ($1)`, [org]);
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [draftScope]);
     await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-      VALUES ($1,$2,$3,'access.membership.consent',clock_timestamp() + interval '1 hour')`,
-    [randomUUID(), f.principalId, member]);
+      VALUES ($1,$2,$3,'access.grant.assign.content.draft',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, org]);
     await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-      VALUES ($1,$2,$3,$4,'access.membership.consent',clock_timestamp() + interval '1 hour')`,
-    [randomUUID(), f.actor, member, scope]);
-    await f.pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
-      VALUES ('realm',$1,1,'terms')`, [f.actor]);
-    const consent = await new AccessMembershipConsents(f.pool).issue({ principal: f.principal, kind: 'realm',
-      ownerSubject: f.actor, memberSubject: member, expectedGeneration: '0', expectedPolicyRevision: '1',
-      termsRevision: 'terms', idempotencyKey: randomUUID(), requestDigest: 'e'.repeat(64) });
-    heldPool.on('connect', client => {
-      const query = client.query.bind(client);
-      let pause = true;
-      client.query = (async (sql: string, values?: unknown[]) => {
-        const result = await query(sql, values);
-        if (pause && sql.includes('FROM access.scope_gate') && values?.[0] === scope) {
-          pause = false; gateRead.release(); await release.promise;
-        }
-        return result;
-      }) as typeof client.query;
-    });
-    const join: MembershipChange = { principal: f.principal, kind: 'realm', ownerSubject: f.actor,
-      memberSubject: member, action: 'join', expectedGeneration: '0', expectedPolicyRevision: '1',
-      termsRevision: 'terms', consentReference: consent.consentReference, idempotencyKey: randomUUID(), requestDigest: 'f'.repeat(64) };
-    const memberships = new AccessMemberships(heldPool);
-    memberships.configureFollowGraph(new FusekiClient(Bun.env.FUSEKI_URL!));
-    const joining = memberships.change(join);
+      VALUES ($1,$2,$2,$3,'access.grant.assign.content.draft',clock_timestamp() + interval '1 hour')`, [randomUUID(), org, draftScope]);
+    const joining = memberships(heldPool).change(a.join);
     pending.push(joining);
-    await within(gateRead.promise);
-    const probe = await f.pool.connect();
+    await within(held.written.promise);
+    const results = await within(Promise.all([
+      memberships(f.pool).change(b.join),
+      new AccessGrants(f.pool).createOrganizationContentDraft({ principal: f.principal, issuerSubject: org, expectedAuthorityEpoch: '0' },
+        randomUUID(), b.member, new Date(Date.now() + 60_000), { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }),
+      f.registry.register(f.request()).then(async row => {
+        await f.registry.claim(row.id, row.requestDigest); await f.cancelled(row); return row;
+      }),
+    ]));
+    expect(results[0].generation).toBe('1');
+    expect(results[1]).toBe('0');
+    expect(results[2].authorityEpoch).toBe('0');
+    expect(await f.epoch()).toBe('0');
+    held.release.release();
+    expect((await within(joining)).authorityEpoch).toBe('0');
+    // A new root grant also shares an in-flight ordinary admission's scope fence.
+    const client = await f.pool.connect();
     try {
-      await probe.query('BEGIN');
-      await expect(probe.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE NOWAIT', [scope])).rejects.toMatchObject({ code: '55P03' });
-    } finally { await probe.query('ROLLBACK'); probe.release(); }
-    release.release();
-    const joined = await within(joining);
-    expect(joined.generation).toBe('1');
-    expect(joined.authorityEpoch).toBe('1');
-    const held = await f.pool.connect();
-    try {
-      await held.query('BEGIN');
-      await f.registry.register(f.request(), held);
-      const writer = new Pool({ connectionString: f.url, max: 1 });
-      try {
-        const pid = (await writer.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
-        const grant = new AccessGrants(writer).create({ principal: f.principal, issuerSubject: f.actor,
-          expectedAuthorityEpoch: joined.authorityEpoch }, randomUUID(), member, new Date(Date.now() + 60_000),
-        { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
-        pending.push(grant);
-        await waitsOnLock(f.pool, pid);
-        await held.query('COMMIT');
-        expect(await within(grant)).toBe('2');
-      } finally { await held.query('ROLLBACK'); await Promise.allSettled(pending); await writer.end(); }
-    } finally { held.release(); }
+      await client.query('BEGIN'); await f.registry.register(f.request(), client);
+      expect(await within(new AccessGrants(f.pool).create({ principal: f.principal, issuerSubject: f.actor,
+        expectedAuthorityEpoch: '0' }, randomUUID(), a.member, new Date(Date.now() + 60_000),
+      { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }))).toBe('0');
+    } finally { await client.query('ROLLBACK'); client.release(); }
   } finally {
-    release.release(); await Promise.allSettled(pending);
-    await heldPool.end(); await f.close();
+    held.release.release(); await Promise.allSettled(pending); await heldPool.end(); await f.close();
+  }
+}, 30_000);
+
+test('Realm membership revocation fences the exact dependent proof while independent authority in the same Realm remains dispatchable', async () => {
+  const f = await fixture();
+  const heldPool = new Pool({ connectionString: f.url, max: 1 });
+  const held = heldCommit(heldPool);
+  const pending: Promise<unknown>[] = [];
+  try {
+    const { member, join } = await joiningFixture(f);
+    const joined = await memberships(f.pool).change(join);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.create',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, member]);
+    await new AccessGrants(f.pool).create({ principal: f.principal, issuerSubject: f.actor, expectedAuthorityEpoch: '0' },
+      randomUUID(), member, new Date(Date.now() + 60_000), { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) },
+      { membershipId: joined.membershipId, generation: joined.generation });
+    const dependentRequest = { ...f.request(), actingSubject: member };
+    const dependent = await f.registry.register(dependentRequest);
+    const independentRequest = f.request(), independent = await f.registry.register(independentRequest);
+    const leaving = memberships(heldPool).change({ ...join, action: 'leave', expectedGeneration: '1',
+      idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
+    pending.push(leaving);
+    await within(held.written.promise);
+    // The independent proof does not use this Realm's membership, even though
+    // its issuer owns that Realm. Neither its claim nor terminal seal waits.
+    await within(f.registry.claim(independent.id, independent.requestDigest));
+    await within(f.cancelled(independent));
+    held.release.release(); await within(leaving);
+    expect(await f.epoch()).toBe('0');
+    await expect(f.registry.claim(dependent.id, dependent.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await f.registry.register(dependentRequest)).dispatchEligible).toBe(false);
+    // An independent replacement source cannot revive the saved admission.
+    await new AccessGrants(f.pool).create({ principal: f.principal, issuerSubject: f.actor, expectedAuthorityEpoch: '0' },
+      randomUUID(), member, new Date(Date.now() + 60_000), { idempotencyKey: randomUUID(), requestDigest: 'c'.repeat(64) });
+    await expect(f.registry.claim(dependent.id, dependent.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await f.registry.register({ ...dependentRequest, idempotencyKey: randomUUID() })).dispatchEligible).toBe(true);
+    // A cancellation is always acknowledged, including after its source ends.
+    await f.cancelled(dependent);
+  } finally {
+    held.release.release(); await Promise.allSettled(pending); await heldPool.end(); await f.close();
   }
 }, 30_000);
 
@@ -365,4 +428,258 @@ test('Joining policy graph preparation holds no Access gate, identity or recover
     release.release(); await Promise.allSettled(pending);
     fuseki.query = query; await f.close();
   }
+}, 30_000);
+
+test('Group proof generations cover only the selected member, grant and ancestry; unrelated roster edits do not invalidate them', async () => {
+  const f = await fixture();
+  try {
+    await f.pool.query("DELETE FROM access.permission_grant WHERE recipient_subject = $1 AND action = 'work.create'", [f.actor]);
+    const root = randomUUID(), child = randomUUID(), other = randomUUID(), memberId = randomUUID();
+    await f.pool.query(`INSERT INTO access.recipient_group (id,scope_id,parent_id) VALUES ($1,$4,NULL),($2,$4,$1),($3,$4,NULL)`, [root, child, other, scope]);
+    await f.pool.query(`INSERT INTO access.group_member (id,group_id,agent_subject) VALUES ($1,$2,$3)`, [memberId, child, f.actor]);
+    await f.pool.query(`INSERT INTO access.group_permission_grant (id,group_id,issuer_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$3,$4,'work.create',clock_timestamp() + interval '1 hour')`, [randomUUID(), root, f.actor, scope]);
+    const intent = f.request(), saved = await f.registry.register(intent);
+    const inventory = (await f.pool.query("SELECT group_generation FROM access.scope_gate WHERE id = 'access:group-inventory'")).rows[0].group_generation;
+    expect((await new AccessAuthorityRead(f.pool).read(f.principal, { scopeId: scope, actingSubject: f.actor, action: 'work.create' }))
+      .groupGeneration).toBe(inventory);
+    const proof = (await f.pool.query<{ authority_witness: { table: string; id: string }[] }>(
+      'SELECT authority_witness FROM access.admission WHERE id = $1', [saved.id])).rows[0]!.authority_witness;
+    expect(proof.filter(row => row.table === 'recipient_group').map(row => row.id).sort()).toEqual([root, child].sort());
+    // A global group inventory revision can change without changing this proof.
+    await f.pool.query(`INSERT INTO access.group_member (id,group_id,agent_subject) VALUES ($1,$2,$3)`, [randomUUID(), other, f.actor]);
+    expect((await f.registry.register(intent)).dispatchEligible).toBe(true);
+    await f.registry.claim(saved.id, saved.requestDigest);
+    await f.pool.query('UPDATE access.recipient_group SET parent_id = $2 WHERE id = $1', [child, other]);
+    await expect(f.registry.claim(saved.id, saved.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    await f.pool.query('UPDATE access.recipient_group SET parent_id = $2 WHERE id = $1', [child, root]);
+    // Restoring the same topology does not restore the old generation.
+    expect((await f.registry.register(intent)).dispatchEligible).toBe(false);
+    await expect(f.registry.claim(saved.id, saved.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect(await f.epoch()).toBe('0');
+    await f.cancelled(saved);
+  } finally { await f.close(); }
+}, 30_000);
+
+test('Generic admissions retain exact mandate and grant generations through claim and retry without a global epoch bump', async () => {
+  const f = await fixture();
+  try {
+    const editScope = `work:edit:${native()}`, grantId = randomUUID(), representationId = randomUUID();
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.title.apply',clock_timestamp() + interval '1 hour')`, [representationId, f.principalId, f.actor]);
+    await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'work.title.apply',clock_timestamp() + interval '1 hour')`, [grantId, f.actor, editScope]);
+    const request = { ...f.request(), scope: editScope, action: 'work.title.apply' };
+    const saved = await f.registry.register(request);
+    await f.pool.query('UPDATE access.representation SET active = false WHERE id = $1', [representationId]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.title.apply',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, f.actor]);
+    await expect(f.registry.claim(saved.id, saved.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await f.registry.register(request)).dispatchEligible).toBe(false);
+    const fresh = await f.registry.register({ ...request, idempotencyKey: randomUUID() });
+    await f.pool.query('UPDATE access.permission_grant SET valid_until = valid_until + interval \'1 second\' WHERE id = $1', [grantId]);
+    await expect(f.registry.claim(fresh.id, fresh.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect(await f.epoch()).toBe('0');
+  } finally { await f.close(); }
+}, 30_000);
+
+test('Concurrent raw controller departures preserve one Agent continuity without fencing unrelated Work admissions', async () => {
+  const f = await fixture();
+  try {
+    const agent = native(), a = randomUUID(), b = randomUUID();
+    await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [agent]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$3,$4,'agent.control','infinity'::timestamptz),
+        ($2,$3,$4,'agent.control','infinity'::timestamptz)`, [a,b,f.principalId,agent]);
+    const results = await Promise.allSettled([a,b].map(id => f.pool.query('UPDATE access.representation SET active = false WHERE id = $1', [id])));
+    expect(results.filter(row => row.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(row => row.status === 'rejected')).toHaveLength(1);
+    expect((await f.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM access.representation
+      WHERE subject_id = $1 AND action = 'agent.control' AND active`, [agent])).rows[0]!.n).toBe(1);
+    const ordinary = await within(f.registry.register(f.request()));
+    await within(f.registry.claim(ordinary.id, ordinary.requestDigest));
+    expect(await f.epoch()).toBe('0');
+    await within(f.cancelled(ordinary));
+  } finally { await f.close(); }
+}, 30_000);
+
+test('Realm participation pins the membership episode even when the command grant is independent of membership', async () => {
+  const f = await fixture();
+  try {
+    const { member, join } = await joiningFixture(f);
+    const owner = memberships(f.pool), joined = await owner.change(join);
+    const realmScope = `reply:place:${f.actor}`;
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1),($2)', [realmScope, `governance:realm:${f.actor}`]);
+    await f.pool.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1)', [f.actor]);
+    await f.pool.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,visibility,review_mode)
+      VALUES ($1,'members','private','mandatory')`, [f.actor]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'reply.place',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, member]);
+    const grantId = randomUUID();
+    await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$3,$4,'reply.place',clock_timestamp() + interval '1 hour')`, [grantId, f.actor, member, realmScope]);
+    const request = { ...f.request(), scope: realmScope, action: 'reply.place', actingSubject: member };
+    const saved = await f.registry.register(request);
+    expect((await f.pool.query<{ authority_witness: unknown[] }>('SELECT authority_witness FROM access.admission WHERE id = $1',
+      [saved.id])).rows[0]!.authority_witness).toContainEqual({ table: 'membership', id: joined.membershipId, generation: '1' });
+    await owner.change({ ...join, action: 'leave', expectedGeneration: '1', idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
+    // The grant survives, and a more permissive policy supplies no replacement
+    // for the membership episode that this admission actually used.
+    expect((await f.pool.query('SELECT active FROM access.permission_grant WHERE id = $1', [grantId])).rows[0].active).toBe(true);
+    await f.pool.query("UPDATE access.realm_admin_settings SET visibility = 'public',who_may_submit = 'granted' WHERE realm = $1", [f.actor]);
+    await expect(f.registry.claim(saved.id, saved.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await f.registry.register(request)).dispatchEligible).toBe(false);
+    expect((await f.registry.register({ ...request, idempotencyKey: randomUUID() })).dispatchEligible).toBe(true);
+    expect(await f.epoch()).toBe('0');
+  } finally { await f.close(); }
+}, 30_000);
+
+test('Realm member administration revokes the member proof without invalidating another Reviewer in the same Realm', async () => {
+  const f = await fixture();
+  const client = await f.pool.connect();
+  try {
+    const { member, join } = await joiningFixture(f);
+    const joined = await memberships(f.pool).change(join);
+    const reviewScope = `review:decide:${f.actor}`;
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [reviewScope]);
+    for (const actor of [member, f.actor]) {
+      await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,'review.decide',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, actor]);
+      await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until,membership_id,membership_generation)
+        VALUES ($1,$2,$3,$4,'review.decide',clock_timestamp() + interval '1 hour',$5,$6)`,
+      [randomUUID(), f.actor, actor, reviewScope, actor === member ? joined.membershipId : null, actor === member ? '1' : null]);
+    }
+    const request = { ...f.request(), action: 'review.decide', scope: reviewScope };
+    const independent = await f.registry.register(request);
+    const dependent = await f.registry.register({ ...request, actingSubject: member, idempotencyKey: randomUUID() });
+    await client.query('BEGIN');
+    await changeRealmMember(client, f.actor, { actingSubject: f.actor, member, expectedGeneration: '0',
+      expectedMembershipGeneration: '1', action: 'remove', reason: 'End membership', consent: null, durationSeconds: null },
+    f.principalId, randomUUID());
+    await client.query('COMMIT');
+    await expect(f.registry.claim(dependent.id, dependent.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    await within(f.registry.claim(independent.id, independent.requestDigest));
+    await within(f.cancelled(independent));
+    expect((await f.pool.query('SELECT authority_epoch FROM access.scope_gate WHERE id = $1', [reviewScope])).rows[0].authority_epoch).toBe('0');
+  } finally { await client.query('ROLLBACK'); client.release(); await f.close(); }
+}, 30_000);
+
+test('Policy member-set references share the scope fence and do not invalidate admissions that used no set', async () => {
+  const f = await fixture(), client = await f.pool.connect();
+  try {
+    await f.pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
+      VALUES ('realm',$1,1,'terms')`, [f.actor]);
+    await client.query('BEGIN');
+    const ordinary = await f.registry.register(f.request(), client);
+    const policy = new AccessPolicyChanges(f.pool), setAdmissionId = randomUUID();
+    const context = { principal: f.principal, issuerSubject: f.actor, expectedAuthorityEpoch: '0',
+      idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) };
+    expect((await within(policy.change(context, { action: 'admit-set', setAdmissionId, setKind: 'realm',
+      basis: 'acting_subject', purpose: 'resource-eligibility', referencingScopeId: scope,
+      validUntil: new Date(Date.now() + 60_000) }))).authorityEpoch).toBe('0');
+    expect((await within(policy.change({ ...context, idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) },
+      { action: 'revoke-set', setAdmissionId, expectedGeneration: '0' }))).authorityEpoch).toBe('0');
+    await client.query('COMMIT');
+    await within(f.registry.claim(ordinary.id, ordinary.requestDigest));
+    await within(f.cancelled(ordinary));
+    expect(await f.epoch()).toBe('0');
+  } finally { await client.query('ROLLBACK'); client.release(); await f.close(); }
+}, 30_000);
+
+test('Strong revocation drains exact generic authority witnesses and acknowledges their terminal receipts', async () => {
+  const f = await fixture();
+  try {
+    const editScope = `work:edit:${native()}`, grantId = randomUUID();
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
+    await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'work.title.apply',clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, f.actor]);
+    await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,'work.title.apply',clock_timestamp() + interval '1 hour')`, [grantId, f.actor, editScope]);
+    const request = { ...f.request(), scope: editScope, action: 'work.title.apply' };
+    const claimed = await f.registry.register(request), waiting = await f.registry.register({ ...request, idempotencyKey: randomUUID() });
+    await f.registry.claim(claimed.id, claimed.requestDigest);
+    const independent = await f.registry.register(f.request());
+    const revocations = new AccessRevocations(f.pool);
+    const revoked = await revocations.revoke(f.principal, { revocationId: randomUUID(), issuerSubject: f.actor,
+      scopeId: editScope, expectedAuthorityEpoch: '0', mode: 'strong',
+      target: { kind: 'permission_grant', id: grantId, expectedGeneration: '0' } },
+    { idempotencyKey: randomUUID(), requestDigest: 'c'.repeat(64) });
+    expect(revoked).toMatchObject({ state: 'draining', affectedWork: 2, pending: 2, fenceAuthorityEpoch: '0' });
+    await expect(f.registry.claim(waiting.id, waiting.requestDigest)).rejects.toBeInstanceOf(AdmissionDenied);
+    await f.registry.claim(independent.id, independent.requestDigest);
+    await f.cancelled(claimed); await f.cancelled(waiting);
+    expect(await revocations.read(f.principal, f.actor, revoked.revocationId)).toMatchObject({ state: 'completed', pending: 0 });
+    await f.cancelled(independent);
+    expect(await f.epoch()).toBe('0');
+  } finally { await f.close(); }
+}, 30_000);
+
+test('A strong source cut keeps its pending admissions stable while terminal acknowledgement waits', async () => {
+  const f = await fixture(), writer = new Pool({ connectionString: f.url, max: 1 });
+  const cut = barrier(), release = barrier();
+  const pending: Promise<unknown>[] = [];
+  writer.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = (async (sql: string, values?: unknown[]) => {
+      const result = await query(sql, values);
+      if (sql.includes('FROM access.admission') && sql.includes('authority_witness @>')) {
+        cut.release(); await release.promise;
+      }
+      return result;
+    }) as typeof client.query;
+  });
+  try {
+    const row = await f.registry.register(f.request());
+    await f.registry.claim(row.id, row.requestDigest);
+    const grantId = (await f.pool.query('SELECT represented_grant_id FROM access.admission WHERE id = $1', [row.id])).rows[0].represented_grant_id;
+    const revocations = new AccessRevocations(writer);
+    const changing = revocations.revoke(f.principal, { revocationId: randomUUID(), issuerSubject: f.actor,
+      scopeId: scope, expectedAuthorityEpoch: '0', mode: 'strong',
+      target: { kind: 'permission_grant', id: grantId, expectedGeneration: '0' } },
+    { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+    pending.push(changing); await within(cut.promise);
+    let acknowledged = false;
+    const sealing = f.cancelled(row).then(() => { acknowledged = true; });
+    pending.push(sealing); await Bun.sleep(50);
+    expect(acknowledged).toBe(false);
+    release.release();
+    const revoked = await within(changing);
+    expect(revoked).toMatchObject({ state: 'draining', pending: 1 });
+    await within(sealing);
+    expect(await revocations.read(f.principal, f.actor, revoked.revocationId)).toMatchObject({ state: 'completed', pending: 0 });
+  } finally { release.release(); await Promise.allSettled(pending); await writer.end(); await f.close(); }
+}, 30_000);
+
+test('Claim takes selected sources before its admission row so concurrent strong revocation cannot deadlock the claim', async () => {
+  const f = await fixture(), claimant = new Pool({ connectionString: f.url, max: 1 });
+  const writer = new Pool({ connectionString: f.url, max: 1 });
+  const rowLocked = barrier(), release = barrier();
+  const pending: Promise<unknown>[] = [];
+  claimant.on('connect', client => {
+    const query = client.query.bind(client);
+    client.query = (async (sql: string, values?: unknown[]) => {
+      const result = await query(sql, values);
+      if (sql.includes('FROM access.admission WHERE id = $1 FOR UPDATE')) {
+        rowLocked.release(); await release.promise;
+      }
+      return result;
+    }) as typeof client.query;
+  });
+  try {
+    const row = await f.registry.register(f.request());
+    const grantId = (await f.pool.query('SELECT represented_grant_id FROM access.admission WHERE id = $1', [row.id])).rows[0].represented_grant_id;
+    const pid = (await writer.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    const claiming = new AccessAdmissionRegistry(claimant).claim(row.id, row.requestDigest);
+    pending.push(claiming); await within(rowLocked.promise);
+    const changing = new AccessRevocations(writer).revoke(f.principal, { revocationId: randomUUID(), issuerSubject: f.actor,
+      scopeId: scope, expectedAuthorityEpoch: '0', mode: 'strong',
+      target: { kind: 'permission_grant', id: grantId, expectedGeneration: '0' } },
+    { idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
+    pending.push(changing); await waitsOnLock(f.pool, pid);
+    release.release();
+    expect((await within(claiming)).state).toBe('claimed');
+    expect(await within(changing)).toMatchObject({ state: 'draining', affectedWork: 1 });
+    await f.cancelled(row);
+  } finally { release.release(); await Promise.allSettled(pending); await claimant.end(); await writer.end(); await f.close(); }
 }, 30_000);

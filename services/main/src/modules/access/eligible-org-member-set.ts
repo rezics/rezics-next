@@ -1,3 +1,4 @@
+import { lockAccessKey } from './scope-gates.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
@@ -47,7 +48,7 @@ export class AccessEligibleOrgMemberSet {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async begin(client: PoolClient, changesEpoch = true): Promise<string> {
+  private async begin(client: PoolClient): Promise<string> {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
@@ -56,7 +57,7 @@ export class AccessEligibleOrgMemberSet {
     if (!fence.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-      FROM access.scope_gate WHERE id = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [ROOT]);
+      FROM access.scope_gate WHERE id = $1 FOR SHARE`, [ROOT]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('Access authority gate closed');
     }
@@ -104,6 +105,7 @@ export class AccessEligibleOrgMemberSet {
     try {
       const current = await this.begin(client);
       const principalId = await this.principal(client, context.principal);
+      await lockAccessKey(client, `eligible-set-change:${principalId}:${context.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; action: string;
         grant_id: string; issuer_subject: string; result_authority_epoch: string }>(`
         SELECT request_digest, action, grant_id, issuer_subject, result_authority_epoch
@@ -123,10 +125,7 @@ export class AccessEligibleOrgMemberSet {
         throw new MembershipStale('authority epoch changed');
       }
       await work(client, principalId);
-      const bump = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [ROOT]);
-      const result = bump.rows[0]!.authority_epoch;
+      const result = current;
       await client.query(`INSERT INTO access.eligible_org_member_set_grant_receipt
         (principal_id, idempotency_key, request_digest, action, grant_id,
           issuer_subject, result_authority_epoch) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -217,7 +216,7 @@ export class AccessEligibleOrgMemberSet {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const principalId = await this.principal(client, principal);
       await this.assignment(client, principalId, issuerSubject);
       const row = await client.query<GrantRow>(`

@@ -1,8 +1,9 @@
+import { lockAccessKey } from './scope-gates.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { beginOrgRealm, normalizeOrgRealmError, orgRealmAuthority,
-  recheckOrgRealmAuthority, ORG_REALM_ACTION, ORG_REALM_SCOPE, OrgRealmConflict,
+  recheckOrgRealmAuthority, ORG_REALM_ACTION, OrgRealmConflict,
   OrgRealmDenied, OrgRealmStale, type OrgRealmProof,
   validOrgRealmGeneration, validOrgRealmId } from './org-realm-authority.ts';
 
@@ -158,6 +159,8 @@ export class AccessOrgRealmParticipation {
     this.validate(input, key);
     if (!input.termsRevision || input.termsRevision.length > 128) throw new OrgRealmDenied('invalid terms');
     return this.transaction(async (client, epoch) => {
+      await lockAccessKey(client, `org-realm-receipt:${principal.issuer}:${principal.subject}:${key}`);
+      await lockAccessKey(client, `org-realm:${input.organizationSubject}:${input.realm}`);
       const policy = await this.policy(client, input);
       const proof = await orgRealmAuthority(client, principal, policy.manager_subject, ORG_REALM_ACTION.admit);
       const digest = this.digest('propose', input);
@@ -204,6 +207,8 @@ export class AccessOrgRealmParticipation {
       throw new OrgRealmDenied('invalid Org/Realm change');
     }
     return this.transaction(async (client, epoch) => {
+      await lockAccessKey(client, `org-realm-receipt:${principal.issuer}:${principal.subject}:${key}`);
+      await lockAccessKey(client, `org-realm:${input.organizationSubject}:${input.realm}`);
       const policy = await this.policy(client, input);
       const organizationAction = input.action === 'join' || input.action === 'leave';
       const proof = await orgRealmAuthority(client, principal,
@@ -280,9 +285,7 @@ export class AccessOrgRealmParticipation {
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [participationId, input.realm, input.organizationSubject,
           generation, state, policy.revision, policy.terms_revision, proposalId]);
       }
-      const changed = await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
-        SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`, [ORG_REALM_SCOPE]);
-      const authorityEpoch = changed.rows[0]!.authority_epoch;
+      const authorityEpoch = epoch;
       await client.query(`INSERT INTO access.org_realm_history
         (participation_id, generation, action, state, policy_revision, terms_revision,
           proposal_id, ban_active, ban_generation, actor_proof, authority_epoch, reason_reference)
@@ -318,6 +321,10 @@ export class AccessOrgRealmParticipation {
       source.proposalId, target.realm, target.expectedGeneration, target.expectedPolicyRevision,
       target.proposalId, target.termsRevision])).digest('hex');
     return this.transaction(async (client, epoch) => {
+      await lockAccessKey(client, `org-realm-receipt:${principal.issuer}:${principal.subject}:${key}`);
+      for (const realm of [source.realm, target.realm].sort()) {
+        await lockAccessKey(client, `org-realm:${input.organizationSubject}:${realm}`);
+      }
       const sourcePolicy = await this.policy(client, source);
       const targetPolicy = await this.policy(client, target);
       const proof = await orgRealmAuthority(client, principal, input.organizationSubject, ORG_REALM_ACTION.participate);
@@ -364,9 +371,7 @@ export class AccessOrgRealmParticipation {
       await recheckOrgRealmAuthority(client, proposal.realm_proof);
       await recheckOrgRealmAuthority(client, proof);
       const targetId = to.tuple?.id ?? randomUUID();
-      const authorityEpoch = (await client.query<{ authority_epoch: string }>(`UPDATE access.scope_gate
-        SET authority_epoch = authority_epoch + 1 WHERE id = $1 RETURNING authority_epoch`,
-      [ORG_REALM_SCOPE])).rows[0]!.authority_epoch;
+      const authorityEpoch = epoch;
       const snapshot = (basis: Tuple, policy: Policy, id: string, generation: string,
         state: State, proposalId: string, ban?: Ban): OrgRealmResult => ({
         // Pick the public tuple explicitly; never return wire selectors/private proof.

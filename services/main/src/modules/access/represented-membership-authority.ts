@@ -50,7 +50,7 @@ export class AccessRepresentedMembershipAuthority {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async begin(client: PoolClient, changesEpoch = true): Promise<string> {
+  private async begin(client: PoolClient): Promise<string> {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
@@ -59,7 +59,7 @@ export class AccessRepresentedMembershipAuthority {
     if (!fence.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open FROM access.scope_gate
-      WHERE id = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [ROOT]);
+      WHERE id = $1 FOR SHARE`, [ROOT]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('Access authority gate closed');
     }
@@ -125,7 +125,7 @@ export class AccessRepresentedMembershipAuthority {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const p = await this.principal(client, principal, true);
       await lockAccessKey(client, `representation-request:${p.id}:${idempotencyKey}`);
       const prior = await client.query<{ id: string }>(`SELECT id FROM access.representation_request
@@ -173,7 +173,7 @@ export class AccessRepresentedMembershipAuthority {
     if (!agent.test(issuer) || !uuid.test(requestId)) throw new MembershipDenied('invalid request read');
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const p = await this.principal(client, principal);
       await this.assignment(client, p.id, issuer, 'access.representation.manage');
       await this.assignment(client, p.id, issuer,
@@ -201,6 +201,7 @@ export class AccessRepresentedMembershipAuthority {
     try {
       const current = await this.begin(client);
       const p = await this.principal(client, context.principal);
+      await lockAccessKey(client, `represented-authority-change:${p.id}:${context.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; action: string; object_id: string;
         issuer_subject: string; resource_subject: string; result_authority_epoch: string }>(`
         SELECT * FROM access.represented_membership_authority_receipt
@@ -219,10 +220,7 @@ export class AccessRepresentedMembershipAuthority {
         throw new MembershipStale('authority epoch changed');
       }
       await work(client, p.id);
-      const bumped = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [ROOT]);
-      const result = bumped.rows[0]!.authority_epoch;
+      const result = current;
       await client.query(`INSERT INTO access.represented_membership_authority_receipt
         (principal_id, idempotency_key, request_digest, action, object_id,
           issuer_subject, resource_subject, result_authority_epoch)

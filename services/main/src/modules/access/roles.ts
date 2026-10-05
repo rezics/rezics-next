@@ -71,13 +71,13 @@ export class AccessRoles {
     await client.query("SET LOCAL statement_timeout = '5s'");
   }
 
-  private async gate(client: PoolClient, write: boolean): Promise<string> {
+  private async gate(client: PoolClient): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (recovery.rows[0]?.open !== true) throw new RoleUnavailable('Access recovery is held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-      FROM access.scope_gate WHERE id = $1 ${write ? 'FOR UPDATE' : 'FOR SHARE'}`, [SCOPE]);
+      FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new RoleDenied('role scope is closed');
     }
@@ -124,7 +124,7 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      await this.gate(client, false);
+      await this.gate(client);
       await this.authorize(client, principal, issuerSubject, 'access.role.manage');
       const family = await client.query<{ head_revision: string }>(`
         SELECT head_revision FROM access.role_family
@@ -157,7 +157,7 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       const principalId = await this.authorize(client, context.principal,
         context.issuerSubject, 'access.role.manage',
         permissions.length ? new Date() : undefined);
@@ -242,7 +242,7 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       await this.authorize(client, principal, issuerSubject, 'access.role.bind');
       const row = await client.query<BindingRow>(`SELECT id, family_id, role_revision,
         issuer_subject, recipient_subject, valid_until, active, generation,
@@ -266,7 +266,7 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       await this.authorize(client, principal, issuerSubject, 'access.role.bind');
       const rows = await client.query<BindingRow>(`SELECT id, family_id, role_revision,
         issuer_subject, recipient_subject, valid_until, active, generation,
@@ -296,9 +296,10 @@ export class AccessRoles {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, true);
+      const authorityEpoch = await this.gate(client);
       const principalId = await this.authorize(client, context.principal,
         context.issuerSubject, 'access.role.bind');
+      await lockAccessKey(client, `role-binding:${principalId}:${context.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         action: string; binding_id: string; result_authority_epoch: string }>(`
         SELECT request_digest, issuer_subject, action, binding_id,
@@ -318,10 +319,7 @@ export class AccessRoles {
         throw new RoleStale('role binding authority epoch changed');
       }
       await work(client, principalId);
-      const bumped = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
-      const resultEpoch = bumped.rows[0]!.authority_epoch;
+      const resultEpoch = authorityEpoch;
       await client.query(`INSERT INTO access.role_binding_receipt
         (principal_id, idempotency_key, request_digest, issuer_subject,
           action, binding_id, result_authority_epoch) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -363,6 +361,7 @@ export class AccessRoles {
         membershipDependency, recipientSubject)) {
         throw new RoleDenied('membership dependency is stale');
       }
+      await lockAccessKey(client, `role-recipient:${recipientSubject}`);
       const existing = await client.query(`SELECT id FROM access.role_binding
         WHERE recipient_subject = $1 AND active
           AND valid_until > clock_timestamp() LIMIT 16`, [recipientSubject]);

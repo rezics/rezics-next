@@ -1,5 +1,7 @@
+import { lockAccessKey } from './scope-gates.ts';
 // Protected policy write template: publish/end a policy, admit or revoke a set
-// reference. Each change, its scope epoch advance and its receipt commit together.
+// reference. Policy revisions advance the scope epoch; set references advance
+// their own generation. Each effect and its receipt commit together.
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -101,11 +103,12 @@ export class AccessPolicyChanges {
       const editor = changesPolicy
         ? await semanticPolicyAuthority(client, principal.id, context.issuerSubject, scope!) : null;
       if (editor) await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-      const epoch = await lockOpenScope(client, scope!);
+      const epoch = await lockOpenScope(client, scope!, changesPolicy);
       const mandate = editor?.mandate ?? await requireMandate(client, principal.id, context.issuerSubject,
         changesPolicy ? POLICY_MANAGE : POLICY_SET_ADMISSION);
       const grant = changesPolicy
         ? editor?.grant ?? await requireGrant(client, context.issuerSubject, scope!, POLICY_MANAGE) : null;
+      await lockAccessKey(client, `policy-change:${principal.id}:${context.idempotencyKey}`);
       const prior = (await client.query<PolicyChangeReceiptRow>(`SELECT * FROM access.policy_change_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [principal.id, context.idempotencyKey])).rows[0];
       if (prior) {
@@ -153,7 +156,7 @@ export class AccessPolicyChanges {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [change.setAdmissionId, change.setKind,
           context.issuerSubject, change.basis, scope, change.purpose, principal.id, mandate.id,
           mandate.generation, change.validUntil]);
-        authorityEpoch = await advanceScopeEpoch(client, scope!);
+        authorityEpoch = epoch;
         result = { action: change.action, policyId: null, revision: null, setAdmissionId: change.setAdmissionId };
       } else {
         const current = (await client.query<{ active: boolean; generation: string }>(`SELECT active,
@@ -163,7 +166,7 @@ export class AccessPolicyChanges {
           await client.query('UPDATE access.policy_set_admission SET active = false WHERE id = $1',
             [change.setAdmissionId]);
         }
-        authorityEpoch = await advanceScopeEpoch(client, scope!);
+        authorityEpoch = epoch;
         result = { action: change.action, policyId: null, revision: null, setAdmissionId: change.setAdmissionId };
       }
       await client.query(`INSERT INTO access.policy_change_receipt (principal_id, idempotency_key,

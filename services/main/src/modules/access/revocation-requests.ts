@@ -1,5 +1,6 @@
-// IAM07/IAM29 revocation requests. Revoking one source advances the scope epoch
-// in the same transaction; a strong request also fixes the admitted command and
+import { lockAccessKey } from './scope-gates.ts';
+// Source generations fence exactly their saved proofs. A strong request fixes
+// the admitted command and
 // private-read work that must end before completion is acknowledged.
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -8,7 +9,7 @@ import {
   uuidPattern,
 } from './policy-errors.ts';
 import {
-  advanceScopeEpoch, drainRevokedAuthority, inAccessTransaction, requireActivePrincipal, requireMandate,
+  drainRevokedAuthority, inAccessTransaction, requireActivePrincipal, requireMandate,
   requireRecoveryOpen,
 } from './policy-transaction.ts';
 import {
@@ -68,15 +69,13 @@ export class AccessRevocations {
     }
     return inAccessTransaction(this.pool, 'read committed', async client => {
       await requireRecoveryOpen(client, true);
-      // Controller revocations take the Work fence before any other gate or source.
-      if (request.target.kind === 'representation') await client.query(
-        "SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
       const identity = await requireActivePrincipal(client, principal);
       // A closed scope still accepts a revocation: fencing never needs an open gate.
       const gate = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch
-        FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [request.scopeId])).rows[0];
+        FROM access.scope_gate WHERE id = $1 FOR SHARE`, [request.scopeId])).rows[0];
       if (!gate) throw new PolicyDenied('scope is unavailable');
       await requireMandate(client, identity.id, request.issuerSubject, REVOKE_ACTION);
+      await lockAccessKey(client, `revocation:${identity.id}:${receipt.idempotencyKey}`);
       const prior = (await client.query<RevocationReceiptRow>(`SELECT * FROM access.revocation_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [identity.id, receipt.idempotencyKey])).rows[0];
       if (prior) {
@@ -102,7 +101,7 @@ export class AccessRevocations {
         access.${shape.table} SET active = false WHERE id = $1 RETURNING generation`,
       [request.target.id])).rows[0]!.generation : target.generation;
       if (generation === '0') throw new PolicyStale('source was never admitted');
-      const fence = await advanceScopeEpoch(client, request.scopeId);
+      const fence = gate.authority_epoch;
       await drainRevokedAuthority(client, identity.id, request.issuerSubject,
         request.target.kind, request.target.id, generation, request.scopeId,
         { revocationId: request.revocationId, mode: request.mode });

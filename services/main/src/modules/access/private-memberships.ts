@@ -88,7 +88,7 @@ export class AccessPrivateMemberships {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async begin(client: PoolClient, write: boolean): Promise<string> {
+  private async begin(client: PoolClient): Promise<string> {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
@@ -97,7 +97,7 @@ export class AccessPrivateMemberships {
     if (!recovery.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-        FROM access.scope_gate WHERE id = $1 ${write ? 'FOR UPDATE' : 'FOR SHARE'}`, [SCOPE]);
+        FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
     if (!gate.rows[0]) throw new MembershipUnavailable('scope gate missing');
     if (!gate.rows[0].open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('membership scope closed');
@@ -146,7 +146,7 @@ export class AccessPrivateMemberships {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const principal = await this.recipient(client, input.principal, true);
       await lockAccessKey(client, `private-membership-consent:${principal.id}:${input.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; consent_id: string }>(`
@@ -210,7 +210,7 @@ export class AccessPrivateMemberships {
     if (!uuid.test(consentReference)) throw new MembershipDenied('invalid consent reference');
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const principal = await this.recipient(client, asserted, false);
       const owned = await client.query(`SELECT id FROM access.private_membership_consent
         WHERE id = $1 AND principal_id = $2 FOR SHARE`, [consentReference, principal.id]);
@@ -232,7 +232,7 @@ export class AccessPrivateMemberships {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client, false);
+      await this.begin(client);
       const principal = await this.recipient(client, asserted, false);
       const rows = await client.query<{ id: string; kind: MembershipKind; owner_subject: string;
         state: 'joined' | 'left'; generation: string; policy_revision: string;
@@ -268,11 +268,13 @@ export class AccessPrivateMemberships {
       ? await prepareRealmHistoryAdmission(this.pool,input.historyEnvironment,input.ownerSubject) : undefined;
     const client = await this.pool.connect();
     try {
-      const currentEpoch = await this.begin(client, true);
+      const currentEpoch = await this.begin(client);
+      if (input.action === 'leave') await lockAccessKey(client, `private-membership-row:${input.membershipId}`);
       let owned: Member | undefined;
       let recipientId: string | undefined;
       if (input.action === 'leave') {
         recipientId = (await this.recipient(client, input.principal, false)).id;
+        await lockAccessKey(client, `private-membership:${input.kind}:${input.ownerSubject}:${recipientId}`);
         owned = (await client.query<Member>(`SELECT id, principal_id, kind, owner_subject, state,
           generation, policy_revision FROM access.private_membership
           WHERE id=$1 AND kind=$2 AND owner_subject=$3 AND principal_id=$4 FOR UPDATE`,
@@ -281,6 +283,7 @@ export class AccessPrivateMemberships {
       const selfLeave = !!owned;
       if (input.selfLeaveOnly && !selfLeave) throw new MembershipDenied('membership unavailable to recipient');
       const managerId = selfLeave ? recipientId! : await this.manager(client, input.principal, input.kind, input.ownerSubject);
+      await lockAccessKey(client, `private-membership-change:${managerId}:${input.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; membership_id: string;
         result_generation: string; result_authority_epoch: string; action: 'join' | 'leave' }>(`
         SELECT request_digest, membership_id, result_generation, result_authority_epoch, action
@@ -333,6 +336,7 @@ export class AccessPrivateMemberships {
         [input.consentReference, input.kind, input.ownerSubject,
           input.expectedPolicyRevision, input.termsRevision]);
         if (!consent.rows[0]) throw new MembershipDenied('recipient consent unavailable');
+        await lockAccessKey(client, `private-membership:${input.kind}:${input.ownerSubject}:${consent.rows[0].principal_id}`);
         const existing = await client.query<Member>(`SELECT id, principal_id, kind,
           owner_subject, state, generation FROM access.private_membership
           WHERE kind = $1 AND owner_subject = $2 AND principal_id = $3 FOR UPDATE`,
@@ -428,10 +432,7 @@ export class AccessPrivateMemberships {
           consent_reference = NULL, changed_at = now() WHERE id = $1`,
         [member.id, member.generation, selfLeave ? policy.rows[0].revision : input.expectedPolicyRevision]);
       }
-      const bumped = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
-      const authorityEpoch = bumped.rows[0]!.authority_epoch;
+      const authorityEpoch = currentEpoch;
       if (input.kind === 'realm' && input.action === 'join') await recordRealmHistoryAdmission(client,
         input.historyEnvironment, input.ownerSubject, 'private', member.id, member.generation, historyAdmission);
       await client.query(`INSERT INTO access.private_membership_history

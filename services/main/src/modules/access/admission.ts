@@ -1,3 +1,4 @@
+import { captureAuthorityWitness, authorityWitnessCurrent, type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { requirePlatformParticipation } from '../safety-queue/participation.ts';
 import { requireRealmParticipation } from './realm-management-settings.ts';
@@ -154,10 +155,10 @@ export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
 
-/** Register, claim and seal only check authority, so every action shares its
- * gate. Closing, epoch bumps and group-generation changes remain exclusive.
- * Receipt retries and inventory moves serialize on their own key or object;
- * a scope gate must never become their incidental global mutex. */
+/** Admissions share the scope's policy/closure fence. Selected authority rows
+ * stay locked through register and claim; terminal seals acknowledge an exact
+ * graph receipt. Scope-wide policy changes remain exclusive. Receipt retries
+ * and inventory moves serialize on their own key or object. */
 const admissionGateLock = 'SHARE';
 class AuthorityChecked extends Error {}
 
@@ -202,6 +203,7 @@ async function pendingSearchReads(client: PoolClient, column: 'scope_id' | 'prin
   return Number(result.rows[0]?.count ?? '0');
 }
 interface AdmissionRow {
+  authority_witness: AuthorityWitness[] | null;
   id: string;
   principal_id: string;
   acting_subject: string;
@@ -968,7 +970,7 @@ export class AccessAdmissionRegistry {
       await lockAdmissionKey(client, principalId, request.action, request.idempotencyKey);
 
       const existingResult = await client.query<AdmissionRow>(
-        `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
+        `SELECT authority_witness, id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
                 authority_epoch, registered_at, expires_at, state, group_member_id, group_grant_id, group_generation,
                 direct_grant_id, direct_grant_generation, attribution_id, attribution_generation,
                 direct_subject_generation, direct_principal_epoch,
@@ -985,6 +987,8 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+      const witnessCurrent = !existing?.authority_witness
+        || await authorityWitnessCurrent(client, existing.authority_witness);
 
       const ratingConfiguration = ratingConfigurationAction(request.action);
       const savedRating = existing && ratingConfiguration ? await savedRealmRatingProof(client, existing.id) : null;
@@ -993,7 +997,7 @@ export class AccessAdmissionRegistry {
           || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+        const dispatchEligible = witnessCurrent && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && !!await realmRatingProof(client, this.baselineGraph, principalId, request.actingSubject,
             request.action, request.scope, savedRating);
@@ -1013,7 +1017,7 @@ export class AccessAdmissionRegistry {
           || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+        const dispatchEligible = witnessCurrent && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await platformAdministratorProofCurrent(client, savedAdministrator, principalId, request.actingSubject)
           && await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId,
@@ -1039,7 +1043,7 @@ export class AccessAdmissionRegistry {
           || (savedBaseline.submission_contribution ?? null) !== (request.baselineContribution ?? null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = request.principal.emailVerified === true
+        const dispatchEligible = witnessCurrent && request.principal.emailVerified === true
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
@@ -1064,7 +1068,7 @@ export class AccessAdmissionRegistry {
           || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+        const dispatchEligible = witnessCurrent && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open
           && existing.authority_epoch === gate.authority_epoch
           && await selectedRepresentedWorkProof(client, existing,
@@ -1087,7 +1091,7 @@ export class AccessAdmissionRegistry {
           || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+        const dispatchEligible = witnessCurrent && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await selectedDirectWorkProof(client, existing, principal.enforcement_epoch);
         if (!transaction) await client.query('COMMIT');
@@ -1130,8 +1134,12 @@ export class AccessAdmissionRegistry {
       let roleBindingGeneration: string | null = null;
       let roleFamilyId: string | null = null;
       let roleRevision: string | null = null;
+      const authoritySources: AuthoritySource[] = [
+        { table: 'principal', id: principalId, generation: principal.enforcement_epoch },
+        { table: 'authority_subject', id: request.actingSubject },
+      ];
       let publishingProof: RepresentedWorkProof | null = null;
-      await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
+      authoritySources.push(...await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject));
       const administratorCandidate = !existing && authorityPath === 'represented-agent'
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
@@ -1219,21 +1227,24 @@ export class AccessAdmissionRegistry {
             throw new AdmissionDenied('permission is not granted');
           }
         } else {
-          const represented = await client.query(
-            `SELECT id FROM access.representation
+          const represented = await client.query<{ id: string; generation: string }>(
+            `SELECT id, generation FROM access.representation
              WHERE principal_id = $1 AND subject_id = $2
                AND (action = $3 OR action = 'agent.control' AND $3 IN ('review.decide','publication.adopt'))
                AND active AND valid_until > clock_timestamp()
              ORDER BY id LIMIT 1 FOR SHARE`,
             [principalId, request.actingSubject, authorityAction]);
           if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
-          const granted = await client.query(
-            `SELECT id FROM access.permission_grant
+          const granted = await client.query<{ id: string; generation: string }>(
+            `SELECT id, generation FROM access.permission_grant
              WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
                AND active AND valid_until > clock_timestamp()
              ORDER BY id LIMIT 1 FOR SHARE`,
             [request.actingSubject, request.scope, authorityAction]);
           if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
+          authoritySources.push(
+            { table: 'representation', id: represented.rows[0]!.id, generation: represented.rows[0]!.generation },
+            { table: 'permission_grant', id: granted.rows[0]!.id, generation: granted.rows[0]!.generation });
         }
       }
 
@@ -1254,7 +1265,8 @@ export class AccessAdmissionRegistry {
           authorityEpoch: existing.authority_epoch,
           registeredAt: existing.registered_at.toISOString(), expiresAt: existing.expires_at.toISOString(),
           state: existing.state as RegisteredAdmission['state'],
-          dispatchEligible: existing.state !== 'sealed' && existing.eligible,
+          dispatchEligible: witnessCurrent && gate.open && gate.dispatch_open
+            && existing.authority_epoch === gate.authority_epoch && existing.state !== 'sealed' && existing.eligible,
           replayed: true,
         };
       }
@@ -1264,6 +1276,29 @@ export class AccessAdmissionRegistry {
         throw new AuthorityChecked();
       }
 
+      if (baseline?.realm_membership) {
+        const [kind, membershipId, generation] = baseline.realm_membership.split(':');
+        authoritySources.push({ table: kind === 'owner' ? 'permission_grant'
+          : kind === 'private' ? 'private_membership' : 'membership', id: membershipId!, generation });
+      }
+      const witness = await captureAuthorityWitness(client, [...authoritySources,
+        { table: 'principal_permission_grant', id: directGrantId, generation: directGrantGeneration },
+        { table: 'principal_agent_attribution', id: attributionId, generation: attributionGeneration },
+        { table: 'private_group_member', id: privateGroupMemberId, generation: privateGroupMemberGeneration },
+        { table: 'group_permission_grant', id: privateGroupGrantId, generation: privateGroupGrantGeneration },
+        { table: 'private_role_binding', id: privateRoleBindingId, generation: privateRoleBindingGeneration },
+        { table: 'group_member', id: groupMemberId },
+        { table: 'group_permission_grant', id: groupGrantId },
+        { table: 'representation', id: representedRepresentationId, generation: representedRepresentationGeneration },
+        { table: 'permission_grant', id: representedGrantId, generation: representedGrantGeneration },
+        { table: 'role_binding', id: roleBindingId, generation: roleBindingGeneration },
+        { table: 'authority_subject', id: publishingProof?.path?.origin ?? null },
+        { table: 'representation', id: baseline?.representation_id ?? administrator?.representation_id
+          ?? rating?.representation_id ?? null, generation: baseline?.representation_generation
+          ?? administrator?.representation_generation ?? rating?.representation_generation },
+        { table: 'representation', id: baseline?.avatar_control_id ?? null, generation: baseline?.avatar_control_generation },
+        { table: 'permission_grant', id: rating?.grant_id ?? null, generation: rating?.grant_generation },
+      ]);
       const id = Bun.randomUUIDv7();
       const inserted = await client.query<{ expires_at: Date; registered_at: Date }>(
         `INSERT INTO access.admission
@@ -1300,6 +1335,7 @@ export class AccessAdmissionRegistry {
           roleBindingId, roleBindingGeneration, roleFamilyId, roleRevision,
           request.scope, request.action, request.idempotencyKey,
           request.requestDigest, gate.authority_epoch]);
+      await client.query('UPDATE access.admission SET authority_witness = $2::jsonb WHERE id = $1', [id, JSON.stringify(witness)]);
       if (baseline) {
         await saveBaselineProof(client, id, baseline);
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
@@ -1401,8 +1437,22 @@ export class AccessAdmissionRegistry {
         `SELECT authority_epoch, group_generation, open, dispatch_open FROM access.scope_gate
          WHERE id = $1 FOR ${admissionGateLock}`, [scope]);
       if (gateResult.rows[0]?.dispatch_open !== true) throw new AdmissionDenied('dispatch is fenced');
+      // Source writers acquire the source before fixing their drain's admission
+      // rows. Take the same order so claim cannot hold an admission while it
+      // waits for the source that its revoker already owns.
+      const cut = (await client.query<{ authority_witness: AuthorityWitness[] | null; eligible: boolean; topology: boolean }>(
+        `SELECT authority_witness, EXISTS (SELECT 1 FROM access.admission_obligation o
+          WHERE o.admission_id = a.id AND o.path_id IS NOT NULL) AS topology, expires_at > clock_timestamp() AND state IN ('registered','claimed') AS eligible
+         FROM access.admission a WHERE id = $1`, [admissionId])).rows[0];
+      if (cut?.topology && !(await client.query(
+        "SELECT 1 FROM access.scope_gate WHERE id = 'access:representation-topology' AND open AND dispatch_open FOR SHARE")).rowCount) {
+        throw new AdmissionDenied('representation topology is closed');
+      }
+      if (cut?.eligible && cut.authority_witness && !await authorityWitnessCurrent(client, cut.authority_witness)) {
+        throw new AdmissionDenied('selected authority changed before dispatch');
+      }
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
-        `SELECT id, principal_id, acting_subject, authority_path, direct_grant_id,
+        `SELECT authority_witness, id, principal_id, acting_subject, authority_path, direct_grant_id,
                 attribution_id, direct_grant_generation, attribution_generation,
                 direct_subject_generation, direct_principal_epoch,
                 private_group_member_id, private_group_member_generation,
@@ -1509,6 +1559,9 @@ export class AccessAdmissionRegistry {
         && !await selectedRepresentedWorkProof(client, row,
           principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation, this.baselineGraph)) {
         throw new AdmissionDenied('represented authority changed before claim');
+      }
+      if (row.authority_witness && !await authorityWitnessCurrent(client, row.authority_witness)) {
+        throw new AdmissionDenied('selected authority changed before dispatch');
       }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
       let claimedAt = row.claimed_at;
@@ -1673,7 +1726,7 @@ export class AccessAdmissionRegistry {
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(
-      `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+      `SELECT authority_witness, id, principal_id, acting_subject, scope_id, action, idempotency_key,
               request_digest, authority_epoch, registered_at, expires_at, state,
               (expires_at > clock_timestamp()) AS eligible
        FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'
@@ -1689,7 +1742,7 @@ export class AccessAdmissionRegistry {
   async listUnsealed(scope: string, limit = 100): Promise<RegisteredAdmission[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(
-      `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+      `SELECT authority_witness, id, principal_id, acting_subject, scope_id, action, idempotency_key,
               request_digest, authority_epoch, registered_at, expires_at, state,
               (expires_at > clock_timestamp()) AS eligible
        FROM access.admission WHERE scope_id = $1 AND state <> 'sealed'
@@ -1702,7 +1755,9 @@ export class AccessAdmissionRegistry {
       replayed: true }));
   }
 
-  /** The caller supplies a just-read terminal Jena receipt, not a timeout inference. */
+  /** The caller supplies a just-read terminal Jena receipt, not a timeout inference.
+   * Its graph effect has already committed: later revocation cannot prevent the
+   * acknowledgement. Authorization must be enforced before owner dispatch. */
   async recordGraphOutcome(admissionId: string, proof: GraphTerminalProof): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -1722,7 +1777,7 @@ export class AccessAdmissionRegistry {
         graph_receipt: string | null; graph_outcome: string | null;
         graph_data_epoch: string | null; graph_sequence: string | null;
       }>(
-        `SELECT id, principal_id, acting_subject, scope_id, action, idempotency_key,
+        `SELECT authority_witness, id, principal_id, acting_subject, scope_id, action, idempotency_key,
                 request_digest, authority_epoch, registered_at, expires_at, state, graph_receipt,
                 graph_outcome, graph_data_epoch, graph_sequence,
                 (expires_at > clock_timestamp()) AS eligible

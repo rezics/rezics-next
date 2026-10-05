@@ -130,7 +130,7 @@ export class AccessTopology {
     return controlTransaction(this.pool, async client => {
       // Controller edge revocation also fences Work. All topology writers
       // acquire Work before topology, matching admission and controller leave.
-      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR UPDATE");
+      await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE");
       const epoch = await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       const mandate = await requireMandate(client, actor.id, change.representedSubject, MANAGE);

@@ -1,3 +1,4 @@
+import { lockAccessKey } from '../access/scope-gates.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { t } from 'elysia';
@@ -143,7 +144,7 @@ export class RealmJoinRequests {
     const recovery = await this.discoverableRequest(realm);
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
-      await membershipRoot(client, false);
+      await membershipRoot(client);
       await this.requestRecovery(client,recovery);
       const policy = await this.policy(client,realm);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`join-request:${actor.id}:${key}`]);
@@ -262,7 +263,6 @@ export class RealmJoinRequests {
       (principal_id,idempotency_key,request_digest,request_id,decision_id,result) VALUES ($1,$2,$3,$4,$5,$6)`,[principal,key,hash,request,receiptId,result]);
     if (state !== 'withdrawn') {
       await client.query('UPDATE access.realm_admin_revision SET generation = $2 WHERE realm = $1',[realm,generation]);
-      await client.query('UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = $1',[`governance:realm:${realm}`]);
     }
     return result;
   }
@@ -289,7 +289,7 @@ export class RealmJoinRequests {
       ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
-      await membershipRoot(client, input.decision === 'accepted');
+      await membershipRoot(client);
       const hash = digest(['decide',realm,request,input]);
       const replay = await this.replay(client,manager.id,key,hash);
       if (replay) return replay;
@@ -297,6 +297,7 @@ export class RealmJoinRequests {
       if (current !== input.expectedGeneration) throw new RealmAdminStale('Realm management generation changed');
       const row = await this.pending(client,realm,request,input.expectedRequestGeneration);
       const policy = await this.policy(client,realm);
+      await lockAccessKey(client, `membership:realm:${realm}:${row.member}`);
       const member = await this.episode(client,realm,row.member);
       if ((member?.generation ?? '0') !== row.membership_generation || member?.state === 'joined'
         || policy.revision !== row.policy_revision || policy.terms_revision !== row.terms_revision) throw new RealmAdminStale('Membership or admission terms changed');
@@ -326,7 +327,6 @@ export class RealmJoinRequests {
         if (error instanceof RealmHistoryAdmissionStale) throw new RealmAdminStale(error.message);
         throw error;
       }
-      await client.query("UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = 'work:create:root'");
       return this.finish(client,realm,request,manager.id,input.actingSubject,key,hash,'accepted',input.reason,next,id,generation);
     });
   }

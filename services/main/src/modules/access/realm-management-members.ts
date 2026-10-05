@@ -1,4 +1,5 @@
 import { currentMembershipConsent } from './memberships.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminLimit, RealmAdminStale,
@@ -12,11 +13,12 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
   principalId: string, receiptId: string, env?: WorkActivationEnvironment, historyAdmission?: RealmHistoryAdmission) {
   if ((input.action === 'add') !== (input.consent !== null)
     || input.action !== 'ban' && input.durationSeconds !== null) throw new RealmAdminInvalid('Invalid member change');
-  // The generic membership owner also holds this gate, so consent use and
-  // membership generation cannot race its join/leave endpoints.
+  // Scope closure fences all owners. The membership identity lock also covers
+  // an absent episode and is shared with the generic join/leave owner.
   const root = await client.query(`SELECT 1 FROM access.scope_gate WHERE id = 'work:create:root'
-    AND open AND dispatch_open FOR UPDATE`);
+    AND open AND dispatch_open FOR SHARE`);
   if (!root.rowCount) throw new RealmAdminDenied('Membership authority is unavailable');
+  await lockAccessKey(client, `membership:realm:${realm}:${input.member}`);
   const subject = await client.query(`SELECT 1 FROM access.authority_subject
     WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [input.member]);
   if (!subject.rowCount) throw new RealmAdminDenied('Member is unavailable');
@@ -88,8 +90,6 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
     await client.query(`DELETE FROM access.realm_admin_role_grant WHERE realm = $1 AND member = $2`, [realm, input.member]);
     await client.query(`UPDATE access.realm_admin_assignment SET valid_until = clock_timestamp()
       WHERE realm = $1 AND member = $2 AND valid_until > clock_timestamp()`, [realm, input.member]);
-    await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = ANY($1::text[])`,
-      [[`review:decide:${realm}`, `publication:adopt:${realm}`]]);
   }
   let bannedUntil = banned?.expires_at?.toISOString() ?? null;
   if (input.action === 'ban' || input.action === 'unban') {
@@ -101,7 +101,6 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
     [realm, input.member, input.action === 'ban', receiptId, input.durationSeconds])).rows[0]!;
     bannedUntil = row.expires_at?.toISOString() ?? null;
   }
-  await client.query(`UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = 'work:create:root'`);
   return { member: input.member, membershipGeneration, bannedUntil,
     banned: input.action === 'ban' || input.action !== 'unban' && !!banned };
 }

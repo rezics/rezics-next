@@ -1,3 +1,4 @@
+import { lockAccessKey } from './scope-gates.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -93,7 +94,7 @@ export class AccessRealmJoining {
       || input.expiresInSeconds < 60 || input.expiresInSeconds > REALM_JOIN_COST.maxLifetimeSeconds) throw new RealmAdminInvalid('Invalid invitation');
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
-      await membershipRoot(client, false);
+      await membershipRoot(client);
       return this.receipt(client,manager.id,key,['invite',realm,input],async () => {
         const policy = await this.policy(client,realm);
         const member = await this.member(client,realm,input.member);
@@ -175,6 +176,7 @@ export class AccessRealmJoining {
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
+      await lockAccessKey(client, `membership:realm:${realm}:${input.actingSubject}`);
       return this.receipt(client,actor.id,key,['self-join',realm,input],async () => {
         const policy = await this.policy(client,realm);
         if (!policy.self_join || !policy.open || graph?.admission !== 'open') {
@@ -191,7 +193,8 @@ export class AccessRealmJoining {
     const historyAdmission = input.action === 'accept' ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
-      await membershipRoot(client, input.action === 'accept');
+      await membershipRoot(client);
+      await lockAccessKey(client, `membership:realm:${realm}:${input.actingSubject}`);
       return this.receipt(client,actor.id,key,['respond',realm,id,input],async () => {
         const row = (await client.query<Invitation>(`SELECT *,expires_at <= clock_timestamp() AS expired
           FROM access.realm_invitation WHERE id = $1 AND realm = $2 AND member = $3 FOR UPDATE`,[id,realm,input.actingSubject])).rows[0];

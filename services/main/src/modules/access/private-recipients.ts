@@ -1,3 +1,4 @@
+import { lockAccessKey } from './scope-gates.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 
@@ -109,11 +110,15 @@ export class AccessPrivateRecipients {
       if (!recovery.rows[0]?.open) throw new PrivateRecipientUnavailable('Access recovery held');
       const gate = await client.query<{ authority_epoch: string; group_generation: string;
         open: boolean; dispatch_open: boolean }>(`SELECT authority_epoch, group_generation,
-        open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [SCOPE]);
+        open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
         throw new PrivateRecipientDenied('private recipient scope is closed');
       }
+      const inventory = (await client.query<{ group_generation: string }>(
+        "SELECT group_generation FROM access.scope_gate WHERE id = 'access:group-inventory' FOR SHARE")).rows[0]!;
+      if ('membershipId' in input) await lockAccessKey(client, `private-membership-row:${input.membershipId}`);
       const managerId = await this.authorize(client, input);
+      await lockAccessKey(client, `private-recipient:${managerId}:${input.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; action: string;
         object_id: string; result_authority_epoch: string; result_group_generation: string }>(`
         SELECT request_digest, action, object_id, result_authority_epoch,
@@ -133,12 +138,13 @@ export class AccessPrivateRecipients {
         throw new PrivateRecipientStale('private recipient authority epoch changed');
       }
       if ((input.action === 'add-group-member' || input.action === 'revoke-group-member')
-        && gate.rows[0].group_generation !== input.expectedGroupGeneration) {
+        && inventory.group_generation !== input.expectedGroupGeneration) {
         throw new PrivateRecipientStale('private recipient group generation changed');
       }
       switch (input.action) {
         case 'add-group-member': {
           const principalId = await this.recipient(client, input);
+          await lockAccessKey(client, `private-recipient-inventory:${principalId}`);
           const group = await client.query(`SELECT id FROM access.recipient_group
             WHERE id = $1 AND scope_id = $2 FOR SHARE`, [input.groupId, SCOPE]);
           if (!group.rows[0]) throw new PrivateRecipientDenied('private recipient group unavailable');
@@ -185,6 +191,7 @@ export class AccessPrivateRecipients {
             throw new PrivateRecipientDenied('private role validity ended');
           }
           const principalId = await this.recipient(client, input);
+          await lockAccessKey(client, `private-recipient-inventory:${principalId}`);
           const revision = await client.query<{ permissions: string[] }>(`
             SELECT r.permissions FROM access.role_revision r
             JOIN access.role_family f ON f.id = r.family_id
@@ -229,10 +236,7 @@ export class AccessPrivateRecipients {
           break;
         }
       }
-      const bumped = await client.query<{ authority_epoch: string; group_generation: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch, group_generation`, [SCOPE]);
-      const result = bumped.rows[0]!;
+      const result = { authority_epoch: gate.rows[0].authority_epoch, group_generation: inventory.group_generation };
       await client.query(`INSERT INTO access.private_recipient_change_receipt
         (principal_id, idempotency_key, request_digest, action, object_id,
           result_authority_epoch, result_group_generation)

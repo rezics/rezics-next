@@ -195,7 +195,7 @@ test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL resto
     const managedFixture = await seedManagedOrganization(primary, orgFixture);
     const managedOwner = new AccessManagedOrganizations(primary);
     const managedIssue: ManagedOrgChange = { operation: 'issue', organizationSubject: orgFixture.org,
-      expectedAuthorityEpoch: '2', recipient: { kind: 'realm', id: orgFixture.realm },
+      expectedAuthorityEpoch: suspended.authorityEpoch, recipient: { kind: 'realm', id: orgFixture.realm },
       actions: [MANAGED_ORG_ACTION.roster], delegationCeiling: 0,
       validFrom: new Date(Date.now() - 1000).toISOString(), validUntil: new Date(Date.now() + 1200_000).toISOString() };
     const managedGrant = await managedOwner.change(orgFixture.orgPrincipal, managedIssue, 'pitr-managed-issue');
@@ -205,7 +205,7 @@ test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL resto
       expectedPolicyRevision: '1', admissionsOpen: false };
     const managedEffect = await managedOwner.setRosterPolicy(orgFixture.realmPrincipal, managedPolicy, 'pitr-managed-policy');
     const managedRevoke: ManagedOrgChange = { operation: 'revoke', organizationSubject: orgFixture.org,
-      expectedAuthorityEpoch: '4', grantId: managedGrant.grantId, expectedGeneration: '1' };
+      expectedAuthorityEpoch: managedGrant.authorityEpoch, grantId: managedGrant.grantId, expectedGeneration: '1' };
     const managedRevoked = await managedOwner.change(orgFixture.orgPrincipal, managedRevoke, 'pitr-managed-revoke');
     // The paired move is absent from the base backup; both effects and the receipt must replay from WAL.
     const transfer = await seedOrgRealm(primary, 'https://account.pitr.test',
@@ -653,7 +653,7 @@ test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL resto
       selectedGrantId, selectedSelectorId, A, representedUntil)).toBe(selectedGrantEpoch);
     expect(await new AccessRepresentedMembershipAuthority(restored).accept(
       acceptInput, representedRequestId, representedMandateId))
-      .toBe((BigInt(grantInput.expectedAuthorityEpoch) + 2n).toString());
+      .toBe(acceptInput.expectedAuthorityEpoch);
     for (const snapshot of [moved.source, moved.target]) {
       expect(await restoredOrgRealm.read(transfer.orgPrincipal, { realm: snapshot.realm,
         organizationSubject: transfer.org, side: 'organization' })).toEqual(snapshot);

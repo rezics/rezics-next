@@ -42,7 +42,9 @@ export class AccessAuthorityRead {
         grant = await requireGrant(client, input.actingSubject, input.scopeId, input.action);
       }
       const gate = (await client.query<{ authority_epoch: string; group_generation: string }>(
-        'SELECT authority_epoch, group_generation FROM access.scope_gate WHERE id = $1',
+        `SELECT g.authority_epoch, CASE WHEN g.id = 'work:create:root'
+          THEN COALESCE(i.group_generation,g.group_generation) ELSE g.group_generation END AS group_generation
+        FROM access.scope_gate g LEFT JOIN access.scope_gate i ON i.id = 'access:group-inventory' WHERE g.id = $1`,
         [input.scopeId])).rows[0];
       if (!gate) throw new PolicyDenied('scope is unavailable');
       return { scopeId: input.scopeId, actingSubject: input.actingSubject, action: input.action,

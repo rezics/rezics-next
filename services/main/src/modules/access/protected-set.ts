@@ -108,7 +108,7 @@ export class AccessProtectedChanges {
       throw new ControlInvalid('invalid protected set');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       const manage = input.objectKind === 'group' ? GROUP_MANAGE : ROLE_MANAGE;
       await requireMandate(client, actor.id, input.issuerSubject, manage);
@@ -128,7 +128,7 @@ export class AccessProtectedChanges {
           [input.objectKind, input.objectId, input.issuerSubject, input.approvalSubject,
             input.requiredApprovals, input.objectKind === 'group' ? input.objectId : null,
             input.objectKind === 'role-family' ? input.objectId : null, actor.id]);
-          const epoch = await bumpEpoch(client, WORK_SCOPE);
+          const epoch = scopeEpoch;
           return { epoch, result: { objectKind: input.objectKind, objectId: input.objectId,
             authorityEpoch: epoch } };
         });
@@ -303,7 +303,7 @@ export class AccessProtectedChanges {
 
   private async groupGeneration(client: PoolClient): Promise<string> {
     const gate = await client.query<{ group_generation: string }>(
-      'SELECT group_generation FROM access.scope_gate WHERE id = $1', [WORK_SCOPE]);
+      'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
     return gate.rows[0]!.group_generation;
   }
 
@@ -486,7 +486,7 @@ export class AccessProtectedChanges {
     requireReceipt(receipt);
     if (!idPattern.test(proposalId)) throw new ControlInvalid('invalid activation');
     return controlTransaction(this.pool, async client => {
-      const epoch = await lockGate(client, WORK_SCOPE, true);
+      const epoch = await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<ProposalView & { authorityEpoch: string }>(client, actor.id, receipt,
@@ -519,7 +519,7 @@ export class AccessProtectedChanges {
           [proposalId, row.kind, row.target_subject, row.target_object, actor.id,
             approvals.rows.length, epoch, row.expected_object_generation]);
           await this.apply(client, row, actor.id);
-          const authorityEpoch = await bumpEpoch(client, WORK_SCOPE);
+          const authorityEpoch = epoch;
           await bumpEpoch(client, TOPOLOGY_SCOPE);
           return { epoch: authorityEpoch, result: { ...await this.view(client, proposalId),
             authorityEpoch } };
@@ -661,7 +661,7 @@ export class AccessProtectedChanges {
       throw new ControlInvalid('invalid automation installation');
     }
     return controlTransaction(this.pool, async client => {
-      await lockGate(client, WORK_SCOPE, true);
+      const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, input.ownerSubject, REPRESENTATION_MANAGE);
       return receipted(client, actor.id, receipt, 'automation', 'install', input.ownerSubject,
@@ -688,7 +688,7 @@ export class AccessProtectedChanges {
               VALUES ($1,$2,$3,$4,$5,$6,$7)`, [randomUUID(), row.workload_principal,
               input.ownerSubject, action, row.valid_until, actor.id, input.installationId]);
           }
-          const epoch = await bumpEpoch(client, WORK_SCOPE);
+          const epoch = scopeEpoch;
           return { epoch, result: { installationId: input.installationId, authorityEpoch: epoch } };
         });
     });

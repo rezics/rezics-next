@@ -68,7 +68,7 @@ export class AccessRepresentations {
     await client.query("SET LOCAL statement_timeout = '5s'");
   }
 
-  private async gate(client: PoolClient, write: boolean): Promise<string> {
+  private async gate(client: PoolClient): Promise<string> {
     const recovery = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (recovery.rows[0]?.open !== true) {
@@ -76,7 +76,7 @@ export class AccessRepresentations {
     }
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open
-      FROM access.scope_gate WHERE id = $1 ${write ? 'FOR UPDATE' : 'FOR SHARE'}`, [SCOPE]);
+      FROM access.scope_gate WHERE id = $1 FOR SHARE`, [SCOPE]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new RepresentationDenied('representation scope is closed');
     }
@@ -154,7 +154,7 @@ export class AccessRepresentations {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      await this.gate(client, false);
+      await this.gate(client);
       const principalId = await this.principal(client, principal, true);
       await lockAccessKey(client, `representation-request:${principalId}:${idempotencyKey}`);
       const prior = await client.query<{ id: string }>(`SELECT id
@@ -200,7 +200,7 @@ export class AccessRepresentations {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      await this.gate(client, false);
+      await this.gate(client);
       await this.manager(client, principal, issuerSubject);
       const row = await this.requestRow(client, requestId);
       if (!row || row.subject_id !== issuerSubject) {
@@ -222,7 +222,7 @@ export class AccessRepresentations {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, false);
+      const authorityEpoch = await this.gate(client);
       await this.manager(client, principal, issuerSubject);
       const row = await client.query<{ id: string; subject_id: string; request_id: string | null;
         valid_until: Date; active: boolean; generation: string }>(`SELECT id, subject_id,
@@ -253,8 +253,9 @@ export class AccessRepresentations {
     const client = await this.pool.connect();
     try {
       await this.begin(client);
-      const authorityEpoch = await this.gate(client, true);
+      const authorityEpoch = await this.gate(client);
       const managerId = await this.manager(client, context.principal, context.issuerSubject);
+      await lockAccessKey(client, `representation-change:${managerId}:${context.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; issuer_subject: string;
         action: string; representation_id: string; result_authority_epoch: string }>(`
         SELECT request_digest, issuer_subject, action, representation_id, result_authority_epoch
@@ -275,10 +276,7 @@ export class AccessRepresentations {
         throw new RepresentationStale('representation scope authority epoch changed');
       }
       await work(client, managerId);
-      const bumped = await client.query<{ authority_epoch: string }>(`
-        UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
-        WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
-      const resultEpoch = bumped.rows[0]!.authority_epoch;
+      const resultEpoch = authorityEpoch;
       await client.query(`INSERT INTO access.representation_change_receipt
         (principal_id, idempotency_key, request_digest, issuer_subject,
           action, representation_id, result_authority_epoch)

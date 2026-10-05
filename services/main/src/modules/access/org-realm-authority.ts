@@ -31,7 +31,7 @@ export const validOrgRealmId = (value: string) =>
 export const validOrgRealmGeneration = (value: string) =>
   /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) < 9223372036854775807n;
 
-export async function beginOrgRealm(client: PoolClient, write: boolean): Promise<string> {
+export async function beginOrgRealm(client: PoolClient, _write: boolean): Promise<string> {
   await client.query('BEGIN');
   await client.query("SET LOCAL lock_timeout = '2s'");
   await client.query("SET LOCAL statement_timeout = '5s'");
@@ -39,7 +39,7 @@ export async function beginOrgRealm(client: PoolClient, write: boolean): Promise
     'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (!recovery.rows[0]?.open) throw new OrgRealmUnavailable('Access recovery held');
   const gate = await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-    `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR ${write ? 'UPDATE' : 'SHARE'}`,
+    `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE`,
     [ORG_REALM_SCOPE]);
   if (!gate.rows[0]) throw new OrgRealmUnavailable('Access scope missing');
   if (!gate.rows[0].open || !gate.rows[0].dispatch_open) throw new OrgRealmDenied('Access scope closed');
