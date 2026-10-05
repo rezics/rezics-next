@@ -236,7 +236,7 @@ export async function enrichShowcaseModules(modules: PlacedModule[], context: Ad
     if (hero.state.state !== 'ready') continue;
     const slides = hero.state.data.slides.map(slide => {
       const own = slide.work && art.get(slide.work.id);
-      return own ? { ...slide, work: { ...slide.work!, showcaseArt: workShowcaseArt(own) },
+      return own ? { ...slide, work: { ...slide.work!, showcaseArt: workShowcaseArt(own, context.avatarQuery) },
         trailer: own.trailer ? { href: own.trailer.url } : slide.trailer } : slide;
     });
     replacements.set(hero, { ...hero, state: { state: 'ready', data: { slides } } });

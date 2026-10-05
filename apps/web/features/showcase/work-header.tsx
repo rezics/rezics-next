@@ -23,9 +23,10 @@ export interface WorkShowcaseHeader {
 export function workShowcaseHeader(
   item: WorkShowcase | undefined,
   messages: ShowcaseMessages,
+  avatarQuery = '',
 ): WorkShowcaseHeader | null {
   if (!item) return null;
-  const art = workShowcaseArt(item);
+  const art = workShowcaseArt(item, avatarQuery);
   if (!art.landscape && !art.portrait) return null;
   return { art, trailer: item.trailer ? { href: item.trailer.url } : null, messages };
 }

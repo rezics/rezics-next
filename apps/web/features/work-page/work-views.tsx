@@ -165,7 +165,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
-    showcase={workShowcaseHeader(art.get(work.id), showcaseMessages)}
+    showcase={workShowcaseHeader(art.get(work.id), showcaseMessages, avatarQuery)}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>

@@ -72,7 +72,9 @@ export function showcaseFocal(value: string | null | undefined, crop?: string | 
     width: focal.width / selected.width, height: focal.height / selected.height };
 }
 
-const showcaseUrl = (url: string) => url.startsWith('/v1/') ? `${BFF_PREFIX}${url}` : url;
+/** A signed-in reader's BFF sends their token, so Main also needs the Agent they read as (`query`, as `zoneImage` takes it). */
+const showcaseUrl = (url: string, query: string) => url.startsWith('/v1/')
+  ? `${BFF_PREFIX}${url}${url.includes('?') ? query.replace('?', '&') : query}` : url;
 
 /**
  * Delivery candidates name their codec; a srcset cannot contain duplicate widths for two codecs.
@@ -84,25 +86,25 @@ export function deliveredShowcaseImage(image: {
   url: string; width: number; height: number; focalArea?: string | null; crop?: string | null;
   cropWidth?: number; cropHeight?: number;
   srcset: readonly { url: string; width: number; type: string }[];
-}): ZoneShowcaseImage {
+}, query = ''): ZoneShowcaseImage {
   const codec = image.srcset.some(candidate => candidate.type === 'image/webp') ? 'image/webp' : 'image/avif';
   const crop = percentArea(image.crop);
   const cropped = crop && (crop.x > 0 || crop.y > 0 || crop.width < 1 || crop.height < 1);
-  return { url: showcaseUrl(image.url), width: image.cropWidth ?? image.width,
+  return { url: showcaseUrl(image.url, query), width: image.cropWidth ?? image.width,
     height: image.cropHeight ?? image.height, framed: true,
     focal: showcaseFocal(image.focalArea, image.crop),
     ...!image.srcset.length && cropped ? { view: crop } : {},
     candidates: image.srcset.filter(candidate => candidate.type === codec)
-      .map(candidate => ({ url: showcaseUrl(candidate.url), width: candidate.width })) };
+      .map(candidate => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })) };
 }
 
 /** A logo keyed `zxx` (no linguistic content, as Main keys language-neutral logos) or `und` serves every title language. */
 const logoLanguage = (language: string | undefined) => !language || language === 'zxx' || language === 'und' ? '' : language;
 
-export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
+export function workShowcaseArt(item: WorkShowcase, query = ''): ZoneShowcaseArt {
   const role = (name: ShowcaseImage['role']) => {
     const image = item.images.find(image => image.role === name);
-    return image ? deliveredShowcaseImage(image) : null;
+    return image ? deliveredShowcaseImage(image, query) : null;
   };
   return { landscape: role('background-landscape'), portrait: role('background-portrait'), cutout: role('cutout'),
     logos: item.images.flatMap(image => image.role === 'logo' && image.tone && image.anchor
@@ -110,18 +112,18 @@ export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
         language: logoLanguage(image.language) }] : []) };
 }
 
-export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia']): ZoneShowcaseArt | null {
+export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia'], query = ''): ZoneShowcaseArt | null {
   const art = media.find(item => item.id === slideId)?.art;
   if (!art) return null;
   // Art is framed for the stage when its selected crop, not its original, has the stage's ratio.
   const background = (image: NonNullable<typeof art.landscape> | null, ratio: number) => {
-    const delivered = image ? deliveredShowcaseImage(image) : null;
+    const delivered = image ? deliveredShowcaseImage(image, query) : null;
     return delivered ? { ...delivered, framed: Math.abs(delivered.width / delivered.height - ratio) < .001 } : null;
   };
   return { landscape: background(art.landscape, 16 / 9),
     portrait: background(art.portrait, 3 / 4),
-    cutout: art.cutout ? deliveredShowcaseImage(art.cutout) : null,
-    logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image), tone: image.tone,
+    cutout: art.cutout ? deliveredShowcaseImage(art.cutout, query) : null,
+    logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image, query), tone: image.tone,
       anchor: image.anchor, language: logoLanguage(image.language) })) };
 }
 
@@ -136,7 +138,7 @@ export function presentationSlide(slide: PresentationSlide, work: ZoneWork | nul
       : slide.title ? zoneContentText(slide.title) : work?.title ?? zoneContentText(''),
     kicker: kicker !== undefined ? zoneContentText(kicker, context.locale)
       : slide.kicker ? zoneContentText(slide.kicker) : null,
-    tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media) };
+    tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media, context.avatarQuery) };
 }
 
 /** Legacy uploads were not authored for a showcase frame, so the renderer must preserve the whole image. */
