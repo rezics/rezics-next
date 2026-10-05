@@ -131,6 +131,13 @@ candidates. A rendition never adds a ratio or a selection. The reason is that
 showcase art is the largest image a page loads, and the stage asks for it at
 every width from a phone to a desktop.
 
+A rendition shows its source representation's NSFW and age assessment,
+marked as derived from that source, until it is labelled itself (manager
+decision, 2026-10-05). Main makes the rendition from the same pixels, so it
+is the same image; leaving it unknown masked every showcase image whose
+original was labelled. Labels still never pass between uploads, Assets or
+representations that Main did not derive from one another.
+
 `POST /v1/resources/showcase` reads up to 64 Work targets together, preserving
 request order. For each readable Work it returns selected images, their crop,
 focal area and width candidates, each logo's language, tone and anchor, and its
