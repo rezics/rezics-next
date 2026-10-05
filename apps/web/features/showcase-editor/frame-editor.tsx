@@ -115,7 +115,7 @@ export function FrameEditor({ src, size, role, frame, focal, onChange, showPhone
         aria-describedby={`${ids}-frame-keys`} onKeyDown={event => keys(event, 'frame')}
         onPointerDown={event => start(event, 'frame', null)}
         className={cn('absolute cursor-move outline-none ring-offset-2 focus-visible:ring-3 focus-visible:ring-ring',
-          'shadow-[0_0_0_9999px_rgb(7_16_29/0.62)] outline-2 outline-white -outline-offset-1', disabled && 'cursor-default')}
+          'shadow-[0_0_0_9999px_rgb(0_0_0/0.6)] outline-2 outline-white -outline-offset-1', disabled && 'cursor-default')}
         style={percent(frame, size)}>
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,transparent_33.2%,#fff6_33.3%,transparent_33.4%,transparent_66.6%,#fff6_66.7%,transparent_66.8%),linear-gradient(to_bottom,transparent_33.2%,#fff6_33.3%,transparent_33.4%,transparent_66.6%,#fff6_66.7%,transparent_66.8%)]" />
         {handles('frame')}

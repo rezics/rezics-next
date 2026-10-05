@@ -137,7 +137,8 @@ export function BackgroundCard({ role, saved, draft, status, busy, note, showPho
 
 /** How a logo or cutout looks against what it will sit on: light logos on the dark scrim, dark ones on light. */
 function LayerSwatch({ url, tone }: { url: string; tone: LogoTone | null }) {
-  return <div className={cn('grid h-24 w-full place-items-center overflow-hidden rounded-xl p-3 sm:w-40',
+  // A flex box of definite height, so the image's percentage limits resolve and a tall cutout fits whole.
+  return <div className={cn('flex h-24 w-full items-center justify-center overflow-hidden rounded-xl p-3 sm:w-40',
     tone === 'light' ? 'bg-[#101b2c]' : tone === 'dark' ? 'bg-[#eef2f7]'
       : 'bg-[repeating-conic-gradient(#8883_0_25%,transparent_0_50%)] bg-size-[16px_16px]')}>
     <img src={url} alt="" className="max-h-full max-w-full object-contain" />
