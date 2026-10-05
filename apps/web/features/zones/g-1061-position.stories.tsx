@@ -168,7 +168,11 @@ export const CjkPhone: Story = {
     const result = await page.findByRole('option', { name: chapter });
     await capture('found');
     if (parameters.selection === 'keyboard') await userEvent.keyboard('{ArrowDown}{Enter}');
-    else await userEvent.click(result);
+    else {
+      // The sheet's opening transition disables pointer events; a loaded run can reach the option before it ends.
+      await waitFor(() => expect(getComputedStyle(result).pointerEvents).not.toBe('none'));
+      await userEvent.click(result);
+    }
     const destination = `/${locale}${here}?position=${occurrence}`;
     await waitFor(() =>
       expect(canvas.getByLabelText('Selected address')).toHaveTextContent(destination),
