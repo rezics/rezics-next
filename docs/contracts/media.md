@@ -155,6 +155,15 @@ authored crop. An image's `width`/`height` describe the oriented original URL;
 `cropWidth`/`cropHeight` describe the selected frame. Candidate URLs already
 contain the authored crop and report their own dimensions.
 
+Art is one cached copy for every reader (manager decision, 2026-10-05): its
+URLs name no reader, and a byte read that names no Agent is decided as the
+anonymous reader first, so it costs no Account introspection. Only such
+answers are `public, no-cache`, with the bytes' digest as ETag and 304 on a
+match after the same checks; what a reader's identity decided stays
+`private, no-store`. Pages read the labels of the art they draw first with
+the page, so the first slide and the Work header are images, or masks, in the
+server's HTML and are preloaded only when shown.
+
 ## Post attachments and preview selection
 
 Body attachments retain exact identity, original dimensions and authored order.

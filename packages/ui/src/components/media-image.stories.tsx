@@ -5,7 +5,7 @@ import { Button } from './button.tsx';
 import { ImageSettings } from './image-settings.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
 import type { DocumentSnapshot } from '@rezics/document';
-import { MediaImage, MediaImageProvider, mediaImageKey, type MediaImageMetadata, type MediaImageViewer } from './media-image.tsx';
+import { MediaImage, MediaImageProvider, mediaImageKey, ResolvedMediaImages, type MediaImageMetadata, type MediaImageViewer } from './media-image.tsx';
 
 const viewer: MediaImageViewer = { ready: true, signedIn: true, age: 'adult',
   optIns: { general: true, r15: true, sexual: true, grotesque: false }, nsfwDisplay: 'mask' };
@@ -182,5 +182,33 @@ export const CompactAvatarReveal: Story = { render: () => <CompactAvatar />,
     await waitFor(() => expect(image.complete && image.naturalWidth > 0).toBe(true));
     await expect(image.getBoundingClientRect().width).toBe(80);
     await expect(image.getBoundingClientRect().height).toBe(80);
+  },
+};
+
+/** Metadata a server read with the page: images draw (or mask) at once and nothing is requested again. */
+function ServerResolved() {
+  const src = useMemo(source, []);
+  const [requests, setRequests] = useState(0);
+  const images = useMemo(() => Object.fromEntries((['sfw', 'nsfw'] as const).map(nsfw => [mediaImageKey({ representationId: nsfw }),
+    { representationId: nsfw, src, nsfw, ageRating: { status: 'unassessed' } } satisfies MediaImageMetadata])), [src]);
+  return <MediaImageProvider viewer={{ ...viewer, signedIn: false, age: 'unknown' }}
+    referenceFromUrl={url => ({ representationId: url.slice(url.indexOf('#') + 1) })}
+    resolve={async references => { setRequests(count => count + references.length); return []; }}>
+    <ResolvedMediaImages images={images}>
+      <div className="mx-auto grid w-full max-w-lg gap-3 p-4">
+        <MediaImage src={`${src}#sfw`} alt="Resolved art" revealable={false} className="w-full" />
+        <MediaImage src={`${src}#nsfw`} alt="Resolved NSFW art" revealable={false} className="h-32 w-full" />
+        <p>{requests} metadata requests</p>
+      </div>
+    </ResolvedMediaImages>
+  </MediaImageProvider>;
+}
+export const ResolvedByServer: Story = { render: () => <ServerResolved />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('img', { name: 'Resolved art' })).toBeVisible();
+    await expect(canvas.getByRole('img', { name: 'NSFW image' })).toBeVisible();
+    await expect(canvas.queryByRole('img', { name: 'Resolved NSFW art' })).toBeNull();
+    await expect(canvas.getByText('0 metadata requests')).toBeVisible();
   },
 };
