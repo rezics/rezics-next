@@ -10,6 +10,8 @@ export type SerializationClass =
   | 'operator/startup'
   | 'recovery fence'
   | 'rate gate'
+  | 'external log head'
+  | 'per-object management revision'
   | 'projection checkpoint (background)';
 
 export interface SerializationAllowance {
@@ -25,6 +27,19 @@ const access = 'services/main/migrations/access/';
 const content = 'services/content/migrations/';
 const main = 'services/main/src/';
 export const serializationAllowlist: SerializationAllowance[] = [
+  {
+    relation: 'pkg.go_sumdb_head',
+    class: 'external log head',
+    reason:
+      'The Go checksum database is one external transparency log whose tree heads must be verified in order.',
+    writers: [content + '014_go_sumdb_trust.sql', main + 'modules/package/go-sumdb-trust.ts'],
+  },
+  {
+    key: 'access:group-inventory',
+    class: 'per-object management revision',
+    reason: 'Group inventory management revision, not admission authority.',
+    writers: [access + '1210_authority_domains.sql', main + 'modules/access/groups.ts'],
+  },
   {
     relation: 'content.owner_control',
     class: 'post-commit sequencer',
@@ -222,8 +237,11 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     key: 'rezics_signing_key',
     class: 'operator/startup',
-    reason: 'Migration assigns the initial signing key generations before serving requests.',
-    writers: ['services/account/migrations/004_signing_key_generations.sql'],
+    reason: 'One-time key creation per rotation, not per request.',
+    writers: [
+      'services/account/migrations/004_signing_key_generations.sql',
+      'services/account/src/signing-keys.ts',
+    ],
   },
   {
     key: 'account-operator-roles',
@@ -263,7 +281,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
 export interface SerializationFinding {
   file: string;
   line: number;
-  rule: 'singleton-table' | 'constant-advisory-key' | 'singleton-write' | 'gate-lock-upgrade';
+  rule:
+    | 'singleton-table'
+    | 'constant-advisory-key'
+    | 'singleton-write'
+    | 'gate-lock-upgrade'
+    | 'scope-gate-write-without-update-lock';
   target: string;
   detail: string;
 }
@@ -368,6 +391,13 @@ export function singletonTables(
         { file: source.file, line: source.text.slice(0, offset).split('\n').length },
       ]);
     for (let i = 0; i < input.length; i++) {
+      if (word(input[i], 'drop') && word(input[i + 1], 'table')) {
+        let table = relationAt(input, i + 2);
+        while (table) {
+          result.delete(table.name);
+          table = word(input[table.end], ',') ? relationAt(input, table.end + 1) : undefined;
+        }
+      }
       if (word(input[i], 'create') && word(input[i + 1], 'table')) {
         const relation = relationAt(input, i + 2);
         if (!relation || !word(input[relation.end], '(')) continue;
@@ -657,6 +687,8 @@ interface Effect {
   line: number;
   file?: string;
   conditions?: Condition[];
+  lock?: 'update' | 'no-key-update';
+  columns?: string[];
 }
 function sqlEffects(fragment: SqlFragment): Effect[] {
   const input = lex(fragment.text);
@@ -715,6 +747,15 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
             relation: relation.name,
             key: rowKey(),
             line: line(statement[i].offset),
+            columns: statement
+              .slice(set + 1)
+              .filter(
+                (token, at, tokens) =>
+                  identifier(token) &&
+                  word(tokens[at + 1], '=') &&
+                  (at === 0 || word(tokens[at - 1], ',')),
+              )
+              .map((token) => token.text),
           });
       }
       if (word(statement[i], 'insert') && word(statement[i + 1], 'into')) {
@@ -773,6 +814,12 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
         if (!aliases.size || aliases.has(alias))
           effects.push({
             kind,
+            lock:
+              kind === 'exclusive'
+                ? word(statement[i + 1], 'no')
+                  ? 'no-key-update'
+                  : 'update'
+                : undefined,
             relation: relation.name,
             key: rowKey(alias),
             line: line(statement[i].offset),
@@ -914,7 +961,7 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
   const functions = new Map<string, { fragment: SqlFragment; parameters: string[] }>();
   const triggers = new Map<
     string,
-    { relation: string; function: string; operations: Set<string> }
+    { relation: string; function: string; operations: Set<string>; phase: number; name: string }
   >();
   for (const source of migrations) {
     const input = lex(source.text);
@@ -977,6 +1024,14 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         triggers.set(`${relation.name}#${trigger}`, {
           relation: relation.name,
           function: func.name,
+          name: trigger,
+          phase: input.slice(kind + 2, on).some((token) => word(token, 'before'))
+            ? input.slice(relation.end, execute).some((token) => word(token, 'row'))
+              ? 1
+              : 0
+            : input.slice(relation.end, execute).some((token) => word(token, 'row'))
+              ? 2
+              : 3,
           operations: new Set(
             input
               .slice(kind + 2, on)
@@ -1012,10 +1067,11 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
       return result;
     }
     const result = sqlEffects(fragment);
-    const invoke = (name: string, arguments_: Token[][] = []) => {
-      if (chain.has(name)) return;
+    const before: Effect[] = [];
+    const invoke = (name: string, arguments_: Token[][] = []): Effect[] => {
+      if (chain.has(name)) return [];
       const definition = functions.get(name);
-      if (!definition) return;
+      if (!definition) return [];
       const bindings = new Map<string, string>();
       for (let i = 0; i < arguments_.length; i++) {
         const argument = arguments_[i];
@@ -1031,27 +1087,33 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         bindings.set(definition.parameters[i], value);
         bindings.set(`$${i + 1}`, value);
       }
-      result.push(
-        ...expand({ ...definition.fragment, bindings }, new Set(chain).add(name))
-          .filter((effect) => effect.kind !== 'boundary')
-          .map((effect) => ({ ...effect, file: effect.file ?? definition.fragment.file })),
-      );
+      return expand({ ...definition.fragment, bindings }, new Set(chain).add(name))
+        .filter((effect) => effect.kind !== 'boundary')
+        .map((effect) => ({ ...effect, file: effect.file ?? definition.fragment.file }));
     };
     for (let i = 0; i < input.length; i++) {
       const name = relationAt(input, i);
       if (name && functions.has(name.name) && word(input[name.end], '(')) {
-        invoke(name.name, parts(input.slice(name.end + 1, close(input, name.end))));
+        result.push(...invoke(name.name, parts(input.slice(name.end + 1, close(input, name.end)))));
         i = close(input, name.end);
       }
       const operation = ['insert', 'update', 'delete'].find((value) => word(input[i], value));
       if (!operation || word(input[i - 1], 'for') || word(input[i - 1], 'do')) continue;
       const relation = relationAt(input, i + (operation === 'update' ? 1 : 2));
       if (!relation) continue;
-      for (const trigger of triggers.values())
-        if (trigger.relation === relation.name && trigger.operations.has(operation))
-          invoke(trigger.function);
+      // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
+      // triggers, then sorts equal-kind triggers by name. Migration order is not
+      // execution order: an AFTER bump can depend on a later-defined BEFORE lock.
+      for (const trigger of [...triggers.values()]
+        .filter(
+          (trigger) => trigger.relation === relation.name && trigger.operations.has(operation),
+        )
+        .sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name))) {
+        const target = trigger.phase < 2 ? before : result;
+        target.push(...invoke(trigger.function));
+      }
     }
-    return result;
+    return [...before, ...result];
   };
   return (fragment) => expand(fragment, new Set());
 }
@@ -1063,6 +1125,7 @@ function gateUpgrades(
   sources: SqlSource[],
   byFile: Map<string, SqlFragment[]>,
   effects: (fragment: SqlFragment) => Effect[],
+  allowlist: SerializationAllowance[],
 ): SerializationFinding[] {
   const traces = new Map<string, FunctionTrace>();
   const named = new Map<string, string>();
@@ -1159,7 +1222,7 @@ function gateUpgrades(
         traces.get(id)!.events.push({
           effect: {
             ...effect,
-            file: source.file,
+            file: effect.file ?? source.file,
             conditions: [...(fragment.conditions ?? []), ...pathConditions(fragment.node)],
           },
           offset: fragment.node.getStart(ast),
@@ -1202,14 +1265,51 @@ function gateUpgrades(
     calls(ast);
   }
   const embeddedCallbacks = new Set<string>();
+  const invokedFunctions = new Set<string>();
   for (const trace of traces.values())
     for (const event of trace.events) {
       if ('effect' in event) continue;
       const imported = imports.get(trace.file)?.get(event.call);
+      const target = named.get(`${trace.file}#${event.call}`) ?? (imported && named.get(imported));
+      if (target) invokedFunctions.add(target);
       if (named.has(`${trace.file}#${event.call}`) || (imported && named.has(imported))) {
         for (const arg of event.args) if (traces.has(arg)) embeddedCallbacks.add(arg);
       }
     }
+  const importedSymbols = new Map<string, Map<string, string>>();
+  const constant = (file: string, name: string, seen = new Set<string>()): string | undefined => {
+    const key = `${file}#${name}`;
+    if (seen.has(key)) return;
+    const next = new Set(seen).add(key);
+    const imported = imports.get(file)?.get(name);
+    if (imported) {
+      const separator = imported.lastIndexOf('#');
+      return constant(imported.slice(0, separator), imported.slice(separator + 1), next);
+    }
+    const ast = byFile.get(file)?.[0]?.ast;
+    if (!ast) return;
+    let value: string | undefined;
+    const visit = (node: ts.Node) => {
+      if (ts.isFunctionLike(node)) return;
+      if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name && node.initializer) {
+        const resolved = expressionValue(node.initializer);
+        if (resolved.constant) value = symbolValue(node.initializer);
+        else if (ts.isIdentifier(node.initializer))
+          value = constant(file, node.initializer.text, next);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+    return value;
+  };
+  for (const [file, names] of imports) {
+    const values = new Map<string, string>();
+    for (const name of names.keys()) {
+      const value = constant(file, name);
+      if (value !== undefined) values.set(name, value);
+    }
+    importedSymbols.set(file, values);
+  }
   const expand = (
     trace: FunctionTrace,
     chain: Set<string>,
@@ -1218,13 +1318,14 @@ function gateUpgrades(
   ): Effect[] => {
     if (chain.has(trace.id)) return [];
     const nextChain = new Set(chain).add(trace.id);
+    const symbols = new Map([...(importedSymbols.get(trace.file) ?? []), ...bindings]);
     const substitute = (value: string) =>
-      traces.has(value) ? value : substituteSymbols(value, bindings);
+      traces.has(value) ? value : substituteSymbols(value, symbols);
     const conditions = (input: Condition[]) => [
       ...path,
       ...input.map((condition) => ({
         ...condition,
-        expression: substituteSymbols(condition.expression, bindings, true),
+        expression: substituteSymbols(condition.expression, symbols, true),
       })),
     ];
     const result: Effect[] = [];
@@ -1255,6 +1356,11 @@ function gateUpgrades(
   const findings: SerializationFinding[] = [];
   for (const trace of traces.values()) {
     if (embeddedCallbacks.has(trace.id)) continue;
+    // A lock-free helper is valid when its caller already holds the fence.
+    // Check full transaction paths and entry points, rather than isolated callees.
+    const checkRequiredLock =
+      !invokedFunctions.has(trace.id) ||
+      trace.events.some((event) => 'effect' in event && event.effect.kind === 'boundary');
     const shares: Effect[] = [];
     const exclusive: Effect[] = [];
     const order = new Map<Effect, number>();
@@ -1269,6 +1375,43 @@ function gateUpgrades(
       if (effect.kind === 'exclusive') exclusive.push(effect);
       if (effect.kind === 'share' && /(?:^|[._])gate$/.test(effect.relation)) shares.push(effect);
       if (effect.kind !== 'write') continue;
+      if (checkRequiredLock && /(?:^|[._])scope_gate$/.test(effect.relation)) {
+        const managementRevision = allowlist.some(
+          (entry) =>
+            entry.class === 'per-object management revision' &&
+            effect.key === JSON.stringify(entry.key) &&
+            entry.writers.includes(effect.file!) &&
+            effect.columns?.length &&
+            effect.columns.every((column) => column === 'group_generation'),
+        );
+        const locks = exclusive.filter(
+          (prior) =>
+            prior.lock === 'update' &&
+            prior.relation === effect.relation &&
+            prior.key === effect.key,
+        );
+        // The union of conditional locks must cover every path to this write.
+        const uncovered = compatible([
+          ...(effect.conditions ?? []),
+          ...locks.map((prior) => ({
+            expression:
+              (prior.conditions ?? [])
+                .map((condition) =>
+                  condition.truth ? `(${condition.expression})` : `!(${condition.expression})`,
+                )
+                .join(' && ') || 'true',
+            truth: false,
+          })),
+        ]);
+        if (!managementRevision && uncovered)
+          findings.push({
+            file: effect.file!,
+            line: effect.line,
+            rule: 'scope-gate-write-without-update-lock',
+            target: effect.relation,
+            detail: `Scope gate bump (${effect.key}) lacks an earlier FOR UPDATE on this transaction path via ${trace.file}#${trace.name ?? 'callback'}; no authority exemption is permitted`,
+          });
+      }
       const share = shares.find(
         (prior) =>
           prior.relation === effect.relation &&
@@ -1401,7 +1544,7 @@ export function serializationFindings(
         }
       }
   }
-  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations)));
+  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations), allowlist));
   return [
     ...new Map(
       findings.map((finding) => [

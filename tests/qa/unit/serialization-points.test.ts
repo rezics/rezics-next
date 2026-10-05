@@ -189,7 +189,11 @@ test('gate share then update is never exempted, but distinct keys and transactio
     ],
     [],
   );
-  expect(findings.map((finding) => finding.rule)).toEqual(['gate-lock-upgrade']);
+  expect(
+    findings
+      .filter((finding) => finding.rule === 'gate-lock-upgrade')
+      .map((finding) => finding.rule),
+  ).toEqual(['gate-lock-upgrade']);
 });
 
 test('module-level transaction paths cannot share then update a gate', () => {
@@ -204,7 +208,9 @@ test('module-level transaction paths cannot share then update a gate', () => {
   `),
       ],
       [],
-    ).map((finding) => finding.rule),
+    )
+      .filter((finding) => finding.rule === 'gate-lock-upgrade')
+      .map((finding) => finding.rule),
   ).toEqual(['gate-lock-upgrade']);
 });
 
@@ -245,8 +251,9 @@ test('gate upgrades follow imported helpers, callbacks and method calls with sub
     ],
     [],
   );
-  expect(findings.every((finding) => finding.rule === 'gate-lock-upgrade')).toBe(true);
-  expect(new Set(findings.map((finding) => finding.file))).toEqual(
+  const upgrades = findings.filter((finding) => finding.rule === 'gate-lock-upgrade');
+  expect(upgrades.length).toBeGreaterThan(0);
+  expect(new Set(upgrades.map((finding) => finding.file))).toEqual(
     new Set(['services/example/src/gates.ts', 'services/example/src/routes/write.ts']),
   );
 });
@@ -379,9 +386,11 @@ test('gate upgrades include current database functions and triggers, replacing h
     await client.query("SELECT id FROM probe.scope_gate WHERE id='a' FOR SHARE");
     await client.query("UPDATE probe.objects SET id='b' WHERE id='c'");
   }`);
-  expect(serializationFindings([ddl], [path], []).map((finding) => finding.rule)).toEqual([
-    'gate-lock-upgrade',
-  ]);
+  expect(
+    serializationFindings([ddl], [path], [])
+      .filter((finding) => finding.rule === 'gate-lock-upgrade')
+      .map((finding) => finding.rule),
+  ).toEqual(['gate-lock-upgrade']);
   const replacement = {
     ...migration(
       `CREATE OR REPLACE FUNCTION probe.bump_gate() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;`,
@@ -393,9 +402,178 @@ test('gate upgrades include current database functions and triggers, replacing h
     await client.query("SELECT id FROM probe.scope_gate WHERE id='a' FOR SHARE");
     await client.query('SELECT probe.bump_gate()');
   }`);
-  expect(serializationFindings([ddl], [direct], []).map((finding) => finding.rule)).toEqual([
-    'gate-lock-upgrade',
-  ]);
+  expect(
+    serializationFindings([ddl], [direct], [])
+      .filter((finding) => finding.rule === 'gate-lock-upgrade')
+      .map((finding) => finding.rule),
+  ).toEqual(['gate-lock-upgrade']);
+});
+
+test('scope gate bumps require a matching earlier FOR UPDATE on every transaction path', () => {
+  for (const before of [
+    '',
+    'await db.query("SELECT id FROM probe.scope_gate WHERE id=\'other\' FOR UPDATE");',
+    'await db.query("SELECT id FROM probe.scope_gate WHERE id=\'scope\' FOR NO KEY UPDATE");',
+    "await db.query(\"SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE\"); await db.query('COMMIT');",
+    'if (flag) await db.query("SELECT id FROM probe.scope_gate WHERE id=\'scope\' FOR UPDATE");',
+  ]) {
+    const findings = serializationFindings(
+      [],
+      [
+        source(`async function command(db,flag) { ${before}
+      await db.query("UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'");
+      await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
+    }`),
+      ],
+      [],
+    );
+    expect(
+      findings.some((finding) => finding.rule === 'scope-gate-write-without-update-lock'),
+    ).toBe(true);
+  }
+  expect(
+    serializationFindings(
+      [],
+      [
+        source(`async function command(db,flag) {
+    if(flag) await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
+    else await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
+    await db.query("UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'");
+  }`),
+      ],
+      [],
+    ),
+  ).toEqual([]);
+});
+
+test('scope gate helpers retain their callers FOR UPDATE requirement', () => {
+  const helper: SqlSource = {
+    file: 'services/example/src/gates.ts',
+    text: `export async function bump(db,key) {
+    await db.query('UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id=$1',[key]);
+  }`,
+  };
+  for (const lock of [true, false]) {
+    const findings = serializationFindings(
+      [],
+      [
+        helper,
+        source(`import { bump } from '../gates.ts';
+      async function command(db,key) {
+        ${lock ? "await db.query('SELECT id FROM probe.scope_gate WHERE id=$1 FOR UPDATE',[key]);" : ''}
+        await bump(db,key);
+      }`),
+      ],
+      [],
+    );
+    expect(
+      findings.some((finding) => finding.rule === 'scope-gate-write-without-update-lock'),
+    ).toBe(!lock);
+  }
+});
+
+test('imported scope constants match literal gate keys in database effects', () => {
+  const ddl = migration(`CREATE FUNCTION probe.bump() RETURNS void LANGUAGE plpgsql AS $$ BEGIN
+    UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'; END $$;`);
+  expect(
+    serializationFindings(
+      [ddl],
+      [
+        { file: 'services/example/src/scopes.ts', text: "export const SCOPE='scope';" },
+        source(`import { SCOPE } from '../scopes.ts'; async function command(db) {
+      await db.query('SELECT id FROM probe.scope_gate WHERE id=$1 FOR UPDATE',[SCOPE]);
+      await db.query('SELECT probe.bump()');
+    }`),
+      ],
+      [],
+    ),
+  ).toEqual([]);
+});
+
+test('BEFORE trigger locks precede AFTER bumps regardless of migration declaration order', () => {
+  const ddl = migration(`
+    CREATE FUNCTION probe.bump() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'; RETURN NEW; END $$;
+    CREATE TRIGGER a_bump AFTER UPDATE ON probe.objects FOR EACH ROW EXECUTE FUNCTION probe.bump();
+    CREATE FUNCTION probe.lock() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      PERFORM 1 FROM probe.scope_gate WHERE id='scope' FOR UPDATE; RETURN NULL; END $$;
+    CREATE TRIGGER z_lock BEFORE UPDATE ON probe.objects FOR EACH STATEMENT EXECUTE FUNCTION probe.lock();
+  `);
+  expect(
+    serializationFindings(
+      [ddl],
+      [
+        source(`async function command(db) {
+    await db.query("UPDATE probe.objects SET id='next' WHERE id='old'");
+  }`),
+      ],
+      [],
+    ),
+  ).toEqual([]);
+});
+
+test('retiring a singleton removes its historical definition from the live inventory', () => {
+  const retired = {
+    ...migration('DROP TABLE probe.head;'),
+    file: 'services/example/migrations/002.sql',
+  };
+  expect(serializationFindings([table, retired], [], [])).toEqual([]);
+  expect(
+    serializationFindings(
+      [table, retired, { ...table, file: 'services/example/migrations/003.sql' }],
+      [],
+      [],
+    ).map((finding) => finding.rule),
+  ).toEqual(['singleton-table']);
+});
+
+test('group management revision allowance never exempts an admission authority bump', () => {
+  const entry = serializationAllowlist.find((entry) => entry.key === 'access:group-inventory')!;
+  const management = (column: string): SqlSource => ({
+    file: 'services/main/src/modules/access/groups.ts',
+    text: `async function command(db) {
+    await db.query("UPDATE access.scope_gate SET ${column}=${column}+1 WHERE id='access:group-inventory'");
+  }`,
+  });
+  expect(entry.class).toBe('per-object management revision');
+  expect(serializationFindings([], [management('group_generation')])).toEqual([]);
+  expect(
+    serializationFindings([], [management('authority_epoch')]).map((finding) => finding.rule),
+  ).toEqual(['scope-gate-write-without-update-lock']);
+  expect(
+    serializationFindings([], [source(management('group_generation').text)]).map(
+      (finding) => finding.rule,
+    ),
+  ).toEqual(['scope-gate-write-without-update-lock']);
+});
+
+test('reviewed external head and key creation have classified allowances without exempting author names', () => {
+  const head = serializationAllowlist.find((entry) => entry.relation === 'pkg.go_sumdb_head')!;
+  const key = serializationAllowlist.find((entry) => entry.key === 'rezics_signing_key')!;
+  expect(head.class).toBe('external log head');
+  expect(key.class).toBe('operator/startup');
+  expect(key.writers).toContain('services/account/src/signing-keys.ts');
+  expect(
+    serializationAllowlist.some((entry) => entry.relation === 'source.author_name_generation'),
+  ).toBe(false);
+  expect(
+    serializationFindings(
+      [
+        migration(
+          "CREATE TABLE pkg.go_sumdb_head(server text PRIMARY KEY CHECK(server='sum.golang.org'));",
+        ),
+      ].map((source) => ({
+        ...source,
+        file: 'services/content/migrations/014_go_sumdb_trust.sql',
+      })),
+      [
+        {
+          file: 'services/main/src/modules/package/go-sumdb-trust.ts',
+          text: 'db.query("UPDATE pkg.go_sumdb_head SET server=\'sum.golang.org\'")',
+        },
+      ],
+    ),
+  ).toEqual([]);
 });
 
 test('template alternatives and SQL constants retain the surrounding write operation', () => {
