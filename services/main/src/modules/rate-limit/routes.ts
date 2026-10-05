@@ -692,6 +692,10 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['POST', '/v1/relations/changes', 'write'],
   ['POST', '/v1/reports', 'report'],
   ['PUT', '/v1/resources/{resource}/avatar', 'write'],
+  // Showcase art selects an uploaded asset as the avatar does; the bytes went through uploads.
+  ['PUT', '/v1/resources/{resource}/showcase/art', 'write'],
+  ['PUT', '/v1/resources/{resource}/showcase/trailer', 'write'],
+  ['POST', '/v1/resources/showcase', 'read'],
   ['POST', '/v1/resources/summaries', 'read'],
   ['POST', '/v1/reviews', 'write'],
   ['DELETE', '/v1/reviews/{id}', 'write'],
