@@ -1707,6 +1707,16 @@ export const profileRegistry = {
     "focusRoles": [
       "zone"
     ]
+  },
+  "zone-presentation-v2": {
+    "sha256": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+    "file": "shapes/zone-presentation-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/zone-presentation-v2/zone-shape"
+    ],
+    "focusRoles": [
+      "zone"
+    ]
   }
 } as const;
 export type ProfileId = keyof typeof profileRegistry;

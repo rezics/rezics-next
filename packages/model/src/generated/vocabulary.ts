@@ -181,6 +181,7 @@ export const iri = {
   "<https://rezics.com/definition/work-title-control-v2>": "https://rezics.com/definition/work-title-control-v2",
   "<https://rezics.com/definition/zone-capability-v1>": "https://rezics.com/definition/zone-capability-v1",
   "<https://rezics.com/definition/zone-presentation-v1>": "https://rezics.com/definition/zone-presentation-v1",
+  "<https://rezics.com/definition/zone-presentation-v2>": "https://rezics.com/definition/zone-presentation-v2",
   "<https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c>": "https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c",
   "<urn:rezics:classification-context:global>": "urn:rezics:classification-context:global",
   "<urn:rezics:dataset:product>": "urn:rezics:dataset:product",

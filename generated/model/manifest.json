@@ -1311,6 +1311,11 @@
       "id": "zone-presentation-v1",
       "sha256": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
       "file": "shapes/zone-presentation-v1.ttl"
+    },
+    {
+      "id": "zone-presentation-v2",
+      "sha256": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+      "file": "shapes/zone-presentation-v2.ttl"
     }
   ],
   "canonical": [
@@ -4034,6 +4039,7 @@
     "contexts/work-type-v3.jsonld": "9836e0759eba77a3e7a5648ca3b223a2973d9ada49038b4c8fcbe8c034f1ea5f",
     "contexts/zone-capability-v1.jsonld": "e2b55a2058a3b218a3fb2a7c4542886ff1f5c79b42101293a02c38b048869dcd",
     "contexts/zone-presentation-v1.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
+    "contexts/zone-presentation-v2.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
     "shapes/agent-profile-address-v1.ttl": "4fafde7ef02e94ffff6bd3b961d4feeb206e30405843a42b376c605bbac21547",
     "shapes/agent-profile-v1.ttl": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
     "shapes/agent-profile-v2.ttl": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27",
@@ -4167,9 +4173,10 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "07c45b5eb24de1b73d452f68cda36bff6a079445b54a5895377be6ef84da2a49",
-    "packages/model/src/generated/profiles.ts": "1d15ad4a5d6fdee7b564befbbb7b1fbd17cde87693b61436ffa715f048eb89c6",
-    "packages/model/src/generated/schemas.ts": "d3d44678629fcf9b9294c8bd916495fa6b0e6f9299b05d507fae6ac6751efd94",
-    "packages/model/src/generated/vocabulary.ts": "f11ad5fbe721269fcdfd7c7e5dbb87bbf07889026282acb311d3eea2698a8d76"
+    "shapes/zone-presentation-v2.ttl": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+    "packages/model/src/generated/arbitraries.ts": "7cbf29d9d59923fbb9c7c1f3928c96df4338cfbadbba5cd640120ef665d29b0e",
+    "packages/model/src/generated/profiles.ts": "e21f2ac7dc65d9e3d5f9421b66440ab102d35bc8472f84c5e8ce0cee308b9371",
+    "packages/model/src/generated/schemas.ts": "9259ea7d8a3fb1fb8f12bf8c37e2060648b4eaf38f568b6312b5f690ee6ddf15",
+    "packages/model/src/generated/vocabulary.ts": "bf34d44d6e48ba86234b1d9d6933127120738f43b18432f0ccfbd0235ad17910"
   }
 }

@@ -646,6 +646,8 @@ export const ZoneCapabilityV1RevisionShapeArbitrary = fc.record({ "@id": fc.inte
 
 export const ZonePresentationV1ZoneShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:ZonePresentationV1ZoneShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/Zone").map(value => [value]), "rv:presentation": fc.constant("https://rezics.com/definition/zone-presentation-v1").map(value => [value]) });
 
+export const ZonePresentationV2ZoneShapeArbitrary = fc.record({ "@id": fc.integer({ min: 0, max: 1000000 }).map(value => "urn:rezics:sample:ZonePresentationV2ZoneShape:" + value), "rdf:type": fc.constant("https://rezics.com/vocab/Zone").map(value => [value]), "rv:presentation": fc.constant("https://rezics.com/definition/zone-presentation-v2").map(value => [value]) });
+
 export const shapeArbitraries = {
   "https://rezics.com/definition/agent-profile-address-v1/profile-shape": AgentProfileAddressV1ProfileShapeArbitrary,
   "https://rezics.com/definition/agent-profile-address-v1/localized-profile-shape": AgentProfileAddressV1LocalizedProfileShapeArbitrary,
@@ -968,5 +970,6 @@ export const shapeArbitraries = {
   "https://rezics.com/definition/zone-capability-v1/zone-shape": ZoneCapabilityV1ZoneShapeArbitrary,
   "https://rezics.com/definition/zone-capability-v1/mount-shape": ZoneCapabilityV1MountShapeArbitrary,
   "https://rezics.com/definition/zone-capability-v1/revision-shape": ZoneCapabilityV1RevisionShapeArbitrary,
-  "https://rezics.com/definition/zone-presentation-v1/zone-shape": ZonePresentationV1ZoneShapeArbitrary
+  "https://rezics.com/definition/zone-presentation-v1/zone-shape": ZonePresentationV1ZoneShapeArbitrary,
+  "https://rezics.com/definition/zone-presentation-v2/zone-shape": ZonePresentationV2ZoneShapeArbitrary
 } as const;

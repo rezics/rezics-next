@@ -1290,6 +1290,10 @@ export const ZonePresentationV1ZoneShapeSchema = Type.Object({ "@id": Type.Strin
 
 export type ZonePresentationV1ZoneShape = Static<typeof ZonePresentationV1ZoneShapeSchema>;
 
+export const ZonePresentationV2ZoneShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Zone"), { maxItems: 1, minItems: 1 }), "rv:presentation": Type.Array(Type.Literal("https://rezics.com/definition/zone-presentation-v2"), { maxItems: 1, minItems: 1 }) }, { additionalProperties: true });
+
+export type ZonePresentationV2ZoneShape = Static<typeof ZonePresentationV2ZoneShapeSchema>;
+
 export const shapeSchemas = {
   "https://rezics.com/definition/agent-profile-address-v1/profile-shape": AgentProfileAddressV1ProfileShapeSchema,
   "https://rezics.com/definition/agent-profile-address-v1/localized-profile-shape": AgentProfileAddressV1LocalizedProfileShapeSchema,
@@ -1612,5 +1616,6 @@ export const shapeSchemas = {
   "https://rezics.com/definition/zone-capability-v1/zone-shape": ZoneCapabilityV1ZoneShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/mount-shape": ZoneCapabilityV1MountShapeSchema,
   "https://rezics.com/definition/zone-capability-v1/revision-shape": ZoneCapabilityV1RevisionShapeSchema,
-  "https://rezics.com/definition/zone-presentation-v1/zone-shape": ZonePresentationV1ZoneShapeSchema
+  "https://rezics.com/definition/zone-presentation-v1/zone-shape": ZonePresentationV1ZoneShapeSchema,
+  "https://rezics.com/definition/zone-presentation-v2/zone-shape": ZonePresentationV2ZoneShapeSchema
 } as const;
