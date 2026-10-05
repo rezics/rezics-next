@@ -12,7 +12,7 @@ areas:
 
 # Media showcase
 
-Status: started on 2026-10-05 by the maintainer, manager `rezics-next-01`
+Status: started on 2026-10-05 by the maintainer, manager `rezics-next-f9` (was `rezics-next-01` until a session restart)
 (manager worktree `.temp/worktrees/showcase-manager`). [state.md](state.md)
 records where the work stands.
 
