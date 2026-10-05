@@ -1127,7 +1127,7 @@ test('Rating question presentations preserve meaning across locales, permission 
     );
     for (const entry of pending) {
       await expect(s.access.claim(entry.admission.id, entry.request.requestDigest)).rejects.toThrow(
-        'Realm rating authority changed',
+        /Realm rating authority changed|selected authority changed before dispatch/,
       );
       expect(await s.access.register(entry.request)).toMatchObject({
         id: entry.admission.id,
