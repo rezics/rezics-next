@@ -376,7 +376,7 @@ describe('dev seed plan', () => {
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedScopedSubjects', 'seedVnCatalogue', 'seedLnVnZones', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedZoneSites', 'seedBookConcepts',
-      'seedOfficialThemes', 'seedOfficialWiki',
+      'seedOfficialThemes', 'seedOfficialWiki', 'seedShowcase',
       // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
       'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',
       'seedRatings', 'seedReviews', 'seedCommunityVotes', 'seedCoReaders',
