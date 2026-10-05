@@ -87,7 +87,7 @@ export class SourceAuthorNameStore {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       await client.query(`SET LOCAL statement_timeout = '${AUTHOR_NAME_COST.statementMs}ms'`);
       const generation = (await client.query<{ generation: string }>(
-        'SELECT generation FROM source.author_name_generation WHERE id')).rows[0]!.generation;
+        'SELECT source.author_name_search_generation() AS generation')).rows[0]!.generation;
       const rows = (await client.query<Row>(`${selected}
         JOIN source.author_name_head h ON h.revision = n.id
         WHERE n.display_name IS NOT NULL AND lower(n.display_name) LIKE $1
@@ -161,7 +161,7 @@ export class SourceAuthorNameStore {
 
   async searchGeneration() {
     return (await this.pool.query<{ generation: string }>(
-      'SELECT generation FROM source.author_name_generation WHERE id')).rows[0]!.generation;
+      'SELECT source.author_name_search_generation() AS generation')).rows[0]!.generation;
   }
 
   async batch(keys: readonly string[]): Promise<Map<string, AuthorName>> {
@@ -261,7 +261,6 @@ export class SourceAuthorNameStore {
         input.expectedRevision, observationId, displayName, input.action === 'remove' ? input.reason : null, providerRevision]);
       await client.query(`INSERT INTO source.author_name_head (author_key, revision) VALUES ($1,$2)
         ON CONFLICT (author_key) DO UPDATE SET revision = EXCLUDED.revision`, [author, id]);
-      await client.query('UPDATE source.author_name_generation SET generation = generation + 1 WHERE id');
       const saved = (await client.query<Row>(`${selected} WHERE n.id = $1`, [id])).rows[0]!;
       await client.query('COMMIT');
       return result(saved, false);

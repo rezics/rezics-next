@@ -408,7 +408,9 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
         );
     });
     await budget.phase('release-access', async () => {
-      await restoredPools.content.query('SELECT reading_position.advance_restore_epoch()');
+      await restoredPools.content.query(
+        'SELECT reading_position.advance_restore_epoch(),source.advance_author_name_restore_epoch()',
+      );
       await releaseAccessRecoveryFence(restoredPools.access, manifest.fenceGeneration);
       await restoredPools.account.query(
         'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
