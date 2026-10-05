@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
-import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods,
+import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods, officialTheme,
   type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   grantImportedWorkSeedAuthority,
@@ -15,7 +15,33 @@ import { gamesCatalogue } from './games-catalogue.ts';
 import { softwareCatalogue } from './software-catalogue.ts';
 import { requiresSeedAdministrator } from './work-authority.ts';
 import { afterCatchUp, refreshSeedTokens, type AgentReceipt, type ContributionReceipt, type PublicationReceipt,
-  type SeedState, type Session, type WorkReceipt } from './state.ts';
+  stableId, type SeedState, type Session, type WorkReceipt } from './state.ts';
+import { officialPackageSlugs } from './official-theme-step.ts';
+import type { OfficialZoneApproval } from '../refresh.ts';
+
+/** Public execution is the approval the web actually consumes. Absent demo
+ * Zones and presentations using another theme are outside package refresh. */
+export async function inspectOfficialZoneApprovals(
+  get: (path: string) => Promise<Response>,
+  digest: (slug: typeof officialPackageSlugs[number]) => Promise<string>,
+): Promise<OfficialZoneApproval[]> {
+  const changed: OfficialZoneApproval[] = [];
+  for (const slug of officialPackageSlugs) {
+    const response = await get(`/v1/zones/${stableId(`zone:${slug}`)}/presentation`);
+    if (response.status === 404) { await response.body?.cancel(); continue; }
+    if (!response.ok) throw new Error(`Cannot inspect official ${slug} approval (HTTP ${response.status})`);
+    const view = await response.json() as { presentation: { official?: { theme: string } };
+      execution: { state: string; packageDigest?: string; reason?: string } };
+    if (view.presentation.official?.theme !== officialTheme(slug)) continue;
+    if (view.execution.reason === 'globally_disabled' || view.execution.reason === 'revoked') {
+      throw new Error(`Official ${slug} execution is ${view.execution.reason}; resolve its theme control before refreshing`);
+    }
+    const source = await digest(slug);
+    const approved = view.execution.state === 'package' ? view.execution.packageDigest ?? null : null;
+    if (source !== approved) changed.push({ slug, digest: source, approvedDigest: approved });
+  }
+  return changed;
+}
 
 // The official Zones' content, through Main's public APIs as their authors,
 // editors and readers would make it: pen names write serials chapter by

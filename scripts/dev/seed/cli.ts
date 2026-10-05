@@ -23,7 +23,7 @@ import { retainSharedSeedIntake } from './intake-cache.ts';
 import { seedModeration } from './moderation-step.ts';
 import { seedOfficialZones } from './official-zones-step.ts';
 import { seedZoneSites } from './zone-sites-step.ts';
-import { seedOfficialThemes } from './official-theme-step.ts';
+import { officialPackageSlugs, seedOfficialThemes } from './official-theme-step.ts';
 import { seedOfficialWiki } from './official-wiki-step.ts';
 import { people, realms, works } from './plan.ts';
 import { seedProfileBios } from './profile-bios-step.ts';
@@ -43,15 +43,24 @@ import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedVnCatalogue } from './vn-catalogue-step.ts';
 import { seedWorks } from './works-step.ts';
 
-interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean; wikiOnly: boolean; scopedSubjectsOnly: boolean }
+interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean; wikiOnly: boolean; scopedSubjectsOnly: boolean;
+  packages?: typeof officialPackageSlugs }
 
 export function parseOptions(args: string[]): Options {
+  const selection = args.find(arg => arg.startsWith('--packages='));
+  const packages = selection?.slice('--packages='.length).split(',');
+  if (selection && (args.filter(arg => arg.startsWith('--packages=')).length !== 1 || !args.includes('--themes-only') || !packages?.length
+    || new Set(packages).size !== packages.length || packages.some(slug => !officialPackageSlugs.includes(slug as typeof officialPackageSlugs[number])))) {
+    throw new Error('--packages=<comma-separated official package slugs> requires --themes-only and installed official packages');
+  }
+  args = args.filter(arg => arg !== selection);
   if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only', '--wiki-only', '--scoped-subjects-only'].includes(arg))
     || new Set(args).size !== args.length
     || args.filter(arg => ['--themes-only', '--zones-only', '--wiki-only', '--scoped-subjects-only'].includes(arg)).length > 1) {
-    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only | --wiki-only | --scoped-subjects-only]');
+    throw new Error('Usage: task dev:seed -- [--dry-run] [--reset-own] [--themes-only [--packages=<slugs>] | --zones-only | --wiki-only | --scoped-subjects-only]');
   }
   return { dryRun: args.includes('--dry-run'), resetOwn: args.includes('--reset-own'),
+    ...(packages ? { packages: packages as typeof officialPackageSlugs } : {}),
     themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only'), wikiOnly: args.includes('--wiki-only'),
     scopedSubjectsOnly: args.includes('--scoped-subjects-only') };
 }
@@ -179,7 +188,7 @@ async function run(options: Options): Promise<boolean> {
   const started = performance.now();
   const plan: readonly SeedStep[] = options.scopedSubjectsOnly ? [seedAccounts, seedScopedSubjects]
     : options.wikiOnly ? [seedAccounts, seedOfficialWiki] : options.themesOnly
-    ? [seedAccounts, state => seedOfficialThemes(state, realms.map(realm => realm.id))]
+    ? [seedAccounts, state => seedOfficialThemes(state, options.packages ?? realms.map(realm => realm.id))]
     : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
   for (const step of plan) {
     const begun = performance.now();

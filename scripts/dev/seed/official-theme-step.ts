@@ -25,10 +25,11 @@ const packages = {
   'franchise-wiki': ['home', 'memberIndex', 'entity'],
 } as const;
 type Slug = keyof typeof packages;
+export const officialPackageSlugs = Object.keys(packages) as Slug[];
 
 /** The same source-byte digest that `task zones:digest` and the web package loader compute. */
-export async function officialSourceDigest(slug: Slug): Promise<string> {
-  const directory = join(packageRoot, slug);
+export async function officialSourceDigest(slug: Slug, sourceRoot = packageRoot): Promise<string> {
+  const directory = join(sourceRoot, slug);
   const paths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: directory, onlyFiles: true }));
   if (!paths.length) throw new Error(`No official package source for ${slug}`);
   const files = Object.fromEntries(await Promise.all(paths.map(async path =>

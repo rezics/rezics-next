@@ -1,7 +1,17 @@
 export const refreshResources = ['account', 'main', 'main-relay'] as const;
 export type RefreshResource = typeof refreshResources[number];
 export type RefreshStep = 'build-image' | 'stop-writers' | 'prepare-storage' | 'align-model'
-  | 'restart-resources' | 'wait-ready' | 'record-success';
+  | 'restart-resources' | 'wait-ready' | 'approve-zones' | 'record-success';
+
+export const appHostRestartInstruction = 'In the main checkout, run task dev:stop, then task dev, then retry task dev:refresh';
+
+export class AppHostResourceLost extends Error {
+  constructor(resource: string, operation: string) {
+    super(`AppHost resource ${resource} is lost (${operation}). ${appHostRestartInstruction}`);
+  }
+}
+
+export interface OfficialZoneApproval { slug: string; digest: string; approvedDigest: string | null }
 
 export interface RefreshInputs {
   revision: string;
@@ -13,6 +23,8 @@ export interface RefreshInputs {
   unhealthyResources: readonly string[];
   environmentChanges: readonly string[];
   appHostChanged: boolean;
+  lostResources: readonly string[];
+  zoneApprovals: readonly OfficialZoneApproval[];
 }
 
 /** A checkpoint is evidence of a completed refresh, never a substitute for live
@@ -20,10 +32,13 @@ export interface RefreshInputs {
 export function refreshPlan(input: RefreshInputs): { steps: RefreshStep[]; blockers: string[] } {
   const blockers: string[] = [];
   if (input.environmentChanges.length) blockers.push(
-    `Generated stack environment would change (${input.environmentChanges.join(', ')}); restart the AppHost with task dev before retrying task dev:refresh`,
+    `Generated stack environment would change (${input.environmentChanges.join(', ')}). ${appHostRestartInstruction}`,
   );
   if (input.appHostChanged) blockers.push(
-    'AppHost topology changed; restart the AppHost with task dev before retrying task dev:refresh',
+    `AppHost topology changed. ${appHostRestartInstruction}`,
+  );
+  if (input.lostResources.length) blockers.push(
+    `AppHost restart required for lost resources: ${input.lostResources.join(', ')}. ${appHostRestartInstruction}`,
   );
   const prepare = input.previousRevision !== input.revision || !input.imagePresent
     || input.storageChanged || input.pendingMigrations.length > 0;
@@ -33,7 +48,10 @@ export function refreshPlan(input: RefreshInputs): { steps: RefreshStep[]; block
   if (restart) steps.push('stop-writers');
   if (prepare) steps.push('prepare-storage');
   if (prepare || !input.modelCurrent) steps.push('align-model');
-  if (restart) steps.push('restart-resources', 'wait-ready', 'record-success');
+  if (restart) steps.push('restart-resources', 'wait-ready');
+  if (!restart && input.zoneApprovals.length) steps.push('wait-ready');
+  if (restart || input.zoneApprovals.length) steps.push('approve-zones');
+  if (restart || input.zoneApprovals.length) steps.push('record-success');
   return { steps, blockers };
 }
 
@@ -55,11 +73,13 @@ export interface RefreshActions {
   alignModel(): Promise<void>;
   restartResources(): Promise<void>;
   waitReady(): Promise<void>;
+  approveZones(): Promise<void>;
+  stopAppHost(): Promise<void>;
   recordSuccess(): Promise<void>;
 }
 
-/** No success record or implicit restart after a failed maintenance step. A
- * retry re-inspects live state and completes the unfinished operations. */
+/** Maintenance failures remain stopped for a retry. A lost orchestration
+ * resource instead shuts down this AppHost, avoiding partially stopped writers. */
 export async function executeRefresh(plan: ReturnType<typeof refreshPlan>, actions: RefreshActions): Promise<void> {
   if (plan.blockers.length) throw new Error(plan.blockers.join('\n'));
   const operations: Record<RefreshStep, () => Promise<void>> = {
@@ -69,7 +89,19 @@ export async function executeRefresh(plan: ReturnType<typeof refreshPlan>, actio
     'align-model': () => actions.alignModel(),
     'restart-resources': () => actions.restartResources(),
     'wait-ready': () => actions.waitReady(),
+    'approve-zones': () => actions.approveZones(),
     'record-success': () => actions.recordSuccess(),
   };
-  for (const step of plan.steps) await operations[step]();
+  try {
+    for (const step of plan.steps) await operations[step]();
+  } catch (error) {
+    if (error instanceof AppHostResourceLost) {
+      try { await actions.stopAppHost(); }
+      catch {
+        throw new Error(`${error.message}. Automatic AppHost shutdown failed; task dev:stop must succeed before restarting`, { cause: error });
+      }
+      throw new Error(`${error.message}. This AppHost was stopped; data volumes were retained`, { cause: error });
+    }
+    throw error;
+  }
 }

@@ -12,13 +12,16 @@ import { readActiveModelGeneration } from '../../services/main/src/modules/seman
 import { mainSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { appEnvironment, composeProcessEnvironment, readEnv, stackDirectory } from './config.ts';
-import { assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
+import { AppHostResourceLost, appHostRestartInstruction, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   refreshResources, type RefreshResource } from './refresh.ts';
+import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
+import { officialSourceDigest } from './seed/official-theme-step.ts';
 
 interface Resource {
   name: string; displayName?: string; state?: string; healthStatus?: string;
   dashboardUrl?: string; urls?: { url: string }[];
   environment?: Record<string, string | null>;
+  properties?: { 'executable.pid'?: number | null };
 }
 interface Checkpoint { revision: string; appHostHash: string; appHostSession: string }
 
@@ -30,10 +33,64 @@ function command(root: string, executable: string, args: string[], env = process
   return result.stdout.trim();
 }
 
+/** CLI exit 16 and nested DCP NotFound (including stop's exit 17) both
+ * require a new AppHost. Parse diagnostics without exposing their contents. */
+export function refreshAspireOutput(args: string[], result: {
+  status: number | null; stdout: string; stderr: string; error?: Error;
+}): string {
+  if (result.error || result.status !== 0) {
+    const resource = args[0] === 'resource' || args[0] === 'wait' ? args[1] : undefined;
+    if (resource && (result.status === 16 || /\bNotFound\b|\bnot found\b/i.test(`${result.stdout}\n${result.stderr}`))) {
+      throw new AppHostResourceLost(resource, args[0] === 'wait' ? 'wait' : args[2]!);
+    }
+    throw new Error(`Aspire ${args[0]} failed (exit ${result.status ?? 'timeout/error'})`);
+  }
+  return result.stdout.trim();
+}
+
 function aspire(root: string, args: string[], timeout = 30_000): string {
-  return command(root, 'node', [join(root, 'node_modules/@microsoft/aspire-cli/bin/aspire.js'),
+  const result = spawnSync('node', [join(root, 'node_modules/@microsoft/aspire-cli/bin/aspire.js'),
     ...args, '--apphost', join(root, 'apphost/apphost.mts'), '--non-interactive', '--nologo'],
-  process.env, timeout);
+  { cwd: root, env: process.env, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'] });
+  try { return refreshAspireOutput(args, result); }
+  catch (error) {
+    if (error instanceof AppHostResourceLost) throw error;
+    if ((args[0] === 'resource' || args[0] === 'wait') && refreshResources.includes(args[1] as RefreshResource)) {
+      // A wait timeout can mask a dead executable behind cached Running state.
+      // Preserve the original error when the follow-up describe also fails.
+      try { assertRefreshResourcePresent(root, args[1] as RefreshResource); }
+      catch (inspectionError) { if (inspectionError instanceof AppHostResourceLost) throw inspectionError; }
+    }
+    throw error;
+  }
+}
+
+export function refreshProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    // A zombie still answers signal 0 but cannot run a writer.
+    if (process.platform === 'linux') {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z')) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+
+export function lostRefreshResources(resources: Partial<Record<RefreshResource, Resource>>,
+  alive = refreshProcessAlive): RefreshResource[] {
+  return refreshResources.filter(name => !resources[name] || (resources[name].state === 'Running'
+    && !alive(resources[name].properties?.['executable.pid'] ?? 0)));
+}
+
+function assertRefreshResourcePresent(root: string, name: RefreshResource): void {
+  const described = JSON.parse(aspire(root, ['describe', '--format', 'Json'])) as { resources?: Resource[] };
+  const resource = described.resources?.find(item => item.displayName === name || item.name === name);
+  if (lostRefreshResources({ [name]: resource }).includes(name)) {
+    throw new AppHostResourceLost(name, 'missing or dead executable');
+  }
 }
 
 function compose(root: string, args: string[], timeout = 180_000): string {
@@ -92,21 +149,30 @@ export function refreshHeavyLockHeld(path: string, alive = (pid: number): boolea
   return alive(pid) || Date.now() - statSync(path).mtimeMs < 10_000;
 }
 
-export async function inspectRefresh(root: string) {
-  const dir = stackDirectory(root, { profile: 'dev' });
+export async function inspectRefresh(root: string, stackRoot = root) {
+  const dir = stackDirectory(stackRoot, { profile: 'dev' });
   const env = readEnv(join(dir, 'dev.env'));
-  const expected = expectedRefreshEnvironment(root);
+  const expected = expectedRefreshEnvironment(stackRoot);
   const environmentChanges = changedEnvironment(env, expected);
   const composeEnv = readEnv(join(dir, 'compose.env'));
   for (const key of ['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY', 'ACCOUNTS_PORT']) {
     if (!composeEnv[key] && !environmentChanges.includes(key)) environmentChanges.push(key);
   }
-  const described = JSON.parse(aspire(root, ['describe', '--format', 'Json'])) as { resources?: Resource[] };
+  const described = JSON.parse(aspire(stackRoot, ['describe', '--format', 'Json'])) as { resources?: Resource[] };
   const resources = Object.fromEntries(refreshResources.map(name => {
     const resource = described.resources?.find(item => item.displayName === name || item.name === name);
-    if (!resource) throw new Error(`Shared AppHost resource ${name} is missing; restart the AppHost with task dev`);
-    return [name, resource];
+    return [name, resource ?? { name, state: 'Missing' }];
   })) as Record<RefreshResource, Resource>;
+  const lostResources = lostRefreshResources(Object.fromEntries(refreshResources.map(name =>
+    [name, resources[name].state === 'Missing' ? undefined : resources[name]])));
+  for (const name of refreshResources) {
+    if (lostResources.includes(name) || resources[name].state !== 'Running') continue;
+    try { aspire(stackRoot, ['wait', name, '--status', 'up', '--timeout', '1'], 5_000); }
+    catch (error) {
+      if (error instanceof AppHostResourceLost) lostResources.push(name);
+      else throw error;
+    }
+  }
   const specs = { account: accountSpec, main: mainSpec, 'main-relay': relaySpec };
   // Compare non-secret values with the environment Aspire actually loaded. Its
   // dynamically assigned listening ports differ from the public proxy ports.
@@ -117,7 +183,9 @@ export async function inspectRefresh(root: string) {
       if (actual === undefined || (actual !== null && actual !== expected[key])) environmentChanges.push(`${name}.${key}`);
     }
   }
-  const appHostSession = new URL(resources.account.dashboardUrl!).origin;
+  const dashboard = described.resources?.find(resource => resource.dashboardUrl)?.dashboardUrl;
+  if (!dashboard) throw new Error(`Shared AppHost session is unavailable. ${appHostRestartInstruction}`);
+  const appHostSession = new URL(dashboard).origin;
   const checkpointPath = join(dir, 'refresh.json');
   const checkpoint = existsSync(checkpointPath)
     ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as Checkpoint : undefined;
@@ -129,11 +197,11 @@ export async function inspectRefresh(root: string) {
     throw new Error('Cannot inspect the pinned Fuseki image; check Docker availability');
   }
   const imagePresent = inspected.status === 0;
-  const containerOutput = compose(root, ['ps', '--all', '--format', 'json']);
+  const containerOutput = compose(stackRoot, ['ps', '--all', '--format', 'json']);
   const containers = (containerOutput.startsWith('[') ? JSON.parse(containerOutput)
     : containerOutput.split('\n').filter(Boolean).map(line => JSON.parse(line))) as
     Array<{ ID: string; Service: string; State: string; Health?: string }>;
-  const hashes = compose(root, ['config', '--hash', '*']).split('\n').filter(Boolean).map(line => line.split(/\s+/));
+  const hashes = compose(stackRoot, ['config', '--hash', '*']).split('\n').filter(Boolean).map(line => line.split(/\s+/));
   let storageChanged = !imagePresent;
   for (const [service, hash] of hashes) {
     const container = containers.find(item => item.Service === service);
@@ -154,12 +222,19 @@ export async function inspectRefresh(root: string) {
     ? await readActiveModelGeneration(new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN))
     : { generation: 'unavailable until storage is prepared' };
   const revision = command(root, 'git', ['rev-parse', 'HEAD']);
+  // If Main is unavailable, the restart is blocked or planned first. Inspect
+  // again after readiness so a recovered stack cannot miss package changes.
+  const zoneApprovals = lostResources.includes('main') || resources.main.state !== 'Running'
+    || resources.main.healthStatus !== 'Healthy' ? [] : await inspectOfficialZoneApprovals(
+      path => fetch(new URL(path, env.MAIN_ORIGIN!), { signal: AbortSignal.timeout(10_000) }),
+      slug => officialSourceDigest(slug, join(root, 'apps/web/zones/official')));
   const input = { revision, previousRevision: checkpoint?.revision, imagePresent, storageChanged, pendingMigrations,
     modelCurrent: active.generation === targetGeneration,
     unhealthyResources: refreshResources.filter(name => resources[name].state !== 'Running'
       || resources[name].healthStatus !== 'Healthy'),
     environmentChanges: [...new Set(environmentChanges)].sort(),
-    appHostChanged: checkpoint?.appHostSession === appHostSession && checkpoint.appHostHash !== appHostHash };
+    appHostChanged: checkpoint?.appHostSession === appHostSession && checkpoint.appHostHash !== appHostHash,
+    lostResources, zoneApprovals };
   return { input, plan: refreshPlan(input), image, active, targetGeneration, resources,
     checkpointPath, checkpoint: { revision, appHostHash, appHostSession } satisfies Checkpoint };
 }
@@ -176,6 +251,11 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
   console.log(`  Storage: ${snapshot.input.storageChanged ? 'reconcile containers; keep data volumes' : 'current'}`);
   console.log(`  Pending SQL migrations: ${snapshot.input.pendingMigrations.join(', ') || 'none'}`);
   console.log(`  Model generation: ${snapshot.active.generation} -> ${snapshot.targetGeneration}`);
+  console.log(`  Resources requiring AppHost restart: ${snapshot.input.lostResources.join(', ') || 'none'}`);
+  console.log(`  Official Zones to re-approve: ${snapshot.input.zoneApprovals.map(zone =>
+    `${zone.slug} (${zone.approvedDigest ?? 'no active approval'} -> ${zone.digest})`).join(', ')
+    || (snapshot.input.lostResources.includes('main') || snapshot.input.unhealthyResources.includes('main')
+      ? 'inspect after Main readiness; currently unavailable' : 'none')}`);
   console.log(`  Plan: ${snapshot.plan.steps.join(' -> ') || 'no changes'}`);
   for (const blocker of snapshot.plan.blockers) console.log(`  BLOCKED: ${blocker}`);
 }
@@ -211,6 +291,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
       stopWriters: async () => {
         for (const name of [...refreshResources].reverse()) {
           if (['Exited', 'Finished', 'FailedToStart'].includes(snapshot.resources[name].state ?? '')) continue;
+          assertRefreshResourcePresent(root, name);
           aspire(root, ['resource', name, 'stop']);
           aspire(root, ['wait', name, '--status', 'down', '--timeout', '60'], 65_000);
         }
@@ -218,7 +299,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
       prepareStorage: async () => {
         const prepared = await preparation.prepare(applied => console.log(`  SQL migrations applied: ${applied.join(', ') || 'none'}`));
         const changes = changedEnvironment(readEnv(join(stackDirectory(root, { profile: 'dev' }), 'dev.env')), prepared);
-        if (changes.length) throw new Error(`Prepared environment changed (${changes.join(', ')}); restart the AppHost with task dev before retrying`);
+        if (changes.length) throw new Error(`Prepared environment changed (${changes.join(', ')}). ${appHostRestartInstruction}`);
         console.log('  Storage and owner data migrations ready; volumes retained');
       },
       alignModel: async () => {
@@ -230,10 +311,12 @@ export async function refreshSharedStack(root: string, args: string[], preparati
         for (const name of refreshResources) {
           aspire(root, ['resource', name, 'restart']);
           aspire(root, ['wait', name, '--timeout', '120'], 125_000);
+          assertRefreshResourcePresent(root, name);
           console.log(`  Restarted: ${name}`);
         }
       },
       waitReady: async () => {
+        for (const name of refreshResources) assertRefreshResourcePresent(root, name);
         for (const name of ['account', 'main'] as const) {
           const endpoint = snapshot.resources[name].urls?.[0]?.url;
           if (!endpoint) throw new Error(`Aspire did not declare a readiness URL for ${name}`);
@@ -241,12 +324,23 @@ export async function refreshSharedStack(root: string, args: string[], preparati
           if (!response.ok) throw new Error(`${name} readiness failed (HTTP ${response.status})`);
         }
       },
+      approveZones: async () => {
+        const env = readEnv(join(stackDirectory(root, { profile: 'dev' }), 'dev.env'));
+        const zones = await inspectOfficialZoneApprovals(
+          path => fetch(new URL(path, env.MAIN_ORIGIN!), { signal: AbortSignal.timeout(10_000) }),
+          slug => officialSourceDigest(slug));
+        if (zones.length) command(root, 'task', ['dev:seed', '--', '--themes-only',
+          `--packages=${zones.map(zone => zone.slug).join(',')}`], process.env, 600_000);
+      },
+      stopAppHost: async () => {
+        command(root, 'task', ['dev:stop'], process.env, 60_000);
+      },
       recordSuccess: async () => {
         const checked = await inspectRefresh(root);
         if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])
           || checked.input.revision !== snapshot.input.revision || checked.input.storageChanged
           || checked.input.pendingMigrations.length || !checked.input.modelCurrent
-          || checked.input.unhealthyResources.length || checked.plan.blockers.length) {
+          || checked.input.unhealthyResources.length || checked.input.zoneApprovals.length || checked.plan.blockers.length) {
           throw new Error('Shared stack changed or is not current after refresh; no success checkpoint recorded');
         }
         writeFileSync(`${snapshot.checkpointPath}.tmp`, `${JSON.stringify(checked.checkpoint)}\n`, { mode: 0o600 });

@@ -20,13 +20,25 @@ To discard and recreate this checkout's dev data, run `task dev:reset -- --yes` 
 After merges, run `task dev:refresh` from the clean, committed `main` checkout to
 build a missing pinned Fuseki image, reconcile storage with volumes kept, apply
 owner migrations, align the dataset model generation and restart Account, Main
-and the Main relay through Aspire. `task dev:refresh -- --dry-run` reads the live
+and the Main relay through Aspire. It compares installed official Zone source
+digests with their active approvals and submits changed packages through the
+demo seed's revision, independent review and activation path, including
+`franchise-wiki`. Absent demo Zones and custom themes are left alone.
+`task dev:refresh -- --dry-run` reads the live
 stack and prints the plan without changing it. Refresh refuses worktrees and a
 held heavy QA lock. If it reports changed environment variables or AppHost
-topology, restart the AppHost with `task dev` before retrying; a resource restart
-cannot reload the AppHost's configuration. A successful second refresh makes no
-changes. A failed maintenance step leaves the writers stopped and records no
-success checkpoint; resolve the reported error and rerun the command.
+topology, or names a missing or dead executable behind a running resource, run
+`task dev:stop`, then `task dev` from the main checkout before retrying. A resource
+restart cannot reload the AppHost's configuration or recover a lost DCP
+executable after Docker restarts. Dry-run lists the affected resources and each
+Zone's approved and source digests; when Main is unavailable, it reports that
+approval inspection must wait for readiness. If a stop, restart or wait loses a
+resource during refresh, refresh stops that AppHost with `task dev:stop`, keeps
+data volumes and records no checkpoint; start it again with `task dev` before
+retrying. A shutdown failure is reported explicitly and must be resolved first.
+A successful second refresh makes no changes. Other failed maintenance steps
+leave the writers stopped and record no success checkpoint; resolve the error
+and rerun the command.
 
 Use `task test -- <explicit test files>` for changed behavior. Preview the
 dependency-selected plan with `task test -- --affected --list`, then run
