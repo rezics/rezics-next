@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
 import { readStudioWork, readStudioWorks } from '../modules/studio/works.ts';
 import { readStudioChapters } from '../modules/studio/chapters.ts';
+import { fenceStudioVariantHeads } from '../modules/studio/variant-heads.ts';
 import { contentsItem } from '../modules/work-contents/read-contract.ts';
 import { changeAdmittedComposition } from '../modules/structure/change-admitted.ts';
 import { derivedId, readCompositionHeader } from '../modules/structure/graph.ts';
@@ -151,20 +152,19 @@ export function studioRoutes(work: MainWorkDependencies) {
           throw new WorkReadUnavailable('Content variant heads are ambiguous');
         }
         const byVariant = new Map(heads.map(row => [row.variant!.value, row]));
-        const after = await content.ownerPosition();
-        if (after.dataEpoch !== listed.position.dataEpoch
-          || after.sequence !== listed.position.sequence) {
-          throw new WorkReadMoved('Content variant page changed');
-        }
         if (!await work.studioAccess.canReadContentVariants(session.principal, query.actingSubject, resource)) {
           throw new WorkReadMoved('Content variant authority changed');
         }
+        await fenceStudioVariantHeads(content, resource, query.cursor ?? '', query.limit ?? 20, listed);
+        // Clients use the Content epoch to prepare publication; this sequencer
+        // watermark is metadata, not the consistency fence for these variants.
+        const sourcePosition = await content.ownerPosition();
         return { work: resource, items: listed.items.map(item => ({ variantId: item.id,
           language: { kind: item.languageKind, tag: item.languageTag,
             originalTag: item.originalLanguageTag }, direction: item.direction,
           draftHead: item.draftHead, publicationHead: byVariant.get(item.id)?.publication?.value ?? null,
           eligibilityHead: byVariant.get(item.id)?.eligibility?.value ?? null })),
-        nextCursor: listed.nextCursor, sourcePosition: listed.position };
+        nextCursor: listed.nextCursor, sourcePosition };
       }), { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) { return workReadError(error); }
   }).post('/v1/works/:id/chapters', {

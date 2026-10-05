@@ -235,6 +235,30 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     expect(largeEvents).toHaveLength(1);
     expect(largeEvents[0]!.position.sequence).toBe(large.position.sequence);
     expect(largeEvents[0]!.payload.reason).toBe('admission-fenced');
+
+    // Private inventory depends on indexed variants, even when the sequencer
+    // watermark is unavailable. Empty inventories use the same one-query path.
+    await pool.query('DELETE FROM content.owner_control WHERE singleton');
+    expect(await core.listVariantHeads(variant.resourceId, '', 20)).toEqual({
+      items: [{ id: variant.id, languageKind: 'tag', languageTag: 'zh-Hans',
+        originalLanguageTag: 'zh-hans', direction: 'ltr', draftHead: winner.revisionId },
+      { id: secondVariant.id, languageKind: 'tag', languageTag: 'zh-Hans',
+        originalLanguageTag: 'zh-hans', direction: 'ltr', draftHead: other.revisionId }],
+      nextCursor: null,
+    });
+    expect(await core.listVariantHeads('urn:rezics:work:empty', '', 20)).toEqual({ items: [], nextCursor: null });
+    const inventoryResource = 'urn:rezics:work:inventory';
+    const inventoryIds = Array.from({ length: 21 }, (_, index) => `urn:rezics:variant:inventory-${String(index).padStart(2, '0')}`);
+    await pool.query(`INSERT INTO content.variant
+      (id, resource_id, language_kind, language_tag, original_language_tag, direction)
+      SELECT id, $2, 'tag', 'en', 'en', 'ltr' FROM unnest($1::text[]) AS id`, [inventoryIds, inventoryResource]);
+    const inventoryFirst = await core.listVariantHeads(inventoryResource, '', 20);
+    expect(inventoryFirst.items.map(item => item.id)).toEqual(inventoryIds.slice(0, 20));
+    expect(inventoryFirst.nextCursor).toBe(inventoryIds[19]!);
+    const inventoryLast = await core.listVariantHeads(inventoryResource, inventoryFirst.nextCursor!, 20);
+    expect(inventoryLast.items.map(item => item.id)).toEqual(inventoryIds.slice(20));
+    expect(inventoryLast.nextCursor).toBeNull();
+    await expect(core.listVariantHeads(inventoryResource, '', 21)).rejects.toBeInstanceOf(ContentConflict);
   } finally {
     await pool.end();
     execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });

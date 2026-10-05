@@ -16,6 +16,8 @@ import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { studioRoutes } from '../../../services/main/src/routes/studio.ts';
 import { contentRoutes } from '../../../services/main/src/routes/content.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentComments, contentCommentIntentDigest } from '../../../services/content/src/comments.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
@@ -345,6 +347,117 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     expect(statements).toBeLessThanOrEqual(STUDIO_CHAPTER_COST.graphStatements);
   } finally { await f.close(); }
 }, 20_000);
+
+test('Studio chapters and variant pages ignore other Work writes but reject changed draft heads and variant membership', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>,
+    resolve('.temp', `studio-variant-fence-${randomUUID()}`));
+  try {
+    const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
+    try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
+    finally { await accountPool.end(); }
+    f.account.tokenA = await f.account.tokenFor(f.account.a);
+    const agent = { kind: 'person' as const, displayName: 'Concurrent Studio Author' };
+    const graphAgent = await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor,
+      ...agent, digest: agentProvisionDigest(agent) });
+    const controlId = randomUUID();
+    await f.accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`, [controlId, f.principalId, f.actor]);
+    await f.accessPool.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key,
+      request_digest, agent_id, agent_kind, display_name, principal_epoch, state,
+      graph_data_epoch, graph_sequence, representation_id)
+      VALUES ($1,$2,$3,$4,$5,'person',$6,0,'active',$7,$8,$9)`, [randomUUID(), f.principalId,
+      randomUUID(), agentProvisionDigest(agent), f.actor, agent.displayName,
+      graphAgent.dataEpoch, graphAgent.sequence, controlId]);
+    const book = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', {
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Concurrent Studio Book', language: 'en',
+      semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor,
+    }), 201);
+    await f.grant(`work:edit:${book.work}`, 'work.edit');
+    await f.grant(`work:read:${book.work}`, 'work.read');
+    const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/' });
+    await objects.initialize();
+    (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
+    const composition = await f.json<{ structure: string; revision: string }>(await f.call('POST',
+      '/v1/compositions', { profile: 'book-composition', work: book.work,
+        mainVersion: book.mainVersion, actingSubject: f.actor }), 201);
+    const content = new ContentCore(f.pool);
+    let betweenReads: (() => Promise<void>) | undefined;
+    let contentCalls = 0;
+    const hooked = new Proxy(content, { get(target, key) {
+      if (key === 'listVariantHeads') return async (...args: Parameters<typeof target.listVariantHeads>) => {
+        contentCalls++;
+        const listed = await target.listVariantHeads(...args);
+        const hook = betweenReads;
+        betweenReads = undefined;
+        if (hook) await hook();
+        return listed;
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const app = new Elysia().use(studioRoutes({ environment: f.env, account: f.account.verifier,
+      access: f.access, contentAuthoring: hooked, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
+    const call = (method: string, path: string, body?: object) => app.handle(new Request(`http://main.local${path}`,
+      { method, headers: { authorization: `Bearer ${f.account.tokenA}`, 'idempotency-key': randomUUID(),
+        ...(body ? { 'content-type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const chapter = await f.json<{ post: string; variantId: string }>(await call('POST',
+      `/v1/works/${shortId(book.work)}/chapters`, { profile: 'book-chapter-create-v1',
+        title: 'Concurrent chapter', language: 'en', direction: 'ltr', parent: composition.structure,
+        position: 'last', expectedCompositionHead: composition.revision, actingSubject: f.actor }), 200);
+    const variant = { id: chapter.variantId, resourceId: chapter.post,
+      language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const };
+    const save = (identity = variant, expectedHead: string | null = null) => content.saveDraft({
+      operationId: randomUUID(), variant: identity, expectedHead, model: 'content-shape-v1',
+      sourceRevision: null, provenance: {}, serializedJson: JSON.stringify({ body: 'Concurrent manuscript' }) });
+    let draft = await save();
+    const otherWork = `https://rezics.com/id/${randomUUID()}`;
+    const otherDraft = await save({ ...variant, id: `urn:rezics:variant:${randomUUID()}`, resourceId: otherWork });
+    const comments = new ContentComments(f.pool), progress = new StructureProgressStore(f.pool);
+    const unrelatedWrites = async () => {
+      const before = await content.ownerPosition();
+      const input = { revisionId: otherDraft.revisionId!, resourceId: otherWork, author: f.actor,
+        exact: 'Concurrent manuscript', body: 'Comment on another Work' };
+      await Promise.all([progress.write({ principal: { issuer: 'https://studio-fence.test', subject: randomUUID() },
+        structure: `https://rezics.com/id/${randomUUID()}`, occurrence: `https://rezics.com/id/${randomUUID()}`,
+        completed: true, position: 'p1', expectedVersion: 0, idempotencyKey: randomUUID(),
+        library: { agent: f.actor, work: otherWork } }),
+      comments.create({ ...input, admissionId: randomUUID(), authorityEpoch: '1',
+        scope: `content:comment:${otherWork}`, requestDigest: contentCommentIntentDigest(input) })]);
+      expect(BigInt((await content.ownerPosition()).sequence)).toBeGreaterThan(BigInt(before.sequence));
+    };
+    const paths = [
+      `/v1/me/agents/${shortId(f.actor)}/works/${shortId(book.work)}/chapters?language=en`,
+      `/v1/works/${shortId(chapter.post)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`,
+    ];
+    for (const path of paths) {
+      contentCalls = 0;
+      betweenReads = unrelatedWrites;
+      expect((await call('GET', path)).status).toBe(200);
+      expect(betweenReads).toBeUndefined();
+      expect(contentCalls).toBe(2);
+      betweenReads = async () => { draft = await save(variant, draft.revisionId); };
+      const changedHead = await call('GET', path);
+      expect(changedHead.status).toBe(409);
+      expect(await changedHead.json()).toMatchObject({ code: 'read_basis_changed' });
+      const added = { ...variant, id: `urn:rezics:variant:${randomUUID()}` };
+      betweenReads = async () => { await save(added); };
+      expect((await call('GET', path)).status).toBe(409);
+      // A draft-free variant has no retained revisions or receipts to erase.
+      const emptyVariant = `urn:rezics:variant:${randomUUID()}`;
+      await f.pool.query(`INSERT INTO content.variant
+        (id, resource_id, language_kind, language_tag, original_language_tag, direction)
+        VALUES ($1,$2,'tag','en','en','ltr')`, [emptyVariant, chapter.post]);
+      betweenReads = async () => { await f.pool.query('DELETE FROM content.variant WHERE id = $1', [emptyVariant]); };
+      expect((await call('GET', path)).status).toBe(409);
+    }
+  } finally { await f.close(); }
+}, 30_000);
 
 test('G1049 disclosure batches plan a singleton recovery fence without per-read JIT', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');

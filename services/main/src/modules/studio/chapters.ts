@@ -1,14 +1,15 @@
 import { readCompositionHeader, readPlacements } from '../structure/graph.ts';
 import { countSerialWords } from '../work/serial-projection.ts';
 import { readContents } from '../work-contents/read.ts';
+import { fenceStudioVariantHeads } from './variant-heads.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   unerased, type WorkReadSession } from '../work/read-session.ts';
 
 /** One contents page of one level, one placement batch, two Access owner batches, at
- * most twenty indexed Content variant reads, five four-body batches for lengths,
+ * most forty indexed Content variant reads, five four-body batches for lengths,
  * and fixed graph enrichment batches. */
-export const STUDIO_CHAPTER_COST = { pageSize: 20, contentCalls: 20, graphBatches: 4,
+export const STUDIO_CHAPTER_COST = { pageSize: 20, contentCalls: 40, graphBatches: 4,
   accessCalls: 44, graphStatements: 64, bodyBatch: 4, bodyBatches: 5 } as const;
 
 // Scripts written without spaces between words: their writers measure a manuscript in
@@ -90,11 +91,6 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
       FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
   } LIMIT ${variants.length + 1}`, variants.length + 1) : [];
   const publicVariants = new Set(published.map(row => row.variant?.value));
-  const before = [...controlled.values()][0]?.position;
-  const after = await content.ownerPosition();
-  if (before && (before.dataEpoch !== after.dataEpoch || before.sequence !== after.sequence)
-    || [...controlled.values()].some(list => list.position.dataEpoch !== after.dataEpoch
-      || list.position.sequence !== after.sequence)) throw new WorkReadMoved('Content variants changed');
   const facts = chapters.map(item => {
     const placement = byOccurrence.get(item.occurrence)!;
     const target = placement.target ?? null;
@@ -145,6 +141,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     if (!await access.canReadContentVariants(principal, writers.get(target)!.writer, target)) {
       throw new WorkReadMoved('Studio chapter access changed');
     }
+    await fenceStudioVariantHeads(content, target, '', 20, controlled.get(target)!);
   }
   const byFact = new Map(facts.map(fact => [fact.occurrence, fact]));
   const counted = facts.map(({ text: _text, ...fact }: typeof facts[number] & { text?: string | null }) =>
