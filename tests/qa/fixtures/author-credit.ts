@@ -166,8 +166,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     sourceFieldAttachments: new SourceFieldAttachmentStore(pool, env, access),
     sourceAttachments: new SourceNativeWorkAttachmentStore(pool, proposals, adoptions, env, access),
     openLibraryFetch: (async (_input: string | URL | Request) => new Response(JSON.stringify(source), { headers: { 'content-type': 'application/json' } })) as typeof fetch });
-  const call = (method: string, path: string, body?: object, key = randomUUID(), token = account.tokenA) => app.handle(
-    new Request(`http://main.local${path}`, { method, headers: { authorization: `Bearer ${token}`,
+  const call = (method: string, path: string, body?: object, key = randomUUID(), token: string | null = account.tokenA) => app.handle(
+    new Request(`http://main.local${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
       'idempotency-key': key, ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
   const json = async <T>(response: Response, status: number): Promise<T> => {

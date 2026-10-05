@@ -20,6 +20,7 @@ import { admittedSemanticBulkChange, SemanticStageConflict, SemanticStageRejecte
 import { readResourceSummaries } from '../modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { referenceDisclosure } from '../modules/target/disclosed-references.ts';
 import { readingPositionQuery } from './reading-positions.ts';
 import { workReadError } from './work-reads.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -95,8 +96,11 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       return batch.summaries[0]?.status === 'available'
         || !!principal && await work.access.canReadWork(principal, actor!, ref);
     };
+    // Role members and property values may be typed coordinates (Concepts): one target-reader batch per read.
+    const disclose = referenceDisclosure(work.environment,
+      { access: work.access, principal, ...(actor ? { actingSubject: actor } : {}) }, canRead);
     return { allowed: (await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false)
-      && await disclosed(target, revision), canRead, principal };
+      && await disclosed(target, revision), canRead, disclose, principal };
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
@@ -146,10 +150,10 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead, principal } = await readable(request, query.actingSubject, target);
+        const { allowed, canRead, disclose, principal } = await readable(request, query.actingSubject, target);
         if (!allowed) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
         const read = await readingPositionRead(work, request, principal, query.actingSubject,
-          boundary => readSemanticCurrent(work.environment, target, canRead, records => boundary.visible(records)));
+          boundary => readSemanticCurrent(work.environment, target, canRead, records => boundary.visible(records), disclose));
         if (!read) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
         if (!(await readable(request, query.actingSubject, target)).allowed) {
           return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
@@ -164,12 +168,12 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead, principal } = await readable(request, query.actingSubject, target,
+        const { allowed, canRead, disclose, principal } = await readable(request, query.actingSubject, target,
           `https://rezics.com/id/${params.revision}`);
         if (!allowed) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         const read = await readingPositionRead(work, request, principal, query.actingSubject,
           boundary => readSemanticRevision(work.environment, target,
-            `https://rezics.com/id/${params.revision}`, canRead, records => boundary.visible(records)));
+            `https://rezics.com/id/${params.revision}`, canRead, records => boundary.visible(records), disclose));
         if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         if (!(await readable(request, query.actingSubject, target,
           `https://rezics.com/id/${params.revision}`)).allowed) {

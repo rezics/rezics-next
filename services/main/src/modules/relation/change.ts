@@ -16,6 +16,7 @@ import { checkedApplicability, checkedParticipations, checkedRevealedAt, Invalid
   type RevealedAt } from './schema.ts';
 import { RevelationConflict, type ReadingPositionStore } from '../reading-position/store.ts';
 import { targetRead, targetSummaries } from '../target/resolve.ts';
+import { undisclosedReferences, type ReferenceDisclosure } from '../target/disclosed-references.ts';
 import { normalizeStatementSubject, StatementApplicabilityRefused } from '../statement/projection.ts';
 import { readingWorkScope } from '../reading-position/work-scope.ts';
 
@@ -83,7 +84,7 @@ export const roleIri = (definition: string, key: string): string => `${definitio
  * SKOS notation is an identifier independent of a preferred language label:
  * https://www.w3.org/TR/skos-reference/#notations */
 export async function readDefinitionByKey(env: WorkActivationEnvironment, key: string,
-  canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
+  canRead?: (definition: string) => Promise<boolean>, disclose?: ReferenceDisclosure): Promise<ExactDefinition | null> {
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new SemanticChangeRejected('invalid', 'invalid definition key');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?key a rv:DefinitionKey ; rv:keyDefinition ?definition ;
@@ -93,14 +94,14 @@ export async function readDefinitionByKey(env: WorkActivationEnvironment, key: s
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition key is ambiguous');
   if (canRead && !await canRead(rows[0]!.definition!.value)) return null;
-  const definition = await readExactDefinition(env, rows[0]!.head!.value, canRead);
+  const definition = await readExactDefinition(env, rows[0]!.head!.value, canRead, disclose);
   if (!definition || definition.notation !== key) throw new RevisionCorrupt('definition key differs from retained state');
   return definition;
 }
 
 /** Resolve an exact relation DefinitionRef from its immutable revision, never the current head. */
 export async function readExactDefinition(env: WorkActivationEnvironment, revision: string,
-  canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
+  canRead?: (definition: string) => Promise<boolean>, disclose?: ReferenceDisclosure): Promise<ExactDefinition | null> {
   checkedNativeIri(revision);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:DefinitionRevision ; rv:component ?definition ;
@@ -113,9 +114,11 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
   if (state.kind !== 'relation') return null;
+  // Role members are typed coordinates: one disclosure decision for all roles, never one per member.
+  const readableMembers = disclose ? await disclose(state.roles.flatMap(role => role.members ?? [])) : null;
   const roles = await Promise.all(state.roles.map(async (role: RelationRole) => ({ role: roleIri(definition, role.key),
     minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
-    ...(role.members ? { members: canRead
+    ...(role.members ? { members: readableMembers ? role.members.filter(ref => readableMembers.has(ref)) : canRead
       ? (await Promise.all(role.members.map(async ref => await canRead(ref) ? ref : null))).filter((ref): ref is string => ref !== null)
       : role.members } : {}) })));
   return { revision, definition, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
@@ -195,21 +198,12 @@ export async function relationReferences(env: WorkActivationEnvironment, definit
       projections.add(summary.reference);
     }
   }
-  // Applicability names typed coordinates (Structure positions, releases, Concepts), not only semantic Resources
-  // or Works; a Statement writer resolves them through the target reader, so a relation writer does too.
-  const coordinates = state.applicability.length
-    ? (await targetRead(env, authority, session => targetSummaries(session, state.applicability))).summaries : [];
-  return [...new Set([definition.definition, ...participants.filter(ref => !projections.has(ref)),
-    ...definition.roles.flatMap(role => role.members ?? []), ...undisclosedReferences(state.applicability, coordinates),
-    ...(state.revealedAt ? [state.revealedAt.work] : [])])];
-}
-
-/** References the target reader did not disclose; they stay for the semantic and Work readers, whose refusal is the
- * one indistinct outcome a hidden or missing reference gets. */
-export function undisclosedReferences(references: readonly string[],
-  summaries: readonly { reference: string; status: string }[]): string[] {
-  const disclosed = new Set(summaries.flatMap(summary => summary.status === 'available' ? [summary.reference] : []));
-  return references.filter(ref => !disclosed.has(ref));
+  // Participants, role members and applicability name typed coordinates (Structure positions, releases, Concepts),
+  // not only semantic Resources or Works: the target reader discloses them, the semantic and Work readers decide the rest.
+  const members = definition.roles.flatMap(role => role.members ?? []);
+  const undisclosed = await undisclosedReferences(env, authority,
+    [...participants.filter(ref => !projections.has(ref)), ...members, ...state.applicability]);
+  return [...new Set([definition.definition, ...undisclosed, ...(state.revealedAt ? [state.revealedAt.work] : [])])];
 }
 
 function starRoles(definition: ExactDefinition) {

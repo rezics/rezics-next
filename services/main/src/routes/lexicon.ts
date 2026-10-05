@@ -12,6 +12,7 @@ import { readerLanguages } from '../modules/display-language/select.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
 import { readCurrentComponent } from '../modules/semantic/change.ts';
 import { SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
+import { referenceDisclosure } from '../modules/target/disclosed-references.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable } from '../modules/semantic/command.ts';
 import { checkedNativeIri } from '../modules/semantic/schema.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -177,6 +178,10 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
   const readable = (principal: VerifiedPrincipal | null, actor: string | undefined,
     definition: string, revision?: string) => work.access.canReadSemanticResource?.(
       principal, principal ? actor! : null, definition, revision, fuseki) ?? Promise.resolve(false);
+  // Role members and participants are typed coordinates (Concepts), disclosed by the target reader first.
+  const disclosure = (principal: VerifiedPrincipal | null, actor: string | undefined,
+    canRead: (ref: string) => Promise<boolean>) => referenceDisclosure(work.environment,
+    { access: work.access, principal, ...(principal && actor ? { actingSubject: actor } : {}) }, canRead);
   // Drafts retain explicit authority; a public vocabulary decision alone cannot disclose them.
   const draftReadable = async (principal: VerifiedPrincipal | null, actor: string | undefined,
     definition: string) => {
@@ -242,7 +247,8 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const items = [];
         for (const meaning of page.items) {
           const rendering = await renderRelation(work.environment, { meaning, bindings: [] },
-            meaning.workSubjectRole ?? Object.values(meaning.roleKeys)[0]!, languages, publicRead);
+            meaning.workSubjectRole ?? Object.values(meaning.roleKeys)[0]!, languages, publicRead, false,
+            disclosure(null, undefined, publicRead));
           if (!await publicRead(meaning.definition, meaning.revision)) continue;
           items.push({ key: meaning.notation!, definition: meaning.definition, revision: meaning.revision,
             lifecycle: 'active' as const, ...editorRecording(meaning),
@@ -263,7 +269,8 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       try {
         const principal = await authenticate(request, query.actingSubject);
         const meaning = await readDefinitionByKey(work.environment, params.key,
-          definition => readable(principal, query.actingSubject, definition));
+          definition => readable(principal, query.actingSubject, definition), disclosure(principal, query.actingSubject,
+            ref => readable(principal, query.actingSubject, ref)));
         if (!meaning || !await readable(principal, query.actingSubject, meaning.definition, meaning.revision)) {
           return problem(404, 'definition_unavailable', 'Definition is unavailable');
         }
@@ -388,6 +395,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         try {
           const principal = await authenticate(request, query.actingSubject);
           const canRead = (ref: string) => readable(principal, query.actingSubject, ref);
+          const disclose = disclosure(principal, query.actingSubject, canRead);
           const languages = readerLanguages(
             query.languages,
             request.headers.get('accept-language'),
@@ -426,6 +434,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
                   languages,
                   canRead,
                   includeDrafts,
+                  disclose,
                 ),
               );
             items.push({ definition, status: 'available', renderings });

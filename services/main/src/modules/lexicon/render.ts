@@ -9,6 +9,7 @@ import { readCurrentComponent } from '../semantic/change.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable } from '../semantic/command.ts';
 import type { CreditedName } from '../relation/schema.ts';
 import type { ReferenceCheck } from '../semantic/read.ts';
+import { readableReferences, type ReferenceDisclosure } from '../target/disclosed-references.ts';
 import type { SemanticValue } from '../semantic/value.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
@@ -213,6 +214,7 @@ export async function renderRelation(
   languages: readonly string[],
   canRead: ReferenceCheck,
   includeDrafts = false,
+  disclose?: ReferenceDisclosure,
 ): Promise<RelationRendering> {
   let meaning: ExactDefinition | null;
   let bindings: RelationBinding[] = [];
@@ -229,7 +231,7 @@ export async function renderRelation(
       throw new SemanticTargetUnavailable('relation definition is unavailable');
     const revision =
       subject.revision ?? (await readCurrentComponent(env, subject.definition, 'definition'))?.head;
-    meaning = revision ? await readExactDefinition(env, revision, canRead) : null;
+    meaning = revision ? await readExactDefinition(env, revision, canRead, disclose) : null;
     if (meaning && meaning.definition !== subject.definition) meaning = null;
   } else {
     if (!(await canRead(subject.occurrence)))
@@ -237,11 +239,18 @@ export async function renderRelation(
     const revision =
       subject.revision ?? (await readCurrentOccurrence(env, subject.occurrence))?.head;
     const read = revision ? await readExactOccurrence(env, subject.occurrence, revision) : null;
-    meaning = read ? await readExactDefinition(env, read.state.definition, canRead) : null;
+    meaning = read ? await readExactDefinition(env, read.state.definition, canRead, disclose) : null;
     if (read && meaning) {
       occurrence = { component: subject.occurrence, revision: read.revision };
+      const readable = await readableReferences(
+        read.state.participations.flatMap((item) =>
+          item.participant.kind === 'resource' ? [item.participant.ref] : [],
+        ),
+        canRead,
+        disclose,
+      );
       for (const item of read.state.participations) {
-        const hidden = item.participant.kind === 'resource' && !(await canRead(item.participant.ref));
+        const hidden = item.participant.kind === 'resource' && !readable.has(item.participant.ref);
         bindings.push({
           role: meaning.roleKeys[item.role]!,
           participant: hidden ? { kind: 'unavailable-reference' } : item.participant,
@@ -253,9 +262,21 @@ export async function renderRelation(
     }
   }
   if (!meaning) throw new SemanticTargetUnavailable('relation meaning is unavailable');
-  meaning = { ...meaning, roles: await Promise.all(meaning.roles.map(async role => ({ ...role,
-    ...(role.members ? { members: (await Promise.all(role.members.map(async ref => await canRead(ref) ? ref : null)))
-      .filter((ref): ref is string => ref !== null) } : {}) }))) };
+  // A meaning this call read through `disclose` already carries only disclosed members.
+  if (!(disclose && !('meaning' in subject))) {
+    const readableMembers = await readableReferences(
+      meaning.roles.flatMap((role) => role.members ?? []),
+      canRead,
+      disclose,
+    );
+    meaning = {
+      ...meaning,
+      roles: meaning.roles.map((role) => ({
+        ...role,
+        ...(role.members ? { members: role.members.filter((ref) => readableMembers.has(ref)) } : {}),
+      })),
+    };
+  }
   if (!Object.values(meaning.roleKeys).includes(viewingRole))
     throw new SemanticChangeRejected('invalid', 'viewing role is unknown');
   const rows = await presentations(env, meaning, includeDrafts);
