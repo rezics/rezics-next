@@ -148,6 +148,11 @@ export function registerFranchiseWikiJourney(viewports: readonly { name: 'phone'
 
   async function check(page: Page, info: TestInfo, name: string) {
     expect(await overflows(page), `${name} overflows`).toBe(false);
+    // These controls start disabled and fade in once hydrated (the Follow button once its state is read); axe reads
+    // the colours of that fade, so it runs after they have enabled.
+    await expect(
+      page.locator('[data-relationship] button:disabled, [data-position-bar] button:disabled'),
+    ).toHaveCount(0, { timeout: 30_000 });
     const violations = await axeViolations(page);
     expect(violations, formatViolations(violations)).toEqual([]);
     await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
@@ -233,7 +238,10 @@ export function registerFranchiseWikiJourney(viewports: readonly { name: 'phone'
     await ready(page);
     await expect(page.locator('[data-wiki-index="characters"] li')).toHaveCount(3);
     await page.getByRole('link', { name: /Fitzwilliam Darcy/ }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Fitzwilliam Darcy' })).toBeVisible();
+    // The first visit to a character page renders it on the server.
+    await expect(page.getByRole('heading', { level: 1, name: 'Fitzwilliam Darcy' })).toBeVisible({
+      timeout: 30_000,
+    });
     expect(page.url()).toContain('position=all');
     await check(page, info, 'everything-darcy');
   });
@@ -247,21 +255,25 @@ export function registerFranchiseWikiJourney(viewports: readonly { name: 'phone'
     await expect(button).toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
     await button.focus();
     await page.keyboard.press('Enter');
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('link')).toHaveText([
-      /Your own progress/,
-      'Chapter 1',
-      'Chapter 2',
-      'Chapter 3',
-      /Show everything/,
-    ]);
+    // The chapter search opens its suggestions in a second dialog; the sheet is the one named by its title.
+    const sheet = page.getByRole('dialog', { name: 'Read up to' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole('link')).toHaveText([/Your own progress/, /Show everything/]);
     await check(page, info, 'position-sheet');
     await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
+    await expect(sheet).toBeHidden();
     await expect(button).toBeFocused();
-    await button.click();
-    await dialog.getByRole('link', { name: 'Chapter 2' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(sheet).toBeVisible();
+    // Main searches the chapters as the reader types; the suggestions are options of a combobox.
+    const search = sheet.getByRole('combobox', { name: 'Search chapters' });
+    // The search is inert until it hydrates.
+    await expect(search).toBeEnabled();
+    await search.focus();
+    await page.keyboard.type('Chapter 2');
+    const option = page.getByRole('option', { name: 'Chapter 2' });
+    await expect(option).toBeVisible({ timeout: 60_000 });
+    await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\?position=[0-9a-f-]{36}$/);
     await expect(page.locator('[data-position-current]')).toContainText('Up to: Chapter 2');

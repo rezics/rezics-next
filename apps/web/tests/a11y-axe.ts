@@ -17,8 +17,25 @@ export interface AxeViolation {
   nodes: { target: string; html: string; summary: string }[];
 }
 
+/**
+ * Wait until no CSS transition or animation is running. axe reads the colours the page shows at that instant, so a
+ * control fading from its disabled to its enabled state (a trigger that enables on hydration) fails contrast for a
+ * frame it never rests in.
+ */
+export async function settleAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    // An endless animation (a spinner) never finishes and is not a transition between states.
+    const finite = () => document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity);
+    for (let running = finite(); running.length; running = finite()) {
+      await Promise.allSettled(running.map(animation => animation.finished));
+      await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+    }
+  });
+}
+
 /** Run axe on the page as it stands and return its violations, trimmed for reading. */
 export async function axeViolations(page: Page, options: { exclude?: string[] } = {}): Promise<AxeViolation[]> {
+  await settleAnimations(page);
   if (!await page.evaluate(() => 'axe' in globalThis)) await page.evaluate(source);
   return page.evaluate(async ({ tags, exclude }) => {
     const axe = (globalThis as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{
