@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isQaE2ePath } from './acceptance.ts';
@@ -88,99 +88,6 @@ function validatePreparation(value: unknown, source: string, root: string): Decl
   return { command: [program, ...parts.slice(1)], budgetMs: budgetMs as number, step, slug };
 }
 
-/** A journey file may declare preparation as one object literal. Anything else belongs in the sibling module. */
-function preparationFromJourney(
-  source: string,
-  journey: string,
-): Record<string, unknown> | undefined {
-  const marker = /(?:^|\n)[ \t]*export const e2ePreparation =/;
-  const found = marker.exec(source);
-  if (!found) {
-    if (source.includes('export const e2ePreparation')) {
-      throw new Error(`${journey} must export e2ePreparation as an object literal`);
-    }
-    return undefined;
-  }
-  let index = found.index + found[0].length;
-  const skip = () => {
-    while (index < source.length && /[ \t\n]/.test(source[index]!)) index += 1;
-  };
-  skip();
-  if (source[index] !== '{')
-    throw new Error(`${journey} must export e2ePreparation as an object literal`);
-  index += 1;
-  const record: Record<string, unknown> = {};
-  const fail = (detail: string): never => {
-    throw new Error(
-      `${journey} preparation ${detail}; use a sibling .prepare.ts for anything else`,
-    );
-  };
-  const stringLiteral = (): string => {
-    const quote = source[index];
-    if (quote !== '"' && quote !== "'") fail('strings must be quotes');
-    let value = '';
-    for (let cursor = index + 1; cursor < source.length; cursor += 1) {
-      const char = source[cursor]!;
-      if (char === '\\' || char === '\n') fail('cannot use escapes or line breaks');
-      if (char === quote) {
-        index = cursor + 1;
-        return value;
-      }
-      value += char;
-    }
-    fail('has an unclosed string');
-  };
-  skip();
-  while (index < source.length && source[index] !== '}') {
-    const key = /^[A-Za-z]+/.exec(source.slice(index));
-    if (!key) fail('has an unreadable field');
-    if (Object.hasOwn(record, key[0])) fail(`repeats ${key[0]}`);
-    index += key[0].length;
-    skip();
-    if (source[index] !== ':') fail(`must put a colon after ${key[0]}`);
-    index += 1;
-    skip();
-    if (source[index] === '[') {
-      index += 1;
-      const items: string[] = [];
-      skip();
-      while (source[index] !== ']') {
-        if (source[index] !== '"' && source[index] !== "'")
-          fail('command must be an array of string literals');
-        items.push(stringLiteral());
-        skip();
-        if (source[index] === ',') {
-          index += 1;
-          skip();
-          continue;
-        }
-        if (source[index] !== ']') fail('command must be an array of string literals');
-      }
-      index += 1;
-      record[key[0]] = items;
-    } else if (source[index] === '"' || source[index] === "'") {
-      record[key[0]] = stringLiteral();
-    } else if (source[index] !== undefined && /\d/.test(source[index]!)) {
-      const number = /^(\d+(?:_\d+)*)/.exec(source.slice(index));
-      if (!number) fail('has an unreadable number');
-      index += number[1]!.length;
-      record[key[0]] = Number(number[1]!.replaceAll('_', ''));
-    } else fail(`field ${key[0]} must be a literal`);
-    skip();
-    if (source[index] === ',') {
-      index += 1;
-      skip();
-      continue;
-    }
-    if (source[index] !== '}') fail('must separate fields with commas');
-  }
-  if (source[index] !== '}') fail('is not closed');
-  index += 1;
-  skip();
-  if (source[index] !== ';') fail('must end with a semicolon');
-  return record;
-}
-
 function remember(
   found: Map<string, JourneyPreparation>,
   journey: string,
@@ -192,8 +99,8 @@ function remember(
   found.set(journey, { journey, ...declaration });
 }
 
-/** Declarations under `apps/web/tests`: `<name>.prepare.ts` exports `preparation` for `<name>.e2e.ts`,
- * and a journey file may export `e2ePreparation` itself. */
+/** Declarations under `apps/web/tests`: `<name>.prepare.ts` exports `preparation` for `<name>.e2e.ts`.
+ * A sibling module, not the journey itself, so discovery never loads a test file. */
 export async function discoverJourneyPreparations(root: string): Promise<JourneyPreparation[]> {
   const directory = join(root, 'apps/web/tests');
   if (!existsSync(directory)) return [];
@@ -227,16 +134,6 @@ export async function discoverJourneyPreparations(root: string): Promise<Journey
       validatePreparation(imported.preparation, display(root, preparePath), root),
       file,
     );
-  }
-  const journeyFiles = readdirSync(directory)
-    .filter((file) => file.endsWith('.e2e.ts'))
-    .sort();
-  for (const file of journeyFiles) {
-    const journey = `apps/web/tests/${file}`;
-    const source = readFileSync(join(directory, file), 'utf8');
-    const literal = preparationFromJourney(source, journey);
-    if (!literal) continue;
-    remember(found, journey, validatePreparation(literal, journey, root), file);
   }
   return [...found.values()].sort((left, right) =>
     left.journey < right.journey ? -1 : left.journey > right.journey ? 1 : 0,

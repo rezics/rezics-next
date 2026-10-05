@@ -81,14 +81,6 @@ test('the scoped-subjects journey keeps its seed command and 600s budget', async
   expect(preparationBudgetMs(others)).toBe(0);
 });
 
-const literal = (budget = '600_000') => `export const e2ePreparation = {
-  command: ['bun', 'apps/web/tests/example-seed.ts'],
-  budgetMs: ${budget},
-  step: 'Example preparation',
-  slug: 'example-seed',
-};
-`;
-
 async function withTree(
   files: Record<string, string>,
   check: (root: string) => Promise<void>,
@@ -108,26 +100,6 @@ async function withTree(
 
 const seed = 'apps/web/tests/example-seed.ts';
 const journey = 'apps/web/tests/example.e2e.ts';
-
-test('a journey file can declare its preparation as an object literal', async () => {
-  await withTree(
-    {
-      [seed]: 'export {}\n',
-      [journey]: literal(),
-    },
-    async (root) => {
-      expect(await discoverJourneyPreparations(root)).toEqual([
-        {
-          journey,
-          command: ['bun', seed],
-          budgetMs: 600_000,
-          step: 'Example preparation',
-          slug: 'example-seed',
-        },
-      ]);
-    },
-  );
-});
 
 test('a sibling prepare module declares the same preparation', async () => {
   await withTree(
@@ -149,29 +121,17 @@ test('a sibling prepare module declares the same preparation', async () => {
   );
 });
 
-test('two declarations for one journey are refused', async () => {
-  await withTree(
-    {
-      [seed]: 'export {}\n',
-      [journey]: literal(),
-      'apps/web/tests/example.prepare.ts': `export const preparation = {
-      command: ['bun', '${seed}'],
-      budgetMs: 1_000,
-      step: 'Example preparation',
-      slug: 'example-seed',
-    };\n`,
-    },
-    async (root) => {
-      await expect(discoverJourneyPreparations(root)).rejects.toThrow('more than one place');
-    },
-  );
-});
-
 test('a preparation budget above the data-preparation ceiling is refused', async () => {
   await withTree(
     {
       [seed]: 'export {}\n',
-      [journey]: literal('600_001'),
+      [journey]: "import { test } from '@playwright/test';\n",
+      'apps/web/tests/example.prepare.ts': `export const preparation = {
+      command: ['bun', '${seed}'],
+      budgetMs: 600_001,
+      step: 'Example preparation',
+      slug: 'example-seed',
+    };\n`,
     },
     async (root) => {
       await expect(discoverJourneyPreparations(root)).rejects.toThrow('600000');
