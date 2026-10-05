@@ -48,7 +48,7 @@ const create = async (member: Member, subject: string, frames: readonly string[]
   (await json<Write>(await project(member, subject, frames), 201)).projection;
 const query = (member: Member | null, subject: string, frames: readonly string[] = [], extra = '') => {
   const search = new URLSearchParams({ subject });
-  for (const frame of frames) search.append('frame', frame);
+  for (const frame of frames) search.append('frames', frame);
   const path = `/v1/projections?${search}${extra}`;
   return member ? member.read(path) : stack.call('GET', path);
 };

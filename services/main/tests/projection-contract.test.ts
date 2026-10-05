@@ -6,9 +6,10 @@ import { receiptFamilyFor } from '../src/modules/access/receipt-families.ts';
 import { resourceSummary } from '../src/modules/media/summary-contract.ts';
 import { discoverOutboxEventHandlers } from '../src/modules/outbox/event-handlers.ts';
 import { MAX_FRAMES, MAX_PAGE, PROJECTION_COST, PROJECTION_FAMILY, PROJECTION_SCOPE, ProjectionRefused,
-  projectionDigest, projectionKey, projectionPage, projectionRequest, projectionWriteResponse }
+  projectionDigest, projectionKey, projectionPage, projectionQuery, projectionRequest, projectionWriteResponse }
   from '../src/modules/projection/schema.ts';
 import { openApiOperations } from '../src/routes/projections.ts';
+import { projectionFrameListSql } from '../src/modules/projection/store.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const [subject, a, b, c] = [id(1), id(2), id(3), id(4)];
@@ -52,6 +53,28 @@ test('the request and response contracts are closed and bounded', () => {
   expect(Value.Check(projectionPage, { items: Array.from({ length: MAX_PAGE + 1 }, () => view), nextCursor: null,
     sourcePosition: position })).toBe(false);
   expect(Value.Check(projectionPage, { items: [{ ...view, disclosure: 'private' }], nextCursor: null, sourcePosition: position })).toBe(false);
+});
+
+test('frame membership and exact frame-set lookup have distinct bounded contracts', () => {
+  for (const query of [{ frame: a }, { subject }, { frame: a, subject, cursor: id(8).slice(-36), limit: 1 },
+    { subject, frames: [a, b] }]) expect(Value.Check(projectionQuery, query)).toBe(true);
+  for (const query of [{ frame: [a, b] }, { frames: [] }, { frame: a, limit: MAX_PAGE + 1 },
+    { frame: a, extra: true }, { frame: a, cursor: a }]) expect(Value.Check(projectionQuery, query)).toBe(false);
+  expect(PROJECTION_COST.listSelectors).toBe(2);
+  expect(PROJECTION_COST.identityReadsPerBatch).toBe(1);
+  expect(PROJECTION_COST.frameMembershipsPerIdentity).toBe(MAX_FRAMES);
+});
+
+test('frame candidate queries seek in order with optional subject and continuation', () => {
+  expect(projectionFrameListSql(false, false)).toContain('WHERE frame = $1');
+  expect(projectionFrameListSql(false, true)).toContain('AND projection > $2::uuid');
+  expect(projectionFrameListSql(true, false)).toContain('AND subject = $2');
+  expect(projectionFrameListSql(true, true)).toContain('AND projection > $3::uuid');
+  for (const subject of [false, true]) for (const continued of [false, true]) {
+    const sql = projectionFrameListSql(subject, continued);
+    expect(sql).toContain(`ORDER BY projection LIMIT $${2 + Number(subject) + Number(continued)}`);
+    expect(sql).not.toContain(' OR ');
+  }
 });
 
 test('a summary carries a projection as its subject and frames, each a summary of its own', () => {

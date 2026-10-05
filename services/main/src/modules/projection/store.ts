@@ -4,6 +4,15 @@ import type { ProjectionKey } from './schema.ts';
 
 const native = (id: string) => `https://rezics.com/id/${id}`;
 
+/** Equality on the leading frame (and optionally subject), then a UUID seek, with no
+ * sort or scan of unrelated identities. Use separate shapes so prepared plans keep the cursor in the index bound. */
+export function projectionFrameListSql(subject: boolean, continued: boolean): string {
+  return `SELECT projection FROM access.projection_frame_identity
+    WHERE frame = $1 ${subject ? 'AND subject = $2' : ''}
+      ${continued ? `AND projection > $${subject ? 3 : 2}::uuid` : ''}
+    ORDER BY projection LIMIT $${2 + Number(subject) + Number(continued)}`;
+}
+
 /** The Access-owned identity of each projection: one row per subject and sorted frame set. Both
  * statements are single indexed probes on the primary key, whatever the number of projections. */
 export class ProjectionStore {
@@ -34,6 +43,17 @@ export class ProjectionStore {
       `SELECT projection FROM access.projection_identity
        WHERE subject = $1 AND ($2::uuid IS NULL OR projection > $2) ORDER BY projection LIMIT $3`,
       [subject, after, limit])).rows.map(row => native(row.projection)));
+  }
+
+  /** One ordered candidate batch whose frame contains this coordinate. Availability and
+   * disclosure still come from the graph; the owner index contains reservations, not readable views. */
+  listByFrame(frame: string, subject: string | undefined, after: string | null, limit: number): Promise<string[]> {
+    const args: (string | number)[] = [frame];
+    if (subject !== undefined) args.push(subject);
+    if (after !== null) args.push(after);
+    args.push(limit);
+    return controlRead(this.pool, async client => (await client.query<{ projection: string }>(
+      projectionFrameListSql(subject !== undefined, after !== null), args)).rows.map(row => native(row.projection)));
   }
 
   /** Reserve the one identity of a key. Concurrent callers all receive the first caller's identity;

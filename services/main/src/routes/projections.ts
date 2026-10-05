@@ -1,13 +1,12 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { PendingContextCommand } from '../modules/context/command.ts';
 import { ControlUnavailable } from '../modules/access/topology-control.ts';
 import { getOrCreateProjection } from '../modules/projection/command.ts';
 import { listProjections, lookupProjection } from '../modules/projection/read.ts';
-import { MAX_FRAMES, MAX_PAGE, ProjectionRefused, ProjectionUnavailable, projectionPage, projectionRequest,
+import { MAX_PAGE, ProjectionRefused, ProjectionUnavailable, projectionPage, projectionQuery, projectionRequest,
   projectionWriteResponse } from '../modules/projection/schema.ts';
-import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -47,20 +46,26 @@ export function projectionRoutes(deps: MainWorkDependencies) {
       } catch (error) { return projectionError(error); }
     })
     .get('/v1/projections', {
-      query: t.Object({ subject: readId, frame: t.Optional(t.Array(readId, { maxItems: MAX_FRAMES })),
-        limit: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE })), cursor: t.Optional(readUuid),
-        language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false }),
+      query: projectionQuery,
       response: { 200: projectionPage, ...workReadProblems },
     }, async ({ request, query }) => {
       try {
         const store = deps.projections;
         if (!store) throw new WorkReadUnavailable('Projection owner is unavailable');
-        if (query.frame?.length && query.cursor) return problem(400, 'invalid_projection', 'A lookup has no continuation');
+        // Scalar query decoding keeps only the first value; reject ambiguous selection instead.
+        const search = new URL(request.url).searchParams;
+        if (['subject', 'frame'].some(key => search.getAll(key).length > 1)) {
+          return problem(400, 'invalid_projection', 'A listing selects at most one subject and one frame');
+        }
+        if (query.frames !== undefined && (!query.subject || query.frame !== undefined || query.cursor !== undefined)) {
+          return problem(400, 'invalid_projection', 'An exact frame-set lookup requires a subject and has no frame filter or continuation');
+        }
+        if (!query.subject && !query.frame) return problem(400, 'invalid_projection', 'A subject or frame is required');
         const result = await workRead(deps, request, query, async session => {
-          const page = query.frame?.length
-            ? await lookupProjection(session, store, { subject: query.subject, frames: query.frame })
+          const page = query.frames !== undefined
+            ? await lookupProjection(session, store, { subject: query.subject!, frames: query.frames })
               .then(found => ({ items: found ? [found] : [], nextCursor: null }))
-            : await listProjections(session, store, { subject: query.subject, cursor: query.cursor ?? null,
+            : await listProjections(session, store, { subject: query.subject, frame: query.frame, cursor: query.cursor ?? null,
               limit: query.limit ?? MAX_PAGE });
           return { ...page, sourcePosition: session.position };
         });

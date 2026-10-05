@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { sourcePosition } from '../../api-contract.ts';
-import { readId, readPosition } from '../work/read-contract.ts';
+import { readId, readLanguage, readPosition, readUuid } from '../work/read-contract.ts';
 
 export const PROJECTION_PROFILE = 'https://rezics.com/definition/projection-v1';
 export const PROJECTION_ACTION = 'projection.create';
@@ -24,6 +24,7 @@ export const PROJECTION_COST = {
   /** Admission register, claim and seal, one identity insert and one guarded graph command. */
   creationWrites: { admissionTransactions: 3, identityInserts: 1, graphCommands: 1 },
   listPage: MAX_PAGE, listLookahead: 1, partsPerProjection: MAX_FRAMES + 1,
+  listSelectors: 2, identityReadsPerBatch: 1, frameMembershipsPerIdentity: MAX_FRAMES,
   partPagesPerListPage: Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64),
 } as const;
 
@@ -82,6 +83,12 @@ export type ProjectionView = Static<typeof projectionView>;
 export const projectionRequest = t.Object({ subject: readId,
   frames: t.Array(readId, { minItems: 1, maxItems: MAX_FRAMES }), actingSubject: readId },
 { additionalProperties: false });
+/** `frame` selects membership; `frames` is the exact-set lookup and requires a subject.
+ * A list always has a subject, a frame, or both, never the global identity inventory. */
+export const projectionQuery = t.Object({ subject: t.Optional(readId), frame: t.Optional(readId),
+  frames: t.Optional(t.Array(readId, { minItems: 1, maxItems: MAX_FRAMES })),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE })), cursor: t.Optional(readUuid),
+  language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false });
 export const projectionWriteResponse = t.Object({ projection: projectionView, created: t.Boolean(),
   replayed: t.Boolean(), sourcePosition }, { additionalProperties: false });
 export const projectionPage = t.Object({ items: t.Array(projectionView, { maxItems: MAX_PAGE }),
