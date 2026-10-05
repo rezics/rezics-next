@@ -39,8 +39,7 @@ export const stageWindowCss = stageWindows
   .showcase .showcase-controls { width: var(--showcase-width); margin-inline: 0; }
   .showcase .showcase-arrows, .showcase .showcase-rotation { display: none; }
   .showcase .showcase-item { width: var(--showcase-width); }
-  .showcase-art { object-fit: var(--fit-portrait); object-position: var(--focal-portrait); }
-  .showcase-art, .showcase-ambient img { object-view-box: var(--view-portrait); }
+  .showcase-background { --crop-ratio: var(--crop-ratio-portrait); --crop-width: var(--crop-width-portrait); --crop-height: var(--crop-height-portrait); --crop-x: var(--crop-x-portrait); --crop-y: var(--crop-y-portrait); --image-width: var(--image-width-portrait); --image-height: var(--image-height-portrait); --image-left: var(--image-left-portrait); --image-top: var(--image-top-portrait); }
   .showcase-copy { width: 100%; padding: 1.25rem; gap: .5rem; }
   .showcase-title { font-size: clamp(1.5rem, min(7cqw, 4.2svh), 2.5rem); }
   .showcase-cutout-layer { inset-block: -3% 45%; inset-inline: 45% 10%; }
@@ -78,7 +77,23 @@ export function pictureSources(art: ZoneShowcaseArt) {
       window.shape === 'portrait'
         ? (art.portrait ?? art.landscape)
         : (art.landscape ?? art.portrait);
-    return image ? [{ ...window, image, srcSet: imageSet(image) }] : [];
+    return image
+      ? [
+          ...(image.avifCandidates?.length
+            ? [
+                {
+                  ...window,
+                  image,
+                  type: 'image/avif',
+                  srcSet: image.avifCandidates
+                    .map((candidate) => `${candidate.url} ${candidate.width}w`)
+                    .join(', '),
+                },
+              ]
+            : []),
+          { ...window, image, type: undefined, srcSet: imageSet(image) },
+        ]
+      : [];
   });
 }
 
@@ -102,16 +117,22 @@ export function focalPosition(image: ZoneShowcaseImage) {
     : '50% 50%';
 }
 
-/**
- * `object-view-box` for an original whose cropped renditions are pending: the authored frame cut
- * from it, so `object-fit` and the focal position work on the frame, as they do on a rendition.
- * Absent when the image already is the frame.
- */
-export function viewBox(image: ZoneShowcaseImage): string {
-  const view = image.view;
-  if (!view) return 'none';
-  const percent = (fraction: number) => `${+(fraction * 100).toFixed(3)}%`;
-  return `inset(${percent(view.y)} ${percent(1 - view.x - view.width)} ${percent(1 - view.y - view.height)} ${percent(view.x)})`;
+/** Fit the authored crop first, then expand and offset its original within it.
+ * The original's pixels remain proportional even when the crop is not centred. */
+export function cropGeometry(image: ZoneShowcaseImage, ratio: number, ambient = false) {
+  const frame = focalFrame(image, ratio);
+  const [x, y] = frame.position.split(' ');
+  const view = image.view ?? { x: 0, y: 0, width: 1, height: 1 };
+  return {
+    ratio: image.width / image.height,
+    fit: ambient || frame.fit === 'cover' ? 'max' : 'min',
+    x,
+    y,
+    width: `${100 / view.width}%`,
+    height: `${100 / view.height}%`,
+    left: `${(-100 * view.x) / view.width}%`,
+    top: `${(-100 * view.y) / view.height}%`,
+  };
 }
 
 /** A cover crop is safe only if every point in the authored focal rectangle survives. */

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ZoneShowcaseArt } from '@rezics/zone-sdk';
 import { deliveredShowcaseImage } from '../features/realm/adapt.ts';
 import { Background } from '../features/showcase/slide.tsx';
-import { viewBox } from '../features/showcase/stage.ts';
+import { cropGeometry } from '../features/showcase/stage.ts';
 import { messages } from '../features/work-page/messages.ts';
 import { shelfWords } from '../features/work-page/shelf-words.ts';
 
@@ -17,14 +17,14 @@ test('art whose renditions are pending carries its crop to draw from the origina
   const pending = deliveredShowcaseImage({ ...original, srcset: [] });
   expect([pending.width, pending.height]).toEqual([2400, 1350]);
   expect(pending.view).toEqual({ x: 0.1, y: 0.2, width: 0.6, height: 0.45 });
-  expect(viewBox(pending)).toBe('inset(20% 30% 35% 10%)');
+  expect(cropGeometry(pending, 16 / 9).width).toBe('166.66666666666669%');
 });
 
 test('art with renditions, or whose crop is the whole image, draws as delivered', () => {
   expect(deliveredShowcaseImage({ ...original, srcset: rendition }).view).toBeUndefined();
   expect(deliveredShowcaseImage({ ...original, crop: 'xywh=percent:0,0,100,100', srcset: [] }).view).toBeUndefined();
   expect(deliveredShowcaseImage({ ...original, crop: null, srcset: [] }).view).toBeUndefined();
-  expect(viewBox(deliveredShowcaseImage({ ...original, srcset: rendition }))).toBe('none');
+  expect(cropGeometry(deliveredShowcaseImage({ ...original, srcset: rendition }), 16 / 9).width).toBe('100%');
 });
 
 test('the stage cuts each window from its own art', () => {
@@ -33,8 +33,10 @@ test('the stage cuts each window from its own art', () => {
     portrait: deliveredShowcaseImage({ ...original, crop: 'xywh=percent:25,0,50,100', srcset: [] }),
   };
   const html = renderToStaticMarkup(<Background art={art} first />);
-  expect(html).toContain('--view-landscape:inset(20% 30% 35% 10%)');
-  expect(html).toContain('--view-portrait:inset(0% 25% 0% 25%)');
+  expect(html).toContain('--image-left-landscape:-16.666666666666668%');
+  expect(html).toContain('--image-width-landscape:166.66666666666669%');
+  expect(html).toContain('--image-left-portrait:-50%');
+  expect(html).toContain('--image-width-portrait:200%');
 });
 
 test('the shelf words follow the Work kind and stay the reading words for a book', () => {

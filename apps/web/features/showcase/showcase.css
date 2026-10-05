@@ -67,21 +67,42 @@
 .showcase-generated-ambient [data-slot='work-cover'] {
   width: 100%;
 }
-.showcase-background picture {
+.showcase-background {
+  --crop-ratio: var(--crop-ratio-landscape);
+  --crop-width: var(--crop-width-landscape);
+  --crop-height: var(--crop-height-landscape);
+  --crop-x: var(--crop-x-landscape);
+  --crop-y: var(--crop-y-landscape);
+  --image-width: var(--image-width-landscape);
+  --image-height: var(--image-height-landscape);
+  --image-left: var(--image-left-landscape);
+  --image-top: var(--image-top-landscape);
+}
+.showcase-image-frame {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  overflow: hidden;
+}
+.showcase-background .showcase-crop {
+  position: absolute;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: var(--crop-width);
+  height: var(--crop-height);
+  left: var(--crop-x);
+  top: var(--crop-y);
+  transform: translate(calc(-1 * var(--crop-x)), calc(-1 * var(--crop-y)));
+  overflow: hidden;
 }
 .showcase-art {
+  position: absolute;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: var(--fit-landscape);
-  object-position: var(--focal-landscape);
-}
-.showcase-art,
-.showcase-ambient img {
-  object-view-box: var(--view-landscape, none);
+  max-width: none;
+  width: var(--image-width);
+  height: var(--image-height);
+  left: var(--image-left);
+  top: var(--image-top);
+  object-fit: fill;
 }
 .showcase-background .showcase-ambient {
   position: absolute;
@@ -91,11 +112,9 @@
   z-index: -1;
   filter: blur(30px) brightness(0.6);
 }
-.showcase-ambient img,
-.showcase-ambient span {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.showcase-ambient .showcase-crop {
+  width: max(100cqw, calc(100cqh * var(--crop-ratio)));
+  height: max(100cqh, calc(100cqw / var(--crop-ratio)));
 }
 .showcase-cover-ambient {
   width: 100%;

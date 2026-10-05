@@ -138,6 +138,8 @@ export interface ZoneFocalArea { x: number; y: number; width: number; height: nu
 
 export interface ZoneShowcaseImage extends ZoneImage {
   candidates?: readonly { url: string; width: number }[];
+  /** A complete AVIF ladder, selected by picture before the fallback codec. */
+  avifCandidates?: readonly { url: string; width: number }[];
   focal?: ZoneFocalArea;
   /** Only art authored for this frame may be cropped; covers and posters stay whole. */
   framed?: boolean;

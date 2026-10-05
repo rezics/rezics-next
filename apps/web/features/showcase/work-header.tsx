@@ -43,8 +43,7 @@ const heroCss = stageWindows
   .map(
     (window) => `@media ${window.media} {
   .work-hero { --hero-height: ${heights[window.shape]}; --hero-lead: ${leads[window.shape]}; }
-  .work-hero .showcase-art { object-fit: var(--fit-${window.shape}); object-position: var(--focal-${window.shape}); }
-  .work-hero .showcase-art, .work-hero .showcase-ambient img { object-view-box: var(--view-${window.shape}, none); }
+  .work-hero .showcase-background { --crop-ratio: var(--crop-ratio-${window.shape}); --crop-width: var(--crop-width-${window.shape}); --crop-height: var(--crop-height-${window.shape}); --crop-x: var(--crop-x-${window.shape}); --crop-y: var(--crop-y-${window.shape}); --image-width: var(--image-width-${window.shape}); --image-height: var(--image-height-${window.shape}); --image-left: var(--image-left-${window.shape}); --image-top: var(--image-top-${window.shape}); }
 }`,
   )
   .join('\n');

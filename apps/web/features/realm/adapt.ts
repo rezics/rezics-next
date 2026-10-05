@@ -82,20 +82,57 @@ const showcaseUrl = (url: string, query: string) => url.startsWith('/v1/')
  * crop travels as `view` for the stage to draw from it; the frame then never shows more or less
  * than the author chose.
  */
-export function deliveredShowcaseImage(image: {
-  url: string; width: number; height: number; focalArea?: string | null; crop?: string | null;
-  cropWidth?: number; cropHeight?: number;
-  srcset: readonly { url: string; width: number; type: string }[];
-}, query = ''): ZoneShowcaseImage {
-  const codec = image.srcset.some(candidate => candidate.type === 'image/webp') ? 'image/webp' : 'image/avif';
+export function deliveredShowcaseImage(
+  image: {
+    url: string;
+    width: number;
+    height: number;
+    focalArea?: string | null;
+    crop?: string | null;
+    cropWidth?: number;
+    cropHeight?: number;
+    srcset: readonly { url: string; width: number; type: string }[];
+  },
+  query = '',
+): ZoneShowcaseImage {
+  const codec = image.srcset.some((candidate) => candidate.type === 'image/webp')
+    ? 'image/webp'
+    : 'image/avif';
   const crop = percentArea(image.crop);
   const cropped = crop && (crop.x > 0 || crop.y > 0 || crop.width < 1 || crop.height < 1);
-  return { url: showcaseUrl(image.url, query), width: image.cropWidth ?? image.width,
-    height: image.cropHeight ?? image.height, framed: true,
+  // Match Main's oriented pixel rounding, including subpixel crops at the edge.
+  const pixels = (fraction: number, dimension: number) => Math.round(fraction * 100_000) * dimension / 100_000;
+  const left = crop ? Math.floor(pixels(crop.x, image.width)) : 0;
+  const top = crop ? Math.floor(pixels(crop.y, image.height)) : 0;
+  const width = crop
+    ? Math.min(image.width - left, Math.ceil(pixels(crop.width, image.width)))
+    : image.width;
+  const height = crop
+    ? Math.min(image.height - top, Math.ceil(pixels(crop.height, image.height)))
+    : image.height;
+  return {
+    url: showcaseUrl(image.url, query),
+    width: image.cropWidth ?? image.width,
+    height: image.cropHeight ?? image.height,
+    framed: true,
     focal: showcaseFocal(image.focalArea, image.crop),
-    ...!image.srcset.length && cropped ? { view: crop } : {},
-    candidates: image.srcset.filter(candidate => candidate.type === codec)
-      .map(candidate => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })) };
+    ...(!image.srcset.length && cropped
+      ? {
+          view: {
+            x: left / image.width,
+            y: top / image.height,
+            width: width / image.width,
+            height: height / image.height,
+          },
+        }
+      : {}),
+    avifCandidates: image.srcset
+      .filter((candidate) => candidate.type === 'image/avif')
+      .map((candidate) => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })),
+    candidates: image.srcset
+      .filter((candidate) => candidate.type === codec)
+      .map((candidate) => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })),
+  };
 }
 
 /** A logo keyed `zxx` (no linguistic content, as Main keys language-neutral logos) or `und` serves every title language. */

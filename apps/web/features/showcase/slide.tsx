@@ -8,7 +8,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { catalogueWork, WhyHere } from '../zones/card.tsx';
 import { PrimaryAction } from './work-action.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
-import { focalFrame, focalPosition, logoFor, pictureSources, slideArt, viewBox } from './stage.ts';
+import { cropGeometry, logoFor, pictureSources, slideArt } from './stage.ts';
 import { Trailer } from './trailer.tsx';
 
 export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
@@ -20,76 +20,90 @@ export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
         ? { landscape: { ...slide.work.cover, framed: false } }
         : null;
   if (!art) return null;
-  return pictureSources(art).map((source) => (
-    <link
-      key={source.shape}
-      rel="preload"
-      as="image"
-      media={source.media}
-      imageSrcSet={source.srcSet}
-      imageSizes={source.sizes}
-      fetchPriority="high"
-    />
-  ));
+  return pictureSources(art)
+    .filter((source, index, sources) => index === 0 || source.shape !== sources[index - 1]?.shape)
+    .map((source) => (
+      <link
+        key={source.shape}
+        rel="preload"
+        as="image"
+        media={source.media}
+        type={source.type}
+        imageSrcSet={source.srcSet}
+        imageSizes={source.sizes}
+        fetchPriority="high"
+      />
+    ));
 }
 
 export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
   const sources = pictureSources(art);
   const fallback = art.landscape ?? art.portrait;
   if (!fallback) return null;
-  const portrait = focalFrame(art.portrait ?? fallback, 3 / 4);
-  const views = {
-    '--view-landscape': viewBox(art.landscape ?? fallback),
-    '--view-portrait': viewBox(art.portrait ?? fallback),
-  } as CSSProperties;
+  const geometry = Object.fromEntries(
+    ['landscape', 'portrait'].flatMap((shape) => {
+      const image = (shape === 'portrait' ? art.portrait : art.landscape) ?? fallback;
+      const crop = cropGeometry(image, shape === 'portrait' ? 3 / 4 : 16 / 9);
+      return Object.entries({
+        'crop-ratio': crop.ratio,
+        'crop-width': `${crop.fit}(100cqw, calc(100cqh * var(--crop-ratio)))`,
+        'crop-height': `${crop.fit}(100cqh, calc(100cqw / var(--crop-ratio)))`,
+        'crop-x': crop.x,
+        'crop-y': crop.y,
+        'image-width': crop.width,
+        'image-height': crop.height,
+        'image-left': crop.left,
+        'image-top': crop.top,
+      }).map(([name, value]) => [`--${name}-${shape}`, value]);
+    }),
+  ) as CSSProperties;
   // Both copies pass through the media policy, so a mask also removes the ambient backdrop.
   return (
-    <div aria-hidden="true" className="showcase-background" style={views}>
-      <picture className="showcase-ambient">
-        {sources.map((source) => (
-          <source
-            key={source.shape}
-            media={source.media}
-            srcSet={source.srcSet}
-            sizes={source.sizes}
+    <div aria-hidden="true" className="showcase-background" style={geometry}>
+      <div className="showcase-image-frame showcase-ambient">
+        <picture className="showcase-crop">
+          {sources.map((source) => (
+            <source
+              key={`${source.shape}-${source.type}`}
+              media={source.media}
+              type={source.type}
+              srcSet={source.srcSet}
+              sizes={source.sizes}
+            />
+          ))}
+          <WebMediaImage
+            revealable={false}
+            alt=""
+            src={fallback.url}
+            className="showcase-art"
+            loading={first ? 'eager' : 'lazy'}
+            fetchPriority={first ? 'high' : 'low'}
           />
-        ))}
-        <WebMediaImage
-          revealable={false}
-          alt=""
-          src={fallback.url}
-          loading={first ? 'eager' : 'lazy'}
-          fetchPriority={first ? 'high' : 'low'}
-        />
-      </picture>
-      <picture>
-        {sources.map((source) => (
-          <source
-            key={source.shape}
-            media={source.media}
-            srcSet={source.srcSet}
-            sizes={source.sizes}
+        </picture>
+      </div>
+      <div className="showcase-image-frame">
+        <picture className="showcase-crop">
+          {sources.map((source) => (
+            <source
+              key={`${source.shape}-${source.type}`}
+              media={source.media}
+              type={source.type}
+              srcSet={source.srcSet}
+              sizes={source.sizes}
+            />
+          ))}
+          <WebMediaImage
+            revealable={false}
+            alt=""
+            src={fallback.url}
+            width={fallback.width}
+            height={fallback.height}
+            loading={first ? 'eager' : 'lazy'}
+            fetchPriority={first ? 'high' : 'low'}
+            className="showcase-art"
           />
-        ))}
-        <WebMediaImage
-          revealable={false}
-          alt=""
-          src={fallback.url}
-          width={fallback.width}
-          height={fallback.height}
-          loading={first ? 'eager' : 'lazy'}
-          fetchPriority={first ? 'high' : 'low'}
-          className="showcase-art"
-          style={
-            {
-              '--fit-landscape': art.landscape?.framed ? 'cover' : 'contain',
-              '--fit-portrait': portrait.fit,
-              '--focal-landscape': focalPosition(art.landscape ?? fallback),
-              '--focal-portrait': portrait.position,
-            } as CSSProperties
-          }
-        />
-      </picture>
+        </picture>
+      </div>
     </div>
   );
 }

@@ -54,6 +54,7 @@ function Preview({
         landscape: {
           ...fixtureArt.landscape!,
           focal: undefined,
+          candidates: [],
           view: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
         },
       },
@@ -203,10 +204,14 @@ export const ForeignLanguageLogo: Story = {
 export const PendingRenditionCrop: Story = {
   args: { variant: 'pending-crop' },
   async play({ canvasElement }) {
-    const image = canvasElement.querySelector<HTMLImageElement>('img.showcase-art');
+    const image = canvasElement.querySelector<HTMLImageElement>('.showcase-image-frame:not(.showcase-ambient) img.showcase-art');
     await waitFor(() => expect(image?.naturalWidth).toBeGreaterThan(0));
-    if (!CSS.supports('object-view-box', 'inset(0)')) return;
-    await expect(getComputedStyle(image!).getPropertyValue('object-view-box')).toBe('inset(25%)');
+    const original = image!.getBoundingClientRect();
+    const frame = image!.closest('picture')!.getBoundingClientRect();
+    await expect(original.width).toBeCloseTo(frame.width * 2, 0);
+    await expect(original.height).toBeCloseTo(frame.height * 2, 0);
+    await expect(original.left + original.width / 4).toBeCloseTo(frame.left, 0);
+    await expect(original.top + original.height / 4).toBeCloseTo(frame.top, 0);
   },
 };
 export const WholePoster: Story = { args: { variant: 'poster' } };
