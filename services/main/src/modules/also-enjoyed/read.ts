@@ -212,7 +212,10 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     throw new WorkReadMissing('Work is unavailable');
   }
   const finalVisible = new Set((await publicCandidates(session, live, source, sourceTypes)).map(item => item.work));
+  const coReaderPrivacy = !co.generation || await store.privacyCurrent(co.generation);
+  if (!coReaderPrivacy) session.stale = true;
   const items: Static<typeof alsoEnjoyedItem>[] = live.flatMap((item, index) => {
+    if (item.basis === 'co-readers' && !coReaderPrivacy) return [];
     const summary = summaries[index], final = fenced[index + 1], fact = facts.get(item.work)!,
       metadata = serial?.get(item.work) ?? EMPTY_SERIAL_SUMMARY;
     if (summary?.status !== 'available' || summary.type !== 'work'

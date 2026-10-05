@@ -5,6 +5,19 @@ import { DISCOVERY_SOURCE_PROFILE } from '../src/modules/discovery/profile.ts';
 import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import type { AlsoEnjoyedStore } from '../src/modules/also-enjoyed/store.ts';
+
+test('discovery ticks fold co-reader logs on their schedule and advance one build batch every tick', async () => {
+  const calls: string[] = [];
+  const store = { purge: async () => {}, claim: async () => null } as unknown as DiscoveryRefreshStore;
+  const alsoEnjoyed = { fold: async () => { calls.push('fold'); },
+    refresh: async () => { calls.push('refresh'); } } as unknown as AlsoEnjoyedStore;
+  const worker = new DiscoveryRefreshWorker({ alsoEnjoyed } as MainWorkDependencies, store, {} as DiscoveryProjection);
+  (worker as unknown as { enroll: () => Promise<void> }).enroll = async () => {};
+  expect(await worker.tick()).toBe('idle');
+  expect(await worker.tick()).toBe('idle');
+  expect(calls).toEqual(['fold', 'refresh', 'refresh']);
+});
 
 test('a slow catalog read defers enrollment while the refresh tick still claims a Work', async () => {
   const calls: string[] = [];

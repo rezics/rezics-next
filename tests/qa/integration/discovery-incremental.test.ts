@@ -62,8 +62,14 @@ test('Discovery incremental: appended Works preserve a partial pin and a moved r
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1 AND work = $2',
       [pending.generation_id, appended.work])).rows[0].count).toBe('0');
     await drain();
-    expect(await tick()).toBe('advanced');
+    expect(await tick()).toBe('activated');
     expect((await stack.accessPool.query('SELECT work_count FROM access.discovery_generation WHERE generation_id = $1', [pending.generation_id])).rows[0].work_count).toBe('3');
+    const cut = await projection.active({ scope: 'global', realm: null, context: null, owner: null },
+      (await deps.relayPosition.read())!);
+    expect(cut.generation_id).toBe(pending.generation_id);
+    expect(cut.stale).toBe(true);
+    expect(cut.covered_sequence).toBe(cut.source_sequence);
+    // The birth after catch-up's cut is retained for the following refresh.
     expect(await tick()).toBe('activated');
     expect((await stack.accessPool.query(`SELECT d.work_count FROM access.discovery_generation d
       JOIN access.derived_generation_head h ON h.active_generation = d.generation_id`)).rows[0].work_count).toBe('4');

@@ -1,12 +1,13 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AlsoEnjoyedStore } from '../../../services/main/src/modules/also-enjoyed/store.ts';
+import { automaticCoReaders } from '../../../services/main/src/modules/also-enjoyed/automation.ts';
 import { DiscoveryRefreshStore } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/discovery/refresh.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
-import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { cloneOwners, requireQa } from './recommendation-support.ts';
@@ -14,12 +15,11 @@ import { startMediaStack } from './media-support.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('co-readers activate under a steady stream of votes and shelf changes, report input changes stale, and the refresh tick folds both logs', async () => {
+test('scheduled co-readers activate under continuous shelf writes, retain stale signals, and withhold privacy changes until covered', async () => {
   const owners = await cloneOwners(requireQa(), ['access', 'content', 'relay']);
   const stack = await startMediaStack('also-enjoyed-continuous', { ownerUrls: owners.urls });
   try {
     const manager = await stack.member('manager');
-    await manager.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const source = await stack.publicWork(manager.actor, ['en'], 'A continuously shelved source');
     const candidate = await stack.publicWork(manager.actor, ['en'], 'A continuously shelved candidate');
     const readers = await Promise.all(['reader-1', 'reader-2', 'reader-3', 'reader-4']
@@ -53,61 +53,126 @@ test('co-readers activate under a steady stream of votes and shelf changes, repo
       Number((await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM ${log}`)).rows[0]!.n);
     const logs = async () => ({ access: await count('access.also_enjoyed_source_change'),
       content: await count('reader.also_enjoyed_source_change', stack.contentPool) });
+    await manager.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+    const contextResponse = await manager.send('POST', '/v1/global-rating-contexts', {
+      profile: 'global-rating-standing-context-v1', question: 'How good is this book?', actingSubject: manager.actor,
+    });
+    expect(contextResponse.status, await contextResponse.clone().text()).toBe(201);
+    const global = await contextResponse.json() as { context: string };
+    const ratingReader = readers[3]!;
+    await ratingReader.grant(`rating:observe:${global.context}`, 'rating.observation.set');
 
     const store = new AlsoEnjoyedStore(stack.accessPool, stack.contentPool);
     // These owner paths read no Account assertion.
     const owned: Partial<MainWorkDependencies> = { environment: stack.env, access: stack.access,
       media: stack.media, alsoEnjoyed: store };
     const deps = owned as MainWorkDependencies;
-    const context = { principal: manager.principal, actingSubject: manager.actor };
-    const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
-    const buildRequest = new Request('http://main.local/v1/also-enjoyed/generations/advance', { method: 'POST' });
-    const position = await workRead(deps, new Request('http://main.local/position'), {},
-      async session => session.position);
-    // One vote and one shelf change before every step: a deterministic stream.
-    const build = async (stream: () => Promise<unknown>, head: string | null) => {
-      const { generation } = await store.register(context, position, receipt());
-      let advances = 0;
-      while ((await store.generation(generation)).phase !== 'complete') {
-        await stream();
-        await store.advance(generation, context, deps, buildRequest);
-        expect(++advances).toBeLessThan(20);
-      }
-      await stream();
-      expect((await store.activate(context, generation, head, receipt(), position)).outcome).toBe('succeeded');
-      return { generation, advances };
-    };
-
-    // Votes and want-to-read shelves are not co-reader inputs: they append no
-    // change row and the generation stays current through them.
-    const unrelated = await build(async () => { await vote(); await shelve('want-to-read'); }, null);
-    expect(unrelated.advances).toBeGreaterThan(2);
-    expect(await logs()).toEqual({ access: 0, content: 0 });
-    const served = await store.candidates(source.work);
-    expect(served).toMatchObject({ generation: unrelated.generation, stale: false, sourceReaders: 4 });
-    expect(served.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(4);
-
-    // Read shelves are inputs. A build under a stream of them still completes
-    // and activates against its basis; the later changes report it stale.
-    const related = await build(async () => { await vote(); await shelve('read'); }, '1');
-    expect(related.advances).toBeGreaterThan(2);
-    expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true, candidates: [] });
-
-    // Without a manual build, the refresh tick folds both change logs.
-    await stack.accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [native()]);
-    const pending = await logs();
-    expect(pending.access).toBe(1);
-    expect(pending.content).toBeGreaterThan(related.advances);
     const worker = new DiscoveryRefreshWorker(deps, new DiscoveryRefreshStore(stack.accessPool),
       new DiscoveryProjection(stack.accessPool));
-    expect(await worker.tick()).toBe('idle');
-    expect(await logs()).toEqual({ access: 0, content: 0 });
+    const scheduled = async (prior: string | null, stream: () => Promise<unknown>) => {
+      for (let ticks = 1; ticks <= 20; ticks++) {
+        await stream();
+        expect(await worker.tick()).toBe('idle');
+        const current = await store.candidates(source.work);
+        if (current.generation && current.generation !== prior) return { ...current, ticks };
+      }
+      throw new Error('Scheduled co-reader activation exceeded 20 ticks');
+    };
 
-    // A shelf change to a Work in the current generation's scope reports it stale.
-    const clean = await build(async () => undefined, '2');
-    expect(await store.candidates(source.work)).toMatchObject({ generation: clean.generation, stale: false });
+    // Cold start requires no manual build or human management grant. Votes and
+    // want-to-read shelves append no input changes, so this cut stays current.
+    expect((await store.candidates(source.work)).generation).toBeNull();
+    const unrelated = await scheduled(null, async () => { await vote(); await shelve('want-to-read'); });
+    expect(unrelated.ticks).toBeGreaterThan(2);
+    expect(await logs()).toEqual({ access: 0, content: 0 });
+    expect(unrelated).toMatchObject({ stale: false, sourceReaders: 4 });
+    expect(unrelated.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(4);
+
+    // An admitted rating is also a signal, both while its row is pending and
+    // after a fold. Neither state revokes the public overlaps already active.
+    const ratingResponse = await ratingReader.send('POST', '/v1/global-rating-observations', {
+      profile: 'global-rating-standing-observation-v1', context: global.context, work: source.work,
+      mainVersion: source.mainVersion, value: 5, expectedRevisionHead: null, actingSubject: ratingReader.actor,
+    });
+    expect(ratingResponse.status, await ratingResponse.clone().text()).toBe(201);
+    expect(await store.candidates(source.work)).toMatchObject({ generation: unrelated.generation, stale: true });
+    await store.fold();
+    expect(await store.candidates(source.work)).toMatchObject({ generation: unrelated.generation, stale: true });
+
+    // No manual registration, advance or activation: shelf changes before every
+    // tick make the active replacement stale without hiding its overlaps.
+    const related = await scheduled(unrelated.generation!, async () => { await vote(); await shelve('read'); });
+    expect(related.ticks).toBeGreaterThan(2);
+    expect(related).toMatchObject({ stale: true, sourceReaders: 4 });
+    expect(related.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(4);
+    expect((await logs()).content).toBeGreaterThan(0);
+
+    // Changing an existing input also retains the active generation.
     await stack.contentPool.query(`UPDATE reader.library_status SET status = 'want-to-read', version = version + 1
       WHERE agent = $1 AND work = $2`, [readers[0]!.actor, candidate.work]);
+    expect(await store.candidates(source.work)).toMatchObject({ generation: related.generation, stale: true });
+
+    // A privacy write in the same transaction as a signal write still records
+    // its own change. Folding cannot make that invalidation disappear.
+    const client = await stack.accessPool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT access.record_also_enjoyed_source_change(false)');
+      await client.query(`UPDATE access.agent_library_visibility SET visibility='private',version=version+1
+        WHERE agent_id=$1`, [readers[0]!.actor]);
+      await client.query('COMMIT');
+    } finally { client.release(); }
+    expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true, candidates: [] });
+    expect(await store.privacyCurrent(related.generation!)).toBe(false);
+    await store.fold();
+    expect(await logs()).toEqual({ access: 0, content: 0 });
     expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true });
+    const covered = await scheduled(related.generation!, () => shelve('read'));
+    expect(covered.sourceReaders).toBe(3);
+    expect(await store.privacyCurrent(covered.generation!)).toBe(true);
+
+    // Deactivation, physical erasure and recovery all revoke retained inputs.
+    for (const revoke of [
+      () => stack.accessPool.query('UPDATE access.principal SET active=false WHERE id=$1', [readers[1]!.principalId]),
+      async () => {
+        const prior = (await store.candidates(source.work)).generation;
+        await stack.contentPool.query(`UPDATE reader.library_status SET status=NULL,version=version+1
+          WHERE agent=$1`, [readers[2]!.actor]);
+        expect(await store.candidates(source.work)).toMatchObject({ generation: prior, stale: true });
+        await stack.contentPool.query('DELETE FROM reader.library_status WHERE agent=$1', [readers[2]!.actor]);
+      },
+      () => stack.accessPool.query('UPDATE access.recovery_fence SET generation=generation+1 WHERE id'),
+    ]) {
+      const prior = (await store.candidates(source.work)).generation!;
+      await revoke();
+      expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true });
+      await store.fold();
+      expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true });
+      expect((await scheduled(prior, async () => undefined)).stale).toBe(false);
+    }
+
+    // A delayed ready build must not roll back a newer, covering head. Stage
+    // two operator builds, activate the newer one, then resume the scheduler.
+    const position = await workRead(deps, new Request('http://main.local/position'), {},
+      async session => session.position);
+    const request = new Request('http://main.local/also-enjoyed/advance');
+    const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: 'c'.repeat(64) });
+    const stage = async () => {
+      const { generation } = await store.register(automaticCoReaders, position, receipt());
+      for (let steps = 0; (await store.generation(generation)).phase !== 'complete'; steps++) {
+        expect(steps).toBeLessThan(20);
+        await store.advance(generation, automaticCoReaders, deps, request);
+      }
+      return generation;
+    };
+    const older = await stage();
+    await shelve('read');
+    const newer = await stage();
+    const head = (await stack.accessPool.query<{ revision: string }>(`SELECT revision::text
+      FROM access.derived_generation_head WHERE family='also-enjoyed'`)).rows[0]!.revision;
+    expect((await store.activate(automaticCoReaders, newer, head, receipt(), position)).outcome).toBe('succeeded');
+    expect(await worker.tick()).toBe('idle');
+    expect((await store.generation(older)).state).toBe('cancelled');
+    expect(await store.candidates(source.work)).toMatchObject({ generation: newer, stale: false });
   } finally { await stack.stop(); await owners.close(); }
 }, 240_000);

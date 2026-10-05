@@ -8,9 +8,10 @@ import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAcces
   recordReceipt, replayReceipt, requireRecoveryOpen, type ManageContext, type ReceiptKey }
   from '../recommendation/derived-generation.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import { automaticCoReaders, coReaderOperator, type CoReaderOperator } from './automation.ts';
 
-/** `foldMs` paces the scheduled fold that keeps both change logs bounded
- * between manual builds; each fold removes at most 100,000 rows per log. */
+/** Each discovery tick advances one build batch; `foldMs` paces background
+ * log folding, removing at most 100,000 rows per owner. */
 export const ALSO_ENJOYED_COST = { ratingRows: 32, shelfRows: 64, pairWorks: 2,
   pairsPerWork: 64, pageRows: 64, leaseMs: 30_000, foldMs: 10_000 } as const;
 const FAMILY = 'also-enjoyed';
@@ -28,6 +29,16 @@ export interface CoReaderCandidate { work: string; sharedReaders: number; score:
  * fold. Writers append change rows and never lock the fence row. */
 export interface AlsoEnjoyedSourceFence { revision: string; changed: boolean }
 const covers = (fence: AlsoEnjoyedSourceFence, basis: string) => !fence.changed && fence.revision === basis;
+const privacyCovers = (fence: AlsoEnjoyedSourceFence, basis: string) =>
+  !fence.changed && BigInt(fence.revision) <= BigInt(basis);
+
+async function privacyFence(owner: Pool | PoolClient, schema: 'access' | 'reader') {
+  const row = (await owner.query<AlsoEnjoyedSourceFence>(`SELECT privacy_revision::text AS revision,
+    EXISTS (SELECT 1 FROM ${schema}.also_enjoyed_source_change WHERE privacy) AS changed
+    FROM ${schema}.also_enjoyed_source_fence WHERE id`)).rows[0];
+  if (!row) throw new RecommendationUnavailable('Co-reader privacy fence is unavailable');
+  return row;
+}
 
 /** Content shelf fence. Folding records the basis of a new generation; a shelf
  * change that has not committed yet keeps its row and outdates that basis. */
@@ -50,11 +61,9 @@ export async function alsoEnjoyedAccessFence(client: PoolClient, fold = false): 
   return row;
 }
 
-/** One snapshot spans three owners. The source fences make an old active
- * generation ineligible immediately, even before a replacement is built. A build
- * completes against its basis: a change after it outdates the generation for
- * reads but never restarts it, so continuous shelf and rating writes cannot
- * keep a build from finishing. */
+/** One snapshot spans three owners. Signal changes retain the last active
+ * generation with a stale marker; privacy changes withhold it immediately.
+ * Builds finish at their basis while subsequent changes await another build. */
 export class AlsoEnjoyedStore {
   constructor(private readonly access: Pool, private readonly content: Pool) {}
 
@@ -72,11 +81,11 @@ export class AlsoEnjoyedStore {
     });
   }
 
-  async register(context: ManageContext, position: ReadPosition, key: ReceiptKey) {
+  async register(context: CoReaderOperator, position: ReadPosition, key: ReceiptKey) {
     const contentRevision = (await alsoEnjoyedContentFence(this.content, true)).revision;
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
-      const principal = await authorizeManager(client, context);
+      const principal = await coReaderOperator(client, context);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`also-enjoyed-receipt:${principal}:${key.idempotencyKey}`]);
       const replay = await replayReceipt(client, principal, key, 'build');
@@ -102,6 +111,57 @@ export class AlsoEnjoyedStore {
         outcome: 'succeeded', head_revision: null });
       return { generation, replayed: false };
     });
+  }
+
+  /** Reuses the existing durable build and head, with no scheduler table.
+   * One tick inspects the single population and advances at most one batch.
+   * Source revisions, not graph traffic, decide whether a replacement is due. */
+  async refresh(work: MainWorkDependencies, request: Request) {
+    const position = await workRead(work, new Request(request.url), {}, session =>
+      Promise.resolve(session.position));
+    const state = await inAccess(this.access, async client => {
+      await requireRecoveryOpen(client);
+      const head = (await client.query<{ generation: string; revision: string; graph_epoch: string;
+        access_revision: string; content_revision: string }>(`SELECT h.active_generation::text AS generation,
+        h.revision::text, a.graph_epoch, a.access_revision::text, a.content_revision::text
+        FROM access.derived_generation_head h JOIN access.also_enjoyed_generation a
+          ON a.generation_id=h.active_generation WHERE h.family=$1 AND h.scope_key=$2`,
+      [FAMILY, SCOPE])).rows[0];
+      const pending = (await client.query<{ id: string; state: string; graph_epoch: string;
+        access_revision: string; content_revision: string }>(`
+        SELECT g.id::text, g.state, a.graph_epoch, a.access_revision::text, a.content_revision::text
+        FROM access.derived_generation g
+        JOIN access.also_enjoyed_generation a ON a.generation_id=g.id
+        WHERE g.family=$1 AND g.scope_key=$2 AND g.state IN ('building','ready')
+          AND g.id IS DISTINCT FROM $3::uuid ORDER BY g.created_at,g.id LIMIT 1`,
+      [FAMILY, SCOPE, head?.generation ?? null])).rows[0];
+      const access = await alsoEnjoyedAccessFence(client);
+      const current = !!head && head.graph_epoch === position.dataEpoch
+        && covers(access, head.access_revision);
+      // A delayed manual build must not replace a newer covering head.
+      if (pending && (pending.graph_epoch !== position.dataEpoch
+        || head?.graph_epoch === pending.graph_epoch && (BigInt(pending.access_revision) < BigInt(head.access_revision)
+          || BigInt(pending.content_revision) < BigInt(head.content_revision)))) {
+        await client.query(`UPDATE access.derived_generation SET state='cancelled',
+          lease_expires_at=NULL,finished_at=clock_timestamp(),failure_reason='co-reader-cut-obsolete'
+          WHERE id=$1 AND state IN ('building','ready')`, [pending.id]);
+        return { head, pending: null, current };
+      }
+      return { head, pending, current };
+    });
+    if (state.pending?.state === 'ready') {
+      return this.activate(automaticCoReaders, state.pending.id, state.head?.revision ?? null,
+        { idempotencyKey: `co-reader-activate:${state.pending.id}:${state.head?.revision ?? 'none'}`,
+          requestDigest: digest([state.pending.id, state.head?.revision ?? null]) }, position);
+    }
+    let generation = state.pending?.id;
+    if (!generation) {
+      if (state.current && state.head
+        && covers(await alsoEnjoyedContentFence(this.content), state.head.content_revision)) return;
+      generation = (await this.register(automaticCoReaders, position,
+        { idempotencyKey: `co-reader-build:${randomUUID()}`, requestDigest: digest(position) })).generation;
+    }
+    await this.advance(generation, automaticCoReaders, work, request);
   }
 
   async generation(id: string): Promise<Generation> {
@@ -192,8 +252,8 @@ export class AlsoEnjoyedStore {
    * pair writes are capped at 64 per source Work after popularity ranking.
    * Every batch commits its checkpoint with its derived rows. A crash repeats
    * only the unfinished batch; the generation lease fences an older worker. */
-  async advance(id: string, manager: ManageContext, work: MainWorkDependencies, request: Request) {
-    await inAccess(this.access, client => authorizeManager(client, manager));
+  async advance(id: string, manager: CoReaderOperator, work: MainWorkDependencies, request: Request) {
+    await inAccess(this.access, client => coReaderOperator(client, manager));
     const epoch = await inAccess(this.access, client => claimLease(client, id, ALSO_ENJOYED_COST.leaseMs));
     const generation = await this.generation(id);
     if (generation.state !== 'building') throw new RecommendationRestart('Generation is closed');
@@ -297,7 +357,7 @@ export class AlsoEnjoyedStore {
     });
   }
 
-  async activate(context: ManageContext, generation: string, expectedRevision: string | null,
+  async activate(context: CoReaderOperator, generation: string, expectedRevision: string | null,
     key: ReceiptKey, position: ReadPosition) {
     const row = await this.generation(generation);
     // A complete generation activates at its own cut; reads report it stale
@@ -308,7 +368,7 @@ export class AlsoEnjoyedStore {
     }
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
-      const principal = await authorizeManager(client, context);
+      const principal = await coReaderOperator(client, context);
       return activateHead(client, principal, key, generation, expectedRevision);
     });
   }
@@ -329,8 +389,10 @@ export class AlsoEnjoyedStore {
           WHERE h.family = $1 AND h.scope_key = $2`, [FAMILY, SCOPE])).rows[0];
       if (!head) return { generation: null, graphEpoch: null, graphSequence: null,
         stale: false, sourceReaders: 0, rows: [] };
-      if (!covers(await alsoEnjoyedAccessFence(client), head.access_revision)
-        || !covers(contentFence, head.content_revision)) return { generation: null,
+      const stale = !covers(await alsoEnjoyedAccessFence(client), head.access_revision)
+        || !covers(contentFence, head.content_revision);
+      if (!privacyCovers(await privacyFence(client, 'access'), head.access_revision)
+        || !privacyCovers(await privacyFence(this.content, 'reader'), head.content_revision)) return { generation: null,
           graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0, rows: [] };
       const sourceReaders = Number((await client.query<{ readers: string }>(`
         SELECT count(*)::text AS readers FROM access.also_enjoyed_signal
@@ -341,18 +403,36 @@ export class AlsoEnjoyedStore {
         WHERE generation_id = $1 AND source_work = $2
         ORDER BY score DESC, candidate_work COLLATE "C" LIMIT $3`,
       [head.generation, source, limit])).rows;
-      return { generation: head.generation, graphEpoch: head.graph_epoch,
-        graphSequence: head.graph_sequence, stale: false, sourceReaders, rows };
+      const privateChange = !privacyCovers(await privacyFence(client, 'access'), head.access_revision);
+      return { generation: privateChange ? null : head.generation, graphEpoch: head.graph_epoch,
+        graphSequence: head.graph_sequence, contentRevision: head.content_revision,
+        stale: stale || privateChange, sourceReaders: privateChange ? 0 : sourceReaders,
+        rows: privateChange ? [] : rows };
     });
     const contentAfter = await alsoEnjoyedContentFence(this.content);
-    if (contentAfter.changed !== contentFence.changed || contentAfter.revision !== contentFence.revision) {
+    if (result.generation && !privacyCovers(await privacyFence(this.content, 'reader'), result.contentRevision!)) {
       return { generation: null, graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0,
         candidates: [] as CoReaderCandidate[] };
     }
     return { generation: result.generation, graphEpoch: result.graphEpoch,
-      graphSequence: result.graphSequence, stale: result.stale,
+      graphSequence: result.graphSequence, stale: result.stale
+        || contentAfter.changed !== contentFence.changed || contentAfter.revision !== contentFence.revision,
       sourceReaders: result.sourceReaders,
       candidates: result.rows.map(row => ({ work: row.candidate_work, sharedReaders: row.shared_readers,
         score: Number(row.score) })) };
+  }
+
+  /** Recheck privacy after graph hydration; revocation during a read cannot
+   * publish retained overlaps computed from the newly private library. */
+  async privacyCurrent(id: string): Promise<boolean> {
+    const result = await inAccess(this.access, async client => {
+      await requireRecoveryOpen(client);
+      const row = (await client.query<{ access_revision: string; content_revision: string }>(`
+        SELECT access_revision::text,content_revision::text FROM access.also_enjoyed_generation
+        WHERE generation_id=$1`, [id])).rows[0];
+      return row && privacyCovers(await privacyFence(client, 'access'), row.access_revision)
+        ? row.content_revision : null;
+    });
+    return result !== null && privacyCovers(await privacyFence(this.content, 'reader'), result);
   }
 }

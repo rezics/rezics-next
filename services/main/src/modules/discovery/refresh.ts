@@ -121,13 +121,16 @@ export class DiscoveryRefreshWorker {
 
   async tick(): Promise<RefreshOutcome> {
     await this.store.purge();
-    // Co-reader builds are manual, so this tick also folds their change logs.
+    // Reuse this scheduler for co-reader maintenance and one durable build step.
     if (this.deps.alsoEnjoyed && performance.now() >= this.coReaderFoldDue) {
       this.coReaderFoldDue = performance.now() + ALSO_ENJOYED_COST.foldMs;
       await this.deps.alsoEnjoyed.fold().catch((error: unknown) => {
         console.error('co-reader fold deferred', recommendationFailureCause(error), error);
       });
     }
+    await this.deps.alsoEnjoyed?.refresh(this.deps, request()).catch((error: unknown) => {
+      console.error('co-reader refresh deferred', recommendationFailureCause(error), error);
+    });
     try {
       await this.enroll();
     } catch (error) {
@@ -171,10 +174,17 @@ export class DiscoveryRefreshWorker {
             return 'current';
           }
           const operator = automaticDiscovery(job.basis.owner);
+          // The immutable input pin remains at registration. A newer source cut
+          // means the scan has entered its one catch-up pass; later writes belong
+          // to the next generation, even when this pass takes several ticks.
+          const catchingUp =
+            !!state.row &&
+            BigInt(state.row.source_sequence) > BigInt(state.row.population_sequence);
           let intervening: DiscoveryChanges | null = { works: [], created: [] };
           if (
             state.row &&
             !state.row.complete &&
+            !catchingUp &&
             (state.row.validated_sequence ?? state.row.source_sequence) !==
               session.position.sequence
           ) {
@@ -260,7 +270,7 @@ export class DiscoveryRefreshWorker {
             ].sort();
             const rebuild = row.rebuild_pending || intervening === null || catchup.length > 2000;
             const nextPass =
-              projected.complete && (rebuild || catchup.length)
+              !catchingUp && projected.complete && (rebuild || catchup.length)
                 ? { works: rebuild ? null : catchup, position: session.position }
                 : undefined;
             return {
@@ -268,6 +278,7 @@ export class DiscoveryRefreshWorker {
               step,
               projected: { ...projected, nextPass },
               position: session.position,
+              validatedSequence: catchingUp ? row.source_sequence : session.position.sequence,
               intervening,
             };
           }
@@ -287,7 +298,7 @@ export class DiscoveryRefreshWorker {
           await this.store.validated(
             job,
             prepared.row,
-            prepared.position.sequence,
+            prepared.validatedSequence,
             prepared.intervening,
           );
         const row =

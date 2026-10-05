@@ -284,9 +284,14 @@ export class DiscoveryRefreshStore {
       }
       const access = since ? { revision: since.revision, statements: since.statements } : null;
       const pending = (
-        await client.query<{ id: string; validated_sequence: string | null }>(
+        await client.query<{
+          id: string;
+          validated_sequence: string | null;
+          population_sequence: string;
+        }>(
           `SELECT g.id,
-        i.checkpoint_sequence::text AS validated_sequence FROM access.derived_generation g
+        i.checkpoint_sequence::text AS validated_sequence, i.pinned_sequence::text AS population_sequence
+        FROM access.derived_generation g
         LEFT JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE g.family = 'discovery' AND g.scope_key = $1 AND
           (g.state = 'building' OR (g.id = $2 AND g.state = 'ready'))
@@ -314,6 +319,7 @@ export class DiscoveryRefreshStore {
       const row = {
         ...(await generation(client, pending.id)),
         validated_sequence: pending.validated_sequence ?? null,
+        population_sequence: pending.population_sequence,
       };
       // A build outlives judged Statements after its basis; only a wide change
       // or recovery makes it obsolete.

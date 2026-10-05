@@ -105,6 +105,48 @@ test('discovery activates under a steady stream of unrelated votes and shelf cha
     expect(delta.changed_works).toEqual([work.work]);
     expect(delta.storage_generation).toBe(built);
     expect((await projection.page(delta, 'recent', '', '', 20)).map(row => row.work)).toContain(work.work);
+
+    // Relevant graph writes continue between every fenced tick. Use legal
+    // one-Work checkpoints so both the initial scan and catch-up span ticks.
+    await f.publicWork(writer.actor, ['en'], 'First pending discovery Work');
+    await f.publicWork(writer.actor, ['en'], 'Second pending discovery Work');
+    const drain = async () => {
+      for (let i = 0; i < 100; i++) {
+        if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) return;
+      }
+      throw new Error('Fixture relay exceeded its batch bound');
+    };
+    await drain();
+    const commit = projection.commitBatch.bind(projection);
+    projection.commitBatch = (operator, id, lease, checkpoint, result, at) => {
+      if (result.items.length <= 1) return commit(operator, id, lease, checkpoint, result, at);
+      return commit(operator, id, lease, checkpoint,
+        { items: result.items.slice(0, 1), after: result.items[0]!.work, complete: false }, at);
+    };
+    let lastWrite = work.work;
+    const relevant: string[] = [];
+    try {
+      while (relevant.at(-1) !== 'activated') {
+        relevant.push(await tick());
+        expect(relevant.length).toBeLessThanOrEqual(6);
+        lastWrite = (await f.publicWork(writer.actor, ['en'], 'A later discovery Work')).work;
+        await drain();
+      }
+    } finally { projection.commitBatch = commit; }
+    expect(relevant.length).toBeGreaterThan(2);
+    const cut = await projection.active(basis, (await position.read())!);
+    expect(cut.stale).toBe(true);
+    expect(cut.covered_sequence).toBe(cut.source_sequence);
+    expect(BigInt(cut.covered_sequence!)).toBeLessThan(BigInt((await position.read())!.sequence));
+    expect((await f.accessPool.query<{ checkpoint: string }>(`SELECT checkpoint_sequence::text AS checkpoint
+      FROM access.derived_generation_input WHERE generation_id=$1 AND source='main-graph'`,
+    [cut.generation_id])).rows[0]!.checkpoint).toBe(cut.source_sequence);
+    expect((await projection.page(cut, 'recent', '', '', 20)).map(row => row.work)).not.toContain(lastWrite);
+    // The following refresh covers the later births without skipping them.
+    expect(await tick()).toBe('activated');
+    const current = await projection.active(basis, (await position.read())!);
+    expect(current.stale).toBe(false);
+    expect((await projection.page(current, 'recent', '', '', 20)).map(row => row.work)).toContain(lastWrite);
   } finally {
     // The graph is shared by the shard; remove the fixture Statement.
     if (judgedStatement) await f.fuseki.update(
