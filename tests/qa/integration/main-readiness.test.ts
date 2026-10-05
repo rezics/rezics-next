@@ -44,7 +44,9 @@ test('OPS01: host Main work readiness accepts the pinned live command module', a
     expect(live?.status).toBe(200);
     const ready = await fetch(`${base}/health/ready`, { signal: AbortSignal.timeout(10_000) });
     expect(ready.status).toBe(200);
-    expect(await ready.json()).toEqual({ status: 'ready' });
+    // Readiness also reports horizon consumers' lag (write-concurrency G-1201).
+    expect(await ready.json()).toMatchObject({ status: 'ready',
+      horizons: { notification: expect.any(Object), editorial: expect.any(Object) } });
     passed = true;
   } finally {
     main.kill('SIGTERM');
