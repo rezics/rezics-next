@@ -7,7 +7,7 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/counting-fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -56,15 +56,6 @@ export function png(width: number, height: number, payload = 64): Uint8Array {
   return new Uint8Array(Buffer.concat([header, randomBytes(payload)]));
 }
 
-/** Counts Main-to-Fuseki queries so tests can assert fixed per-batch graph round trips. */
-class CountingFuseki extends FusekiClient {
-  queries = 0;
-  override async query(sparql: string, maxBytes?: number): Promise<SparqlResult> {
-    this.queries++;
-    return super.query(sparql, maxBytes);
-  }
-}
-
 class CountingMediaAccess extends MediaAccessBatchReader {
   batches = 0;
   override async canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[]) {
@@ -88,6 +79,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const directory = join(root, '.temp', `${label}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const fuseki = new CountingFuseki(Bun.env.FUSEKI_URL);
+  attributeDirectoryRefreshQueries();
   // The graph is shared by the shard, so immutable manifests must survive this
   // fixture too. The runner removes both owners when it resets the QA stack.
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,

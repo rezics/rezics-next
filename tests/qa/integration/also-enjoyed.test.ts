@@ -52,7 +52,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       ${author(sameAuthor.work, `https://rezics.com/id/${randomUUID()}`)}
     }`);
     const store = new AlsoEnjoyedStore(stack.accessPool, stack.contentPool);
-    const principals = new Map([[manager.token, manager.principal]]);
+    const principals = new Map<string, typeof manager.principal>([[manager.token, manager.principal]]);
     const deps = { environment: stack.env, access: stack.access, media: stack.media,
       alsoEnjoyed: store, account: { verify: async (request: Request) => {
         const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
@@ -83,7 +83,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     let churn = 0;
     stack.fuseki.query = async (sparql, bytes) => {
       const result = await originalQuery(sparql, bytes);
-      if (sparql.includes('SELECT ?epoch ?sequence WHERE')) {
+      if (!stack.fuseki.isBackgroundContext && sparql.includes('SELECT ?epoch ?sequence WHERE')) {
         const index = ++churn;
         await fusekiReadBudget.exit(() => stack.privateWork(manager.actor, `Concurrent private Work ${index}`));
       }
@@ -110,7 +110,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     let erased = false;
     stack.fuseki.query = async (sparql, bytes) => {
       const result = await originalQuery(sparql, bytes);
-      if (!erased && sparql.includes('SELECT ?work ?head ?main ?type WHERE')) {
+      if (!stack.fuseki.isBackgroundContext && !erased && sparql.includes('SELECT ?work ?head ?main ?type WHERE')) {
         erased = true;
         await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { ${erasure} }`);
       }

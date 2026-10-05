@@ -325,7 +325,7 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     let invalidated = false;
     stack.fuseki.query = async (sparql, maxBytes) => {
       const result = await originalQuery(sparql, maxBytes);
-      if (!invalidated && sparql.includes('SELECT ?epoch ?sequence ?hold ?r')) {
+      if (!stack.fuseki.isBackgroundContext && !invalidated && sparql.includes('SELECT ?epoch ?sequence ?hold ?r')) {
         invalidated = true;
         await stack.accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [outsider.principalId]);
       }
