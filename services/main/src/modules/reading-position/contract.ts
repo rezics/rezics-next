@@ -1,6 +1,8 @@
 import { t } from 'elysia';
 import { readId, readPosition } from '../work/read-contract.ts';
 
+export const readingPositionQuery = t.Optional(t.Union([readId, t.Literal('all'), t.Literal('mine'), t.Literal('start')]));
+
 /** Legacy wiki-boundary budgets, retained in the served cost metadata.
  * The chooser uses READING_CHOOSER_COST's bounded seeks; occurrences is not a
  * chooser inventory ceiling. Search and ordering run before each store limit. */

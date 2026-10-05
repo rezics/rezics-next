@@ -3,6 +3,8 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { sourcePosition } from '../../api-contract.ts';
 import { readId, readLanguage, readPosition } from '../work/read-contract.ts';
+import { readingPositionQuery } from '../reading-position/contract.ts';
+import { REVELATION_COST } from '../reading-position/store.ts';
 
 export const PROJECTION_PROFILE = 'https://rezics.com/definition/projection-v1';
 export const PROJECTION_ACTION = 'projection.create';
@@ -30,6 +32,7 @@ export const PROJECTION_COST = {
   listSelectors: 2, identityReadsPerBatch: 1, frameMembershipsPerIdentity: MAX_FRAMES,
   visibilityBatches: 2,
   partPagesPerListPage: Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64),
+  revelationBatchesPerListPage: Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 2) / REVELATION_COST.batch),
 } as const;
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -93,7 +96,7 @@ export const projectionRequest = t.Object({ subject: readId,
 export const projectionQuery = t.Object({ subject: t.Optional(readId), frame: t.Optional(readId),
   frames: t.Optional(t.Array(readId, { minItems: 1, maxItems: MAX_FRAMES })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE })), cursor: t.Optional(t.String({ maxLength: 2048, pattern: '^[\\w-]+$' })),
-  language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false });
+  language: t.Optional(readLanguage), actingSubject: t.Optional(readId), position: readingPositionQuery }, { additionalProperties: false });
 export const projectionWriteResponse = t.Object({ projection: projectionView, created: t.Boolean(),
   replayed: t.Boolean(), sourcePosition }, { additionalProperties: false });
 export const projectionPage = t.Object({ items: t.Array(projectionView, { maxItems: MAX_PAGE }),

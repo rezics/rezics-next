@@ -91,6 +91,7 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
         { key: 'performer', minParticipants: 1, maxParticipants: 1, ordered: false },
         { key: 'character', minParticipants: 1, maxParticipants: 63, ordered: false },
       ] });
+    await f.grant(`semantic:read:${relationDefinition.component}`, 'semantic.read');
     const performer = await createResource();
     const otherPerformer = await createResource();
     const characters = await Promise.all(Array.from({ length: 3 }, createResource));
@@ -253,7 +254,9 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     const claims = await f.json<{ claims: Array<{ statement: string; speaker: string; evidence: string[];
       meaningBasis: { state: string; context?: string; interpretationDefinitions?: string[] };
       decisions: Array<{ acceptanceContext: string; outcome: string }> }> }>(measuredClaims.response, 200);
-    expect(measuredClaims.graphQueries).toBe(2);
+    // Two graph-position fences, lineage and candidate reads, one projection
+    // expansion and one revelation batch, independent of the three claims.
+    expect(measuredClaims.graphQueries).toBe(6);
     const personalResult = claims.claims.find(claim => claim.statement === personalClaim.statement)!;
     const realmResult = claims.claims.find(claim => claim.statement === realmClaim.statement)!;
     expect(personalResult).toMatchObject({ speaker: personalClaim.speaker, evidence: [personalClaim.evidence],

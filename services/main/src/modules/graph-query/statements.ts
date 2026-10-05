@@ -50,6 +50,7 @@ function queryText(input: StatementGraphQuery, epoch: string): string {
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?statement rv:interpretationDefinition ?definition } }
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?statement rv:applicability ?app } }
         OPTIONAL {
+          GRAPH ${iri(GRAPHS.current)} { ?statement rv:semanticContextRevision ?pin }
           GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?context . }
           GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure . }
         }
@@ -85,9 +86,10 @@ function queryText(input: StatementGraphQuery, epoch: string): string {
     ORDER BY STR(?statement)`;
 }
 
-function statementQueryDigest(input: StatementGraphQuery): string {
+function statementQueryDigest(input: StatementGraphQuery, readingBinding?: readonly unknown[]): string {
   return hash(JSON.stringify({ profile: input.profile, actingSubject: input.actingSubject,
-    anchor: input.anchor, direction: input.direction, predicate: input.predicate ?? null }));
+    anchor: input.anchor, direction: input.direction, predicate: input.predicate ?? null,
+    position: input.position ?? 'mine', readingBinding: readingBinding ?? null }));
 }
 
 function values(value: string | undefined, max: number): string[] {
@@ -101,10 +103,12 @@ function values(value: string | undefined, max: number): string[] {
 
 /** One bounded ARQ join returns a claim with its exact speaker, Context pin and evidence. */
 export async function queryStatementGraph(env: WorkActivationEnvironment,
-  authority: GraphReadAuthority & { canReadPrivateContext: (context: string) => Promise<boolean> },
+  authority: GraphReadAuthority & { canReadPrivateContext: (context: string) => Promise<boolean>;
+    visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
+    readingBinding?: readonly unknown[] },
   raw: StatementGraphQuery) {
   const input = checkedStatementGraphQuery(raw);
-  const digest = statementQueryDigest(input);
+  const digest = statementQueryDigest(input, authority.readingBinding);
   if (input.continuation && (input.continuation.expiresAt <= Date.now()
     || input.continuation.queryDigest !== digest
     || input.continuation.sourcePosition.dataEpoch !== env.lineage.dataEpoch)) {
@@ -128,11 +132,17 @@ export async function queryStatementGraph(env: WorkActivationEnvironment,
   }
   const rawClaims = bindings.filter(row => row.statement);
   if (rawClaims.length > PROBE) throw new GraphQueryUnavailable('statement query exceeded its result bound');
+  const revealed = authority.visibleRecords ? await authority.visibleRecords([input.anchor, ...rawClaims.flatMap(row =>
+    [...[row.statement?.value, row.subject?.value, row.object?.value].filter((ref): ref is string => ref !== undefined),
+      ...values(row.applicability?.value, 8)])]) : null;
+  if (revealed && !revealed.has(input.anchor)) throw new GraphQueryNotFound('graph anchor is unavailable');
   const claims: Array<Record<string, unknown> & { statement: string }> = [];
   const readable = new Map<string, boolean>();
   for (const row of rawClaims) {
     if (!row.statement || !row.head || !row.subject || !row.predicate || !row.object || !row.relation
       || !row.speaker || !row.key) throw new GraphQueryUnavailable('statement binding is incomplete');
+    if (revealed && [row.statement.value, row.subject.value, row.object.value,
+      ...values(row.applicability?.value, 8)].some(ref => !revealed.has(ref))) continue;
     const neighbor = input.direction === 'outgoing' ? row.object.value : row.subject.value;
     if (!readable.has(neighbor)) readable.set(neighbor, await authority.canReadResource(neighbor));
     if (!readable.get(neighbor)) continue;

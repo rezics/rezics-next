@@ -8,6 +8,11 @@ import { InvalidGraphQuery } from '../modules/graph-query/schema.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { boundedReadingPositionRead } from '../modules/reading-position/read.ts';
+import { revealedGraphRecords } from '../modules/graph/reading.ts';
+import { readingPositionQuery } from '../modules/reading-position/contract.ts';
+import { workReadError } from './work-reads.ts';
+import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const anchor = t.Union([
@@ -38,6 +43,7 @@ const statementRequest = t.Object({ profile: t.Literal('statement-graph-v1'), ac
   anchor: native, direction: t.Union([t.Literal('outgoing'), t.Literal('incoming')]),
   predicate: t.Optional(t.String({ pattern: '^https?://[^\\s<>"{}|\\\\^`]{1,2040}$' })),
   continuation: t.Optional(statementContinuation),
+  position: readingPositionQuery,
 }, { additionalProperties: false });
 const request = t.Union([relationRequest, statementRequest]);
 const edge = t.Object({ occurrence: native, revision: native, definition: native,
@@ -84,6 +90,8 @@ function graphQueryError(error: unknown): Response {
     return problem(409, 'graph_continuation_restart', 'Graph query source changed; restart at the first page');
   }
   if (error instanceof GraphQueryUnavailable) return problem(503, 'graph_query_unavailable', 'Graph query state is unavailable');
+  if (error instanceof WorkReadInvalid || error instanceof WorkReadMissing
+    || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable) return workReadError(error);
   return commandError(error);
 }
 
@@ -118,13 +126,19 @@ export function graphQueryRoutes(work: MainWorkDependencies) {
       }
       const selections = (work as MainWorkDependencies & GraphRouteDependencies).contextSelections;
       let contextPrincipal: Promise<Awaited<ReturnType<typeof work.account.verify>> | null> | undefined;
-      const result = await queryStatementGraph(work.environment, { canReadResource: canRead,
+      const positionUrl = new URL(webRequest.url);
+      // POST selection comes from the body; ignore a competing URL query value.
+      positionUrl.searchParams.set('position', body.position ?? 'mine');
+      const positionRequest = new Request(positionUrl, { headers: webRequest.headers, signal: webRequest.signal });
+      const result = await boundedReadingPositionRead(work, positionRequest, principal, body.actingSubject, async boundary =>
+        queryStatementGraph(work.environment, { canReadResource: canRead,
+        readingBinding: await boundary.binding(), visibleRecords: records => revealedGraphRecords(boundary, records),
         canReadPrivateContext: async context => {
           if (!selections) return false;
           contextPrincipal ??= work.account.verify(webRequest, ['context:read']).catch(() => null);
           const verified = await contextPrincipal;
           return !!verified && selections.canReadPrivate(verified, body.actingSubject, context);
-        } }, body);
+        } }, body));
       return Response.json(result, { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return graphQueryError(error); }
   });

@@ -1,13 +1,13 @@
 import { Elysia, t } from 'elysia';
-import { readId, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, decodeReadCursor, encodeReadCursor } from '../modules/work/read-session.ts';
 import { readingBoundary, READING_POSITION_COST } from '../modules/reading-position/boundary.ts';
 import { normalizePositionQuery } from '../modules/reading-position/store.ts';
-import { readingPositionPage } from '../modules/reading-position/contract.ts';
+import { readingPositionPage, readingPositionQuery } from '../modules/reading-position/contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
-export const readingPositionQuery = t.Optional(t.Union([readId, t.Literal('all'), t.Literal('mine'), t.Literal('start')]));
+export { readingPositionQuery } from '../modules/reading-position/contract.ts';
 export const openApiOperations = { '/v1/reading-positions/{work}': { get: { bearer: false } } } as const;
 export function readingPositionsRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/reading-positions/:work', { params: t.Object({ work: readUuid }),

@@ -1,5 +1,8 @@
 import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS, MAX_SEARCH_RESPONSE_BYTES,
   PHRASE_HIT_PROBE } from '../work/search-readiness.ts';
+import { WORK_READ_COST } from '../work/read-contract.ts';
+import { MAX_FRAMES } from '../projection/schema.ts';
+import { REVELATION_COST } from '../reading-position/store.ts';
 
 /** Relation graph reads never walk more than one admitted occurrence page. */
 export const GRAPH_QUERY_LIMITS = {
@@ -32,8 +35,13 @@ export const GRAPH_QUERY_COST = {
     graphQueries: 2, // lineage plus one bounded grouped ARQ read
     maxCandidates: GRAPH_QUERY_LIMITS.candidates,
     maxResponseBytes: MAX_SEARCH_RESPONSE_BYTES,
-    maxFusekiCalls: 2,
-    maxFusekiBytes: MAX_SEARCH_RESPONSE_BYTES,
+    // ReadingBoundary's bounded traversal uses the ordinary position-read ceilings.
+    maxFusekiCalls: WORK_READ_COST.graphCalls,
+    maxFusekiBytes: WORK_READ_COST.graphBytes,
+    projectionPartQueries: 1,
+    readingFenceQueries: 2,
+    recordsPerCandidate: 3 + MAX_FRAMES, // Statement, endpoints and applicability coordinates
+    revelationBatches: Math.ceil((GRAPH_QUERY_LIMITS.candidates * (3 + MAX_FRAMES + 2 * (MAX_FRAMES + 1)) + 1) / REVELATION_COST.batch),
     maxRequestMs: GRAPH_QUERY_READ_LIMITS.requestMs,
     resourceAccessChecks: GRAPH_QUERY_LIMITS.candidates + 3,
     privateContextAccessChecks: GRAPH_QUERY_LIMITS.candidates,
@@ -81,6 +89,7 @@ export interface StatementGraphQuery {
   anchor: string;
   direction: 'outgoing' | 'incoming';
   predicate?: string;
+  position?: string;
   continuation?: StatementGraphContinuation;
 }
 
@@ -124,6 +133,7 @@ export function checkedStatementGraphQuery(input: StatementGraphQuery): Statemen
   if (input.profile !== 'statement-graph-v1'
     || !nativeId.test(input.actingSubject) || !nativeId.test(input.anchor)
     || !['outgoing', 'incoming'].includes(input.direction)
+    || (input.position !== undefined && !['mine', 'all', 'start'].includes(input.position) && !nativeId.test(input.position))
     || (input.predicate !== undefined && !/^https?:\/\/[^\s<>"{}|\\^`]{1,2040}$/u.test(input.predicate))
     || (input.continuation !== undefined && (!input.continuation
       || !/^[0-9a-f]{64}$/u.test(input.continuation.queryDigest)

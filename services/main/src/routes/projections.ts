@@ -11,6 +11,7 @@ import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
+import { readingBoundary } from '../modules/reading-position/boundary.ts';
 
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
@@ -62,11 +63,13 @@ export function projectionRoutes(deps: MainWorkDependencies) {
         }
         if (!query.subject && !query.frame) return problem(400, 'invalid_projection', 'A subject or frame is required');
         const result = await workRead(deps, request, query, async session => {
+          const boundary = readingBoundary(session);
           const page = query.frames !== undefined
-            ? await lookupProjection(session, store, { subject: query.subject!, frames: query.frames })
+            ? await lookupProjection(session, store, { subject: query.subject!, frames: query.frames }, boundary)
               .then(found => ({ items: found ? [found] : [], nextCursor: null }))
             : await listProjections(session, store, { subject: query.subject, frame: query.frame, cursor: query.cursor ?? null,
-              limit: query.limit ?? MAX_PAGE });
+              limit: query.limit ?? MAX_PAGE }, boundary);
+          await boundary.fence();
           return { ...page, sourcePosition: session.position };
         });
         return Response.json(result, { headers });

@@ -60,9 +60,11 @@ test('the request and response contracts are closed and bounded', () => {
 
 test('frame membership and exact frame-set lookup have distinct bounded contracts', () => {
   for (const query of [{ frame: a }, { subject }, { frame: a, subject, cursor: id(8).slice(-36), limit: 1 },
-    { subject, frames: [a, b] }]) expect(Value.Check(projectionQuery, query)).toBe(true);
+    { subject, frames: [a, b] }, ...['mine', 'all', 'start', c].map(position => ({ subject, position }))]) {
+    expect(Value.Check(projectionQuery, query)).toBe(true);
+  }
   for (const query of [{ frame: [a, b] }, { frames: [] }, { frame: a, limit: MAX_PAGE + 1 },
-    { frame: a, extra: true }, { frame: a, cursor: a }]) expect(Value.Check(projectionQuery, query)).toBe(false);
+    { frame: a, extra: true }, { frame: a, cursor: a }, { subject, position: 'chapter 3' }]) expect(Value.Check(projectionQuery, query)).toBe(false);
   expect(PROJECTION_COST.listSelectors).toBe(2);
   expect(PROJECTION_COST.identityReadsPerBatch).toBe(1);
   expect(PROJECTION_COST.frameMembershipsPerIdentity).toBe(MAX_FRAMES);
@@ -117,6 +119,7 @@ test('the cost contract holds for the largest page, whatever exists about the su
   expect(PROJECTION_COST.listLookahead).toBe(1);
   expect(PROJECTION_COST.partPagesPerListPage).toBe(Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64));
   expect(PROJECTION_COST.partPagesPerListPage).toBe(3);
+  expect(PROJECTION_COST.revelationBatchesPerListPage).toBe(5);
   expect(PROJECTION_COST.creationWrites.graphCommands).toBe(1);
 });
 
