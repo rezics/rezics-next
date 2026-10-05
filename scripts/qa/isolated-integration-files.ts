@@ -9,6 +9,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1016-discovery-refresh.test.ts',
   'tests/qa/integration/g-1029-discovery-ready.test.ts',
   'tests/qa/integration/g-1033-discovery-refresh.test.ts',
+  // Discover refresh readiness, retained cursors and rollback likewise own their population and relay history.
+  'tests/qa/integration/g-1063-refresh.test.ts',
   // G-1038 retains a command-created catalogue before independent restores.
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   // M6 replays reference suites that require fresh rating and catalogue inventories.
