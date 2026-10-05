@@ -41,7 +41,7 @@ export function canonical(value: unknown): string {
 /** One bounded Access transaction; interrupted work never returns to the pool half-done. */
 export async function inAccess<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   let client: PoolClient;
-  try { client = await pool.connect(); } catch { throw new RecommendationUnavailable('Access owner is unavailable'); }
+  try { client = await pool.connect(); } catch (cause) { throw new RecommendationUnavailable('Access owner is unavailable', { cause }); }
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
@@ -60,11 +60,23 @@ function normalize(error: unknown): unknown {
     || error instanceof RecommendationStale || error instanceof RecommendationNotReady
     || error instanceof RecommendationMissing || error instanceof RecommendationRestart
     || error instanceof RecommendationUnavailable) return error;
-  const code = (error as { code?: string }).code;
+  const code = error && typeof error === 'object' ? (error as { code?: string }).code : undefined;
   if (code === '23514' || code === '40001' || code === '40P01' || code === '55P03') {
-    return new RecommendationStale('generation state changed concurrently');
+    return new RecommendationStale('generation state changed concurrently', { cause: error });
   }
-  return new RecommendationUnavailable('Access owner is unavailable');
+  return new RecommendationUnavailable('Access owner is unavailable', { cause: error });
+}
+
+/** Operator diagnostics retain the deepest provider failure, including nested adapters. */
+export function recommendationFailureCause(error: unknown): { code?: string; message: string } {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && error.cause !== undefined && !seen.has(error.cause)) {
+    seen.add(error);
+    error = error.cause;
+  }
+  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
+  return { ...(typeof code === 'string' ? { code } : {}),
+    message: error instanceof Error ? error.message : String(error) };
 }
 
 export async function requireRecoveryOpen(client: PoolClient): Promise<void> {

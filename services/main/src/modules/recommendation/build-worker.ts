@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
-import { RecommendationNotReady, RecommendationStale, RecommendationUnavailable }
+import { recommendationFailureCause, RecommendationNotReady, RecommendationStale, RecommendationUnavailable }
   from './derived-generation.ts';
 import { RankingGenerations } from './ranking.ts';
 
@@ -25,6 +25,7 @@ export class RankingBuildWorker {
       try { await this.rankings.refreshPublicRanking(); }
       catch (error) {
         if (!(error instanceof RecommendationStale || error instanceof RecommendationUnavailable)) throw error;
+        this.logDeferred(error);
         recordWorkerOutcome({ outcome: error instanceof RecommendationStale ? 'deferred' : 'retry' });
       }
     }
@@ -35,7 +36,7 @@ export class RankingBuildWorker {
           AND i.data_epoch=$1 ORDER BY g.lease_expires_at, g.id LIMIT 1`, [this.rankings.dataEpoch])).rows[0];
       if (!candidate) return;
       try { this.held = { generation: candidate.id, epoch: await this.rankings.claim(candidate.id) }; }
-      catch (error) { if (error instanceof RecommendationStale) { recordWorkerOutcome({ outcome: 'deferred' }); return; } throw error; }
+      catch (error) { if (error instanceof RecommendationStale) { this.logDeferred(error); recordWorkerOutcome({ outcome: 'deferred' }); return; } throw error; }
     }
     const { generation, epoch } = this.held;
     try {
@@ -46,10 +47,16 @@ export class RankingBuildWorker {
       try { await this.rankings.finish(generation, epoch); this.held = undefined; }
       catch (error) { if (!(error instanceof RecommendationNotReady)) throw error; recordWorkerOutcome({ outcome: 'deferred' }); }
     } catch (error) {
+      this.logDeferred(error);
       if (error instanceof RecommendationStale) { this.held = undefined; recordWorkerOutcome({ outcome: 'deferred' }); }
       else if (!(error instanceof RecommendationUnavailable)) throw error;
       else recordWorkerOutcome({ outcome: 'retry' });
     }
+  }
+
+  private logDeferred(error: unknown): void {
+    if (error instanceof RecommendationUnavailable || error instanceof RecommendationStale && error.cause !== undefined)
+      console.error('ranking build deferred', recommendationFailureCause(error), error);
   }
 
   start(): void {
@@ -57,7 +64,7 @@ export class RankingBuildWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.ranking.build', () => this.tick()).catch(error => {
-        console.error('ranking build tick failed', error);
+        console.error('ranking build tick failed', recommendationFailureCause(error), error);
       }).finally(() => { this.running = undefined; });
     }, this.intervalMs);
   }

@@ -5,6 +5,7 @@ import {
   digest,
   RecommendationRestart,
   RecommendationStale,
+  recommendationFailureCause,
 } from '../recommendation/derived-generation.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import {
@@ -285,13 +286,14 @@ export class DiscoveryRefreshWorker {
           held.step.lease,
         );
       if (
+        (error instanceof RecommendationStale && error.cause !== undefined) ||
         !(
           error instanceof RecommendationRestart ||
           error instanceof RecommendationStale ||
           error instanceof WorkReadMoved
         )
       ) {
-        console.error('discovery refresh deferred', error);
+        console.error('discovery refresh deferred', recommendationFailureCause(error), error);
       }
     }
     await this.store.finish(
@@ -332,7 +334,7 @@ export class DiscoveryRefreshWorker {
         }),
       )
         .catch((error) => {
-          console.error('discovery refresh tick failed', error);
+          console.error('discovery refresh tick failed', recommendationFailureCause(error), error);
         })
         .finally(() => {
           this.running = undefined;

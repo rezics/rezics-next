@@ -122,21 +122,21 @@ export class RankingGenerations {
   private async candidateSnapshot(): Promise<string | null> {
     if (!this.options.zeroSnapshot) return null;
     try { return await this.options.zeroSnapshot(); }
-    catch { throw new RecommendationUnavailable('zero-score source snapshot is unavailable'); }
+    catch (cause) { throw new RecommendationUnavailable('zero-score source snapshot is unavailable', { cause }); }
   }
 
   private async relayHead(): Promise<string> {
     try {
       return (await this.options.relay.query<{ head: string }>(`SELECT coalesce(max(sequence), 0)::text AS head
         FROM relay.delivered_batch WHERE data_epoch = $1`, [this.options.dataEpoch])).rows[0]!.head;
-    } catch { throw new RecommendationUnavailable('relay retention is unavailable'); }
+    } catch (cause) { throw new RecommendationUnavailable('relay retention is unavailable', { cause }); }
   }
 
   private async erasureHead(): Promise<string> {
     try {
       return (await this.options.relay.query<{ head: string }>(`SELECT coalesce(max(erasure_epoch), 0)::text AS head
         FROM relay.erasure`)).rows[0]!.head;
-    } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+    } catch (cause) { throw new RecommendationUnavailable('erasure journal is unavailable', { cause }); }
   }
 
   private async describe(client: PoolClient, generation: string): Promise<GenerationView> {
@@ -338,8 +338,8 @@ export class RankingGenerations {
         i.checkpoint_sequence::text AS checkpoint, g.input_manifest->'source'->>'snapshotTarget' AS target
       FROM access.derived_generation g JOIN access.ranking_generation r ON r.generation_id = g.id
       JOIN access.derived_generation_input i ON i.generation_id = g.id AND i.source = 'main-graph'
-      WHERE g.id = $1 AND g.state = 'building'`, [generation]).catch(() => {
-      throw new RecommendationUnavailable('Access owner is unavailable');
+      WHERE g.id = $1 AND g.state = 'building'`, [generation]).catch((cause) => {
+      throw new RecommendationUnavailable('Access owner is unavailable', { cause });
     })).rows[0];
     if (!basis) throw new RecommendationStale('generation is not building');
     if (basis.data_epoch !== this.options.dataEpoch) {
@@ -374,7 +374,7 @@ export class RankingGenerations {
       }
     } catch (error) {
       if (error instanceof RecommendationStale) throw error;
-      throw new RecommendationUnavailable('relay retention is unavailable');
+      throw new RecommendationUnavailable('relay retention is unavailable', { cause: error });
     }
     const counts = new Map<string, number>();
     for (const event of events) counts.set(event.sequence, (counts.get(event.sequence) ?? 0) + 1);
@@ -449,7 +449,7 @@ export class RankingGenerations {
               WHERE e.kind = 'account' AND e.stage <> 'blocked'`,
           [admissions.map(row => row.account_issuer), admissions.map(row => row.account_subject)]))
             .rows.map(row => `${row.account_issuer}\0${row.account_subject}`));
-        } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+        } catch (cause) { throw new RecommendationUnavailable('erasure journal is unavailable', { cause }); }
       }
       const admitted = signals.filter(signal => {
         const owner = byAdmission.get(signal.admission)!;
@@ -592,7 +592,7 @@ export class RankingGenerations {
         manifest = (await this.options.access.query<{ basis: RankingBasis }>(`SELECT
           input_manifest->'basis' AS basis FROM access.derived_generation
           WHERE id = $1 AND family = 'ranking'`, [generation])).rows[0];
-      } catch { throw new RecommendationUnavailable('Access owner is unavailable'); }
+      } catch (cause) { throw new RecommendationUnavailable('Access owner is unavailable', { cause }); }
       if (manifest?.basis?.semantic && (publicRankingAutomation in context
         || !await this.options.verifySemantic(context, manifest.basis))) {
         throw new RecommendationStale('ranking semantic basis changed');
@@ -658,7 +658,7 @@ export class RankingGenerations {
       if (erasedViewer?.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
     } catch (error) {
       if (error instanceof RecommendationMissing) throw error;
-      throw new RecommendationUnavailable('erasure journal is unavailable');
+      throw new RecommendationUnavailable('erasure journal is unavailable', { cause: error });
     }
     const viewerDigest = digest({ issuer: viewer.principal?.issuer ?? null, subject: viewer.principal?.subject ?? null,
       actingSubject: viewer.actingSubject });
@@ -744,7 +744,7 @@ export class RankingGenerations {
           [topics.generation,topics.concepts,after ?? '',window.generation,scanLimit-rows.length+1])).rows
             .map(row => row.candidate)))
           : await this.options.zeroCandidates!(after, window.zeroSnapshot!, scanLimit - rows.length + 1);
-      } catch { throw new RecommendationUnavailable('zero-score candidate source is unavailable'); }
+      } catch (cause) { throw new RecommendationUnavailable('zero-score candidate source is unavailable', { cause }); }
       rows = [...rows, ...zero.map(candidate => ({ candidate, score: '0' }))];
     }
     const scanned = rows.slice(0, scanLimit);
@@ -756,7 +756,7 @@ export class RankingGenerations {
     const erased = await this.erased(scanned.map(row => row.candidate));
     let unverified: ReadonlySet<string> = new Set();
     try { unverified = await this.options.unverifiedWorks?.(scanned.map(row => row.candidate)) ?? unverified; }
-    catch { throw new RecommendationUnavailable('candidate verification is unavailable'); }
+    catch (cause) { throw new RecommendationUnavailable('candidate verification is unavailable', { cause }); }
     const items: { candidate: string }[] = [];
     let examined: { candidate: string; score: string } | undefined;
     for (const row of scanned) {
@@ -768,7 +768,7 @@ export class RankingGenerations {
       let visible: boolean;
       try {
         visible = viewer.principal ? await this.options.canReadWork(viewer.principal, viewer.actingSubject!, row.candidate) : true;
-      } catch { throw new RecommendationUnavailable('candidate disclosure is unavailable'); }
+      } catch (cause) { throw new RecommendationUnavailable('candidate disclosure is unavailable', { cause }); }
       if (visible) items.push({ candidate: row.candidate });
     }
     const more = examined !== undefined && (examined !== scanned.at(-1) || rows.length > scanLimit);
@@ -786,7 +786,7 @@ export class RankingGenerations {
         `SELECT account_issuer, account_subject FROM relay.erasure
          WHERE kind = 'account' AND stage <> 'blocked' AND erasure_epoch > $1::bigint
          ORDER BY erasure_epoch LIMIT 65`, [since])).rows;
-    } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+    } catch (cause) { throw new RecommendationUnavailable('erasure journal is unavailable', { cause }); }
     if (!erased.length) return;
     if (erased.length > 64) throw new RecommendationRestart('ranking contributor fence needs a rebuild');
     const affected = await inAccess(this.options.access, async client => {
@@ -814,7 +814,7 @@ export class RankingGenerations {
         FROM relay.erasure_target t JOIN relay.erasure e ON e.id = t.erasure_id
         WHERE t.owner = 'graph' AND t.target_kind = 'resource' AND t.target_ref = ANY($1::text[])
           AND e.stage <> 'blocked'`, [candidates])).rows.map(row => row.target_ref));
-    } catch { throw new RecommendationUnavailable('erasure journal is unavailable'); }
+    } catch (cause) { throw new RecommendationUnavailable('erasure journal is unavailable', { cause }); }
   }
 
   /** Bounded retention purge of an expired generation's derived rows. */

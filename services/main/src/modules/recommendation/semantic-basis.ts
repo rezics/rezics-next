@@ -52,6 +52,6 @@ export async function verifyRankingSemanticBasis(env: WorkActivationEnvironment,
     return false;
   } catch (error) {
     if (error instanceof ContextNotFound) return false;
-    throw new RecommendationUnavailable('Context owner is unavailable');
+    throw new RecommendationUnavailable('Context owner is unavailable', { cause: error });
   }
 }
