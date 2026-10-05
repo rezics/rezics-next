@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { bigint, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, integer, jsonb, pgSchema, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import type { LogoAnchor, ShowcaseSlot } from './showcase-contract.ts';
 
 // Media owner tables in Main's Content database. The SQL migration
 // `services/content/migrations/070_media_owner.sql` remains the DDL and trigger
@@ -105,8 +106,13 @@ const use = media.table('use', {
   representationId: uuid('representation_id').notNull(),
   target: text('target').notNull(),
   context: text('context').notNull(),
-  role: text('role').$type<'avatar' | 'publication-item' | 'document-image'>().notNull(),
+  role: text('role').$type<'avatar' | 'publication-item' | 'document-image' | Exclude<ShowcaseSlot, 'showcase-trailer'>>().notNull(),
   crop: text('crop'),
+  focalArea: text('focal_area'),
+  logoAnchor: text('logo_anchor').$type<LogoAnchor>(),
+  orientedWidth: integer('oriented_width'),
+  orientedHeight: integer('oriented_height'),
+  hasAlpha: boolean('has_alpha'),
   actor: text('actor').notNull(),
   operationId: text('operation_id').notNull(),
   createdAt: createdAt(),
@@ -116,8 +122,8 @@ const use = media.table('use', {
 const selectionSlot = media.table('selection_slot', {
   target: text('target').notNull(),
   context: text('context').notNull(),
-  role: text('role').$type<'avatar'>().notNull(),
-  policy: text('policy').$type<'avatar-selection-v1'>().notNull(),
+  role: text('role').$type<'avatar' | ShowcaseSlot>().notNull(),
+  policy: text('policy').$type<'avatar-selection-v1' | 'showcase-selection-v1'>().notNull(),
   head: uuid('head'),
   deliveryHead: uuid('delivery_head'),
 });
@@ -126,9 +132,10 @@ const selectionRevision = media.table('selection_revision', {
   id: uuid('id').primaryKey(),
   target: text('target').notNull(),
   context: text('context').notNull(),
-  role: text('role').$type<'avatar'>().notNull(),
+  role: text('role').$type<'avatar' | ShowcaseSlot>().notNull(),
   predecessor: uuid('predecessor'),
   useId: uuid('use_id'),
+  trailerUrl: text('trailer_url'),
   actor: text('actor').notNull(),
   authorityEpoch: text('authority_epoch').notNull(),
   operationId: text('operation_id').notNull(),

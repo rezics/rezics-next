@@ -104,11 +104,47 @@ crop and focal area, and selections extend the avatar selection slots with
 these roles rather than add a store, under the authority that selects the Work's
 cover. A trailer is a link on the Work, not media.
 
+`PUT /v1/resources/{work}/showcase/art` selects or removes one role with the
+observed `expectedSelection` and an `Idempotency-Key`. It uses the same
+`media:avatar:{work}` scope and `media.avatar` action as the Work's avatar.
+Logo keys use canonical BCP 47 language and tone; changing an anchor replaces
+that key's selection. Anchors are `start-bottom`, `center-top`, `center-middle`
+and `center-bottom`. Crops and optional focal areas use `xywh=percent:` on
+oriented source pixels; a focal area lies within the selected crop. Landscape
+crops must be exactly 16:9 and at least 1280×720; portrait crops must be exactly
+3:4 and at least 960×1280. Logos and cutouts require an alpha channel, including
+an entirely opaque alpha channel. Invalid crop, wrong ratio, insufficient
+resolution and missing alpha return distinct problem codes.
+
+`PUT /v1/resources/{work}/showcase/trailer` uses the same expected-head,
+authority, replay and explicit-null removal rules. YouTube watch, short,
+embed, live and shorts links normalize to `https://www.youtube.com/watch?v=…`;
+Bilibili BV/av and player links normalize to `https://www.bilibili.com/video/…/`,
+retaining a multipart `p` parameter. Tracking parameters are discarded for
+these providers. Other HTTPS URLs remain plain links. Main does not fetch
+links or resolve short-link redirects; credentials and non-HTTPS URLs are
+refused. Equivalent canonical watch URLs bind the same retry intent.
+
 Main derives width renditions (AVIF and WebP) of each selected showcase image
 from its crop when it is selected, and reads return them as `srcset`
 candidates. A rendition never adds a ratio or a selection. The reason is that
 showcase art is the largest image a page loads, and the stage asks for it at
 every width from a phone to a desktop.
+
+`POST /v1/resources/showcase` reads up to 64 Work targets together, preserving
+request order. For each readable Work it returns selected images, their crop,
+focal area and width candidates, each logo's language, tone and anchor, and its
+trailer. Each requested context's role/key wins over the default, including
+explicit removal and hidden art. Hidden or erased art is absent; an unreadable
+Work has only an unavailable descriptor. The batch uses one media query after
+the existing batched target disclosure and Access read, with at most twelve
+candidates per selected image; all selected logo languages are retained.
+Responses revalidate on every read. Selection replacement and removal also
+invalidate the preceding Use's delivery URLs. Pending renditions leave an
+empty candidate list while the admitted original remains available with its
+authored crop. An image's `width`/`height` describe the oriented original URL;
+`cropWidth`/`cropHeight` describe the selected frame. Candidate URLs already
+contain the authored crop and report their own dimensions.
 
 ## Post attachments and preview selection
 

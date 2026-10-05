@@ -2,14 +2,18 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, readProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { selectAdmittedAvatar } from '../modules/media/commands.ts';
+import { selectAdmittedAvatar, selectAdmittedShowcase } from '../modules/media/commands.ts';
+import { showcaseBatchCommand, showcaseBatchResult, showcaseSelectionCommand, showcaseSelectionResult,
+  showcaseTrailerCommand, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from '../modules/media/showcase-contract.ts';
 import { publicAgent } from '../modules/profiles/read.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaMissing } from '../modules/media/store.ts';
 import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
   MAX_SUMMARY_REFERENCE_LENGTH, SUMMARY_REFERENCE_PATTERN, type SummaryReader } from '../modules/media/summary.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readSitemap } from '../modules/disclosure/sitemap.ts';
-import { disclosureViewer } from '../modules/disclosure/viewer.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
+import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
+import { discloseInventory, hasDisclosure, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { mediaError, mediaRoutes } from './media.ts';
@@ -32,6 +36,9 @@ const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unav
 
 export const openApiOperations = {
   '/v1/resources/{resource}/avatar': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/showcase/art': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/showcase/trailer': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/resources/showcase': { post: { bearer: false } },
 } as const;
 
 /** Resource summaries, previews, sitemap and avatar selection, plus the media owner routes. */
@@ -63,14 +70,14 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       : undefined } };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
-    context?: string; language?: string; position?: string }, batch = true) => {
+    context?: string; language?: string; position?: string }, batch = true, includeMedia = true) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const { reader,principal } = await readerFor(request, input.actingSubject, batch);
     const url = new URL(request.url);
     if (input.position !== undefined) url.searchParams.set('position',input.position);
     const selected = new Request(url,{ headers: request.headers,signal: request.signal });
     return boundedReadingPositionRead(work,selected,principal,input.actingSubject,boundary =>
-      readResourceSummaries(work.environment, work.media?.store,
+      readResourceSummaries(work.environment, includeMedia ? work.media?.store : undefined,
       { ...reader,visibleRecords: records => boundary.visible(records) }, { resources: input.resources,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,
         languages: readerLanguages([input.language, request.headers.get('x-rezics-display-languages')]
@@ -82,8 +89,80 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   const headers = (generation: { graph: string; media: string | null }, shared: boolean) => ({
     'cache-control': shared ? 'public, no-cache' : 'private, no-store',
     etag: `"${new Bun.CryptoHasher('sha256').update(JSON.stringify(generation)).digest('hex').slice(0, 32)}"` });
+  const showcaseWrite = async (request: Request,
+    input: (ShowcaseSelectionInput | ShowcaseTrailerInput) & { actingSubject: string }) => {
+    if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+    const key = request.headers.get('idempotency-key');
+    if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key))
+      return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
+    try {
+      // The same target read proof as avatar writes, before independent Access admission.
+      const current = await summarize(request,{ resources:[input.target],actingSubject:input.actingSubject },false,false);
+      const target = current.summaries[0];
+      if (target?.status !== 'available' || target.type !== 'work') return unavailable();
+      const result = await selectAdmittedShowcase(work.environment,work.media,work.account,work.access,request,
+        { ...input,idempotencyKey:key });
+      if (result.outcome === 'stale_head') return Response.json({ type:'https://rezics.com/problems/stale_head',
+        title:'Showcase selection changed',status:409,code:'stale_head',current:result.predecessor,replayed:result.replayed },
+      { status:409,headers:{ 'content-type':'application/problem+json','cache-control':'no-store' } });
+      return Response.json({ target:input.target,selection:result.id,predecessor:result.predecessor,
+        position:result.position,replayed:result.replayed },{ status:result.replayed?200:201,headers:{ 'cache-control':'no-store' } });
+    } catch (error) { return summaryError(error); }
+  };
   return new Elysia()
     .use(mediaRoutes(fuseki, work))
+    .put('/v1/resources/:resource/showcase/art',{ params:t.Object({ resource:uuid }),body:showcaseSelectionCommand,
+      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,404:problemResult(404),422:problemResult(422) } },
+    ({request,params,body}) => {
+      const { profile:_profile,...input } = body;
+      return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT,
+        crop:input.crop??null,focalArea:input.focalArea??null });
+    })
+    .put('/v1/resources/:resource/showcase/trailer',{ params:t.Object({ resource:uuid }),body:showcaseTrailerCommand,
+      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,404:problemResult(404),422:problemResult(422) } },
+    ({request,params,body}) => {
+      const { profile:_profile,...input } = body;
+      return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT });
+    })
+    .post('/v1/resources/showcase',{ body:showcaseBatchCommand,response:{ 200:showcaseBatchResult,...authorizedReadProblems } },
+    async ({request,body}) => {
+      if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+      try {
+        const context = body.context??DEFAULT_MEDIA_CONTEXT;
+        const summaries = await summarize(request,{ resources:body.targets,context,actingSubject:body.actingSubject },true,false);
+        const targets = summaries.summaries.filter(item => item.status === 'available' && item.type === 'work')
+          .map(item => item.reference);
+        const principal = request.headers.get('authorization') ? await work.account.verify(request,['work:read']) : null;
+        const batch = await withDisclosureViewer(principal ? disclosureViewer(principal) : ANONYMOUS_VIEWER,
+          () => work.media!.store.showcase.readBatch(targets,context));
+        const facts: DisclosureTarget[] = [];
+        const indexes = new Map<string, number[]>();
+        for (const item of batch.art.values()) {
+          for (const image of item.images) {
+            indexes.set(image.use,[facts.length,facts.length+1]);
+            facts.push({ owner:'media',resource:`${ID}${image.asset}`,component:'cover',context:image.context,work:item.reference },
+              { owner:'media',resource:`${ID}${image.use}`,component:'media_use',context:image.context,work:item.reference });
+          }
+          if (item.trailer) {
+            indexes.set(item.trailer.selection,[facts.length]);
+            facts.push({ owner:'media',resource:item.reference,component:'media_use',context:item.trailer.context,work:item.reference });
+          }
+        }
+        const decisions = await discloseInventory(work.environment,facts,
+          principal ? disclosureViewer(principal) : ANONYMOUS_VIEWER,'media');
+        for (const item of batch.art.values()) {
+          item.images = item.images.filter(image => indexes.get(image.use)!.every(index => decisions[index]==='visible'));
+          if (item.trailer && !indexes.get(item.trailer.selection)!.every(index => decisions[index]==='visible')) item.trailer=null;
+        }
+        const governed = hasDisclosure(work.environment) && facts.length>0;
+        return Response.json({ profile:'work-showcase-batch-v1',complete:true,
+          items:body.targets.map(reference => batch.art.get(reference)??{ reference,status:'unavailable' }),
+          generation:{ ...summaries.generation,media:batch.generation },
+          cost:{ ...summaries.cost,mediaQueries:summaries.cost.mediaQueries+1,
+            graphQueries:summaries.cost.graphQueries+(governed?1:0),
+            disclosureQueries:governed?Math.ceil(facts.length/64):0 } },{ headers:{ 'cache-control':'private, no-store' } });
+      } catch (error) { return summaryError(error); }
+    })
     .get('/v1/resources/:resource', {
       params: t.Object({ resource: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId), context: t.Optional(context),

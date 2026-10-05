@@ -1,6 +1,6 @@
 # Media owner
 
-Media identity, upload/transform workflow and avatar selection live in Main's
+Media identity, upload/transform workflow and avatar/showcase selection live in Main's
 Content PostgreSQL database under the `media` schema
 (`services/content/migrations/070_media_owner.sql`). `typed-schema.ts` declares
 the same tables for typed queries. Bytes live in the configured object bucket.
@@ -28,8 +28,9 @@ bases and activation fences live in the owner migrations and their tests.
 responsive bytes for one authored crop, including transparent logos and cutouts.
 The media owner calls
 [requestUseRenditions](../media-rendition/request.ts) after admitting an exact
-Use. Selection commands do not call it yet; showcase and slide selection owners
-will wire that producer. It shares retained jobs across Uses of the same source
+Use. Showcase selection calls it before sealing its admitted outcome. A retry
+after a committed selection repairs interrupted queueing; a replaced, removed or
+unavailable source needs no new work. It shares retained jobs across Uses of the same source
 and crop, rather than creating another selection or asset revision.
 
 Main runs the [rendition worker](../media-rendition/worker.ts) beside its existing
@@ -106,6 +107,8 @@ check at request time. Valid replacements become deliverable immediately; NSFW a
 | Activate bytes | `PUT /v1/media/uploads/{upload}/bytes` | `media.upload.settle`, then `draft.save` | ≤ 8 MiB read once; 2 object creates and 1 read-back; 2 PG transactions; ≤ 4 CAS attempts |
 | Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
 | Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
+| Showcase art/trailer CAS | `PUT /v1/resources/{work}/showcase/{art\|trailer}` | `media.selection.change` | 1 target summary read, 1 avatar Access admission, 1 PG transaction; an image adds one bounded object inspection and the rendition request |
+| Showcase batch | `POST /v1/resources/showcase` | none | ≤ 64 targets, existing graph/Access summary batch without avatars, 1 media query; ≤ 12 candidates per selected image |
 | Image-only body | `POST /v1/media/publications` | `media.use.create`, then `draft.save` | ≤ 16 items; 1 basis query, 2 PG transactions, 1 Access seal |
 | Summaries | `GET /v1/resources/{id}`, `POST /v1/resources/summaries`, `GET /v1/public-previews/{id}` | none | 2 graph queries (lineage and batch), 1 media query, ≤ 1 Access batch query for ≤ 64 Works |
 | Sitemap | `GET /v1/sitemap` | none | 1 graph query per page of 500. The keyset still orders all public Works, a scan over P |
@@ -123,6 +126,43 @@ Extension, for a new PG-owned media command:
    - stale CAS with its receipt;
    - owner rows.
 6. Add a lost-stage case to `tests/qa/fault-recovery/media-recovery.test.ts`.
+
+## Showcase selection extension
+
+[showcase-store.ts](showcase-store.ts) extends the same slot/revision/Use records
+and CAS triggers in Content migration 770. Slot roles name landscape, portrait,
+cutout and trailer; a logo role includes its canonical language and tone, so an
+anchor is replaceable value rather than identity. The trailer revision carries
+its URL and no Use. No graph-owned Work link or second media document is added.
+All commands retain the avatar scope/action/receipt family. Stale receipts keep
+the observed head in their outbox payload so later replay reports that same
+outcome after subsequent writes.
+
+The existing bounded child inspector reports orientation and alpha from exact
+digest-verified bytes. Admission uses the rendition worker's
+[pixel crop](../media-rendition/policy.ts), backed by the
+[Media Fragments spatial selector](https://www.w3.org/TR/media-frags/#naming-space)
+and [Sharp metadata](https://sharp.pixelplumbing.com/api-input/). The selected
+Use keeps inspected oriented dimensions, crop and focal area. Ratio and minimum
+resolution apply to cropped pixels, not the un-oriented container header.
+
+`SHOWCASE_BATCH_SQL` performs two indexed context ranges per disclosed target,
+then exact head/Use/source probes and at most twelve candidate probes per image.
+Its cost is O(B log S + K·C log R), with B≤64, C≤12 and K the selected slots of
+these Works, including every logo language; output is O(K·C). It never scans
+selection history or makes per-target round trips. A requested role/key wins
+even if removed or unreadable, leaving other keys free to use the default.
+The representation byte route rechecks current selection membership for a
+showcase Use, besides its existing target disclosure and exact byte clearance.
+Both batch descriptors and metadata/bytes pass asset and Use references through
+the shared media disclosure gate. These are pages of 64 policy targets, with
+one graph head batch for the distinct owning Works; the batch's
+`cost.disclosureQueries` reports those added policy pages separately.
+The reused Access batch reader has one transaction for explicit private Work
+grants. Its baseline-author fallback still calls `authorWorkGeneration` for each
+remaining Work, adding per-Work SQL and graph proof round trips. The single
+media query does not settle that broader disclosure-path cost.
+The integration journey is [showcase-art.test.ts](../../../../../tests/qa/integration/showcase-art.test.ts).
 
 ## Required wiring outside this module
 

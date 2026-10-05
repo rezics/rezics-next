@@ -38,7 +38,7 @@ async function transform(): Promise<void> {
     if (!process.send) throw new Error('missing rendition parent');
     const plan = JSON.parse(process.argv[3]!) as RenditionPlan | null;
     if (plan === null) {
-      process.send({ ...size, type: null, byteLength: 0, sha256: null });
+      process.send({ ...size, hasAlpha: metadata.hasAlpha, type: null, byteLength: 0, sha256: null });
       return;
     }
     const profile = parseProfile(plan.profile);
@@ -61,6 +61,7 @@ async function transform(): Promise<void> {
     process.send({
       width: info.width,
       height: info.height,
+      hasAlpha: metadata.hasAlpha,
       type: profile.type,
       byteLength: data.length,
       sha256: createHash('sha256').update(data).digest('hex'),

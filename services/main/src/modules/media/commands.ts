@@ -12,6 +12,10 @@ import { ImageFormatRejected, verifyImage } from './image.ts';
 import { validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
 import { receiptFamilies } from './receipt-family.ts';
+import { LocalImageTransformer } from '../media-rendition/transform.ts';
+import { requestUseRenditions } from '../media-rendition/request.ts';
+import { RENDITION_LIMITS } from '../media-rendition/policy.ts';
+import { normalizeTrailer, showcaseSlot, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from './showcase-contract.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
   MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
   MediaUnavailable,
@@ -210,6 +214,40 @@ export function selectAdmittedAvatar(env: WorkActivationEnvironment, media: Medi
     action: 'media.avatar', actingSubject, idempotencyKey, digest: avatarDigest(selection),
     operation: id => `media-avatar:${id}`, accountScope: 'work:edit' },
   media.store, admission => media.store.selectAvatar(admission, selection));
+}
+
+/** Showcase art and trailers use exactly the Work avatar scope/action and its
+ * retained Content receipt family. Queueing is retryable before Access seals. */
+export function selectAdmittedShowcase(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: (ShowcaseSelectionInput | ShowcaseTrailerInput) & { actingSubject: string; idempotencyKey: string }) {
+  const { actingSubject,idempotencyKey,...raw } = input;
+  const selection = 'url' in raw ? { ...raw,url: normalizeTrailer(raw.url)?.url ?? null }
+    : { ...raw,...(raw.role === 'logo' ? { language: showcaseSlot(raw).split(':')[1] } : {}) };
+  if (!('url' in selection)) showcaseSlot(selection);
+  return admitted(env,account,access,request,{ scope: avatarScope(selection.target),action:'media.avatar',
+    actingSubject,idempotencyKey,digest:sha256(stable({ family:'media-showcase-v1',...selection })),
+    operation:id=>`media-avatar:${id}`,accountScope:'work:edit' },media.store,async admission => {
+    const result = await media.store.showcase.select(admission,selection,async basis => {
+      const bytes = await media.objects(basis.namespace).get(basis.digest);
+      if (bytes.length > RENDITION_LIMITS.bytes || sha256(bytes) !== basis.digest)
+        throw new MediaUnavailable('showcase source integrity differs');
+      try { return await new LocalImageTransformer().inspect(bytes,basis.mediaType); }
+      catch { throw new MediaInvalid('showcase requires a decodable still image'); }
+    });
+    if (result.outcome === 'succeeded' && result.id && !('url' in selection)) {
+      const use = await media.store.showcase.renditionUse(result.id);
+      if (use) {
+        try { await requestUseRenditions(media.store.renditions,media.objects,use); }
+        catch (error) {
+          // A lifecycle change after selection retires derivative work. Other
+          // queue failures remain retryable through the retained selection.
+          if (!(error instanceof MediaMissing)) throw new MediaUnavailable('showcase rendition request is awaiting retry');
+        }
+      }
+    }
+    return result;
+  });
 }
 
 export function changeAdmittedMediaField(env: WorkActivationEnvironment, media: MediaDependencies,

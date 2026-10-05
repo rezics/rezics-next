@@ -148,6 +148,9 @@ export class MediaPresentationStore {
       LEFT JOIN media.field_revision cr ON cr.id = c.value_head
       WHERE p.availability = 'available' AND s.lifecycle = 'active' AND s.moderation = 'none'
         AND media.delivery_clearance(p) = 'cleared' AND (q.use IS NULL OR u.id IS NOT NULL)
+        AND (u.role IS NULL OR u.role NOT LIKE 'showcase-%' OR EXISTS (
+          SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision current ON current.id=slot.head
+          WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND current.use_id=u.id))
       ORDER BY q.ordinality`, [JSON.stringify(refs)])).rows;
     const byIndex = new Map(rows.map(row => [Number(row.ordinality) - 1, row]));
     return refs.map((ref, index) => {

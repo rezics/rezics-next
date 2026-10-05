@@ -11,7 +11,7 @@ import {
 } from './policy.ts';
 
 export interface ImageTransformer {
-  inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize>;
+  inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize & { hasAlpha?: boolean }>;
   transform(
     bytes: Uint8Array,
     mediaType: string,
@@ -23,7 +23,7 @@ export class LocalImageTransformer implements ImageTransformer {
   constructor(private readonly timeoutMs: number = RENDITION_LIMITS.timeoutMs) {
     checkDeadline(timeoutMs);
   }
-  async inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize> {
+  async inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize & { hasAlpha: boolean }> {
     return transformInProcess(bytes, mediaType, null, this.timeoutMs, signal);
   }
   async transform(
@@ -42,6 +42,7 @@ function checkDeadline(timeoutMs: number): void {
     throw new Error('invalid rendition deadline');
 }
 interface ProcessReport extends ImageSize {
+  hasAlpha: boolean;
   type: RenditionType | null;
   byteLength: number;
   sha256: string | null;
@@ -51,6 +52,7 @@ function report(message: unknown, plan: RenditionPlan | null): ProcessReport {
   const value = message as ProcessReport;
   checkSize(value);
   if (
+    typeof value.hasAlpha !== 'boolean' ||
     !Number.isInteger(value.byteLength) ||
     value.byteLength < 0 ||
     value.byteLength > RENDITION_LIMITS.bytes ||
@@ -75,7 +77,7 @@ export async function transformInProcess(
   timeoutMs: number,
   signal?: AbortSignal,
   entryPoint = new URL('./transform-process.ts', import.meta.url),
-): Promise<ImageSize & { bytes: Uint8Array; type: RenditionType | null }> {
+): Promise<ImageSize & { bytes: Uint8Array; type: RenditionType | null; hasAlpha: boolean }> {
   checkDeadline(timeoutMs);
   signal?.throwIfAborted();
   if (
@@ -153,7 +155,7 @@ export async function transformInProcess(
       (plan && createHash('sha256').update(data).digest('hex') !== result.sha256)
     )
       throw new Error('local image transform unavailable');
-    return { width: result.width, height: result.height, type: result.type, bytes: data };
+    return { width: result.width, height: result.height, type: result.type, bytes: data, hasAlpha: result.hasAlpha };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', kill);

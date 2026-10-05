@@ -12,6 +12,7 @@ import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAd
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
   mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
 import type { MetadataRef } from '../modules/media/presentation.ts';
+import { ShowcaseRefused } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
@@ -22,6 +23,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
+import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -47,6 +49,7 @@ const commandResult = t.Object({ outcome: t.String(), id: t.Nullable(t.String())
 
 /** Media errors first; everything else keeps the shared command mapping. */
 export function mediaError(error: unknown): Response {
+  if (error instanceof ShowcaseRefused) return problem(422, error.code, 'Showcase media does not meet the selected role');
   if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
     return problem(403, 'authority_denied', 'Authority is not admitted');
   }
@@ -177,8 +180,23 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         VALUES ?agent { ${agentTargets.map(iri).join(' ')} } ${publicAgent('?agent')} } LIMIT 65`,64*1024)).results?.bindings??[];
       for (const agent of agents) if (agent.agent) available.add(`${DEFAULT_MEDIA_CONTEXT}\0${agent.agent.value}`);
     }
-    return Promise.all(bases.map(async basis=>{
+    const facts: DisclosureTarget[]=[];
+    const indexes=bases.map(basis=>{
+      if (!basis) return [];
+      const own=[facts.length];
+      facts.push({owner:'media',resource:`https://rezics.com/id/${basis.metadata.asset}`,component:'cover',
+        context:basis.context,work:basis.target});
+      if (basis.metadata.use) {
+        own.push(facts.length);
+        facts.push({owner:'media',resource:`https://rezics.com/id/${basis.metadata.use}`,component:'media_use',
+          context:basis.context,work:basis.target});
+      }
+      return own;
+    });
+    const decisions=await discloseInventory(work.environment,facts,reader.viewer??ANONYMOUS_VIEWER,'media');
+    return Promise.all(bases.map(async (basis,index)=>{
       if (!basis || basis.target && !available.has(`${basis.context}\0${basis.target}`)
+        || indexes[index]!.some(index=>decisions[index]!=='visible')
         || basis.disclosure!=='public' && !(controlsActor && basis.owner===actingSubject)) return null;
       const canProtectLabels=!!(administrator && principal && actingSubject && await work.access.canProtectMedia?.(principal,actingSubject,
         `https://rezics.com/id/${basis.metadata.representation}`));

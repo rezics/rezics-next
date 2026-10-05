@@ -5,21 +5,17 @@ import type { ContentCore, ContentPosition } from '../../../../content/src/core.
 import { advanceContentSequence } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
 import { MediaRenditionStore } from '../media-rendition/store.ts';
+import { MediaShowcaseStore } from './showcase-store.ts';
 import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
+import { AVATAR_POLICY, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
+  MediaMissing, MediaStale } from './contract.ts';
+export { AVATAR_POLICY, DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaFenced, MediaInvalid,
+  MediaMissing, MediaStale, MediaUnavailable } from './contract.ts';
 
 /** Media commands in Main's Content database. Every command writes one
  * `content.receipt`, its `content.outbox` event and its media rows together. */
-export class MediaInvalid extends Error {}
-export class MediaConflict extends Error {}
-export class MediaStale extends Error {}
-export class MediaMissing extends Error {}
-export class MediaUnavailable extends Error {}
-export class MediaFenced extends Error {}
-
-export const DEFAULT_MEDIA_CONTEXT = 'urn:rezics:media:context:default';
-export const AVATAR_POLICY = 'avatar-selection-v1';
 const RECIPE = 'media-v1';
 const ID = 'https://rezics.com/id/';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -233,9 +229,11 @@ export function assetManifest(asset: string, representation: { id: string; sha25
 export class MediaStore {
   readonly presentation: MediaPresentationStore;
   readonly renditions: MediaRenditionStore;
+  readonly showcase: MediaShowcaseStore;
   constructor(private readonly pool: Pool, private readonly content: ContentCore) {
     this.presentation = new MediaPresentationStore(pool);
     this.renditions = new MediaRenditionStore(pool);
+    this.showcase = new MediaShowcaseStore(pool);
   }
 
   /** Create the asset when absent, then reserve one bounded quarantine upload. */
@@ -978,7 +976,7 @@ export class MediaStore {
         AND (CASE WHEN $2 THEN s.head ELSE media.delivered_selection(s) END) = r.id
       JOIN media.use u ON u.id = r.use_id JOIN media.asset a ON a.id = u.asset_id
       JOIN media.asset_state st ON st.id = a.state_head
-      JOIN media.representation p ON p.id = u.representation_id WHERE r.id = $1`, [selection, requested]);
+      JOIN media.representation p ON p.id = u.representation_id WHERE r.id = $1 AND r.role = 'avatar'`, [selection, requested]);
     const row = result.rows[0];
     return row ? { target: row.target, context: row.context, selection: row.selection,
       selectionPosition: null, use: row.use, asset: row.asset_id, crop: row.crop,
