@@ -24,6 +24,18 @@ not accidentally grow with unrelated corpus or history; batch work must not
 rescan completed prefixes. Big-O alone cannot establish latency or contention.
 The [complexity verification method](../testing/complexity.md) explains multi-scale observations.
 
+Lock scope (write-concurrency Goal, 2026-10-06): no user write path takes a row,
+counter or constant lock key shared by unrelated targets. Ordered consumers use
+one of three shapes instead of a gap-free head that writers update: a reader
+gated by `pg_snapshot_xmin` over `(epoch, xid, id)`, a post-commit sequencer
+that alone numbers committed rows, or change rows that builders fold. The epoch
+leads because a logical restore does not carry the transaction counter.
+[`serialization-points.ts`](../../scripts/qa/serialization-points.ts) refuses a
+new singleton, constant advisory key or shared-then-exclusive gate upgrade unless
+it is listed with its class and reason; application pools bound lock and
+transaction waits ([`pg-pool.ts`](../../services/main/src/infrastructure/pg-pool.ts)),
+and `/health/ready` reports horizon consumers' lag.
+
 ## Data preparation and import
 
 The maintainer set a 600-second ceiling on 2026-09-26 for ordinary fixture
@@ -134,7 +146,10 @@ statements stay unchanged and measure actual adoption separately.
 
 Use selective subject/target/scope indexes, batched decisions, bounded impact
 planning and immediate scope fences before cleanup; the private directory is
-never a per-request join. Enforce budgets inside execution (a counter checked
+never a per-request join. An authority change advances only the generation of
+what it changed (membership episode, grant source, representation path, member
+set); admissions pin the sources their proof used and recheck them at register,
+retry and claim, so a Realm join never invalidates unrelated admissions. Enforce budgets inside execution (a counter checked
 after an unbounded SQL scan is insufficient), and treat budget exhaustion as
 unavailable, never as allowance or proof of no authority. Materialize ancestry
 only where measured reads warrant it, budgeting storage by actual closure, and
