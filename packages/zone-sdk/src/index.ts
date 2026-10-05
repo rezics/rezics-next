@@ -19,7 +19,7 @@ export const zonePresets = ['clean', 'editorial', 'vibrant', 'serial'] as const;
 export type ZonePreset = (typeof zonePresets)[number];
 
 /**
- * Presentation tokens (Main's `zone-presentation-v1`). Zones share REZICS's visual
+ * Presentation tokens (Main's `zone-presentation-v2`). Zones share REZICS's visual
  * language: the platform applies their structure (density, panels) and keeps their
  * colour, scheme and type tokens for a Zone that asks for its own look.
  */

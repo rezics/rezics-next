@@ -58,7 +58,7 @@ async function openZone(port: CataloguePort, zone: string, realm: string, name: 
     `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(port.actingSubject)}`);
   await written(port, 'PUT', `/v1/zones/${short(zone)}/configuration`, { expectedHead: head.revision,
     actingSubject: port.actingSubject, name, language: 'en', defaultRealm: realm,
-    presentation: { profile: 'zone-presentation-v1', preset: 'clean', tokens: ZONE_PRESETS.clean, navigation: [], banners: [], modules: [] } });
+    presentation: { profile: 'zone-presentation-v2', preset: 'clean', tokens: ZONE_PRESETS.clean, navigation: [], slides: [], modules: [] } });
 }
 
 /** Writes the Zones, the related Works and the reviews; nothing is read back before the graph has settled. */

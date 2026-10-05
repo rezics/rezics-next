@@ -299,8 +299,8 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   const current = await json<{ revision: string }>(await wiki('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(holder.actor)}`));
   await post(`/v1/zones/${short(zone)}/configuration`, { expectedHead: current.revision, actingSubject: holder.actor,
     name: spec.name, language: spec.language, defaultRealm: space.realm, official: {},
-    presentation: { profile: 'zone-presentation-v1', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
-      navigation: spec.navigation, banners: [], official: { theme },
+    presentation: { profile: 'zone-presentation-v2', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
+      navigation: spec.navigation, slides: [], official: { theme },
       modules: [{ id: 'works', type: 'shelf', title: 'Works', source: { kind: 'collection', collection: collections.franchise! },
         options: { layout: 'covers', limit: 12 } }] } }, 200, 'PUT', false);
 

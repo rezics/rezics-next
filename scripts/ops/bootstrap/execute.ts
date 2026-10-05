@@ -230,11 +230,11 @@ export async function executeBootstrap(input: {
       defaultRealm: realm.realm,
       official: {},
       presentation: {
-        profile: 'zone-presentation-v1',
+        profile: 'zone-presentation-v2',
         preset: spec.preset,
         tokens: ZONE_PRESETS[spec.preset],
         navigation: spec.navigation,
-        banners: [],
+        slides: [],
         modules: [
           ...(spec.announcement
             ? [
