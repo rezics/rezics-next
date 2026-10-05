@@ -23,7 +23,7 @@ export async function chooseOption(scope: Scope, name: string | RegExp, { timeou
   await waitFor(
     async () => {
       // A styled Select keeps a native <select> beside its popup; its <option>s are not the ones to click.
-      const found = scope.queryAllByRole('option', { name, hidden: true }).filter(candidate => !candidate.closest('select'));
+      const found = scope.queryAllByRole('option', { name, hidden: true }).filter((candidate: HTMLElement) => !candidate.closest('select'));
       await expect(found).toHaveLength(1);
       option = found[0]!;
       await expect(option).toBeVisible();
