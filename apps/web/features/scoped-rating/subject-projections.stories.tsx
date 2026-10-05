@@ -76,6 +76,18 @@ export const ApplicablePlacesOnly: Story = {
     await expect(within(canvasElement).queryByText(/No question applies/)).toBeNull();
   },
 };
+export const ContinueAfterAnUnrateablePage: Story = {
+  args: { scenario: { ...fixture.populated, pageSize: 3,
+    questions: { [fixture.populated.places![4]!.projection.id]: [fixture.writing] } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Show more' })).toBeVisible());
+    await expect(canvasElement.querySelectorAll('[data-projection]')).toHaveLength(0);
+    await expect(canvas.queryByText('Nobody has rated this in a specific part yet.')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await see(canvasElement, '76 ratings');
+  },
+};
 
 /** Every place is short of the display threshold or unrated: counts show, no average, no zero. */
 export const BelowThreshold: Story = {

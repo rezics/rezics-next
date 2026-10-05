@@ -50,7 +50,7 @@ function Figures({
       </p>
     );
   const figures = figuresOfRating(member.ratings.data.summary);
-  if (!figures) return <p className="text-muted-foreground text-sm">{t.noRatingQuestion}</p>;
+  if (!figures) return null;
   if (!figures.count)
     return (
       <p data-identity-ratings className="text-muted-foreground text-sm">
@@ -183,7 +183,7 @@ function IdentitySection({
           />
         </p>
       ) : null}
-      <p className="text-muted-foreground text-xs">{t.visibleRelationsOnly}</p>
+      {section.members.length ? <p className="text-muted-foreground text-xs">{t.visibleRelationsOnly}</p> : null}
       {section.legend && section.members.length ? (
         <p
           data-identity-question

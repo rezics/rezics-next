@@ -89,6 +89,7 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
   const t = translate(messages, locale);
   const [first, reload] = useLoad(() => readPage(api, subject, scope, question), `${subject}\n${scope.kind === 'realm' ? scope.realm : 'global'}\n${question?.context ?? ''}`);
   const [later, setLater] = useState<{ items: RatedProjection[]; next: string | null; busy: boolean; failed: boolean } | null>(null);
+  const restart = () => { setLater(null); reload(); };
   const Heading = `h${level}` as const;
   const items = first.state === 'ready' ? [...first.data.items, ...later?.items ?? []] : [];
   const next = later ? later.next : first.state === 'ready' ? first.data.nextCursor : null;
@@ -106,11 +107,11 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
   return <section data-subject-projections className={cn('grid gap-4', className)}>
     <Heading className="font-semibold text-lg tracking-tight">{t.byPart}</Heading>
     {first.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
-      : first.state === 'failed' ? <FailureNote failure={first.failure} locale={locale} messages={messages} retry={reload} />
+      : first.state === 'failed' ? <FailureNote failure={first.failure} locale={locale} messages={messages} retry={restart} />
         : <>
-            {items.length === 0 ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p> : null}
+            {items.length === 0 && !next ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p> : null}
             {visible.length ? <ul className="grid min-w-0 gap-3">
-              {visible.map(({ read, row }) => <ProjectionRow key={read.projection.id} read={read} row={row!} retry={reload}
+              {visible.map(({ read, row }) => <ProjectionRow key={read.projection.id} read={read} row={row!} retry={restart}
                 position={position} locale={locale} messages={messages} />)}
             </ul> : null}
             {hidden > 0 ? <p data-hidden-parts className="flex items-start gap-2 text-muted-foreground text-sm">

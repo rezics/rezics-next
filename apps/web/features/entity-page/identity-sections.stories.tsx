@@ -61,6 +61,8 @@ async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
     await expect(canvas.queryByText('Saber Alter')).not.toBeInTheDocument();
     await expect(canvas.queryByText('Saber')).not.toBeInTheDocument();
     await expect(canvasElement.querySelector('[data-identity-hub]')).toBeNull();
+    if (args.state === 'spoiler-hidden')
+      await expect(canvas.getAllByText(copyOf(args.locale).visibleRelationsOnly)).toHaveLength(5);
   } else {
     await expect(canvasElement.querySelector('[data-identity-hub]')).toHaveTextContent('Saber');
     await expect(canvas.getAllByText('Alternate self')).toHaveLength(1);
@@ -108,6 +110,37 @@ async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
 }
 
 export const PopulatedDesktop: Story = { play: checks };
+export const MemberWithoutARatingQuestion: Story = {
+  render: () => {
+    const data = identityData('units', 'populated');
+    if (!data.ok) throw new Error('Expected a readable unit membership');
+    const section = data.data.sections[0]!;
+    const member = section.members[0]!;
+    const ratings = member.ratings;
+    if (!ratings?.ok || !('targetGrain' in ratings.data.summary)) throw new Error('Expected target ratings');
+    member.ratings = { ok: true, data: { contexts: [], context: null, summary: {
+      ...ratings.data.summary, targetGrain: 'resource', context: null, status: 'no-context',
+      aggregationScope: null, scale: null, count: 0, mean: null, displayThreshold: null,
+      meanDisplay: null, distribution: [],
+    } } };
+    section.legend = undefined;
+    return <div className="mx-auto max-w-3xl p-4"><IdentitySectionsView data={data} self={saber} locale="en"
+      t={copyOf('en')} messages={messages.en} hrefFor={hrefFor} /></div>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('region', { name: 'Units' })).toBeVisible();
+    await expect(canvasElement.querySelector('[data-identity-member]')).not.toBeNull();
+    await expect(canvas.queryByText(copyOf('en').noRatingQuestion)).toBeNull();
+    await expect(canvasElement.querySelector('[data-identity-ratings]')).toBeNull();
+    if (import.meta.env.VITE_IDENTITY_VISUAL === '1') {
+      const browser = (await import('vitest/browser')).page;
+      await browser.viewport(390, 844);
+      await document.fonts.ready;
+      await browser.screenshot({ element: canvasElement, path: '../../../../.temp/identity-pages/stories/units-no-question.png' });
+    }
+  },
+};
 export const PopulatedPhone: Story = {
   args: { phone: true },
   globals: { viewport: { value: 'phone' } },
