@@ -725,10 +725,10 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             if (interpretation.state !== 'resolved') throw new ContextCommandUnavailable('interpretation is not resolved');
             const authority = { access: work.access, principal, actingSubject: input.actingSubject,
               readers: { mediaAccess: work.mediaAccess, contextSelections: work.contextSelections, governance: work.governance } };
-            return recordStatement(env, admission, input, speaker, undefined, async subject =>
+            return recordStatement(env, admission, input, speaker, undefined, async projection =>
               targetRead(env, authority,
               async session => {
-                const [summary] = (await targetSummaries(session, [subject])).summaries;
+                const [summary] = (await targetSummaries(session, [projection])).summaries;
                 return summary?.status === 'available';
               }), references => targetRead(env, authority, session => resolveVisibleTargets(session, references, 'report')));
           } });

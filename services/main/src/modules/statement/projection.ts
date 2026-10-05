@@ -115,11 +115,8 @@ const notCoordinate = () => new StatementApplicabilityRefused('statement_applica
 /** The request digest retains the supplied subject; only the stored meaning is normalized.
  * Projection parts are immutable, so admission retries always resolve to the same meaning. */
 export async function normalizeStatementSubject(env: WorkActivationEnvironment,
-  input: { subject: string; applicability: string[] }, canReadSubject?: (subject: string) => Promise<boolean>,
+  input: { subject: string; applicability: string[] }, canReadProjection?: (projection: string) => Promise<boolean>,
   readTargets?: StatementTargetReader) {
-  if (canReadSubject && !await canReadSubject(input.subject)) {
-    throw new ContextCommandUnavailable('Statement subject is unavailable');
-  }
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?subject ?frame WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.subject)} a rv:Projection .
@@ -129,6 +126,11 @@ export async function normalizeStatementSubject(env: WorkActivationEnvironment,
   if (!rows.length) {
     await readCoordinates(env, input.applicability, readTargets);
     return { subject: input.subject, applicability: input.applicability };
+  }
+  // Unlike a direct subject reference, normalization reveals parts the caller
+  // may never have seen. The public writer must be able to read the projection.
+  if (canReadProjection && !await canReadProjection(input.subject)) {
+    throw new ContextCommandUnavailable('Statement projection is unavailable');
   }
   if (rows.length > 8 || rows.some(row => !row.subject || !row.frame)
     || new Set(rows.map(row => row.subject!.value)).size !== 1) {

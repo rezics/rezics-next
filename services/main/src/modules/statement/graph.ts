@@ -106,13 +106,13 @@ export async function statementInterpretation(env: WorkActivationEnvironment, in
 export async function recordStatement(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: RecordStatementInput, speaker: InterpretationSpeaker,
   beforeCommit?: (component: string, receipt: string) => Promise<void>,
-  canReadSubject?: (subject: string) => Promise<boolean>,
+  canReadProjection?: (projection: string) => Promise<boolean>,
   readTargets?: StatementTargetReader): Promise<ContextCommandReceipt> {
   const request = recordStatementRequest(input);
   const family = STATEMENT_FAMILIES.record;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
-  const normalized = await normalizeStatementSubject(env, input, canReadSubject, readTargets);
+  const normalized = await normalizeStatementSubject(env, input, canReadProjection, readTargets);
   const interpretation = await statementInterpretation(env, input, speaker);
   if (interpretation.state === 'unavailable') throw new ContextCommandUnavailable('interpretation is unavailable');
   // The route previews first; a slot that became unresolved meanwhile seals as unavailable.
