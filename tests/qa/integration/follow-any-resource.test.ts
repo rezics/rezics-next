@@ -53,9 +53,14 @@ test('read, follow, change delivery level and unfollow admitted resources and pr
     // A type hint cannot admit a hidden, missing or mismatched target.
     expect((await state(character, 'work')).status).toBe(400);
     expect((await write(character, true, null, undefined, 'work')).status).toBe(404);
-    for (const target of [hidden, `https://rezics.com/id/${randomUUID()}`]) {
-      expect((await state(target)).status).toBe(404);
-      expect((await write(target, true, null)).status).toBe(404);
+    const absent = `https://rezics.com/id/${randomUUID()}`;
+    for (const read of [(target: string) => state(target), (target: string) => write(target, true, null),
+      (target: string) => call('POST', '/v1/me/follows/batch', { profile: 'follow-batch-v1', actingSubject: actor,
+        targets: [{ target, following: true, expectedRevision: null }] })]) {
+      const denied = await read(hidden), missing = await read(absent);
+      expect(denied.status).toBe(404);
+      expect(missing.status).toBe(404);
+      expect(await denied.json()).toEqual(await missing.json());
     }
     const denied = await call('GET', `/v1/me/follow-state?${new URLSearchParams({
       target: character, actingSubject: actor,

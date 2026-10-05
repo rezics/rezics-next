@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { relationLexiconSeed, variantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { canonicalRelation, relationChangeDigest, type ExactDefinition } from '../src/modules/relation/change.ts';
 import { PARTICIPATION_FORMAT_V2, checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
-import { checkedComponentState } from '../src/modules/semantic/change.ts';
+import { checkedComponentState, referencedResources } from '../src/modules/semantic/change.ts';
 import { SemanticChangeRejected } from '../src/modules/semantic/command.ts';
 import { selectedProjection } from '../src/modules/lexicon/render.ts';
 import { seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
@@ -52,7 +52,8 @@ test('star definitions name two distinct roles; occurrences keep leaf and hub ap
     { leaf: 'variant', hub: 'hub', extra: 1 }, 'variant']) {
     expect(() => checkedComponentState({ ...base, star })).toThrow(SemanticChangeRejected);
   }
-  expect(() => canonicalRelation(definition, input(ref(1), ref(1)))).toThrow('both leaf and hub');
+  // A structurally valid self-link reaches dispatch for a sealed star refusal.
+  expect(canonicalRelation(definition, input(ref(1), ref(1))).participations).toHaveLength(3);
   expect(() => canonicalRelation(definition, input({ kind: 'external', provider: 'p', namespace: 'n', key: 'k' }, ref(2))))
     .toThrow('star roles take native resources');
   expect(canonicalRelation(definition, input(ref(1), ref(2))).participations).toHaveLength(3);
@@ -121,6 +122,7 @@ test('definition state: role members are bounded native resources and the star h
   const stored = (checked as { roles: { key: string; members?: string[] }[] }).roles;
   expect(stored.find(item => item.key === 'kind')!.members).toEqual([native(50), native(51)]);
   expect(stored.find(item => item.key === 'hub')!.members).toBeUndefined();
+  expect(referencedResources(checked)).toEqual([native(50), native(51)]);
   for (const members of [[], [native(50), native(50)], ['not-an-iri'], 'x', Array.from({ length: 9 }, (_, i) => native(60 + i))]) {
     expect(() => checkedComponentState(base(roles({ members })))).toThrow(SemanticChangeRejected);
   }

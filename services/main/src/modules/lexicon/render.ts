@@ -229,7 +229,7 @@ export async function renderRelation(
       throw new SemanticTargetUnavailable('relation definition is unavailable');
     const revision =
       subject.revision ?? (await readCurrentComponent(env, subject.definition, 'definition'))?.head;
-    meaning = revision ? await readExactDefinition(env, revision) : null;
+    meaning = revision ? await readExactDefinition(env, revision, canRead) : null;
     if (meaning && meaning.definition !== subject.definition) meaning = null;
   } else {
     if (!(await canRead(subject.occurrence)))
@@ -237,7 +237,7 @@ export async function renderRelation(
     const revision =
       subject.revision ?? (await readCurrentOccurrence(env, subject.occurrence))?.head;
     const read = revision ? await readExactOccurrence(env, subject.occurrence, revision) : null;
-    meaning = read ? await readExactDefinition(env, read.state.definition) : null;
+    meaning = read ? await readExactDefinition(env, read.state.definition, canRead) : null;
     if (read && meaning) {
       occurrence = { component: subject.occurrence, revision: read.revision };
       for (const item of read.state.participations) {
@@ -253,6 +253,9 @@ export async function renderRelation(
     }
   }
   if (!meaning) throw new SemanticTargetUnavailable('relation meaning is unavailable');
+  meaning = { ...meaning, roles: await Promise.all(meaning.roles.map(async role => ({ ...role,
+    ...(role.members ? { members: (await Promise.all(role.members.map(async ref => await canRead(ref) ? ref : null)))
+      .filter((ref): ref is string => ref !== null) } : {}) }))) };
   if (!Object.values(meaning.roleKeys).includes(viewingRole))
     throw new SemanticChangeRejected('invalid', 'viewing role is unknown');
   const rows = await presentations(env, meaning, includeDrafts);

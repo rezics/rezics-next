@@ -13,7 +13,8 @@ export function normalizePositionQuery(q?: string): string {
   return (q ?? '').normalize('NFKC').trim().toLowerCase();
 }
 
-export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
+export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, pendingGraphQueries: 1,
+  writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
   record: string;
   recordKind: 'entity' | 'name' | 'alias' | 'statement' | 'relation';
@@ -110,6 +111,15 @@ export class ReadingPositionStore {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally { client.release(); }
+  }
+  /** Check an existing position without mutating disclosure before graph acceptance.
+   * The successful graph receipt requires publication; retries recover that boundary. */
+  async preparePublication(row: Revelation): Promise<void> {
+    const existing = await this.pool.query<{ occurrence: string }>(`SELECT occurrence FROM reading_position.revelation
+      WHERE record = $1 AND continuity_work = $2`, [row.record, row.continuityWork]);
+    if (existing.rows[0] && existing.rows[0].occurrence !== row.occurrence) {
+      throw new RevelationConflict('Revelation position changed');
+    }
   }
   async completed(principal: VerifiedPrincipal, structures: readonly string[]): Promise<Set<string>> {
     if (!structures.length) return new Set();

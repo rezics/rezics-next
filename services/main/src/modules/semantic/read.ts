@@ -1,6 +1,6 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
-import { checkedStoredState, readCurrentComponent, type ComponentState, type DefinitionState,
+import { checkedStoredState, readCurrentComponent, referencedResources, type ComponentState, type DefinitionState,
   type ResourceState, type StoredProperty } from './change.ts';
 import { readComponent } from './command.ts';
 import { PROFILES } from './schema.ts';
@@ -68,14 +68,16 @@ export async function readSemanticRevision(env: WorkActivationEnvironment, compo
       && (property.value.kind !== 'resource' || availability[property.value.ref]?.state !== 'available'
         || disclosed.has(property.value.ref))) : [];
   const deliveredReferences = new Set(state.component === 'resource' ? properties.flatMap(property =>
-    property.value.kind === 'resource' ? [property.value.ref] : []) : state.successor ? [state.successor] : []);
+    property.value.kind === 'resource' ? [property.value.ref] : []) : referencedResources(state));
   for (const ref of Object.keys(availability)) if (!deliveredReferences.has(ref) || disclosed && !disclosed.has(ref)) delete availability[ref];
   const visible: PublicState = state.component === 'resource'
     ? { ...state, properties: properties.map(property => property.value.kind === 'resource'
       && availability[property.value.ref]?.state !== 'available'
       ? { ...property, value: { kind: 'unavailable-reference' as const } } : property) }
-    : state.successor && availability[state.successor]?.state !== 'available'
-      ? { ...state, successor: null, successorUnavailable: true } : state;
+    : { ...state, roles: state.roles.map(role => ({ ...role,
+      ...(role.members ? { members: role.members.filter(ref => availability[ref]?.state === 'available') } : {}) })),
+    ...(state.successor && availability[state.successor]?.state !== 'available'
+      ? { successor: null, successorUnavailable: true } : {}) };
   return { component, revision, predecessor: row.predecessor?.value ?? null, modelGeneration: row.generation!.value,
     state: visible, references: Object.fromEntries(Object.entries(availability)
       .filter(([, value]) => value.state === 'available')), export: exportOf(component, visible),
@@ -96,10 +98,7 @@ export async function readSemanticCurrent(env: WorkActivationEnvironment, compon
 }
 
 async function references(state: ComponentState, canRead: ReferenceCheck): Promise<Record<string, ReferenceAvailability>> {
-  const refs = state.component === 'resource'
-    ? [...new Set(state.properties.flatMap(({ value }: { value: SemanticValue }) =>
-      value.kind === 'resource' ? [value.ref] : []))]
-    : state.successor ? [state.successor] : [];
+  const refs = referencedResources(state);
   const entries = await Promise.all(refs.map(async ref =>
     [ref, { state: (await canRead(ref)) ? 'available' : 'unavailable' } as ReferenceAvailability] as const));
   return Object.fromEntries(entries);

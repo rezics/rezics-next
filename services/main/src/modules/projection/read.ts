@@ -1,7 +1,7 @@
 import { GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadMoved } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadMoved } from '../work/read-session.ts';
 import { targetSummaries, type TargetReadSession } from '../target/resolve.ts';
-import { MAX_PAGE, type ProjectionView } from './schema.ts';
+import { MAX_PAGE, PROJECTION_COST, type ProjectionView } from './schema.ts';
 import type { ProjectionStore } from './store.ts';
 import { resolveProjection } from './validate.ts';
 
@@ -43,8 +43,8 @@ export async function lookupProjection(session: TargetReadSession, store: Pick<P
 }
 
 /** One page of visible projections, oldest first. Check selectors before probing their identity inventory.
- * Seek through P+1 owner batches under the read session's graph/deadline budgets; only a disclosed
- * lookahead can establish continuation, and only a delivered identity can be its cursor. */
+ * Bound visibility work even when reservations are hidden or not yet materialized. The sealed cursor
+ * carries the private scan position, bound to the reader, selectors and graph cut. */
 export async function listProjections(session: TargetReadSession, store: Pick<ProjectionStore, 'list' | 'listByFrame'>,
   input: { subject?: string; frame?: string; cursor: string | null; limit: number }): Promise<{ items: ProjectionView[]; nextCursor: string | null }> {
   const selectors = [input.subject, input.frame].filter((ref): ref is string => ref !== undefined);
@@ -59,8 +59,11 @@ export async function listProjections(session: TargetReadSession, store: Pick<Pr
   const limit = Math.min(Math.max(input.limit, 1), MAX_PAGE);
   const batchSize = limit + 1;
   const visible: ProjectionView[] = [];
-  let after = input.cursor;
-  while (visible.length <= limit) {
+  const binding = ['projection-list-v2', input.subject ?? null, input.frame ?? null,
+    session.principal, session.options.actingSubject ?? null, session.options.language ?? null];
+  let after = decodeReadCursor(input.cursor ?? undefined, binding, session.position)?.after ?? null;
+  let more = false;
+  for (let batch = 0; batch < PROJECTION_COST.visibilityBatches; batch++) {
     session.checkDeadline();
     const ids = input.frame !== undefined
       ? await store.listByFrame(input.frame, input.subject, after, batchSize)
@@ -68,9 +71,12 @@ export async function listProjections(session: TargetReadSession, store: Pick<Pr
     visible.push(...(await readProjectionViews(session, ids)).filter(view =>
       (input.subject === undefined || view.subject === input.subject)
       && (input.frame === undefined || view.frames.includes(input.frame))));
-    if (ids.length < batchSize || visible.length > limit) break;
-    after = ids.at(-1)!.slice(-36);
+    more = ids.length === batchSize;
+    if (visible.length > limit) { after = visible[limit - 1]!.id.slice(-36); break; }
+    after = ids.at(-1)?.slice(-36) ?? after;
+    if (!more) break;
   }
   const items = visible.slice(0, limit);
-  return { items, nextCursor: visible.length > limit ? items.at(-1)!.id.slice(-36) : null };
+  return { items, nextCursor: (visible.length > limit || more) && after
+    ? encodeReadCursor(binding, session.position, after) : null };
 }

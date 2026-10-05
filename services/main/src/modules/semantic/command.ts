@@ -21,7 +21,7 @@ export type SemanticAdmission = Pick<RegisteredAdmission,
   'id' | 'scope' | 'action' | 'requestDigest' | 'authorityEpoch' | 'expiresAt'>;
 
 export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailable-reference' | 'generation-changed'
-  | 'star-violation' | 'question-presentation-language-limit';
+  | 'star-violation' | 'reserved-owner' | 'question-presentation-language-limit';
 
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
@@ -53,6 +53,7 @@ const REASONS: Record<string, SemanticRejection> = {
   [`${RV}StaleHead`]: 'stale-head', [`${RV}RetiredDefinition`]: 'retired-definition',
   [`${RV}UnavailableReference`]: 'unavailable-reference', [`${RV}GenerationChanged`]: 'generation-changed',
   [`${RV}StarViolation`]: 'star-violation',
+  [`${RV}ReservedOwner`]: 'reserved-owner',
   [`${RV}QuestionPresentationLanguageLimit`]: 'question-presentation-language-limit',
 };
 const REASON_TERMS = Object.fromEntries(Object.entries(REASONS).map(([term, reason]) =>
@@ -120,6 +121,9 @@ export function checkedSemanticTerminal(terminal: SemanticTerminal, admission: P
     }
     if (terminal.reason === 'star-violation') {
       throw new SemanticChangeRejected('star-violation', 'the occurrence breaks its definition\'s star constraint');
+    }
+    if (terminal.reason === 'reserved-owner') {
+      throw new SemanticChangeRejected('reserved-owner', 'The reference belongs to another owner');
     }
     if (terminal.reason === 'invalid-profile') throw new CommandRejected({ status: 'invalid' });
     throw new CancelledActivation('semantic admission was cancelled before dispatch');

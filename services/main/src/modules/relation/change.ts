@@ -15,6 +15,8 @@ import { checkedApplicability, checkedParticipations, checkedRevealedAt, Invalid
   type RevealedAt } from './schema.ts';
 import { RevelationConflict, type ReadingPositionStore } from '../reading-position/store.ts';
 import { targetRead, targetSummaries } from '../target/resolve.ts';
+import { normalizeStatementSubject, StatementApplicabilityRefused } from '../statement/projection.ts';
+import { readingWorkScope } from '../reading-position/work-scope.ts';
 
 export const RELATION_CHANGE_FAMILY = 'relation-change';
 
@@ -35,10 +37,17 @@ export interface RelationChangeIntent {
   occurrence?: string;
   expectedHead: string | null;
   input: RelationInput;
-  /** Server-only publication hook; complete disclosure metadata before graph visibility. */
-  beforeCommit?: (component: string, receipt: string) => Promise<void>;
+  /** Server-only validation and successful-receipt publication hook. */
+  beforeCommit?: RelationPublication;
   /** The caller's read authority; a star refusal names only links this reader may see. */
   canRead?: (resource: string) => Promise<boolean>;
+}
+
+/** Validate publication, then publish only a successful graph receipt. */
+export interface RelationPublication {
+  (component: string, receipt: string): Promise<void>;
+  complete?: (component: string, receipt: string) => Promise<void>;
+  guard?: string;
 }
 
 /** Stored occurrence revision state; participation and value node identities are exact. */
@@ -81,7 +90,7 @@ export async function readDefinitionByKey(env: WorkActivationEnvironment, key: s
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition key is ambiguous');
   if (canRead && !await canRead(rows[0]!.definition!.value)) return null;
-  const definition = await readExactDefinition(env, rows[0]!.head!.value);
+  const definition = await readExactDefinition(env, rows[0]!.head!.value, canRead);
   if (!definition || definition.notation !== key) throw new RevisionCorrupt('definition key differs from retained state');
   return definition;
 }
@@ -101,14 +110,17 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
   if (state.kind !== 'relation') return null;
+  const roles = await Promise.all(state.roles.map(async (role: RelationRole) => ({ role: roleIri(definition, role.key),
+    minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
+    ...(role.members ? { members: canRead
+      ? (await Promise.all(role.members.map(async ref => await canRead(ref) ? ref : null))).filter((ref): ref is string => ref !== null)
+      : role.members } : {}) })));
   return { revision, definition, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
     ...(state.writePath === undefined ? {} : { writePath: state.writePath }),
     ...(state.notation ? { notation: state.notation } : {}),
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
     ...(state.star ? { star: state.star } : {}),
-    roles: state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
-      minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
-      ...(role.members ? { members: role.members } : {}) })),
+    roles,
     roleKeys: Object.fromEntries(state.roles.map(role => [roleIri(definition, role.key), role.key])) };
 }
 
@@ -134,10 +146,6 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
     if (error instanceof InvalidRelationOccurrence) throw new SemanticChangeRejected('invalid', error.message);
     throw error;
   }
-}
-
-export class StarViolation extends SemanticChangeRejected {
-  constructor(message: string) { super('star-violation', message); }
 }
 
 export class ProjectionParticipantRefused extends SemanticChangeRejected {
@@ -169,6 +177,26 @@ export async function assertIdentityParticipants(env: WorkActivationEnvironment,
   throw new ProjectionParticipantRefused();
 }
 
+/** Preflight disclosure precedes admission. Visible owner references reach dispatch for a sealed refusal;
+ * hidden references keep the same pre-admission outcome as missing ones. */
+export async function relationReferences(env: WorkActivationEnvironment, definition: ExactDefinition,
+  state: CanonicalRelation, authority: Parameters<typeof targetRead>[1]): Promise<string[]> {
+  const participants = [...new Set(state.participations.flatMap(item =>
+    item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+  const projections = new Set<string>();
+  try { await assertIdentityParticipants(env, state.participations, authority); }
+  catch (error) {
+    if (!(error instanceof ProjectionParticipantRefused)) throw error;
+    const batch = await targetRead(env, authority, session => targetSummaries(session, participants));
+    for (const summary of batch.summaries) if (summary.status === 'available' && summary.type === 'projection') {
+      projections.add(summary.reference);
+    }
+  }
+  return [...new Set([definition.definition, ...participants.filter(ref => !projections.has(ref)),
+    ...definition.roles.flatMap(role => role.members ?? []), ...state.applicability,
+    ...(state.revealedAt ? [state.revealedAt.work] : [])])];
+}
+
 function starRoles(definition: ExactDefinition) {
   const star = definition.star!;
   return { leaf: roleIri(definition.definition, star.leaf), hub: roleIri(definition.definition, star.hub) };
@@ -182,10 +210,6 @@ function checkedStarParticipants(definition: ExactDefinition, participations: re
   const all = [...members(roles.leaf), ...members(roles.hub)];
   if (all.some(item => item.participant.kind !== 'resource')) {
     throw new InvalidRelationOccurrence('star roles take native resources');
-  }
-  const hubs = new Set(members(roles.hub).map(item => JSON.stringify(item.participant)));
-  if (members(roles.leaf).some(item => hubs.has(JSON.stringify(item.participant)))) {
-    throw new StarViolation('a participant cannot be both leaf and hub of one occurrence');
   }
 }
 
@@ -214,26 +238,27 @@ export function starConflict(definition: ExactDefinition, occurrence: string, st
     FILTER(?other != ${iri(occurrence)}) }`;
 }
 
-export const STAR_REFUSAL_COST = { conflicts: 32 } as const;
+export const RELATION_REFERENCE_COST = { applicability: 8, coordinateQueries: 2, roleMembers: 16 * 8,
+  revelationQueries: 1, starConflictQueries: 1 } as const;
 
-/** A star refusal names a link only when the caller can read one of the conflicting occurrences with every
- * participant; otherwise the refusal must look like any unavailable reference. */
+export const STAR_REFUSAL_COST = { conflicts: 32 } as const;
+/** Refuse indistinctly if any conflicting occurrence or participant is hidden. An overflow is also
+ * undisclosed; it cannot make a hidden conflict visible through a sampled public one. */
 async function visibleStarConflict(env: WorkActivationEnvironment, conflict: string,
   canRead: (resource: string) => Promise<boolean>): Promise<boolean> {
-  const others = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?other WHERE ${conflict}
-    LIMIT ${STAR_REFUSAL_COST.conflicts}`)).results?.bindings ?? [];
-  for (const row of others) {
-    const other = row.other!.value;
-    if (!await canRead(other)) continue;
-    const current = await readCurrentOccurrence(env, other).catch(() => null);
-    if (!current) continue;
-    const refs = current.state.participations.flatMap(item =>
-      item.participant.kind === 'resource' ? [item.participant.ref] : []);
-    let readable = true;
-    for (const ref of refs) if (!await canRead(ref)) { readable = false; break; }
-    if (readable) return true;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?other WHERE ${conflict}
+    LIMIT ${STAR_REFUSAL_COST.conflicts + 1}`)).results?.bindings ?? [];
+  if (!rows.length || rows.length > STAR_REFUSAL_COST.conflicts) return false;
+  for (const row of rows) {
+    if (!await canRead(row.other!.value)) return false;
+    const current = await readCurrentOccurrence(env, row.other!.value);
+    if (!current) return false;
+    for (const ref of [...current.state.applicability, ...current.state.participations.flatMap(item =>
+      item.participant.kind === 'resource' ? [item.participant.ref] : [])]) {
+      if (!await canRead(ref)) return false;
+    }
   }
-  return false;
+  return true;
 }
 
 export function relationChangeDigest(occurrence: string | undefined, expectedHead: string | null,
@@ -311,8 +336,35 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
   const digest = relationChangeDigest(intent.occurrence, intent.expectedHead, state);
   const receipt = familyReceiptIri(intent.admission.id, RELATION_CHANGE_FAMILY);
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
-  if (existing) return checkedResult(existing, intent, true);
-  await assertIdentityParticipants(env, state.participations);
+  if (existing) {
+    const result = checkedResult(existing, intent, true);
+    await intent.beforeCommit?.complete?.(result.occurrence, result.receipt);
+    return result;
+  }
+  try { await assertIdentityParticipants(env, state.participations); }
+  catch (error) {
+    if (!(error instanceof ProjectionParticipantRefused)) throw error;
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'reserved-owner',
+      `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        VALUES ?participant { ${state.participations.flatMap(item => item.participant.kind === 'resource'
+          ? [iri(item.participant.ref)] : []).join(' ')} } ?participant a rv:Projection } }`);
+    if (refused) return checkedResult(refused, intent, false);
+    throw new PendingActivation('participant owner refusal is not sealed');
+  }
+  try { await normalizeStatementSubject(env, { subject: definition.definition, applicability: state.applicability }); }
+  catch (error) {
+    if (error instanceof StatementApplicabilityRefused) throw new SemanticChangeRejected('invalid', 'Relation applicability must name typed coordinates');
+    throw error;
+  }
+  if (definition.star) {
+    const roles = starRoles(definition);
+    const hubs = new Set(state.participations.filter(item => item.role === roles.hub).map(item => JSON.stringify(item.participant)));
+    if (state.participations.some(item => item.role === roles.leaf && hubs.has(JSON.stringify(item.participant)))) {
+      const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'star-violation', 'FILTER(true)');
+      if (refused) return checkedResult(refused, intent, false);
+      throw new PendingActivation('star refusal is not sealed');
+    }
+  }
   const generation = await ensureModelGeneration(env);
   const occurrence = intent.occurrence ?? `${ID}${Bun.randomUUIDv7()}`;
   const current = intent.occurrence ? await readCurrentOccurrence(env, occurrence) : null;
@@ -332,8 +384,9 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
   const operation = `${ID}${Bun.randomUUIDv7()}`;
   const old = current ? occurrenceTriples(current.state, current.head) : [];
   const next = occurrenceTriples(exact, revision);
-  const resources = [...new Set(state.participations.flatMap(item =>
-    item.participant.kind === 'resource' ? [item.participant.ref] : []))];
+  const resources = [...new Set([...state.participations.flatMap(item =>
+    item.participant.kind === 'resource' ? [item.participant.ref] : []), ...state.applicability,
+    ...definition.roles.flatMap(role => role.members ?? [])])];
   const active = state.lifecycle === 'active';
   const conflict = active && definition.star ? starConflict(definition, occurrence, exact) : '';
   const validations = [
@@ -375,12 +428,18 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
       ${resources.map(ref => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a ?refType } }`).join('\n')}
       ${resources.map(ref => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a rv:Projection } }`).join('\n')}
       ${conflict ? `FILTER NOT EXISTS ${conflict}` : ''}
+      ${intent.beforeCommit?.guard ? `FILTER EXISTS ${intent.beforeCommit.guard}` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(occurrence)} ; rv:revision ${iri(revision)} ;
+      ${state.revealedAt ? `rv:revelationWork ${iri(state.revealedAt.work)} ; rv:revelationOccurrence ${iri(state.revealedAt.occurrence)} ;` : ''}
       ${current ? `rv:expectedHead ${iri(current.head)} ;` : ''}`,
   });
   const committed = await readSemanticTerminal(env, receipt);
-  if (committed) return checkedResult(committed, intent, committed.revision !== revision);
+  if (committed) {
+    const result = checkedResult(committed, intent, committed.revision !== revision);
+    await intent.beforeCommit?.complete?.(result.occurrence, result.receipt);
+    return result;
+  }
   if (current) {
     const now = await readCurrentOccurrence(env, occurrence).catch(() => null);
     if (now && now.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, occurrence);
@@ -397,9 +456,14 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
     if (missing) return checkedResult(missing, intent, false);
   }
   if (conflict) {
-    const visible = intent.canRead ? await visibleStarConflict(env, conflict, intent.canRead) : true;
+    const visible = intent.canRead ? await visibleStarConflict(env, conflict, intent.canRead) : false;
     const refused = await sealSemanticRejection(env, receipt, digest, intent.admission,
       visible ? 'star-violation' : 'unavailable-reference', `FILTER EXISTS ${conflict}`);
+    if (refused) return checkedResult(refused, intent, false);
+  }
+  if (intent.beforeCommit?.guard) {
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
+      `FILTER NOT EXISTS ${intent.beforeCommit.guard}`);
     if (refused) return checkedResult(refused, intent, false);
   }
   throw new PendingActivation('relation change guard did not match');
@@ -425,22 +489,30 @@ function checkedResult(terminal: SemanticTerminal, intent: RelationChangeIntent,
 }
 
 /**
- * Publish an occurrence's revelation position the way the wiki publisher records its own: the occurrence becomes
- * position-required and is revealed at the named occurrence of the Work's composition. It runs before the graph
- * write so the occurrence is never visible unguarded. A position already recorded for the occurrence never moves.
+ * Check the selected composition before dispatch. The successful graph receipt position-requires the
+ * occurrence atomically; publication then records the position in owner storage, recoverable on replay.
+ * A refused graph write leaves no position or disclosure marker. An existing position never moves.
  */
-export function relationRevelation(env: WorkActivationEnvironment, store: Pick<ReadingPositionStore, 'publish'> | undefined,
-  revealedAt: RevealedAt) {
-  return async (component: string, receipt: string) => {
-    if (!store) throw new SemanticChangeRejected('unsupported', 'revelation positions are unavailable');
-    const placed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+export function relationRevelation(env: WorkActivationEnvironment,
+  store: Pick<ReadingPositionStore, 'publish' | 'preparePublication'> | undefined,
+  revealedAt: RevealedAt): RelationPublication {
+  const row = (component: string, receipt: string) => ({ record: component, recordKind: 'relation' as const,
+    continuityWork: revealedAt.work, occurrence: revealedAt.occurrence, receipt });
+  const guard = `{
       GRAPH ${iri(GRAPHS.current)} { ${iri(revealedAt.work)} a <https://schema.org/CreativeWork> .
-        ?placement a rv:OccurrencePlacement ; rv:occurrence ${iri(revealedAt.occurrence)} .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removed } } }`);
+        { ${readingWorkScope(revealedAt.work)} }
+        ?work rv:mainVersion ?main . ?structure a rv:Structure ; rv:structureOf ?main ;
+          rv:structureProfile ?profile ; rv:selectedGeneration ?generation .
+        FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
+        ?generation rv:generationState rv:Active .
+        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ${iri(revealedAt.occurrence)} .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removed } } }`;
+  const prepare: RelationPublication = async (component, receipt) => {
+    if (!store) throw new SemanticChangeRejected('unsupported', 'revelation positions are unavailable');
+    const placed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK ${guard}`);
     if (placed.boolean !== true) throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
     try {
-      await store.publish({ record: component, recordKind: 'relation', continuityWork: revealedAt.work,
-        occurrence: revealedAt.occurrence, receipt });
+      await store.preparePublication(row(component, receipt));
     } catch (error) {
       if (error instanceof RevelationConflict) {
         throw new SemanticChangeRejected('invalid', 'the occurrence already has a revelation position');
@@ -448,6 +520,12 @@ export function relationRevelation(env: WorkActivationEnvironment, store: Pick<R
       throw error;
     }
   };
+  prepare.guard = guard;
+  prepare.complete = async (component, receipt) => {
+    if (!store) throw new SemanticChangeRejected('unsupported', 'revelation positions are unavailable');
+    await store.publish(row(component, receipt));
+  };
+  return prepare;
 }
 
 export async function readRelationChangeTerminal(env: WorkActivationEnvironment, admissionId: string) {

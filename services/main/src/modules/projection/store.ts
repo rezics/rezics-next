@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
-import type { ProjectionKey } from './schema.ts';
+import { ProjectionRefused, type ProjectionKey } from './schema.ts';
 
 const native = (id: string) => `https://rezics.com/id/${id}`;
 
@@ -64,7 +64,12 @@ export class ProjectionStore {
       const inserted = await client.query<{ projection: string }>(
         `INSERT INTO access.projection_identity (key, projection, subject, frames, admission_id)
          VALUES ($1, $2, $3, $4, $5) ON CONFLICT (key) DO NOTHING RETURNING projection`,
-        [input.key, candidate, input.subject, input.frames, input.admission]);
+        [input.key, candidate, input.subject, input.frames, input.admission]).catch(error => {
+        if (error instanceof Error && 'constraint' in error && error.constraint === 'projection_creation_quota') {
+          throw new ProjectionRefused('creation-quota', 'Projection creation quota reached');
+        }
+        throw error;
+      });
       if (inserted.rows[0]) return { projection: native(inserted.rows[0].projection), reserved: true };
       const existing = await client.query<{ projection: string }>(
         'SELECT projection FROM access.projection_identity WHERE key = $1', [input.key]);

@@ -4,7 +4,6 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readCurrentOccurrence, readExactDefinition, readExactOccurrence, relationRevelation } from '../modules/relation/change.ts';
 import { admittedRelationChange, canReadSemantic, referenceReader, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
-import { RevisionCorrupt } from '../modules/work/history.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -47,11 +46,12 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const read = await readExactOccurrence(work.environment, occurrence, head);
     if (!read) return null;
     // The occurrence pins its exact DefinitionRef; a later retirement never retargets it.
-    const definition = await readExactDefinition(work.environment, read.state.definition);
-    if (!definition) throw new RevisionCorrupt('occurrence definition revision is unavailable');
+    const canRead = referenceReader(work.access, principal, actingSubject);
+    const definition = await readExactDefinition(work.environment, read.state.definition,
+      async ref => await canRead(ref) && (await boundary.visible([ref])).has(ref));
+    if (!definition) return null;
     const disclosed = await boundary.visible([occurrence, definition.definition, ...read.state.applicability]);
     if (!disclosed.has(occurrence) || !disclosed.has(definition.definition)) return null;
-    const canRead = referenceReader(work.access, principal, actingSubject);
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
       definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
@@ -89,11 +89,15 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        const principal = await work.account.verify(request, ['work:edit']);
+        const readable = referenceReader(work.access, principal, body.actingSubject);
         const definition = await readExactDefinition(work.environment, body.definition);
         const change = definition?.workSubjectRole ? admittedWorkRelationChange : admittedRelationChange;
         const result = await change(work.environment, work.account, work.access, request, {
           ...(body.occurrence ? { occurrence: body.occurrence } : {}), expectedHead: body.expectedHead,
           ...(body.revealedAt ? { beforeCommit: relationRevelation(work.environment, work.readingPositions, body.revealedAt) } : {}),
+          canReadConflict: async ref => await readable(ref) && await readingPositionRead(work, request, principal,
+            body.actingSubject, async boundary => (await boundary.visible([ref])).has(ref)),
           input: { ...(body.evidence === undefined ? {} : { evidence: body.evidence }), definition: body.definition, participations: body.participations,
             ...(body.revealedAt ? { revealedAt: body.revealedAt } : {}),
             ...(body.applicability ? { applicability: body.applicability } : {}),

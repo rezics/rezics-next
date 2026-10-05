@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { sourcePosition } from '../../api-contract.ts';
-import { readId, readLanguage, readPosition, readUuid } from '../work/read-contract.ts';
+import { readId, readLanguage, readPosition } from '../work/read-contract.ts';
 
 export const PROJECTION_PROFILE = 'https://rezics.com/definition/projection-v1';
 export const PROJECTION_ACTION = 'projection.create';
@@ -14,27 +14,29 @@ export const PROJECTION_SCOPE = 'projection:create:root';
 export const PROJECTION_WRITE_SCOPES = ['rating:submit', 'comment:create', 'work:edit'] as const;
 export const MAX_FRAMES = 8;
 export const MAX_PAGE = 20;
+export const PROJECTION_CREATION_QUOTA = 1000;
 
 /** Output and owner-batch ceilings, independent of the total inventory. A list batch includes one
  * lookahead: at most 21 * 9 = 189 parts, or three summary pages of 64. Hidden candidates can require
- * additional batches; the read session's graph, byte and deadline budgets bound the whole request. */
+ * additional requests; at most two candidate batches are hydrated in one request. */
 export const PROJECTION_COST = {
   writerScopeChecks: PROJECTION_WRITE_SCOPES.length, admissionScopeChecks: 1,
   /** Subject summary, one target batch for the frames, one admission probe, one identity lookup and one
    * projection summary (itself one page of parts). */
   existingReads: { summaries: 2, targetBatches: 1, admissionProbes: 1, identityLookups: 1 },
   /** Admission register, claim and seal, one identity insert and one guarded graph command. */
-  creationWrites: { admissionTransactions: 3, identityInserts: 1, graphCommands: 1 },
+  creationWrites: { admissionTransactions: 3, identityInserts: 1, creatorQuotaUpdates: 1, graphCommands: 1 },
   listPage: MAX_PAGE, listLookahead: 1, partsPerProjection: MAX_FRAMES + 1,
   listSelectors: 2, identityReadsPerBatch: 1, frameMembershipsPerIdentity: MAX_FRAMES,
+  visibilityBatches: 2,
   partPagesPerListPage: Math.ceil((MAX_PAGE + 1) * (MAX_FRAMES + 1) / 64),
 } as const;
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 export type ProjectionRefusal = 'invalid' | 'subject-unavailable' | 'subject-is-projection'
-  | 'frame-unavailable' | 'frame-not-coordinate' | 'frame-slot-repeated' | 'frame-work-mismatch';
-const refusals: Record<ProjectionRefusal, { status: 400 | 404 | 422; code: string }> = {
+  | 'frame-unavailable' | 'frame-not-coordinate' | 'frame-slot-repeated' | 'frame-work-mismatch' | 'creation-quota';
+const refusals: Record<ProjectionRefusal, { status: 400 | 404 | 422 | 429; code: string }> = {
   invalid: { status: 400, code: 'invalid_projection' },
   'subject-unavailable': { status: 404, code: 'projection_subject_unavailable' },
   'subject-is-projection': { status: 422, code: 'projection_of_projection' },
@@ -42,10 +44,11 @@ const refusals: Record<ProjectionRefusal, { status: 400 | 404 | 422; code: strin
   'frame-not-coordinate': { status: 422, code: 'projection_frame_not_coordinate' },
   'frame-slot-repeated': { status: 422, code: 'projection_frame_slot_repeated' },
   'frame-work-mismatch': { status: 422, code: 'projection_frame_work_mismatch' },
+  'creation-quota': { status: 429, code: 'projection_creation_quota' },
 };
 /** A refused request; an unreadable and an absent subject or frame are indistinguishable. */
 export class ProjectionRefused extends Error {
-  readonly status: 400 | 404 | 422;
+  readonly status: 400 | 404 | 422 | 429;
   readonly code: string;
   constructor(readonly refusal: ProjectionRefusal, message: string) {
     super(message);
@@ -89,7 +92,7 @@ export const projectionRequest = t.Object({ subject: readId,
  * A list always has a subject, a frame, or both, never the global identity inventory. */
 export const projectionQuery = t.Object({ subject: t.Optional(readId), frame: t.Optional(readId),
   frames: t.Optional(t.Array(readId, { minItems: 1, maxItems: MAX_FRAMES })),
-  limit: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE })), cursor: t.Optional(readUuid),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: MAX_PAGE })), cursor: t.Optional(t.String({ maxLength: 2048, pattern: '^[\\w-]+$' })),
   language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false });
 export const projectionWriteResponse = t.Object({ projection: projectionView, created: t.Boolean(),
   replayed: t.Boolean(), sourcePosition }, { additionalProperties: false });

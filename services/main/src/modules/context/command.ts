@@ -6,6 +6,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
 import { DATASET, GRAPHS, IdempotencyConflict, PendingActivation, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { ProjectionRefused } from '../projection/schema.ts';
 
 // One graph command family for Contexts, selections, Statements and decisions.
 // It is the classification decision pattern (classification/decision.ts and
@@ -280,7 +281,7 @@ export async function runAdmittedCommand<I>(env: WorkActivationEnvironment,
         try { await command.execute(admission, principal); }
         catch (error) {
           if (error instanceof IdempotencyConflict || error instanceof InvalidContextCommand
-            || error instanceof CommandRejected) throw error;
+            || error instanceof CommandRejected || error instanceof ProjectionRefused) throw error;
           if (error instanceof ContextCommandUnavailable) {
             await sealCommandTerminal(env, admission, command.family, 'unavailable');
           }
@@ -294,7 +295,7 @@ export async function runAdmittedCommand<I>(env: WorkActivationEnvironment,
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleContextCommand
       || error instanceof ContextCommandUnavailable || error instanceof InvalidContextCommand
-      || error instanceof CommandRejected) throw error;
+      || error instanceof CommandRejected || error instanceof ProjectionRefused) throw error;
     throw new PendingContextCommand(registered.id, command.family);
   }
 }

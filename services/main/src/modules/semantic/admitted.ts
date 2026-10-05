@@ -6,8 +6,8 @@ import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironmen
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generation-guard.ts';
-import { assertIdentityParticipants, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
-  relationChangeDigest, type RelationChangeResult, type RelationInput } from '../relation/change.ts';
+import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
+  relationChangeDigest, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
 import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
@@ -88,7 +88,9 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     } else {
       try { dispatched = await call.dispatch(admission, readable); }
       catch (error) {
-        if (error instanceof IdempotencyConflict || error instanceof SemanticChangeRejected
+        if (error instanceof SemanticChangeRejected && await call.readTerminal(registered.id)) {
+          // Dispatch sealed a typed refusal; record it in Access before reporting it.
+        } else if (error instanceof IdempotencyConflict || error instanceof SemanticChangeRejected
           || error instanceof CommandRejected || error instanceof SemanticTargetUnavailable) throw error;
       }
     }
@@ -106,6 +108,9 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
     checkedSemanticTerminal(terminal, registered, call.digest);
     return await call.result(terminal, dispatched);
   } catch (error) {
+    if (call.action === 'relation.change' && error instanceof SemanticChangeRejected && error.code === 'reserved-owner') {
+      throw new ProjectionParticipantRefused();
+    }
     if (error instanceof IdempotencyConflict || error instanceof StaleSemanticHead
       || error instanceof SemanticChangeRejected || error instanceof CommandRejected
       || error instanceof SemanticTargetUnavailable || error instanceof CancelledActivation
@@ -143,8 +148,9 @@ export interface AdmittedRelationChangeInput {
   occurrence?: string;
   expectedHead: string | null;
   input: RelationInput;
-  /** Server-only: publishes the revelation position before the graph write. */
-  beforeCommit?: (component: string, receipt: string) => Promise<void>;
+  /** Server-only: validates the position and publishes it after graph acceptance. */
+  beforeCommit?: RelationPublication;
+  canReadConflict?: (resource: string) => Promise<boolean>;
   actingSubject: string;
   idempotencyKey: string;
 }
@@ -159,17 +165,18 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
     idempotencyKey: input.idempotencyKey, action: 'relation.change', family: RELATION_CHANGE_FAMILY,
     scope: input.occurrence ? `relation:edit:${input.occurrence}` : 'relation:create:root', digest,
     references: async principal => {
-      await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
-      return [...new Set([...state.participations.flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : []),
-        ...state.revealedAt ? [state.revealedAt.work] : []])];
+      return relationReferences(env, definition, state, { access, principal, actingSubject: input.actingSubject });
     },
-    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead,
+    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead: input.canReadConflict ?? canRead,
       ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input,
       ...(input.beforeCommit ? { beforeCommit: input.beforeCommit } : {}) }),
     readTerminal: id => readRelationChangeTerminal(env, id),
-    result: (terminal, dispatched) => ({ occurrence: terminal.component!, revision: terminal.revision!,
+    result: async (terminal, dispatched) => {
+      await input.beforeCommit?.complete?.(terminal.component!, terminal.receipt);
+      return { occurrence: terminal.component!, revision: terminal.revision!,
       predecessor: terminal.expectedHead ?? null, receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,
-      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true }) });
+      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true };
+    } });
 }
 
 function relationIntent(definition: NonNullable<Awaited<ReturnType<typeof readExactDefinition>>>,

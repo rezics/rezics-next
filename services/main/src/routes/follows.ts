@@ -16,7 +16,8 @@ export function homeError(error: unknown) {
   const result = error instanceof ControlDenied ? problem(403, 'home_denied', error.message)
     : error instanceof ControlInvalid ? problem(400, 'invalid_home_command', error.message)
     : error instanceof ControlConflict || error instanceof ControlStale ? problem(409, 'home_conflict', error.message)
-    : error instanceof ControlUnavailable ? problem(503, 'home_unavailable', error.message) : workReadError(error);
+    : error instanceof ControlUnavailable ? problem(503, 'home_unavailable', error.message)
+    : error instanceof WorkReadMissing ? workReadError(new WorkReadMissing('Follow target is unavailable')) : workReadError(error);
   result.headers.set('cache-control', homeHeaders['cache-control']);
   return result;
 }

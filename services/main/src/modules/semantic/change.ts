@@ -231,7 +231,9 @@ const STRUCTURED = new Set(['quantity', 'temporal', 'external']);
 
 /** Resource references in a state; Access must admit each before dispatch (MODEL10). */
 export function referencedResources(state: ComponentInput): string[] {
-  if (state.component !== 'resource') return state.successor ? [state.successor] : [];
+  if (state.component !== 'resource') return [...new Set([
+    ...(state.successor ? [state.successor] : []), ...state.roles.flatMap(role => role.members ?? []),
+  ])].sort();
   return [...new Set(state.properties.flatMap(item => item.value.kind === 'resource' ? [item.value.ref] : []))].sort();
 }
 
@@ -331,6 +333,40 @@ Promise<SemanticTerminal | null> {
   return readSemanticTerminal(env, familyReceiptIri(admissionId, SEMANTIC_CHANGE_FAMILY));
 }
 
+/** A new star covers all active occurrences, including those pinned to older definition revisions.
+ * One existential conflict query and the same transactional guard; no occurrence inventory is hydrated. */
+export const DEFINITION_STAR_COST = { conflictQueries: 1, hydratedOccurrences: 0 } as const;
+export function definitionStarConflict(target: string, star: RelationStar): string {
+  const leaf = iri(`${target}/role/${star.leaf}`), hub = iri(`${target}/role/${star.hub}`);
+  return `{ { GRAPH ${iri(GRAPHS.revisions)} {
+    ?definitionRevision rv:component ${iri(target)} .
+    ?firstHead rv:relationDefinition ?definitionRevision ; rv:lifecycle rv:Active ; rv:participation ?firstPart .
+    ?firstPart rv:role ?firstRole ; rv:participant ?member .
+    FILTER(?firstRole IN (${leaf}, ${hub}))
+  } GRAPH ${iri(GRAPHS.current)} { ?first rv:occurrenceHead ?firstHead }
+  FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?member a ?memberType } } }
+  UNION {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?definitionRevision rv:component ${iri(target)} .
+      ?firstHead rv:relationDefinition ?definitionRevision ; rv:lifecycle rv:Active ; rv:participation ?firstPart .
+      ?firstPart rv:role ${leaf} ; rv:participant ?member .
+      ?otherDefinition rv:component ${iri(target)} .
+      ?secondHead rv:relationDefinition ?otherDefinition ; rv:lifecycle rv:Active ; rv:participation ?secondPart .
+      ?secondPart rv:role ?secondRole ; rv:participant ?member .
+      FILTER(?secondRole IN (${leaf}, ${hub}))
+      FILTER(?firstPart != ?secondPart)
+    } GRAPH ${iri(GRAPHS.current)} { ?first rv:occurrenceHead ?firstHead . ?second rv:occurrenceHead ?secondHead }
+  }
+  UNION {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ?definitionRevision rv:component ${iri(target)} .
+      ?firstHead rv:relationDefinition ?definitionRevision ; rv:lifecycle rv:Active ; rv:participation ?firstPart, ?extraHub .
+      ?firstPart rv:role ${hub} .
+      ?extraHub rv:role ${hub} . FILTER(?extraHub != ?firstPart) }
+    GRAPH ${iri(GRAPHS.current)} { ?first rv:occurrenceHead ?firstHead }
+  } }`;
+}
+
 /** The structural attachment guard is not a semantic predecessor. Read the
  * immutable anchor so first attachment and receipt replay report the same lineage. */
 export async function semanticPredecessor(env: WorkActivationEnvironment, terminal: SemanticTerminal): Promise<string | null> {
@@ -428,6 +464,15 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     GRAPH ${iri(GRAPHS.current)} { ?occurrence rv:relationDefinition ?relied } }`;
   const starRelied = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK ${definitionOccurrences}`)).boolean === true;
   if (releasesStar && await starRelied()) fail('invalid', 'a definition with occurrences keeps its star');
+  const addsStar = current?.state.component === 'definition' && state.component === 'definition'
+    && current.state.star === undefined && state.star !== undefined;
+  const addedStarConflict = addsStar ? definitionStarConflict(target, state.star!) : '';
+  if (addedStarConflict && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK ${addedStarConflict}`)).boolean) {
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'star-violation',
+      `${ownershipHeadGuard} FILTER EXISTS ${addedStarConflict}`);
+    if (refused) return checkedResult(env, refused, intent, false);
+    throw new PendingActivation('definition star refusal is not sealed');
+  }
   const addedTypes = state.component === 'resource' ? state.types.filter(type =>
     current?.state.component !== 'resource' || !current.state.types.includes(type)) : [];
   if (intent.target && addedTypes.length) {
@@ -495,6 +540,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
         ?key a rv:DefinitionKey ; rv:keyDefinition ?other ; <${KEY_NOTATION}> ${lit(state.notation)} .
         FILTER(?other != ${iri(target)}) } }` : ''}
       ${releasesStar ? `FILTER NOT EXISTS ${definitionOccurrences}` : ''}
+      ${addedStarConflict ? `FILTER NOT EXISTS ${addedStarConflict}` : ''}
       ${current ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }`
         : workHead ? `GRAPH ${iri(GRAPHS.current)} {
             ${iri(target)} a <https://schema.org/CreativeWork> ; rv:head ${iri(intent.expectedHead!)} . }
@@ -533,6 +579,11 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     await assertPredicatesUnowned(env, target, addedPredicates, ownershipHeadGuard);
   }
   if (releasesStar && await starRelied()) fail('invalid', 'a definition with occurrences keeps its star');
+  if (addedStarConflict) {
+    const refused = await sealSemanticRejection(env, receipt, digest, intent.admission, 'star-violation',
+      `${ownershipHeadGuard} FILTER EXISTS ${addedStarConflict}`);
+    if (refused) return checkedResult(env, refused, intent, false);
+  }
   if (state.component === 'definition' && state.notation) {
     const sealed = await sealSemanticRejection(env, receipt, digest, intent.admission, 'unavailable-reference',
       `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {

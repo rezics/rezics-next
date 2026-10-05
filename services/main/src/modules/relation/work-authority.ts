@@ -3,7 +3,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { admitted, type AdmittedRelationChangeInput, type SemanticAccess } from '../semantic/admitted.ts';
 import { SemanticChangeRejected } from '../semantic/command.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { assertIdentityParticipants, canonicalRelation, changeRelationOccurrence, readCurrentOccurrence, readExactDefinition,
+import { assertIdentityParticipants, relationReferences, canonicalRelation, changeRelationOccurrence, readCurrentOccurrence, readExactDefinition,
   readRelationChangeTerminal, relationChangeDigest, RELATION_CHANGE_FAMILY, type ExactDefinition,
   type OccurrenceState } from './change.ts';
 
@@ -51,17 +51,17 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
     scope: `work:edit:${subject}`, digest,
     references: async principal => {
       currentPrincipal = principal;
-      await assertIdentityParticipants(env, state.participations, { access, principal, actingSubject: input.actingSubject });
       if (!await access.canReadWork(principal, input.actingSubject, subject)) {
         throw new SemanticChangeRejected('unavailable-reference', 'subject Work is unavailable');
       }
-      return [definition.definition, ...new Set([...state.participations.flatMap(item =>
-        item.participant.kind === 'resource' ? [item.participant.ref] : []),
-      ...state.revealedAt ? [state.revealedAt.work] : []])];
+      return relationReferences(env, definition, state, { access, principal, actingSubject: input.actingSubject });
     },
-    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead, ...input }),
+    dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, ...input, canRead: input.canReadConflict ?? canRead }),
     readTerminal: id => readRelationChangeTerminal(env, id),
-    result: (terminal, dispatched) => ({ occurrence: terminal.component!, revision: terminal.revision!,
+    result: async (terminal, dispatched) => {
+      await input.beforeCommit?.complete?.(terminal.component!, terminal.receipt);
+      return { occurrence: terminal.component!, revision: terminal.revision!,
       predecessor: terminal.expectedHead ?? null, receipt: terminal.receipt, dataEpoch: terminal.dataEpoch,
-      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true }) });
+      sequence: terminal.sequence, replayed: dispatched?.replayed ?? true };
+    } });
 }

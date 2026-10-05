@@ -34,7 +34,7 @@ export function projectionRoutes(deps: MainWorkDependencies) {
     .post('/v1/projections', {
       body: projectionRequest,
       response: { 200: projectionWriteResponse, 201: projectionWriteResponse, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422), 429: problemResult(429) },
     }, async ({ request, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
