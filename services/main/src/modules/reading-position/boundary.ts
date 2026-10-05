@@ -238,17 +238,6 @@ export class ReadingBoundary {
       const batch = missing.slice(at, at + REVELATION_COST.batch);
       const found = await store?.lookup(batch) ?? new Map<string, Revelation[]>();
       for (const record of await store?.required(batch) ?? []) this.required.add(record);
-      // A relation receipt commits this marker atomically with its revision. Until
-      // publication reaches owner storage, every read fails closed; refused edits
-      // never mark the earlier successful revision as position-required.
-      if (batch.length) {
-        const pending = await this.session.query(`SELECT DISTINCT ?record WHERE {
-          VALUES ?record { ${batch.map(iri).join(' ')} }
-          GRAPH ${iri(GRAPHS.current)} { ?record rv:occurrenceHead ?revision }
-          GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:component ?record ; rv:revision ?revision ; rv:revelationWork ?work }
-        } LIMIT ${REVELATION_COST.batch + 1}`, REVELATION_COST.batch);
-        for (const row of pending) if (row.record) this.required.add(row.record.value);
-      }
       for (const record of batch) this.records.set(record, found.get(record) ?? []);
     }
     const visible = new Set<string>();

@@ -5,8 +5,9 @@ import type { EditorRecording } from '../lexicon/editor-recording.ts';
 import { KEY_NOTATION } from '../lexicon/definition-key.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration, familyReceiptIri,
   readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable, sealComponentState,
-  sealSemanticRejection, sendSemanticWrite, validationsFor, type SemanticAdmission,
+  sealSemanticRejection, sendSemanticWrite, StaleSemanticHead, validationsFor, type SemanticAdmission,
   type SemanticTerminal } from '../semantic/command.ts';
+import { ModelGenerationChanged } from '../semantic/generation-guard.ts';
 import { checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
 import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
@@ -43,10 +44,12 @@ export interface RelationChangeIntent {
   canRead?: (resource: string) => Promise<boolean>;
 }
 
-/** Validate publication, then publish only a successful graph receipt. */
+/** Validate and register publication before the graph write, then settle it: `complete` on a successful
+ * receipt, `abandon` on a sealed refusal. An interrupted write settles on replay of the same admission. */
 export interface RelationPublication {
   (component: string, receipt: string): Promise<void>;
   complete?: (component: string, receipt: string) => Promise<void>;
+  abandon?: (receipt: string) => Promise<void>;
   guard?: string;
 }
 
@@ -326,6 +329,19 @@ export interface RelationChangeResult {
  */
 export async function changeRelationOccurrence(env: WorkActivationEnvironment,
   intent: RelationChangeIntent): Promise<RelationChangeResult> {
+  try { return await writeRelationOccurrence(env, intent); }
+  catch (error) {
+    // A sealed refusal is final, so its registration goes; an unknown outcome keeps it, failing closed.
+    if (error instanceof SemanticChangeRejected || error instanceof StaleSemanticHead
+      || error instanceof ModelGenerationChanged) {
+      await intent.beforeCommit?.abandon?.(familyReceiptIri(intent.admission.id, RELATION_CHANGE_FAMILY));
+    }
+    throw error;
+  }
+}
+
+async function writeRelationOccurrence(env: WorkActivationEnvironment,
+  intent: RelationChangeIntent): Promise<RelationChangeResult> {
   if (intent.occurrence !== undefined) checkedNativeIri(intent.occurrence);
   if ((intent.occurrence === undefined) !== (intent.expectedHead === null)) {
     throw new SemanticChangeRejected('invalid', 'a create has no head; an edit names one');
@@ -489,12 +505,14 @@ function checkedResult(terminal: SemanticTerminal, intent: RelationChangeIntent,
 }
 
 /**
- * Check the selected composition before dispatch. The successful graph receipt position-requires the
- * occurrence atomically; publication then records the position in owner storage, recoverable on replay.
- * A refused graph write leaves no position or disclosure marker. An existing position never moves.
+ * Check the selected composition and register the occurrence as pending before dispatch: readers treat a pending
+ * record as position-required, so the graph write never exposes it unguarded and costs reads no graph query.
+ * An accepted receipt publishes the position and settles the registration; a refused one abandons it. A crash
+ * in between leaves the registration, which stays hidden until a replay of the same admission settles it.
+ * An existing position never moves.
  */
 export function relationRevelation(env: WorkActivationEnvironment,
-  store: Pick<ReadingPositionStore, 'publish' | 'preparePublication'> | undefined,
+  store: Pick<ReadingPositionStore, 'publish' | 'register' | 'abandon'> | undefined,
   revealedAt: RevealedAt): RelationPublication {
   const row = (component: string, receipt: string) => ({ record: component, recordKind: 'relation' as const,
     continuityWork: revealedAt.work, occurrence: revealedAt.occurrence, receipt });
@@ -512,7 +530,7 @@ export function relationRevelation(env: WorkActivationEnvironment,
     const placed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK ${guard}`);
     if (placed.boolean !== true) throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
     try {
-      await store.preparePublication(row(component, receipt));
+      await store.register(row(component, receipt));
     } catch (error) {
       if (error instanceof RevelationConflict) {
         throw new SemanticChangeRejected('invalid', 'the occurrence already has a revelation position');
@@ -525,6 +543,7 @@ export function relationRevelation(env: WorkActivationEnvironment,
     if (!store) throw new SemanticChangeRejected('unsupported', 'revelation positions are unavailable');
     await store.publish(row(component, receipt));
   };
+  prepare.abandon = async receipt => { await store?.abandon(receipt); };
   return prepare;
 }
 

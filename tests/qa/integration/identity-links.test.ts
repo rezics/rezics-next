@@ -248,6 +248,9 @@ test('identity links: credited names, star refusals and seeded definitions throu
     const positions = async () => Number((await f.pool.query<{ count: string }>(
       "SELECT count(*) FROM reading_position.revelation WHERE record_kind = 'relation'")).rows[0]!.count);
     const beforeRefusal = await positions();
+    const pendingRegistrations = async () => Number((await f.pool.query<{ count: string }>(
+      'SELECT count(*) FROM reading_position.pending_revelation')).rows[0]!.count);
+    expect(await pendingRegistrations()).toBe(0);
     // The leaf already belongs to an unpositioned link; graph refusal must not publish a position.
     await write(link(quiet, other, { revealedAt }));
     expect(await positions()).toBe(beforeRefusal);
@@ -255,8 +258,18 @@ test('identity links: credited names, star refusals and seeded definitions throu
     const refusedEdit = await write(link(quiet, alter, { revealedAt, occurrence: quietLink.occurrence,
       expectedHead: quietLink.revision }));
     expect(refusedEdit.status).toBe(422);
+    // The refusal removes its pending registration; the earlier revision stays readable and unpositioned.
+    expect(await pendingRegistrations()).toBe(0);
     expect((await at(quietLink.occurrence, 'start')).status).toBe(200);
     expect(await positions()).toBe(beforeRefusal);
+    // A write interrupted after registering leaves the occurrence hidden until its receipt is abandoned.
+    const interrupted = new ReadingPositionStore(f.pool);
+    const interruptedReceipt = `urn:rezics:receipt:${randomUUID()}`;
+    await interrupted.register({ record: quietLink.occurrence, recordKind: 'relation', continuityWork: revealedAt.work,
+      occurrence: revealedAt.occurrence, receipt: interruptedReceipt });
+    expect((await at(quietLink.occurrence, 'start')).status).toBe(404);
+    await interrupted.abandon(interruptedReceipt);
+    expect((await at(quietLink.occurrence, 'start')).status).toBe(200);
     // A readable occurrence can still be hidden by its revelation boundary.
     const hiddenSpoilerConflict = await write(link(spoilerLeaf, other));
     expect([hiddenSpoilerConflict.status, await problemOf(hiddenSpoilerConflict)]).toEqual([422, 'unavailable_reference']);
@@ -277,10 +290,13 @@ test('identity links: credited names, star refusals and seeded definitions throu
       await f.grant(`semantic:read:${recoveryOccurrence}`, 'semantic.read');
       expect((await at(recoveryOccurrence, 'all')).status).toBe(404);
       expect(await positions()).toBe(beforeRefusal);
+      // The registration stays, so readers fail closed without asking the graph.
+      expect(await pendingRegistrations()).toBe(1);
     } finally { ReadingPositionStore.prototype.publish = nativePublish; }
     const recovered = await f.json<Written>(await write(recoveryBody, recoveryKey), 201);
     expect(recovered).toMatchObject({ occurrence: recoveryOccurrence, replayed: true });
     expect((await at(recovered.occurrence, 'all')).status).toBe(200);
+    expect(await pendingRegistrations()).toBe(0);
     // An occurrence's position never moves.
     await f.grant(`relation:edit:${spoiler.occurrence}`, 'relation.change');
     const movedPosition = await write(link(spoilerLeaf, spoilerHub, { occurrence: spoiler.occurrence, expectedHead: spoiler.revision,

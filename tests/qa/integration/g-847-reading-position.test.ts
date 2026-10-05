@@ -389,7 +389,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     } finally { stack.contentPool.query = poolQuery; }
     const schema = await stack.contentPool.query<{ name: string }>(`SELECT tablename AS name FROM pg_tables
       WHERE schemaname = 'reading_position' ORDER BY tablename`);
-    expect(schema.rows.map(row => row.name)).toEqual(['generation', 'revelation']);
+    expect(schema.rows.map(row => row.name)).toEqual(['generation', 'pending_revelation', 'revelation']);
 
     let baselineQueries = 0;
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {

@@ -13,8 +13,7 @@ export function normalizePositionQuery(q?: string): string {
   return (q ?? '').normalize('NFKC').trim().toLowerCase();
 }
 
-export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, pendingGraphQueries: 1,
-  writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
+export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
   record: string;
   recordKind: 'entity' | 'name' | 'alias' | 'statement' | 'relation';
@@ -66,8 +65,10 @@ export class ReadingPositionStore {
   async required(records: readonly string[]): Promise<Set<string>> {
     if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
     if (!records.length) return new Set();
+    // A record pending publication is required too, so readers fail closed without a graph query.
     const result = await this.pool.query<{ record: string }>(`SELECT record
-      FROM wiki.revelation_record WHERE record = ANY($1::text[])`,[records]);
+      FROM wiki.revelation_record WHERE record = ANY($1::text[])
+      UNION SELECT record FROM reading_position.pending_revelation WHERE record = ANY($1::text[])`,[records]);
     return new Set(result.rows.map(row => row.record));
   }
   /** Only the reviewed publication/correction owner calls this in its transaction.
@@ -95,7 +96,8 @@ export class ReadingPositionStore {
     if (result.rowCount !== 1) throw new RevelationConflict('Revelation receipt changed');
   }
   /** Position-require one record and reveal it at one occurrence, in one transaction. Replaying the same
-   * receipt is a no-op; a different position for the same record and continuity is a conflict, never a move. */
+   * receipt is a no-op; a different position for the same record and continuity is a conflict, never a move.
+   * It also settles this receipt's pending registration. */
   async publish(row: Revelation): Promise<void> {
     const client = await this.pool.connect();
     try {
@@ -106,20 +108,30 @@ export class ReadingPositionStore {
       if (existing.rows[0]) {
         if (existing.rows[0].occurrence !== row.occurrence) throw new RevelationConflict('Revelation position changed');
       } else await this.write(client, row, null);
+      await client.query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1 AND record = $2`,
+        [row.receipt, row.record]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally { client.release(); }
   }
-  /** Check an existing position without mutating disclosure before graph acceptance.
-   * The successful graph receipt requires publication; retries recover that boundary. */
-  async preparePublication(row: Revelation): Promise<void> {
+  /** Register a relation's revelation before its graph write. The record is position-required, hence hidden, until
+   * `publish` settles this receipt or `abandon` removes it, so a refused or interrupted write never leaves it unguarded.
+   * An existing position is checked and never moves; a record already revealed there needs no registration. */
+  async register(row: Revelation): Promise<void> {
     const existing = await this.pool.query<{ occurrence: string }>(`SELECT occurrence FROM reading_position.revelation
       WHERE record = $1 AND continuity_work = $2`, [row.record, row.continuityWork]);
-    if (existing.rows[0] && existing.rows[0].occurrence !== row.occurrence) {
-      throw new RevelationConflict('Revelation position changed');
+    if (existing.rows[0]) {
+      if (existing.rows[0].occurrence !== row.occurrence) throw new RevelationConflict('Revelation position changed');
+      return;
     }
+    await this.pool.query(`INSERT INTO reading_position.pending_revelation(record, receipt) VALUES ($1, $2)
+      ON CONFLICT DO NOTHING`, [row.record, row.receipt]);
+  }
+  /** The graph refused the write: drop only this receipt's registration. */
+  async abandon(receipt: string): Promise<void> {
+    await this.pool.query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1`, [receipt]);
   }
   async completed(principal: VerifiedPrincipal, structures: readonly string[]): Promise<Set<string>> {
     if (!structures.length) return new Set();
