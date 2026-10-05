@@ -6,6 +6,10 @@ import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
 
 /** POST operations that read or compute and never record anything. */
 const LOOKUP_POSTS = new Set(['/v1/catalogue/candidates', '/v1/classification-resolutions', '/v1/rating-rollups']);
+/** Role-change previews compute an impact digest and record nothing a rerun could add to. */
+const LOOKUP_POST_PATTERNS = [/^\/v1\/realms\/[0-9a-f-]{36}\/role-impact$/];
+/** POSTs that answer 200 for a replay and 201 for a new record, without a `replayed` field. */
+const REPLAY_BY_STATUS_POSTS = new Set(['/v1/hub/imports', '/v1/prompts/revisions']);
 export interface SeedWriteCounts { written: number; replayed: number; reconciled: number; lookups: number }
 
 export interface SeedEndpoints {
@@ -117,12 +121,35 @@ export class SeedApi {
     throw new Error(`Verification email for ${email} did not reach local Mailpit`);
   }
 
+  /** Account answers 503 while it restarts or cannot reach its database, and reports when that has passed on its
+   * own readiness route. Wait for that report, within one deadline, rather than repeating a request on a timer. */
+  private async waitForAccountReady(timeoutMs = 60_000): Promise<void> {
+    const ready = `${this.endpoints.accountService ?? this.endpoints.account}/health/ready`;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(ready, { signal: AbortSignal.timeout(3_000) });
+        await response.body?.cancel();
+        if (response.ok) return;
+      } catch { /* A restarting listener refuses connections. */ }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    throw new Error(`Account did not become ready within ${timeoutMs / 1000} s: ${ready}`);
+  }
+
   async signInOrUp(user: Credentials): Promise<{ cookie: string; id: string }> {
     const account = this.endpoints.account;
     const headers = { 'content-type': 'application/json', origin: account,
       ...(this.endpoints.enrollmentToken ? { 'x-captcha-response': this.endpoints.enrollmentToken } : {}) };
-    const signIn = () => this.accountFetch(`${account}/api/auth/sign-in/email`, { method: 'POST', headers,
+    const attempt = () => this.accountFetch(`${account}/api/auth/sign-in/email`, { method: 'POST', headers,
       body: JSON.stringify({ email: user.email, password: user.password }) });
+    const signIn = async () => {
+      const response = await attempt();
+      if (response.status !== 503) return response;
+      await response.body?.cancel();
+      await this.waitForAccountReady();
+      return attempt();
+    };
     let response = await signIn();
     if ([400, 401, 404].includes(response.status) && user.name) {
       await response.body?.cancel();
@@ -302,8 +329,10 @@ export class SeedApi {
           // Like the catalogue fixture's createdWrites, count seed-record
           // commands separately from candidate searches, their evidence and
           // roll-up computations, which are POST reads that store nothing.
-          const replayed = !!result && typeof result === 'object' && 'replayed' in result && result.replayed === true;
-          this.endpoints.writeCounts[LOOKUP_POSTS.has(path) ? 'lookups' : replayed ? 'replayed' : 'written']++;
+          const replayed = !!result && typeof result === 'object' && 'replayed' in result && result.replayed === true
+            || REPLAY_BY_STATUS_POSTS.has(path) && response.status === 200;
+          const lookup = LOOKUP_POSTS.has(path) || LOOKUP_POST_PATTERNS.some(pattern => pattern.test(path));
+          this.endpoints.writeCounts[lookup ? 'lookups' : replayed ? 'replayed' : 'written']++;
         }
         return result;
       }

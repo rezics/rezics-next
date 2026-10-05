@@ -160,10 +160,17 @@ export async function seedHomeV2(api: SeedApi, sessions: Session[], created: Map
   if (!resume.items.some(item => item.work === serial.work && item.nextUnread.occurrence)) {
     throw new Error('Home Continue strip has no serial chapter');
   }
-  const navigation = await api.get<{ items: { newSince?: { state: string } }[] }>(
-    `/v1/me/follows?actingSubject=${encodeURIComponent(reader.actingSubject)}&kind=realm&include=newSince`, reader.token);
-  if (!navigation.items.some(item => item.newSince?.state === 'new')) {
-    throw new Error('Home Realm navigation has no new activity');
+  // Realms are followed as Spaces, as the web lists them. The reader follows more than one page holds, and a page
+  // may hold none the watermarks left new activity in.
+  let cursor: string | null = null, fresh = false;
+  for (let page = 0; page < 50 && !fresh; page++) {
+    const navigation: { items: { newSince?: { state: string } }[]; nextCursor?: string | null } = await api.get(
+      `/v1/me/follows?actingSubject=${encodeURIComponent(reader.actingSubject)}&kind=space&include=newSince&limit=20${
+        cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, reader.token);
+    fresh = navigation.items.some(item => item.newSince?.state === 'new');
+    cursor = navigation.nextCursor ?? null;
+    if (!cursor) break;
   }
+  if (!fresh) throw new Error('Home Realm navigation has no new activity');
   return { chapters: 3, watermarks: realms.length + 1 };
 }

@@ -1,21 +1,25 @@
+import { onEarlierWork, replayEarlierWork } from './contributions-work.ts';
 import { seedKey, works, type DemoWork } from './plan.ts';
 import { seedReply } from './replies.ts';
 import type { ContributionReceipt, PublicationReceipt, SeedState } from './state.ts';
+import { workIntents } from './works-step.ts';
 
 export async function seedContributions(state: SeedState, plan: readonly DemoWork[] = works) {
   const { api, created, publicForRealm, sessions } = state;
   const owner = sessions[0]!;
   for (const excerpt of plan.filter(work => work.excerpt)) {
-    const target = created.get(excerpt.id)!;
     const writer = excerpt.author === 'moonlight' ? owner
       : sessions.find(session => session.id === excerpt.author) ?? owner;
     const author = excerpt.author === 'moonlight'
       ? state.penAgents.get('moonlight')! : writer.actingSubject;
-    const contribution = await state.optional(`Text contribution ${excerpt.id}`, () => api.post<ContributionReceipt>(
-      '/v1/contributions', { profile: 'text-contribution-v1', work: target.work,
+    const written = await state.optional(`Text contribution ${excerpt.id}`, () => onEarlierWork(created.get(excerpt.id)!,
+      () => replayEarlierWork(api, workIntents(excerpt, author, !!excerpt.author), writer.token, seedKey('work', excerpt.id)),
+      work => api.post<ContributionReceipt>('/v1/contributions', { profile: 'text-contribution-v1', work: work.work,
         language: excerpt.language, body: excerpt.excerpt!, actingSubject: author },
-      writer.token, seedKey('contribution', excerpt.id)));
-    if (!contribution) continue;
+      writer.token, seedKey('contribution', excerpt.id))));
+    if (!written) continue;
+    const { work: target, result: contribution } = written;
+    created.set(excerpt.id, target);
     const published = await state.optional('Contribution publication', () => api.post<PublicationReceipt>(
       '/v1/contribution-publications', { profile: 'text-publication-v1',
         contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,

@@ -224,3 +224,24 @@ test('G-909: explicitly declared Space languages are never replaced on a creatio
     expect(calls[0]!.body!.language).toBe('zh-Hans');
   });
 });
+
+test('role-change previews are lookups in the seed write report', async () => {
+  await serverFixture(() => Response.json({ digest: 'a'.repeat(64), affectedCount: 0 }), async api => {
+    await api.post(`/v1/realms/${uuid}/role-impact`, { actingSubject: id, expectedGeneration: '1', reason: 'Seed',
+      change: { kind: 'assignment', roleId: uuid, member: id, assigned: true, validUntil: '2026-12-31T00:00:00.000Z' } }, 'token', 'seed-impact');
+    expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 1 });
+  });
+});
+
+test('hub imports and prompt revisions answer 200 for a replay and 201 for a new record', async () => {
+  await serverFixture(request => Response.json({ id }, { status: request.headers.get('idempotency-key') === 'seed-replay' ? 200 : 201 }),
+    async api => {
+      const revision = { resourceId: id, variantId: `urn:rezics:variant:${uuid}`, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+        direction: 'ltr', expectedHead: null, actingSubject: id, profile: 'rezics-prompt-revision-v1', content: 'x',
+        parameterSchema: {}, examples: [], applicability: { models: [], tools: [] } };
+      await api.post('/v1/prompts/revisions', revision, 'token', 'seed-replay');
+      expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 1, reconciled: 0, lookups: 0 });
+      await api.post('/v1/prompts/revisions', revision, 'token', 'seed-new');
+      expect(api.endpoints.writeCounts).toEqual({ written: 1, replayed: 1, reconciled: 0, lookups: 0 });
+    });
+});

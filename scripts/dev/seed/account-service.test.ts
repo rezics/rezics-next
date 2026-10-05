@@ -103,3 +103,43 @@ test('G-909: transient OAuth authorization failures retry the same PKCE request'
     expect(new Set(requests).size).toBe(1);
   } finally { await server.stop(true); }
 });
+
+test('Account sign-in that meets 503 waits for Account readiness and repeats once, never on a timer', async () => {
+  const calls: string[] = [];
+  let ready = false;
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    const path = new URL(request.url).pathname;
+    calls.push(path);
+    if (path === '/health/ready') {
+      ready = calls.filter(call => call === '/health/ready').length >= 2;
+      return new Response(null, { status: ready ? 200 : 503 });
+    }
+    if (path.endsWith('/sign-in/email')) {
+      return ready ? Response.json({ user: { id: 'account-id' } }, { headers: { 'set-cookie': 'session=seed' } })
+        : Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+    }
+    return new Response(null, { status: 404 });
+  } });
+  try {
+    const api = new SeedApi({ account: server.url.origin, main: 'http://localhost:3001', mailpit: '', clientId: 'client',
+      redirectUri: 'http://localhost:3000/callback', resource: 'http://localhost:3001', scope: 'openid work:read' });
+    expect(await api.signInOrUp({ email: 'reader@example.test', password: 'password' })).toEqual({ cookie: 'session=seed', id: 'account-id' });
+    expect(calls).toEqual(['/api/auth/sign-in/email', '/health/ready', '/health/ready', '/api/auth/sign-in/email']);
+  } finally { await server.stop(true); }
+});
+
+test('Account sign-in that still meets 503 once Account is ready is reported, not repeated again', async () => {
+  const calls: string[] = [];
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    const path = new URL(request.url).pathname;
+    calls.push(path);
+    return path === '/health/ready' ? new Response(null, { status: 200 })
+      : Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
+  } });
+  try {
+    const api = new SeedApi({ account: server.url.origin, main: 'http://localhost:3001', mailpit: '', clientId: 'client',
+      redirectUri: 'http://localhost:3000/callback', resource: 'http://localhost:3001', scope: 'openid work:read' });
+    await expect(api.signInOrUp({ email: 'reader@example.test', password: 'password' })).rejects.toThrow('HTTP 503');
+    expect(calls).toEqual(['/api/auth/sign-in/email', '/health/ready', '/api/auth/sign-in/email']);
+  } finally { await server.stop(true); }
+});

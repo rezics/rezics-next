@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
 import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
@@ -8,9 +9,11 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContri
   grantImportedWorkSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
-import { localizedBilingual, people, profilePlan, seedKey, works } from './plan.ts';
+import { localizedBilingual, people, profilePlan, realms as plannedRealms, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import { modsConcepts } from './realms-step.ts';
+import { onEarlierWork, replayEarlierWork } from './contributions-work.ts';
+import { demoSessions } from './library-people.ts';
 import { gamesCatalogue } from './games-catalogue.ts';
 import { softwareCatalogue } from './software-catalogue.ts';
 import { requiresSeedAdministrator } from './work-authority.ts';
@@ -60,6 +63,12 @@ const kinds = { document: DOCUMENT, mod: 'https://rezics.com/vocab/ModPackage',
 interface Published { contribution: string; decision: string; draftRevision: string }
 interface Placed { work: WorkReceipt; language: string; published: Published | null }
 
+/** The key part naming an official Realm in the commands that write into it; see `Official.keyed`. */
+export function realmKeyed(id: string, realm: string): string {
+  const planned = plannedRealms.find(item => item.id === id);
+  return planned && 'handle' in planned ? `${id}:${short(realm)}` : id;
+}
+
 class Official {
   readonly works = new Map<string, Placed>();
   readonly agents = new Map<string, string>();
@@ -88,6 +97,12 @@ class Official {
     if (!realm) throw new Error(`Official Realm ${id} was not created`);
     return realm;
   }
+  /**
+   * Keys of the commands that write into a Realm. A Realm planned with a handle was created under a key that names it,
+   * so on a stack seeded before the handle it replaced an earlier Realm of the same plan id, and that Realm's records
+   * hold the plain keys. The replacement's records carry it in their keys; every other Realm keeps its plain ones.
+   */
+  keyed(id: OfficialRealmId): string { return realmKeyed(id, this.realm(id).receipt.realm); }
   /** Fixture authority on the local stack, for `actor` as the person `as` represents. */
   input(as: Session, actor: string): LocalOperatorInput {
     return { ...this.operator, ownerAccountSubject: as.accountId, actingSubject: actor };
@@ -349,16 +364,23 @@ async function lighterTexts(o: Official) {
       if (requiresSeedAdministrator([kinds[extra.type]])) {
         await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject));
       }
-      const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,
-        semanticTypes: [kinds[extra.type]], language: extra.language, authoring: 'own-work',
-        actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
-      // Restricted kinds are created with the administrator's bearer. Grant the
-      // named writer's fixture authority before their first metadata command.
-      await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject), target.work, target.mainVersion);
+      const intent = { profile: 'metadata-only-v1', title: extra.title, semanticTypes: [kinds[extra.type]],
+        language: extra.language, authoring: 'own-work', actingSubject: as.actingSubject };
+      const key = seedKey('official-work', extra.id);
+      const made = await createWork(o, intent, as.token, key);
+      // The text goes first: its key tells whether an earlier Work, made by the author before this kind became
+      // administrator-created, still holds this one's records, and that Work is then the one described.
+      const { work: target, result: published } = await onEarlierWork(made,
+        () => replayEarlierWork(o.api, [intent, { ...intent, language: 'en' }], as.token, key),
+        async work => {
+          // Restricted kinds are created with the administrator's bearer. Grant the
+          // named writer's fixture authority before their first metadata command.
+          await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject), work.work, work.mainVersion);
+          return publish(o, extra.id, work, as.actingSubject, as, extra.language, extra.text);
+        });
       await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null,
         extra.id === 'lumen-fabric');
-      o.works.set(extra.id, { work: target, language: extra.language,
-        published: await publish(o, extra.id, target, as.actingSubject, as, extra.language, extra.text) });
+      o.works.set(extra.id, { work: target, language: extra.language, published });
     });
   }
 }
@@ -380,6 +402,24 @@ async function gameAndAppTaglines(o: Official) {
   }
 }
 
+export type ModRead = (path: string) => Promise<{ items: { version: string | null; gameVersions: string[];
+  mod: { ecosystem: string } | null }[]; nextCursor: string | null } | null>;
+
+/** Whether the Work already lists this release for this game version. A binding answers 201 whether it is new or a
+ * replay, so only the Work's release list tells a run that has nothing left to bind. */
+export async function modReleaseBound(read: ModRead, work: string, release: string, gameVersion: string,
+  ecosystem: string): Promise<boolean> {
+  let cursor: string | null = null;
+  do {
+    const page = await read(`/v1/mod-releases/${short(work)}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+    if (!page) return false;
+    if (page.items.some(item => item.version === release && item.gameVersions.includes(gameVersion)
+      && item.mod?.ecosystem === ecosystem)) return true;
+    cursor = page.nextCursor;
+  } while (cursor);
+  return false;
+}
+
 /** Verified native captures become explicit, disclosure-safe Work bindings. */
 async function mods(o: Official) {
   const as = o.person('jun');
@@ -394,6 +434,7 @@ async function mods(o: Official) {
         ? JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: item.release,
           environment: 'client', depends: {} })
         : `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="${item.nativeId}"\nversion="${item.release}"\n`;
+      if (await modReleaseBound(path => o.read(path), target.work.work, item.release, '1.21.1', item.ecosystem)) return;
       const bytes = Buffer.from(manifest);
       const resolved = await api.post<{ resolution: { resolution: string } }>(
         '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem: item.ecosystem,
@@ -426,6 +467,7 @@ async function mods(o: Official) {
         : JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: later.release,
           ...later.environment ? { environment: later.environment } : {}, depends: later.depends ?? {},
           ...later.recommends ? { recommends: later.recommends } : {}, ...later.breaks ? { breaks: later.breaks } : {} });
+      if (await modReleaseBound(path => o.read(path), target.work.work, later.release, later.gameVersion, ecosystem)) return;
       const resolved = await api.post<{ resolution: { resolution: string } }>(
         '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem,
           side: 'CLIENT', root: item.nativeId,
@@ -467,7 +509,7 @@ async function modClassifications(o: Official) {
       await o.api.post('/v1/classification-decisions', {
         profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
         outcome: 'accepted', actingSubject: steward.actingSubject }, steward.token,
-      seedKey('official-mod-classification', `${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
+      seedKey('official-mod-classification', `${o.keyed('mods')}:${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
     }
   }
 }
@@ -628,7 +670,7 @@ async function adoptions(o: Official) {
         profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: realm.receipt.realm },
         work: work.work.work, mainVersion: work.work.mainVersion, contribution: work.contribution,
         publicationDecision: work.decision, expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
-        actingSubject: realm.steward.actingSubject }, realm.steward.token, seedKey('realm-adoption', `${id}:${workId}`)));
+        actingSubject: realm.steward.actingSubject }, realm.steward.token, seedKey('realm-adoption', `${o.keyed(id)}:${workId}`)));
       if (adopted) count++;
     }
   }
@@ -699,13 +741,14 @@ async function joining(o: Official) {
       body: localizedBilingual(rule.body), governanceRule: null }));
     const current = await o.read<Settings>(`${root}/settings?actingSubject=${encodeURIComponent(steward.actingSubject)}`,
       steward.token);
-    if (current && (!current.settings.selfJoin || JSON.stringify(current.settings.rules) !== JSON.stringify(rules))) {
+    // Main answers the rules with their fields in its own order, so equal rules are compared as values.
+    if (current && (!current.settings.selfJoin || !isDeepStrictEqual(current.settings.rules, rules))) {
       await o.api.put(`${root}/settings`, { actingSubject: steward.actingSubject, expectedGeneration: current.generation,
         reason: 'Open the official community to readers and publish its rules',
         settings: { ...current.settings, selfJoin: true, rules }, expectedRulesRevision: current.ruleBasis.revision },
-      steward.token, seedKey('official-settings', `${id}:${current.generation}`));
+      steward.token, seedKey('official-settings', `${o.keyed(id)}:${current.generation}`));
     }
-    for (const member of o.state.sessions.filter(session => session.id !== steward.id)) {
+    for (const member of demoSessions(o.state.sessions).filter(session => session.id !== steward.id)) {
       const result = await o.state.optional('Official Realm join', async () => {
         const policy = await o.read<{ selfJoin: boolean; open: boolean; state: string; membershipGeneration: string;
           policyRevision: string; termsRevision: string }>(
@@ -716,7 +759,7 @@ async function joining(o: Official) {
           termsRevision: policy.termsRevision,
           // One demo person joins without being listed, as anyone may.
           listed: member.id !== 'leo' }, member.token,
-        seedKey('official-join', `${id}:${member.id}:${policy.membershipGeneration}`));
+        seedKey('official-join', `${o.keyed(id)}:${member.id}:${policy.membershipGeneration}`));
       });
       if (result) joined++;
     }
@@ -727,16 +770,22 @@ async function joining(o: Official) {
 /** Each Realm's public profile (description, member count and moderators), with each moderator's own consent. */
 async function profiles(o: Official) {
   const client = await realmProfileClient(o.operator);
-  const tokens = new Map<string, string>();
+  // Access tokens last five minutes and this step outlasts them, so a person's token is renewed with the session
+  // that signed it, on the schedule the other steps keep.
+  const tokens = new Map<string, { value: string; cookie: string; issuedAt: number }>();
   const token = async (person: string) => {
-    let value = tokens.get(person);
-    if (!value) {
+    let held = tokens.get(person);
+    if (!held) {
       const credentials = people.find(item => item.id === person);
       if (!credentials) throw new Error(`Demo person ${person} has no credentials`);
-      value = await client.token((await client.signInOrUp(credentials)).cookie);
-      tokens.set(person, value);
+      const { cookie } = await client.signInOrUp(credentials);
+      held = { value: await client.token(cookie), cookie, issuedAt: Date.now() };
+      tokens.set(person, held);
+    } else if (Date.now() - held.issuedAt > 120_000) {
+      held.value = await client.token(held.cookie);
+      held.issuedAt = Date.now();
     }
-    return value;
+    return held.value;
   };
   for (const [id, profile] of Object.entries(realmProfiles) as [OfficialRealmId, typeof realmProfiles.fiction][]) {
     await o.state.optional(`Realm profile ${id}`, async () => {
@@ -750,7 +799,7 @@ async function profiles(o: Official) {
           `${root}/moderators/${short(moderator.actingSubject)}/public-choice`, {
             profile: 'realm-public-moderator-choice-v1', expectedHead: null, public: true,
             actingSubject: moderator.actingSubject }, await token(person),
-          seedKey('official-moderator-choice', `${id}:${person}`)).catch(error => {
+          seedKey('official-moderator-choice', `${o.keyed(id)}:${person}`)).catch(error => {
           // A choice made on an earlier run stands; only its first command has no head.
           if (error instanceof SeedApiError && error.status === 409) return true;
           throw error;
@@ -772,7 +821,7 @@ async function profiles(o: Official) {
           bannerSelection: null, rules: profile.rules.map(rule => ({ ...rule,
             title: localizedBilingual(rule.title), body: localizedBilingual(rule.body), governanceRule: null })),
           count: { kind: 'exact', value: null }, moderators } },
-      await token(realm.steward.id), seedKey('official-profile-v2', `${id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
+      await token(realm.steward.id), seedKey('official-profile-v2', `${o.keyed(id)}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
     });
   }
 }

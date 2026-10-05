@@ -6,6 +6,14 @@ import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
 import { refreshMetadataBasis } from './metadata.ts';
 import { requiresSeedAdministrator } from './work-authority.ts';
 
+/** The intents a Work's creation key has carried, newest first: later runs replay it under that key. */
+export function workIntents(work: DemoWork, actingSubject: string, authored: boolean): Record<string, unknown>[] {
+  const body = {
+    profile: 'metadata-only-v1', title: work.seedTitle ?? work.title, semanticTypes: semanticTypes(work.type),
+    language: work.language, actingSubject, ...(authored ? { authoring: 'own-work' } : {}) };
+  return [body, { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) }];
+}
+
 export async function seedWorks(state: SeedState, plan: readonly DemoWork[] = works) {
   const { api, created } = state;
   const owner = state.sessions[0]!;
@@ -28,18 +36,14 @@ export async function seedWorks(state: SeedState, plan: readonly DemoWork[] = wo
       creationApi = state.operatorSession.api;
       creationToken = state.operatorSession.token;
     }
-    const body = {
-      profile: 'metadata-only-v1', title: work.seedTitle ?? work.title, semanticTypes: semanticTypes(work.type),
-      language: work.language, actingSubject: author ?? owner.actingSubject,
-      ...(author ? { authoring: 'own-work' } : {}) };
+    const [body, legacy] = workIntents(work, author ?? owner.actingSubject, !!author);
     const receipt: WorkReceipt = await creationApi.post<WorkReceipt>('/v1/works', body, creationToken, seedKey('work', work.id))
       .catch((error: unknown) => {
         // Stacks seeded before Works named their language and kind recorded these intents without them. Main
         // now requires the language and digests a missing one as English, so the replay states that.
         // A clean `task dev:reset` gives every Work both.
         if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
-        return creationApi.post<WorkReceipt>('/v1/works', { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) },
-          creationToken, seedKey('work', work.id));
+        return creationApi.post<WorkReceipt>('/v1/works', legacy!, creationToken, seedKey('work', work.id));
       });
     if (work.seedTitle && state.operatorInput) {
       const actor = author ?? owner.actingSubject;
