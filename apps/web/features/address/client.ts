@@ -101,6 +101,7 @@ export function resolvedAddress(value: unknown): ResolvedAddress | null {
   if (!value || typeof value !== 'object') return null;
   const data = value as ResolvedAddress;
   const address = data.canonical;
+  const chapterPlace = address && /^\/w\/[^/]+\/read\/$/.test(address.prefix);
   if (
     data.profile !== 'address-resolution-v1' ||
     data.status !== 'resolved' ||
@@ -113,12 +114,14 @@ export function resolvedAddress(value: unknown): ResolvedAddress | null {
     !nativeIri.test(data.holder) ||
     !address ||
     typeof address.key !== 'string' ||
-    // A UUID is a legacy lookup, never a canonical policy. Refuse a malformed
-    // Main answer instead of permanently redirecting to a lowercase UUID.
+    // Resource UUIDs are legacy lookups. Reader occurrences retain their
+    // owning route's UUID grammar, independently of the Book's address key.
     !parseAddressSegment(address.key) ||
-    parseAddressSegment(address.key)?.kind === 'uuid' ||
+    (parseAddressSegment(address.key)?.kind === 'uuid' && !chapterPlace) ||
     typeof address.suffixSource !== 'string' ||
-    !/^\/(?:@|(?:a|r|z|w|e|concepts)\/|z\/[^/]+\/[^/]+\/)$/.test(address.prefix) ||
+    !/^\/(?:@|(?:a|r|z|w|e|concepts)\/|z\/[^/]+\/[^/]+\/|w\/[^/]+\/(?:read\/)?)$/.test(
+      address.prefix,
+    ) ||
     (data.capabilities &&
       Object.values(data.capabilities).some(
         (value) => typeof value !== 'string' || !nativeIri.test(value),

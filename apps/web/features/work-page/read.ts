@@ -157,8 +157,6 @@ export async function postPlaceInBook(post: string, book: string, locale: UiLoca
 
 export type WorkResolution =
   | { kind: 'work'; id: string; header: WorkHeader }
-  /** A chapter Post: its address moves to its place in a Book's reader, or its Book's Contents. */
-  | { kind: 'post'; id: string; href: string }
   | { kind: 'moved'; key: string }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
@@ -166,8 +164,8 @@ export type WorkResolution =
 /**
  * The Work behind a `/w/{ref}` page, shared by its layout, views and
  * metadata. Metadata reads this directly: vinext streams metadata, so a
- * `notFound()` thrown there would answer 200. A chapter's address, from before chapters became Posts of their
- * Book, resolves to its Post.
+ * `notFound()` thrown there would answer 200. Former chapter addresses move
+ * to their reader place in the address edge before any page renders.
  */
 export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<WorkResolution> => {
   const parsed = parseWorkRef(ref);
@@ -176,26 +174,20 @@ export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<
   if (resolved.kind !== 'work') return resolved;
   const header = await readWorkHeader(resolved.id, locale);
   if (header.ok) return { kind: 'work', id: resolved.id, header: header.data };
-  if (header.failure !== 'missing') return { kind: 'unavailable' };
-  const post = await readPost(resolved.id, locale);
-  if (!post.ok) return { kind: post.failure === 'missing' ? 'missing' : 'unavailable' };
-  const href = postPlaceHref(post.data.placements);
-  return href ? { kind: 'post', id: resolved.id, href } : { kind: 'missing' };
+  return { kind: header.failure === 'missing' ? 'missing' : 'unavailable' };
 });
 
 /**
  * The Work for a layout or view. A missing or invisible Work is a 404 and a
  * renamed alias moves to the current one; when Main cannot answer, the page
  * says the Work is unavailable rather than pretending it does not exist. A
- * chapter is a Post of its Book: its address moves for good to the Book's
- * reader at that chapter.
+ * chapter's old Work address is handled by the address edge.
  */
 export async function loadWork(ref: string, locale: UiLocale):
   Promise<{ ok: true; id: string; header: WorkHeader } | { ok: false }> {
   const work = await resolveWork(ref, locale);
   if (work.kind === 'missing') notFound();
   if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.key), locale));
-  if (work.kind === 'post') permanentRedirect(localizedPath(work.href, locale));
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 

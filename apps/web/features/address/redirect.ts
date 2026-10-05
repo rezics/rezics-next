@@ -34,13 +34,20 @@ export async function decideAddress(
   }
   const path = addressPath(url.pathname);
   if (!path) return { kind: 'pass' };
-  // Main's current resolver admits only anonymous summaries. Private draft
-  // editors must reach their owning authenticated read until that resolver
-  // supports the viewer; public address admission cannot fence an editor out.
+  // Draft editors use their owner's edit admission. Reading a summary is not
+  // a prerequisite for reaching an editor with independent write authority.
   if (path.lookup.scope === 'work' && path.tail[0] === 'edit') return { kind: 'pass' };
   const read = await resolve(path.lookup);
   if (read.kind !== 'resolved') return error(read);
   const data = read.data;
+  // Main supplies the whole reader place for a former chapter Work. Its old
+  // Work tabs do not become tabs inside the chapter reader or Book's Contents.
+  if (
+    path.lookup.scope === 'work' &&
+    data.canonical.prefix.startsWith('/w/') &&
+    data.canonical.prefix !== '/w/'
+  )
+    path.tail = [];
   // Before the site router split, /r also held Zone capability identities.
   // That admitted identity still names the site when its Space has a Realm;
   // ordinary Space addresses and Realm identities keep the community surface.

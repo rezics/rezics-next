@@ -12,6 +12,8 @@ import { workRead, WorkReadMissing } from '../work/read-session.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { readRealmLanding } from '../realm-reads/read-realm.ts';
 import { identityCanonical } from './canonical.ts';
+import { readPost } from '../post/read.ts';
+import { deriveAddressSuffix, isSid, type CanonicalAddress } from '@rezics/model/address';
 import {
   ALIAS_COST,
   AliasInvalid,
@@ -291,6 +293,51 @@ async function resolveAddressBatch(
     }
     return pending;
   };
+  // Each distinct former chapter shares one Post read (at most eight readable
+  // placements) and one Book summary. The existing Post/read-session budgets
+  // fence graph changes and authority; duplicate aliases do not multiply them.
+  const postPlaces = new Map<string, Promise<CanonicalAddress | null>>();
+  const postPlace = (holder: string) => {
+    let pending = postPlaces.get(holder);
+    if (!pending) {
+      pending = workRead(
+        work,
+        viewer.workPrincipal ? request : publicLanguageRequest(request),
+        {
+          publicViewer: disclosureViewer(viewer.principal),
+          ...(viewer.workPrincipal && actingSubject ? { actingSubject } : {}),
+        },
+        async (session) => {
+          const post = await readPost(session, holder);
+          const first = post.placements[0];
+          if (!first) return null;
+          // A bounded list with only one entry cannot establish uniqueness if
+          // truncated. Fail closed rather than guess a reader location.
+          const places = post.placements.filter((place) => place.book === first.book);
+          const single =
+            places.length === 1 && (!post.placementsTruncated || post.placements.length > 1);
+          const [book] = await session.summaries([first.book]);
+          if (book?.status !== 'available' || book.type !== 'work') return null;
+          const suffix = isSid(book.address.key)
+            ? deriveAddressSuffix(book.address.suffixSource)
+            : '';
+          const key = `${book.address.key}${suffix ? `-${suffix}` : ''}`;
+          return {
+            prefix: single
+              ? `/w/${encodeURIComponent(key)}/read/`
+              : `/w/${encodeURIComponent(key)}/`,
+            key: single ? first.occurrence.slice(-36) : 'contents',
+            suffixSource: '',
+          } satisfies CanonicalAddress;
+        },
+      ).catch((error) => {
+        if (error instanceof WorkReadMissing) return null;
+        throw new AliasUnavailable('Chapter address is unavailable', { cause: error });
+      });
+      postPlaces.set(holder, pending);
+    }
+    return pending;
+  };
   return Promise.all(
     selected.map(async ({ input, holder, alias, capabilityIdentity }) => {
       const summary = holder ? summaries.get(holder) : null;
@@ -298,11 +345,14 @@ async function resolveAddressBatch(
         input.scope === 'resource' || input.scope === 'concept'
           ? input.scope
           : scopeKind(input.scope);
+      const chapter =
+        kind === 'work' && summary?.status === 'available' && summary.type === 'resource';
+      const chapterAddress = chapter ? await postPlace(holder!) : null;
       if (
         !summary ||
         summary.status !== 'available' ||
         (capabilityIdentity && summaries.get(capabilityIdentity)?.status !== 'available') ||
-        (kind !== 'zone' && kind !== 'resource' && summary.type !== kind)
+        (kind !== 'zone' && kind !== 'resource' && summary.type !== kind && !chapterAddress)
       ) {
         const page =
           input.scope === 'space' && holder && !alias?.successor ? await landing(holder) : null;
@@ -333,7 +383,7 @@ async function resolveAddressBatch(
           throw new AliasUnavailable('Alias successor is no longer equivalent');
         }
       }
-      let canonical = summary.address;
+      let canonical = chapterAddress ?? summary.address;
       const availableCapabilities = Object.fromEntries(
         Object.entries(capabilities.get(holder!) ?? {}).filter(
           ([, target]) => summaries.get(target)?.status === 'available',
@@ -385,7 +435,11 @@ async function resolveAddressBatch(
         key: input.key,
         status: retired ? ('retired' as const) : ('resolved' as const),
         holder: holder!,
-        state: retired ? ('retired' as const) : (alias?.state ?? ('current' as const)),
+        state: retired
+          ? ('retired' as const)
+          : chapterAddress
+            ? ('redirect' as const)
+            : (alias?.state ?? ('current' as const)),
         canonical,
         ...(alias ? { revision: alias.revision } : {}),
         ...(summary.type === 'space' ? { capabilities: availableCapabilities } : {}),

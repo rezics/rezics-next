@@ -90,8 +90,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const access = cookies.find((cookie) => cookie.name === ACCESS_COOKIE);
   const token = access ? access.value || undefined : request.cookies.get(ACCESS_COOKIE)?.value;
   let resourceViewer: { token: string; actingSubject: string } | undefined;
-  const resourcePath = addressPath(pathname)?.lookup.scope === 'resource';
-  if (resourcePath && token) {
+  const addressScope = addressPath(pathname)?.lookup.scope;
+  if ((addressScope === 'resource' || addressScope === 'work') && token) {
     try {
       const response = await serverRead(
         `${serviceOrigin('MAIN_ORIGIN')}/v1/me/session-agent`,
@@ -138,7 +138,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
           displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
           undefined,
           incoming,
-          lookup.scope === 'resource' ? resourceViewer : undefined,
+          lookup.scope === 'resource' || lookup.scope === 'work' ? resourceViewer : undefined,
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
         if (lookup.scope === 'resource' && read.kind === 'resolved') resourceAddress = read.data;
@@ -257,6 +257,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       new URL(addressed.location, request.url),
       addressed.status,
     );
+    if (addressScope === 'work' && resourceViewer)
+      response.headers.set('cache-control', 'private, no-store');
     for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
     return finish(response);
   }
