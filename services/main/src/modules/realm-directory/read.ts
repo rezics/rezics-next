@@ -82,7 +82,9 @@ export async function readRealmDirectory(session: WorkReadSession,
         : profile?.count ?? { kind: 'unknown', value: null } },
       links: { realm: `/v1/realms/${candidate.realm.slice(-36)}` } };
   });
-  await index.fence(page.position, input.sort === 'growing', page.sourcePosition);
+  // The SQL page is a coherent published snapshot. A later publish does not
+  // invalidate a first page; continuation cursors still bind that source cut.
+  await index.fence(page.position, input.sort === 'growing', session.options.cursor ? page.sourcePosition : undefined);
   return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items, page.next),
     sourcePosition: page.sourcePosition };
 }

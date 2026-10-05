@@ -21,8 +21,10 @@ export const realmDirectoryPage = t.Object({ profile: t.Literal('realm-directory
  * A cold GET only nudges the scheduler. Published pages may lag new writes and
  * carry their published sourcePosition; they never rebuild in the request.
  * Pages: one indexed SQL keyset query and one page of live summaries, no refresh.
- * Background refresh copies/clears at most 64 local rows per tick and hydrates
- * only affected Realms; restore/erasure rebuilds in bounded source batches.
+ * Incremental refresh copies receipt-affected rows since the spare slot's last
+ * publish, then hydrates this cycle's changes: O(changed), not O(Realms).
+ * Each tick copies/clears at most 64 rows; restore/erasure rebuilds and mirrors
+ * both generations in bounded batches while the published slot stays readable.
  * Substring search can scan the SQL index relation.
  * No candidate population ceiling; response and source batch sizes are separate. */
 export const REALM_DIRECTORY_COST = { pageSize: 20, sourceBatch: 32,

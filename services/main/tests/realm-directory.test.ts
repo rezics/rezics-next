@@ -5,10 +5,11 @@ import type { MainApp } from '@rezics/main/app';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { REALM_DIRECTORY_COST } from '../src/modules/realm-directory/contract.ts';
-import { searchText } from '../src/modules/realm-directory/read.ts';
+import { readRealmDirectory, searchText } from '../src/modules/realm-directory/read.ts';
 import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved }
   from '../src/modules/work/read-session.ts';
+import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
 import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale }
   from '../src/modules/realm-admin/history.ts';
@@ -42,6 +43,29 @@ test('Realm directory pages use the last built position and perform no graph rea
   countRevision = '5';
   await expect(index.page(session, { sort: 'members', q: '', limit: 1, cursor: page.next! })).rejects.toBeInstanceOf(WorkReadMoved);
   await expect(index.page(session, { sort: 'members', q: '', cursor: 'invalid' })).rejects.toBeInstanceOf(WorkReadInvalid);
+});
+
+test('Realm directory first pages retain their published snapshot while continuations fence later publications', async () => {
+  const sourcePosition = { dataEpoch: 'epoch', sequence: '17' };
+  let published = '17', revision = '4', changeMembership = false;
+  const query = async (sql: string) => {
+    let rows: object[] = [];
+    if (sql.includes('FROM access.recovery_fence')) rows = [{}];
+    else if (sql.includes('FROM access.realm_directory_position')) rows = [{ data_epoch: 'epoch', sequence: published, generation: 1 }];
+    else if (sql.includes('FROM access.realm_count_position')) rows = [{ revision }];
+    return { rows, rowCount: rows.length };
+  };
+  const index = new RealmDirectoryIndex({ query, connect: async () => ({ query, release() {} }) } as unknown as Pool);
+  const session = { options: {} as { cursor?: string }, position: { dataEpoch: 'epoch', sequence: '23' },
+    summaries: async () => { published = '18'; if (changeMembership) revision = '5'; return []; },
+    deps: { environment: {}, access: { realmDirectory: index } } } as unknown as WorkReadSession;
+  expect((await readRealmDirectory(session, { sort: 'members' })).sourcePosition).toEqual(sourcePosition);
+  published = '17';
+  session.options.cursor = encodeReadCursor(['realm-directory-v3', 'members', '', null, null], sourcePosition, 'one', '4:-7');
+  await expect(readRealmDirectory(session, { sort: 'members' })).rejects.toBeInstanceOf(WorkReadMoved);
+  session.options.cursor = undefined;
+  published = '17'; changeMembership = true;
+  await expect(readRealmDirectory(session, { sort: 'members' })).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('Realm history cuts are prepared outside the transaction and reject changed recovery, policy or epoch locally', async () => {

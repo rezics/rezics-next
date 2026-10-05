@@ -78,6 +78,15 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     };
     const first = await create('First concurrency Realm');
     const second = await create('Second concurrency Realm');
+    await owner.grant(`realm:profile:${second.realm}`, 'realm.profile.publish');
+    const profile = await owner.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
+      profile: 'realm-public-profile-v2', expectedHead: null, actingSubject: owner.actor,
+      publication: { name: { original: 'en', labels: { en: 'Second concurrency Realm' } },
+        description: { original: 'en', labels: { en: 'Exact concurrent membership counts' } },
+        iconSelection: null, bannerSelection: null, rules: [], moderators: [],
+        count: { kind: 'exact', value: null } },
+    });
+    expect(profile.status, await profile.clone().text()).toBe(201);
     await stack.accessPool.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,history)
       VALUES ($1,'granted','from-admission') ON CONFLICT (realm) DO UPDATE SET history = EXCLUDED.history`, [second.realm]);
     const worker = new RealmDirectoryWorker({ environment: stack.env, access: stack.access, account: {} as never });
@@ -130,6 +139,8 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     expect(won).toBe(true);
     delayed.release();
     await waitForRealmDirectory(stack.env, () => stack.call('GET', '/v1/realms'));
+    expect((await stack.accessPool.query(`SELECT count_value::int AS n FROM access.realm_directory
+      WHERE realm = $1 ORDER BY generation`, [second.realm])).rows).toEqual([{ n: 1 }, { n: 1 }]);
     stack.fuseki.query = originalQuery;
 
     const held = await stack.accessPool.connect();

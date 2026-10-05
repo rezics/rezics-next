@@ -14,12 +14,14 @@ export interface DirectoryRow { realm: string; space: string; profile: PublicPro
 interface DirectoryPosition {
   data_epoch: string | null; sequence: string; generation: number; revision: string;
   build_data_epoch: string | null; build_base_sequence: string; target_sequence: string | null;
-  refresh_after: string; rebuilding: boolean; phase: 'idle' | 'clean' | 'copy' | 'graph';
+  spare_sequence: string | null; refresh_after: string; rebuilding: boolean;
+  phase: 'idle' | 'clean' | 'copy' | 'graph' | 'sync-clean' | 'sync-copy';
 }
 
 /** Derived, rebuildable projection. Source updates and deletions commit with
  * their watermark; restore/erasure invalidates the projection. A cold rebuild
- * streams bounded source batches. Ordinary updates hydrate only affected Realms.
+ * streams bounded source batches, then synchronizes the spare generation.
+ * Ordinary updates copy and hydrate only affected Realms.
  * Activity, member and newest pages seek an ordered B-tree: O(log R + P).
  * Growing reads at most seven daily aggregate rows per Realm and sorts in SQL;
  * substring search can scan the matching order O(R). No path materializes the
@@ -37,8 +39,6 @@ export class RealmDirectoryIndex {
 
   private async upsert(client: PoolClient, candidate: Candidate, generation: number): Promise<void> {
     const count = candidate.profile?.count;
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
-      [`realm-count:${candidate.id}`]);
     await client.query(`INSERT INTO access.realm_directory
       (realm, space, profile, created, activity, search_text, count_kind, count_value, topics, generation)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 = 'exact' THEN
@@ -68,6 +68,7 @@ export class RealmDirectoryIndex {
     let base = prior.build_base_sequence;
     let target = prior.target_sequence ?? session.position.sequence;
     let after = prior.refresh_after;
+    let spareSequence = prior.spare_sequence;
     const reset = prior.build_data_epoch !== session.position.dataEpoch
       || BigInt(prior.sequence) > BigInt(session.position.sequence)
       || prior.target_sequence !== null && BigInt(prior.target_sequence) > BigInt(session.position.sequence);
@@ -75,7 +76,11 @@ export class RealmDirectoryIndex {
       const erased = !reset && prior.data_epoch === session.position.dataEpoch
         ? await this.erasures(session, prior.sequence, target) : false;
       rebuilding = reset || erased;
-      phase = 'clean';
+      // A missing spare cut includes projections built by older binaries.
+      // Rebuild and mirror once before using receipt deltas for either slot.
+      rebuilding ||= spareSequence === null;
+      phase = rebuilding ? 'clean' : 'copy';
+      if (rebuilding) spareSequence = null;
       base = prior.sequence;
       target = session.position.sequence;
       after = '';
@@ -83,29 +88,24 @@ export class RealmDirectoryIndex {
     const generation = 1 - prior.generation;
     const candidates: Candidate[] = [];
     const changed: string[] = [];
+    const batchSize = REALM_DIRECTORY_COST.sourceBatch * REALM_DIRECTORY_COST.refreshBatches;
+    let copyComplete = false;
     let complete = false;
-    if (phase === 'graph') {
+    if (phase === 'copy') {
+      changed.push(...await this.changedRealms(session, spareSequence!, target, after, batchSize));
+      after = changed.at(-1) ?? after;
+      copyComplete = changed.length < batchSize;
+    } else if (phase === 'graph') {
       // An erasure while an incremental successor is building needs a full
       // rebuild, including Realms whose activity depended on the erased Work.
       if (!rebuilding && await this.erasures(session, base, target)) {
-        phase = 'clean'; rebuilding = true; after = '';
+        phase = 'clean'; rebuilding = true; spareSequence = null; after = '';
       } else {
         for (let batch = 0; batch < REALM_DIRECTORY_COST.refreshBatches; batch++) {
           session.checkDeadline();
           let ids: string[] | undefined;
           if (!rebuilding) {
-            const rows = await session.query(`SELECT DISTINCT ?realm WHERE {
-              GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:dataEpoch ${lit(session.position.dataEpoch)} ;
-                rv:sequence ?sequence . FILTER(?sequence > ${base} && ?sequence <= ${target}) }
-              { { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:realm ?realm } }
-                UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:space ?space }
-                  GRAPH ${iri(GRAPHS.current)} { ?realm rv:space ?space } }
-                UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt ?property ?work .
-                  VALUES ?property { rv:work rv:resource } }
-                  GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ; rv:work ?work } } }
-              FILTER(STR(?realm) > ${lit(after)})
-            } ORDER BY STR(?realm) LIMIT ${REALM_DIRECTORY_COST.sourceBatch}`, REALM_DIRECTORY_COST.sourceBatch);
-            ids = rows.map(row => row.realm!.value);
+            ids = await this.changedRealms(session, base, target, after, REALM_DIRECTORY_COST.sourceBatch);
             changed.push(...ids);
             if (!ids.length) { complete = true; break; }
           }
@@ -133,13 +133,12 @@ export class RealmDirectoryIndex {
         WHERE singleton AND revision = $1 FOR UPDATE NOWAIT`, [prior.revision])).rowCount) {
         throw new WorkReadMoved('Realm directory builder changed');
       }
-      const batchSize = REALM_DIRECTORY_COST.sourceBatch * REALM_DIRECTORY_COST.refreshBatches;
-      if (phase === 'clean') {
+      if (phase === 'clean' || phase === 'sync-clean') {
         const removed = await client.query(`DELETE FROM access.realm_directory WHERE (generation,realm) IN
           (SELECT generation,realm FROM access.realm_directory WHERE generation = $1 ORDER BY realm LIMIT $2)`,
         [generation, batchSize]);
-        if ((removed.rowCount ?? 0) < batchSize) phase = rebuilding ? 'graph' : 'copy';
-      } else if (phase === 'copy') {
+        if ((removed.rowCount ?? 0) < batchSize) phase = phase === 'sync-clean' ? 'sync-copy' : 'graph';
+      } else if (phase === 'sync-copy') {
         // Match membership's per-Realm lock before copying an exact count.
         // Sorted locks keep overlapping builder batches in one order.
         await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('realm-count:' || realm,0))
@@ -153,30 +152,80 @@ export class RealmDirectoryIndex {
           FROM access.realm_directory WHERE generation = $2 AND realm > $3 ORDER BY realm LIMIT $4 RETURNING realm`,
         [generation, prior.generation, after, batchSize]);
         after = copied.rows.at(-1)?.realm ?? after;
-        if (copied.rows.length < batchSize) { phase = 'graph'; after = ''; }
+        if (copied.rows.length < batchSize) { phase = 'idle'; after = ''; spareSequence = prior.sequence; }
+      } else if (phase === 'copy') {
+        if (changed.length) {
+          // Membership updates both generations. Take the same ordered locks
+          // before deleting/replacing rows, then read counts in a fresh statement.
+          // https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED
+          await this.lockCounts(client, changed);
+          await client.query('DELETE FROM access.realm_directory WHERE generation = $1 AND realm = ANY($2::text[])',
+            [generation, changed]);
+          await client.query(`INSERT INTO access.realm_directory
+            (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics)
+            SELECT $1,realm,space,profile,created,activity,search_text,count_kind,
+              CASE WHEN count_kind = 'exact' THEN COALESCE((SELECT value FROM access.realm_member_count c
+                WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics
+            FROM access.realm_directory WHERE generation = $2 AND realm = ANY($3::text[]) ORDER BY realm`,
+          [generation, prior.generation, changed]);
+        }
+        if (copyComplete) { phase = 'graph'; after = ''; }
       } else {
+        // Lock before deleting too: a membership trigger holds this advisory
+        // lock before updating either directory row, so the reverse order cycles.
+        await this.lockCounts(client, [...new Set([...changed, ...candidates.map(candidate => candidate.id)])]);
         if (changed.length) await client.query(`DELETE FROM access.realm_directory
           WHERE generation = $1 AND realm = ANY($2::text[])`, [generation, changed]);
         for (const candidate of candidates) await this.upsert(client, candidate, generation);
       }
       const publish = complete && target === session.position.sequence;
       if (complete && !publish) { base = target; target = session.position.sequence; after = ''; rebuilding = false; }
+      // A rebuild may have inserted or removed rows without receipt deltas
+      // relative to the old slot. Mirror it before admitting incremental work.
+      if (publish) {
+        phase = spareSequence === null ? 'sync-clean' : 'idle';
+        spareSequence = phase === 'idle' ? prior.sequence : null;
+      }
       await client.query(`UPDATE access.realm_directory_position SET
         data_epoch = CASE WHEN $1 THEN $2 ELSE data_epoch END,
         sequence = CASE WHEN $1 THEN $3::bigint ELSE sequence END,
         generation = CASE WHEN $1 THEN $4::smallint ELSE generation END,
         build_data_epoch = $2,build_base_sequence = $5,target_sequence = $6,
-        refresh_after = $7,rebuilding = $8,phase = $9,revision = revision + 1 WHERE singleton`,
-      [publish, session.position.dataEpoch, target, generation, base, publish ? null : target,
-        publish ? '' : after, !publish && rebuilding, publish ? 'idle' : phase]);
+        refresh_after = $7,rebuilding = $8,phase = $9,spare_sequence = $10,
+        revision = revision + 1 WHERE singleton`,
+      [publish, session.position.dataEpoch, target, generation, base,
+        publish || phase === 'idle' || phase === 'sync-clean' || phase === 'sync-copy' ? null : target,
+        publish ? '' : after, !publish && rebuilding, phase, spareSequence]);
       await client.query('COMMIT');
-      return publish;
+      return phase === 'idle' && (publish || prior.sequence === session.position.sequence);
     } catch (error) {
       await client.query('ROLLBACK');
       if (error instanceof WorkReadUnavailable || error instanceof WorkReadMoved) throw error;
       if ((error as { code?: string }).code === '55P03') throw new WorkReadMoved('Realm directory refresh is busy');
       throw new WorkReadUnavailable('Realm directory refresh is unavailable', { cause: error });
     } finally { client.release(); }
+  }
+
+  private async lockCounts(client: PoolClient, realms: string[]): Promise<void> {
+    if (!realms.length) return;
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('realm-count:' || realm,0))
+      FROM (SELECT realm FROM unnest($1::text[]) AS ids(realm) ORDER BY realm) batch`, [realms]);
+  }
+
+  private async changedRealms(session: WorkReadSession, afterSequence: string, target: string,
+    afterRealm: string, limit: number): Promise<string[]> {
+    const rows = await session.query(`SELECT DISTINCT ?realm WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:dataEpoch ${lit(session.position.dataEpoch)} ;
+        rv:sequence ?sequence . FILTER(?sequence > ${afterSequence} && ?sequence <= ${target}) }
+      { { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:realm ?realm } }
+        UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:space ?space }
+          GRAPH ${iri(GRAPHS.current)} { ?realm rv:space ?space } }
+        UNION { GRAPH ${iri(GRAPHS.receipts)} { ?receipt ?property ?work .
+          VALUES ?property { rv:work rv:resource } }
+          GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ?realm ; rv:work ?work } } }
+      FILTER(STR(?realm) > ${lit(afterRealm)})
+    } ORDER BY STR(?realm) LIMIT ${limit}`, limit);
+    return rows.map(row => row.realm!.value);
   }
 
   private async erasures(session: WorkReadSession, after: string, target: string): Promise<boolean> {

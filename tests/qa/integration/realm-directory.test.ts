@@ -3,8 +3,9 @@ import { RealmDirectoryIndex } from '../../../services/main/src/modules/realm-di
 import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { startMediaStack } from './media-support.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
 import { measureGraphReads } from './support/graph-reads.ts';
 
@@ -203,12 +204,35 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     expect((await get(`/v1/realms?sort=members&limit=1&cursor=${exactPage.nextCursor}`)).status).toBe(409);
     expect((await json<DirectoryPage>(await get('/v1/realms?sort=members&limit=1'))).items[0]?.membership.count)
       .toMatchObject({ kind: 'exact', value: 1 });
-    await json(await editor.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
+    let secondHead = (await json<{ revision: string }>(await editor.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
       ...exactBody, expectedHead: exactProfile.revision,
-      publication: { ...exactBody.publication, count: { kind: 'unknown', value: null } } }), 201);
+      publication: { ...exactBody.publication, count: { kind: 'unknown', value: null } } }), 201)).revision;
     await refresh();
     expect((await json<DirectoryPage>(await get('/v1/realms?q=Circle'))).items[0]?.membership.count)
       .toEqual({ kind: 'unknown', value: null });
+
+    const settled = async () => {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        const row = (await stack.accessPool.query<{ phase: string; spare_sequence: string | null }>(
+          'SELECT phase,spare_sequence::text FROM access.realm_directory_position WHERE singleton')).rows[0]!;
+        if (row.phase === 'idle' && row.spare_sequence !== null) return;
+        await delay(50);
+      }
+      throw new Error('Realm directory did not finish synchronizing its spare generation');
+    };
+    // Count actual row mutations, including all background worker ticks. This
+    // catches a bounded-per-tick implementation that still copies the inventory.
+    await stack.accessPool.query(`CREATE TABLE access.realm_directory_probe (realm text,operation text);
+      CREATE FUNCTION access.probe_realm_directory() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        INSERT INTO access.realm_directory_probe VALUES (COALESCE(NEW.realm,OLD.realm),TG_OP);
+        RETURN NULL;
+      END $$;
+      CREATE TRIGGER realm_directory_probe AFTER INSERT OR UPDATE OR DELETE ON access.realm_directory
+        FOR EACH ROW EXECUTE FUNCTION access.probe_realm_directory()`);
+    await editor.grant(`realm:profile:${third.realm}`, 'realm.profile.publish');
+    let thirdHead: string | null = null;
 
     // Populate a small multi-scale directory directly; invalidate because this
     // fixture deliberately bypasses graph receipts. Product writes use refresh.
@@ -284,7 +308,74 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
         }
         await planner.query('ROLLBACK');
       } finally { planner.release(); }
+      await settled();
+      expect((await stack.accessPool.query(`SELECT count(*)::int AS n FROM (
+        (SELECT realm,space,profile,activity,count_value FROM access.realm_directory WHERE generation = 0
+          EXCEPT SELECT realm,space,profile,activity,count_value FROM access.realm_directory WHERE generation = 1)
+        UNION ALL
+        (SELECT realm,space,profile,activity,count_value FROM access.realm_directory WHERE generation = 1
+          EXCEPT SELECT realm,space,profile,activity,count_value FROM access.realm_directory WHERE generation = 0)
+      ) difference`)).rows[0].n).toBe(0);
+      await stack.accessPool.query('TRUNCATE access.realm_directory_probe');
+      secondHead = (await json<{ revision: string }>(await editor.send('PUT',
+        `/v1/realms/${second.realm.slice(-36)}/profile`, { ...exactBody, expectedHead: secondHead,
+          publication: { ...exactBody.publication,
+            name: { original: 'en', labels: { en: `Book Circle ${size}`, 'zh-Hans': '图书圈' } } } }), 201)).revision;
+      await refresh();
+      await settled();
+      const singleChange = (await stack.accessPool.query<{ realm: string }>(
+        'SELECT realm FROM access.realm_directory_probe')).rows;
+      expect(singleChange).toHaveLength(4); // One copy and one hydration, regardless of inventory size.
+      expect(new Set(singleChange.map(row => row.realm))).toEqual(new Set([second.realm]));
+
+      // The next slot is missing the previous cycle's change as well as this
+      // cycle's. Carry it forward even when the two changed sets are disjoint.
+      await stack.accessPool.query('TRUNCATE access.realm_directory_probe');
+      thirdHead = (await json<{ revision: string }>(await editor.send('PUT',
+        `/v1/realms/${third.realm.slice(-36)}/profile`, { ...exactBody, expectedHead: thirdHead,
+          publication: { ...exactBody.publication,
+            name: { original: 'en', labels: { en: `Third Circle ${size}`, 'zh-Hans': '第三圈' } },
+            count: { kind: 'estimated', value: 3 } } }), 201)).revision;
+      await refresh();
+      await settled();
+      const consecutiveChanges = (await stack.accessPool.query<{ realm: string }>(
+        'SELECT realm FROM access.realm_directory_probe')).rows;
+      expect(consecutiveChanges).toHaveLength(6);
+      expect(new Set(consecutiveChanges.map(row => row.realm))).toEqual(new Set([second.realm, third.realm]));
+      expect((await json<DirectoryPage>(await get('/v1/realms?q=Book'))).items[0])
+        .toMatchObject({ id: second.realm, name: { value: `Book Circle ${size}` },
+          membership: { count: { kind: 'exact', value: 1 } } });
     }
+    // A receipted visibility fixture exercises removal, including carrying the
+    // deletion into the older slot on a later unrelated graph write.
+    await stack.accessPool.query('TRUNCATE access.realm_directory_probe');
+    await stack.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(third.space)} rv:disclosure rv:Public }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(third.space)} rv:disclosure rv:Private }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.receipts)} { <urn:rezics:directory-visibility:${randomUUID()}> a rv:OperationReceipt ;
+          rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:realm ${iri(third.realm)} } }
+      WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ;
+        rv:sequence ?sequence } BIND((?sequence + 1) AS ?next) }`);
+    await refresh();
+    await settled();
+    expect((await stack.accessPool.query('SELECT realm FROM access.realm_directory_probe')).rows)
+      .toEqual([{ realm: third.realm }, { realm: third.realm }, { realm: third.realm }]);
+    await stack.accessPool.query('TRUNCATE access.realm_directory_probe');
+    await stack.publicWork(editor.actor, ['en'], 'Carry forward a directory deletion');
+    await refresh();
+    await settled();
+    expect((await stack.accessPool.query('SELECT realm FROM access.realm_directory_probe')).rows)
+      .toEqual([{ realm: third.realm }]);
+    expect((await stack.accessPool.query('SELECT 1 FROM access.realm_directory WHERE realm = $1', [third.realm])).rows)
+      .toEqual([]);
+    await stack.accessPool.query('TRUNCATE access.realm_directory_probe');
+    await stack.publicWork(editor.actor, ['en'], 'An unrelated write leaves the directory rows alone');
+    await refresh();
+    await settled();
+    expect((await stack.accessPool.query('SELECT 1 FROM access.realm_directory_probe')).rows).toEqual([]);
+    expect((await json<DirectoryPage>(await get('/v1/realms?q=Third'))).items).toEqual([]);
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
       <urn:rezics:dataset:product> rv:restoreHold true } }`);
     expect((await get('/v1/realms')).status).toBe(503);
