@@ -29,9 +29,9 @@ function kindName(dimension: FrameDimension, t: Translation): string {
  * Chooses where a rating applies. Only kinds of place that Main accepts as frames are offered: a source for anything
  * else cannot be listed, and choosing a second place of one kind replaces the first, as Main allows one of each.
  */
-export function FramePicker({ sources, value, onChange, onContinue, busy = false, locale, messages }: {
+export function FramePicker({ sources, value, onChange, onContinue, busy = false, canContinue = true, locale, messages }: {
   sources: readonly FrameSource[]; value: readonly FrameCandidate[]; onChange: (next: FrameCandidate[]) => void;
-  onContinue: () => void; busy?: boolean; locale: UiLocale; messages: ScopedRatingMessages;
+  onContinue: () => void; busy?: boolean; canContinue?: boolean; locale: UiLocale; messages: ScopedRatingMessages;
 }) {
   const t = translate(messages, locale);
   const offered = sources.filter(source => frameDimensions.includes(source.dimension));
@@ -68,7 +68,7 @@ export function FramePicker({ sources, value, onChange, onContinue, busy = false
           </li>)}
         </ul>}
     </div>
-    <Button disabled={busy || value.length === 0 || value.length > MAX_FRAMES} isLoading={busy} onClick={onContinue}
+    <Button disabled={busy || !canContinue || value.length === 0 || value.length > MAX_FRAMES} isLoading={busy} onClick={onContinue}
       className="justify-self-start">{t.continue}</Button>
   </div>;
 }

@@ -212,6 +212,11 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       await wait(scenario.delay ?? 0);
       return ok(questionsOf(target));
     },
+    async frameQuestions() {
+      await wait(scenario.delay ?? 0);
+      return ok([...new Map(Object.values(scenario.questions ?? populated.questions ?? {}).flat()
+        .map(question => [question.context, question])).values()]);
+    },
     async rating(target, context, scope) {
       await wait(scenario.delay ?? 0);
       return ok(ratingOf(target, context, bucketsOf(target, context), scope));

@@ -9,13 +9,14 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { ProjectionRead, QuestionScope, ScopedRatingApi } from './api.ts';
 import { FailureNote } from './failure.tsx';
 import { FramePicker } from './frame-picker.tsx';
-import type { FrameCandidate } from './frames.ts';
+import { frameDimensions, type FrameCandidate } from './frames.ts';
 import { translate } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { ProjectionHeader } from './projection-header.tsx';
 import { QuestionList, type EntryHref, type Viewer } from './question-rating.tsx';
 import type { FrameSource } from './sources.ts';
 import type { Failure, Subject } from './types.ts';
+import { useLoad } from './use-load.ts';
 
 type Step =
   | { step: 'choose' }
@@ -41,8 +42,19 @@ export function RateInFrame({ subject, api, sources, scope = { kind: 'global' },
   // Tests and scripts wait for this before they press the trigger: the server-rendered button does nothing until then.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
+  const [questions, reload] = useLoad(() => api.frameQuestions
+    ? api.frameQuestions(subject.iri, scope)
+    : Promise.resolve({ ok: false as const, failure: 'unavailable' as const }),
+    `${subject.iri}\n${scope.kind === 'realm' ? scope.realm : 'global'}`);
+  const applicable = questions.state === 'ready' ? questions.data : [];
+  const dimensions = new Set(applicable.flatMap(question => question.acceptedFrameDimensions ?? frameDimensions));
+  const offered = sources.filter(source => dimensions.has(source.dimension));
+  // A union of dimensions can contain a combination no single question accepts.
+  const accepted = frames.length > 0 && applicable.some(question =>
+    frames.every(frame => !question.acceptedFrameDimensions || question.acceptedFrameDimensions.includes(frame.dimension)));
 
   async function openPlace() {
+    if (!accepted) return;
     setState({ step: 'opening' });
     const answer = await api.projection(subject.iri, frames.map(frame => frame.iri))
       .catch(() => ({ ok: false as const, failure: 'unavailable' as const }));
@@ -58,8 +70,14 @@ export function RateInFrame({ subject, api, sources, scope = { kind: 'global' },
       <SheetHeader title={t.sheetTitle({ name: subject.name.value })} description={t.sheetBody} />
       <SheetBody>
         {state.step === 'choose' || state.step === 'opening'
-          ? <FramePicker sources={sources} value={frames} onChange={setFrames} onContinue={() => void openPlace()}
-            busy={state.step === 'opening'} locale={locale} messages={messages} />
+          ? questions.state === 'loading' ? <p aria-busy="true" className="text-muted-foreground text-sm">{t.loading}</p>
+            : questions.state === 'failed' ? <FailureNote failure={questions.failure} retry={reload} locale={locale} messages={messages} />
+              : !applicable.length ? <p className="text-muted-foreground text-sm">{t.noQuestions}</p>
+                : <div className="grid gap-3">
+                  {frames.length > 0 && !accepted ? <p role="status" className="text-muted-foreground text-sm">{t.noQuestions}</p> : null}
+                  <FramePicker sources={offered} value={frames} onChange={setFrames} onContinue={() => void openPlace()}
+                    canContinue={accepted} busy={state.step === 'opening'} locale={locale} messages={messages} />
+                </div>
           : state.step === 'failed'
             ? <div className="grid gap-3">
               <FailureNote failure={state.failure} locale={locale} messages={messages}

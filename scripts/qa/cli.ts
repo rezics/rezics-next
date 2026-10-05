@@ -603,8 +603,9 @@ try {
         const args = e2eArgs(selection, chosen);
         const counts = browserFileCounts(root, args);
         const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
+        const preparation = !args.some(path => path.endsWith('.e2e.ts')) || args.some(path => path.endsWith('scoped-subjects-journey.e2e.ts')) ? 600_000 : 0;
         const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
-          budgets.setup + budgets.playwright + budgets.storybook + 30_000,
+          preparation + budgets.setup + budgets.playwright + budgets.storybook + 30_000,
           { ...process.env, REZICS_WEB_E2E_BASE_URL: origin, REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) });
         writeFileSync(join(logs, 'e2e.log'), result.output);
         const browserTests = junitResults(directory, ['e2e']);

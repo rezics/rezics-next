@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resourceHref } from '../features/address/path.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
@@ -19,21 +18,8 @@ let data: Seeded;
 // A step that cannot proceed fails in a minute, not in the test's whole allowance.
 test.use({ actionTimeout: 45_000 });
 test.beforeAll(() => {
-  test.setTimeout(900_000);
   const retained = resolve('.temp/scoped-subjects-journey', process.env.REZICS_QA_RUN_ID!, 'seed.json');
-  if (existsSync(retained)) {
-    data = JSON.parse(readFileSync(retained, 'utf8'));
-    return;
-  }
-  const seed = spawnSync('bun', ['apps/web/tests/scoped-subjects-journey-seed.ts'], {
-    cwd: process.cwd(),
-    env: process.env,
-    encoding: 'utf8',
-    timeout: 840_000,
-  });
-  if (seed.status !== 0 || seed.error)
-    throw new Error(`Scoped subjects seed failed: ${seed.stderr || seed.error?.message}`);
-  data = JSON.parse(seed.stdout.trim().split('\n').at(-1)!);
+  data = JSON.parse(readFileSync(retained, 'utf8'));
 });
 
 const pictures = resolve('.temp/scoped-subjects-journey');
@@ -96,6 +82,12 @@ test('a character rated in an episode keeps her overall score, and the rating su
   const overall = question(page, data.questions.character.context);
   await expect(overall).toContainText('5 ratings', { timeout: 60_000 });
   await expect(overall).toContainText('8.00');
+  for (const name of ['Other versions', 'Units', 'Titles'])
+    await expect(page.getByRole('region', { name, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Ability', exact: true })).toBeVisible();
+  await expect(page.locator('#main-content').getByText(/^(semanticWork|ability)$/)).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Relations', exact: true })).toContainText('Appears in');
+  await expect(page.getByRole('region', { name: 'Relations', exact: true })).toContainText('Role');
   const before = await figure(page, data.questions.character.context);
   await expect(page.locator('[data-projection]')).toHaveCount(2, { timeout: 60_000 });
   await capture(page, '1-misaka-page');
@@ -140,7 +132,7 @@ test('a character rated in an episode keeps her overall score, and the rating su
   await capture(page, '4-misaka-rerated-after-clearing-storage');
 });
 
-test('a Work chosen from a character’s page says when nothing asks about it, and her episodes have a combined score', async ({ page }) => {
+test('a character can choose only accepting frame dimensions, select an episode and see her episodes combined', async ({ page }) => {
   test.setTimeout(300_000);
   await signIn(page);
   await page.goto(at(data.subjects.misaka!));
@@ -150,18 +142,19 @@ test('a Work chosen from a character’s page says when nothing asks about it, a
   await trigger.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('tab', { name: 'Work', exact: true }).click();
+  await expect(dialog.getByRole('tab', { name: 'Work', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('tab', { name: 'Game versions', exact: true })).toHaveCount(0);
+  await dialog.getByRole('tab', { name: /A Certain Scientific Railgun/ }).click();
   const search = dialog.getByRole('combobox').first();
   await search.click();
-  await search.fill('Magical Index');
-  await page.getByRole('option', { name: /A Certain Magical Index/ }).click();
-  await capture(page, '5-misaka-choose-a-work');
+  await search.fill('episode 4');
+  await page.getByRole('option', { name: /Season 1, episode 4/ }).click();
+  await capture(page, '5-misaka-choose-an-episode');
   await dialog.getByRole('button', { name: 'Continue' }).click();
-  await expect(dialog.locator('[data-projection-header]')).toContainText('A Certain Magical Index', { timeout: 60_000 });
-  // No question accepts a whole Work as a place for a character, and the sheet says so instead of offering a rating.
-  await expect(dialog).toContainText('No question applies here yet', { timeout: 60_000 });
-  await expect(dialog.locator('[data-slot="rating-item"]')).toHaveCount(0);
-  await capture(page, '6-misaka-no-question-in-a-work');
+  await expect(dialog.locator('[data-projection-header]')).toContainText('Season 1, episode 4', { timeout: 60_000 });
+  await expect(question(page, data.questions.performance.context)).toContainText('No ratings yet', { timeout: 60_000 });
+  await expect(dialog).not.toContainText('No question applies here yet');
+  await capture(page, '6-misaka-rateable-episode');
   await page.keyboard.press('Escape');
 
   // Her two episodes of one Work are combined by a named formula, with how many of them could be counted.
@@ -234,6 +227,8 @@ test.describe('reading', () => {
     // Off by default, each claim says which continuity it holds in.
     await expect(page.locator('[data-holds-in]')).toHaveCount(2);
     await expect(page.locator('[data-continuity-current]')).toContainText('All continuities');
+    await expect(page.locator('[data-projection]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Family', exact: true })).toBeVisible();
     await capture(page, '11-anakin-all-continuities');
 
     const choose = async (name: RegExp | string) => {

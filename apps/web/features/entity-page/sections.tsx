@@ -11,6 +11,7 @@ import type { EntityProjection, EntitySection } from './types.ts';
 import { DiscussionView, RelationsView, type SectionProps, StatementsView } from './views.tsx';
 import { ProjectionFactsView } from './projection-views.tsx';
 import { readIdentityDefinitions } from './identity-read.ts';
+import { readPredicateLabels } from './predicate-labels.ts';
 
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
@@ -20,6 +21,7 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     /** A place's facts: those covered by its coordinates, most specific first, each saying how far it reaches. */
     projection?: boolean }) {
   const page = await readStatements(section, cursor, position, frame);
+  const labels = page.ok ? await readPredicateLabels(page.data, rest.locale) : new Map();
   // Values and the continuities a statement holds in are named together, so one read names both.
   const names = page.ok ? await namesOf(page.data.groups.flatMap(group => group.items.flatMap(item => [
     ...item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : [],
@@ -27,8 +29,8 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
     ...item.qualifiers.applicability]))) : new Map();
   return projection
-    ? <ProjectionFactsView page={page} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
-    : <StatementsView page={page} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
+    ? <ProjectionFactsView page={page} labels={labels} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
+    : <StatementsView page={page} labels={labels} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
       messages={rest.messages} />;
 }
 

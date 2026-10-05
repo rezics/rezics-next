@@ -143,9 +143,33 @@ export const NoRatingsYetPhone: Story = { ...NoRatingsYet, globals: phone };
 export const NoQuestions: Story = {
   args: { frames: [e3], scenario: { ...fixture.populated, questions: {} } },
   async play() {
-    const dialog = await openPlace();
+    const dialog = await screen.findByRole('dialog');
     await see(dialog, 'No question applies here yet, so it can’t be rated.');
+    await expect(within(dialog).queryByRole('button', { name: 'Continue' })).toBeNull();
     await expect(within(dialog).queryByRole('slider')).toBeNull();
+  },
+};
+export const ApplicableDimensionsOnly: Story = {
+  args: { scenario: { ...fixture.populated, questions: { '*': [{ ...fixture.writing, acceptedFrameDimensions: ['position'] }] } } },
+  async play() {
+    const dialog = await screen.findByRole('dialog');
+    await seeRole(dialog, 'combobox', 'Episodes');
+    await expect(within(dialog).queryByRole('tab', { name: 'Continuities' })).toBeNull();
+    await expect(within(dialog).queryByRole('combobox', { name: 'Continuities' })).toBeNull();
+  },
+};
+export const NoQuestionAcceptsTheCombination: Story = {
+  args: { frames: [e3, fixture.continuities[0]!], scenario: { ...fixture.populated, questions: { '*': [
+    { ...fixture.writing, acceptedFrameDimensions: ['position'] },
+    { ...fixture.strength, acceptedFrameDimensions: ['continuity'] },
+  ] } } },
+  async play() {
+    const dialog = await screen.findByRole('dialog');
+    await seeRole(dialog, 'tab', 'Episodes');
+    await seeRole(dialog, 'tab', 'Continuities');
+    await expect(within(dialog).getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: /Remove Austen/ }));
+    await expect(within(dialog).getByRole('button', { name: 'Continue' })).toBeEnabled();
   },
 };
 

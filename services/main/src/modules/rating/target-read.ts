@@ -8,7 +8,7 @@ import { resolveTargets } from '../target/resolve.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { RATING_STANDING_CADENCE } from './context.ts';
 import { TARGET_GRAINS, targetContextOwnerPattern, targetRatingSlotIri, assertRatingContextTarget, type TargetGrain } from './target.ts';
-import { contextAcceptanceFilter, ratingAcceptanceTarget, assertRatingTargetAccepted, type AcceptanceTarget } from './acceptance.ts';
+import { contextAcceptanceFilter, ratingAcceptanceTarget, assertRatingTargetAccepted, readContextAcceptance, type AcceptanceTarget } from './acceptance.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { queryTargetRatingAggregate } from './target-aggregate.ts';
 import { targetGrain, targetAggregateResult, meanDisplay } from './target-api.ts';
@@ -64,13 +64,18 @@ function contextPattern(grain: TargetGrain, scope: { kind: string; realm: string
     FILTER NOT EXISTS { ?context rv:protectionHead ?contextProtection }
     ${contextAcceptanceFilter('?context', target)}`;
 }
-export async function readResourceRatingContexts(session: WorkReadSession, target: string) {
+/** Projection discovery reads the subject's types without minting a place. Each
+ * page adds at most 20 bounded acceptance reads to the shared session budget. */
+export const PROJECTION_QUESTION_DISCOVERY_COST = { pageSize: 20, acceptanceQueries: 20, contextQueries: 1 } as const;
+export async function readResourceRatingContexts(session: WorkReadSession, target: string, forProjection = false) {
   const [resolved] = await resolveTargets(session, [target], 'rating');
-  if (resolved!.base === 'work') {
+  if (resolved!.base === 'work' && !forProjection) {
     const page = await readWorkRatingContexts(session, target);
     return { ...page, items: await presentRatingQuestions(session.deps.environment, page.items, session.displayLanguages) };
   }
-  const grain = resolved!.base as TargetGrain, scope = await session.scope(), limit = session.options.limit ?? 20;
+  if (forProjection && resolved!.base === 'projection') throw new WorkReadInvalid('Projection discovery needs a subject');
+  const grain = forProjection ? 'projection' : resolved!.base as TargetGrain, scope = await session.scope();
+  const limit = forProjection ? Math.min(session.options.limit ?? 20, PROJECTION_QUESTION_DISCOVERY_COST.pageSize) : session.options.limit ?? 20;
   const acceptance = await ratingAcceptanceTarget(session, resolved!);
   const binding = ['target-rating-contexts-v1', target, grain, scope];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
@@ -82,8 +87,10 @@ export async function readResourceRatingContexts(session: WorkReadSession, targe
     throw new WorkReadUnavailable('Target Context inventory ambiguous');
   }
   const page = rows.slice(0, limit);
-  const items = await presentRatingQuestions(session.deps.environment, page.map(row => ({ context: row.context!.value, question: row.question!.value,
+  const policies = forProjection ? await Promise.all(page.map(row => readContextAcceptance(session, row.context!.value))) : [];
+  const items = await presentRatingQuestions(session.deps.environment, page.map((row, index) => ({ context: row.context!.value, question: row.question!.value,
     language: row.question!['xml:lang']!, targetGrain: grain,
+    ...(forProjection ? { acceptedFrameDimensions: policies[index]!.acceptedFrameDimensions ?? null } : {}),
     owner: { kind: scope.kind === 'global' ? 'global' as const : 'realm' as const,
       id: scope.kind === 'global' ? GLOBAL_RATING_POPULATION_OWNER : scope.realm! },
     scale: { min: 1, max: 10, step: 1 as const } })), session.displayLanguages);

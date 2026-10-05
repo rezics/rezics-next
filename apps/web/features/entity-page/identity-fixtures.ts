@@ -190,6 +190,7 @@ export function identityData(
           kind,
           hub: kind === 'family' && state !== 'empty' && state !== 'spoiler-hidden' ? saber : null,
           members: state === 'empty' || state === 'spoiler-hidden' ? [] : members,
+          hidden: state === 'spoiler-hidden',
           ...(kind === 'family' || kind === 'units'
             ? {
                 legend: {

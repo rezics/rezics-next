@@ -26,13 +26,13 @@ export type PlacePlan =
   | { kind: 'static'; dimension: FrameDimension; candidates: FrameCandidate[] };
 
 function sourcesOf(plans: readonly PlacePlan[], subject: string, actingSubject: string | null, locale: UiLocale,
-  messages: ScopedRatingMessages): FrameSource[] {
+  messages: ScopedRatingMessages, position?: string): FrameSource[] {
   const t = translate(messages, locale);
   const several = (kind: 'position' | 'release') => plans.filter(plan => plan.kind === kind).length > 1;
   return plans.map(plan => {
     const reader = actingSubject ?? undefined;
     switch (plan.kind) {
-      case 'position': return readingPositionSource({ work: plan.work, actingSubject: reader, locale,
+      case 'position': return readingPositionSource({ work: plan.work, actingSubject: reader, position, locale,
         label: several('position') ? `${t.dimensionPosition} · ${plan.name}` : undefined });
       case 'release': return releaseSource({ work: plan.work, actingSubject: reader,
         label: several('release') ? `${t.dimensionRelease} · ${plan.name}` : undefined });
@@ -99,8 +99,8 @@ export function SubjectJudgments({ subject, scope = { kind: 'global' }, actingSu
 }) {
   const api = useMemo(() => provided ?? mainScopedRatingApi({ actingSubject, locale }), [provided, actingSubject, locale]);
   const viewer: Viewer = actingSubject ? { kind: 'reader' } : { kind: 'signed-out', signInHref };
-  const sources = useMemo(() => given ?? sourcesOf(plans, subject.iri, actingSubject, locale, messages),
-    [given, plans, subject.iri, actingSubject, locale, messages]);
+  const sources = useMemo(() => given ?? sourcesOf(plans, subject.iri, actingSubject, locale, messages, position),
+    [given, plans, subject.iri, actingSubject, locale, messages, position]);
   return <div data-subject-judgments className={className ?? 'grid min-w-0 gap-8'}>
     <QuestionList api={api} target={subject.iri} scope={scope} viewer={viewer} entryHref={subjectEntry} heading={false} quiet
       locale={locale} messages={messages} />

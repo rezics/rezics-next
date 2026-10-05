@@ -55,7 +55,7 @@ async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
     import.meta.env.VITE_IDENTITY_VISUAL === '1' ? (await import('vitest/browser')).page : null;
   if (browser) await browser.viewport(args.phone ? 390 : 1280, 844);
   const canvas = within(canvasElement);
-  await expect(canvas.getAllByRole('heading', { level: 2 })).toHaveLength(5);
+  await expect(canvas.queryAllByRole('heading', { level: 2 })).toHaveLength(args.state === 'empty' ? 0 : 5);
   if (args.state === 'empty' || args.state === 'spoiler-hidden') {
     await expect(canvasElement.querySelectorAll('[data-identity-member]')).toHaveLength(0);
     await expect(canvas.queryByText('Saber Alter')).not.toBeInTheDocument();

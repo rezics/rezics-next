@@ -148,6 +148,7 @@ function IdentitySection({
   currentHref?: string;
 }) {
   const { t, hrefFor } = props;
+  if (!section.members.length && !section.hidden) return null;
   const titles: Record<IdentitySectionKind, string> = {
     family: t.variantFamily,
     units: t.units,
@@ -218,7 +219,7 @@ function IdentitySection({
         </ul>
       ) : (
         <p className="rounded-xl bg-muted/60 p-4 text-muted-foreground text-sm">
-          {empty[section.kind]}
+          {section.hidden ? t.visibleRelationsOnly : empty[section.kind]}
         </p>
       )}
       {next && destination ? (

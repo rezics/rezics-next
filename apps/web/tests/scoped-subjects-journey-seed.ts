@@ -69,6 +69,7 @@ try {
   for (const ref of [
     ...Object.values(manifest.subjects),
     ...Object.values(manifest.relations).map((relation) => relation.occurrence),
+    ...Object.values(manifest.definitions),
     manifest.variantKind,
   ])
     await grant(`semantic:read:${ref}`, 'semantic.read');
@@ -83,7 +84,7 @@ try {
   ])
     await grant(`rating:observe:${context}`, 'rating.observation.set');
 
-  // Episode 4 of *Railgun*: a second group in the same reading order, with Misaka in it, so her episodes have a combined view.
+  // A second episode placement in the same reading order gives Misaka's episodes a combined view.
   const railgun = manifest.positions['railgun-episode']!;
   const composition = await patient(h.owner).get<{ revision: string }>(
     `/v1/compositions/${short(railgun.structure)}?actingSubject=${encodeURIComponent(h.owner.actor)}`,
@@ -99,7 +100,10 @@ try {
           op: 'insert',
           parent: railgun.structure,
           position: 'last',
-          role: 'group',
+          role: 'part',
+          target: manifest.works['railgun-episode-4']!.work,
+          displayLabel: 'Season 1, episode 4',
+          inclusion: 'required',
           label: { value: 'Season 1, episode 4', language: 'en' },
         },
       ],

@@ -33,9 +33,9 @@ const questionScope = (scope: IdentityRatingScope): QuestionScope =>
 export const judgmentSignals = cache(async (resource: string, realm: string | null) => {
   const { main, actingSubject } = await reader();
   const id = idOf(resource);
-  if (!id) return { questions: false, places: false };
+  if (!id) return { questions: false, places: false, frames: false };
   const target = main.v1.resources({ resource: id });
-  const [questions, places] = await Promise.all([
+  const [questions, places, frames] = await Promise.all([
     settle(() =>
       target['rating-contexts'].get({
         query: {
@@ -49,10 +49,13 @@ export const judgmentSignals = cache(async (resource: string, realm: string | nu
         query: { subject: resource, limit: 1, ...(actingSubject ? { actingSubject } : {}) },
       }),
     ),
+    settle(() => target['rating-contexts'].get({ query: { actingSubject, forProjection: 'true',
+      ...(realm ? { scope: 'realm' as const, realm } : { scope: 'global' as const }) } })),
   ]);
   return {
     questions: questions.ok && questions.data.items.length > 0,
     places: places.ok && places.data.items.length > 0,
+    frames: frames.ok && frames.data.items.length > 0,
   };
 });
 
@@ -161,7 +164,7 @@ export async function SubjectJudgmentsSection({
     reference,
     ratingScope.scope === 'realm' ? ratingScope.realm : null,
   );
-  if (!signals.questions && !signals.places) return null;
+  if (!signals.questions && !signals.places && !signals.frames) return null;
   const [plans, scoped] = await Promise.all([
     placePlans(page, cursors, position),
     getMessages('scopedRating', locale),

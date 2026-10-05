@@ -96,14 +96,18 @@ export function workReadRoutes(work: MainWorkDependencies) {
       catch (error) { return workReadError(error); }
     })
     .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
-      query: t.Object({ ...pageQuery, ...scopeQuery, language: t.Optional(questionReadFields.language), ...questionLanguagesQuery }, { additionalProperties: false }),
+      query: t.Object({ ...pageQuery, ...scopeQuery, forProjection: t.Optional(t.Literal('true')), language: t.Optional(questionReadFields.language), ...questionLanguagesQuery }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
         ...questionReadFields, owner: t.Optional(ratingContextOwner),
+        acceptedFrameDimensions: t.Optional(t.Nullable(t.Array(t.Union([
+          t.Literal('position'), t.Literal('event'), t.Literal('continuity'),
+          t.Literal('work'), t.Literal('release'), t.Literal('realization'),
+        ])))),
         scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
         scope: readScope, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
-        session => readResourceRatingContexts(session, `https://rezics.com/id/${path.resource}`)), { headers }); }
+        session => readResourceRatingContexts(session, `https://rezics.com/id/${path.resource}`, options.forProjection === 'true')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/resources/:resource/ratings', { params: resourceParams, detail,

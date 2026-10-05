@@ -20,6 +20,7 @@ import { Region, RegionFailure } from '../work-page/region.tsx';
 import { idOf } from '../work-page/route.ts';
 import type { DiscussionPage, Loaded } from '../work-page/types.ts';
 import type { Copy } from './messages.ts';
+import type { PredicateLabels } from './predicate-labels.ts';
 import type {
   EntitySection,
   HrefFor,
@@ -84,9 +85,6 @@ export const summaryHref =
       ...(address ? { address } : {}),
     });
   };
-
-/** The last word of a predicate's IRI: what Main recorded, since the relation lexicon's labels are another owner's. */
-export const localName = (iri: string) => iri.split(/[#/]/).filter(Boolean).at(-1) ?? iri;
 
 export function Pages({
   cursor,
@@ -212,6 +210,7 @@ export function HoldsIn({ item, names, t }: { item: StatementItem; names: Names;
 /** Accepted statements about the resource, grouped by predicate, continuing by Main's cursor. */
 export function StatementsView({
   page,
+  labels = new Map(),
   names,
   cursor,
   hrefFor,
@@ -219,6 +218,7 @@ export function StatementsView({
   messages,
 }: {
   page: Loaded<StatementPage>;
+  labels?: PredicateLabels;
   names: Names;
   cursor: string | undefined;
   hrefFor: HrefFor;
@@ -246,14 +246,13 @@ export function StatementsView({
             <div
               key={group.predicate}
               data-statement-group
-              className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4"
+              className={labels.has(group.predicate) ? 'grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4' : 'grid gap-1'}
             >
-              <h3
+              {labels.has(group.predicate) ? <h3
                 className="break-words font-medium text-muted-foreground text-sm"
-                title={group.predicate}
               >
-                <bdi>{localName(group.predicate)}</bdi>
-              </h3>
+                {labels.get(group.predicate) ? <LocalizedText text={labels.get(group.predicate)!} /> : null}
+              </h3> : null}
               <ul className="grid min-w-0 gap-1">
                 {group.items.map((item, index) => (
                   <li key={`${item.revision}-${index}`} className="min-w-0">

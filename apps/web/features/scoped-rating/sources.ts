@@ -37,12 +37,12 @@ export function staticFrameSource(dimension: FrameDimension, candidates: readonl
  * The chapters or episodes of a Work, from Main's reading order: Main searches every language it carries and applies
  * disclosure before the page bound, so a place the reader has not reached never appears here.
  */
-export function readingPositionSource({ work, actingSubject, locale, label, main = () => browserMainApi(undefined, { anonymous: !actingSubject }) }: {
-  work: string; actingSubject?: string; locale: UiLocale; label?: string; main?: () => MainClient;
+export function readingPositionSource({ work, actingSubject, position, locale, label, main = () => browserMainApi(undefined, { anonymous: !actingSubject }) }: {
+  work: string; actingSubject?: string; position?: string; locale: UiLocale; label?: string; main?: () => MainClient;
 }): FrameSource {
   return { id: `position:${work}`, dimension: 'position', label, async load({ q, cursor }) {
     const page = await readReadingPositionPage(main(),
-      { work, actingSubject, q, cursor: cursor ?? undefined, limit: 20, language: locale });
+      { work, actingSubject, position, q, cursor: cursor ?? undefined, limit: 20, language: locale });
     return { nextCursor: page.nextCursor, complete: page.complete, updating: page.search?.status === 'indexing',
       items: page.items.map(item => {
         const text = pickPositionLabel(item.labels, locale);
@@ -122,4 +122,3 @@ export function relatedEventSource({ subject, actingSubject, label, main = () =>
     return { items, nextCursor: null, complete: true };
   } };
 }
-

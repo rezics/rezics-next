@@ -207,10 +207,15 @@ test('the chapters or episodes Main lists become position frames, in the languag
   const occurrence = fixture.iri('0c01');
   const page = { items: [{ occurrence, ordinal: 3, displayLabel: 'Chapter 3',
     labels: [{ value: '第三章', language: 'zh-Hans' }] }], nextCursor: null, complete: true, search: { status: 'current' } };
-  const main = (() => ({ v1: { 'reading-positions': () => ({ get: async () => ({ data: page, error: null }) }) } })) as unknown as () => MainClient;
-  const source = readingPositionSource({ work: fixture.iri('0c00'), locale: 'zh-Hans', main });
+  let query: Record<string, unknown> | undefined;
+  const main = (() => ({ v1: { 'reading-positions': () => ({ get: async (options: { query: Record<string, unknown> }) => {
+    query = options.query;
+    return { data: page, error: null };
+  } }) } })) as unknown as () => MainClient;
+  const source = readingPositionSource({ work: fixture.iri('0c00'), position: 'all', locale: 'zh-Hans', main });
   const loaded = await source.load({ q: '', cursor: null });
   expect(loaded).toMatchObject({ complete: true, nextCursor: null, updating: false });
+  expect(query).toMatchObject({ position: 'all', language: 'zh-Hans' });
   expect(loaded.items[0]).toMatchObject({ value: occurrence, label: '第三章',
     candidate: { iri: occurrence, dimension: 'position', name: { value: '第三章', language: 'zh-Hans', direction: 'ltr' } } });
 });

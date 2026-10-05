@@ -58,6 +58,19 @@ export const Statements: Story = {
   },
 };
 
+export const DefinitionLabels: Story = {
+  render: () => <Page><StatementsView page={{ ok: true, data: statements() }} names={statementNames} cursor={undefined}
+    labels={new Map([['https://schema.org/alternateName', { value: '別名', language: 'ja', direction: 'ltr' }]])}
+    {...common('ja')} /></Page>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('別名')).toHaveAttribute('lang', 'ja');
+    await expect(canvas.queryByText('alternateName')).toBeNull();
+    await expect(canvas.queryByText('memberOf')).toBeNull();
+    await expect(canvas.getByText('Aincrad guild')).toBeVisible();
+  },
+};
+
 export const ComponentProperties: Story = {
   render: () => <Page><StatementsView page={{ ok: true, data: componentStatements }} names={new Map()} cursor={undefined}
     {...common('en')} /></Page>,
@@ -174,4 +187,3 @@ export const BaseByPresentationMatrix: Story = {
     }
   },
 };
-

@@ -4,7 +4,9 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { Loaded } from '../work-page/types.ts';
 import type { Copy } from './messages.ts';
 import type { HrefFor, StatementItem, StatementPage } from './types.ts';
-import { localName, Pages, Quiet, Value } from './views.tsx';
+import { Pages, Quiet, Value } from './views.tsx';
+import { LocalizedText } from '@rezics/ui/localized-text';
+import type { PredicateLabels } from './predicate-labels.ts';
 
 // A place's facts. Main answers only what holds within the place's coordinates, most specific first, and says how far each
 // claim reaches (`frameMatch`); this page keeps Main's order and groups it by that reach, never by a rule of its own.
@@ -21,6 +23,7 @@ export function reachOf(item: StatementItem): Reach {
 
 export function ProjectionFactsView({
   page,
+  labels = new Map(),
   names,
   cursor,
   hrefFor,
@@ -28,6 +31,7 @@ export function ProjectionFactsView({
   messages,
 }: {
   page: Loaded<StatementPage>;
+  labels?: PredicateLabels;
   names: Names;
   cursor: string | undefined;
   hrefFor: HrefFor;
@@ -70,13 +74,12 @@ export function ProjectionFactsView({
                   {inReach.map(({ predicate, item }, index) => (
                     <div
                       key={`${item.revision}-${index}`}
-                      className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4"
+                      className={labels.has(predicate) ? 'grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4' : 'grid gap-1'}
                     >
                       <dt
                         className="break-words font-medium text-muted-foreground text-sm"
-                        title={predicate}
                       >
-                        <bdi>{localName(predicate)}</bdi>
+                        {labels.get(predicate) ? <LocalizedText text={labels.get(predicate)!} /> : null}
                       </dt>
                       <dd className="min-w-0">
                         <Value item={item} names={names} hrefFor={hrefFor} t={t} />

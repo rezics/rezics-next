@@ -67,6 +67,16 @@ export const Empty: Story = {
 };
 export const EmptyPhone: Story = { ...Empty, globals: phone };
 
+/** Places with no accepting question are omitted, including on an otherwise populated page. */
+export const ApplicablePlacesOnly: Story = {
+  args: { scenario: { ...fixture.populated, questions: { [fixture.populated.places![0]!.projection.id]: [fixture.writing] } } },
+  async play({ canvasElement }) {
+    await see(canvasElement, '190 ratings');
+    await expect(canvasElement.querySelectorAll('[data-projection]')).toHaveLength(1);
+    await expect(within(canvasElement).queryByText(/No question applies/)).toBeNull();
+  },
+};
+
 /** Every place is short of the display threshold or unrated: counts show, no average, no zero. */
 export const BelowThreshold: Story = {
   args: { scenario: fixture.belowThreshold },

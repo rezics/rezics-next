@@ -326,6 +326,13 @@ async function runE2e(): Promise<void> {
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
+    if (!playwrightArgs.some(path => path.endsWith('.e2e.ts')) || playwrightArgs.some(path => path.endsWith('scoped-subjects-journey.e2e.ts'))) {
+      await measured('Scoped subjects preparation', 600_000, async () => {
+        const seed = launch('scoped-subjects-seed', 'bun', ['apps/web/tests/scoped-subjects-journey-seed.ts']);
+        const code = await completed('Scoped subjects seed', seed, 600_000);
+        if (code !== 0) throw new Error(`Scoped subjects seed failed (${code}); see logs/e2e-scoped-subjects-seed.log`);
+      });
+    }
     await measured('Playwright', budgets.playwright, async () => {
       const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...playwrightArgs,
         '--reporter=junit', '--output', join(artifactDir, 'playwright')], {

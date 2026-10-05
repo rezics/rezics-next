@@ -20,6 +20,8 @@ export interface IdentitySectionData {
   kind: IdentitySectionKind;
   hub: AvailableSummary | null;
   members: IdentityMember[];
+  /** Members are known to exist but are withheld by the reading boundary. */
+  hidden?: boolean;
   legend?: {
     context: RatingContext;
     scope: 'global' | 'realm';

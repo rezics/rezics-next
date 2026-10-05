@@ -30,6 +30,8 @@ export interface ScopedRatingApi {
   projections: (subject: string, cursor?: string | null) => Promise<Outcome<ProjectionList>>;
   /** The questions that accept this target, in the scope's population. */
   questions: (target: string, scope: QuestionScope) => Promise<Outcome<Question[]>>;
+  /** Questions accepting places of this subject, before a place exists. */
+  frameQuestions?: (subject: string, scope: QuestionScope) => Promise<Outcome<Question[]>>;
   /** One question's figures for one target. */
   rating: (target: string, question: string, scope: QuestionScope) => Promise<Outcome<TargetRating>>;
   /** Sets (1–10) or withdraws (null) the signed-in person's rating of a target for a question. */
@@ -101,6 +103,20 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
   const named = (summaries: readonly (ResourceSummary | null)[]) => nameOccurrences(main(), summaries, locale,
     actingSubject ?? undefined, orders).catch(() => [...summaries]);
 
+  async function questions(target: string, scope: QuestionScope, forProjection = false): Promise<Outcome<Question[]>> {
+    const items: Question[] = [];
+    let cursor: string | undefined;
+    do {
+      const answer = await settle(() => main().v1.resources({ resource: uuidOf(target) })['rating-contexts']
+        .get({ query: { ...scopeQuery(scope), ...cursor ? { cursor } : {}, ...reader,
+          ...(forProjection ? { forProjection: 'true' as const } : {}) } }));
+      if (!answer.ok) return answer;
+      items.push(...answer.data.items);
+      cursor = answer.data.nextCursor ?? undefined;
+    } while (cursor);
+    return { ok: true, data: items };
+  }
+
   async function summaryOf(projection: string): Promise<ResourceSummary | null> {
     const batch = await settle(() => main().v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
       resources: [projection], ...reader }));
@@ -143,20 +159,8 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
         items: page.data.items.map(projection => ({ projection, summary: summaries.get(projection.id) ?? null })) } };
     },
 
-    async questions(target, scope) {
-      const items: Question[] = [];
-      let cursor: string | undefined;
-      // Twenty a page; a target has a handful of questions, so this ends at the first or second page.
-      for (let page = 0; page < 5; page += 1) {
-        const answer = await settle(() => main().v1.resources({ resource: uuidOf(target) })['rating-contexts']
-          .get({ query: { ...scopeQuery(scope), ...cursor ? { cursor } : {}, ...reader } }));
-        if (!answer.ok) return answer;
-        items.push(...answer.data.items);
-        if (!answer.data.nextCursor) break;
-        cursor = answer.data.nextCursor;
-      }
-      return { ok: true, data: items };
-    },
+    questions,
+    frameQuestions: (subject, scope) => questions(subject, scope, true),
 
     async rating(target, question, scope) {
       const answer = await settle(() => main().v1.resources({ resource: uuidOf(target) }).ratings

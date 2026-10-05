@@ -30,21 +30,28 @@ interface RowFigures { question: Question | null; figures: Figures | null; more:
  * Nothing is read for a place the reader has not reached.
  */
 async function readRow(api: ScopedRatingApi, target: string, scope: QuestionScope, question?: Question): Promise<Outcome<RowFigures>> {
-  let chosen = question ?? null;
-  let more = 0;
-  if (!chosen) {
-    const asked = await api.questions(target, scope);
-    if (!asked.ok) return asked;
-    chosen = asked.data[0] ?? null;
-    more = Math.max(0, asked.data.length - 1);
-  }
+  const asked = await api.questions(target, scope);
+  if (!asked.ok) return asked;
+  const chosen = asked.data.find(item => item.context === question?.context) ?? asked.data[0] ?? null;
+  const more = Math.max(0, asked.data.length - 1);
   if (!chosen) return { ok: true, data: { question: null, figures: null, more } };
   const rating = await api.rating(target, chosen.context, scope);
   return rating.ok ? { ok: true, data: { question: chosen, figures: figuresOfRating(rating.data), more } } : rating;
 }
 
-function ProjectionRow({ read, api, scope, question, position, locale, messages }: {
-  read: ProjectionRead; api: ScopedRatingApi; scope: QuestionScope; question?: Question; position?: string; locale: UiLocale;
+interface RatedProjection { read: ProjectionRead; row: Outcome<RowFigures> | null }
+
+async function readPage(api: ScopedRatingApi, subject: string, scope: QuestionScope, question?: Question, cursor?: string | null) {
+  const page = await api.projections(subject, cursor);
+  if (!page.ok) return page;
+  const items = await Promise.all(page.data.items.map(async read => ({ read,
+    row: isVisible(read) ? await readRow(api, read.projection.id, scope, question) : null })));
+  return { ok: true as const, data: { ...page.data,
+    items: items.filter(item => !item.row?.ok || item.row.data.question !== null) } };
+}
+
+function ProjectionRow({ read, row, retry, position, locale, messages }: {
+  read: ProjectionRead; row: Outcome<RowFigures>; retry: () => void; position?: string; locale: UiLocale;
   messages: ScopedRatingMessages;
 }) {
   const t = translate(messages, locale);
@@ -52,12 +59,10 @@ function ProjectionRow({ read, api, scope, question, position, locale, messages 
   const placeHref = (place: ProjectionRead) => place.summary?.status === 'available'
     ? canonicalHref(place.summary.address as CanonicalAddress, locale, place.summary.name.value)
     : localizedPath(identityHref('/e/', place.projection.id), locale);
-  const [row, reload] = useLoad(() => readRow(api, read.projection.id, scope, question), `${read.projection.id}\n${question?.context ?? ''}`);
   return <li data-projection={read.projection.id} className="grid min-w-0 gap-3 rounded-2xl border border-border/60 bg-card p-4">
     {/* The list is one subject's, so each row leads with where it is rated, not with the subject again. */}
     <FrameChips chips={frameChips(read.summary ?? undefined, locale)} label={t.within} size="lg" />
-    {row.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
-      : row.state === 'failed' ? <FailureNote failure={row.failure} locale={locale} messages={messages} retry={reload} />
+    {!row.ok ? <FailureNote failure={row.failure} retry={retry} locale={locale} messages={messages} />
         : !row.data.question ? <p className="text-muted-foreground text-sm">{t.noQuestions}</p>
           : <div className="grid gap-1.5">
             <p lang={questionText(row.data.question).language} dir={questionText(row.data.question).direction}
@@ -82,18 +87,18 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
   position?: string; level?: 2 | 3; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
   const t = translate(messages, locale);
-  const [first, reload] = useLoad(() => api.projections(subject), subject);
-  const [later, setLater] = useState<{ items: ProjectionRead[]; next: string | null; busy: boolean; failed: boolean } | null>(null);
+  const [first, reload] = useLoad(() => readPage(api, subject, scope, question), `${subject}\n${scope.kind === 'realm' ? scope.realm : 'global'}\n${question?.context ?? ''}`);
+  const [later, setLater] = useState<{ items: RatedProjection[]; next: string | null; busy: boolean; failed: boolean } | null>(null);
   const Heading = `h${level}` as const;
   const items = first.state === 'ready' ? [...first.data.items, ...later?.items ?? []] : [];
   const next = later ? later.next : first.state === 'ready' ? first.data.nextCursor : null;
-  const visible = items.filter(isVisible);
+  const visible = items.filter(item => isVisible(item.read));
   const hidden = items.length - visible.length;
 
   async function more() {
     if (!next) return;
     setLater(state => ({ items: state?.items ?? [], next, busy: true, failed: false }));
-    const page = await api.projections(subject, next).catch(() => null);
+    const page = await readPage(api, subject, scope, question, next).catch(() => null);
     setLater(state => !page?.ok ? { items: state?.items ?? [], next, busy: false, failed: true }
       : { items: [...state?.items ?? [], ...page.data.items], next: page.data.nextCursor, busy: false, failed: false });
   }
@@ -102,10 +107,10 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
     <Heading className="font-semibold text-lg tracking-tight">{t.byPart}</Heading>
     {first.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : first.state === 'failed' ? <FailureNote failure={first.failure} locale={locale} messages={messages} retry={reload} />
-        : items.length === 0 ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p>
-          : <>
+        : <>
+            {items.length === 0 ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p> : null}
             {visible.length ? <ul className="grid min-w-0 gap-3">
-              {visible.map(read => <ProjectionRow key={read.projection.id} read={read} api={api} scope={scope} question={question}
+              {visible.map(({ read, row }) => <ProjectionRow key={read.projection.id} read={read} row={row!} retry={reload}
                 position={position} locale={locale} messages={messages} />)}
             </ul> : null}
             {hidden > 0 ? <p data-hidden-parts className="flex items-start gap-2 text-muted-foreground text-sm">

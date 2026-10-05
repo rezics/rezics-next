@@ -3,7 +3,7 @@ import { SeedApiError } from './api.ts';
 import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
 import { relationLexiconSeed, CANONICITY_PROPERTY, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
-import { seedScopedSubjectQuestions, type ScopedSubjectApi, type GlobalQuestions } from './scoped-subjects-questions.ts';
+import { seedScopedSubjectQuestions, scopedSubjectLocales, type ScopedSubjectApi, type GlobalQuestions } from './scoped-subjects-questions.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
 import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
@@ -38,6 +38,7 @@ export interface ScopedSubjectManifest {
   projections: Record<string, string>;
   relations: Record<string, Occurrence>;
   statements: Record<string, string>;
+  definitions: Record<string, string>;
   release: string;
   authority: string;
   variantKind: string;
@@ -74,8 +75,9 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     return api.post<T>(path, body, requestKey);
   } }, actor, namespace);
   const result: ScopedSubjectManifest = { profile: 'scoped-subjects-seed-v1', questions,
-    works: {}, subjects: {}, positions: {}, projections: {}, relations: {}, statements: {},
+    works: {}, subjects: {}, positions: {}, projections: {}, relations: {}, statements: {}, definitions: {},
     release: '', authority: '', variantKind: '', itemQuestion: '' };
+  const primaryWorks = new Map<string, string>();
   // Catalogue intake retains the candidate receipt across retries; it does not
   // claim that these existing published Works are the fixture author's own work.
   for (const [id, title, type] of [
@@ -90,6 +92,10 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     ['canon', 'Star Wars: The Force Awakens', 'https://schema.org/Movie'],
     ['legends', 'Heir to the Empire', 'https://schema.org/Book'],
     ['match', 'Harbor Invitational — exhibition match broadcast', 'https://schema.org/VideoObject'],
+    ['railgun-episode-3', 'A Certain Scientific Railgun — Season 1, episode 3', 'https://schema.org/VideoObject'],
+    ['railgun-episode-4', 'A Certain Scientific Railgun — Season 1, episode 4', 'https://schema.org/VideoObject'],
+    ['fate-zero-episode-24', 'Fate/Zero — Episode 24', 'https://schema.org/VideoObject'],
+    ['heavens-feel-route', "Fate/stay night — Heaven's Feel route", 'https://schema.org/DigitalDocument'],
   ]) {
     const body = await catalogueWorkBody({ actingSubject: actor,
       request: async (method, path, body, requestKey) => ({ status: 200, body: method === 'GET'
@@ -105,10 +111,11 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
       profile: 'semantic-change-v1', expectedHead: null, actingSubject: actor,
       state: { component: 'resource', types: [type], properties: [
         { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: name, language: 'en' } },
-        { predicate: `${RV}semanticWork`, value: resource(work) }, ...extra,
+        ...extra,
       ] },
     }, key(`resource:${id}`));
     result.subjects[id] = saved.component;
+    primaryWorks.set(id, work);
     return saved.component;
   };
   for (const [id, name, type, work] of [
@@ -134,12 +141,12 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   ]) await semantic(id!, name!, type!, result.works[work!]!.work,
     id === 'conan' ? [{ predicate: 'https://schema.org/alternateName',
       value: { kind: 'language-string', lexical: 'Kudo Shinichi', language: 'en' } }] : []);
-  // A targetless grouping coordinate is an identified Structure position. It
-  // does not mint a Work or a second character for an episode or VN route.
-  for (const [id, workKey, label] of [
-    ['railgun-episode', 'railgun', 'Season 1, episode 3'],
-    ['heavens-feel', 'fate-vn', "Heaven's Feel route"],
-    ['fate-zero-episode', 'fate-zero', 'Episode 24'],
+  // Episodes and routes are Works placed as parts of their series or game,
+  // using the same reading-order placements as published narrative parts.
+  for (const [id, workKey, part, label] of [
+    ['railgun-episode', 'railgun', 'railgun-episode-3', 'Season 1, episode 3'],
+    ['heavens-feel', 'fate-vn', 'heavens-feel-route', "Heaven's Feel route"],
+    ['fate-zero-episode', 'fate-zero', 'fate-zero-episode-24', 'Episode 24'],
   ]) {
     const work = result.works[workKey!]!;
     const base = await api.post<{ structure: string; revision: string }>('/v1/compositions', {
@@ -147,8 +154,8 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     }, key(`structure:${id}`));
     const changed = await api.post<{ occurrences: string[] }>(`/v1/compositions/${short(base.structure)}/changes`, {
       profile: 'work-composition', expectedHead: base.revision, actingSubject: actor,
-      operations: [{ op: 'insert', parent: base.structure, position: 'last', role: 'group',
-        label: { value: label, language: 'en' } }],
+      operations: [{ op: 'insert', parent: base.structure, position: 'last', role: 'part', target: result.works[part!]!.work,
+        label: { value: label, language: 'en' }, displayLabel: label, inclusion: 'required' }],
     }, key(`position:${id}`));
     result.positions[id!] = { structure: base.structure, occurrence: changed.occurrences[0]!, work: work.work };
   }
@@ -191,6 +198,38 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   }, key('definition:appearance'));
   await authorize(`semantic:read:${appearance.component}`, 'semantic.read');
   definitions.set('appearance', appearance);
+  for (const [name, definition] of definitions) result.definitions[name] = definition.component;
+  const labelDefinition = async (definition: Written, fromRole: string, toRole: string, labels: readonly string[], name: string) => {
+    await authorize(`semantic:edit:${definition.component}`, 'lexicon.presentation.review');
+    for (const [index, language] of scopedSubjectLocales.entries()) {
+      const current = await api.get<{ items: { renderings: { projections: { fromRole: string; toRole: string; language: string | null; labels: unknown }[] }[] }[] }>(
+        `/v1/lexicon/presentations?definitions=${encodeURIComponent(definition.component)}&languages=${language}&actingSubject=${encodeURIComponent(actor)}`);
+      if (current.items.some(item => item.renderings.some(rendering => rendering.projections.some(projection =>
+        projection.fromRole === fromRole && projection.toRole === toRole && projection.language === language && projection.labels)))) continue;
+      const noun = labels[index]!;
+      await api.post('/v1/lexicon/presentations', { profile: 'definition-presentation-v1', expectedHead: null, actingSubject: actor,
+        state: { definition: definition.component, meaningRevision: definition.revision, fromRole, toRole, language,
+          noun, heading: noun, plurals: { other: noun }, grammaticalForms: [],
+          source: 'https://rezics.com/definition/scoped-subjects-seed-v1',
+          licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'reviewed' } }, key(`label:${name}:${language}`));
+    }
+  };
+  await labelDefinition(appearance, 'subject', 'work', ['Appears in', '登場作品', '登场作品', '登場作品', '등장 작품', 'Auftritte in', 'Apparaît dans', 'Aparece en'], 'appearance-work');
+  await labelDefinition(appearance, 'work', 'subject', ['Characters', '角色', '角色', 'キャラクター', '캐릭터', 'Figuren', 'Personnages', 'Personajes'], 'appearance-subject');
+  await labelDefinition(appearance, 'subject', 'role', ['Role', '角色定位', '角色定位', '役割', '역할', 'Rolle', 'Rôle', 'Papel'], 'appearance-role');
+  await labelDefinition(appearance, 'work', 'role', ['Role', '角色定位', '角色定位', '役割', '역할', 'Rolle', 'Rôle', 'Papel'], 'appearance-work-role');
+  await labelDefinition(appearance, 'role', 'subject', ['Characters', '角色', '角色', 'キャラクター', '캐릭터', 'Figuren', 'Personnages', 'Personajes'], 'appearance-role-subject');
+  await labelDefinition(appearance, 'role', 'work', ['Appears in', '登場作品', '登场作品', '登場作品', '등장 작품', 'Auftritte in', 'Apparaît dans', 'Aparece en'], 'appearance-role-work');
+  const subjectWork = await api.post<Written>('/v1/semantic/changes', {
+    profile: 'semantic-change-v1', expectedHead: null, actingSubject: actor,
+    state: { component: 'definition', kind: 'relation', workSubjectRole: 'work',
+      roles: ['subject', 'work'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) },
+  }, key('definition:subject-work'));
+  await authorize(`semantic:read:${subjectWork.component}`, 'semantic.read');
+  await labelDefinition(subjectWork, 'subject', 'work', ['Work', '作品', '作品', '作品', '작품', 'Werk', 'Œuvre', 'Obra'], 'subject-work');
+  await labelDefinition(subjectWork, 'work', 'subject', ['Subjects', '主體', '主体', '対象', '대상', 'Gegenstände', 'Sujets', 'Sujetos'], 'work-subject');
+  definitions.set('subject-work', subjectWork);
+  result.definitions['subject-work'] = subjectWork.component;
   for (const concept of Object.values(variants)) await authorize(`semantic:read:${concept}`, 'semantic.read');
   result.variantKind = variants.persona;
   const vocabulary = await seedCanonicity({ ...lexicon, post: async <T>(path: string, body: object, requestKey: string) => {
@@ -215,6 +254,10 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     result.relations[id] = saved;
   };
   const subject = (id: string) => result.subjects[id]!;
+  // Primary Work membership is a labelled relation, not an unlabelled model
+  // property rendered alongside facts. Appearances retain their separate roles.
+  for (const [id, work] of primaryWorks) await relation(`work:${id}`, 'subject-work',
+    [{ role: 'subject', ref: subject(id) }, { role: 'work', ref: work }]);
   const appear = (id: string, on: string, work: string, role: string, frames: string[] = [], credit?: string) =>
     relation(id, 'appearance', [{ role: 'subject', ref: subject(on), ...(credit ? { creditedName: credit } : {}) },
       { role: 'work', ref: result.works[work]!.work }, { role: 'role', ref: subject(role) }], frames);
@@ -229,16 +272,33 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   await relation('swimsuit-unit', 'represents', [{ role: 'unit', ref: subject('swimsuit') }, { role: 'character', ref: subject('hoshino') }]);
   for (const continuity of ['canon', 'legends']) await relation(`${continuity}-work`, 'in-continuity',
     [{ role: 'work', ref: result.works[continuity]!.work }, { role: 'continuity', ref: subject(continuity) }]);
-  const property = await api.post<Written>('/v1/semantic/changes', {
-    profile: 'semantic-change-v1', expectedHead: null, actingSubject: actor,
-    state: { component: 'definition', kind: 'property', roles: [] },
-  }, key('definition:scoped-fact'));
-  await authorize(`semantic:read:${property.component}`, 'semantic.read');
+  // Each predicate pins its own labelled meaning, as wiki claims do, rather
+  // than borrowing one anonymous definition for unrelated assertions.
+  const predicates = new Map<string, Written>();
+  for (const [name, labels] of [
+    ['ability', ['Ability', '能力', '能力', '能力', '능력', 'Fähigkeit', 'Capacité', 'Habilidad']],
+    ['age', ['Age', '年齡', '年龄', '年齢', '나이', 'Alter', 'Âge', 'Edad']],
+    ['form', ['Form', '形態', '形态', '形態', '형태', 'Form', 'Forme', 'Forma']],
+    ['isPartOf', ['Part of', '所屬', '所属', '所属', '소속', 'Teil von', 'Fait partie de', 'Parte de']],
+    ['participatesIn', ['Participates in', '參與', '参与', '参加', '참가', 'Teilnahme an', 'Participe à', 'Participa en']],
+    ['family', ['Family', '家庭', '家庭', '家族', '가족', 'Familie', 'Famille', 'Familia']],
+  ] as const) {
+    const definition = await api.post<Written>('/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, actingSubject: actor,
+      state: { component: 'definition', kind: 'relation', roles: ['subject', 'value'].map(key =>
+        ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) },
+    }, key(`definition:fact:${name}`));
+    await authorize(`semantic:read:${definition.component}`, 'semantic.read');
+    await labelDefinition(definition, 'subject', 'value', labels, `fact:${name}`);
+    predicates.set(name, definition);
+    result.definitions[name] = definition.component;
+  }
   const statement = async (id: string, on: string, predicate: string, value: object, applicability: string[],
-    evidence: string[] = [], speaker = actor, meaning = property.revision) => {
+    evidence: string[] = [], speaker = actor, meaning?: string) => {
+    const definition = predicates.get(predicate);
     await authorize(`statement:speak:${speaker}`, 'statement.record', speaker);
     const saved = await api.post<{ statement: string }>('/v1/statements', {
-      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate, relationDefinition: meaning,
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate: definition?.component ?? predicate, relationDefinition: meaning ?? definition!.revision,
       value, applicability, interpretation: { kind: 'selected' }, evidence, actingSubject: speaker,
     }, key(`statement:${id}`));
     await api.post('/v1/statement-decisions', { profile: 'statement-decision-v1',
@@ -247,18 +307,18 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     }, key(`accept:${id}`));
     result.statements[id] = saved.statement;
   };
-  await statement('misaka-ability', subject('misaka'), `${RV}ability`, text('Electromaster'), [result.works.railgun!.work]);
+  await statement('misaka-ability', subject('misaka'), 'ability', text('Electromaster'), [result.works.railgun!.work]);
   for (const [id, work, predicate, value] of [
     ['goku-child', 'dragon-ball', 'age', 'Child'], ['goku-adult', 'dragon-ball-z', 'age', 'Adult'],
     ['goku-base', 'dragon-ball', 'form', 'Base form'], ['goku-super-saiyan', 'dragon-ball-z', 'form', 'Super Saiyan'],
-  ]) await statement(id!, subject('goku'), `${RV}${predicate}`, text(value!), [result.works[work!]!.work],
+  ]) await statement(id!, subject('goku'), predicate!, text(value!), [result.works[work!]!.work],
     ['https://en.dragon-ball-official.com/news/01_3864.html']);
-  await statement('map-in-match', subject('map-a'), 'https://schema.org/isPartOf', { kind: 'resource', iri: subject('match') }, []);
-  await statement('second-map-in-match', subject('map-b'), 'https://schema.org/isPartOf', { kind: 'resource', iri: subject('match') }, []);
-  await statement('player-in-match', subject('player'), `${RV}participatesIn`, { kind: 'resource', iri: subject('match') }, []);
-  await statement('canon-family', subject('anakin'), `${RV}family`, text('Grandfather of Ben Solo'), [subject('canon')],
+  await statement('map-in-match', subject('map-a'), 'isPartOf', { kind: 'resource', iri: subject('match') }, []);
+  await statement('second-map-in-match', subject('map-b'), 'isPartOf', { kind: 'resource', iri: subject('match') }, []);
+  await statement('player-in-match', subject('player'), 'participatesIn', { kind: 'resource', iri: subject('match') }, []);
+  await statement('canon-family', subject('anakin'), 'family', text('Grandfather of Ben Solo'), [subject('canon')],
     ['https://www.starwars.com/news/darth-vader-kylo-ren-grandfather-grandson']);
-  await statement('legends-family', subject('anakin'), `${RV}family`, text('Father of Luke Skywalker'), [subject('legends')],
+  await statement('legends-family', subject('anakin'), 'family', text('Father of Luke Skywalker'), [subject('legends')],
     ['https://www.starwars.com/databank/luke-skywalker']);
   const authority = await api.post<{ agent: string }>('/v1/agents', { profile: 'agent-provision-v1', kind: 'organization',
     displayName: 'Continuity authority (demo curator)' }, key('authority'));

@@ -89,6 +89,43 @@ test('Misaka keeps one Character across two Works; episode ratings and covered f
   expect(await aggregate(data.questions.performance.context, projection('misaka-episode'))).toMatchObject({ count: 11, sum: 90 });
 });
 
+test('episodes are selectable reading placements and subject discovery lists only accepting frame questions', async () => {
+  for (const position of Object.values(data.positions)) {
+    const read = await curator().get<{ items: { occurrence: string }[] }>(
+      `/v1/reading-positions/${short(position.work)}?${acting()}&position=all`);
+    expect(read.items.map(item => item.occurrence)).toContain(position.occurrence);
+  }
+  const discover = (on: string) => curator().get<{ items: { context: string; acceptedFrameDimensions: string[] | null }[] }>(
+    `/v1/resources/${short(on)}/rating-contexts?${acting()}&scope=global&forProjection=true`);
+  expect((await discover(subject('misaka'))).items).toEqual(expect.arrayContaining([
+    expect.objectContaining({ context: data.questions.performance.context, acceptedFrameDimensions: ['event', 'position'] }),
+  ]));
+  expect((await discover(subject('misaka'))).items.map(item => item.context)).not.toContain(data.questions.unit.context);
+  expect((await discover(subject('swimsuit'))).items).toEqual(expect.arrayContaining([
+    expect.objectContaining({ context: data.questions.unit.context, acceptedFrameDimensions: ['release'] }),
+  ]));
+  expect((await discover(subject('saber-title'))).items).toEqual([]);
+  expect((await contexts(projection('anakin-canon'))).items).toEqual([]);
+});
+
+test('scoped predicates and appearance directions have definition labels in every UI language', async () => {
+  const facts = await statements(subject('misaka'));
+  expect(facts.groups.some(group => group.predicate === data.definitions.ability)).toBe(true);
+  for (const language of scopedSubjectLocales) {
+    const labelled = await curator().get<{ items: { renderings: { projections: { language: string; labels: { noun: string } | null }[] }[] }[] }>(
+      `/v1/lexicon/presentations?definitions=${Object.values(data.definitions).slice(-6).join(',')}&languages=${language}&${acting()}`);
+    for (const item of labelled.items) expect(item.renderings.flatMap(rendering => rendering.projections)
+      .some(projection => projection.language === language && !!projection.labels?.noun)).toBe(true);
+  }
+  const appearances = (await relations(subject('misaka'))).items.filter(item =>
+    item.rendering?.meaning.definition === data.definitions.appearance);
+  expect(appearances).toHaveLength(2);
+  for (const item of appearances) {
+    expect(item.rendering!.projections.find(projection => projection.toRole === 'work')!.labels?.noun).toBe('Appears in');
+    expect(item.rendering!.projections.find(projection => projection.toRole === 'role')!.labels?.noun).toBe('Role');
+  }
+});
+
 test('Artoria and Saber Alter are two Characters linked by a persona star and a separate Saber title', async () => {
   expect(subject('artoria')).not.toBe(subject('alter'));
   const variant = data.relations['alter-variant']!.occurrence;
@@ -133,6 +170,10 @@ test('Conan and Shinichi are names of one Character; the appearance retains its 
   const semantic = await h.api(h.owner).get<{ state: { properties: { predicate: string; value: { lexical?: string } }[] } }>(
     `/v1/semantic/resources/${short(subject('conan'))}?actingSubject=${encodeURIComponent(h.owner.actor)}`);
   expect(semantic.state.properties.find(item => item.predicate === 'https://schema.org/alternateName')!.value.lexical).toBe('Kudo Shinichi');
+  expect(semantic.state.properties.some(item => item.predicate === 'https://rezics.com/vocab/semanticWork')).toBe(false);
+  expect((await relations(subject('conan'))).items.some(item =>
+    item.rendering?.meaning.definition === data.definitions['subject-work']
+      && item.rendering.projections.some(projection => projection.toRole === 'work' && projection.labels?.noun === 'Work'))).toBe(true);
   const read = await relationRecord<{ participations: { role: string; participant: { ref: string }; creditedName?: object }[] }>(
     data.relations['conan-credit']!.occurrence);
   expect(read.participations.find(item => item.role === 'subject')).toMatchObject({ participant: { ref: subject('conan') },
