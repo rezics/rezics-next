@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { uuidToSid } from '@rezics/model/address';
 import { documentText, type DocumentSnapshot } from '@rezics/document';
@@ -7,11 +7,10 @@ import { signInAtAccounts } from './account-sign-in.ts';
 
 test.use({ actionTimeout: 30_000, navigationTimeout: 60_000 });
 test.afterEach(async ({ page }, info) => {
-  if (info.status === 'passed' || !new URL(page.url()).pathname.includes('/studio/')) return;
-  if (await page.locator('[data-slot="autosave-status"]').count()) {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: info.outputPath('studio-shared-failure.png'), fullPage: true });
-  }
+  if (info.status === 'passed') return;
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const surface = new URL(page.url()).pathname.includes('/studio/') ? 'studio' : 'reader';
+  await page.screenshot({ path: info.outputPath(`${surface}-shared-failure.png`), fullPage: true });
 });
 
 const saved = (page: Page) => page.locator('[data-slot="autosave-status"] [role="status"]');
@@ -143,12 +142,31 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await expect(page.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveText('');
 
     // The historical chapter Work URL resolves to the Post's placement in the reader.
+    const suitabilityResponse = page.waitForResponse(response => {
+      const request = response.request();
+      return request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/suitability/reads')
+        && request.postDataJSON()?.targets?.includes(`https://rezics.com/id/${post}`);
+    }, { timeout: 60_000 });
     // ast-grep-ignore: web-links-use-address -- A raw chapter UUID independently exercises the historical Work URL redirect.
     await page.goto(`/en/w/${post}?language=en`);
     await page.waitForURL(/\/read\//);
     await expect(page.getByRole('heading', { level: 1, name: chapterTitle })).toBeVisible();
     const readerPath = pathOf(page);
     expect(new URL(page.url()).pathname.split('/')).toContain('read');
+    await expect(page.locator('[data-author-note="before"]')).toContainText(before);
+    await expect(page.locator('[data-author-note="after"]')).toContainText(after);
+    const browserSuitability = await suitabilityResponse;
+    // The legacy redirect can retire the browser response body; replay its exact read input for evidence.
+    const suitabilityInput = browserSuitability.request().postDataJSON();
+    const suitability = await page.request.post('/api/main/v1/suitability/reads', { data: suitabilityInput });
+    const suitabilityEvidence = JSON.stringify({ request: suitabilityInput, browserStatus: browserSuitability.status(),
+      status: suitability.status(), body: await suitability.json() }, null, 2);
+    const suitabilityPath = info.outputPath('chapter-suitability.json');
+    writeFileSync(suitabilityPath, suitabilityEvidence);
+    await info.attach('chapter-suitability', { contentType: 'application/json', path: suitabilityPath });
+    expect(suitability.status(), suitabilityEvidence).toBe(200);
+    await expect(page.locator('[data-reader-text]')).toHaveText(text);
+    await screenshot(page, info, 'old-address-landing');
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       for (const locale of ['en', 'zh-Hant'] as const) {
