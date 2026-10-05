@@ -36,7 +36,6 @@ test('Post read lists the readable Books that place the Post, with its occurrenc
         semanticTypes: types,
         admission: {
           id: randomUUID(),
-          principalId: a.principalId,
           actingSubject: a.actor,
           scope: 'work:create:root',
           action: 'work.create',
@@ -44,9 +43,6 @@ test('Post read lists the readable Books that place the Post, with its occurrenc
           requestDigest: metadataWorkRequestDigest(title, types),
           authorityEpoch: '0',
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          state: 'claimed',
-          dispatchEligible: true,
-          replayed: false,
         },
       });
       if (!created.work || !created.mainVersion) throw new Error('Book was not created');
