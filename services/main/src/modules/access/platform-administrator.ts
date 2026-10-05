@@ -104,6 +104,7 @@ export async function platformAdministratorProof(
   client: Pick<PoolClient, 'query'>,
   principalId: string,
   actor: string,
+  lock = true,
 ): Promise<PlatformAdministratorProof | null> {
   if (!native.test(actor)) return null;
   return (
@@ -118,7 +119,7 @@ export async function platformAdministratorProof(
     JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
     WHERE a.singleton AND p.id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
       AND r.active AND r.valid_until > clock_timestamp()
-    ORDER BY r.id LIMIT 1 FOR SHARE OF p,r,s`,
+    ORDER BY r.id LIMIT 1${lock ? ' FOR SHARE OF p,r,s' : ''}`,
         [principalId, actor],
       )
     ).rows[0] ?? null

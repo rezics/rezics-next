@@ -30,6 +30,7 @@ type Authority = (
   principal: VerifiedPrincipal,
   actor: string,
   action: string,
+  lock?: boolean,
 ) => Promise<{ principalId: string }>;
 export interface QueueFilter {
   actingSubject: string;
@@ -48,14 +49,20 @@ export class SafetyQueue {
     private readonly authority: Authority,
     private readonly clock: () => Date = () => new Date(),
   ) {}
-  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  private async transaction<T>(
+    work: (client: PoolClient) => Promise<T>,
+    readOnly = false,
+  ): Promise<T> {
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       if (
-        !(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE'))
-          .rowCount
+        !(
+          await client.query(
+            `SELECT 1 FROM access.recovery_fence WHERE id AND open${readOnly ? '' : ' FOR SHARE'}`,
+          )
+        ).rowCount
       ) {
         throw new GovernanceUnavailable('Access is held for recovery');
       }
@@ -72,14 +79,19 @@ export class SafetyQueue {
     }
   }
 
-  private async actions(client: PoolClient, principal: VerifiedPrincipal, actor: string) {
+  private async actions(
+    client: PoolClient,
+    principal: VerifiedPrincipal,
+    actor: string,
+    lock = true,
+  ) {
     const allowed: string[] = [];
     for (const [kind, action] of [
       ['content_report', 'governance.moderate'],
       ['rights_complaint', 'governance.rights.decide'],
     ]) {
       try {
-        await this.authority(client, principal, actor!, action!);
+        await this.authority(client, principal, actor!, action!, lock);
         allowed.push(kind!);
       } catch (error) {
         if (!(error instanceof GovernanceDenied)) throw error;
@@ -99,17 +111,23 @@ export class SafetyQueue {
     )
       throw new GovernanceInvalid('invalid queue filter');
     return this.transaction(async (client) => {
-      const kinds = await this.actions(client, principal, filter.actingSubject);
+      const kinds = await this.actions(client, principal, filter.actingSubject, false);
       let specialist = false;
       try {
-        await this.authority(client, principal, filter.actingSubject, 'governance.safety.evidence');
+        await this.authority(
+          client,
+          principal,
+          filter.actingSubject,
+          'governance.safety.evidence',
+          false,
+        );
         specialist = true;
       } catch (error) {
         if (!(error instanceof GovernanceDenied)) throw error;
       }
       const revision = (
         await client.query<{ revision: string }>(
-          'SELECT revision::text FROM access.site_moderation_position WHERE id FOR SHARE',
+          'SELECT access.site_moderation_basis() AS revision',
         )
       ).rows[0]!.revision;
       const position = { dataEpoch: 'safety-queue-v2', sequence: revision };
@@ -212,7 +230,7 @@ export class SafetyQueue {
               )
             : null,
       };
-    });
+    }, true);
   }
 
   async claim(principal: VerifiedPrincipal, actor: string, caseId: string) {
@@ -296,7 +314,7 @@ export class SafetyQueue {
 
   async due(principal: VerifiedPrincipal, actor: string, cursor?: string, now = this.clock()) {
     return this.transaction(async (client) => {
-      const kinds = await this.actions(client, principal, actor);
+      const kinds = await this.actions(client, principal, actor, false);
       const rows = (
         await client.query<{ id: string; case_id: string; step: string; due_at: Date }>(
           `SELECT
@@ -321,7 +339,7 @@ export class SafetyQueue {
         })),
         nextCursor: rows.length > 50 ? page.at(-1)!.id : null,
       };
-    });
+    }, true);
   }
 
   async hold(principal: VerifiedPrincipal, actor: string, caseId: string, reason: string) {
@@ -387,6 +405,6 @@ export class SafetyQueue {
         })),
         nextCursor: rows.length > 50 ? rows[49]!.id : null,
       };
-    });
+    }, true);
   }
 }

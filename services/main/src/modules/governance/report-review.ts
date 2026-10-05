@@ -93,7 +93,4 @@ export class ReviewReportOwner {
     }
   }
 
-  async lockRanking(client: PoolClient): Promise<void> {
-    await client.query('SELECT position FROM access.reader_review_rank_head WHERE singleton FOR UPDATE');
-  }
 }

@@ -259,7 +259,7 @@ export class EditorialReviewStore {
       await this.begin(client);
       const principal = await editorialPrincipal(client,call.principal);
       const replay = await this.replay(client,principal,key,requestDigest);
-      if (replay) { await client.query('COMMIT'); return replay; }
+      if (replay) { await this.commitEvents(client); return replay; }
       await editorialController(client,principal,call.actingSubject);
       if (target.revision !== input.target.revision) throw new EditorialBlocked({ code: 'stale_base',
         expectedHeads: [{ component: target.resource,head: input.target.revision }],actualHeads: [{ component: target.resource,head: target.revision }] });
@@ -280,7 +280,7 @@ export class EditorialReviewStore {
       await this.insertRevision(client,revision,call.actingSubject);
       await this.event(client,id,1,reverts ? 'reversal-proposed' : 'created',call.actingSubject);
       const result = { proposal: id,revision: 1,outcome: 'created',replayed: false };
-      await this.save(client,principal,key,requestDigest,result); await client.query('COMMIT'); return result;
+      await this.save(client,principal,key,requestDigest,result); await this.commitEvents(client); return result;
     },{ call,key });
   }
   async revise(call: EditorialCall, id: string, input: RevisionInput, key: string): Promise<CommandResult> {
@@ -289,7 +289,7 @@ export class EditorialReviewStore {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
-      if (replay) { await client.query('COMMIT'); return replay; }
+      if (replay) { await this.commitEvents(client); return replay; }
       await editorialController(client,principal,call.actingSubject);
       if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer revises this proposal');
       const proposal = rowToProposal(row), old = await this.revision(client,id,input.revision);
@@ -300,7 +300,7 @@ export class EditorialReviewStore {
       await this.insertRevision(client,makeProposalRevision(id,row.latest + 1,validated,input.evidence),call.actingSubject);
       await this.event(client,id,row.latest + 1,'revised',call.actingSubject);
       const result = { proposal: id,revision: row.latest + 1,outcome: 'revised',replayed: false };
-      await this.save(client,principal,key,requestDigest,result); await client.query('COMMIT'); return result;
+      await this.save(client,principal,key,requestDigest,result); await this.commitEvents(client); return result;
     },{ call,key });
   }
   private async insertReview(client: PoolClient, proposal: string, revision: number, principal: string,
@@ -316,7 +316,7 @@ export class EditorialReviewStore {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
-      if (replay) { await client.query('COMMIT'); return replay; }
+      if (replay) { await this.commitEvents(client); return replay; }
       const proposal = rowToProposal(row);
       assertOpenRevision(proposal,await this.revision(client,id,input.revision)); this.pending(await this.application(client,id,row.latest));
       await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
@@ -328,7 +328,7 @@ export class EditorialReviewStore {
       await this.insertReview(client,id,input.revision,principal,call.actingSubject,input.outcome,input.message);
       await this.event(client,id,input.revision,'reviewed',call.actingSubject);
       const result = { proposal: id,revision: input.revision,outcome: input.outcome,replayed: false };
-      await this.save(client,principal,key,requestDigest,result); await client.query('COMMIT'); return result;
+      await this.save(client,principal,key,requestDigest,result); await this.commitEvents(client); return result;
     },{ call,key });
   }
   private applyInput(proposal: Proposal, revision: ProposalRevision, application: Application): ApplyInput {
@@ -368,9 +368,9 @@ export class EditorialReviewStore {
       const current = (await this.application(client,row.id,application.revision))!;
       if (!current.admission) {
         const result = await this.finish(client,row,revision,application,'cancelled');
-        await client.query('COMMIT'); return result;
+        await this.commitEvents(client); return result;
       }
-      await client.query('COMMIT'); application = current;
+      await this.commitEvents(client); application = current;
     }
     if (!adapter.resolve && !adapter.commands) return null;
     let resolution: Awaited<ReturnType<NonNullable<EditorialAdapter['resolve']>>>;
@@ -396,7 +396,7 @@ export class EditorialReviewStore {
       if (error instanceof EditorialBlocked && error.blocker.code === 'owner_command_refused') {
         await this.begin(client);
         const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
-        await client.query('COMMIT'); return result;
+        await this.commitEvents(client); return result;
       }
       if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
         const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
@@ -404,7 +404,7 @@ export class EditorialReviewStore {
         if (!delivered) {
           await this.begin(client);
           const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
-          await client.query('COMMIT'); return result;
+          await this.commitEvents(client); return result;
         }
       }
       return null;
@@ -415,7 +415,7 @@ export class EditorialReviewStore {
       resolution.outcome === 'refused' ? 'cancelled' : resolution.outcome,
       resolution.outcome === 'applied' ? resolution.receipt : undefined,
       resolution.outcome === 'refused' ? resolution.blocker : undefined);
-    await client.query('COMMIT'); return result;
+    await this.commitEvents(client); return result;
   }
   async decide(call: EditorialCall, id: string, input: DecisionInput, key: string): Promise<CommandResult> {
     keyCheck(key); messageCheck(input.message);
@@ -425,11 +425,11 @@ export class EditorialReviewStore {
       let row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
-      if (replay) { await client.query('COMMIT'); return replay; }
+      if (replay) { await this.commitEvents(client); return replay; }
       const adapter = await this.adapter(row.kind,call);
       let application = await this.application(client,id,row.latest);
       if (application && !application.outcome) {
-        await client.query('COMMIT');
+        await this.commitEvents(client);
         const recovered = await this.recover(client,row,adapter,application,
           application.principal === principal && application.actor === call.actingSubject ? call : undefined);
         if (recovered && application.command_key === key && application.principal === principal
@@ -449,7 +449,7 @@ export class EditorialReviewStore {
           VALUES ($1,$2,$3,$4,'rejected')`,[id,revision.n,principal,call.actingSubject]);
         await this.event(client,id,revision.n,'rejected',call.actingSubject);
         const result = { proposal: id,revision: revision.n,outcome: 'rejected',replayed: false };
-        await this.save(client,principal,key,requestDigest,result); await client.query('COMMIT'); return result;
+        await this.save(client,principal,key,requestDigest,result); await this.commitEvents(client); return result;
       }
       application = await this.application(client,id,row.latest);
       if (application) throw new EditorialBlocked({ code: 'revision_required' });
@@ -466,7 +466,7 @@ export class EditorialReviewStore {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[applicationId,id,revision.n,principal,call.actingSubject,
         revisionOperationKey(id,revision.n),key,requestDigest,input.approve,input.message,adapter.requiredApprovals]);
       await this.event(client,id,revision.n,'apply-pending',call.actingSubject);
-      await client.query('COMMIT'); // Durable intent precedes cross-owner delivery.
+      await this.commitEvents(client); // Durable intent precedes cross-owner delivery.
       application = (await this.application(client,id,revision.n))!;
       await this.begin(client);
       let decision: TerminalDecision;
@@ -485,7 +485,7 @@ export class EditorialReviewStore {
         if (error instanceof EditorialBlocked && error.blocker.code === 'owner_command_refused') {
           await this.begin(client);
           const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
-          await client.query('COMMIT'); return result;
+          await this.commitEvents(client); return result;
         }
         if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
           const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
@@ -493,24 +493,24 @@ export class EditorialReviewStore {
           if (!delivered) {
             await this.begin(client);
             const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
-            await client.query('COMMIT'); return result;
+            await this.commitEvents(client); return result;
           }
           return { proposal: id,revision: revision.n,outcome: 'apply_pending',replayed: false,blocker: error.blocker };
         }
         if (error instanceof EditorialBlocked && error.blocker.code === 'stale_base') {
           await this.begin(client); await this.finish(client,row,revision,application,'stale_base',undefined,error.blocker);
-          await client.query('COMMIT'); throw error;
+          await this.commitEvents(client); throw error;
         }
         application = (await this.application(client,id,revision.n))!;
         const recovered = await this.recover(client,row,adapter,application);
         if (recovered) return recovered;
         if (!deliveryAttempted && !application.admission) {
-          await this.begin(client); await this.finish(client,row,revision,application,'cancelled'); await client.query('COMMIT'); throw error;
+          await this.begin(client); await this.finish(client,row,revision,application,'cancelled'); await this.commitEvents(client); throw error;
         }
         return { proposal: id,revision: revision.n,outcome: 'apply_pending',replayed: false };
       }
       const result = await this.finish(client,row,revision,application,'applied',decision.receipt!);
-      await client.query('COMMIT'); return result;
+      await this.commitEvents(client); return result;
     },{ call,key });
   }
   async withdraw(call: EditorialCall, id: string, revision: number, key: string): Promise<CommandResult> {
@@ -519,7 +519,7 @@ export class EditorialReviewStore {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
-      if (replay) { await client.query('COMMIT'); return replay; }
+      if (replay) { await this.commitEvents(client); return replay; }
       await editorialController(client,principal,call.actingSubject);
       if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer withdraws this proposal');
       assertOpenRevision(rowToProposal(row),await this.revision(client,id,revision)); this.pending(await this.application(client,id,row.latest));
@@ -527,7 +527,7 @@ export class EditorialReviewStore {
         VALUES ($1,$2,$3,$4,'withdrawn')`,[id,revision,principal,call.actingSubject]);
       await this.event(client,id,revision,'withdrawn',call.actingSubject);
       const result = { proposal: id,revision,outcome: 'withdrawn',replayed: false };
-      await this.save(client,principal,key,requestDigest,result); await client.query('COMMIT'); return result;
+      await this.save(client,principal,key,requestDigest,result); await this.commitEvents(client); return result;
     },{ call,key });
   }
   async revert(call: EditorialCall, id: string, evidence: EvidenceRef[], key: string): Promise<CommandResult> {
@@ -672,6 +672,13 @@ export class EditorialReviewStore {
     }
     const last = rows.slice(0,limit).at(-1);
     return { items,nextCursor: rows.length > limit && last ? cursorEncode(binding,{ time: last.created_at,id: last.id }) : null };
+  }
+  /** Position assignment happens after commit, so a busy sequencer or an older
+   * open writer cannot keep this proposal's write transaction open. The durable
+   * notification worker also numbers events whose writer stopped here. */
+  private async commitEvents(client: PoolClient): Promise<void> {
+    await client.query('COMMIT');
+    await client.query('SELECT access.sequence_editorial_events(50)');
   }
   async eventsAfter(after: string, limit = 50): Promise<EditorialEvent[]> {
     if (!/^(0|[1-9][0-9]*)$/.test(after) || !Number.isInteger(limit) || limit < 1 || limit > 50) throw new EditorialInvalid('Invalid editorial event page');

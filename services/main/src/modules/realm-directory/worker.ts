@@ -75,7 +75,7 @@ const workers = new WeakMap<RealmDirectoryIndex, RealmDirectoryWorker>();
  * https://elysiajs.com/essential/life-cycle#request
  * Pools closed by embedded hosts stop their unref'd scheduler on its next tick. */
 export function realmDirectoryLifecycle(deps: MainWorkDependencies) {
-  const index = deps.access.realmDirectory;
+  const index = deps.access?.realmDirectory;
   const lifecycle = new Elysia({ name: 'realm-directory-refresh' });
   if (!index) return lifecycle;
   let worker = workers.get(index);

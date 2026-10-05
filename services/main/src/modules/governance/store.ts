@@ -174,8 +174,8 @@ export class GovernanceStore {
     configureDisclosurePool(pool, this.disclosure);
     this.safety = new SafetyQueue(
       pool,
-      (client, principal, actor, action) =>
-        this.decider(client, principal, actor, 'governance:platform', action),
+      (client, principal, actor, action, lock = true) =>
+        this.decider(client, principal, actor, 'governance:platform', action, lock),
       clock,
     );
   }
@@ -266,9 +266,9 @@ export class GovernanceStore {
 
   /** Decider authority: an active Access grant for the case kind's action on its scope gate. */
   private async decider(client: PoolClient, principal: VerifiedPrincipal, actingSubject: string, scopeId: string,
-    action: string): Promise<{ principalId: string; authorityEpoch: string; proofDigest: string }> {
-    // Principal, representation and scope are one locked authority basis. Keeping
-    // them together leaves room for the administrator fallback within queue budgets.
+    action: string, lock = true): Promise<{ principalId: string; authorityEpoch: string; proofDigest: string }> {
+    // Writers lock one authority basis. Queue reads use their repeatable-read
+    // snapshot without locks; the administrator fallback shares that choice.
     const basis = (await client.query<{ id: string; enforcement_epoch: string;
       authority_epoch: string; open: boolean; dispatch_open: boolean }>(`SELECT p.id,
         p.enforcement_epoch::text, gate.authority_epoch::text, gate.open, gate.dispatch_open
@@ -278,13 +278,13 @@ export class GovernanceStore {
       JOIN access.scope_gate gate ON gate.id = $4
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.subject_id = $3 AND r.active
         AND r.valid_until > clock_timestamp() AND s.active
-      LIMIT 1 FOR SHARE OF p, r, s, gate`, [principal.issuer, principal.subject, actingSubject, scopeId])).rows[0];
+      LIMIT 1${lock ? ' FOR SHARE OF p, r, s, gate' : ''}`, [principal.issuer, principal.subject, actingSubject, scopeId])).rows[0];
     if (!basis?.open || !basis.dispatch_open) throw new GovernanceDenied('governance scope is closed or actor is not represented');
     const actor = { principalId: basis.id, epoch: basis.enforcement_epoch };
     const gate = basis;
     if (scopeId === 'governance:platform'
       && ['governance.moderate', 'governance.rights.decide', 'governance.safety.evidence', 'governance.appeal'].includes(action)) {
-      const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject);
+      const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject, lock);
       if (administrator) return { principalId: actor.principalId, authorityEpoch: gate.authority_epoch,
         proofDigest: sha256(canonical({ principalId: actor.principalId, actingSubject, scopeId, action,
           authorityEpoch: gate.authority_epoch, administrator })) };
@@ -295,7 +295,7 @@ export class GovernanceStore {
       WHERE g.recipient_subject = $1 AND g.scope_id = $2 AND g.action = $3 AND g.active
         AND g.valid_until > clock_timestamp() AND (g.membership_id IS NULL OR EXISTS (
           SELECT 1 FROM access.membership m WHERE m.id = g.membership_id AND m.state = 'joined'
-            AND m.generation = g.membership_generation)) ORDER BY g.valid_until DESC,g.id LIMIT 1 FOR SHARE OF g,r`,
+            AND m.generation = g.membership_generation)) ORDER BY g.valid_until DESC,g.id LIMIT 1${lock ? ' FOR SHARE OF g,r' : ''}`,
     [actingSubject, scopeId, action, actor.principalId])).rows[0];
     if (!grant) throw new GovernanceDenied('governance decision authority is missing');
     return { principalId: actor.principalId, authorityEpoch: gate.authority_epoch,
@@ -733,7 +733,6 @@ export class GovernanceStore {
         }
         plans.push(plan);
       }
-      if (reviewVisibility.size) await this.reviews!.lockRanking(client);
       const sequence = (BigInt(caseRow.generation) + 1n).toString();
       await client.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id, case_sequence,
           reverses_decision_id, principal_id, acting_subject, authority_kind, authority_scope_id, authority_epoch,
@@ -1186,7 +1185,6 @@ export class GovernanceStore {
           if (restricting.has(decision.outcome) || releasing.has(decision.outcome)) {
             const wasVisible =
               row.owner === 'review' ? await this.reviews!.visible(client, row.resource) : false;
-            if (row.owner === 'review') await this.reviews!.lockRanking(client);
             if (fence)
               await client.query(
                 `UPDATE access.governance_enforcement SET decision_id = $2,

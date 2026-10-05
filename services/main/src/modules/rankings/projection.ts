@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
-import type { ContentCore } from '../../../../content/src/core.ts';
+import type { ContentCore, ContentOutboxEvent } from '../../../../content/src/core.ts';
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { refreshReadRankingAdmissions } from '../feed/ranking-admission.ts';
@@ -137,7 +137,9 @@ export class ReadRankingProjection {
   }
 
   async tick(): Promise<number> {
+    await this.access.query('SELECT access.sequence_reader_review_ranks($1)', [RANKING_COST.sourceEvents]);
     const owner = await this.content.ownerPosition();
+    const progressHead = await this.progressHead(owner.dataEpoch);
     const existing = (await this.access.query<{ generation: string; content_epoch: string;
       content_sequence: string; graph_epoch: string; review_position: string }>(`SELECT generation, content_epoch,
       content_sequence::text, graph_epoch, review_position::text FROM access.read_ranking_checkpoint WHERE singleton`)).rows[0];
@@ -146,10 +148,18 @@ export class ReadRankingProjection {
     if (!reviewHead) throw new RankingProjectionUnavailable('Review ranking source is unavailable');
     const reset = !existing || existing.content_epoch !== owner.dataEpoch
       || existing.graph_epoch !== this.env.lineage.dataEpoch
-      || BigInt(existing.content_sequence) > BigInt(owner.sequence)
       || BigInt(existing.review_position) > BigInt(reviewHead.position);
     const after = reset ? '0' : existing.content_sequence;
-    const events = await this.content.readOutbox(owner.dataEpoch, after, RANKING_COST.sourceEvents);
+    const events = (await this.contentPool.query<{ id: string; sequence: string; operation_id: string;
+      event_type: string; recipe: string; revision_id: string | null; payload: Record<string, unknown> }>(`
+      SELECT id,sequence::text,operation_id,event_type,recipe,revision_id,payload FROM content.outbox
+      WHERE data_epoch = $1 AND recipe = 'structure-progress-v1'
+        AND sequence > $2 AND sequence <= $3 ORDER BY content.outbox.sequence LIMIT $4`,
+    [owner.dataEpoch, after, progressHead.sequence, RANKING_COST.sourceEvents])).rows.map(row => ({
+      id: row.id, position: { owner: 'content' as const, dataEpoch: owner.dataEpoch, sequence: row.sequence },
+      operationId: row.operation_id, eventType: row.event_type, recipe: row.recipe,
+      revisionId: row.revision_id, payload: row.payload,
+    } satisfies ContentOutboxEvent));
     const reviewAfter = reset ? '0' : existing.review_position;
     const reviewEvents = (await this.access.query<{ position: string; work: string;
       occurred_at: Date; delta: number }>(`SELECT c.position::text, c.work, c.occurred_at, c.delta
@@ -166,17 +176,17 @@ export class ReadRankingProjection {
         throw new RankingProjectionUnavailable('Review ranking source is not contiguous');
       }
     }
-    if (!events.length && BigInt(after) < BigInt(owner.sequence)) {
-      throw new RankingProjectionUnavailable('Content source has an outbox gap');
+    if (!events.length && BigInt(after) < BigInt(progressHead.sequence)) {
+      throw new RankingProjectionUnavailable('Progress source has an outbox gap');
     }
     let sequence = BigInt(after);
     const signals: { value: ProgressSignal; work: string }[] = [];
     for (const event of events) {
       if (event.position.dataEpoch !== owner.dataEpoch
-        || BigInt(event.position.sequence) !== sequence + 1n) {
-        throw new RankingProjectionUnavailable('Content source is not contiguous');
+        || BigInt(event.position.sequence) <= sequence) {
+        throw new RankingProjectionUnavailable('Progress source is not ordered');
       }
-      sequence++;
+      sequence = BigInt(event.position.sequence);
       if (event.recipe === 'structure-progress-v1') {
         const value = await readProgressSignal(this.contentPool, event);
         const work = await this.graphWork(value.structure);
@@ -218,7 +228,10 @@ export class ReadRankingProjection {
           await this.changeReview(client, generation, event.work, interval, event.occurred_at, event.delta);
         }
       }
-      if (events.length) await client.query(`UPDATE access.read_ranking_checkpoint
+      // An old checkpoint may include later unrelated Content events. Lower it
+      // to the last progress event once, without replaying already-counted rows.
+      if (!events.length && sequence > BigInt(progressHead.sequence)) sequence = BigInt(progressHead.sequence);
+      if (events.length || sequence !== BigInt(after)) await client.query(`UPDATE access.read_ranking_checkpoint
         SET content_sequence = $1, updated_at = clock_timestamp() WHERE singleton`, [String(sequence)]);
       if (reviewEvents.length) await client.query(`UPDATE access.read_ranking_checkpoint
         SET review_position = $1, updated_at = clock_timestamp() WHERE singleton`, [String(reviewPosition)]);
@@ -236,23 +249,34 @@ export class ReadRankingProjection {
 
   async current(): Promise<RankingCheckpoint> {
     const owner = await this.content.ownerPosition();
+    const progressHead = await this.progressHead(owner.dataEpoch);
     const row = (await this.access.query<{ generation: string; content_epoch: string;
       content_sequence: string; graph_epoch: string; review_position: string; updated_at: Date }>(`SELECT generation,
       content_epoch, content_sequence::text, graph_epoch, review_position::text, updated_at
       FROM access.read_ranking_checkpoint WHERE singleton`)).rows[0];
-    const reviewHead = (await this.access.query<{ position: string }>(`SELECT position::text
+    const reviewHead = (await this.access.query<{ position: string; pending: boolean }>(`SELECT position::text,
+      EXISTS (SELECT 1 FROM access.reader_review_rank_change WHERE position IS NULL) AS pending
       FROM access.reader_review_rank_head WHERE singleton`)).rows[0];
     if (!row || row.content_epoch !== owner.dataEpoch
-      || BigInt(row.content_sequence) > BigInt(owner.sequence)
       || row.graph_epoch !== this.env.lineage.dataEpoch
       || !reviewHead || BigInt(row.review_position) > BigInt(reviewHead.position)
-      || (row.content_sequence !== owner.sequence || row.review_position !== reviewHead.position)
+      || (BigInt(row.content_sequence) < BigInt(progressHead.sequence) || progressHead.pending
+        || row.review_position !== reviewHead.position || reviewHead.pending)
         && Date.now() - row.updated_at.getTime() > 60_000) {
       throw new RankingProjectionUnavailable('Rankings are catching up with owner events');
     }
     return { generation: row.generation, contentEpoch: row.content_epoch,
       contentSequence: row.content_sequence, graphEpoch: row.graph_epoch,
       reviewPosition: row.review_position };
+  }
+
+  /** Two index probes, independent of the number of unrelated Content events. */
+  private async progressHead(dataEpoch: string): Promise<{ sequence: string; pending: boolean }> {
+    return (await this.contentPool.query<{ sequence: string; pending: boolean }>(`SELECT
+      COALESCE((SELECT sequence::text FROM content.outbox WHERE data_epoch = $1
+        AND recipe = 'structure-progress-v1' AND sequence IS NOT NULL ORDER BY content.outbox.sequence DESC LIMIT 1),'0') AS sequence,
+      EXISTS (SELECT 1 FROM content.outbox WHERE recipe = 'structure-progress-v1'
+        AND sequence IS NULL) AS pending`, [dataEpoch])).rows[0]!;
   }
 
   async candidates(generation: string, metric: RankingMetric, interval: RankingInterval,

@@ -49,6 +49,7 @@ test('SAFETY07 G918: recorded Content notice owners receive moderation notificat
         };
       if (sql.includes('FROM access.governance_report')) return { rows: [] };
       if (sql.includes('FROM access.safety_party_notice')) return { rows: [{ id: recipient }] };
+      if (sql.includes('access.sequence_editorial_events')) return { rows: [{ assigned: 0 }] };
       throw new Error('Unexpected owner query');
     },
   } as unknown as Pool;

@@ -34,9 +34,10 @@ export function propertyRevelationRecord(resource: string, predicate: string, va
 
 export class ReadingPositionStore {
   constructor(private readonly pool: Pool) {}
+  /** Opaque equality fence, rather than a numeric delivery offset. */
   async generation(): Promise<string> {
-    const result = await this.pool.query<{ version: string }>(`SELECT version::text AS version
-      FROM reading_position.generation WHERE singleton`);
+    const result = await this.pool.query<{ version: string }>(
+      'SELECT reading_position.current_generation() AS version');
     if (result.rows.length !== 1) throw new WorkReadUnavailable('Revelation generation is unavailable');
     return result.rows[0]!.version;
   }

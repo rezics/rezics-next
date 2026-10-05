@@ -37,6 +37,8 @@ export class RealmDirectoryIndex {
 
   private async upsert(client: PoolClient, candidate: Candidate, generation: number): Promise<void> {
     const count = candidate.profile?.count;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+      [`realm-count:${candidate.id}`]);
     await client.query(`INSERT INTO access.realm_directory
       (realm, space, profile, created, activity, search_text, count_kind, count_value, topics, generation)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 = 'exact' THEN
@@ -127,9 +129,6 @@ export class RealmDirectoryIndex {
         AND generation = $1 FOR SHARE NOWAIT`, [recovery.generation])).rowCount) {
         throw new WorkReadMoved('Realm directory recovery changed');
       }
-      // Count updates take this lock before touching directory rows, preventing
-      // an upsert from overwriting a concurrent membership delta.
-      await client.query('SELECT revision FROM access.realm_count_position WHERE singleton FOR SHARE NOWAIT');
       if (!(await client.query(`SELECT 1 FROM access.realm_directory_position
         WHERE singleton AND revision = $1 FOR UPDATE NOWAIT`, [prior.revision])).rowCount) {
         throw new WorkReadMoved('Realm directory builder changed');
@@ -141,9 +140,16 @@ export class RealmDirectoryIndex {
         [generation, batchSize]);
         if ((removed.rowCount ?? 0) < batchSize) phase = rebuilding ? 'graph' : 'copy';
       } else if (phase === 'copy') {
+        // Match membership's per-Realm lock before copying an exact count.
+        // Sorted locks keep overlapping builder batches in one order.
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended('realm-count:' || realm,0))
+          FROM (SELECT realm FROM access.realm_directory WHERE generation = $1 AND realm > $2
+            ORDER BY realm LIMIT $3) batch`, [prior.generation, after, batchSize]);
         const copied = await client.query<{ realm: string }>(`INSERT INTO access.realm_directory
           (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics)
-          SELECT $1,realm,space,profile,created,activity,search_text,count_kind,count_value,topics
+          SELECT $1,realm,space,profile,created,activity,search_text,count_kind,
+            CASE WHEN count_kind = 'exact' THEN COALESCE((SELECT value FROM access.realm_member_count c
+              WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics
           FROM access.realm_directory WHERE generation = $2 AND realm > $3 ORDER BY realm LIMIT $4 RETURNING realm`,
         [generation, prior.generation, after, batchSize]);
         after = copied.rows.at(-1)?.realm ?? after;
@@ -206,11 +212,11 @@ export class RealmDirectoryIndex {
       const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
         : decodeReadCursor(input.cursor ?? session.options.cursor, binding, sourcePosition);
       const positionRow = (await client.query<{ revision: string; growth_revision: string; day: string }>(
-        growing ? `SELECT p.revision::text, g.revision::text AS growth_revision,
+        growing ? `SELECT access.realm_count_basis() AS revision, access.realm_growth_basis() AS growth_revision,
           (now() AT TIME ZONE 'UTC')::date::text AS day
           FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
           WHERE p.singleton AND g.singleton`
-          : 'SELECT revision::text FROM access.realm_count_position WHERE singleton')).rows[0];
+          : 'SELECT access.realm_count_basis() AS revision FROM access.realm_count_position WHERE singleton')).rows[0];
       if (!positionRow) throw new WorkReadUnavailable('Realm growth basis is unavailable');
       const position = growing
         ? `${positionRow.revision}/${positionRow.growth_revision}/${positionRow.day}` : positionRow.revision;
@@ -251,11 +257,11 @@ export class RealmDirectoryIndex {
 
   async fence(position: string, growing = false, sourcePosition?: ReadPosition): Promise<void> {
     const row = (await this.pool.query<{ revision: string; growth_revision: string; day: string }>(
-      growing ? `SELECT p.revision::text, g.revision::text AS growth_revision,
+      growing ? `SELECT access.realm_count_basis() AS revision, access.realm_growth_basis() AS growth_revision,
         (now() AT TIME ZONE 'UTC')::date::text AS day
         FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
         WHERE p.singleton AND g.singleton`
-        : 'SELECT revision::text FROM access.realm_count_position WHERE singleton')).rows[0];
+        : 'SELECT access.realm_count_basis() AS revision FROM access.realm_count_position WHERE singleton')).rows[0];
     const current = growing ? `${row?.revision}/${row?.growth_revision}/${row?.day}` : row?.revision;
     if (current !== position) throw new WorkReadMoved('Realm directory ranking changed');
     if (sourcePosition) {

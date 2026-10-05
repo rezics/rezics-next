@@ -388,6 +388,8 @@ export class NotificationProducer {
   /** Cursor advances only after every recipient intake commits. Partial retries
    * deduplicate by the immutable editorial event id, just like the other sources. */
   async runEditorialOnce(): Promise<number> {
+    await this.access.query('SELECT access.sequence_editorial_events($1)',
+      [EDITORIAL_NOTIFICATION_COST.eventsPerTick]);
     const client = await this.access.connect();
     try {
       await client.query('BEGIN');
@@ -405,9 +407,9 @@ export class NotificationProducer {
       }
       const events = (
         await client.query<EditorialEvent>(
-          `SELECT sequence::text,id,proposal,revision,kind,actor,
-        created_at::text AS "occurredAt" FROM access.editorial_event WHERE sequence > $1
-        ORDER BY sequence LIMIT $2`,
+          `SELECT e.sequence::text,e.id,e.proposal,e.revision,e.kind,e.actor,
+        e.created_at::text AS "occurredAt" FROM access.editorial_event e WHERE e.sequence > $1
+        ORDER BY e.sequence LIMIT $2`,
           [cursor.position, EDITORIAL_NOTIFICATION_COST.eventsPerTick],
         )
       ).rows;
