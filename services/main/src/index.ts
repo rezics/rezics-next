@@ -188,6 +188,7 @@ import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 import { mainConfig } from './config.ts';
 import { WorkMaintainers } from './modules/work/maintainers.ts';
+import { PostIdentifications } from './modules/post/identification-store.ts';
 
 const config = mainConfig();
 const fusekiUrl = config.FUSEKI_URL;
@@ -422,6 +423,7 @@ const app = createMainApp(fuseki, {
   alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool, fuseki),
+  postIdentifications: new PostIdentifications(pool),
   agentHandles: new AgentVanityHandles(pool),
   agentProfiles: new AgentPublicProfiles(pool, environment, media.store),
   libraryStatus: new ReaderLibraryStatusStore(contentPool),

@@ -92,7 +92,9 @@ export interface StructureProfileRegistration {
 
 const book: StructureProfileRegistration = {
   id: 'book-composition', graphProfile: `${RV}BookComposition`,
-  ownerType: 'https://schema.org/Book', componentType: `${RV}MainVersion`,
+  // The profile supplies chapter-reading behavior; the Work's descriptive type
+  // does not decide whether its realization can place a Post.
+  ownerType: 'https://schema.org/CreativeWork', componentType: `${RV}MainVersion`,
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
   editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
   targetReadPermission: 'work:read',

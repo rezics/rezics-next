@@ -44,5 +44,25 @@ export const publicWork = (work: string, main: string) => `GRAPH ${iri(GRAPHS.cu
   ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
   ${main} a rv:MainVersion ; rv:work ${work} . }
   FILTER(EXISTS { ${publishedWork(work, main)} }
+    || EXISTS { ${publishedComposition(work, main)} }
     || EXISTS { GRAPH ${iri(GRAPHS.current)} { ${work} rv:catalogueVisible true } })
   ${unerased(work)}`;
+
+/** A Work can realize public text through its composition. The Post still owns
+ * the publication and withdrawal decision; there is no copied Work selection. */
+export const publishedComposition = (work: string, main: string) => `GRAPH ${iri(GRAPHS.current)} {
+  ${work} a schema:CreativeWork ; rv:mainVersion ${main} .
+  ?realizationStructure a rv:Structure ; rv:structureOf ${main} ; rv:structureProfile rv:BookComposition ;
+    rv:selectedGeneration ?realizationGeneration . ?realizationGeneration rv:generationState rv:Active .
+  ?realizationPlacement a rv:OccurrencePlacement ; rv:generation ?realizationGeneration ;
+    rv:occurrenceRole rv:ChapterRole ; schema:item ?realizationPost .
+  FILTER NOT EXISTS { ?realizationPlacement rv:removedBy ?realizationRemoval }
+  ?realizationPost a rv:Post ; rv:head ?realizationHead .
+  ?realizationVariant a rv:ContentVariant ; rv:resource ?realizationPost ;
+    rv:contentPublicationHead ?realizationPublication ; rv:publicSearchEligibilityHead ?realizationEligibility .
+} GRAPH ${iri(GRAPHS.revisions)} {
+  ?realizationEligibility a rv:ContentSearchEligibilityDecision ;
+    rv:publicationDecision ?realizationPublication ; rv:disclosure rv:Public .
+  ?realizationPublication a rv:ContentPublicationDecision ; rv:resource ?realizationPost ; rv:contentRevision ?realizationRevision .
+  FILTER NOT EXISTS { ?realizationRevision a rv:ErasedRevision }
+} ${unerased('?realizationPost')}`;

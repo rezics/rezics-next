@@ -102,6 +102,7 @@ import { projectionRoutes } from './routes/projections.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
+import { postIdentificationRoutes } from './routes/post-identification.ts';
 import { postRoutes } from './routes/posts.ts';
 import { ratingRollupRoutes } from './routes/rating-rollups.ts';
 import { libraryRoutes } from './routes/library.ts';
@@ -176,6 +177,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(new Elysia()
     .use(libraryImportsRoutes(work))
     .use(libraryExportRoutes(work))
     .use(collectionGrainRoutes(work))
@@ -185,6 +187,8 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(wikiHistoryRoutes(work))
     .use(wikiEvidenceRoutes(work))
     .use(editorialProposalRoutes(work))
+    )
+    .use(new Elysia()
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))
@@ -194,8 +198,10 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(queryRoutes(fuseki, work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))
+    )
     .use(managedRealmRoutes(work))
     .use(resourceRelationRoutes(fuseki, work))
+    .use(postIdentificationRoutes(work))
     .use(membershipsRoutes(work))
     .use(new Elysia().use(postRoutes(work)).use(studioRoutes(work)));
 }

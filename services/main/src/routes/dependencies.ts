@@ -98,6 +98,7 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  postIdentifications?: import('../modules/post/identification-store.ts').PostIdentifications;
   discoveryAudience?: import('../modules/discovery/audience.ts').DiscoveryAudienceStore;
   libraryFiles?: import('../modules/library-import/file-store.ts').LibraryFileStore;
   libraryBundle?: import('../modules/library-export/bundle.ts').LibraryBundleExporter;
