@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
 import { readingPositionsRoutes } from '../src/routes/reading-positions.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { type ReadingOccurrence, READING_POSITION_COST } from '../src/modules/reading-position/boundary.ts';
 import { normalizePositionQuery } from '../src/modules/reading-position/store.ts';
@@ -10,6 +11,10 @@ import { WorkReadInvalid } from '../src/modules/work/read-session.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { READING_CHOOSER_COST } from '../src/modules/reading-position/traversal.ts';
 import type { ReadRow } from '../src/modules/work/read-session.ts';
+import { orderTree, recordTree } from '../src/modules/structure/change.ts';
+import { COMPOSITION_PROFILE, orderTreeKey, placementIri } from '../src/modules/structure/graph.ts';
+import { STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OrderEntry } from '../src/modules/structure/format.ts';
+import { newCost } from '../src/modules/structure/tree.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const work = id(), structure = id(), revision = id(), reader = id();
@@ -61,6 +66,90 @@ test('G954: invalid page sizes, foreign continuations and oversized queries fail
   expect(await (await fixture([]).call({ limit: '20', q: '' })).json()).toMatchObject({ items: [], nextCursor: null, complete: true });
 });
 
+const textGeneration = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
+const searchKey = (item: Pick<ReadingOccurrence, 'segmentKey' | 'orderKey' | 'occurrence'>) =>
+  `${item.segmentKey}\u0001${item.orderKey}\u0001${item.occurrence}`;
+
+/** Same analyzed-label rules the occurrence index applies after NFKC folding:
+ * an exact number token, a trailing number as a prefix of one label's number,
+ * otherwise the folded phrase inside one carried label. Navigation roles stay
+ * in order so a seek can descend without scanning non-matching chapters. */
+function labelMatches(item: ReadingOccurrence, q: string): boolean {
+  const labels = [...(item.labels?.map(label => label.value) ?? []), ...(item.displayLabel ? [item.displayLabel] : [])];
+  return labels.some(label => {
+    const value = label.normalize('NFKC').toLowerCase();
+    const numeric = /^(.*\S)\s+([0-9]+)$/.exec(q);
+    if (numeric) {
+      const stem = numeric[1]!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`${stem}(?![\\p{L}\\p{N}])[\\s\\p{P}]*${numeric[2]}\\d*`, 'iu').test(value);
+    }
+    if (/^[0-9]+$/.test(q)) return new RegExp(`(?<![0-9])${q}(?![0-9])`, 'u').test(value);
+    return value.includes(q);
+  });
+}
+
+function occurrencePage(inventory: readonly ReadingOccurrence[], generation: string, parent: string,
+  q: string, afterKey: string, limit: number) {
+  const items = inventory.filter(item => item.structure === generation && item.parent === parent)
+    .sort((a, b) => searchKey(a) < searchKey(b) ? -1 : searchKey(a) > searchKey(b) ? 1 : 0)
+    .filter(item => searchKey(item) > afterKey)
+    .flatMap(item => {
+      const navigation = item.role === 'group' || item.role === 'part';
+      const matches = labelMatches(item, q);
+      return navigation || matches ? [{ occurrence: item.occurrence, segmentKey: item.segmentKey,
+        orderKey: item.orderKey, matches }] : [];
+    }).slice(0, limit);
+  // Directory seeks stay on the returned page. A full sibling walk is not a visit.
+  return { items, reads: Math.min(4096, items.length + 1), current: true };
+}
+
+/** Narrow pages keep each ordinal seek's validation on a short path. A full
+ * leaf would be checked again for every sibling on a filtered page. */
+const orderBranch = 8;
+
+async function orderRoot(objects: ImmutableObjects, entries: readonly OrderEntry[]) {
+  const sorted = [...entries].sort((a, b) => orderTreeKey(a) < orderTreeKey(b) ? -1 : orderTreeKey(a) > orderTreeKey(b) ? 1 : 0);
+  const put = async (level: number, pageEntries: readonly unknown[]) => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ format: STRUCTURE_PAGE_FORMAT, tree: 'order', level, entries: pageEntries }));
+    return `sha256:${await objects.put(bytes)}`;
+  };
+  let level = 0;
+  let children: Array<{ page: string; count: number; first: string }> = [];
+  for (let at = 0; at < sorted.length; at += orderBranch) {
+    const chunk = sorted.slice(at, at + orderBranch);
+    children.push({ page: await put(0, chunk), count: chunk.length, first: orderTreeKey(chunk[0]!) });
+  }
+  while (children.length > 1) {
+    level++;
+    if (level >= STRUCTURE_LIMITS.treeLevels) throw new Error('Reading order tree exceeds its depth');
+    const parents: typeof children = [];
+    for (let at = 0; at < children.length; at += orderBranch) {
+      const chunk = children.slice(at, at + orderBranch);
+      parents.push({ page: await put(level, chunk), count: chunk.reduce((total, child) => total + child.count, 0), first: chunk[0]!.first });
+    }
+    children = parents;
+  }
+  return { page: children[0]!.page, level, count: children[0]!.count };
+}
+
+/** One revision names one structure. The counted tree refuses a shared revision
+ * whose manifest would disagree with the selected generation. */
+function separateSharedRevisions(metas: Map<string, ReadRow>,
+  bind: (value: string) => { type: 'literal'; value: string }) {
+  const owner = new Map<string, string>(), replacements = new Map<string, string>();
+  for (const meta of metas.values()) {
+    const structure = meta.structure?.value, revision = meta.revision?.value;
+    if (!structure || !revision) continue;
+    const prior = owner.get(revision);
+    if (!prior) owner.set(revision, structure);
+    else if (prior !== structure && !replacements.has(structure)) replacements.set(structure, id());
+  }
+  for (const meta of metas.values()) {
+    const fresh = meta.structure && replacements.get(meta.structure.value);
+    if (fresh && meta.revision) meta.revision = bind(fresh);
+  }
+}
+
 function fixture(inventory = chapters, leaves: string[] = []) {
   let sequence = '1', generation = '1', available = true, active = true, historyReads = 0, queryCalls = 0, maxRows = 0;
   let own = false;
@@ -74,9 +163,10 @@ function fixture(inventory = chapters, leaves: string[] = []) {
   for (const item of inventory) metas.set(item.work, { work: binding(item.work), structure: binding(item.structure),
     revision: binding(item.revision), generation: binding(item.structure) });
   for (const leaf of leaves) metas.set(leaf, { work: binding(leaf) });
+  separateSharedRevisions(metas, binding);
   const baseRow = (item: ReadingOccurrence): ReadRow => ({
     work: binding(item.work), structure: binding(item.structure), revision: binding(item.revision),
-    placement: binding(item.occurrence), occurrence: binding(item.occurrence), parent: binding(item.parent),
+    placement: binding(placementIri(item.structure, item.occurrence)), occurrence: binding(item.occurrence), parent: binding(item.parent),
     segmentKey: binding(item.segmentKey), orderKey: binding(item.orderKey),
     role: binding(`${RV}${item.role === 'chapter' ? 'ChapterRole' : item.role === 'part' ? 'PartRole' : 'GroupRole'}`),
     ...(item.target ? { target: binding(item.target) } : {}),
@@ -87,6 +177,41 @@ function fixture(inventory = chapters, leaves: string[] = []) {
   })));
   const rowsByOccurrence = new Map<string, ReadRow[]>();
   for (const row of rows) rowsByOccurrence.set(row.occurrence!.value, [...rowsByOccurrence.get(row.occurrence!.value) ?? [], row]);
+  const stored = new Map<string, Uint8Array>();
+  const manifestByRevision = new Map<string, string>();
+  const objects: ImmutableObjects = { put: async body => {
+    const digest = createHash('sha256').update(body).digest('hex'); stored.set(digest, body); return digest;
+  }, get: async digest => {
+    const body = stored.get(digest);
+    if (!body) throw new ObjectUnavailable('missing order object');
+    return body;
+  } };
+  const ready = (async () => {
+    const cost = newCost(), records = await recordTree(objects).empty(cost), emptyOrder = await orderTree(objects).empty(cost);
+    const groups = new Map<string, { structure: string; generation: string; items: ReadingOccurrence[] }>();
+    for (const meta of metas.values()) {
+      if (!meta.structure?.value || !meta.revision?.value || groups.has(meta.revision.value)) continue;
+      groups.set(meta.revision.value, { structure: meta.structure.value,
+        generation: meta.generation?.value ?? meta.structure.value, items: [] });
+    }
+    for (const item of inventory) {
+      const group = groups.get(metas.get(item.work)?.revision?.value ?? '');
+      if (group && item.structure === group.structure) group.items.push(item);
+    }
+    for (const [revision, group] of groups) {
+      const entries = new Map<string, OrderEntry>();
+      for (const item of group.items) {
+        const entry: OrderEntry = { parent: item.parent, segmentKey: item.segmentKey,
+          orderKey: item.orderKey, occurrence: item.occurrence };
+        entries.set(orderTreeKey(entry), entry);
+      }
+      const root = entries.size ? await orderRoot(objects, [...entries.values()]) : emptyOrder;
+      const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: group.structure, structureOf: id(),
+        profile: 'book-composition' as const, generation: group.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
+        records, order: root, placementCount: root.count, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
+      manifestByRevision.set(revision, await objects.put(new TextEncoder().encode(JSON.stringify(manifest))));
+    }
+  })();
   const order = new Map<string, ReadingOccurrence[]>(), ordinals = new Map<string, number>();
   for (const item of inventory) {
     const bucket = order.get(item.parent) ?? []; bucket.push(item); order.set(item.parent, bucket);
@@ -114,7 +239,7 @@ function fixture(inventory = chapters, leaves: string[] = []) {
       return [...metas.values()].filter(meta => reachable.has(meta.work!.value)
         && (!after || meta.work!.value > JSON.parse(after))).sort((a, b) => a.work!.value.localeCompare(b.work!.value)).slice(0, 50);
     }
-    if (sparql.includes('# reading-position:number')) {
+    if (sparql.includes('# reading-position:number\n')) {
       const item = siblings(sparql)[Number(sparql.match(/OFFSET (\d+)/)![1])];
       return item ? [{ occurrence: binding(item.occurrence) }] : [];
     }
@@ -150,8 +275,33 @@ function fixture(inventory = chapters, leaves: string[] = []) {
       const target = sparql.match(/schema:item <([^>]+)>/)![1]!;
       return inventory.filter(item => item.role === 'part' && item.target === target).map(item => ({ occurrence: binding(item.occurrence) }));
     }
+    if (sparql.includes('# reading-position:manifest')) {
+      const revision = sparql.match(/<([^>]+)> a rv:StructureRevision/)?.[1];
+      const digest = revision && manifestByRevision.get(revision);
+      return digest ? [{ manifest: binding(`urn:rezics:sha256:${digest}`) }] : [];
+    }
+    if (sparql.includes('# reading-position:hydrate')) {
+      const pairs = [...sparql.matchAll(/\(<([^>]+)> <([^>]+)>\)/g)];
+      return pairs.flatMap(([, placement, occurrence]) => (rowsByOccurrence.get(occurrence!) ?? [])
+        .filter(row => row.placement?.value === placement));
+    }
+    if (sparql.includes('# reading-position:numbered-placement')) {
+      const occurrence = sparql.match(/rv:occurrence <([^>]+)>/)?.[1];
+      const parent = sparql.match(/rv:parent <([^>]+)>/)?.[1];
+      const item = inventory.find(entry => entry.occurrence === occurrence && entry.parent === parent);
+      return item ? [{ segmentKey: binding(item.segmentKey), orderKey: binding(item.orderKey) }] : [];
+    }
+    if (sparql.includes('# reading-position:label-index')) {
+      const call = sparql.match(/rv:occurrenceSearch\(\s*<([^>]+)>\s*,\s*<([^>]+)>\s*,\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*,\s*(\d+)\s*\)/);
+      if (!call) throw new Error('Occurrence label index call is unreadable');
+      const page = occurrencePage(inventory, call[1]!, call[2]!, JSON.parse(call[3]!), JSON.parse(call[4]!), Number(call[5]));
+      return [{ page: binding(JSON.stringify(page)) }];
+    }
     if (sparql.includes('SELECT ?work ?structure')) throw new Error('Full composition materialization is forbidden in the chooser');
     const control = { epoch: binding('epoch'), sequence: binding(sequence) };
+    if (sparql.includes('rv:textIndexGeneration')) {
+      return [{ ...control, generation: binding(textGeneration) }];
+    }
     if (sparql.includes('SELECT ?epoch ?sequence ?hold ?r')) {
       const resources = sparql.match(/VALUES \?r \{([^}]+)}/)![1]!;
       return [control, ...[...metas.keys()].filter(resource => available && !hidden.has(resource) && resources.includes(resource))
@@ -161,11 +311,17 @@ function fixture(inventory = chapters, leaves: string[] = []) {
     return [control];
   };
   const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
-    fuseki: { query: async (sparql: string) => {
+    fuseki: { commandHealth: async () => ({ instanceId: '11111111-1111-4111-8111-111111111111',
+      publicSearchWriteEpoch: '0', publicSearchWriteActive: false, publicSearchDeltaAvailable: true }),
+    searchDeltaSince: async () => ({ available: true, ordinal: '0', dataEpoch: 'epoch', sequence,
+      generation: textGeneration, writeEpoch: '0', luceneGeneration: '1', qualifiedPopulation: '1', deltas: [] }),
+    query: async (sparql: string) => {
+      await ready;
       queryCalls++; queries.push(sparql);
       const bindings = execute(sparql); maxRows = Math.max(maxRows, bindings.length);
       return { results: { bindings } };
     } } },
+    structureObjects: objects,
     access: { activePrincipalId: async () => active ? 'reader' : null, canReadAsBaselineMember: async () => own },
     account: { verify: async (request: Request) => {
       if (request.headers.get('authorization') !== 'Bearer reader') throw new AccountAssertionDenied('Unknown bearer');
