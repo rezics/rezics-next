@@ -52,7 +52,8 @@ Reply changes maintain the root's count and latest activity with deltas and an
 indexed latest-child probe; they do not change the vote/age formula or rejuvenate
 an old placement. Votes update the current placement's order rows in the same
 Access transaction. A Realm revision binds keyset cursors and is checked again
-after page hydration. Ordering normalizes descending score/time to an ascending
+after page hydration; it moves with the population, not with scores (see
+[Votes and paging](#votes-and-paging)). Ordering normalizes descending score/time to an ascending
 tuple, with placement IRI in PostgreSQL's C collation as its final key.
 
 Top has independent all/week/month populations. Rolling periods use exact
@@ -92,6 +93,29 @@ neither those counters nor SPARQL algebra claim native TDB2 operator visits.
 The public header's recovery-fenced atomic probes and one rules/link cut hold
 six anonymous or nine signed-in SQL statements across rules/moderators/roles;
 the tests also retain live link invalidation and current principal denial.
+
+## Votes and paging
+
+Decision, 2026-10-05. A vote locks only what it changes: its principal's vote
+key and the group leader row that carries the score. It reads the projection
+epoch without a lock. The Home checkpoint `revision` and a Realm's ranking
+revision change with their population: ingested activity, reviews, restore
+copies, placements entering or leaving an order, and changed placement or time
+keys. A score change moves neither. Previously each vote took the singleton
+checkpoint FOR UPDATE and replaced its revision, so the platform's votes ran
+one at a time, refresh blocked every voter, and one vote anywhere ended every
+open page with "Feed changed". Every vote in a popular Realm also met on that
+Realm's state row.
+
+Continuation therefore pins the population and a keyset position, never a
+score snapshot. New and Following New seek `(sort_time, id)`; Top seeks
+`(score, sort_time, id)`; Best recomputes `home-best-v1` over its cohort and
+continues after the last served `(rank, time, id)`; Realm Best and Top seek
+their order keys. An item whose score changed after it was served may appear
+again, and one that rose past the position is passed over on that traversal.
+The web feed drops repeated ids. A fresh first page always reflects current
+scores. A restore's retained copy share-locks the rows it copies, so no score
+written under the prior epoch is lost.
 
 ## Current relationships and invalidation
 

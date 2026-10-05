@@ -191,8 +191,11 @@ export class HomePersonalStore {
         if (receipt.request_digest !== intent) throw new ControlConflict('Idempotency key has another home intent');
         return { ...receipt.result, replayed: true };
       }
+      // A plain read: the sequence only grows within an epoch, and a row
+      // stamped with a replaced epoch reads as no watermark. Share-locking the
+      // singleton queued every PUT behind the projection's writers.
       const checkpoint = (await client.query<{ sequence: string; data_epoch: string }>(
-        'SELECT sequence::text AS sequence, data_epoch FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
+        'SELECT sequence::text AS sequence, data_epoch FROM access.feed_checkpoint WHERE id')).rows[0];
       if (!checkpoint || checkpoint.data_epoch !== epoch || BigInt(input.sequence) > BigInt(checkpoint.sequence)) {
         throw new ControlStale('Feed position changed');
       }

@@ -63,9 +63,9 @@ export const HOME_READ_BUDGET = {
 /**
  * One vote on one activity: its admission is a fixed read of that activity's
  * source, author, Work, Realm and (for a reply) body, run before the vote's
- * transaction takes the projection's checkpoint, so votes never queue behind
- * a slow read. Measured when set (QA 20260928t091959-349537): 18 graph
- * queries and 64 statements, most of them the admission's Access fences.
+ * transaction takes any row lock, so votes never queue behind a slow read.
+ * Measured when set (QA 20260928t091959-349537): 18 graph queries and 64
+ * statements, most of them the admission's Access fences.
  */
 export const HOME_VOTE_BUDGET = { graphQueries: 25, statements: 75 } as const;
 
@@ -292,7 +292,9 @@ export async function seedHome(home: HomeStack, works = 6) {
     actingSubject: reader, expectedVersion: 0, status: 'reading', startedOn: null, finishedOn: null }, b.token));
   await home.project();
   const signed = (path: string) => `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(reader)}`;
-  return { author, reader, realm, works: published, signed, discussion, response, chapterRevisions, chapterPhrase };
+  return { author, reader, realm, works: published, signed, discussion, response, chapterRevisions, chapterPhrase,
+    /** Another approved reader post in the Realm; project before reading it. */
+    post: reply };
 }
 
 /** One Home read with its graph queries, SQL statements and elapsed time. */

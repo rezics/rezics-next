@@ -377,7 +377,9 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(down.score).toBe(-1);
     const race = await Promise.all([0, 1].map(value => call('POST', votePath, vote(value, down.revision), b.token)));
     expect(race.map(response => response.status).sort()).toEqual([200, 409]);
-    expect((await call('GET', `/v1/feed?sort=new&limit=1&cursor=${pageOne.nextCursor}`)).status).toBe(409);
+    // Votes change scores, not the projection's population: the cursor still pages.
+    expect((await json<Page>(await call('GET', `/v1/feed?sort=new&limit=1&cursor=${pageOne.nextCursor}`)))
+      .items.map(item => item.id)).toEqual(pageTwo.items.map(item => item.id));
     const updated = await json<Page>(await call('GET', `/v1/feed?scope=all&${authQuery}`, undefined, b.token));
     const updatedItem = updated.items.find(item => item.id === firstItem.id)!;
     expect(updatedItem.voteRevision).toBeTruthy();

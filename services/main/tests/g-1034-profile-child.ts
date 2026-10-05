@@ -686,7 +686,8 @@ try {
     ).rowCount,
     0,
   );
-  // Live vote maintenance is transactional, including concurrent same-target writes.
+  // Live vote maintenance is transactional, including concurrent same-target
+  // writes. A score change keeps the Realm's population revision and cursors.
   const firstPage = await app.handle(
     new Request(`http://main.local${root}/threads?sort=top&window=all&limit=1`),
   );
@@ -720,7 +721,7 @@ try {
       `http://main.local${root}/threads?sort=top&window=all&limit=1&cursor=${encodeURIComponent(cursor)}`,
     ),
   );
-  assert.equal(changed.status, 409);
+  assert.equal(changed.status, 200, await changed.clone().text());
   assert.equal(
     (
       await stack.accessPool.query(

@@ -15,10 +15,20 @@ import { FeedReadFrame } from './frame.ts';
 import { FeedTargetIndex } from './target-index.ts';
 import { RealmThreadRankingProjection } from '../rankings/realm-threads.ts';
 
+/** `revision` changes with the projection's population (ingestion, reviews,
+ * restore copies), never with a score: page frames and cursors pin it. */
 export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id: string; revision: string;
   rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
 export interface FeedRow { id: string; kind: FeedSource['kind']; occurred_at: Date;
   time_basis: 'revision' | 'relay'; realm: string | null; group_key: string; group_members: string[]; sort_time: Date; score: number; order_key: string; vote: -1 | 0 | 1; vote_revision: string | null }
+/** A Best cursor's ranked position. An earlier offset cursor restarts its feed. */
+function bestPosition(key: string): { rank: number; time: number } {
+  let value: unknown;
+  try { value = JSON.parse(key); } catch { value = null; }
+  const { rank, time } = (value ?? {}) as { rank?: unknown; time?: unknown };
+  if (typeof rank !== 'number' || typeof time !== 'number') throw new WorkReadMoved('Feed ranking changed');
+  return { rank, time };
+}
 /** Activities that are posts of their own: each takes its own votes and appears on its own. */
 const soloKinds: ReadonlySet<string> = new Set(['discussion', 'reply']);
 
@@ -92,13 +102,15 @@ export class FeedStore {
 
   /** Restore retains opaque prior references in batches. They still pass the
    * live graph/Content gates, so rolled-back and erased activities stay hidden.
-   * Copy is before new-epoch ingestion, preserving votes and original times. */
+   * Copy is before new-epoch ingestion, preserving votes and original times.
+   * The batch is share-locked before its scores are copied: a vote still
+   * writing the prior epoch commits first, and a later one sees the new epoch. */
   async copyRetained(expected: FeedCheckpoint) {
     return controlTransaction(this.pool, async client => {
       const current = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
       if (current?.revision !== expected.revision || !current.rebuild_epoch) throw new WorkReadMoved('Feed rebuild changed');
       const rows = (await client.query<{ id: string }>(`SELECT id FROM access.feed_item
-        WHERE data_epoch = $1 AND id > $2 ORDER BY id LIMIT $3`,
+        WHERE data_epoch = $1 AND id > $2 ORDER BY id LIMIT $3 FOR SHARE`,
       [current.rebuild_epoch, current.rebuild_after, FEED_COST.refreshItems + 1])).rows;
       const ids = rows.slice(0, FEED_COST.refreshItems).map(row => row.id);
       await client.query(`INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at, time_basis, score, best_key, realm, group_bucket, group_key, group_leader, group_members, sort_time)
@@ -274,12 +286,15 @@ export class FeedStore {
         ...(sort === 'new' && after ? [after.key, after.id] : []), ...(rankedPool || !kinds ? [] : [kinds])])).rows;
       if (sort === 'new') return candidates;
       const ranked = rankCandidates(candidates.map(row => ({ ...row, time: row.sort_time.getTime() })), sort)
-        .map((row, index) => ({ ...row, order_key: String(index) }));
-      const offset = after ? Number(after.key) + 1 : 0;
-      if (!Number.isSafeInteger(offset) || offset < 0 || after && ranked[offset - 1]?.id !== after.id) {
-        throw new WorkReadMoved('Feed ranking changed');
-      }
-      return ranked.slice(offset, offset + limit + 1);
+        .map(row => ({ ...row, order_key: JSON.stringify({ rank: row.rank, time: row.time }) }));
+      if (!after) return ranked.slice(0, limit + 1);
+      // Continue after the last served position in the current ranking, as Top
+      // and New do. Votes re-rank without a new revision; an item whose rank
+      // crossed the position repeats or is passed over (timeline.md).
+      const { rank, time } = bestPosition(after.key);
+      const start = ranked.findIndex(row => row.rank < rank
+        || row.rank === rank && (row.time < time || row.time === time && row.id < after.id));
+      return start < 0 ? [] : ranked.slice(start, start + limit + 1);
     };
     return frame ? read(this.pool) : controlRead(this.pool, read);
   }
@@ -322,9 +337,10 @@ export class FeedStore {
    * remain stable across projection refreshes, without disclosing the anchor.
    * The rank row and receipt share the transaction, including lost-response replay.
    * Disclosure is a graph and Content read, so it runs before the transaction
-   * rather than while it holds the projection's checkpoint: a slow admission
-   * delayed every other vote and refresh behind that lock, which is how the
-   * seed's votes ran past their read deadline. A replay needs no admission. */
+   * rather than while it holds row locks: a slow admission once delayed every
+   * other vote and refresh, which is how the seed's votes ran past their read
+   * deadline. A replay needs no admission. A score is not part of the
+   * projection's revision, so a vote leaves every open page frame valid. */
   async vote(principal: VerifiedPrincipal, target: string, epoch: string, input: FeedVoteCommand,
     key: string, disclose: () => Promise<{ actor: string; work: string | null } | void>): Promise<FeedVoteResult> {
     commandKey(key);
@@ -350,17 +366,22 @@ export class FeedStore {
         if (receipt.request_digest !== intent) throw new ControlConflict('Idempotency key has a different vote intent');
         return { ...receipt.result, replayed: true };
       }
-      // Lock order matches projection refresh, so refresh/vote cannot deadlock.
-      const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
-      if (checkpoint?.data_epoch !== epoch) throw new WorkReadUnavailable('Feed is recovering');
-      // Two indexed seeks: the member PK and the group's leader index. The
-      // checkpoint lock prevents refresh changing membership during the vote.
+      // A vote locks only what it changes: the group leader that carries the
+      // score, then its own vote row. Two indexed seeks: the member PK and the
+      // group's leader index. Refresh only appends members, under this same
+      // row lock, so the lock fixes the membership the vote resolves.
       const item = (await client.query<{ id: string; score: number; occurred_at: Date }>(`SELECT leader.id, leader.score, leader.occurred_at
         FROM access.feed_item member JOIN access.feed_item leader
           ON leader.data_epoch = member.data_epoch AND leader.group_key = member.group_key
         WHERE member.data_epoch = $1 AND member.id = $2 AND leader.group_leader
           AND member.id = ANY(leader.group_members)
-        LIMIT 1 FOR UPDATE OF leader`, [epoch, target])).rows[0];
+        LIMIT 1 FOR NO KEY UPDATE OF leader`, [epoch, target])).rows[0];
+      // A plain read after the leader lock: a restore's copy share-locks the
+      // rows it retains, so it either waits for this score or this vote sees
+      // the new epoch here and stops. Taking the singleton checkpoint row ran
+      // every vote on the platform one at a time.
+      const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id')).rows[0];
+      if (checkpoint?.data_epoch !== epoch) throw new WorkReadUnavailable('Feed is recovering');
       if (!item) throw new WorkReadUnavailable('Feed activity is unavailable');
       const prior = (await client.query<{ value: number; revision: string }>(
         'SELECT value, revision FROM access.feed_vote WHERE principal_id = $1 AND target = $2', [owner, item.id])).rows[0];
@@ -373,7 +394,6 @@ export class FeedStore {
       [owner, item.id, input.actingSubject, input.value, revision]);
       await client.query('UPDATE access.feed_item SET score = $3, best_key = $4 WHERE data_epoch = $1 AND id = $2',
         [epoch, item.id, score, bestKey(score, item.occurred_at.getTime())]);
-      await client.query('UPDATE access.feed_checkpoint SET revision = $1 WHERE id', [randomUUID()]);
       const result: FeedVoteResult = { profile: 'feed-vote-receipt-v1', target, value: input.value, revision, score, replayed: false };
       await client.query(`INSERT INTO access.feed_vote_receipt (principal_id, idempotency_key, request_digest, result)
         VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);
