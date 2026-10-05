@@ -183,7 +183,9 @@ title, separate translation, publication or citation), and that link adds a
 Work without moving the Post's text, custody, discussion or occurrences. An
 author's note published with a chapter is a separate part of the Post, not of
 the chapter's text: it is not counted, translated or carried into a release of
-the Work.
+the Work. Undoing an identification retires its relation and the Post's
+occurrence in the identified Work; retiring that Work itself waits for a general
+Work retirement command, which REZICS does not have yet.
 
 The reasons are the standards' and the cost. FRBRoo once modeled the
 publisher's act as a Work (F19 Publication Work, F24 Publication Expression);

@@ -245,6 +245,14 @@ count from growing.
 
 ## Lessons from earlier Goals
 
+- post-layers (2026-10-05) changed a kernel type on live data. A migration's
+  fixture must come from the old command itself, since a hand-written one
+  missed a field the real data had; a startup migration must never keep Main
+  from listening; a merge that adds a profile or migration needs the full
+  shared-stack refresh (image, `dev:prepare`, `dataset:bootstrap-model`,
+  Main/relay restart); every new route needs a rate-limit class, which the
+  g-543 guard now enforces; and a manager never moves a worker worktree's HEAD,
+  or the worker's commits land off its branch.
 - Throughput came from exclusive claims, isolated worktrees, per-run QA stacks
   and short merge waves. Two-worker caps and one shared QA stack serialized work.
 - Choose work by the outcome it completes, not by depth in one area: a third of

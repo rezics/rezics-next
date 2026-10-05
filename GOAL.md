@@ -9,7 +9,6 @@ The numbered product [decisions](docs/product/decisions.md) and the
 | Goal | Outcome | Manager |
 | --- | --- | --- |
 | [Subjects, variants and scoped judgments](docs/goals/scoped-subjects/GOAL.md) | One character identity by default, evidenced variants, units and titles, projections ("X in F") as targets, scoped ratings with honest roll-ups, and continuity, canonicity and canon policy kept apart. | Running since 2026-10-04 |
-| [Posts, texts and Works](docs/goals/post-layers/GOAL.md) | A chapter is a Post placed in its Book, never a Work; Content, custody, rights and discussion on Posts, progress on occurrences, author's notes as separate parts, Works only by evidence. | Running since 2026-10-05 |
 | [Media showcase](docs/goals/showcase/GOAL.md) | A Zone hero of layered media slides on a stage the window sets, showcase art that belongs to the Work, slide editing in Realm management, and banners that never slide (decision 54). | Running since 2026-10-05 |
 | [Production readiness](docs/goals/production-readiness/GOAL.md) | Make REZICS complete and ready for production: milestones M4–M8. | Waiting for the maintainer to start one |
 
