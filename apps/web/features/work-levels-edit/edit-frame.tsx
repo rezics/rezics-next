@@ -8,9 +8,10 @@ import Link from '../shell/localized-link.tsx';
 import type { Copy } from './messages.ts';
 import { type EditSection, editHref, editSections } from './route.ts';
 
-const tabLabel = (t: Copy): Record<EditSection, string> => ({ parts: t.tabParts, relations: t.tabRelations, editions: t.tabEditions });
+const tabLabel = (t: Copy): Record<EditSection, string> => ({ parts: t.tabParts, relations: t.tabRelations, editions: t.tabEditions,
+  showcase: t.tabShowcase });
 
-/** The frame of an edit page: the Work's title, a way back, and the three edit sections as links. */
+/** The frame of an edit page: the Work's title, a way back, and the edit sections as links. */
 export function EditFrame({ workRef, title, current, t, children }: {
   workRef: string; title: string; current: EditSection; t: Copy; children: ReactNode;
 }) {

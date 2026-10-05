@@ -3,7 +3,7 @@ import type { WorkLevelsEditMessages } from '../messages.ts';
 
 export default {
   edit: '編集', editSections: '編集セクション', editStructure: '構成を編集',
-  tabParts: '構成', tabRelations: '関係', tabEditions: '版',
+  tabParts: '構成', tabRelations: '関係', tabEditions: '版', tabShowcase: 'ショーケース',
   backToWork: '作品に戻る',
   editIntro: '変更は現在のアイデンティティとして書き込まれ、そのたびに受領記録が残ります。',
   noAuthorityTitle: 'この作品は編集できません',

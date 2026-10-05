@@ -86,6 +86,9 @@ export function deliveredShowcaseImage(image: {
       .map(candidate => ({ url: showcaseUrl(candidate.url), width: candidate.width })) };
 }
 
+/** A logo keyed `zxx` (no linguistic content, as Main keys language-neutral logos) or `und` serves every title language. */
+const logoLanguage = (language: string | undefined) => !language || language === 'zxx' || language === 'und' ? '' : language;
+
 export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
   const role = (name: ShowcaseImage['role']) => {
     const image = item.images.find(image => image.role === name);
@@ -94,7 +97,7 @@ export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
   return { landscape: role('background-landscape'), portrait: role('background-portrait'), cutout: role('cutout'),
     logos: item.images.flatMap(image => image.role === 'logo' && image.tone && image.anchor
       ? [{ ...deliveredShowcaseImage(image), tone: image.tone, anchor: image.anchor,
-        language: image.language === 'und' ? '' : image.language ?? '' }] : []) };
+        language: logoLanguage(image.language) }] : []) };
 }
 
 export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia']): ZoneShowcaseArt | null {
@@ -106,7 +109,7 @@ export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead
     portrait: background(art.portrait, 3 / 4),
     cutout: art.cutout ? deliveredShowcaseImage(art.cutout) : null,
     logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image), tone: image.tone,
-      anchor: image.anchor, language: image.language === 'und' ? '' : image.language })) };
+      anchor: image.anchor, language: logoLanguage(image.language) })) };
 }
 
 /** The configured target and localized copy survive media fallback; unavailable Works stay absent. */

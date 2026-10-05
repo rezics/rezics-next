@@ -265,6 +265,7 @@ export function Showcase({
   effect = 'plain',
   avatarQuery,
   direction = 'ltr',
+  rotation = true,
 }: {
   slides: readonly ZoneShowcaseSlide[];
   label: string;
@@ -273,16 +274,18 @@ export function Showcase({
   effect?: ZoneTitleEffect;
   avatarQuery?: string;
   direction?: 'ltr' | 'rtl';
+  /** An editor's preview turns rotation off, so the slide being edited stays in view. */
+  rotation?: boolean;
 }) {
   const slides = allSlides.slice(0, 5);
   const [rotate, setRotate] = useState(false);
   useEffect(() => {
     const media = matchMedia(rotationWindow);
-    const changed = () => setRotate(media.matches);
+    const changed = () => setRotate(rotation && media.matches);
     changed();
     media.addEventListener('change', changed);
     return () => media.removeEventListener('change', changed);
-  }, []);
+  }, [rotation]);
   if (!slides.length) return null;
   return (
     <>

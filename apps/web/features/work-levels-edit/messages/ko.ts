@@ -3,7 +3,7 @@ import type { WorkLevelsEditMessages } from '../messages.ts';
 
 export default {
   edit: '편집', editSections: '편집 구역', editStructure: '구조 편집',
-  tabParts: '구성', tabRelations: '관계', tabEditions: '판',
+  tabParts: '구성', tabRelations: '관계', tabEditions: '판', tabShowcase: '쇼케이스',
   backToWork: '작품으로 돌아가기',
   editIntro: '변경 사항은 현재 신원으로 기록되며, 매번 영수증이 남습니다.',
   noAuthorityTitle: '이 작품을 편집할 수 없습니다',

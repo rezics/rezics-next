@@ -8,12 +8,12 @@ import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
 
-// Interface copy for the parts, relations and editions edit pages. Relation labels are never here:
+// Interface copy for the parts, relations and editions edit pages, and the frame the showcase page shares. Relation labels are never here:
 // Main renders them in the editor's language (docs/contracts/semantic-model.md#relation-lexicon).
 // A refusal's reason is Main's own text, shown under the headline this catalog gives the kind of refusal.
 const en = {
   edit: 'Edit', editSections: 'Edit sections', editStructure: 'Edit structure',
-  tabParts: 'Parts', tabRelations: 'Relations', tabEditions: 'Editions',
+  tabParts: 'Parts', tabRelations: 'Relations', tabEditions: 'Editions', tabShowcase: 'Showcase',
   backToWork: 'Back to the Work',
   editIntro: 'Changes are written as your current identity, and each one is recorded with a receipt.',
   noAuthorityTitle: 'You can’t edit this Work',

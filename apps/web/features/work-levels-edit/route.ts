@@ -1,9 +1,9 @@
 import { globalWorkHref } from '../work-page/route.ts';
 
-// Addresses of the Work-level edit pages, `/w/{ref}/edit/parts`, `/edit/relations` and
-// `/edit/editions`, and how a person names another Work to them.
+// Addresses of the Work-level edit pages, `/w/{ref}/edit/parts`, `/edit/relations`,
+// `/edit/editions` and `/edit/showcase`, and how a person names another Work to them.
 
-export const editSections = ['parts', 'relations', 'editions'] as const;
+export const editSections = ['parts', 'relations', 'editions', 'showcase'] as const;
 export type EditSection = (typeof editSections)[number];
 
 export const editHref = (ref: string, section: EditSection) => `${globalWorkHref(ref)}/edit/${section}`;

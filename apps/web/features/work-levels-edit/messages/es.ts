@@ -3,7 +3,7 @@ import type { WorkLevelsEditMessages } from '../messages.ts';
 
 export default {
   edit: 'Editar', editSections: 'Secciones de edición', editStructure: 'Editar la estructura',
-  tabParts: 'Partes', tabRelations: 'Relaciones', tabEditions: 'Ediciones',
+  tabParts: 'Partes', tabRelations: 'Relaciones', tabEditions: 'Ediciones', tabShowcase: 'Escaparate',
   backToWork: 'Volver a la obra',
   editIntro: 'Los cambios se escriben con tu identidad actual, y cada uno queda con un recibo.',
   noAuthorityTitle: 'No puedes editar esta obra',

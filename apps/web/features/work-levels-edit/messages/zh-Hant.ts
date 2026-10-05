@@ -3,7 +3,7 @@ import type { WorkLevelsEditMessages } from '../messages.ts';
 
 export default {
   edit: '編輯', editSections: '編輯分區', editStructure: '編輯結構',
-  tabParts: '組成部分', tabRelations: '關係', tabEditions: '版本',
+  tabParts: '組成部分', tabRelations: '關係', tabEditions: '版本', tabShowcase: '展示',
   backToWork: '返回作品',
   editIntro: '修改會以你目前的身分寫入，並且每次都會留下回執。',
   noAuthorityTitle: '你無法編輯這部作品',
