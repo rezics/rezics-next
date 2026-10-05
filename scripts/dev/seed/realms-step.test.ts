@@ -41,8 +41,14 @@ test('only an idempotency conflict marks a Space as made under an earlier body',
   expect(isIdempotencyConflict(new Error('offline'))).toBe(false);
 });
 
-test('a Zone read the steward may not make is unreadable, not a failure', () => {
-  for (const status of [401, 403, 404]) expect(isUnreadable(new SeedApiError('Main /v1/zones', status, '{}'))).toBe(true);
-  expect(isUnreadable(new SeedApiError('Main /v1/zones', 500, '{}'))).toBe(false);
-  expect(isUnreadable(new Error('offline'))).toBe(false);
+test('a Zone read the steward may not make is unreadable only where no grant is possible', () => {
+  const denied = (status: number) => new SeedApiError('Main /v1/zones', status, '{}');
+  expect(isUnreadable(denied(404), true)).toBe(true);
+  expect(isUnreadable(denied(404), false)).toBe(true);
+  for (const status of [401, 403]) {
+    expect(isUnreadable(denied(status), false)).toBe(true);
+    expect(isUnreadable(denied(status), true)).toBe(false);
+  }
+  expect(isUnreadable(denied(500), false)).toBe(false);
+  expect(isUnreadable(new Error('offline'), false)).toBe(false);
 });
