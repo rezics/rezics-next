@@ -3,12 +3,11 @@
 The manager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-05 02:30 CST) |
+| Field | State (2026-10-05 08:40 CST) |
 | --- | --- |
-| Done | S1 decisions 51–53. Merged and closed: G-1065 projections, G-1066 additive components, thresholds and roll-ups, G-1067 identity links, G-1071 projection pages, frame filters and canonicity seeds, G-1074 projection grain, v4 accepted types, Global questions and relay `target`, G-1075 first-come heavy QA lock. Shared stack on Fuseki `d3f34f43f819`. |
-| Running | G-1072 character pages (Sol: the Claude week projects past its reset with three Opus managers, so frontend falls back to Sol until 2026-10-05 23:00), G-1076 acceptance cases and first Global questions (Sol), G-1078 exports (Sol), G-1083 roll-up acceptance (Grok). |
-| Waiting | G-1077 scoped rating surfaces (after G-1072 and G-1076). Verification of G-1065–G-1071 by rezics-next-1c: browser matrix 96/96 on 1c37fbb1a; integration batches and fault/recovery pending. |
-| Next | G-1077; a full affected pass after the last merge; screenshot review of every new surface; fold module READMEs and decisions into their owners; close the Goal. |
-| Proposed | Per-target admission scope for target ratings (deferred in the ratings contract); batch readability check for roll-ups in `modules/target`; reconstruction job for legacy targets above 100 raters; `projection:write` OAuth scope; projections of merged subjects. |
-| Cut lines | Character merge and split stay with production-readiness (identity merge is Works-only); distinct-collector family counts dropped. |
-| Coupling | rezics-next-1c classifies rating and projection events (`projection.create` and non-MainVersion targets irrelevant to Discover). post-layers (rezics-next-d9) retypes chapter Works to `rv:Post`; frames name chapters by occurrence. Main's highest Access migration is 1060. |
+| Done | S1 decisions 51–53. Merged and closed: projections (G-1065), additive rating components, thresholds and roll-ups (G-1066), identity links (G-1067), projection pages, frame filters and canonicity (G-1071), projection grain, v4 acceptance and Global questions (G-1074), exports (G-1078), roll-up acceptance (G-1083), question presentations (G-1084), acceptance cases and seeds (G-1076), character pages (G-1072, Sol), scoped rating components (G-1077, Sonnet), own target ratings (G-1096); independent review G-1088 and its fixes G-1090–G-1095; presentation stall root cause (G-1100); goalctl FIFO heavy lock and reclaim allowance (G-1075, G-1085); test hygiene (G-1098). Shared stack migrated, model generation aligned and seeded with `scoped-subjects`. |
+| Running | G-1097 page wiring and journeys (Sonnet), G-1099 race helper in rating-components/g-935/g-987 (Grok, allow-area agreed), G-1101 `task dev:refresh` (Sol), G-1102 typed refusal on changed model generation (Sol). |
+| Regression | This Goal holds main-wide regression since 2026-10-05 (handed over by addresses-discovery, now closed). Suspect files from final16 (g-629, g-1059, g-856-position/series/wiki, g-1043) pass together on current main. Next: a full pass (unit, model, 16 integration batches, fault/recovery, Storybook, browser journeys) pinned after this wave merges, routing failures outside our areas to their managers. |
+| Next | Merge the running wave; full main-wide pass; screenshot review of the composed pages; fold module READMEs and decisions; close the Goal. |
+| Proposed | Personal export fence counters (G-1094 finding 12 remainder); batch readability check for roll-ups in `modules/target`; `projection:write` OAuth scope; projections of merged subjects; Character merge and split (production-readiness). |
+| Coupling | post-layers (rezics-next-d9) retypes chapter Works to `rv:Post`; frames name chapters by occurrence. Access migrations on main go up to 1080; post-layers holds 1085–1089. |
