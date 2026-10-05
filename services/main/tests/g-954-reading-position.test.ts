@@ -384,12 +384,14 @@ test('G954: route binds continuations to search, position, identity and graph; f
   f.move(); expect((await f.call(continuation)).status).toBe(409);
 });
 
-test('G954: store reading order is independent of graph row order, and duplicate placements fail closed', async () => {
+test('G954: store reading order is independent of graph row order, and an ambiguous placement fails closed', async () => {
   const f = fixture([...chapters].reverse());
   const response = await f.call({ q: 'chapter 9', limit: '2' }); expect(response.status).toBe(200);
   expect((await response.json()).items.map((item: ReadingOccurrence) => item.ordinal)).toEqual([9, 90]);
+  // Hydration binds each occurrence's canonical placement, so a stray second placement is never read;
+  // the canonical placement answering with two different targets is the ambiguity that must fail closed.
   const corrupt = fixture(chapters.slice(0, 1));
-  corrupt.rows[1]!.placement!.value = id();
+  corrupt.rows[1]!.target = { type: 'literal', value: id() };
   expect((await corrupt.call({ q: 'Chapter' })).status).toBe(503);
 });
 
