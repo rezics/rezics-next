@@ -32,6 +32,9 @@ export interface Coordinate {
   ancestors?: readonly string[];
 }
 
+/** Shared preparation budget for continuity coverage and the Work's paginated continuity inventory. */
+export const CONTINUITY_MEMBERSHIP_COST = { batch: 64, scans: 8, rows: 64 } as const;
+
 /** A target as a typed coordinate; null when its type has no dimension. */
 export function coordinateOf(target: Pick<ResolvedTarget, 'resource' | 'base' | 'types' | 'work'>): Coordinate | null {
   const dimension = dimensionOf(target);

@@ -28,7 +28,7 @@ import { StatementApplicabilityRefused } from '../modules/statement/projection.t
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
-import { targetRead, targetSummaries } from '../modules/target/resolve.ts';
+import { resolveVisibleTargets, targetRead, targetSummaries } from '../modules/target/resolve.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance } from '../modules/statement/read.ts';
 import { CUTOVER_FAMILY, MIGRATION_FAMILY, cutoverRequest, cutoverV1Decisions,
   migrateV1Decision, migrationRequest } from '../modules/statement/migrate-v1.ts';
@@ -723,13 +723,14 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             const interpretation = seen.interpretation = await statementInterpretation(env, input, speaker);
             // Sealed as unavailable: the same key cannot later commit a different meaning.
             if (interpretation.state !== 'resolved') throw new ContextCommandUnavailable('interpretation is not resolved');
-            return recordStatement(env, admission, input, speaker, undefined, async projection =>
-              targetRead(env, { access: work.access, principal, actingSubject: input.actingSubject,
-                readers: { mediaAccess: work.mediaAccess, contextSelections: work.contextSelections, governance: work.governance } },
+            const authority = { access: work.access, principal, actingSubject: input.actingSubject,
+              readers: { mediaAccess: work.mediaAccess, contextSelections: work.contextSelections, governance: work.governance } };
+            return recordStatement(env, admission, input, speaker, undefined, async subject =>
+              targetRead(env, authority,
               async session => {
-                const [summary] = (await targetSummaries(session, [projection])).summaries;
-                return summary?.status === 'available' && summary.type === 'projection';
-              }));
+                const [summary] = (await targetSummaries(session, [subject])).summaries;
+                return summary?.status === 'available';
+              }), references => targetRead(env, authority, session => resolveVisibleTargets(session, references, 'report')));
           } });
         const read = await readStatement(env, receipt.component!, async () => true);
         return written(receipt, { profile: 'statement-v1', statement: receipt.component,

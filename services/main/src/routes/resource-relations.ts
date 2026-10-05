@@ -3,9 +3,9 @@ import { fusekiReadBudget, type FusekiClient } from '../infrastructure/fuseki.ts
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
-import { readResourceRelations, RELATION_PAGE_COST } from '../modules/relation/traversal.ts';
+import { readResourceRelations, readWorkContinuities, RELATION_PAGE_COST, WORK_CONTINUITIES_COST } from '../modules/relation/traversal.ts';
 import { referenceReader } from '../modules/semantic/admitted.ts';
-import { WorkReadInvalid } from '../modules/work/read-session.ts';
+import { WorkReadInvalid, workRead } from '../modules/work/read-session.ts';
 import { workReadError } from './work-reads.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
@@ -20,6 +20,7 @@ import { semanticError } from './semantic.ts';
 import { resourceRelationEntry as entry } from '../modules/entity-page/contract.ts';
 import { readingPositionQuery } from './reading-positions.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { readName } from '../modules/work/read-contract.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { readWikiClaimEvidence, projectWikiEvidence } from '../modules/wiki/evidence-read.ts';
@@ -31,11 +32,34 @@ const receipt = t.Object({ profile: t.Literal('work-derivation-v2'), derivation:
   sourcePosition: position, replayed: t.Boolean() });
 export const openApiOperations = {
   '/v1/resources/{resource}/relations': { get: { bearer: false } },
+  '/v1/resources/{resource}/continuities': { get: { bearer: false } },
   '/v1/resources/{resource}/derivations': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
 export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/resources/:resource/continuities', {
+      params: t.Object({ resource: groupUuid }),
+      query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery,
+        languages: t.Optional(t.String({ maxLength: 8192 })),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: WORK_CONTINUITIES_COST.pageLimit })),
+        cursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('work-continuities-v1'), work: native,
+        items: t.Array(t.Object({ key: native, iri: native, label: readName }, { additionalProperties: false }),
+          { maxItems: WORK_CONTINUITIES_COST.pageLimit }), nextCursor: t.Nullable(t.String()), sourcePosition: position }),
+      ...authorizedReadProblems, 409: problemResult(409) },
+    }, async ({ request, params, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if (request.headers.has('authorization') && !query.actingSubject) {
+          throw new WorkReadInvalid('actingSubject is required for authenticated reads');
+        }
+        const page = await workRead(work, request, { actingSubject: query.actingSubject,
+          languages: query.languages, cursor: query.cursor }, session =>
+          readWorkContinuities(session, `https://rezics.com/id/${params.resource}`, query));
+        return Response.json(page, { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return workReadError(error); }
+    })
     .post('/v1/resources/:resource/derivations', {
       params: t.Object({ resource: groupUuid }),
       body: t.Object({ profile: t.Literal('work-derivation-v2'), targetMainVersion: native, expectedTargetHead: native,

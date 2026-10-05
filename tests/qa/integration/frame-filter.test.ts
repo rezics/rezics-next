@@ -33,7 +33,7 @@ const semantic = async (name: string, type: string) => (await json<{ component: 
 async function settled(path: string, body: object, key: string) {
   for (let attempt = 0; attempt < 30; attempt++) {
     const response = await owner.send('POST', path, body, key);
-    if (response.status !== 202) return json<{ statement: string }>(response, 201);
+    if (response.status !== 202) return json<{ statement: string }>(response, response.status === 200 ? 200 : 201);
     await response.text();
     await new Promise(resolve => setTimeout(resolve, 500));
   }

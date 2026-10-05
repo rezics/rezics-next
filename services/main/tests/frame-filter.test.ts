@@ -43,6 +43,24 @@ test('applicability in a slot the frame already fills must be that coordinate', 
   expect(projectionStatementMeaning('subject', [position], [position, canon]).applicability).toEqual([canon.iri, position.iri].sort());
 });
 
+test('a projection Statement cannot add an edition belonging to another Work', () => {
+  const foreign = coordinate(id(9), 'release', { work: id(10) });
+  expect(refusal(() => projectionStatementMeaning('subject', [position], [foreign])))
+    .toBe('statement_applicability_work_mismatch');
+  expect(projectionStatementMeaning('subject', [position], [release]).applicability)
+    .toEqual([position.iri, release.iri].sort());
+});
+
+test('coverage combines Work and position alternatives in one structure slot, and editions in another', () => {
+  const pattern = framePattern([position, release], '?statement', GRAPHS.current);
+  expect(pattern.filter).toContain('?coordinate_structure');
+  expect(pattern.filter).not.toContain('?coordinate_work');
+  expect(pattern.filter).not.toContain('?coordinate_position');
+  expect(pattern.filter).toContain('?coordinate_edition');
+  expect(pattern.filter).not.toContain('?coordinate_release');
+  expect(pattern.filter).not.toContain('?coordinate_realization');
+});
+
 test('coverage is applied to candidate queries: a position by its group and Work, a release by its Work', () => {
   const pattern = framePattern([position], '?statement', GRAPHS.current);
   expect(pattern.filter).toContain('FILTER(!EXISTS');

@@ -20,8 +20,41 @@ import { RevisionCorrupt } from '../work/history.ts';
 import type { ResourceSummary } from '../media/summary.ts';
 import { discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
-import { framePattern, matchFromScore } from '../projection/frame-read.ts';
-import type { Coordinate } from '../projection/dimension.ts';
+import { framePattern, matchFromScore, readContinuityMemberships,
+  type ContinuityMembershipCursor } from '../projection/frame-read.ts';
+import { CONTINUITY_MEMBERSHIP_COST, type Coordinate } from '../projection/dimension.ts';
+import { resolveTargets, targetSummaries } from '../target/resolve.ts';
+import { readingBoundary } from '../reading-position/boundary.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
+
+/** One Work target, at most eight 64-row membership batches and one summary batch for up to 64 results.
+ * Hidden rows use the scan budget but cannot fail the read; a cursor continues even an empty page. */
+export const WORK_CONTINUITIES_COST = { pageLimit: CONTINUITY_MEMBERSHIP_COST.rows,
+  membershipBatch: CONTINUITY_MEMBERSHIP_COST.batch, membershipScans: CONTINUITY_MEMBERSHIP_COST.scans,
+  targetBatches: 1, resultSummaryBatches: 1 } as const;
+
+export async function readWorkContinuities(session: WorkReadSession, work: string,
+  options: { limit?: number; cursor?: string } = {}) {
+  const limit = options.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > WORK_CONTINUITIES_COST.pageLimit) {
+    throw new WorkReadInvalid('Continuity page limit is invalid');
+  }
+  const [target] = await resolveTargets(session, [work], 'report');
+  if (target!.base !== 'work') throw new WorkReadInvalid('Continuities belong to a Work');
+  const boundary = readingBoundary(session);
+  const binding = ['work-continuities-v1', work, limit, session.principal, session.options.actingSubject,
+    session.displayLanguages, await boundary.binding()];
+  const cursor = decodeReadCursor(options.cursor, binding, session.position);
+  const after: ContinuityMembershipCursor | null = cursor ? JSON.parse(cursor.after) : null;
+  const page = await readContinuityMemberships(session, work, limit, after);
+  const summaries = page.continuities.length ? (await targetSummaries(session, page.continuities)).summaries : [];
+  await boundary.fence();
+  return { profile: 'work-continuities-v1' as const, work,
+    items: summaries.flatMap(summary => summary.status === 'available'
+      ? [{ key: summary.reference, iri: summary.reference, label: summary.name }] : []),
+    nextCursor: page.after ? encodeReadCursor(binding, session.position, JSON.stringify(page.after)) : null,
+    sourcePosition: session.position };
+}
 
 export const RELATION_PAGE_COST = {
   pageLimit: 32,
