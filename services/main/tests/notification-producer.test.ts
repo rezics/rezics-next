@@ -57,6 +57,8 @@ test('notification producer emits a submission decision to its represented recip
       id: 'submission', realm: agent, work: agent, submitting_agent: agent,
       reviewer, state: 'accepted', actor: recipient }] };
     if (sql.includes('FROM access.representation')) return { rows: [{ id: recipient }] };
+    // The editorial consumer numbers committed events first (Access 1171); none are pending here.
+    if (sql.includes('access.sequence_editorial_events')) return { rows: [{ sequence_editorial_events: 0 }] };
     throw new Error(`unexpected Access query: ${sql}`);
   } } as unknown as Pool;
   const producer = new NotificationProducer(access, null, {} as Pool, {} as never,
