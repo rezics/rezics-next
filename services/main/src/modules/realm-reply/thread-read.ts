@@ -3,7 +3,7 @@ import { readEpochOrder } from '../discovery/lineage.ts';
 import { activityTime, bestKey } from '../feed/ranking.ts';
 import { readAgent, readAgentCards } from '../profiles/read.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
-import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { GRAPHS, hash, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { clip, discussionParts } from './discussion-text.ts';
@@ -18,6 +18,7 @@ import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 import type { RealmRankKey, RealmRankPage } from '../rankings/realm-threads.ts';
+import { retainedMembershipBasis } from '../read-basis/membership.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -158,8 +159,8 @@ function ranked<T extends { time: Date; placement: string }>(rows: readonly T[],
  * One page of a Realm's discussions: replies placed in the Realm that answer
  * no other reply. New follows placement order; Best (Home's vote and age
  * signal) and Top (net score within the rolling window) seek the complete
- * maintained Realm population. Votes or expiry that change its order restart
- * continuations. Only the selected page crosses graph/Content disclosure.
+ * maintained Realm population. Population changes restart continuations;
+ * votes keep their keyset position. Only the selected page crosses live disclosure.
  */
 export async function readRealmThreads(session: WorkReadSession, realm: string,
   query: { sort?: Sort; window?: Window; cursor?: string; limit?: number; now?: number }) {
@@ -191,12 +192,22 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
   const binding = ['realm-threads-v1', realm, sort, sort === 'top' ? window : null,
     ...(population ? [population] : []),
+    ...(session.principal ? [{ issuer: session.principal.issuer, subject: session.principal.subject,
+      actingSubject: session.options.actingSubject }] : []),
   ];
-  const cursor = decodeReadCursor(query.cursor, binding, session.position);
+  const retained = retainedMembershipBasis('realm-threads-v1', query.cursor, binding, session.position);
+  const { cursor } = retained;
   const order = sort === 'new' ? cursor?.order.split(':') : undefined;
-  if (order && (order.length !== 2 || !order.every((value) => /^\d+$/.test(value)))) {
+  if (order && (order.length !== 4 || !order.slice(0, 3).every((value) => /^\d+$/.test(value))
+    || !/^[0-9a-f]{64}$/.test(order[3]!))) {
     throw new WorkReadInvalid('Thread cursor is invalid');
   }
+  // New adds two exact-key Access revision probes, independent of Realm size.
+  // Its private admission filter is also membership, never a retained grant.
+  const newRevision = sort === 'new' ? await threads.rankingRevision(session.position.dataEpoch, realm) : null;
+  if (newRevision === 'unavailable') throw new WorkReadUnavailable('Thread population is unavailable');
+  if (order && order[2] !== newRevision) throw new WorkReadMoved('Thread population changed');
+  if (order && order[3] !== hash(history)) throw new WorkReadMoved('Thread history admission changed');
   let after: (RealmRankKey & { revision: string }) | undefined;
   if (sort !== 'new' && cursor) {
     try {
@@ -237,18 +248,15 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     votes = await threads.votes(session.position.dataEpoch, page.map((row) => row.placement), reader(session));
     const last = candidates.at(-1);
     if (rows.length > limit && last) {
-      next = encodeReadCursor(binding, session.position, last.placement, `${last.epochOrder}:${last.sequence}`);
+      next = retained.encode(last.placement, `${last.epochOrder}:${last.sequence}:${newRevision}:${hash(history)}`);
     }
   } else {
-    if (visible.length !== selected!.length)
-      throw new WorkReadMoved('Indexed thread disclosure changed');
     page = visible;
     votes = await threads.votes(session.position.dataEpoch,
       page.map((row) => row.placement), reader(session));
     const last = selected!.at(- 1);
     if (rankedPage!.rows.length > limit && last) {
-      next = encodeReadCursor(binding, session.position,
-        last.placement,
+      next = retained.encode(last.placement,
         JSON.stringify({
           rank: last.rank_key,
           time: last.time_key,
@@ -272,23 +280,23 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     } : undefined)]);
   const items: Summary[] = page.flatMap((row) => {
     const text = texts.get(row.reply), about = titles.get(row.work);
-    if (!about) return [];
-    const { title, body } = text ? discussionParts(text.body) : { title: '', body: '' };
-    return [{ reply: row.reply, placement: row.placement, work: about, author: text ? named(row.author) : null,
-      time: row.time.toISOString(), language: text?.language ?? null, title,
+    if (!about || !text) return [];
+    const { title, body } = discussionParts(text.body);
+    return [{ reply: row.reply, placement: row.placement, work: about, author: named(row.author),
+      time: row.time.toISOString(), language: text.language, title,
       excerpt: clip(body, REALM_THREAD_COST.excerptChars),
-      vote: text ? (votes.get(row.placement) ?? closed) : closed,
-      replies: { value: text ? (counted.counts.get(row.reply) ?? 0) : 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
+      vote: votes.get(row.placement) ?? closed,
+      replies: { value: counted.counts.get(row.reply) ?? 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
   });
   await readRealmBasis(session, realm);
   const currentTargets = await works(session, page);
   if (
-    rankedPage &&
-    (await threads.rankingRevision(session.position.dataEpoch, realm)) !== rankedPage.revision
+    (await threads.rankingRevision(session.position.dataEpoch, realm)) !== (rankedPage?.revision ?? newRevision)
   ) {
     throw new WorkReadMoved('Thread ranking changed');
   }
   const readableReplies = new Set(page.filter((row) => currentTargets.has(row.work)).map((row) => row.reply));
+  retained.assertLive();
   return { profile: 'realm-threads-v1' as const, realm, sort, window,
     ...pageResult(session, items.filter((item) => readableReplies.has(item.reply)), next) };
 }

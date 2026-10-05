@@ -5,12 +5,10 @@ export function projecting(page: FeedPage): boolean {
   return page.projection.status === 'catching-up' || page.caughtUp?.state === 'projecting';
 }
 
-/** Source sequences are decimal strings, potentially larger than a JS number. */
+/** Home retains Access membership; unrelated graph sequences do not move it.
+ * A different epoch still means recovery and cannot share a cursor chain. */
 export function sameSource(left: FeedPage, right: FeedPage): boolean {
-  return (
-    left.sourcePosition.dataEpoch === right.sourcePosition.dataEpoch &&
-    left.sourcePosition.sequence === right.sourcePosition.sequence
-  );
+  return left.sourcePosition.dataEpoch === right.sourcePosition.dataEpoch;
 }
 
 export function appendPosts(items: readonly FeedItem[], next: readonly FeedItem[]): FeedItem[] {
@@ -26,11 +24,9 @@ export function appendPosts(items: readonly FeedItem[], next: readonly FeedItem[
 }
 
 export function sameProjection(left: FeedPage, right: FeedPage): boolean {
-  return (
-    sameSource(left, right) &&
-    left.projection.sequence === right.projection.sequence &&
-    left.projection.reviewSequence === right.projection.reviewSequence
-  );
+  // Main validates the cursor's population, follow, target and personal revisions.
+  // Projection progress alone can consume events without changing membership.
+  return sameSource(left, right);
 }
 
 /**
@@ -48,11 +44,13 @@ export async function recoverProjection(
   active: () => boolean,
 ): Promise<Loaded<{ page: FeedPage; items: FeedItem[]; pages: number }>> {
   const moved = { ok: false, failure: 'moved' } as const;
-  // No per-item source position is served. Never mix a newer source cut into
-  // this view: it could insert posts above the reader's sequence watermark.
+  // A fresh recovery chain may fill an older target-index backfill, but cannot
+  // project activity beyond the reader's former source watermark. An unrelated
+  // graph write may advance the source while this projection cut stays put.
   // Reviews have an independent sequence and must retain their own cut too.
   if (
     !sameSource(first, previous.page) ||
+    BigInt(first.projection.sequence) > BigInt(previous.page.sourcePosition.sequence) ||
     first.projection.reviewSequence !== previous.page.projection.reviewSequence ||
     projecting(first)
   )
@@ -73,5 +71,6 @@ export async function recoverProjection(
     items = appendPosts(items, page.items);
     pages++;
   }
+  if (last && !items.some((item) => item.id === last)) return moved;
   return { ok: true, data: { page, items, pages } };
 }

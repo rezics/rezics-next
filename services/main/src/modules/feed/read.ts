@@ -6,7 +6,7 @@ import { readFollowTarget } from '../follows/read.ts';
 import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { readPublicWorkClassifications, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
+import { pageResult, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './contract.ts';
 import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
@@ -25,6 +25,7 @@ import type { Static } from 'typebox';
 import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
 import { feedCompositions } from './compositions.ts';
+import { retainedMembershipBasis } from '../read-basis/membership.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 /** Keep the candidate's place without retaining any author, words or image. */
@@ -456,16 +457,16 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (personal) session.readingLanguages = personal.preferences.contentLanguages;
   const scope = query.scope ?? personal?.preferences.tab ?? 'all';
   if (scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
-  // Following needs its inventory before validating a cursor. All gets the
-  // same head from its card-match batch; the private preferences already bind
-  // the cursor to the principal through the same followPrincipal authority.
-  const following = reader && scope === 'following' ? frame.following : null;
+  // Both tabs use follow matches for selection or reasons. Keep that inventory
+  // revision with the cursor; followPrincipal also binds its private owner.
+  const following = reader ? frame.following : null;
   const sort = query.sort ?? personal?.preferences.sort ?? 'best', window = query.window ?? 'all';
   if (scope === 'following' && sort === 'top') throw new WorkReadInvalid('Top is available in All');
   const binding = ['home-feed-v1', FEED_RANKING.version, scope, sort, window, normalized(query),
     personal?.owner ?? null, reader?.agent ?? null,
     personSettings ? digest([personSettings.version, personSettings.blockedPeople]) : null];
-  const cursor = decodeReadCursor(query.cursor, binding, session.position);
+  const retained = retainedMembershipBasis('home-feed-v1', query.cursor, binding, session.position);
+  const { cursor } = retained;
   let after: { key: string; id: string } | undefined;
   let asOf = Date.now(), followedSeen = 0;
   let recentRealms: (string | null)[] = [];
@@ -482,8 +483,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         || order.recentRealms.length > 9 || order.recentRealms.some(id => id !== null && typeof id !== 'string')) throw new Error('cursor');
     } catch { throw new WorkReadInvalid('Invalid feed cursor'); }
     if (order.projection !== checkpoint.revision || order.personal !== (personal?.revision ?? null)
-      || (scope === 'following' && (order.following !== following?.revision
-        || sort === 'new' && order.targetIndex !== frame.followingIndexRevision))) {
+      || order.following !== (following?.revision ?? null)
+      || (scope === 'following' && sort === 'new' && order.targetIndex !== frame.followingIndexRevision)) {
       throw new WorkReadMoved('Feed changed');
     }
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
@@ -788,6 +789,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   await session.fenceSummaryMedia();
   const { pending, watermark } = await frame.close();
+  retained.assertLive();
   const last = page.at(-1);
   const current = projected && !pending && (scope !== 'following' || sort !== 'new'
     || frame.followingIndexCurrent(session.position.sequence));
@@ -798,8 +800,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
       state: more ? 'more' as const : current ? 'caught-up' as const : 'projecting' as const } : null,
     ...pageResult(session, selected.map(item => hidden.has(item.id)
       ? feedTombstone(item) : item), more && last
-      ? encodeReadCursor(binding, session.position, last.id, JSON.stringify({ key: last.order_key,
-        projection: checkpoint.revision, following: scope === 'following' ? following?.revision ?? null : null,
+      ? retained.encode(last.id, JSON.stringify({ key: last.order_key,
+        projection: checkpoint.revision, following: following?.revision ?? null,
         targetIndex: scope === 'following' && sort === 'new' ? frame.followingIndexRevision : null,
         personal: personal?.revision ?? null,
         asOf, recentRealms, followedSeen })) : null),

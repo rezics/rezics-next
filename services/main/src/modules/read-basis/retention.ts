@@ -1,6 +1,6 @@
 /** A continuation's expiry is fixed by its first page, never renewed by use.
- * Discovery keeps immutable rows through this window plus one read deadline;
- * live graph/Access checks still decide which fields may be disclosed. */
+ * Discovery retains immutable rows; registered Access families retain membership
+ * through owner revision fences. Live graph/Access checks still decide disclosure. */
 export const READ_BASIS_RETENTION_MS = 5 * 60_000;
 
 /**
@@ -8,8 +8,23 @@ export const READ_BASIS_RETENTION_MS = 5 * 60_000;
  * Prefer native TDB2 read transactions for the graph part of a future envelope;
  * do not copy the corpus or silently relax decodeReadCursor's sequence check.
  * ReadSnapshotProbe/Test in infra/jena/command-module/src/test/java/com/rezics/jena
- * contain the executable comparison and counterexamples. This constant currently
- * retains discovery ROWS only; it does not retain TDB, Lucene or Access state.
+ * contain the executable comparison and counterexamples. At that decision this
+ * constant retained discovery ROWS only, not TDB, Lucene or Access state.
+ *
+ * Registered owner exception (2026-10-05), in membership.ts: Home and Realm
+ * thread lists retain Access population revisions, with follow, target-index,
+ * personal and private history-admission revisions where used. Their encrypted
+ * cursors have this fixed deadline and retain the graph epoch as a recovery
+ * fence, but unrelated graph sequences do not change membership. A changed
+ * owner revision gives 409 restart; disclosure is checked live on every page,
+ * and hidden candidates leave holes rather than being replaced. Votes retain
+ * keyset semantics, not historical scores. There is no graph pin, copy or cache.
+ * Realm ranked continuations may use their already-admitted population while
+ * later source events await projection; first pages still require a complete cut.
+ * Content epoch, recovery, history-index readiness and rolling expiry remain fenced.
+ * The per-page graph consistency fence still applies, so sustained writes
+ * DURING hydration may exhaust a page's budget. This is an owner-specific
+ * membership guarantee, not the universal graph/text/Access snapshot below.
  *
  * Evidence and applicability:
  * - Jena 6.2.0 begin(READ)/end() can retain one graph version across writes, but
@@ -23,7 +38,7 @@ export const READ_BASIS_RETENTION_MS = 5 * 60_000;
  *   remaining allowed after revocation. The final check must use a NEW Access
  *   snapshot. Current Access helpers each start their own transaction, and many
  *   use FOR SHARE, so wrapping workRead in a read-only transaction is insufficient.
- * - read-stability.test.ts records the present HTTP gap: ordinary continuations
+ * - read-stability.test.ts records the present HTTP gap: unregistered continuations
  *   expire after unrelated commits; discovery keeps membership but can exhaust
  *   its current-disclosure hydration retries under writes at every position read.
  * - A custom before-image overlay would duplicate native TDB versioning and need

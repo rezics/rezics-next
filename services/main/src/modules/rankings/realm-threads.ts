@@ -93,7 +93,9 @@ export async function ensureRealmHistoryPopulation(
 }
 
 /** Reads one maintained population, without visiting an expired or denied
- * prefix. The source cut and page share one statement snapshot. */
+ * prefix. The source cut and page share one statement snapshot. A continuation
+ * already admitted that population revision; pending source events cannot move
+ * it until the owner updates membership. Its selected rows pass live disclosure. */
 export async function realmRankPage(
   access: Pool,
   session: WorkReadSession,
@@ -127,11 +129,12 @@ export async function realmRankPage(
       `
     WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
     state AS MATERIALIZED (SELECT COALESCE(s.revision,0)::text AS revision,
-      c.content_epoch=$8::uuid AND c.content_sequence=$9::bigint AND c.sequence=$10::numeric
+      c.content_epoch=$8::uuid AND ($4::double precision IS NOT NULL OR (
+        c.content_sequence=$9::bigint AND c.sequence=$10::numeric
         AND c.after_event='￿'
         AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=$1 AND kind IN ('reply','discussion')
           AND NOT realm_thread_indexed LIMIT 1)
-        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population' LIMIT 1)
+        AND NOT EXISTS(SELECT 1 FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population' LIMIT 1)))
         ${
           population
             ? `AND EXISTS(SELECT 1 FROM access.realm_thread_population p WHERE p.data_epoch=$1
@@ -162,8 +165,9 @@ export async function realmRankPage(
       ],
     )
   ).rows[0];
-  if (!row?.open || !row.complete) throw new WorkReadUnavailable('Realm rankings are projecting');
+  if (!row?.open) throw new WorkReadUnavailable('Realm rankings are projecting');
   if (after && after.revision !== row.revision) throw new WorkReadMoved('Thread ranking changed');
+  if (!row.complete) throw new WorkReadUnavailable('Realm rankings are projecting');
   return { revision: row.revision, rows: row.rows };
 }
 

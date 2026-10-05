@@ -120,10 +120,44 @@ their order keys. An item whose score changed after it was served may appear
 again, and one that rose past the position is passed over on that traversal.
 The web feed drops repeated ids. A fresh first page always reflects current
 scores. A restore's retained copy share-locks the rows it copies, so no score
-written under the prior epoch is lost. A cursor also pins the graph read
-position, as every continuation does until its family registers a retained read
-basis (`services/main/src/modules/read-basis/retention.ts`); the population
-revision is what still holds once the graph position is unchanged.
+written under the prior epoch is lost.
+
+## Retained membership and live disclosure
+
+Decision, 2026-10-05. Home and Realm thread lists register as retained Access
+membership families in `read-basis/membership.ts`. A continuation binds the
+population revision, plus the reader's follow and personal revisions, the
+Following New target-index revision and a private Realm's history-admission
+cut where used. It keeps the graph data epoch as a recovery fence, while an
+unrelated graph sequence does not require a restart. New Realm threads also
+check the Realm population revision before selection and after hydration.
+Every chain ends at `READ_BASIS_RETENTION_MS` after its first page; later pages
+and replays never renew that deadline. Expiry or changed membership gives
+`409 read_basis_changed`, requiring a fresh first page.
+
+Realm Best and Top first pages still require a complete source cut. A cursor
+already admitted its population revision, so it may continue while later graph
+or Content events await projection. The query still checks that revision and
+the Content epoch, private admission-index readiness, rolling-period expiry and
+the Access recovery fence. A pending event supplies no new member and grants
+no disclosure; current heads, exact bodies and authority decide each served row.
+
+Selection and live disclosure remain separate. Each page hydrates current
+graph/Content/Access state, rechecks authorization and disclosure, and omits
+hidden or revoked candidates without filling their retained positions with
+new members. A stale index cannot expose a revoked body or protected Work.
+The web client accepts a successful continuation when its graph sequence or
+projection progress advances; Main validates membership. A recovery that
+starts a fresh chain still respects the old source watermark and requires
+the last loaded post to be reached before replacing the view.
+
+This needs no graph snapshot, copy or cache. PostgreSQL's
+[statement snapshots](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED)
+explain the opening/closing revision checks; Jena's
+[remote transaction semantics](https://jena.apache.org/documentation/rdfconnection/#remote-transactions)
+explain why membership retention does not supply a graph transaction spanning
+HTTP queries. The existing per-page graph consistency fence still applies:
+sustained writes during hydration can fail within the bounded read budget.
 
 ## Current relationships and invalidation
 
