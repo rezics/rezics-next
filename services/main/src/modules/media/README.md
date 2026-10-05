@@ -45,9 +45,16 @@ Readers pass Uses whose targets they have already resolved through disclosure
 and Access to `MediaStore.renditions.candidatesBatch`. Its URLs retain each
 requesting Use, so sharing derived bytes never shares target authority.
 The existing representation metadata/bytes route applies that Use's concealment
-and the rendition's own exact label basis. Source labels are not evidence for a
-different digest. Missing or pending renditions leave the candidate list empty;
+and the rendition's own exact edit basis. Until the rendition is labelled,
+metadata derives its labels from the exact source representation. Missing or
+pending renditions leave the candidate list empty;
 selection readers can keep delivering their admitted original while work finishes.
+
+Zone configuration saves request only newly referenced publication-item Uses,
+after the graph commit and Access seal, as best effort. Dedicated campaign Uses
+request renditions when created. Campaign delivery reads the originating Zone
+from the retained creation event and checks its current public configuration,
+slide schedule and reader-visible Work in one bounded check.
 
 Interrupted transforms retry under the existing lease protocol. Byte persistence
 holds the asset/source fence through settlement, so an erasure sweep cannot
@@ -197,8 +204,12 @@ future producer migration, but new originals do not queue it.
 The protection transition uses the shared Open/review-required protocol in
 `protection/field-control.ts`; protection is a revision reference, not a second
 boolean lock engine. NSFW and age assessment attach to exact
-Representations, including renditions; labels never silently inherit another
-representation digest. Concealment attaches to an immutable Use occurrence, allowing
+Representations, including renditions. Until a rendition has its own value for
+a field, metadata derives NSFW and age assessment from its exact source:
+`nsfwSourceId` identifies the NSFW source, and age assessment uses `basis: source`
+with `sourceId`. The rendition's edit/control basis remains its own. Explicit
+unknown or unassessed values override derivation; labels never pass between
+unrelated representations. Concealment attaches to an immutable Use occurrence, allowing
 an ordinary image to be concealed independently of its NSFW label. No semantic
 graph profile is introduced.
 

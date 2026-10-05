@@ -630,13 +630,17 @@ export class MediaStore {
     if (uses.length > MAX_SUMMARY_TARGETS || uses.some(use => !uuid.test(use))) {
       throw new MediaInvalid('Invalid publication item batch');
     }
-    const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, u.asset_id, u.role, u.crop, u.focal_area, u.logo_anchor,
-      p.byte_digest, p.media_type, p.byte_length,
+    const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, u.context, u.asset_id, u.role, u.crop, u.focal_area, u.logo_anchor,
+      p.byte_digest, p.media_type, p.byte_length, campaign_event.payload->>'zone' AS campaign_zone,
       COALESCE(u.oriented_width,p.pixel_width) AS pixel_width, COALESCE(u.oriented_height,p.pixel_height) AS pixel_height,
       p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
       FROM media.use u JOIN media.asset a ON a.id = u.asset_id JOIN media.asset_state s ON s.id = a.state_head
       JOIN media.representation p ON p.id = u.representation_id
       JOIN content.revision revision ON revision.id = u.asset_revision_id AND revision.availability = 'available'
+      LEFT JOIN content.receipt campaign_receipt ON campaign_receipt.operation_id = u.operation_id
+        AND u.role LIKE 'campaign-%'
+      LEFT JOIN content.outbox campaign_event ON campaign_event.data_epoch = campaign_receipt.data_epoch
+        AND campaign_event.sequence = campaign_receipt.sequence AND campaign_event.event_type = 'media.use.created'
       WHERE u.id = ANY($1::uuid[]) AND (u.role = 'publication-item' OR u.role LIKE 'campaign-%')
         AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
@@ -647,7 +651,9 @@ export class MediaStore {
       width: row.pixel_width as number, height: row.pixel_height as number,
       availability: row.availability as string, clearance: row.clearance as Clearance, disclosure: row.disclosure as string,
       moderation: row.moderation as string, lifecycle: row.lifecycle as string,
-      objectNamespace: row.object_namespace as string }] as const));
+      objectNamespace: row.object_namespace as string,
+      ...(typeof row.context === 'string' ? { context: row.context } : {}),
+      ...(typeof row.campaign_zone === 'string' ? { campaignZone: row.campaign_zone } : {}) }] as const));
   }
 
   /** Exact current avatar bytes linked to the requested Work and context. */

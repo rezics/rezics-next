@@ -9,7 +9,8 @@ export const mediaControlBasis = t.Object({head:nullableHead,epoch:t.String({pat
 const control = t.Object({target:t.Object({component:t.String(),definition:t.String(),occurrence:t.Nullable(t.String()),context:t.String()}),
   basis:mediaControlBasis,valueHead:nullableHead,locked:t.Boolean(),canEdit:t.Boolean(),canProtect:t.Boolean()},{additionalProperties:false});
 export const mediaDescriptorFields = {representation:mediaUuid,asset:mediaUuid,sha256:t.String(),use:t.Nullable(mediaUuid),
-  mediaType:t.String(),width:t.Integer(),height:t.Integer(),url:t.String(),nsfw:imageNsfw,ageRating:readAssessment,conceal:t.Boolean(),
+  mediaType:t.String(),width:t.Integer(),height:t.Integer(),url:t.String(),nsfw:imageNsfw,
+  nsfwSourceId:t.Optional(t.Nullable(mediaNative)),ageRating:readAssessment,conceal:t.Boolean(),
   controls:t.Object({nsfw:control,ageRating:control,conceal:t.Nullable(control)}),canEdit:t.Boolean(),canProtect:t.Boolean()};
 export const mediaDescriptor = t.Object(mediaDescriptorFields,{additionalProperties:false});
 export const metadataRef = t.Union([t.Object({representation:mediaUuid,use:t.Optional(mediaUuid)},{additionalProperties:false}),

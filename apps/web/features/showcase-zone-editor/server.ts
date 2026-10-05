@@ -1,7 +1,7 @@
 import type { ZoneShowcaseArt, ZoneShowcaseImage, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { readWorkShowcase } from '../api/showcase.ts';
-import { mainApiWithToken } from '../api/main.ts';
+import { mainApi, mainApiWithToken } from '../api/main.ts';
 import { workShowcaseArt, zoneWork } from '../realm/adapt.ts';
 import type { MainClient } from '../manage/types.ts';
 import { registryOf } from './art.ts';
@@ -71,10 +71,10 @@ export type ZoneShowcaseRead =
   | { ok: true; state: ZoneShowcaseState }
   | { ok: false; failure: 'sign-in' | 'denied' | 'missing' | 'unavailable' };
 
-/** The Zone's configuration as the acting Agent reads it (`GET /v1/zones/{id}/configuration`). */
+/** The complete saved slides, authorized by current Zone edit authority. */
 export async function readZoneShowcase(main: MainClient, zone: string, actingSubject: string): Promise<ZoneShowcaseRead> {
   try {
-    const { data, error } = await main.v1.zones({ id: zone.slice(-36) }).configuration.get({ query: { actingSubject } });
+    const { data, error } = await main.v1.zones({ id: zone.slice(-36) })['showcase-editor'].get({ query: { actingSubject } });
     if (error || !data) {
       const status = error?.status;
       return { ok: false, failure: status === 401 ? 'sign-in' : status === 403 ? 'denied' : status === 404 ? 'missing' : 'unavailable' };
@@ -87,10 +87,11 @@ export async function readZoneShowcase(main: MainClient, zone: string, actingSub
   }
 }
 
-/** The campaign images Main delivers for a Zone's slides, by Use (`GET /v1/zones/{id}/presentation`, a public read). */
+/** Campaign previews use the same editor-scoped read as the saved slides. */
 export async function readCampaignRegistry(zone: string, actingSubject: string | null = null) {
   try {
-    const { data, error } = await mainApiWithToken(undefined).v1.zones({ id: zone.slice(-36) }).presentation.get({ query: {} });
+    if (!actingSubject) return {};
+    const { data, error } = await (await mainApi()).v1.zones({ id: zone.slice(-36) })['showcase-editor'].get({ query: { actingSubject } });
     return data && !error ? registryOf(data.slideMedia, actingSubject) : {};
   } catch {
     return {};

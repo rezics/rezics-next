@@ -1,7 +1,12 @@
-import { MediaInvalid, type MediaStore } from '../media/store.ts';
+import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, type MediaStore } from '../media/store.ts';
 import { canonicalLanguage } from '../display-language/tag.ts';
 import { pixelCrop, RENDITION_LIMITS, type RenditionCandidate } from '../media-rendition/policy.ts';
 import { zoneCampaignUses, type ZoneCampaignArt, type ZoneSlide } from './presentation-format.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import type { MediaDependencies } from '../media/commands.ts';
+import { requestUseRenditions } from '../media-rendition/request.ts';
 
 export const ZONE_CAMPAIGN_ART_COST = { maxSlides: 6, maxCampaignUses: RENDITION_LIMITS.batch,
   maxCampaignMediaReads: 2 } as const;
@@ -26,12 +31,41 @@ export async function readZoneCampaignItems(store: Pick<MediaStore, 'itemDeliver
   return new Map(eligible.map(use => [use, items.get(use)!]));
 }
 
+/** Optional post-commit work cannot change a saved Zone's result. At most one
+ * media batch and one bounded inspection per newly referenced publication Use. */
+export async function requestNewZoneCampaignRenditions(media: Pick<MediaDependencies, 'store' | 'objects'>,
+  realm: string | null, slides: readonly ZoneSlide[], added: readonly string[]) {
+  if (!added.length) return;
+  try {
+    const items = await readZoneCampaignItems(media.store, realm, slides);
+    for (const use of added) {
+      if (items.get(use)?.role !== 'publication-item') continue;
+      try { await requestUseRenditions(media.store.renditions, media.objects, use); }
+      catch { /* The saved configuration remains usable with its source image. */ }
+    }
+  } catch { /* Media storage is optional after the Zone receipt is sealed. */ }
+}
+
 /** Two exact Content batches, O(B log M) lookups and O(B + S) output:
  * at most 64 distinct campaign Uses for six slides, independent of corpus,
  * memberships and history. Text and target survive every missing art role. */
 export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
-  realm: string | null, slides: readonly ZoneSlide[]) {
+  realm: string | null, slides: readonly ZoneSlide[], disclosure?: {
+    environment: WorkActivationEnvironment; zone: string;
+  }) {
   const items = await readZoneCampaignItems(store, realm, slides);
+  if (disclosure && items.size) {
+    const uses = [...items.keys()];
+    const decisions = await discloseInventory(disclosure.environment, uses.flatMap(use => [
+      { owner: 'media' as const, resource: `https://rezics.com/id/${items.get(use)!.asset}`,
+        component: 'cover' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm },
+      { owner: 'media' as const, resource: `https://rezics.com/id/${use}`,
+        component: 'media_use' as const, context: items.get(use)!.context ?? DEFAULT_MEDIA_CONTEXT, work: realm },
+    ]), currentDisclosureViewer(), 'media');
+    uses.forEach((use, index) => {
+      if (decisions[index * 2] !== 'visible' || decisions[index * 2 + 1] !== 'visible') items.delete(use);
+    });
+  }
   const candidates: Map<string, RenditionCandidate[]> = store && items.size
     ? await store.renditions.candidatesBatch([...items.keys()]) : new Map();
   const resolve = (image: ZoneCampaignArt['landscape'], role: string) => {

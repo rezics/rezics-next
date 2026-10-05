@@ -25,6 +25,7 @@ import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
+import { currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -262,6 +263,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
         if (!basis || !work.media) return unavailable();
+        if (basis.campaign && (!basis.metadata.use || !basis.target || !(await currentZoneCampaignUses(
+          work.environment, basis.campaignZone, await readerFor(request, query.actingSubject), basis.target
+        )).has(basis.metadata.use))) return unavailable();
         if (basis.disclosure==='public') return deliver(work.media,{objectNamespace:basis.objectNamespace,
           sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},true);
         if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
@@ -467,6 +471,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           () => work.media!.store.itemDelivery(params.use));
         if (!item || item.availability !== 'available' || item.disclosure !== 'public'
           || item.moderation !== 'none' || item.lifecycle !== 'active' || item.clearance !== 'cleared') return unavailable();
+        if (item.role.startsWith('campaign-') && !(await currentZoneCampaignUses(
+          work.environment, item.campaignZone, reader, item.target)).has(params.use)) return unavailable();
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [item.target], context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();

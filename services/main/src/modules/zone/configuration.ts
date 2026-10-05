@@ -13,9 +13,8 @@ import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfig
   ZONE_LIMITS, ZONE_PROFILE, type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
 import { ZONE_PRESENTATION_PROFILE, ZONE_PRESENTATION_V1_PROFILE, zoneCampaignUses, type ZonePresentation } from './presentation-format.ts';
-import { readZoneCampaignItems } from './campaign-art.ts';
+import { requestNewZoneCampaignRenditions } from './campaign-art.ts';
 import type { MediaDependencies } from '../media/commands.ts';
-import { requestUseRenditions } from '../media-rendition/request.ts';
 import { readZoneName } from './read-name.ts';
 import type { ResourceListing } from '../space/policy.ts';
 
@@ -145,6 +144,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   const scope = `zone:edit:${input.zone}`;
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: 'zone.edit', idempotencyKey: input.idempotencyKey, requestDigest: digest });
+  let renditionRequest: { configuration: ZoneConfiguration; uses: string[] } | undefined;
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
     try { admission = await access.claim(registered.id, digest, principal); }
@@ -238,16 +238,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       if (available.boolean !== true) return invalid(new InvalidZoneConfiguration('selected Context is unavailable'));
     }
     if (typeof config.presentation === 'object' && media) {
-      const previous = new Set(config.defaultRealm === prior.defaultRealm && typeof prior.presentation === 'object'
+      const previous = new Set(typeof prior.presentation === 'object'
         ? zoneCampaignUses(prior.presentation.slides) : []);
-      const added = new Set(zoneCampaignUses(config.presentation.slides).filter(use => !previous.has(use)));
-      if (added.size) {
-        // The same public Realm eligibility gates apply to reads and requests.
-        const campaign = await readZoneCampaignItems(media.store, config.defaultRealm ?? null, config.presentation.slides);
-        for (const use of campaign.keys()) {
-          if (added.has(use)) await requestUseRenditions(media.store.renditions, media.objects, use);
-        }
-      }
+      renditionRequest = { configuration: config,
+        uses: zoneCampaignUses(config.presentation.slides).filter(use => !previous.has(use)) };
     }
     const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
@@ -335,6 +329,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   terminalResult(terminal, registered);
   if (terminal.owner !== input.zone || terminal.requestDigest !== digest || !terminal.revision) {
     throw new IdempotencyConflict('Zone revision receipt differs from intent');
+  }
+  // The graph receipt and Access seal are durable before optional media IO.
+  // Campaign Uses already request renditions at creation; only legacy publication
+  // items newly referenced by this commit need a request here.
+  if (media && renditionRequest && typeof renditionRequest.configuration.presentation === 'object') {
+    await requestNewZoneCampaignRenditions(media, renditionRequest.configuration.defaultRealm ?? null,
+      renditionRequest.configuration.presentation.slides, renditionRequest.uses);
   }
   return { zone: input.zone, revision: terminal.revision, receipt: terminal.receipt,
     replayed: registered.replayed, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence };

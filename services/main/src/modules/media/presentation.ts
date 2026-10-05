@@ -20,6 +20,8 @@ export interface ImageMetadata {
   representation: string; asset: string; sha256: string; use: string | null;
   mediaType: string; width: number; height: number; url: string;
   nsfw: ImageNsfw; ageRating: ReadAssessment; conceal: boolean;
+  /** Exact source representation when NSFW is derived rather than labelled here. */
+  nsfwSourceId?: string | null;
   controls: { nsfw: MediaFieldControl; ageRating: MediaFieldControl; conceal: MediaFieldControl | null };
   canEdit: boolean; canProtect: boolean;
 }
@@ -27,6 +29,7 @@ export type MetadataRef = { representation: string; use?: string } | { selection
 export interface MetadataBasis {
   metadata: ImageMetadata; owner: string; actor: string | null; target: string | null;
   context: string; disclosure: string; objectNamespace: string; byteLength: number;
+  campaign?: boolean; campaignZone?: string | null;
 }
 export interface MediaFieldInput {
   representation?: string; use?: string; field: ImageField;
@@ -121,12 +124,23 @@ export class MediaPresentationStore {
         FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY r(value,ordinality))
       SELECT q.ordinality,p.id,p.asset_id,p.byte_digest,p.media_type,p.pixel_width,p.pixel_height,p.byte_length,
         a.owner,a.object_namespace,s.disclosure,u.id AS use_id,u.actor,u.target,u.context,
+        (u.role LIKE 'campaign-%' OR u.id IS NULL AND EXISTS (
+          SELECT 1 FROM media.use campaign WHERE campaign.representation_id = COALESCE(p.source_id,p.id)
+            AND campaign.role LIKE 'campaign-%')) AS campaign,
+        campaign_event.payload->>'zone' AS campaign_zone,
         n.head AS nsfw_head,n.epoch AS nsfw_epoch,n.protection_head AS nsfw_protection,n.value_head AS nsfw_value,
         COALESCE(nr.value,CASE WHEN legacy.reason = 'likely-explicit' THEN '"nsfw"'::jsonb
-          WHEN legacy.reason IS NULL AND legacy.evidence ? 'scores' THEN '"sfw"'::jsonb ELSE NULL END) AS nsfw,
+          WHEN legacy.reason IS NULL AND legacy.evidence ? 'scores' THEN '"sfw"'::jsonb ELSE NULL END,
+          snr.value,CASE WHEN source_legacy.reason = 'likely-explicit' THEN '"nsfw"'::jsonb
+          WHEN source_legacy.reason IS NULL AND source_legacy.evidence ? 'scores' THEN '"sfw"'::jsonb ELSE NULL END) AS nsfw,
+        CASE WHEN nr.id IS NULL AND legacy.source_id IS NULL
+          AND (snr.id IS NOT NULL OR source_legacy.source_id IS NOT NULL) THEN source.id ELSE NULL END AS nsfw_source_id,
         ag.head AS age_head,ag.epoch AS age_epoch,ag.protection_head AS age_protection,
-        ag.value_head AS age_value,ar.value AS age_rating,ar.predecessor AS age_predecessor,
-        ar.source AS age_source,ar.created_at AS age_created,
+        ag.value_head AS age_value,COALESCE(ar.value,sar.value) AS age_rating,
+        COALESCE(ar.id,sar.id) AS assessed_revision,
+        CASE WHEN ar.id IS NOT NULL THEN ar.predecessor ELSE sar.predecessor END AS age_predecessor,
+        COALESCE(ar.source,sar.source) AS age_source,COALESCE(ar.created_at,sar.created_at) AS age_created,
+        CASE WHEN ar.id IS NULL AND sar.id IS NOT NULL THEN source.id ELSE NULL END AS age_source_id,
         c.head AS conceal_head,c.epoch AS conceal_epoch,c.protection_head AS conceal_protection,
         c.value_head AS conceal_value,cr.value AS conceal
       FROM requested q
@@ -136,14 +150,25 @@ export class MediaPresentationStore {
       LEFT JOIN media.use selected_use ON selected_use.id = selection.use_id AND selection_slot.target IS NOT NULL
       JOIN media.representation p ON p.id = COALESCE(q.representation::uuid,selected_use.representation_id)
       JOIN media.asset a ON a.id = p.asset_id JOIN media.asset_state s ON s.id = a.state_head
+      LEFT JOIN media.representation source ON p.kind = 'rendition' AND source.id = p.source_id
+        AND source.asset_id = p.asset_id
       LEFT JOIN media.use u ON u.id = COALESCE(q.use::uuid,selected_use.id)
         AND (u.representation_id = p.id OR (p.kind = 'rendition' AND p.source_id = u.representation_id
           AND p.crop IS NOT DISTINCT FROM u.crop))
+      LEFT JOIN content.receipt campaign_receipt ON campaign_receipt.operation_id = u.operation_id
+        AND u.role LIKE 'campaign-%'
+      LEFT JOIN content.outbox campaign_event ON campaign_event.data_epoch = campaign_receipt.data_epoch
+        AND campaign_event.sequence = campaign_receipt.sequence AND campaign_event.event_type = 'media.use.created'
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head
       LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id
+      LEFT JOIN media.field_slot sn ON sn.representation_id = source.id AND sn.field = 'nsfw'
+      LEFT JOIN media.field_revision snr ON snr.id = sn.value_head
+      LEFT JOIN media.screen_result source_legacy ON source_legacy.source_id = source.id
       LEFT JOIN media.field_slot ag ON ag.representation_id = p.id AND ag.field = 'ageRating'
       LEFT JOIN media.field_revision ar ON ar.id = ag.value_head
+      LEFT JOIN media.field_slot sag ON sag.representation_id = source.id AND sag.field = 'ageRating'
+      LEFT JOIN media.field_revision sar ON sar.id = sag.value_head
       LEFT JOIN media.field_slot c ON c.use_id = u.id AND c.field = 'conceal'
       LEFT JOIN media.field_revision cr ON cr.id = c.value_head
       WHERE p.availability = 'available' AND s.lifecycle = 'active' AND s.moderation = 'none'
@@ -163,18 +188,20 @@ export class MediaPresentationStore {
         canEdit:false,canProtect:false,
       });
       const ageRating: ReadAssessment = row.age_rating?.status === 'assessed'
-        ? { status: 'assessed', labels: row.age_rating.labels, revision: IRI(row.age_value)!,
-          predecessor: IRI(row.age_predecessor), basis: row.age_source === 'platform' ? 'platform' : 'author',
-          sourceId: null, createdAt: row.age_created.toISOString() } : UNASSESSED;
+        ? { status: 'assessed', labels: row.age_rating.labels, revision: IRI(row.assessed_revision)!,
+          predecessor: IRI(row.age_predecessor), basis: row.age_source_id ? 'source'
+            : row.age_source === 'platform' ? 'platform' : 'author',
+          sourceId: IRI(row.age_source_id), createdAt: row.age_created.toISOString() } : UNASSESSED;
       return { metadata: { representation: row.id, asset: row.asset_id, sha256: row.byte_digest,
         use: row.use_id ?? null, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height,
         url: `/v1/media/representations/${row.id}/bytes${row.use_id ? `?use=${row.use_id}` : ''}`,
-        nsfw: row.nsfw ?? 'unknown', ageRating, conceal: row.conceal ?? false,
+        nsfw: row.nsfw ?? 'unknown', nsfwSourceId: IRI(row.nsfw_source_id), ageRating, conceal: row.conceal ?? false,
         controls: { nsfw: control('nsfw','nsfw'), ageRating: control('ageRating','age'),
           conceal: row.use_id ? control('conceal','conceal') : null }, canEdit: false, canProtect: false },
         owner: row.owner, actor: row.actor ?? null, target: row.target ?? null,
         context: row.context ?? DEFAULT_MEDIA_CONTEXT, disclosure: row.disclosure,
-        objectNamespace: row.object_namespace, byteLength: row.byte_length };
+        objectNamespace: row.object_namespace, byteLength: row.byte_length, campaign: row.campaign ?? false,
+        campaignZone: row.campaign_zone ?? null };
     });
   }
   private async replay(client: PoolClient, operation: string, digest: string, action: string) {

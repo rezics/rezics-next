@@ -62,10 +62,10 @@ test('v2 campaign writes request only new art, replay once, and read srcset for 
   const f = await fixture('layered');
   const landscape = await f.campaign();
   const logo = await f.campaign();
-  const work = await f.catalogueWork(f.moderator.actor, 'Featured Work');
+  const work = await f.publicWork(f.moderator.actor, ['en'], 'Featured Work');
   const presentation: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION, tokens: ZONE_PRESETS.vibrant,
     slides: [{ id: 'featured', work: work.work, title: 'Featured', titles: { ja: '注目' },
-      kicker: 'New', kickers: { fr: 'Nouveau' }, startsAt: '2026-10-05T00:00:00.000Z',
+      kicker: 'New', kickers: { fr: 'Nouveau' }, startsAt: new Date(Date.now() - 60_000).toISOString(),
       art: { landscape: { use: landscape.use, focalArea: 'xywh=percent:10,10,80,80' },
         portrait: { use: landscape.use }, cutout: { use: logo.use },
         logos: [{ use: logo.use, language: 'zxx', tone: 'light', anchor: 'center-middle' }] } }] };
@@ -116,9 +116,11 @@ test('an immutable v1 configuration reads as v2 and an unrelated write persists 
   await json(await f.write(DEFAULT_ZONE_PRESENTATION));
   const before = await readZoneConfiguration(f.env, f.zone);
   const { titleEffect: _effect, ...tokens } = DEFAULT_ZONE_PRESENTATION.tokens;
+  const schedule = { startsAt: new Date(Date.now() - 60_000).toISOString(),
+    endsAt: new Date(Date.now() + 3_600_000).toISOString() };
   const legacy = { ...DEFAULT_ZONE_PRESENTATION, profile: 'zone-presentation-v1', slides: undefined,
     tokens, banners: [{ id: 'launch', title: 'Launch', alt: 'Landscape art', image: art.use, href: '/campaign',
-      startsAt: '2026-10-05T00:00:00.000Z', endsAt: '2026-10-06T00:00:00.000Z' }] };
+      ...schedule }] };
   const manifest = prepareComponent(f.env.objectDirectory, f.zone, {
     configuration: { ...before.configuration, presentation: legacy },
     ...(before.name !== null ? { name: before.name, language: before.language } : {}),
@@ -132,7 +134,7 @@ test('an immutable v1 configuration reads as v2 and an unrelated write persists 
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(before.revision)} rv:manifest ?manifest } }`);
   expect(await json(await f.read())).toMatchObject({ presentation: { profile: 'zone-presentation-v2',
     slides: [{ id: 'launch', title: 'Launch', href: '/campaign',
-      startsAt: '2026-10-05T00:00:00.000Z', endsAt: '2026-10-06T00:00:00.000Z',
+      ...schedule,
       art: { landscape: { use: art.use, alt: 'Landscape art' } } }] },
     slideMedia: [{ id: 'launch', art: { landscape: { width: 80, height: 60 } } }] });
   const normalized = await readZoneConfiguration(f.env, f.zone);
@@ -169,10 +171,11 @@ test('missing, wrong-Realm and newly private campaign art leave slide text and t
   const f = await fixture('fallback');
   const image = await f.campaign();
   const otherRealm = await f.campaign(ref());
+  const work = await f.publicWork(f.moderator.actor, ['en'], 'Work retaining its text without campaign art');
   const presentation: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION, slides: [
     { id: 'missing', href: '/missing', title: 'Missing art', art: { landscape: { use: ref() } } },
     { id: 'other', href: '/other', title: 'Other Realm', art: { portrait: { use: otherRealm.use } } },
-    { id: 'private', work: ref(), title: 'Retained text', art: { cutout: { use: image.use } } },
+    { id: 'private', work: work.work, title: 'Retained text', art: { cutout: { use: image.use } } },
   ] };
   await json(await f.write(presentation));
   const state = (await f.store.readAsset(image.asset))!;

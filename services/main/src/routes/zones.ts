@@ -47,6 +47,9 @@ import { canonicalAddress } from '../modules/address/schema.ts';
 import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
 import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
+import { AdmissionDenied } from '../modules/access/admission.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
+import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const disclosure = t.Union([t.Literal('public'), t.Literal('private')]);
@@ -68,6 +71,7 @@ const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemR
 export const openApiOperations = {
   '/v1/zones': { post: { bearer: true, idempotencyKey: true }, get: {} },
   '/v1/zones/{id}/presentation': { get: {} },
+  '/v1/zones/{id}/showcase-editor': { get: { bearer: true } },
   '/v1/zones/{id}/routes': { get: {} },
   '/v1/zones/{id}/mounts': { post: { bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/mounts/{occurrence}': { delete: { bearer: true, idempotencyKey: true } },
@@ -169,6 +173,12 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer(),
     maxNavigation: t.Integer(), maxNavigationGraphReads: t.Integer() }),
 });
+const showcaseEditorCost = { ...ZONE_CAMPAIGN_ART_COST, authorityProbes: 1 } as const;
+const showcaseEditorRead = t.Object({ ...configRead.properties,
+  slideMedia: publicationRead.properties.slideMedia,
+  cost: t.Object({ ...configRead.properties.cost.properties,
+    ...Object.fromEntries(Object.entries(showcaseEditorCost).map(([name, value]) => [name, t.Literal(value)])) }),
+});
 
 const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
 const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }),name: readName,address: canonicalAddress });
@@ -194,6 +204,14 @@ async function navigation(fuseki: FusekiClient, zone: string): Promise<string | 
       rv:navigation ?navigation . } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   return rows.length === 1 ? rows[0]?.navigation?.value ?? null : null;
+}
+
+/** Raw configuration includes unreleased slides and unreadable Work references. */
+async function requireZoneEditor(work: MainWorkDependencies, request: Request, zone: string, actingSubject: string) {
+  const principal = await work.account.verify(request, ['zone:edit']);
+  if (!work.access.assertAuthority) throw new AdmissionDenied('Zone edit authority is unavailable');
+  await work.access.assertAuthority({ principal, actingSubject, scope: `zone:edit:${zone}`, action: 'zone.edit' });
+  return principal;
 }
 
 async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, request: Request,
@@ -257,7 +275,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer) => {
           const moduleData = await readZoneModuleData(work.environment, state.configuration);
           const slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
-            state.presentation.slides);
+            state.presentation.slides, { environment: work.environment, zone });
           const theme = state.presentation.official?.theme;
           const forced = query.safeTheme || query['safe-theme']
             ? { state: 'fallback' as const, reason: 'safe_mode' as const }
@@ -271,7 +289,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
             ...pageDiscoveryHeaders(state.discovery),
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
-              && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
+              && execution.reason === 'none_approved' ? 'public, no-cache' : 'no-store' };
           if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
           return Response.json({ profile: 'zone-presentation-response-v2', zone, realm: state.realm,
             listing: state.listing, discovery: state.discovery,
@@ -288,6 +306,24 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (error instanceof ZoneRouteMissing) return problem(404, 'zone_unavailable', 'Zone is unavailable');
         return routeError(error);
       }
+    })
+    .get('/v1/zones/:id/showcase-editor', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: showcaseEditorRead, ...authorizedReadProblems } },
+    async ({ request, params, query }) => {
+      try {
+        const zone = `https://rezics.com/id/${params.id}`;
+        const principal = await requireZoneEditor(work, request, zone, query.actingSubject);
+        const state = await readZoneConfiguration(work.environment, zone);
+        const presentation = typeof state.configuration.presentation === 'object'
+          ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
+        const slideMedia = await withDisclosureViewer(disclosureViewer(principal), () =>
+          readZoneCampaignArt(work.media?.store, state.configuration.defaultRealm ?? null,
+            presentation.slides, { environment: work.environment, zone }));
+        return Response.json({ zone, revision: state.revision, configuration: state.configuration,
+          name: state.name, language: state.language, direction: state.direction, slideMedia,
+          cost: { ...state.cost, ...showcaseEditorCost } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
       query: t.Object({ path: t.String({ maxLength: 1024 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
@@ -412,10 +448,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     async ({ request, params, query }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
-        const principal = await work.account.verify(request, ['semantic:read']);
-        if (!await work.access.canReadSemanticResource?.(principal, query.actingSubject, zone)) {
-          throw new ZoneUnavailable('Zone is unavailable');
-        }
+        await requireZoneEditor(work, request, zone, query.actingSubject);
         const state = await readZoneConfiguration(work.environment, zone);
         return Response.json({ zone, revision: state.revision, configuration: state.configuration,
           name: state.name, language: state.language, direction: state.direction,

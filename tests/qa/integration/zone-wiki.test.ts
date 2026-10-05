@@ -100,7 +100,7 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
     const presentationUrl = `http://main.local/v1/zones/${shortId(publicationZone.zone)}/presentation`;
     const publicResponse = await anonymous.handle(new Request(presentationUrl));
     expect(publicResponse.status).toBe(200);
-    expect(publicResponse.headers.get('cache-control')).toBe('public, max-age=30');
+    expect(publicResponse.headers.get('cache-control')).toBe('public, no-cache');
     const etag = publicResponse.headers.get('etag')!;
     expect(await publicResponse.json()).toMatchObject({ revision: publicationWrite.revision,
       presentation: publication, execution: { state: 'fallback', reason: 'none_approved' },

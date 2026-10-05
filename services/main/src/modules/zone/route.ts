@@ -27,6 +27,7 @@ import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { canonicalAddresses } from '../address/canonical.ts';
 import { readZoneVisibility } from './route-visibility.ts';
+import { slideIsCurrent } from './showcase-disclosure.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
 export class ZoneRouteMissing extends Error {}
@@ -263,8 +264,13 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
       items.push({ occurrence: item.occurrence, segment: qualifier.routeSegment, target: item.target!,
         kind: summary.type === 'collection' ? 'index' : 'document', name: summary.name });
     }
-    const fenced = await read.targets(items.map(item => item.target));
-    return present(state, items.filter((_, index) => fenced[index] !== null), read.viewer);
+    const currentSlides = state.presentation.slides.filter(slide => slideIsCurrent(slide));
+    const targets = [...new Set([...items.map(item => item.target),
+      ...currentSlides.flatMap(slide => 'work' in slide ? [slide.work] : [])])];
+    await read.targets(targets);
+    const slides = currentSlides.filter(slide => !('work' in slide) || read.summaries.get(slide.work)?.type === 'work');
+    return present({ ...state, presentation: { ...state.presentation, slides } },
+      items.filter(item => read.summaries.get(item.target)), read.viewer);
   });
 }
 
