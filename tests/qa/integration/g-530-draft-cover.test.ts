@@ -13,7 +13,7 @@ const stack = () => started ??= startMediaStack('g-530-cover');
 afterAll(async () => { if (started) await (await started).stop(); });
 
 test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and revoked writers, private to its readers, and public only with the Work', async () => {
-  const { member, privateWork, call, accessPool, admission, env, contribution } = await stack();
+  const { main, member, privateWork, call, accessPool, admission, env, contribution } = await stack();
   const writer = await member('writer');
   const revoked = await member('revoked-writer');
   const stranger = await member('stranger');
@@ -36,8 +36,20 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
 
   type Summary = { disclosure: 'public' | 'restricted'; avatar: { kind: string; selection?: string; url?: string } };
   const summaryOf = async (as: typeof writer | null) => as ? as.read(`/v1/resources/${id}`) : call('GET', `/v1/resources/${id}`);
-  const avatarOf = async (as: typeof writer | null, selection: string) => as ? as.read(urlOf(selection))
-    : call('GET', urlOf(selection));
+  const readBytes = (as: typeof writer | null, path: string, validator?: string) => {
+    const url = new URL(`http://main.local${path}`);
+    if (as) url.searchParams.set('actingSubject', as.actor);
+    return main.handle(new Request(url, { headers: {
+      ...(as ? { authorization: `Bearer ${as.token}` } : {}),
+      ...(validator ? { 'if-none-match': validator } : {}),
+    } }));
+  };
+  const avatarOf = (as: typeof writer | null, selection: string, validator?: string) => readBytes(as, urlOf(selection), validator);
+  const representationOf = async (selection: string) => {
+    const metadata = await writer.send('POST', '/v1/media/metadata', { items: [{ selection }], actingSubject: writer.actor });
+    expect(metadata.status).toBe(200);
+    return (await metadata.json()).items[0].url as string;
+  };
   /** Status and exact body of a refusal: what a caller learns must not tell a draft from an absent selection. */
   const answer = async (response: Response) => ({ status: response.status, body: await response.json() });
 
@@ -48,13 +60,29 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
   expect(ownBody).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'image', selection: first, url: urlOf(first) } });
   const bytes = await avatarOf(writer, first);
   expect(bytes.status).toBe(200);
-  expect(bytes.headers.get('cache-control')).toBe('private, no-store');
+  expect(bytes.headers.get('cache-control')).toBe('private, no-cache');
   expect(bytes.headers.get('etag')).toBe(`"${sha(cover)}"`);
   expect(sha(new Uint8Array(await bytes.arrayBuffer()))).toBe(sha(cover));
+  // Asset disclosure alone cannot give a draft's representation shared-cache headers.
+  const firstRepresentation = await representationOf(first);
+  for (const path of [urlOf(first), firstRepresentation]) {
+    const privateBytes = await readBytes(writer, path);
+    expect(privateBytes.status).toBe(200);
+    expect(privateBytes.headers.get('cache-control')).toBe('private, no-cache');
+    const revalidated = await readBytes(writer, path, `"${sha(cover)}"`);
+    expect(revalidated.status).toBe(304);
+    expect(revalidated.headers.get('cache-control')).toBe('private, no-cache');
+    expect(revalidated.headers.get('etag')).toBe(`"${sha(cover)}"`);
+    expect((await revalidated.arrayBuffer()).byteLength).toBe(0);
+  }
   // A reader the Work was shared with sees the same, until the grant is revoked.
   expect((await avatarOf(revoked, first)).status).toBe(200);
   await accessPool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
     WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.read'`, [revoked.actor, `work:read:${draft.work}`]);
+  for (const path of [urlOf(first), firstRepresentation]) {
+    expect((await readBytes(revoked, path, `"${sha(cover)}"`)).status).toBe(404);
+    expect((await readBytes(null, path, `"${sha(cover)}"`)).status).toBe(404);
+  }
 
   // Anonymous, a stranger and the revoked reader get one answer for the summary and one for the avatar URL, and it
   // equals the answer for a selection that never existed.
@@ -91,6 +119,7 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
   const published = await selectMainDefault(env, admission(writer.actor, `publication:select:${draft.mainVersion}`,
     'publication.select', mainSelectionDigest(input)), input);
   expect(published.outcome).toBe('succeeded');
+  const secondRepresentation = await representationOf(second);
   for (const reader of [null, stranger, revoked]) {
     const publicSummary = await summaryOf(reader);
     expect(publicSummary.status).toBe(200);
@@ -101,6 +130,13 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
     expect(publicBytes.headers.get('cache-control')).toBe('public, no-cache');
     expect(publicBytes.headers.get('etag')).toBe(`"${sha(replacementBytes)}"`);
     expect(sha(new Uint8Array(await publicBytes.arrayBuffer()))).toBe(sha(replacementBytes));
+    for (const path of [urlOf(second), secondRepresentation]) {
+      const revalidated = await readBytes(reader, path, `"${sha(replacementBytes)}"`);
+      expect(revalidated.status).toBe(304);
+      expect(revalidated.headers.get('cache-control')).toBe('public, no-cache');
+      expect(revalidated.headers.get('etag')).toBe(`"${sha(replacementBytes)}"`);
+      expect((await revalidated.arrayBuffer()).byteLength).toBe(0);
+    }
   }
   // The replaced selection stays unavailable after publication: publication discloses the current cover only.
   expect(await answer(await avatarOf(null, first))).toEqual(unknown);

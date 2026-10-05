@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import { sha, startMediaStack, type MediaStack } from './media-support.ts';
+import { png, sha, startMediaStack, type MediaStack } from './media-support.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('media-delivery-cache');
@@ -15,7 +16,7 @@ async function expectStatus(response: Response, expected: number) {
   return response;
 }
 
-test('public showcase art is one shared, revalidating copy: 304 on its validator, no reader identity or introspection', async () => {
+test('public showcase art shares cache headers and validators for anonymous, bearer and acting-Agent readers', async () => {
   const { main, call, member, publicWork } = await stack();
   const get = (path: string, headers: Record<string, string> = {}) =>
     main.handle(new Request(`http://main.local${path}`, { headers }));
@@ -53,9 +54,17 @@ test('public showcase art is one shared, revalidating copy: 304 on its validator
   }
   expect((await expectStatus(await get(url, { 'if-none-match': '"other"' }), 200)).headers.get('etag')).toBe(etag);
 
-  // An Agent's read is decided by that reader's identity, so it stays private to them.
-  const named = await expectStatus(await reader.read(url), 200);
-  expect(named.headers.get('cache-control')).toBe('private, no-store');
+  // Naming an Agent does not change public bytes or their cache policy.
+  const namedPath = `${url}&actingSubject=${encodeURIComponent(reader.actor)}`;
+  for (const validator of [undefined, etag, `"other", W/${etag}`, '*']) {
+    const response = await expectStatus(await get(namedPath, {
+      authorization: `Bearer ${reader.token}`, ...(validator ? { 'if-none-match': validator } : {}),
+    }), validator ? 304 : 200);
+    expect(response.headers.get('cache-control')).toBe('public, no-cache');
+    expect(response.headers.get('etag')).toBe(etag);
+    if (validator) expect((await response.arrayBuffer()).byteLength).toBe(0);
+    else expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(bytes));
+  }
 
   // Revalidation repeats every check: removed art is gone, not "not modified".
   await expectStatus(await owner.send('PUT', artPath, { ...body, expectedSelection: selected.selection,
@@ -63,10 +72,43 @@ test('public showcase art is one shared, revalidating copy: 304 on its validator
   for (const headers of [{ 'if-none-match': etag }, { 'if-none-match': etag, authorization: `Bearer ${reader.token}` }]) {
     expect((await get(url, headers)).status).toBe(404);
   }
+  expect((await get(namedPath, { 'if-none-match': etag, authorization: `Bearer ${reader.token}` })).status).toBe(404);
 });
 
-test('private media stays private and uncacheable, and a bearer alone still reaches none of it', async () => {
-  const { main, member, privateWork } = await stack();
+test('public publication-item delivery shares cache headers and validators with signed-in readers', async () => {
+  const { main, member, publicWork } = await stack();
+  const owner = await member('publication-owner');
+  const reader = await member('publication-reader');
+  const work = await publicWork(owner.actor);
+  const bytes = png(320, 200);
+  const asset = await owner.upload(bytes);
+  await owner.grant(`content:draft:${work.work}`, 'content.draft');
+  const saved = await (await expectStatus(await owner.send('POST', '/v1/media/publications', {
+    profile: 'media-set-v1', resourceId: work.work, variantId: `urn:rezics:variant:${randomUUID()}`,
+    expectedHead: null, assets: [asset.asset], actingSubject: owner.actor,
+  }), 201)).json();
+  const path = `/v1/media/uses/${saved.body.items[0].use}`;
+  const etag = `"${sha(bytes)}"`;
+  for (const actor of [undefined, reader.actor]) {
+    const url = new URL(`http://main.local${path}`);
+    if (actor) url.searchParams.set('actingSubject', actor);
+    for (const token of [undefined, reader.token]) {
+      for (const validator of [undefined, etag]) {
+        const response = await expectStatus(await main.handle(new Request(url, { headers: {
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(validator ? { 'if-none-match': validator } : {}),
+        } })), validator ? 304 : 200);
+        expect(response.headers.get('cache-control')).toBe('public, no-cache');
+        expect(response.headers.get('etag')).toBe(etag);
+        if (validator) expect((await response.arrayBuffer()).byteLength).toBe(0);
+        else expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(bytes));
+      }
+    }
+  }
+});
+
+test('draft-target media revalidates only in private caches; revoked, anonymous and bearer-only readers receive no bytes or 304', async () => {
+  const { main, member, privateWork, accessPool } = await stack();
   const get = (path: string, headers: Record<string, string> = {}) =>
     main.handle(new Request(`http://main.local${path}`, { headers }));
   const owner = await member('private-owner');
@@ -83,10 +125,19 @@ test('private media stays private and uncacheable, and a bearer alone still reac
   await reader.grant(`work:read:${hidden.work}`, 'work.read');
   const etag = `"${sha(bytes)}"`;
   const granted = await expectStatus(await reader.read(path), 200);
-  expect(granted.headers.get('cache-control')).toBe('private, no-store');
+  expect(granted.headers.get('cache-control')).toBe('private, no-cache');
   expect(sha(new Uint8Array(await granted.arrayBuffer()))).toBe(sha(bytes));
+  const namedPath = `${path}?actingSubject=${encodeURIComponent(reader.actor)}`;
+  const namedHeaders = { 'if-none-match': etag, authorization: `Bearer ${reader.token}` };
+  const revalidated = await expectStatus(await get(namedPath, namedHeaders), 304);
+  expect(revalidated.headers.get('cache-control')).toBe('private, no-cache');
+  expect(revalidated.headers.get('etag')).toBe(etag);
+  expect((await revalidated.arrayBuffer()).byteLength).toBe(0);
   for (const headers of [{}, { authorization: `Bearer ${reader.token}` }, { 'if-none-match': etag },
     { 'if-none-match': etag, authorization: `Bearer ${reader.token}` }]) {
     expect((await get(path, headers)).status).toBe(404);
   }
+  await accessPool.query(`UPDATE access.permission_grant SET active = false, generation = generation + 1
+    WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.read'`, [reader.actor, `work:read:${hidden.work}`]);
+  expect((await get(namedPath, namedHeaders)).status).toBe(404);
 });

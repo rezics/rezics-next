@@ -155,14 +155,20 @@ authored crop. An image's `width`/`height` describe the oriented original URL;
 `cropWidth`/`cropHeight` describe the selected frame. Candidate URLs already
 contain the authored crop and report their own dimensions.
 
-Art is one cached copy for every reader (manager decision, 2026-10-05): its
-URLs name no reader, and a byte read that names no Agent is decided as the
-anonymous reader first, so it costs no Account introspection. Only such
-answers are `public, no-cache`, with the bytes' digest as ETag and 304 on a
-match after the same checks; what a reader's identity decided stays
-`private, no-store`. Pages read the labels of the art they draw first with
-the page, so the first slide and the Work header are images, or masks, in the
-server's HTML and are preloaded only when shown.
+Public art and covers share one cached copy across readers, including requests
+with a bearer or an acting Agent: identical public bytes are `public, no-cache`,
+with their digest as ETag. A byte read naming no Agent is decided as the
+anonymous reader first, so public delivery costs no Account introspection.
+Private or draft targets are `private, no-cache`; an Asset's public disclosure
+does not make its target or context public. Every conditional read repeats
+the current disclosure, selection and clearance checks before answering 304,
+so replacement, removal or revoked access cannot reuse an earlier response.
+Private downloads governed by an Access read lease remain `private, no-store`:
+each transfer requires a fresh lease and accounts for the delivered bytes.
+These cache directives follow [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html#section-5.2.2).
+Pages read the labels of the art they draw first with the page, so the first
+slide and the Work header are images, or masks, in the server's HTML and are
+preloaded only when shown.
 
 ## Post attachments and preview selection
 

@@ -124,13 +124,13 @@ const notModified = (header: string | null, etag: string) => !!header && (header
   || header.split(',').some(tag => tag.trim().replace(/^W\//, '') === etag));
 
 /** Serve one exact representation after the disclosure checks. Bytes are named by their digest, so a
- * matching validator answers 304 without reading the object. Public means no reader identity decided
- * the answer (see `publicFirst`); what a bearer's identity unlocked stays private to that reader. */
+ * matching validator answers 304 without reading the object. Public targets share the same bytes
+ * across readers, including signed-in readers; restricted targets stay in the reader's own cache. */
 async function deliver(request: Request, media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
   mediaType: string }, publicTarget: boolean): Promise<Response> {
   const headers = { etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
     // Revalidation keeps shared caches from outliving a revoked selection or disclosure.
-    'cache-control': publicTarget && !request.headers.get('authorization') ? 'public, no-cache' : 'private, no-store' };
+    'cache-control': publicTarget ? 'public, no-cache' : 'private, no-cache' };
   if (notModified(request.headers.get('if-none-match'), headers.etag)) return new Response(null, { status: 304, headers });
   const bytes = await media.objects(basis.objectNamespace).get(basis.sha256);
   return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType, ...headers } });
@@ -196,10 +196,15 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const targets=groups.get(basis.context)??new Set<string>();targets.add(basis.target);groups.set(basis.context,targets);
     }
     const available=new Set<string>();
+    const publicTargets=new Set<string>();
     for (const [context,targets] of groups) {
       const summaries=await readResourceSummaries(work.environment,undefined,reader,
         {resources:[...targets],context,language:null,channel:'media'});
-      for (const summary of summaries.summaries) if (summary.status==='available') available.add(`${context}\0${summary.reference}`);
+      for (const summary of summaries.summaries) if (summary.status==='available') {
+        const key=`${context}\0${summary.reference}`;
+        available.add(key);
+        if (summary.disclosure==='public') publicTargets.add(key);
+      }
     }
     // Public profile avatar targets are Agents rather than Work/semantic resources.
     const agentTargets=[...groups.get(DEFAULT_MEDIA_CONTEXT)??[]].filter(target=>!available.has(`${DEFAULT_MEDIA_CONTEXT}\0${target}`));
@@ -207,7 +212,10 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const agents=(await fuseki.query(`PREFIX rv: <${RV}>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?agent WHERE {
         VALUES ?agent { ${agentTargets.map(iri).join(' ')} } ${publicAgent('?agent')} } LIMIT 65`,64*1024)).results?.bindings??[];
-      for (const agent of agents) if (agent.agent) available.add(`${DEFAULT_MEDIA_CONTEXT}\0${agent.agent.value}`);
+      for (const agent of agents) if (agent.agent) {
+        const key=`${DEFAULT_MEDIA_CONTEXT}\0${agent.agent.value}`;
+        available.add(key);publicTargets.add(key);
+      }
     }
     const facts: DisclosureTarget[]=[];
     const indexes=bases.map(basis=>{
@@ -239,7 +247,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         canEdit:labelControls.canEdit&&(!basis.metadata.controls.ageRating.locked||canProtectLabels)};
       const conceal=basis.metadata.controls.conceal?{...basis.metadata.controls.conceal,...concealControls,
         canEdit:concealControls.canEdit&&(!basis.metadata.controls.conceal.locked||canProtectConceal)}:null;
-      return {...basis,metadata:{...basis.metadata,
+      // A public Asset can still be used by a draft Work or a private Context.
+      const publicTarget=basis.disclosure==='public' && (!basis.target || publicTargets.has(`${basis.context}\0${basis.target}`));
+      return {...basis,publicTarget,metadata:{...basis.metadata,
         controls:{nsfw,ageRating,conceal},
         canEdit:nsfw.canEdit||ageRating.canEdit||!!conceal?.canEdit,canProtect:canProtectLabels||canProtectConceal}};
     }));
@@ -289,7 +299,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           work.environment, basis.campaignZone, await readerFor(request, query.actingSubject), basis.target
         )).has(basis.metadata.use))) return unavailable();
         if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
-          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},true);
+          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},basis.publicTarget);
         if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
         const principal=await work.account.verify(request,['work:read']);
         lease=await work.downloadLeases.admit(principal,query.actingSubject,basis.target,basis.metadata.asset);
