@@ -89,6 +89,7 @@ export default {
   replacesSelection: '이 커뮤니티가 이전에 선택한 버전을 대체합니다.',
   workUnavailable: '이 작품을 볼 수 없어요.',
   workFallback: '작품',
+  chapterOf: insert('{{book}}의 한 장', { book: String }),
   noItemTitle: '항목을 선택하세요',
   noItemHelp: '이곳에서 내용과 선택지를 확인할 수 있어요.',
   selectItem: insert('{{title}} 선택', { title: String }),

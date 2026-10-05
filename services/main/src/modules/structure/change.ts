@@ -93,6 +93,7 @@ export interface CompositionTerminal {
   seal?: string;
   owner?: string;
   component?: string;
+  /** Retained receipt fields let pre-Post commands replay from older snapshots. */
   chapterWork?: string;
   chapterMainVersion?: string;
   chapterWorkRevision?: string;
@@ -1278,7 +1279,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const chapter = intent.newWork;
   const postManifestValue = chapter ? { publisher: intent.admission.actingSubject,
     labels: [{ value: chapter.title, language: chapter.language }] } : null;
-  const chapterWorkManifest = chapter ? env.workObjects
+  const postManifest = chapter ? env.workObjects
     ? await prepareWorkComponent(env.workObjects, chapter.work, postManifestValue!, 'https://rezics.com/definition/post-v1')
     : prepareComponent(env.objectDirectory, chapter.work, postManifestValue!, 'https://rezics.com/definition/post-v1') : null;
   const chapterCurrent = chapter ? `${iri(chapter.work)} a rv:Post ;
@@ -1286,7 +1287,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     rv:head ${iri(chapter.workRevision)} .` : '';
   const chapterRevisions = chapter ? `${iri(chapter.workRevision)} a rv:RevisionAnchor ;
     rv:component ${iri(chapter.work)} ; rv:operation ${iri(operation)} ;
-    rv:manifest ${iri(`urn:rezics:sha256:${chapterWorkManifest}`)} ;
+    rv:manifest ${iri(`urn:rezics:sha256:${postManifest}`)} ;
     rv:modelRevision <https://rezics.com/definition/post-v1> ; rv:shapeRevision <https://rezics.com/definition/post-v1> ;
     rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .` : '';
   const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>

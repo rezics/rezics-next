@@ -40,8 +40,7 @@ const uuid = (iri: string) => iri.slice(-36);
 
 describe('G-395 what a queue item is about', () => {
   test("a chapter is named in its Book, wears the Book's cover and opens in the reader at that chapter", () => {
-    const subject = subjectOf(chapterOne, names, t.workFallback);
-    // The chapter's label in its Book, not its Work title, which still carries the Book's name.
+    const subject = subjectOf(chapterOne, names, t);
     expect(subject.title?.value).toBe('第一章 雨夜');
     expect(subject.book?.value).toBe('雨夜书店 · 连载小说');
     expect(subject.text).toBe('第一章 雨夜 · 雨夜书店 · 连载小说');
@@ -51,25 +50,26 @@ describe('G-395 what a queue item is about', () => {
   });
 
   test("before its chapter is read, a chapter still names its Book; a chapter placed nowhere opens the Book's contents", () => {
-    const early = subjectOf(chapterOne, { works, chapters: {} }, t.workFallback);
-    expect(early.text).toBe('雨夜书店 · 第一章 雨夜 · 雨夜书店 · 连载小说');
+    const early = subjectOf(chapterOne, { works, chapters: {}, facts: names.facts }, t);
+    expect(early.text).toBe('A chapter of 雨夜书店 · 连载小说');
     const unplaced = subjectOf(
       chapterOne,
       {
-        works: {
-          ...works,
-          [chapterOne]: { ...works[chapterOne]!, partOf: { work: book, occurrence: null } },
+        works,
+        facts: {
+          ...names.facts,
+          [chapterOne]: { ...names.facts[chapterOne]!, partOf: { work: book, occurrence: null } },
         },
         chapters,
       },
-      t.workFallback,
+      t,
     );
     // ast-grep-ignore: web-links-use-address -- Independent SID expectation keeps the route and its selections exact without reusing the link builder.
     expect(unplaced.href).toBe(`/w/${uuidToSid(uuid(book))}/contents`);
     const unknown = subjectOf(
       'https://rezics.com/id/00000000-0000-4000-8000-000000009999',
       noNames,
-      t.workFallback,
+      t,
     );
     expect(unknown).toMatchObject({
       title: null,
@@ -82,11 +82,7 @@ describe('G-395 what a queue item is about', () => {
 
   test('a chapter whose own record is private is placed in its Book by the moderation context', () => {
     const { [chapterOne]: _private, ...readable } = works;
-    const subject = subjectOf(
-      chapterOne,
-      { works: readable, chapters, facts: names.facts },
-      t.workFallback,
-    );
+    const subject = subjectOf(chapterOne, { works: readable, chapters, facts: names.facts }, t);
     expect(subject).toMatchObject({
       work: undefined,
       text: '第一章 雨夜 · 雨夜书店 · 连载小说',
@@ -121,10 +117,10 @@ describe('G-395 what a queue item is about', () => {
 
   test('a Work says what it is, and mods, prompts and skills have their own facts to review', () => {
     seedServedTypes();
-    expect(workTypeText(works[chapterOne], 'en', t)).toBe('Chapter');
-    expect(workTypeText(works[book], 'en', t)).toBe('Book');
-    expect(workTypeText(works[prompt], 'ja', t)).toBe('プロンプト');
-    expect(workTypeText(works[mod], 'en', t)).toBe('Mod');
+    expect(subjectOf(chapterOne, names, t).isChapter).toBe(true);
+    expect(workTypeText(works[book], 'en')).toBe('Book');
+    expect(workTypeText(works[prompt], 'ja')).toBe('プロンプト');
+    expect(workTypeText(works[mod], 'en')).toBe('Mod');
     expect([
       reviewedAs(works[mod], names.facts?.[mod]),
       reviewedAs(works[prompt], undefined),

@@ -20,7 +20,7 @@ import { mergeAgents, readAgents, readAudit, readPublicDecisions, readSubjects, 
 import { type AuditFilter, type LogView as View, logHref } from './routes.ts';
 import type { AgentSummary, AuditItem, AuditPage, Loaded, PublicDecision, PublicDecisionPage } from './types.ts';
 
-/** What a log page names: people, and Works with each chapter's Book and label. */
+/** What a log page names: people, Works, and chapter Posts with their placing Books and labels. */
 export interface LogNames extends SubjectNames { agents: Record<string, AgentSummary> }
 
 /** Later pages of either log. Stories pass a stand-in. */
@@ -117,7 +117,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
           const name = agentName(item.actingSubject);
           const handle = shownHandle(names.agents[item.actingSubject]?.handle ?? null);
           const work = item.target ? targetWork(item.target) : null;
-          const subject = work ? subjectOf(work, names, t.workFallback) : null;
+          const subject = work ? subjectOf(work, names, t) : null;
           return <li key={item.id} className="flex gap-3 px-4 py-3.5">
             <AgentMark name={name} iri={item.actingSubject} />
             <div className="grid min-w-0 flex-1 gap-1">
@@ -139,7 +139,7 @@ export function LogView({ realm, address = realm, actingSubject, view, first, na
             </div>
           </li>;
         }) : decisions.map(item => {
-          const subject = item.work ? subjectOf(item.work, names, t.workFallback) : null;
+          const subject = item.work ? subjectOf(item.work, names, t) : null;
           return <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-3">
               {subject ? <WorkThumb iri={subject.cover.iri} work={subject.cover.work}

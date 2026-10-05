@@ -4,22 +4,18 @@ import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard, workHeader } from './read-contract.ts';
 import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, type WorkReadSession } from './read-session.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
-import { chapterPlaceFromRows, chapterPlaceQuery } from '../structure/chapter-work.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
-  disclosure: 'public' | 'restricted'; fieldProvenance?: Static<typeof workHeader>['fieldProvenance'];
-  partOf?: ReturnType<typeof chapterPlaceFromRows> }
+  disclosure: 'public' | 'restricted'; fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
 
-export async function readWorkBasis(session: WorkReadSession, work: string, includeChapterPlace = false): Promise<WorkBasis> {
+export async function readWorkBasis(session: WorkReadSession, work: string): Promise<WorkBasis> {
   const types = `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
     ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } } }`;
-  // UNION adds at most eight placement rows instead of multiplying each semantic
-  // type by every placement. Other Work reads only need the original basis.
-  const maximumRows = includeChapterPlace ? 17 : 9;
+  const maximumRows = 9;
   const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public ?provisional ?provenance
-    ${includeChapterPlace ? '?book ?occurrence ?declared' : ''} WHERE {
+    WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
@@ -27,7 +23,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string, incl
       OPTIONAL { ${iri(work)} rv:provisional ?provisional }
       OPTIONAL { ${iri(work)} rv:fieldProvenance ?provenance }
     }
-    ${includeChapterPlace ? `{ ${types} } UNION { ${chapterPlaceQuery(work)} }` : types}
+    ${types}
     ${unerased(iri(work))}
     BIND(EXISTS { ${publicWork(iri(work), '?main')} } AS ?public)
   } LIMIT ${maximumRows + 1}`, maximumRows);
@@ -59,8 +55,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string, incl
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
-  ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}),
-  ...(includeChapterPlace ? { partOf: chapterPlaceFromRows(rows) } : {}) };
+  ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
 }
 
 /** Repeat the admission after hydration; Access restrictions need not move the graph. */
@@ -74,10 +69,9 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
 }
 
 export async function readWorkHeader(session: WorkReadSession, work: string) {
-  const basis = await readWorkBasis(session, work, true);
+  const basis = await readWorkBasis(session, work);
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
-  const partOf = basis.partOf;
   await fenceWorkBasis(session, basis);
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
@@ -87,7 +81,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     metadataRevision: metadata.revision,
     originalTitle: metadata.originalTitle ? recordedDisplayText(metadata.originalTitle) : null,
     mainVersionRevision: basis.mainRevision, mainVersionLabel: selected.mainVersionLabel,
-    selectedLanguage: basis.selectedLanguage, ...(partOf ? { partOf } : {}), sourcePosition: session.position,
+    selectedLanguage: basis.selectedLanguage, sourcePosition: session.position,
     links: { versions: `${path}/versions`, classifications: `${path}/classifications`,
       adoptions: `${path}/adoptions`, ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
       metadata: `${path}/metadata`, editions: `${path}/editions` } };

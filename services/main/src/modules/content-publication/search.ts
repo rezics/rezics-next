@@ -1,5 +1,5 @@
 import { publicWork } from '../work/public-patterns.ts';
-import { bookChapterPlacement } from '../post/patterns.ts';
+import { postBookPlacement } from '../post/patterns.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -215,7 +215,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;
           rv:publicSearchEligibilityHead ?eligibility . }
-        OPTIONAL { ${bookChapterPlacement('?resource', '?parentWork', '?parentMain')} }
+        OPTIONAL { ${postBookPlacement('?resource', '?parentWork', '?parentMain')} }
         # Keep the placing Book bound for disclosure; an unreadable Book cannot
         # turn a chapter hit into an unparented Content hit.
         FILTER(!BOUND(?parentWork) || EXISTS { ${publicWork('?parentWork', '?parentMain')} })

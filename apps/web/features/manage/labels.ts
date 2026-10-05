@@ -48,9 +48,9 @@ export function reasonLabel(item: Pick<ModerationItem, 'kind' | 'reasonCode'>, t
   return cited ? cited.rule.title.value : reasonText(item, t);
 }
 
-/** What a Work is, in a word: a chapter of a Book, or the kind its types name (Prompt, Mod, Book…). */
-export function workTypeText(work: WorkSummary | undefined, locale: UiLocale, t: T): string | null {
-  return work?.partOf ? t.typeChapter : typeLabel(work?.types ?? [], locale);
+/** What a Work is, in a word, from its semantic types (Prompt, Mod, Book…). */
+export function workTypeText(work: WorkSummary | undefined, locale: UiLocale): string | null {
+  return typeLabel(work?.types ?? [], locale);
 }
 
 export function completionText(status: WorkSummary['completionStatus'], t: T): string | null {

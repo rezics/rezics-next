@@ -40,7 +40,7 @@ export async function decideAddress(
   const read = await resolve(path.lookup);
   if (read.kind !== 'resolved') return error(read);
   const data = read.data;
-  // Main supplies the whole reader place for a former chapter Work. Its old
+  // Main supplies the whole reader place for a chapter Post. Its old
   // Work tabs do not become tabs inside the chapter reader or Book's Contents.
   if (
     path.lookup.scope === 'work' &&

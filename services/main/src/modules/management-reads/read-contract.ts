@@ -50,7 +50,7 @@ export const moderationPage = t.Object({ items: t.Array(moderationItem, { maxIte
  * What a moderator reads beside one queue page: one Access transaction
  * (two optional authority checks and one aggregate over at most `agents`
  * people, each count stopping at `historyRows`) and one Work read session
- * (one chapter-place query per Work, one summary batch, two credit queries
+ * (one Post-placement query per resource, one summary batch, two credit queries
  * per Work or Book named, one name batch, one Hub batch and one mod-card
  * lookup).
  */
@@ -71,8 +71,8 @@ export const personContext = t.Object({ agent: readId,
   reports: t.Nullable(t.Object({ open: historyCount, upheld: historyCount, dismissed: historyCount,
     total: historyCount, capped: t.Boolean() })) });
 /**
- * What a queue item's Work is beyond its header: its place when it is a
- * chapter, who wrote it, and a mod's or prompt's own facts. A chapter's place
+ * What a queue item's Work or Post is beyond its header: a chapter Post's
+ * placement, who wrote it, and a mod's or prompt's own facts. A chapter's place
  * in a Book the reader can read is named even when the chapter's own record
  * is not public, as the Book's contents already show it; its authors are then
  * the Book's.

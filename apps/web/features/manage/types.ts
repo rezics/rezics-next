@@ -106,8 +106,6 @@ export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar;
   types: readonly string[];
   /** The one-line hook, in the reader's language when Main has one. */
   tagline?: LocalizedName | null;
-  /** Set when the Work is a chapter: its Book, and its place in the Book's contents (null when it has none now). */
-  partOf?: { work: string; occurrence: string | null } | null;
   completionStatus?: 'ongoing' | 'completed' | 'hiatus' | null;
   chapterCount?: number | null }
 

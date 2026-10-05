@@ -37,8 +37,7 @@ const name = (value: string, language = 'en') => ({ value, language, direction: 
 const titles = ['Pride and Prejudice', 'Jane Eyre', '西游记', 'Frankenstein; or, The Modern Prometheus', '红楼梦',
   'Little Women', 'The Adventures of Sherlock Holmes', '聊斋志异 · 画皮'];
 /**
- * The demo's serial and what else a Realm reviews: a Book with its chapters
- * (whose Work titles still carry the Book's name, as older chapters do), a
+ * The demo's serial and what else a Realm reviews: a Book with its chapter Posts, a
  * Minecraft mod, a prompt and a skill.
  */
 export const book = iri(110);
@@ -58,12 +57,7 @@ export const works: Record<string, WorkSummary> = {
   })),
   [book]: { iri: book, title: name('雨夜书店 · 连载小说', 'zh-Hans'), cover: fallback(book), originalTitle: null,
     types: ['https://schema.org/Book'], tagline: name('一封没有地址的信，把雨夜书店带向二十年前的秘密。', 'zh-Hans'),
-    partOf: null, completionStatus: 'ongoing', chapterCount: 3 },
-  [chapterOne]: { iri: chapterOne, title: { ...name('雨夜书店 · 第一章 雨夜'), basis: 'fallback' }, cover: fallback(chapterOne),
-    originalTitle: null, types: ['https://schema.org/DigitalDocument'], partOf: { work: book, occurrence: occurrences.one } },
-  [chapterTwo]: { iri: chapterTwo, title: { ...name('雨夜书店 · 第二章 未寄出的信'), basis: 'fallback' },
-    cover: fallback(chapterTwo), originalTitle: null, types: ['https://schema.org/DigitalDocument'],
-    partOf: { work: book, occurrence: occurrences.two } },
+    completionStatus: 'ongoing', chapterCount: 3 },
   [mod]: { iri: mod, title: name('Lantern Paths'), cover: fallback(mod), originalTitle: null,
     types: [`${vocab}ModPackage`, 'https://schema.org/SoftwareApplication'], tagline: name('Lanterns that light the way home.') },
   [prompt]: { iri: prompt, title: name('Chapter recap for serial readers'), cover: fallback(prompt), originalTitle: null,

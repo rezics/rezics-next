@@ -83,6 +83,7 @@ export default {
   replacesSelection: '取代此社群先前選定的版本。',
   workUnavailable: '你無法查看此作品。',
   workFallback: '作品',
+  chapterOf: insert('《{{book}}》的一個章節', { book: String }),
   noItemTitle: '選擇一個項目',
   noItemHelp: '此處會顯示項目內容與可用的操作。',
   selectItem: insert('選取 {{title}}', { title: String }),

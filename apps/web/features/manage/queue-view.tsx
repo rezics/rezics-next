@@ -126,7 +126,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   const current = state.current ? state.items[state.current] ?? null : null;
   const titleOf = useCallback((id: string) => {
     const item = latest.current.items[id];
-    return item ? subjectOf(item.target.resource, names, t.workFallback).text : t.workFallback;
+    return item ? subjectOf(item.target.resource, names, t).text : t.workFallback;
   }, [names, t.workFallback]);
 
   const learn = useCallback(async (items: readonly ModerationItem[]) => {
@@ -284,7 +284,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
 
   function row(id: string) {
     const item = state.items[id]!;
-    const subject = subjectOf(item.target.resource, names, t.workFallback);
+    const subject = subjectOf(item.target.resource, names, t);
     const title = subject.text;
     const author = item.authorAgent ? agentLabel(names.agents[item.authorAgent], item.authorAgent,
       short => t.agentFallback({ id: short })) : null;

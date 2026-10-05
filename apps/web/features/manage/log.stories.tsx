@@ -58,6 +58,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const ChapterWithoutLabel: Story = {
+  args: {
+    names: { ...logNames, chapters: {} },
+    api: { ...logApi, names: async () => ({ ...logNames, chapters: {} }) },
+  },
+  async play({ canvasElement }) {
+    await expect(
+      within(canvasElement).getByRole('link', { name: 'A chapter of 雨夜书店 · 连载小说' }),
+    ).toBeVisible();
+  },
+};
+
 /**
  * Who changed what, and why: management reasons and decision rationales are
  * shown as written, and a decision names what it was about, a chapter within

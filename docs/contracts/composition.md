@@ -1,11 +1,13 @@
 # Content composition
 
-A Structure represents uses of resources, not ownership of their content. Each
-occurrence has its own identity so repeated targets, reorder, progress and source
-correspondence remain distinct. Membership, navigation, consumption order and
-semantic part-of have different meanings; a container reference does not expand
-its descendants. The shared Structure format, owner profiles and commands carry
-these rules in `services/main/src/modules/structure/`.
+A Structure represents uses of resources, not ownership of their content.
+Chapters are Posts placed in a Book by occurrences, so reuse shares text and
+discussion while each placement retains its own reading position and progress.
+Placement adds no Work identity or semantic part-of relation. This keeps
+publication custody separate from the Book's creative scope, as
+[the Post decision](work-and-release.md#posts-texts-and-works) explains. The
+shared Structure format, owner profiles and commands carry the exact behavior
+in `services/main/src/modules/structure/`.
 
 The authoring choice is contextual: an ordinary chapter may follow eligible
 published content, while reviewed adoption and a fixed release select exact

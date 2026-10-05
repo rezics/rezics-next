@@ -152,8 +152,8 @@ export function mergeAgents(known: Record<string, AgentSummary>, found: Record<s
 
 /**
  * The Works queue items point at, read as the acting moderator so restricted
- * Works still show, and the Book of each chapter among them, which names it
- * and lends it a cover. Works already `known` are not read again.
+ * Works still show. Posts have no Work header; moderation context names their
+ * placing Books separately. Works already `known` are not read again.
  */
 export async function readWorks(main: MainClient, iris: readonly string[], query: { language: string;
   actingSubject: string }, known: Record<string, WorkSummary> = {}): Promise<Record<string, WorkSummary>> {
@@ -164,15 +164,12 @@ export async function readWorks(main: MainClient, iris: readonly string[], query
       if (!header.ok) return null;
       const work = header.data;
       return { iri, title: work.title, cover: work.cover, types: work.types, originalTitle: work.originalTitle?.value ?? null,
-        tagline: work.tagline, partOf: work.partOf ?? null, completionStatus: work.completionStatus,
+        tagline: work.tagline, completionStatus: work.completionStatus,
         chapterCount: work.chapterCount } satisfies WorkSummary;
     });
     return Object.fromEntries(works.filter(work => work !== null).map(work => [work.iri, work]));
   };
-  const works = await read(iris);
-  const books = await read(Object.values(works).flatMap(work => work.partOf && !works[work.partOf.work]
-    ? [work.partOf.work] : []));
-  return { ...works, ...books };
+  return read(iris);
 }
 
 /** About a screenful of a chapter: enough to judge it without reading it all. */
@@ -192,7 +189,7 @@ export function chapterExcerpt(body: string, label: string | null, limit = CHAPT
   return { excerpt: (paragraph > limit / 2 ? cut.slice(0, paragraph) : cut).trimEnd(), truncated: true };
 }
 
-/** Where each chapter among some Works is placed in its Book, from their headers or Main's moderation context. */
+/** Where each chapter Post is placed in its Book, from Main's moderation context. */
 export type Placements = Record<string, { work: string; occurrence: string | null }>;
 
 /**
@@ -241,7 +238,7 @@ export async function readSubjects(main: MainClient, realm: string, iris: readon
   const all = { ...known.works, ...works };
   const placements: Placements = {};
   for (const iri of iris) {
-    const place = all[iri]?.partOf ?? facts[iri]?.partOf ?? known.facts[iri]?.partOf;
+    const place = facts[iri]?.partOf ?? known.facts[iri]?.partOf;
     if (place) placements[iri] = place;
   }
   const [books, chapters] = await Promise.all([

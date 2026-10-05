@@ -89,6 +89,7 @@ export default {
   replacesSelection: 'Remplace la version précédemment sélectionnée par cette communauté.',
   workUnavailable: 'Cette œuvre ne vous est pas accessible.',
   workFallback: 'Une œuvre',
+  chapterOf: insert('Un chapitre de {{book}}', { book: String }),
   noItemTitle: 'Choisissez un élément',
   noItemHelp: 'Son contenu et vos choix s’afficheront ici.',
   selectItem: insert('Sélectionner {{title}}', { title: String }),

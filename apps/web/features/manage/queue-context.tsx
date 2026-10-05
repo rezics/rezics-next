@@ -26,8 +26,8 @@ export function Shown({ name, className }: { name: ShownName; className?: string
 /** A subject's name on one line: a chapter's label, then its Book's title, quieter. */
 export function SubjectName({ subject, fallback, className }: { subject: Subject; fallback: string; className?: string }) {
   return <span className={className}>
-    {subject.title ? <Shown name={subject.title} /> : fallback}
-    {subject.book ? <span className="font-normal text-muted-foreground"> · <Shown name={subject.book} /></span> : null}
+    {subject.title ? <Shown name={subject.title} /> : subject.isChapter ? subject.text : fallback}
+    {subject.title && subject.book ? <span className="font-normal text-muted-foreground"> · <Shown name={subject.book} /></span> : null}
   </span>;
 }
 
@@ -40,7 +40,7 @@ export function SubjectHeader({ subject, facts, headingId, fallback, locale, t }
   const work = subject.work;
   // A chapter is told by its Book: the Book's hook, status and authors.
   const told = subject.cover.work ?? work;
-  const kind = subject.book ? t.typeChapter : workTypeText(work, locale, t);
+  const kind = subject.isChapter ? t.typeChapter : workTypeText(work, locale);
   const authors = facts?.authors.map(author => author.name) ?? [];
   const status = [kind, completionText(told?.completionStatus, t),
     told?.chapterCount ? t.chapterCount(told.chapterCount) : null].filter(Boolean).join(' · ');

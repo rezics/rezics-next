@@ -8,8 +8,8 @@ import type { AgentSummary, ChapterSummary, DecisionBasis, Loaded, MainClient, M
   PersonRecord, WorkFacts, WorkSummary } from './types.ts';
 
 /**
- * Everything the queue knows about the people and Works its items mention:
- * public names, Work headers with each chapter's Book, chapters' labels and
+ * Everything the queue knows about the people, Works and Posts its items mention:
+ * public names, Work and Book headers, chapter occurrence labels and
  * openings, and Main's moderation context (people's records here, authors,
  * mod cards and prompt text). Each part fills in as reads answer.
  */

@@ -210,7 +210,7 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
     if (summary?.status !== 'available' || summary.disclosure !== 'public'
       || again?.status !== 'available' || again.disclosure !== 'public') return null;
     const facts = serial.get(row.work!.value);
-    if (!facts) throw new WorkReadUnavailable('Zone chapter Work metadata is incomplete');
+    if (!facts) throw new WorkReadUnavailable('Zone chapter Book metadata is incomplete');
     return { work: { id: row.work!.value, revision: row.head!.value, mainVersion: row.main!.value,
       title: summary.name, cover: summary.avatar, types: (types.get(row.work!.value) ?? []).sort(), ...facts,
       primaryCredits: await primaryDiscoveryCredits(session, row.work!.value) },

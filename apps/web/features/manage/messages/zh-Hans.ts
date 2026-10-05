@@ -86,6 +86,7 @@ export default {
   replacesSelection: '将替换此领域之前选定的版本。',
   workUnavailable: '你看不到这部作品。',
   workFallback: '一部作品',
+  chapterOf: insert('《{{book}}》的一个章节', { book: String }),
   noItemTitle: '选择一项',
   noItemHelp: '它的内容和可以做的处理会显示在这里。',
   selectItem: insert('选择 {{title}}', { title: String }),

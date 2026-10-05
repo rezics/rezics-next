@@ -42,7 +42,6 @@ export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...work
   mainVersionRevision: readId, mainVersionLabel: t.Nullable(readName),
   selectedLanguage: t.Nullable(t.String()),
   /** Present when the Work is a chapter: its Book, and where the chapter is read in the Book's contents. */
-  partOf: t.Optional(t.Object({ work: readId, occurrence: t.Nullable(readId) })),
   sourcePosition: readPosition,
   links: t.Object({ versions: t.String(), classifications: t.String(), adoptions: t.String(),
     ratings: t.String(), history: t.String(), credits: t.String(), metadata: t.String(), editions: t.String() }) });

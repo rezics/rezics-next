@@ -9,8 +9,7 @@ export function postBookPlacement(post: string, book: string, main: string,
     ${bookChapterPlacement(post, book, main, occurrence)}`;
 }
 
-/** Content search also admits independently maintained Works used as chapters.
- * Their live Book use supplies a disclosure parent without changing identity. */
+/** A live chapter occurrence supplies its Book without changing the target's identity. */
 export function bookChapterPlacement(resource: string, book: string, main: string,
   occurrence = '?postOccurrence') {
   return `GRAPH ${iri(GRAPHS.current)} {

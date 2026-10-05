@@ -40,8 +40,10 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     expect(classics[0]!.href).toBe(`/w/${uuidToSid(classics[0]!.id.slice(-36))}`);
     // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(post(1).links.target).toBe(`/w/${uuidToSid(post(1).target.id.slice(-36))}`);
+    const subject = subjectOf(iri, { works: {}, chapters: {} }, { workFallback: 'Unknown', typeChapter: 'Chapter',
+      chapterOf: ({ book }) => `A chapter of ${book}` });
     // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
-    expect(subjectOf(iri, { works: {}, chapters: {} }, 'Unknown').href).toBe(`/w/${sid}`);
+    expect(subject.href).toBe(`/w/${sid}`);
   });
 
   test('Main canonical addresses win over a link host and its identity fallback', () => {

@@ -2,11 +2,12 @@ import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { typeEntry } from '../catalogue/types.ts';
 import { chapterPlaceHref } from '../work-page/route.ts';
 import type { ChapterSummary, WorkFacts, WorkSummary } from './types.ts';
+import type { ContractOf } from 'native-i18n';
+import type { ManageMessages } from './messages.ts';
 
 /**
- * The Work a moderation target is about: a Work's own record (`graph`), or
- * the text published for it (`content`, whose resource is the Work, as a
- * chapter's body is). Other owners name no Work.
+ * The catalogue resource a moderation target is about: a Work's record
+ * (`graph`), or published text (`content`, including chapter Posts).
  */
 export function targetWork(target: { owner: string; resource: string }): string | null {
   return (target.owner === 'graph' || target.owner === 'content')
@@ -23,7 +24,7 @@ export interface ShownName { value: string; language?: string; direction?: 'ltr'
  * that chapter.
  */
 export interface Subject {
-  /** The Work the item points at. */
+  /** The Work or Post the item points at. */
   iri: string;
   /** Its header, when Main named it. */
   work: WorkSummary | undefined;
@@ -31,12 +32,13 @@ export interface Subject {
   cover: { iri: string; work: WorkSummary | undefined };
   /** The chapter's label in its Book, or the Work's title; null until Main names it. */
   title: ShownName | null;
-  /** The Book a chapter belongs to; null for any other Work. */
+  /** The Book that places a chapter Post; null for any other subject. */
   book: ShownName | null;
   /** Both as one line of plain text, for toasts, labels and titles. */
   text: string;
   /** Where to open it: the reader at the chapter, or the Work's page. */
   href: string;
+  isChapter: boolean;
   chapter: ChapterSummary | undefined;
 }
 
@@ -44,23 +46,26 @@ const named = (work: WorkSummary | undefined): ShownName | null => work
   ? { value: work.title.value, language: work.title.language, direction: work.title.direction } : null;
 
 /**
- * The subject of a Work IRI from what the queue has read so far; `fallback`
- * names it until Main does. A chapter whose own record is not public is
+ * The subject of a Work or Post IRI from what the queue has read so far.
+ * A chapter whose own record is not public is
  * still placed in its Book by Main's moderation context (`facts`).
  */
 export function subjectOf(iri: string, names: { works: Record<string, WorkSummary>;
-  chapters: Record<string, ChapterSummary>; facts?: Record<string, WorkFacts> }, fallback: string): Subject {
+  chapters: Record<string, ChapterSummary>; facts?: Record<string, WorkFacts> },
+  t: Pick<ContractOf<ManageMessages>, 'workFallback' | 'typeChapter' | 'chapterOf'>): Subject {
   const work = names.works[iri];
-  const partOf = work?.partOf ?? names.facts?.[iri]?.partOf ?? null;
+  const partOf = names.facts?.[iri]?.partOf ?? null;
   const book = partOf ? names.works[partOf.work] : undefined;
   const chapter = names.chapters[iri];
-  // A chapter's own label in its Book's contents; its Work title may still carry the Book's name.
-  const title = chapter?.label ? { value: chapter.label.value, language: chapter.label.language,
-    direction: chapter.direction } : named(work);
+  // A Post's label belongs to its occurrence; it never borrows a Work title.
+  const title = chapter?.label?.value.trim() ? { value: chapter.label.value, language: chapter.label.language,
+    direction: chapter.direction } : partOf ? null : named(work);
   const bookName = partOf ? named(book) : null;
-  const text = [title?.value ?? fallback, bookName?.value].filter(Boolean).join(' · ');
+  const text = title ? [title.value, bookName?.value].filter(Boolean).join(' · ')
+    : partOf ? bookName ? t.chapterOf({ book: bookName.value }) : t.typeChapter : t.workFallback;
   return { iri, work, cover: partOf ? { iri: partOf.work, work: book } : { iri, work }, title, book: bookName, text,
-    href: (partOf && chapterPlaceHref(partOf)) || resourceHref('/w/', work && 'address' in work ? work.address as AddressTarget : iri), chapter };
+    href: (partOf && chapterPlaceHref(partOf)) || resourceHref('/w/', work && 'address' in work ? work.address as AddressTarget : iri),
+    isChapter: partOf !== null, chapter };
 }
 
 /** Whether a Work has its own facts to review: a mod's compatibility, a prompt's or a skill's text. */

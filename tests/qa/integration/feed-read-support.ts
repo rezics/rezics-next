@@ -256,35 +256,35 @@ export async function seedHome(home: HomeStack, works = 6) {
   await grant(`work:edit:${book.work}`, 'work.edit');
   const composition = await json<{ structure: string; revision: string }>(await call('POST', '/v1/compositions', {
     profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: author }, a.token), 201);
-  const chapters: string[] = [];
   const chapterRevisions: { resource_id: string; id: string }[] = [];
   const chapterPhrase = `Published Home chapter ${randomUUID()}`;
+  let compositionHead = composition.revision;
   for (let ordinal = 1; ordinal <= 2; ordinal++) {
-    const chapter = await stack.privateWork(author, `Home chapter ${ordinal}`);
-    chapters.push(chapter.work);
-    const variant = `urn:rezics:variant:${randomUUID()}`;
-    for (const [scope, action] of [[`work:read:${chapter.work}`, 'work.read'], [`content:draft:${chapter.work}`, 'content.draft'],
-      [`content:publish:${chapter.work}`, 'content.publish'],
-      [`content:search-eligibility:${chapter.work}`, 'content.search-eligibility']] as const) await grant(scope, action);
+    const chapter = await json<{ post: string; variantId: string; compositionRevision: string }>(
+      await call('POST', `/v1/works/${book.work.slice(-36)}/chapters`, {
+        profile: 'book-chapter-create-v1', title: `Chapter ${ordinal}`, language: 'en', direction: 'ltr',
+        parent: composition.structure, position: 'last', expectedCompositionHead: compositionHead,
+        actingSubject: author }, a.token));
+    compositionHead = chapter.compositionRevision;
+    const variant = chapter.variantId;
+    for (const [scope, action] of [[`content:draft:${chapter.post}`, 'content.draft'],
+      [`content:publish:${chapter.post}`, 'content.publish'],
+      [`content:search-eligibility:${chapter.post}`, 'content.search-eligibility']] as const) await grant(scope, action);
     const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
-      profile: 'content-text-v1', resourceId: chapter.work, variantId: variant,
+      profile: 'content-text-v1', resourceId: chapter.post, variantId: variant,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
       body: `${chapterPhrase} ${ordinal}`, actingSubject: author }, a.token), 201);
-    chapterRevisions.push({ resource_id: chapter.work, id: saved.revisionId });
+    chapterRevisions.push({ resource_id: chapter.post, id: saved.revisionId });
     const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
     if (exact?.status !== 'available') throw new Error('Missing chapter fixture');
     const publication = await json<{ decision: string }>(await call('POST', '/v1/content-publications', {
       profile: 'content-publication-v1', preparationId: `home-chapter-${randomUUID()}`, revisionId: saved.revisionId,
       expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
-      resourceId: chapter.work, variantId: variant, expectedPublicationHead: null, actingSubject: author }, a.token), 201);
+      resourceId: chapter.post, variantId: variant, expectedPublicationHead: null, actingSubject: author }, a.token), 201);
     await json(await call('POST', '/v1/content-search-eligibility', { profile: 'content-search-eligibility-v1',
-      resourceId: chapter.work, variantId: variant, publicationDecision: publication.decision, expectedEligibilityHead: null,
+      resourceId: chapter.post, variantId: variant, publicationDecision: publication.decision, expectedEligibilityHead: null,
       actingSubject: author, rightsBasis: 'original-contribution', disclosure: 'public' }, a.token), 201);
   }
-  await json(await call('POST', `/v1/compositions/${composition.structure.slice(-36)}/changes`, {
-    profile: 'book-composition', expectedHead: composition.revision, actingSubject: author,
-    operations: chapters.map((target, index) => ({ op: 'insert', parent: composition.structure, position: 'last',
-      role: 'chapter', target, label: { value: `Chapter ${index + 1}`, language: 'en' } })) }, a.token));
   const follow = { profile: 'follow-command-v1', actingSubject: reader, following: true, expectedRevision: null };
   await json(await call('POST', '/v1/follows', { ...follow, target: realm.realm, kind: 'realm' }, b.token));
   await json(await call('POST', '/v1/follows', { ...follow, target: published[1]!.work, kind: 'work' }, b.token));

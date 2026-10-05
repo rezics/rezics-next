@@ -3,10 +3,11 @@ import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { acting, basisFor, book, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
+import { acting, basisFor, book, chapterOne, decidedPage, header, names, now, occurrences, publishedRules, queue, queueApi, queuePage, realm,
   type Recorded } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
 import { ManageFailure } from './parts.tsx';
 import { RealmFrame } from './realm-frame.tsx';
 import { ruleMemoryKey } from './reason-dialog.tsx';
@@ -33,6 +34,40 @@ const meta = {
 } satisfies Meta<typeof QueueView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+/** Main can disclose a chapter's placement while withholding its label and text. */
+export const ChapterWithoutLabel: Story = {
+  args: { initial: { ...queuePage, items: queue.filter(item => item.target.resource === chapterOne), nextCursor: null },
+    names: { ...names, chapters: {} }, api: { ...queueApi(), names: async () => ({ ...names, chapters: {} }) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(detailTitle(canvas)).toHaveTextContent('A chapter of 雨夜书店 · 连载小说');
+    await expect(within(list(canvas)).getByRole('button', { name: /A chapter of 雨夜书店/ })).toBeVisible();
+    await expect(canvas.queryByText('A Work')).toBeNull();
+    if (import.meta.env.VITE_POST_CONVERGENCE_CAPTURE === '1') {
+      const { page } = await import('vitest/browser');
+      await document.fonts.ready;
+      await page.screenshot({ path: '../../../../.temp/post-convergence-queue-en.png' });
+    }
+  },
+};
+
+export const ChapterWithoutLabelTraditionalChinese: Story = {
+  ...ChapterWithoutLabel,
+  args: { ...ChapterWithoutLabel.args, locale: 'zh-Hant', messages: { ...messages, ...zhHant } },
+  globals: { locale: 'zh-Hant' },
+  parameters: { route: { pathname: `/zh-Hant/manage/r/${realm}` } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(detailTitle(canvas)).toHaveTextContent('《雨夜书店 · 连载小说》的一個章節');
+    await expect(detailTitle(canvas)).not.toHaveTextContent('作品');
+    if (import.meta.env.VITE_POST_CONVERGENCE_CAPTURE === '1') {
+      const { page } = await import('vitest/browser');
+      await document.fonts.ready;
+      await page.screenshot({ path: '../../../../.temp/post-convergence-queue-zh-Hant.png' });
+    }
+  },
+};
 
 /** A controlled field can keep only a prefix when another render lands between keystrokes. */
 async function typeValue(field: () => HTMLInputElement | HTMLTextAreaElement, text: string) {

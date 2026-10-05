@@ -1,9 +1,12 @@
 # Native creation and reading
 
-Creators can draft, publish and read source-free Works through the same Work,
-Contribution and Main Version identities used for source adoption. A Post may be
-a standalone utterance or occur more than once in a composition without copying
-its body. Image-only and poll-only publications need no fabricated text document.
+Creators draft and publish chapter Posts placed in a Book by occurrences. A
+chapter adds no Work identity: the Book carries the creative scope, while its
+Post carries publication and custody. The same Post can occur more than once
+without copying its text or discussion. An independently authored, stand-alone
+unit may also be identified as a Work under
+[the identity decision](work-and-release.md#posts-texts-and-works).
+Image-only and poll-only publications need no fabricated text document.
 The [BOOK cases](../../scripts/qa/cases/book-and-creation.ts) and
 [publication owner](../../services/main/src/modules/content-publication/) carry
 the implemented command and exact-history behavior.

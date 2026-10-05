@@ -8,7 +8,7 @@ import { STUDIO_CHAPTER_COST } from '../../../services/main/src/modules/studio/c
 import { authorWorkGeneration } from '../../../services/main/src/modules/access/author-baseline.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
-import { canonicalChapterWorks } from '../../../services/main/src/modules/structure/chapter-work.ts';
+import { postBooks } from '../../../services/main/src/modules/structure/post-book-placements.ts';
 import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
@@ -192,7 +192,7 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     expect(firstChapters.page.items.map(item => item.occurrence)).toEqual([chapter.occurrence]);
     expect(firstChapters.facts).toMatchObject([{ occurrence: chapter.occurrence,
       writer: f.actor, state: 'empty', target: chapter.post, label: { value: '第一章' } }]);
-    const mapping = await canonicalChapterWorks(new WorkReadSession(
+    const mapping = await postBooks(new WorkReadSession(
       { environment: f.env } as MainWorkDependencies,
       new Request('http://main.local'), {},
       { dataEpoch: f.env.lineage.dataEpoch, sequence: chapter.compositionRevision }),

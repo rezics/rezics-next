@@ -4,7 +4,7 @@ import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/cre
 import { type PublicHubCard, readPublicHubCards } from '../hub/public-card.ts';
 import type { PublicModCard } from '../package/mod-resolution.ts';
 import { fenceAuthorNames, readAuthorNames } from '../source/author-name-read.ts';
-import { chapterPlace } from '../structure/chapter-work.ts';
+import { postBookPlace } from '../structure/post-book-placements.ts';
 import { WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
 import { MODERATION_CONTEXT_COST, type personContext, type workContext } from './read-contract.ts';
 
@@ -91,7 +91,7 @@ const cut = (text: string, limit: number) => {
  */
 export async function readWorkContext(session: WorkReadSession, works: readonly string[]): Promise<WorkContext[]> {
   if (!works.length) return [];
-  const places = await Promise.all(works.map(work => chapterPlace(session, work)));
+  const places = await Promise.all(works.map(work => postBookPlace(session, work)));
   const books = [...new Set(places.flatMap(place => place ? [place.work] : []))].filter(book => !works.includes(book));
   const summaries = await session.summaries([...works, ...books]);
   const available = new Set([...works, ...books].filter((_, index) => {

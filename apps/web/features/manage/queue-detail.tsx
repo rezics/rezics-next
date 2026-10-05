@@ -99,7 +99,7 @@ export function QueueDetail({ item, names, draft, basis, allowed, authority, rul
       <p className="mt-1 text-muted-foreground text-sm">{t.noItemHelp}</p>
     </section>;
   }
-  const subject = subjectOf(item.target.resource, names, t.workFallback);
+  const subject = subjectOf(item.target.resource, names, t);
   // A chapter's own context carries its Book's authors; a Book's own, when it is itself in the queue.
   const facts = names.facts[subject.iri] ?? names.facts[subject.cover.iri];
   const reason = reasonLabel(item, t, realmRules);

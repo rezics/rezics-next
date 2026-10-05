@@ -84,6 +84,7 @@ export default {
   replacesSelection: '以前このコミュニティが選んだバージョンを置き換えます。',
   workUnavailable: 'この作品は表示できません。',
   workFallback: '作品',
+  chapterOf: insert('『{{book}}』の章', { book: String }),
   noItemTitle: '項目を選択してください',
   noItemHelp: '選択した項目の内容と操作の選択肢がここに表示されます。',
   selectItem: insert('{{title}}を選択', { title: String }),

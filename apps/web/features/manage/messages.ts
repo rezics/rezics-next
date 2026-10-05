@@ -90,6 +90,7 @@ export const messages = {
   replacesSelection: 'Replaces the version this Realm selected before.',
   workUnavailable: 'This Work isn’t visible to you.',
   workFallback: 'A Work',
+  chapterOf: insert('A chapter of {{book}}', { book: String }),
   noItemTitle: 'Choose an item',
   noItemHelp: 'Its content and your choices appear here.',
   selectItem: insert('Select {{title}}', { title: String }),
