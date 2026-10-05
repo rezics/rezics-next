@@ -9,13 +9,14 @@ import { ratingsUntilMean, StarMeter } from '../catalogue/rating.tsx';
 import { messages as shelfMessages } from '../catalogue/messages.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
+import { bars, figuresOfRating, scoreView, type Figures } from '../scoped-rating/score.ts';
 import { formatNumber, formatShare } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
 import { ScopeOffer, type ScopeView } from './scope-bar.tsx';
 import { scopeName } from './scope-labels.ts';
-import type { Loaded, RatingRead, RatingSummary, StatCount, WorkStats } from './types.ts';
+import type { Loaded, RatingRead, StatCount, WorkStats } from './types.ts';
 
 export const RATINGS_REGION = 'work-ratings';
 /** `REVIEWS_REGION` in reviews.tsx, a client module whose constants a server component can't import. */
@@ -35,70 +36,75 @@ function counted(
     : atLeast({ count: formatNumber(count.value, locale) });
 }
 
-/** Goodreads' distribution: "5 stars", a bar in the star color, the count and its share. */
+/** What the one rating figure and its histogram draw with: the Work page's words, or another feature's carrying the same keys. */
+export type RatingFigureMessages = Pick<
+  WorkPageMessages,
+  'ratingCount' | 'average' | 'distribution' | 'stars' | 'barCount'
+>;
+
+/**
+ * Goodreads' distribution: "5 stars", a bar in the star color, the count and its share, or a strip of columns where
+ * space is short. The one histogram of every score: nothing is drawn where nobody has rated, never a chart of zeros.
+ */
 export function Distribution({
-  summary,
+  figures,
   locale,
   messages,
   compact = false,
 }: {
-  summary: RatingSummary;
+  figures: Figures;
   locale: UiLocale;
-  messages: WorkPageMessages;
+  messages: RatingFigureMessages;
   compact?: boolean;
 }) {
   const t = materializeData(messages, { locale });
-  const { scale } = summary;
-  if (!scale) return null;
-  const counts = new Map(summary.distribution.map((bucket) => [bucket.value, bucket.count]));
-  const values = Array.from({ length: scale.max - scale.min + 1 }, (_, index) => scale.max - index);
+  const rows = bars(figures);
+  if (!rows) return null;
+  const label = (value: number, count: number) =>
+    `${t.stars(value)}: ${t.barCount({ count: formatNumber(count, locale), share: formatShare(count, figures.count, locale) })}`;
   if (compact) {
-    if (!summary.count) return null;
-    const peak = Math.max(...counts.values(), 1);
+    const peak = Math.max(...rows.map((row) => row.count), 1);
     return (
       <ol data-rating-strip aria-label={t.distribution} className="flex h-2.5 max-w-48 gap-0.5">
-        {values.map((value) => {
-          const count = counts.get(value) ?? 0;
-          const label = `${t.stars(value)}: ${t.barCount({ count: formatNumber(count, locale), share: formatShare(count, summary.count, locale) })}`;
-          return (
-            <li key={value} className="relative flex-1 rounded-xs bg-muted" title={label}>
-              <span className="sr-only">{label}</span>
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-0 rounded-xs bg-rating/75"
-                style={{ height: `${(count / peak) * 100}%` }}
-              />
-            </li>
-          );
-        })}
+        {rows.map(({ value, count }) => (
+          <li
+            key={value}
+            className="relative flex-1 rounded-xs bg-muted"
+            title={label(value, count)}
+          >
+            <span className="sr-only">{label(value, count)}</span>
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-0 bottom-0 rounded-xs bg-rating/75"
+              style={{ height: `${(count / peak) * 100}%` }}
+            />
+          </li>
+        ))}
       </ol>
     );
   }
   return (
     <ol aria-label={t.distribution} className="grid gap-2">
-      {values.map((value) => {
-        const count = counts.get(value) ?? 0;
-        return (
-          <li
-            key={value}
-            className="grid grid-cols-[3.75rem_minmax(0,1fr)_7rem] items-center gap-3 text-sm"
-          >
-            <span className="whitespace-nowrap font-medium">{t.stars(value)}</span>
-            <span aria-hidden="true" className="h-3 overflow-hidden rounded-full bg-muted">
-              <span
-                className="block h-full rounded-full bg-rating"
-                style={{ width: `${summary.count ? (count / summary.count) * 100 : 0}%` }}
-              />
-            </span>
-            <span className="text-muted-foreground tabular-nums">
-              {t.barCount({
-                count: formatNumber(count, locale),
-                share: formatShare(count, summary.count, locale),
-              })}
-            </span>
-          </li>
-        );
-      })}
+      {rows.map(({ value, count }) => (
+        <li
+          key={value}
+          className="grid grid-cols-[3.75rem_minmax(0,1fr)_7rem] items-center gap-3 text-sm"
+        >
+          <span className="whitespace-nowrap font-medium">{t.stars(value)}</span>
+          <span aria-hidden="true" className="h-3 overflow-hidden rounded-full bg-muted">
+            <span
+              className="block h-full rounded-full bg-rating"
+              style={{ width: `${(count / figures.count) * 100}%` }}
+            />
+          </span>
+          <span className="text-muted-foreground tabular-nums">
+            {t.barCount({
+              count: formatNumber(count, locale),
+              share: formatShare(count, figures.count, locale),
+            })}
+          </span>
+        </li>
+      ))}
     </ol>
   );
 }
@@ -118,53 +124,65 @@ const countLink = cn(
 );
 
 /**
- * The mean as Goodreads sets it: stars, the number large in the Work-title
- * face, then the counts ("1,287 ratings · 214 reviews").
+ * The one score figure, only as far as it is true. A mean shows as stars and the number large in the Work-title face,
+ * then the counts ("1,287 ratings · 214 reviews"); below the question's display threshold the count shows with how
+ * many more ratings reveal the average; with no ratings it shows `empty` or nothing. Never a zero or a placeholder
+ * star. `sm` sets it out for a row, `md` and `lg` for a heading.
  */
 export function Mean({
-  summary,
+  figures,
   locale,
   messages,
   size = 'lg',
   href,
   reviews,
+  empty,
   className,
 }: {
-  summary: RatingSummary;
+  figures: Figures;
   locale: UiLocale;
-  messages: WorkPageMessages;
-  size?: 'md' | 'lg';
+  messages: RatingFigureMessages;
+  size?: 'sm' | 'md' | 'lg';
   href?: string;
   /** The reviews answering the same question, beside the ratings count. */
   reviews?: ReactNode;
+  /** What to say where nobody has rated; omitted, nothing is drawn. */
+  empty?: string;
   className?: string;
 }) {
   const t = materializeData(messages, { locale });
-  const max = summary.scale?.max ?? 5;
-  const shown =
-    summary.mean !== null && (!('meanDisplay' in summary) || summary.meanDisplay === 'shown');
-  const mean = shown ? formatNumber(summary.mean!, locale, 2) : null;
-  const count = t.ratingCount(summary.count);
+  const view = scoreView(figures);
+  if (view.kind === 'none')
+    return empty ? (
+      <p data-rating-mean="none" className={cn('text-muted-foreground text-sm', className)}>
+        {empty}
+      </p>
+    ) : null;
+  const { max } = figures;
+  const mean = view.kind === 'shown' ? formatNumber(view.mean, locale, 2) : null;
+  const count = t.ratingCount(figures.count);
   const remaining =
-    !shown && 'displayThreshold' in summary
-      ? ratingsUntilMean(summary.count, summary.displayThreshold, locale)
+    view.kind === 'withheld'
+      ? ratingsUntilMean(figures.count, figures.displayThreshold, locale)
       : null;
   return (
     <div
-      data-rating-mean={shown ? 'shown' : 'withheld'}
+      data-rating-mean={view.kind}
       className={cn('flex flex-wrap items-center gap-x-3 gap-y-1', className)}
     >
-      {shown ? (
+      {view.kind === 'shown' ? (
         <>
           <StarMeter
-            mean={summary.mean!}
+            mean={view.mean}
             max={max}
-            className={size === 'lg' ? 'text-[1.75rem]' : 'text-2xl'}
+            className={size === 'lg' ? 'text-[1.75rem]' : size === 'md' ? 'text-2xl' : 'text-lg'}
           />
           <p
             className={cn(
-              'font-semibold font-work-title tabular-nums tracking-tight',
-              size === 'lg' ? 'text-4xl' : 'text-3xl',
+              'font-semibold tabular-nums tracking-tight',
+              size === 'lg' && 'font-work-title text-4xl',
+              size === 'md' && 'font-work-title text-3xl',
+              size === 'sm' && 'text-base',
             )}
           >
             {mean}
@@ -175,7 +193,10 @@ export function Mean({
             {max === 5 ? null : (
               <span
                 aria-hidden="true"
-                className="ms-1 font-normal font-sans text-base text-muted-foreground"
+                className={cn(
+                  'ms-1 font-normal font-sans text-muted-foreground',
+                  size === 'sm' ? 'text-sm' : 'text-base',
+                )}
               >
                 / {formatNumber(max, locale)}
               </span>
@@ -261,7 +282,8 @@ export function RatingLine({
       </>
     );
   const { summary } = ratings.data;
-  if (!summary.count) {
+  const figures = figuresOfRating(summary);
+  if (!figures?.count) {
     return (
       <div className={group}>
         <p className="text-muted-foreground text-sm">{t.noRatingsGlobal}</p>
@@ -278,7 +300,7 @@ export function RatingLine({
   return (
     <div className={group}>
       <Mean
-        summary={summary}
+        figures={figures}
         locale={locale}
         messages={messages}
         size="md"
@@ -286,8 +308,8 @@ export function RatingLine({
         reviews={reviews}
         className="justify-start"
       />
-      {'meanDisplay' in summary && summary.meanDisplay !== 'shown' ? (
-        <Distribution summary={summary} locale={locale} messages={messages} />
+      {figures.mean === null ? (
+        <Distribution figures={figures} locale={locale} messages={messages} />
       ) : null}
       {reading}
       {want}
@@ -393,10 +415,11 @@ export function RatingSummaryRegion({
       </div>
     );
   } else {
+    const figures = figuresOfRating(summary)!;
     body = (
       <div className="grid gap-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
-        <Mean summary={summary} locale={locale} messages={messages} />
-        <Distribution summary={summary} locale={locale} messages={messages} />
+        <Mean figures={figures} locale={locale} messages={messages} />
+        <Distribution figures={figures} locale={locale} messages={messages} />
       </div>
     );
   }
@@ -487,6 +510,7 @@ export function TargetRatingsRegion({
     );
   }
   const { summary } = ratings.data;
+  const figures = figuresOfRating(summary);
   return (
     <Region id={RATINGS_REGION} title={t.ratings}>
       <p className="text-muted-foreground text-sm">{subject}</p>
@@ -499,14 +523,12 @@ export function TargetRatingsRegion({
           {ratings.data.context.displayQuestion.value}
         </p>
       ) : null}
-      {summary.status !== 'available' || !summary.scale || !summary.count ? (
-        <EmptyScope
-          title={summary.scale && summary.status === 'available' ? t.noRatingsGlobal : none}
-        />
+      {!figures?.count ? (
+        <EmptyScope title={figures ? t.noRatingsGlobal : none} />
       ) : (
         <div className="grid gap-6 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
-          <Mean summary={summary} locale={locale} messages={messages} />
-          <Distribution summary={summary} locale={locale} messages={messages} />
+          <Mean figures={figures} locale={locale} messages={messages} />
+          <Distribution figures={figures} locale={locale} messages={messages} />
         </div>
       )}
     </Region>

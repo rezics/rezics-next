@@ -3,7 +3,7 @@
 // Shapes come from the Eden types, so a contract change breaks the stories' build as well as the components'.
 import { uuidToSid } from '@rezics/model/address';
 import { direction } from '@rezics/main/language';
-import { memoryOwnRatings, type ProjectionList, type ProjectionRead, type QuestionScope, type ScopedRatingApi } from './api.ts';
+import { type ProjectionList, type ProjectionRead, type QuestionScope, type ScopedRatingApi } from './api.ts';
 import { type FrameCandidate, type FrameDimension, sameProjection } from './frames.ts';
 import { staticFrameSource } from './sources.ts';
 import type { Failure, Outcome, ProjectionView, Question, ResourceSummary, Rollup, RollupMember, Subject, TargetRating }
@@ -18,6 +18,9 @@ const fail = <T>(failure: Failure): Outcome<T> => ({ ok: false, failure });
 const name = (value: string, language = 'en') => ({ value, language, direction: direction(language, value), basis: 'requested' as const });
 
 // ── What is rated, and where ───────────────────────────────────────────────
+
+/** The Work whose episodes the fixtures' places are in. */
+export const workIri = iri('c0de');
 
 export const subject: Subject = { iri: iri('c001'), name: { value: 'Elizabeth Bennet', language: 'en', direction: direction('en', 'Elizabeth Bennet') } };
 
@@ -43,7 +46,7 @@ export const sources = [
 /** Summary parts are plain summaries of the subject and each frame. */
 function part(reference: string, value: string, type: 'character' | 'occurrence' | 'resource', key: string) {
   return { reference, status: 'available' as const, type, base: type === 'occurrence' ? 'occurrence' as const : 'resource' as const,
-    work: null, disclosure: 'public' as const, address: { prefix: '/e/' as const, key: uuidToSid(reference.slice(-36)), suffixSource: value },
+    work: type === 'occurrence' ? workIri : null, disclosure: 'public' as const, address: { prefix: '/e/' as const, key: uuidToSid(reference.slice(-36)), suffixSource: value },
     name: name(value), avatar: { kind: 'fallback' as const, policy: 'avatar-fallback-v1' as const, key, resourceType: type } };
 }
 
@@ -136,7 +139,9 @@ const key = (target: string, context: string) => `${target}|${context}`;
 export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi {
   const places = [...scenario.places ?? []];
   const histograms = { ...scenario.histograms };
-  const own = memoryOwnRatings();
+  // What this person has rated since the page opened; the scenario holds what they rated before.
+  const given = new Map<string, number | null>();
+  const ownOf = (target: string, context: string) => given.has(key(target, context)) ? given.get(key(target, context))! : scenario.own?.[key(target, context)] ?? null;
   const pageSize = scenario.pageSize ?? 20;
   let minted = 0;
 
@@ -215,16 +220,19 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       await wait(scenario.delay ?? 0);
       if (!scenario.signedIn) return fail('sign-in');
       if (scenario.rateFails) return fail(scenario.rateFails);
-      const before = own.get('me', context, target)?.value ?? scenario.own?.[key(target, context)] ?? null;
+      const before = ownOf(target, context);
       const buckets = [...bucketsOf(target, context)];
       // A rating replaces the person's earlier one: the histogram moves one count, never two.
       if (before !== null) buckets[before - 1] = Math.max(0, (buckets[before - 1] ?? 0) - 1);
       if (value !== null) buckets[value - 1] = (buckets[value - 1] ?? 0) + 1;
       histograms[key(target, context)] = buckets;
-      own.set('me', context, target, value === null ? null : { value, revision: iri('a0000000') });
+      given.set(key(target, context), value);
       return ok({ value, pending: false });
     },
-    own: (target, context) => own.get('me', context, target)?.value ?? scenario.own?.[key(target, context)] ?? null,
+    async own(target, context) {
+      await wait(scenario.delay ?? 0);
+      return scenario.signedIn ? ok({ value: ownOf(target, context) }) : fail('sign-in');
+    },
     async rollup(context, targets, formula, ranked = false) {
       await wait(scenario.delay ?? 0);
       return ok(rollup(context, targets, formula, ranked));

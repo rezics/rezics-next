@@ -13,6 +13,5 @@ export const formatNumber = (value: number, locale: UiLocale, digits = 0) =>
 export const formatShare = (part: number, whole: number, locale: UiLocale) =>
   new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(whole ? part / whole : 0);
 
-/** A mean to one decimal, as ratings on a ten-point scale are read ("8.4"), without a trailing zero ("8"). */
-export const formatMean = (value: number, locale: UiLocale) =>
-  new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value);
+/** A mean to two decimals, as the Work page sets every average ("8.44"), so one number never reads two ways. */
+export const formatMean = (value: number, locale: UiLocale) => formatNumber(value, locale, 2);

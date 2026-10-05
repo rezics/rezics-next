@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { MainClient } from '../features/discover/types.ts';
-import { mainScopedRatingApi, memoryOwnRatings } from '../features/scoped-rating/api.ts';
+import { mainScopedRatingApi } from '../features/scoped-rating/api.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
 import { readingPositionSource, staticFrameSource } from '../features/scoped-rating/sources.ts';
 
@@ -35,7 +35,7 @@ const summaries = { data: { summaries: [place.summary] } };
 
 test('first use gets or creates the one place and reads its summary for the header', async () => {
   const { main, calls } = fakeMain({ projection: [write(true)], summaries: [summaries] });
-  const api = mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
   const answer = await api.projection(fixture.subject.iri, [fixture.episodes[2]!.iri]);
   expect(answer).toMatchObject({ ok: true, data: { created: true, projection: { id: place.projection.id } } });
   expect(calls[0]).toMatchObject({ name: 'projection', body: { subject: fixture.subject.iri, frames: [fixture.episodes[2]!.iri], actingSubject: player } });
@@ -46,7 +46,7 @@ test('first use gets or creates the one place and reads its summary for the head
 test('a first use still settling is asked again under the same key until Main answers with the place', async () => {
   const pending = { data: { operationId: 'op', status: 'reconciling', phase: 'projection', result: null, retry: { allowed: true, afterMs: 0 } } };
   const { main, calls } = fakeMain({ projection: [pending, pending, write(false)], summaries: [summaries] });
-  const answer = await mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main }).projection(fixture.subject.iri, [fixture.episodes[2]!.iri]);
+  const answer = await mainScopedRatingApi({ actingSubject: player, main }).projection(fixture.subject.iri, [fixture.episodes[2]!.iri]);
   expect(answer.ok).toBe(true);
   const keys = calls.filter(call => call.name === 'projection').map(call => call.key);
   expect(keys).toHaveLength(3);
@@ -55,90 +55,119 @@ test('a first use still settling is asked again under the same key until Main an
 
 test('a conflict while creating is asked again once as a new command; a refusal is reported as it is', async () => {
   const conflicted = fakeMain({ projection: [{ error: { status: 409 } }, write(true)], summaries: [summaries] });
-  expect((await mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main: conflicted.main })
+  expect((await mainScopedRatingApi({ actingSubject: player, main: conflicted.main })
     .projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).ok).toBe(true);
   const keys = conflicted.calls.filter(call => call.name === 'projection').map(call => call.key);
   expect(new Set(keys).size).toBe(2);
   const refused = fakeMain({ projection: [{ error: { status: 422 } }] });
-  expect(await mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main: refused.main })
+  expect(await mainScopedRatingApi({ actingSubject: player, main: refused.main })
     .projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).toEqual({ ok: false, failure: 'invalid' });
 });
 
 test('signed out, nothing is written and the answer says to sign in', async () => {
   const { main, calls } = fakeMain({});
-  const api = mainScopedRatingApi({ actingSubject: null, own: memoryOwnRatings(), main });
+  const api = mainScopedRatingApi({ actingSubject: null, main });
   expect(await api.projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).toEqual({ ok: false, failure: 'sign-in' });
   expect(await api.rate(place.projection.id, fixture.writing.context, 8)).toEqual({ ok: false, failure: 'sign-in' });
   expect(calls).toEqual([]);
 });
 
 const saved = (revision: string) => ({ data: { profile: 'realm-target-rating-observation-v1', observationRevision: revision } });
+const target = place.projection.id;
+const question = fixture.writing.context;
+const mine = (own: { revisionHead: string; value: number | null } | null) => ({ data: { profile: 'target-rating-read-v1', scope: { kind: 'mine' },
+  context: question, status: 'available', targetGrain: 'projection', count: own?.value ? 1 : 0, mean: own?.value ?? null,
+  own: own ? { observation: fixture.iri('0b01'), availability: own.value === null ? 'withdrawn' : 'available', ...own } : null } });
+const stale = (currentHead: string | null) => ({ error: { status: 409, value: { code: 'stale_head', currentHead } } });
+const heads = (calls: Call[]) => calls.filter(call => call.name === 'observation')
+  .map(call => (call.body as { expectedRevisionHead: string | null }).expectedRevisionHead);
+
+test('a person’s own rating is read from Main, so a new device shows it without any browser memory', async () => {
+  const { main, calls } = fakeMain({ rating: [mine({ revisionHead: fixture.iri('a1'), value: 8 })] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  expect(await api.own(target, question)).toEqual({ ok: true, data: { value: 8 } });
+  expect(calls[0]).toMatchObject({ name: 'rating', query: { scope: 'mine', context: question, actingSubject: player } });
+  const withdrawn = fakeMain({ rating: [mine({ revisionHead: fixture.iri('a2'), value: null })] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: withdrawn.main }).own(target, question)).toEqual({ ok: true, data: { value: null } });
+  const first = fakeMain({ rating: [mine(null)] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: first.main }).own(target, question)).toEqual({ ok: true, data: { value: null } });
+});
+
+test('signed out, nothing is read or written for the person', async () => {
+  const { main, calls } = fakeMain({});
+  expect(await mainScopedRatingApi({ actingSubject: null, main }).own(target, question)).toEqual({ ok: false, failure: 'sign-in' });
+  expect(calls).toEqual([]);
+});
 
 test('a rating names the head it replaces and each write has its own key', async () => {
-  const { main, calls } = fakeMain({ observation: [saved(fixture.iri('a1')), saved(fixture.iri('a2'))] });
-  const own = memoryOwnRatings();
-  const api = mainScopedRatingApi({ actingSubject: player, own, main });
-  expect(await api.rate(place.projection.id, fixture.writing.context, 7)).toEqual({ ok: true, data: { value: 7, pending: false } });
-  expect(await api.rate(place.projection.id, fixture.writing.context, 9)).toMatchObject({ ok: true });
-  const bodies = calls.map(call => call.body as { expectedRevisionHead: string | null; value: number; context: string; target: string });
-  expect(bodies[0]).toMatchObject({ expectedRevisionHead: null, value: 7, context: fixture.writing.context, target: place.projection.id });
-  expect(bodies[1]).toMatchObject({ expectedRevisionHead: fixture.iri('a1'), value: 9 });
-  expect(calls[0]?.key).not.toBe(calls[1]?.key);
-  expect(api.own(place.projection.id, fixture.writing.context)).toBe(9);
+  const { main, calls } = fakeMain({ rating: [mine(null)], observation: [saved(fixture.iri('a1')), saved(fixture.iri('a2'))] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  expect(await api.rate(target, question, 7)).toEqual({ ok: true, data: { value: 7, pending: false } });
+  expect(await api.rate(target, question, 9)).toMatchObject({ ok: true });
+  expect(heads(calls)).toEqual([null, fixture.iri('a1')]);
+  const bodies = calls.filter(call => call.name === 'observation');
+  expect(bodies[0]?.body).toMatchObject({ value: 7, context: question, target });
+  expect(bodies[0]?.key).not.toBe(bodies[1]?.key);
+});
+
+test('re-rating on a device that has never seen the rating starts from the head Main holds', async () => {
+  const { main, calls } = fakeMain({ rating: [mine({ revisionHead: fixture.iri('a1'), value: 5 })], observation: [saved(fixture.iri('a2'))] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  expect(await api.rate(target, question, 8)).toMatchObject({ ok: true });
+  // The read came first: the write is never sent blind.
+  expect(calls.map(call => call.name)).toEqual(['rating', 'observation']);
+  expect(heads(calls)).toEqual([fixture.iri('a1')]);
 });
 
 test('withdrawing a rating keeps the head so it can be given again', async () => {
-  const { main } = fakeMain({ observation: [saved(fixture.iri('a1')), saved(fixture.iri('a2')), saved(fixture.iri('a3'))] });
-  const api = mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main });
-  await api.rate(place.projection.id, fixture.writing.context, 7);
-  await api.rate(place.projection.id, fixture.writing.context, null);
-  expect(api.own(place.projection.id, fixture.writing.context)).toBeNull();
-  const again = await api.rate(place.projection.id, fixture.writing.context, 6);
-  expect(again.ok).toBe(true);
+  const { main, calls } = fakeMain({ rating: [mine(null)], observation: [saved(fixture.iri('a1')), saved(fixture.iri('a2')), saved(fixture.iri('a3'))] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  await api.rate(target, question, 7);
+  await api.rate(target, question, null);
+  expect((await api.rate(target, question, 6)).ok).toBe(true);
+  expect(heads(calls)).toEqual([null, fixture.iri('a1'), fixture.iri('a2')]);
 });
 
-test('a write another press on this device settled first is applied again on the head it left', async () => {
-  const own = memoryOwnRatings();
-  const { main, calls } = fakeMain({ observation: [{ error: { status: 409 } }, saved(fixture.iri('a2'))] });
-  // The other press landed between the read of the head and the answer.
-  const original = main;
-  let first = true;
-  const racing = () => {
-    const client = original();
-    const post = client.v1['rating-observations'].post;
-    client.v1['rating-observations'].post = (async (...args: Parameters<typeof post>) => {
-      if (first) { first = false; own.set(player, fixture.writing.context, place.projection.id, { value: 5, revision: fixture.iri('a1') }); }
-      return post(...args);
-    }) as typeof post;
-    return client;
-  };
-  const answer = await mainScopedRatingApi({ actingSubject: player, own, main: racing }).rate(place.projection.id, fixture.writing.context, 8);
-  expect(answer.ok).toBe(true);
-  expect(calls.map(call => (call.body as { expectedRevisionHead: string | null }).expectedRevisionHead)).toEqual([null, fixture.iri('a1')]);
+test('a stale write is retried once on the current head Main returns, as a new command', async () => {
+  const { main, calls } = fakeMain({ rating: [mine(null)], observation: [stale(fixture.iri('a1')), saved(fixture.iri('a2'))] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  expect(await api.rate(target, question, 8)).toEqual({ ok: true, data: { value: 8, pending: false } });
+  expect(heads(calls)).toEqual([null, fixture.iri('a1')]);
+  const keys = calls.filter(call => call.name === 'observation').map(call => call.key);
+  expect(new Set(keys).size).toBe(2);
+  // The next write starts from the head the retry left, with no further read.
+  await mainScopedRatingApi({ actingSubject: player, main }).rate(target, question, 4);
 });
 
-test('a rating changed elsewhere is reported as a conflict, never overwritten', async () => {
-  const own = memoryOwnRatings({ [`${player}\n${fixture.writing.context}\n${place.projection.id}`]: { value: 5, revision: fixture.iri('a1') } });
-  const { main, calls } = fakeMain({ observation: [{ error: { status: 409 } }] });
-  const answer = await mainScopedRatingApi({ actingSubject: player, own, main }).rate(place.projection.id, fixture.writing.context, 8);
+test('a rating changed elsewhere again is reported as a conflict after one retry, never overwritten', async () => {
+  const { main, calls } = fakeMain({ rating: [mine(null)], observation: [stale(fixture.iri('a1')), stale(fixture.iri('a2'))] });
+  const answer = await mainScopedRatingApi({ actingSubject: player, main }).rate(target, question, 8);
   expect(answer).toEqual({ ok: false, failure: 'conflict' });
-  expect(calls).toHaveLength(1);
-  // The value on screen stays the one Main last confirmed.
-  expect(own.get(player, fixture.writing.context, place.projection.id)?.value).toBe(5);
+  expect(heads(calls)).toEqual([null, fixture.iri('a1')]);
 });
 
-test('a write Access admitted but has not applied is saved as pending', async () => {
-  const { main } = fakeMain({ observation: [{ data: { operationId: 'op', status: 'reconciling' } }] });
-  const own = memoryOwnRatings();
-  expect(await mainScopedRatingApi({ actingSubject: player, own, main }).rate(place.projection.id, fixture.writing.context, 8))
-    .toEqual({ ok: true, data: { value: 8, pending: true } });
-  expect(own.get(player, fixture.writing.context, place.projection.id)).toBeNull();
+test('a refusal that names no head is a conflict at once, and any other refusal is reported as it is', async () => {
+  const unknown = fakeMain({ rating: [mine(null)], observation: [stale(null)] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: unknown.main }).rate(target, question, 8)).toEqual({ ok: false, failure: 'conflict' });
+  expect(heads(unknown.calls)).toEqual([null]);
+  const denied = fakeMain({ rating: [mine(null)], observation: [{ error: { status: 403 } }] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: denied.main }).rate(target, question, 8)).toEqual({ ok: false, failure: 'denied' });
+  expect(heads(denied.calls)).toEqual([null]);
+});
+
+test('a write Access admitted but has not applied is saved as pending, and the next write reads the head again', async () => {
+  const { main, calls } = fakeMain({ rating: [mine(null), mine({ revisionHead: fixture.iri('a1'), value: 8 })],
+    observation: [{ data: { operationId: 'op', status: 'reconciling' } }, saved(fixture.iri('a2'))] });
+  const api = mainScopedRatingApi({ actingSubject: player, main });
+  expect(await api.rate(target, question, 8)).toEqual({ ok: true, data: { value: 8, pending: true } });
+  expect(await api.rate(target, question, 6)).toMatchObject({ ok: true });
+  expect(heads(calls)).toEqual([null, fixture.iri('a1')]);
 });
 
 test('questions are read for the scope, and every page of them', async () => {
   const page = (items: unknown[], nextCursor: string | null) => ({ data: { items, nextCursor } });
   const { main, calls } = fakeMain({ questions: [page([fixture.writing], 'c2'), page([fixture.strength], null)] });
-  const api = mainScopedRatingApi({ actingSubject: null, own: memoryOwnRatings(), main });
+  const api = mainScopedRatingApi({ actingSubject: null, main });
   const answer = await api.questions(place.projection.id, { kind: 'realm', realm: fixture.iri('9002') });
   expect(answer).toMatchObject({ ok: true, data: [{ context: fixture.writing.context }, { context: fixture.strength.context }] });
   expect(calls[0]?.query).toMatchObject({ scope: 'realm', realm: fixture.iri('9002') });
@@ -147,13 +176,13 @@ test('questions are read for the scope, and every page of them', async () => {
 
 test('a rating read for a target with no question is refused as invalid rather than shown as a Work rating', async () => {
   const { main } = fakeMain({ rating: [{ data: { profile: 'work-rating-read-v1', count: 3 } }] });
-  expect(await mainScopedRatingApi({ actingSubject: null, own: memoryOwnRatings(), main })
+  expect(await mainScopedRatingApi({ actingSubject: null, main })
     .rating(place.projection.id, fixture.writing.context, { kind: 'global' })).toEqual({ ok: false, failure: 'invalid' });
 });
 
 test('a roll-up is requested for one question and its formula, acting as the reader', async () => {
   const { main, calls } = fakeMain({ rollup: [{ data: { profile: 'rating-rollup-v1' } }] });
-  await mainScopedRatingApi({ actingSubject: player, own: memoryOwnRatings(), main })
+  await mainScopedRatingApi({ actingSubject: player, main })
     .rollup(fixture.writing.context, [place.projection.id], 'mean-of-means', true);
   expect(calls[0]?.body).toEqual({ profile: 'rating-rollup-v1', context: fixture.writing.context, targets: [place.projection.id],
     formula: 'mean-of-means', rank: true, actingSubject: player });
@@ -161,7 +190,7 @@ test('a roll-up is requested for one question and its formula, acting as the rea
 
 test('an unreachable Main is a failure to retry, not an exception', async () => {
   const main = (() => { throw new Error('offline'); }) as unknown as () => MainClient;
-  expect(await mainScopedRatingApi({ actingSubject: null, own: memoryOwnRatings(), main }).questions(place.projection.id, { kind: 'global' }))
+  expect(await mainScopedRatingApi({ actingSubject: null, main }).questions(place.projection.id, { kind: 'global' }))
     .toEqual({ ok: false, failure: 'unavailable' });
 });
 

@@ -8,6 +8,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { failureOf } from './failure.ts';
 import { messages as workMessages, type WorkPageMessages } from './messages.ts';
 import { ratingsUntilMean } from '../catalogue/rating.tsx';
+import { figuresOfRating } from '../scoped-rating/score.ts';
 import { Distribution } from './ratings.tsx';
 import { aggregateOf, type ReviewAggregate, type ReviewGrain, type ReviewScopeQuery, type ReviewTarget }
   from './reviews-grain-model.tsx';
@@ -108,6 +109,6 @@ export function AggregateScope({ aggregate, locale, t }: { aggregate: ReviewAggr
       <span>{t.aggregateMean({ mean, max: String(aggregate.scale?.max ?? '') })}</span></> : null}
   </p>{withheld ? <>
     <p>{ratingsUntilMean(summary.count, summary.displayThreshold, locale)}</p>
-    <Distribution summary={summary} locale={locale} messages={workMessages[locale]} />
+    <Distribution figures={figuresOfRating(summary)!} locale={locale} messages={workMessages[locale]} />
   </> : null}</div>;
 }

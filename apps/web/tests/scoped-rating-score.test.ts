@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { bars, figuresOfMember, figuresOfRating, scoreView } from '../features/scoped-rating/score.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
+import * as workFixture from '../features/work-page/fixtures.ts';
 
 const rating = (count: number, mean: number) => fixture.ratingOf(fixture.iri('1'), fixture.writing.context, fixture.histogram(count, mean));
 
@@ -45,4 +46,14 @@ test('a target with no question has no figures', () => {
 test('roll-up members that could not be counted are not figures', () => {
   expect(figuresOfMember({ target: fixture.iri('1'), status: 'not-accepted' }, 10, 10)).toBeNull();
   expect(figuresOfMember({ target: fixture.iri('1'), status: 'unavailable', reason: 'unavailable' }, 10, 10)).toBeNull();
+});
+
+test('a Work’s read, which has no display state, follows the same rules as a target’s', () => {
+  if (!workFixture.globalRatings.ok || !workFixture.noGlobalRatings.ok) throw new Error('fixture unavailable');
+  const rated = figuresOfRating(workFixture.globalRatings.data.summary)!;
+  expect(scoreView(rated)).toMatchObject({ kind: 'shown', count: 1287, max: 5 });
+  expect(bars(rated)?.map(bar => bar.value)).toEqual([5, 4, 3, 2, 1]);
+  const none = figuresOfRating(workFixture.noGlobalRatings.data.summary)!;
+  expect(scoreView(none)).toEqual({ kind: 'none' });
+  expect(bars(none)).toBeNull();
 });

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
+import { figuresOfRating } from '../scoped-rating/score.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
@@ -141,9 +142,9 @@ describe('Honest target scores', () => {
   test('below-threshold means render counts and progress without stars or a manufactured zero', () => {
     const read = identityRatings(1);
     if (!read.ok) throw new Error('fixture unavailable');
-    const summary = read.data.summary;
+    const figures = figuresOfRating(read.data.summary)!;
     const html = renderToStaticMarkup(
-      createElement(Mean, { summary, locale: 'en', messages: workMessages.en }),
+      createElement(Mean, { figures, locale: 'en', messages: workMessages.en }),
     );
     expect(html).toContain('1 rating');
     expect(html).toContain('4 more ratings will reveal the average.');
@@ -158,17 +159,17 @@ describe('Honest target scores', () => {
     expect(inline).not.toContain('<svg');
     expect(inline).toContain('1 rating');
   });
-  test('zero observations retain all ten histogram buckets and the distance to disclosure', () => {
+  test('zero observations draw no histogram, and the distance to disclosure is told in words', () => {
     const read = identityRatings(0);
     if (!read.ok) throw new Error('fixture unavailable');
     const html = renderToStaticMarkup(
       createElement(Distribution, {
-        summary: read.data.summary,
+        figures: figuresOfRating(read.data.summary)!,
         locale: 'en',
         messages: workMessages.en,
       }),
     );
-    expect(html.match(/<li /g)).toHaveLength(10);
+    expect(html).toBe('');
     expect(ratingsUntilMean(0, 5, 'en')).toBe('5 more ratings will reveal the average.');
     expect(ratingsUntilMean(5, 5, 'en')).toBeNull();
     expect(ratingsUntilMean(4, 5, 'en')).toBe('1 more rating will reveal the average.');
@@ -177,7 +178,11 @@ describe('Honest target scores', () => {
     const read = identityRatings(5);
     if (!read.ok) throw new Error('fixture unavailable');
     const html = renderToStaticMarkup(
-      createElement(Mean, { summary: read.data.summary, locale: 'en', messages: workMessages.en }),
+      createElement(Mean, {
+        figures: figuresOfRating(read.data.summary)!,
+        locale: 'en',
+        messages: workMessages.en,
+      }),
     );
     expect(html).toContain('data-rating-mean="shown"');
     expect(html).toContain('5 ratings');

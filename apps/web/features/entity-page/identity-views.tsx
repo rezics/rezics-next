@@ -1,10 +1,10 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import Link from '../shell/localized-link.tsx';
-import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
+import { figuresOfRating } from '../scoped-rating/score.ts';
 import { SummaryLink } from '../work-levels/names.tsx';
 import type { AvailableSummary } from '../work-levels/types.ts';
-import { Distribution } from '../work-page/ratings.tsx';
+import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { Loaded } from '../work-page/types.ts';
@@ -49,40 +49,18 @@ function Figures({
         {t.identityRatingsUnavailable}
       </p>
     );
-  const { summary } = member.ratings.data;
-  if (summary.status !== 'available' || !summary.scale)
-    return <p className="text-muted-foreground text-sm">{t.noRatingQuestion}</p>;
-  if (!summary.count)
+  const figures = figuresOfRating(member.ratings.data.summary);
+  if (!figures) return <p className="text-muted-foreground text-sm">{t.noRatingQuestion}</p>;
+  if (!figures.count)
     return (
       <p data-identity-ratings className="text-muted-foreground text-sm">
         {t.noRatings}
       </p>
     );
-  const shown =
-    summary.mean !== null && (!('meanDisplay' in summary) || summary.meanDisplay === 'shown');
   return (
     <div className="grid gap-1.5" data-identity-ratings>
-      <RatingInline
-        rating={
-          shown
-            ? { mean: summary.mean!, count: summary.count, max: summary.scale.max }
-            : {
-                mean: null,
-                count: summary.count,
-                max: summary.scale.max,
-                displayThreshold: 'displayThreshold' in summary ? summary.displayThreshold : null,
-              }
-        }
-        locale={locale}
-        countStyle="words"
-        disclosure={false}
-      />
-      <Distribution compact summary={summary} locale={locale} messages={messages} />
-      {!shown && 'displayThreshold' in summary ? (
-        <p className="text-muted-foreground text-xs">
-          {ratingsUntilMean(summary.count, summary.displayThreshold, locale)}
-        </p>
-      ) : null}
+      <Mean figures={figures} size="sm" locale={locale} messages={messages} />
+      <Distribution compact figures={figures} locale={locale} messages={messages} />
     </div>
   );
 }

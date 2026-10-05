@@ -101,10 +101,10 @@ export const Populated: Story = {
     const dialog = await openPlace();
     await seeRole(dialog, 'link', 'Elizabeth Bennet');
     await seeRole(dialog, 'link', /Episode 3 · Hunsford/);
-    await see(dialog, /\/10$/);
+    await see(dialog, /\/ 10$/);
     await see(dialog, '214 ratings');
     await seeRole(dialog, 'heading', 'How well written is this character here?');
-    await seeRole(dialog, 'list', 'Ratings by score');
+    await seeRole(dialog, 'list', 'Rating distribution');
     await seeRole(dialog, 'link', 'Write a review');
     await seeRole(dialog, 'link', 'Discuss');
     await fits();
@@ -119,8 +119,8 @@ export const BelowThreshold: Story = {
   async play() {
     const dialog = await openPlace();
     await see(dialog, '3 ratings');
-    await see(dialog, '7 more ratings will reveal the average');
-    await expect(within(dialog).queryByText(/\/10/)).toBeNull();
+    await see(dialog, '7 more ratings will reveal the average.');
+    await expect(within(dialog).queryByText(/\/ 10/)).toBeNull();
     await expect(within(dialog).queryByText(/^0(\.0)?$/)).toBeNull();
     await fits();
   },
@@ -133,7 +133,7 @@ export const NoRatingsYet: Story = {
   async play() {
     const dialog = await openPlace();
     await see(dialog, 'No ratings yet');
-    await expect(within(dialog).queryByRole('list', { name: 'Ratings by score' })).toBeNull();
+    await expect(within(dialog).queryByRole('list', { name: 'Rating distribution' })).toBeNull();
     await fits();
   },
 };
@@ -216,7 +216,7 @@ const localized = (locale: UiLocale): Story => ({
   async play() {
     const dialog = await screen.findByRole('dialog', { name: copy(locale).sheetTitle({ name: fixture.subject.name.value }) });
     await openPlace(locale);
-    await see(dialog, / \/10$|\/10/);
+    await see(dialog, /\/ 10$/);
     await seeRole(dialog, 'link', copy(locale).writeReview);
     await fits();
   },

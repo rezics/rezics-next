@@ -41,10 +41,10 @@ export const Populated: Story = {
     const canvas = within(canvasElement);
     await see(canvasElement, '190 ratings');
     await expect(canvas.getByRole('heading', { name: 'Ratings by part' })).toBeVisible();
-    await expect(within(row(canvas, 'Episode 1')).getByText(/\/10$/)).toBeVisible();
+    await expect(within(row(canvas, 'Episode 1')).getByText(/\/ 10$/)).toBeVisible();
     await see(row(canvas, 'Episode 4'), '3 ratings');
-    await see(row(canvas, 'Episode 4'), '7 more ratings will reveal the average');
-    await expect(within(row(canvas, 'Episode 4')).queryByText(/\/10/)).toBeNull();
+    await see(row(canvas, 'Episode 4'), '7 more ratings will reveal the average.');
+    await expect(within(row(canvas, 'Episode 4')).queryByText(/\/ 10/)).toBeNull();
     await see(row(canvas, 'Episode 5'), '76 ratings');
     // One place is later in the story than the reader has read: counted, never named.
     await expect(canvas.getByText('1 more is hidden until you reach it.')).toBeVisible();
@@ -73,10 +73,10 @@ export const BelowThreshold: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await see(canvasElement, '9 ratings');
-    await expect(canvas.getByText('1 more rating will reveal the average')).toBeVisible();
-    await expect(canvas.getByText('7 more ratings will reveal the average')).toBeVisible();
+    await expect(canvas.getByText('1 more rating will reveal the average.')).toBeVisible();
+    await expect(canvas.getByText('7 more ratings will reveal the average.')).toBeVisible();
     await expect(canvas.getByText('No ratings yet')).toBeVisible();
-    await expect(canvas.queryByText(/\/10/)).toBeNull();
+    await expect(canvas.queryByText(/\/ 10/)).toBeNull();
     await fits();
   },
 };
@@ -126,7 +126,7 @@ const localized = (locale: UiLocale): Story => ({
   args: { locale },
   async play({ canvasElement }) {
     await waitFor(() => expect(canvasElement.querySelectorAll('[data-projection]').length).toBeGreaterThan(2), { timeout: 4000 });
-    await waitFor(() => expect(canvasElement.querySelector('[data-score="shown"]')).not.toBeNull(), { timeout: 4000 });
+    await waitFor(() => expect(canvasElement.querySelector('[data-rating-mean="shown"]')).not.toBeNull(), { timeout: 4000 });
     await expect(canvasElement.querySelector('[data-hidden-parts]')).not.toBeNull();
     await fits();
   },

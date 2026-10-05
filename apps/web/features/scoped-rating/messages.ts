@@ -58,12 +58,10 @@ const en = {
   // Figures
   noRatings: 'No ratings yet',
   score: insert('{{mean}}/{{max}}', { mean: String, max: String }),
-  scoreSpoken: insert('{{mean}} out of {{max}}', { mean: String, max: String }),
+  average: insert('Average {{mean}} out of {{max}}', { mean: String, max: String }),
   ratingCount: plural({ one: insert('{{count}} rating'), other: insert('{{count}} ratings') }, { count: asValue(number()) }),
-  moreToReveal: plural({ one: insert('{{count}} more rating will reveal the average'),
-    other: insert('{{count}} more ratings will reveal the average') }, { count: asValue(number()) }),
-  moreToRevealUnknown: 'The average appears once enough people have rated.',
-  histogram: 'Ratings by score',
+  distribution: 'Rating distribution',
+  stars: plural({ one: insert('{{count}} star'), other: insert('{{count}} stars') }, { count: asValue(number()) }),
   barCount: insert('{{count}} ({{share}})', { count: String, share: String }),
 
   // The header of a rated place
@@ -72,10 +70,12 @@ const en = {
   hiddenHelp: 'This comes later than the place you have read up to, so its name and ratings stay hidden.',
 
   // One subject, place by place
+  placeNoun: 'part',
   byPart: 'Ratings by part',
   noParts: 'Nobody has rated this in a specific part yet.',
   hiddenParts: plural({ one: insert('{{count}} more is hidden until you reach it.'),
     other: insert('{{count}} more are hidden until you reach them.') }, { count: asValue(number()) }),
+  openPart: 'Rate, review and discuss',
   showMore: 'Show more',
   loading: 'Loading…',
   moreQuestions: plural({ one: insert('and {{count}} more question'), other: insert('and {{count}} more questions') },

@@ -6,7 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import type { ProjectionRead, ScopedRatingApi } from './api.ts';
 import { FailureNote } from './failure.tsx';
-import { formatNumber, translate } from './format.ts';
+import { formatMean, formatNumber, translate } from './format.ts';
 import { subjectOf } from './frames.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { SubjectAvatar } from './projection-header.tsx';
@@ -63,7 +63,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
             <p>{t.rankingBasis}</p>
             <p data-ranking-eligibility>
               {t.rankingEligibility({ min: formatNumber(rank?.minimumRatings ?? 50, locale) })}
-              {rank?.prior ? ` ${t.rankingPrior({ mean: formatNumber(rank.prior.mean, locale, 1), ratings: t.ratingCount(rank.prior.weight) })}` : ''}
+              {rank?.prior ? ` ${t.rankingPrior({ mean: formatMean(rank.prior.mean, locale), ratings: t.ratingCount(rank.prior.weight) })}` : ''}
             </p>
           </div>
           {rank?.status === 'unavailable' || !rank?.items.length
@@ -76,7 +76,7 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
                 <span className="col-span-2 grid gap-0.5 text-sm sm:col-span-1 sm:justify-items-end">
                   <span className="font-semibold tabular-nums">{t.rankingWeighted({ score: formatNumber(item.score, locale, 1) })}</span>
                   <span className="text-muted-foreground tabular-nums">
-                    {t.score({ mean: formatNumber(item.mean, locale, 1), max: formatNumber(max, locale) })} · {t.ratingCount(item.count)}</span>
+                    {t.score({ mean: formatMean(item.mean, locale), max: formatNumber(max, locale) })} · {t.ratingCount(item.count)}</span>
                 </span>
               </li>)}
             </ol>}

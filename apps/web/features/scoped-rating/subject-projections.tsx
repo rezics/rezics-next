@@ -6,8 +6,8 @@ import { LockIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { ProjectionRead, QuestionScope, ScopedRatingApi } from './api.ts';
+import { Mean } from '../work-page/ratings.tsx';
 import { FailureNote } from './failure.tsx';
-import { ScoreFigure } from './figure.tsx';
 import { translate } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { FrameChips } from './projection-header.tsx';
@@ -15,6 +15,10 @@ import { frameChips } from './frames.ts';
 import { questionText } from './question-rating.tsx';
 import { figuresOfRating, type Figures } from './score.ts';
 import type { Outcome, Question } from './types.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { canonicalHref, identityHref } from '../address/path.ts';
+import Link from '../shell/localized-link.tsx';
 import { useLoad } from './use-load.ts';
 
 const isVisible = (read: ProjectionRead) => read.summary?.status === 'available';
@@ -39,13 +43,17 @@ async function readRow(api: ScopedRatingApi, target: string, scope: QuestionScop
   return rating.ok ? { ok: true, data: { question: chosen, figures: figuresOfRating(rating.data), more } } : rating;
 }
 
-function ProjectionRow({ read, api, scope, question, locale, messages }: {
-  read: ProjectionRead; api: ScopedRatingApi; scope: QuestionScope; question?: Question; locale: UiLocale;
+function ProjectionRow({ read, api, scope, question, position, locale, messages }: {
+  read: ProjectionRead; api: ScopedRatingApi; scope: QuestionScope; question?: Question; position?: string; locale: UiLocale;
   messages: ScopedRatingMessages;
 }) {
   const t = translate(messages, locale);
+  /** The place's page at its own address, so reaching it needs no redirect. */
+  const placeHref = (place: ProjectionRead) => place.summary?.status === 'available'
+    ? canonicalHref(place.summary.address as CanonicalAddress, locale, place.summary.name.value)
+    : localizedPath(identityHref('/e/', place.projection.id), locale);
   const [row, reload] = useLoad(() => readRow(api, read.projection.id, scope, question), `${read.projection.id}\n${question?.context ?? ''}`);
-  return <li data-projection={read.projection.id} className="grid gap-3 rounded-2xl border border-border/60 bg-card p-4">
+  return <li data-projection={read.projection.id} className="grid min-w-0 gap-3 rounded-2xl border border-border/60 bg-card p-4">
     {/* The list is one subject's, so each row leads with where it is rated, not with the subject again. */}
     <FrameChips chips={frameChips(read.summary ?? undefined, locale)} label={t.within} size="lg" />
     {row.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
@@ -54,10 +62,13 @@ function ProjectionRow({ read, api, scope, question, locale, messages }: {
           : <div className="grid gap-1.5">
             <p lang={questionText(row.data.question).language} dir={questionText(row.data.question).direction}
               className="text-muted-foreground text-sm">{questionText(row.data.question).value}</p>
-            {row.data.figures ? <ScoreFigure figures={row.data.figures} locale={locale} messages={messages} />
+            {row.data.figures ? <Mean figures={row.data.figures} size="sm" empty={t.noRatings} locale={locale} messages={messages} />
               : <p className="text-muted-foreground text-sm">{t.noRatings}</p>}
             {row.data.more > 0 ? <p className="text-muted-foreground text-xs">{t.moreQuestions(row.data.more)}</p> : null}
           </div>}
+    <Link href={`${placeHref(read)}${position ? `?position=${position}` : ''}`} data-open-part
+      className="w-fit rounded-sm text-primary text-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+      {t.openPart}</Link>
   </li>;
 }
 
@@ -65,9 +76,10 @@ function ProjectionRow({ read, api, scope, question, locale, messages }: {
  * Every place a subject is rated in, each with its own figures and none averaged into another's. A place the reader has
  * not reached is not drawn; the list says only how many are hidden, so their names and numbers cannot give the story away.
  */
-export function SubjectProjections({ subject, api, scope = { kind: 'global' }, question, level = 2, locale, messages, className }: {
-  subject: string; api: ScopedRatingApi; scope?: QuestionScope; question?: Question; level?: 2 | 3; locale: UiLocale;
-  messages: ScopedRatingMessages; className?: string;
+export function SubjectProjections({ subject, api, scope = { kind: 'global' }, question, position, level = 2, locale, messages, className }: {
+  subject: string; api: ScopedRatingApi; scope?: QuestionScope; question?: Question;
+  /** The reading position the subject is read at (`all` or a chapter's id), kept on the way to each place's own page. */
+  position?: string; level?: 2 | 3; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
   const t = translate(messages, locale);
   const [first, reload] = useLoad(() => api.projections(subject), subject);
@@ -92,9 +104,9 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
       : first.state === 'failed' ? <FailureNote failure={first.failure} locale={locale} messages={messages} retry={reload} />
         : items.length === 0 ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noParts}</p>
           : <>
-            {visible.length ? <ul className="grid gap-3">
+            {visible.length ? <ul className="grid min-w-0 gap-3">
               {visible.map(read => <ProjectionRow key={read.projection.id} read={read} api={api} scope={scope} question={question}
-                locale={locale} messages={messages} />)}
+                position={position} locale={locale} messages={messages} />)}
             </ul> : null}
             {hidden > 0 ? <p data-hidden-parts className="flex items-start gap-2 text-muted-foreground text-sm">
               <LockIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{t.hiddenParts(hidden)}</p> : null}

@@ -1,7 +1,9 @@
-import type { RollupMember, TargetRating } from './types.ts';
+import type { RatingSummary } from '../work-page/types.ts';
+import type { RollupMember } from './types.ts';
 
-// What a figure may claim. Main withholds a mean below the question's display threshold but always returns the count
-// and the histogram, so a client that drew "0.0" or an empty histogram for "too few" would invent a number.
+// What a figure may claim, for every surface that shows a score (the Work page, entity pages, the scoped places).
+// Main withholds a mean below the question's display threshold but always returns the count and the histogram, so a
+// client that drew "0.0" or an empty histogram for "too few" would invent a number.
 
 /** One target's figures for one question, as every source reduces to. */
 export interface Figures {
@@ -10,9 +12,10 @@ export interface Figures {
   mean: number | null;
   /** Ratings the question needs before it shows a mean, or null when the read did not carry it. */
   displayThreshold: number | null;
-  /** The top of the question's scale. */
+  /** The bottom and the top of the question's scale. */
+  min: number;
   max: number;
-  /** `histogram[i]` is the number of ratings of `i + 1`. */
+  /** `histogram[i]` is the number of ratings of `min + i`. */
   histogram: readonly number[];
 }
 
@@ -35,24 +38,29 @@ export function scoreView(figures: Pick<Figures, 'count' | 'mean' | 'displayThre
 export interface Bar { value: number; count: number }
 
 /** The bars of a histogram from the top of the scale down, or null where there is nothing to draw: no zero histogram. */
-export function bars(figures: Pick<Figures, 'count' | 'histogram' | 'max'>): Bar[] | null {
+export function bars(figures: Pick<Figures, 'count' | 'histogram' | 'min' | 'max'>): Bar[] | null {
   if (figures.count <= 0 || figures.histogram.every(count => count <= 0)) return null;
-  return Array.from({ length: figures.max }, (_, index) => figures.max - index)
-    .map(value => ({ value, count: figures.histogram[value - 1] ?? 0 }));
+  return Array.from({ length: figures.max - figures.min + 1 }, (_, index) => figures.max - index)
+    .map(value => ({ value, count: figures.histogram[value - figures.min] ?? 0 }));
 }
 
-/** A target read, or null where no question applies to the target. */
-export function figuresOfRating(rating: TargetRating): Figures | null {
+/**
+ * A rating read of any grain (a Work's, a release's, a character's, a place's), or null where no question applies. The
+ * mean is only what Main marked as shown: a read that does not say, as a Work's does, shows its mean.
+ */
+export function figuresOfRating(rating: RatingSummary): Figures | null {
   if (rating.status !== 'available' || !rating.scale) return null;
-  const histogram = Array.from({ length: rating.scale.max }, () => 0);
-  for (const entry of rating.distribution) if (entry.value >= 1 && entry.value <= histogram.length) histogram[entry.value - 1] = entry.count;
-  return { count: rating.count, mean: rating.meanDisplay === 'shown' ? rating.mean : null,
-    displayThreshold: rating.displayThreshold, max: rating.scale.max, histogram };
+  const { min, max } = rating.scale;
+  const histogram = Array.from({ length: max - min + 1 }, () => 0);
+  for (const entry of rating.distribution) if (entry.value >= min && entry.value <= max) histogram[entry.value - min] = entry.count;
+  const shown = rating.mean !== null && (!('meanDisplay' in rating) || rating.meanDisplay === 'shown');
+  return { count: rating.count, mean: shown ? rating.mean : null,
+    displayThreshold: 'displayThreshold' in rating ? rating.displayThreshold ?? null : null, min, max, histogram };
 }
 
 /** A roll-up member Main could count; a member it could not is not a figure. */
 export function figuresOfMember(member: RollupMember, threshold: number, max: number): Figures | null {
   if (member.status !== 'available') return null;
   return { count: member.components.count, mean: member.meanDisplay === 'shown' ? member.mean : null,
-    displayThreshold: threshold, max, histogram: member.components.histogram.slice(0, max) };
+    displayThreshold: threshold, min: 1, max, histogram: member.components.histogram.slice(0, max) };
 }

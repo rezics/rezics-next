@@ -10,8 +10,8 @@ import { identityHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import Link from '../shell/localized-link.tsx';
 import type { QuestionScope, ScopedRatingApi } from './api.ts';
+import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { FailureNote } from './failure.tsx';
-import { ScoreFigure } from './figure.tsx';
 import { formatNumber, translate } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { figuresOfRating } from './score.ts';
@@ -21,8 +21,8 @@ import { useLoad } from './use-load.ts';
 /** Who is looking: a signed-out reader is sent to sign in where a signed-in one rates. */
 export type Viewer = { kind: 'signed-out'; signInHref: string } | { kind: 'reader' };
 
-/** Where the review and the discussion of a rated place live; the host's pages decide. */
-export type EntryHref = (entry: 'review' | 'discussion', target: string, question: string) => string;
+/** Where the review and the discussion of a rated place live; the host's pages decide, and a null says there is none. */
+export type EntryHref = (entry: 'review' | 'discussion', target: string, question: string) => string | null;
 
 /** Default: the place's own page, at the sections that hold its reviews and its discussion. */
 export const defaultEntryHref = (locale: UiLocale): EntryHref => (entry, target) =>
@@ -40,40 +40,59 @@ export const questionText = (question: Question) =>
  * and the way on to a review and the discussion. Figures and the person's rating belong to this place and this
  * question only; nothing here averages across places.
  */
-export function QuestionRating({ api, target, question, scope, viewer, entryHref, locale, messages, className }: {
+export function QuestionRating({ api, target, question, scope, viewer, entryHref, level = 4, locale, messages, className }: {
   api: ScopedRatingApi; target: string; question: Question; scope: QuestionScope; viewer: Viewer;
-  entryHref?: EntryHref; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
+  entryHref?: EntryHref; level?: 3 | 4; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
+  const Heading = `h${level}` as const;
   const t = translate(messages, locale);
   const [figures, reload] = useLoad(() => api.rating(target, question.context, scope), `${target}\n${question.context}\n${scope.kind === 'realm' ? scope.realm : 'global'}`);
-  const [own, setOwn] = useState<number | null>(() => api.own(target, question.context));
+  // The person's own rating comes from Main, so a new device or a cleared browser shows what they already gave.
+  const signedIn = viewer.kind === 'reader';
+  const [ownRead, reloadOwn] = useLoad(() => signedIn ? api.own(target, question.context) : Promise.resolve({ ok: true as const, data: { value: null } }),
+    `${signedIn}\n${target}\n${question.context}`);
+  const [changed, setChanged] = useState<{ value: number | null } | null>(null);
+  const own = changed ? changed.value : ownRead.state === 'ready' ? ownRead.data.value : null;
   const [saving, setSaving] = useState<Saving>({ state: 'idle' });
   const text = questionText(question);
   const max = question.scale.max;
   const hrefFor = entryHref ?? defaultEntryHref(locale);
+  const reviewHref = hrefFor('review', target, question.context);
+  const discussHref = hrefFor('discussion', target, question.context);
 
   async function save(next: number | null) {
-    const before = own;
-    setOwn(next);
+    const before = changed;
+    setChanged({ value: next });
     setSaving({ state: 'saving' });
     const answer = await api.rate(target, question.context, next).catch(() => ({ ok: false as const, failure: 'unavailable' as const }));
-    if (!answer.ok) { setOwn(before); setSaving({ state: 'failed', failure: answer.failure }); return; }
+    if (!answer.ok) {
+      setChanged(before);
+      setSaving({ state: 'failed', failure: answer.failure });
+      // Another device may have rated meanwhile: read what Main holds, so the next press starts from it.
+      if (answer.failure === 'conflict') { setChanged(null); reloadOwn(); }
+      return;
+    }
     setSaving({ state: 'saved', pending: answer.data.pending });
     reload();
   }
 
   const read = figures.state === 'ready' ? figuresOfRating(figures.data) : null;
   return <section data-question={question.context} aria-label={text.value} className={cn('grid gap-3', className)}>
-    <h4 lang={text.language} dir={text.direction} className="font-medium text-base leading-snug">{text.value}</h4>
+    <Heading lang={text.language} dir={text.direction} className="font-medium text-base leading-snug">{text.value}</Heading>
     {figures.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : figures.state === 'failed' ? <FailureNote failure={figures.failure} locale={locale} messages={messages} retry={reload} />
-        : read ? <ScoreFigure figures={read} histogram locale={locale} messages={messages} />
+        : read ? <div className="grid gap-3">
+          <Mean figures={read} size="sm" empty={t.noRatings} locale={locale} messages={messages} />
+          <Distribution figures={read} locale={locale} messages={messages} />
+        </div>
           : <p className="text-muted-foreground text-sm">{t.noRatings}</p>}
 
     {viewer.kind === 'signed-out'
       ? <Link href={viewer.signInHref} className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'justify-self-start')}>
         {t.signInToRate}</Link>
-      : <div className="grid justify-items-start gap-1.5">
+      : ownRead.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
+        : ownRead.state === 'failed' ? <FailureNote failure={ownRead.failure} locale={locale} messages={messages} retry={reloadOwn} />
+          : <div className="grid justify-items-start gap-1.5">
         <Rating size="md" count={max} value={own ?? 0} className="items-start"
           onValueChange={({ value }) => { if (value >= 1 && value !== own) void save(value); }}>
           <RatingLabel className="font-normal text-muted-foreground text-sm">
@@ -89,28 +108,32 @@ export function QuestionRating({ api, target, question, scope, viewer, entryHref
         </p>
       </div>}
 
-    <div className="flex flex-wrap gap-2">
-      <Link href={hrefFor('review', target, question.context)} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
-        <PenLineIcon aria-hidden="true" />{t.writeReview}</Link>
-      <Link href={hrefFor('discussion', target, question.context)} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
-        <MessageSquareIcon aria-hidden="true" />{t.discuss}</Link>
-    </div>
+    {reviewHref || discussHref ? <div className="flex flex-wrap gap-2">
+      {reviewHref ? <Link href={reviewHref} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
+        <PenLineIcon aria-hidden="true" />{t.writeReview}</Link> : null}
+      {discussHref ? <Link href={discussHref} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
+        <MessageSquareIcon aria-hidden="true" />{t.discuss}</Link> : null}
+    </div> : null}
   </section>;
 }
 
 /** Every question that accepts the place, each as `QuestionRating`. A place nothing asks about says so. */
-export function QuestionList({ api, target, scope, viewer, entryHref, locale, messages, className }: {
+export function QuestionList({ api, target, scope, viewer, entryHref, heading = true, quiet = false, locale, messages, className }: {
   api: ScopedRatingApi; target: string; scope: QuestionScope; viewer: Viewer; entryHref?: EntryHref;
-  locale: UiLocale; messages: ScopedRatingMessages; className?: string;
+  /** Whether the list names itself; a host that heads the section already leaves it off. */
+  heading?: boolean;
+  /** Draw nothing where no question applies, for a host whose other parts are the point (a subject asked only about its places). */
+  quiet?: boolean; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
   const t = translate(messages, locale);
   const [questions, reload] = useLoad(() => api.questions(target, scope), `${target}\n${scope.kind === 'realm' ? scope.realm : 'global'}`);
+  if (quiet && questions.state === 'ready' && questions.data.length === 0) return null;
   return <div data-questions className={cn('grid gap-5', className)}>
-    <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">{t.questions}</h3>
+    {heading ? <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">{t.questions}</h3> : null}
     {questions.state === 'loading' ? <p className="text-muted-foreground text-sm" aria-busy="true">{t.loading}</p>
       : questions.state === 'failed' ? <FailureNote failure={questions.failure} locale={locale} messages={messages} retry={reload} />
         : questions.data.length === 0 ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{t.noQuestions}</p>
           : questions.data.map(question => <QuestionRating key={question.context} api={api} target={target}
-            question={question} scope={scope} viewer={viewer} entryHref={entryHref} locale={locale} messages={messages} />)}
+            question={question} scope={scope} viewer={viewer} entryHref={entryHref} level={heading ? 4 : 3} locale={locale} messages={messages} />)}
   </div>;
 }

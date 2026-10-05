@@ -4,11 +4,10 @@ import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-gr
 import { cn } from '@rezics/ui/utils';
 import { useId, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { StarMeter } from '../catalogue/rating.tsx';
 import type { ProjectionRead, ScopedRatingApi } from './api.ts';
+import { Mean } from '../work-page/ratings.tsx';
 import { FailureNote } from './failure.tsx';
-import { ScoreFigure } from './figure.tsx';
-import { formatMean, formatNumber, translate, type Translation } from './format.ts';
+import { formatNumber, translate, type Translation } from './format.ts';
 import { frameChips } from './frames.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { FrameChips } from './projection-header.tsx';
@@ -59,7 +58,7 @@ function RollupView({ members, question, unit, api, defaultFormula, locale, mess
   const [rollup, reload] = useLoad(() => api.rollup(question.context, targets, formula), `${question.context}\n${formula}\n${targets.join()}`);
   const byTarget = new Map(members.map(member => [member.projection.id, member]));
   const text = questionText(question);
-  return <section data-rollup aria-label={t.combined({ unit: noun })} className="grid gap-4">
+  return <section data-rollup aria-label={t.combined({ unit: noun })} className="grid min-w-0 gap-4">
     <div className="grid gap-2">
       <h3 className="font-semibold text-lg tracking-tight">{t.combined({ unit: noun })}</h3>
       <p lang={text.language} dir={text.direction} className="text-muted-foreground text-sm">{text.value}</p>
@@ -89,13 +88,8 @@ function RollupBody({ rollup, byTarget, noun, locale, messages }: {
   return <>
     <div data-rollup-value className="grid gap-1">
       {rollup.value !== null
-        ? <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <StarMeter mean={rollup.value} max={max} className="text-xl" />
-          <span className="font-semibold text-xl tabular-nums">{t.score({ mean: formatMean(rollup.value, locale), max: formatNumber(max, locale) })}
-            <span className="sr-only"> — {t.scoreSpoken({ mean: formatMean(rollup.value, locale), max: formatNumber(max, locale) })}</span></span>
-          <span aria-hidden="true" className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground text-sm tabular-nums">{t.ratingCount(ratings)}</span>
-        </p>
+        ? <Mean figures={{ count: ratings, mean: rollup.value, displayThreshold: null, min: rollup.scale.min, max, histogram: [] }}
+          size="md" locale={locale} messages={messages} />
         : rollup.valueWithheld ? <p className="font-medium text-sm">{t.combinedWithheld({ unit: noun })}</p>
           : <p className="text-muted-foreground text-sm">{ratings ? t.ratingCount(ratings) : t.combinedNone}</p>}
       <p className="text-muted-foreground text-sm">
@@ -106,9 +100,9 @@ function RollupBody({ rollup, byTarget, noun, locale, messages }: {
         const read = byTarget.get(member.target);
         const figures = figuresOfMember(member, rollup.displayThreshold, max);
         return <li key={member.target} data-rollup-member={member.target}
-          className="grid gap-2 rounded-xl border border-border/60 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6">
+          className="grid min-w-0 gap-2 rounded-xl border border-border/60 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6">
           <FrameChips chips={frameChips(read?.summary ?? undefined, locale)} label={t.within} />
-          {figures ? <ScoreFigure figures={figures} locale={locale} messages={messages} /> : null}
+          {figures ? <Mean figures={figures} size="sm" empty={t.noRatings} locale={locale} messages={messages} /> : null}
         </li>;
       })}
     </ol>

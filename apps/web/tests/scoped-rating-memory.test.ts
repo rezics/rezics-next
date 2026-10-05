@@ -54,7 +54,7 @@ test('rating replaces the person’s earlier rating, moving one count and never 
   await api.rate(target, q, 9);
   const read = await api.rating(target, q, { kind: 'global' });
   expect(read.ok && read.data.count).toBe(1);
-  expect(api.own(target, q)).toBe(9);
+  expect(await api.own(target, q)).toEqual({ ok: true, data: { value: 9 } });
   await api.rate(target, q, null);
   const after = await api.rating(target, q, { kind: 'global' });
   expect(after.ok && after.data.count).toBe(0);

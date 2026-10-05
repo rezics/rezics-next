@@ -41,11 +41,11 @@ export const Populated: Story = {
     await expect(canvas.getByRole('heading', { name: 'All episodes together' })).toBeVisible();
     await expect(canvas.getByRole('radio', { name: 'Pooled' })).toBeChecked();
     await expect(canvas.getByText('Pooled: every rating counts the same, so a part with more ratings weighs more.')).toBeVisible();
-    await expect(canvasElement.querySelector('[data-rollup-value] [data-score], [data-rollup-value]')?.textContent).toMatch(/\/10/);
+    await expect(canvasElement.querySelector('[data-rollup-value]')?.textContent).toMatch(/\/ 10/);
     await expect(canvas.getByText('1 was left out because this question doesn’t apply to it.')).toBeVisible();
     // Every counted episode keeps its own figure; the thin one shows its count and no average.
     await expect(canvasElement.querySelectorAll('[data-rollup-member]')).toHaveLength(5);
-    await expect(canvas.getByText('7 more ratings will reveal the average')).toBeVisible();
+    await expect(canvas.getByText('7 more ratings will reveal the average.')).toBeVisible();
     await fits();
   },
 };
@@ -72,7 +72,7 @@ export const BelowThreshold: Story = {
     const canvas = within(canvasElement);
     await see(canvasElement, 'No combined score yet: fewer than half of the episodes have enough ratings.');
     await expect(canvas.getByText('0 of 3 episodes have enough ratings to count.')).toBeVisible();
-    await expect(canvasElement.querySelector('[data-rollup-value]')?.textContent).not.toMatch(/\/10/);
+    await expect(canvasElement.querySelector('[data-rollup-value]')?.textContent).not.toMatch(/\/ 10/);
     await fits();
   },
 };
