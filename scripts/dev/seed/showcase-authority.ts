@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import type { LocalOperatorInput } from './operator.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-export type ShowcaseGrant = { action: 'media.upload'; scope: `media:owner:${string}` }
+export type ShowcaseGrant = { action: 'media.upload' | 'media.labels'; scope: `media:owner:${string}` }
   | { action: 'media.avatar'; scope: `media:avatar:${string}` };
 
 async function principal(client: PoolClient, issuer: string, accountSubject: string) {
@@ -26,12 +26,12 @@ async function ensureRepresentation(client: PoolClient, principalId: string, act
 }
 
 /**
- * Dev fixture authority for a demo person to upload showcase art and select it
- * on exact Works, the authority that selects a Work's cover. Selection itself
+ * Dev fixture authority for a demo person to upload showcase art, label it
+ * and select it on exact Works, the authority that selects a Work's cover. Selection itself
  * still goes through Main's showcase commands.
  */
 export async function grantShowcaseSeedAuthority(input: LocalOperatorInput, grants: readonly ShowcaseGrant[]) {
-  if (grants.some(({ action, scope }) => action === 'media.upload'
+  if (grants.some(({ action, scope }) => action !== 'media.avatar'
     ? scope !== `media:owner:${input.actingSubject}`
     : !native.test(scope.slice('media:avatar:'.length)))) {
     throw new Error('Showcase seed grant is outside the demo person and Works');

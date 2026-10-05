@@ -17,7 +17,7 @@ const short = (id: string) => id.slice(-36);
 const anchor = 'start-bottom';
 
 interface Current {
-  role: ShowcaseRoleKey['role']; selection: string; asset: string; language?: string; tone?: string;
+  role: ShowcaseRoleKey['role']; selection: string; asset: string; use: string; representation: string; language?: string; tone?: string;
   anchor?: string; focalArea: string | null;
 }
 interface Read { reference: string; status: string; images?: Current[]; trailer?: { selection: string; url: string } | null }
@@ -73,6 +73,19 @@ export function showcaseTargets(state: SeedState): { work: ShowcaseWork; target:
   });
 }
 
+interface Described { status: string; representation: string; nsfw: string;
+  controls: { nsfw: { basis: unknown; valueHead: string | null } } }
+
+/** Public metadata of every planned image, in one batch: the viewer's mask follows its NSFW label. */
+async function readLabels(state: SeedState, images: readonly Current[], uses: ReadonlyMap<string, string>) {
+  if (!images.length) return [];
+  const response = await fetch(`${state.endpoints.main}/v1/media/metadata`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ items: images.map(image => ({ representation: image.representation, use: uses.get(image.selection) })) }) });
+  if (!response.ok) throw new SeedApiError('Showcase metadata', response.status, (await response.text()).slice(0, 500));
+  return (await response.json() as { items: Described[] }).items.filter(item => item.status === 'available');
+}
+
 export async function seedShowcaseArt(state: SeedState) {
   if (!state.operatorInput) {
     state.findings.add('Showcase art: the local fixture operator is unavailable');
@@ -86,16 +99,23 @@ export async function seedShowcaseArt(state: SeedState) {
     if (!targets.some(item => item.work.id === work.id)) state.findings.add(`Showcase art: ${work.id} is not a Work yet`);
   }
   if (!targets.length) return;
+  const plannedImages = (read: ReadonlyMap<string, Read>) => targets.flatMap(({ work, target }) =>
+    (read.get(target)?.images ?? []).filter(image => work.slots.some(key => present(key, [image]))));
+  const unlabelled = async (read: ReadonlyMap<string, Read>) => {
+    const images = plannedImages(read);
+    const uses = new Map(images.map(image => [image.selection, image.use]));
+    return readLabels(state, images, uses).then(items => items.filter(item => item.nsfw === 'unknown'));
+  };
   let current = await readCurrent(state, targets.map(item => item.target));
   const missing = targets.filter(({ work, target }) => {
     const images = current.get(target)?.images ?? [];
     return work.slots.some(key => !present(key, images)) || (work.trailer && !current.get(target)?.trailer);
   });
-  if (!missing.length) return;
+  if (!missing.length && !(await unlabelled(current)).length) return;
   const own = { ...input, ownerAccountSubject: session.accountId, actingSubject: session.actingSubject };
-  const grants: ShowcaseGrant[] = [{ action: 'media.upload', scope: `media:owner:${session.actingSubject}` },
-    ...missing.map(({ target }) => ({ action: 'media.avatar' as const, scope: `media:avatar:${target}` as const }))];
-  await grantShowcaseSeedAuthority(own, grants);
+  const owner = `media:owner:${session.actingSubject}` as const;
+  await grantShowcaseSeedAuthority(own, [{ action: 'media.upload', scope: owner }, { action: 'media.labels', scope: owner },
+    ...missing.map(({ target }) => ({ action: 'media.avatar' as const, scope: `media:avatar:${target}` as const }))]);
   await refreshSeedTokens(state);
   for (const { work, target } of missing) {
     await state.optional(`Showcase art ${work.id}`, async () => {
@@ -112,6 +132,13 @@ export async function seedShowcaseArt(state: SeedState) {
     });
   }
   current = await readCurrent(state, targets.map(item => item.target));
+  // Unassessed images stay masked for readers, so the demo art is labelled as the curator's own safe work.
+  for (const item of await unlabelled(current)) {
+    await state.optional(`Showcase art label ${item.representation}`, () => state.api.post(
+      `/v1/media/representations/${item.representation}/labels`, { actingSubject: session.actingSubject,
+        field: 'nsfw', basis: item.controls.nsfw.basis, expectedValueHead: item.controls.nsfw.valueHead,
+        value: 'sfw', mode: 'edit', authority: 'author' }, session.token, seedKey('showcase-sfw', item.representation)));
+  }
   for (const { work, target } of targets) {
     const images = current.get(target)?.images ?? [];
     const absent = work.slots.filter(key => !present(key, images));
