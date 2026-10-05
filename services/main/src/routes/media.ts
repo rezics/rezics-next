@@ -130,13 +130,17 @@ async function deliver(media: MediaDependencies, basis: { objectNamespace: strin
 
 export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const readerFor = async (request: Request, actingSubject: string | undefined) => {
-    if (!request.headers.get('authorization')) return { canReadSemantics: work.mediaAccess
+    const publicReader = { viewer: ANONYMOUS_VIEWER, canReadSemantics: work.mediaAccess
       ? (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
       : undefined };
-    if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
+    if (!request.headers.get('authorization')) return publicReader;
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
-    return { viewer: disclosureViewer(await workPrincipal()), realmReadProof: async (realm: string) =>
+    const viewer = disclosureViewer(await workPrincipal());
+    // Public image URLs do not choose an Agent. Keep the reader's live preferences
+    // while leaving private Work/context authority absent until an Agent is supplied.
+    if (!actingSubject) return { ...publicReader, viewer };
+    return { viewer, realmReadProof: async (realm: string) =>
       await work.access.realmReadProof?.(await workPrincipal(), actingSubject, realm) ?? null,
     canReadWorks: work.mediaAccess
       ? async (resources: readonly string[]) => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources)
@@ -423,10 +427,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        // A public Agent avatar needs no representation selection, even when
-        // the browser also sends its bearer. Other targets keep the read proof.
-        const publicOnly = !!request.headers.get('authorization') && !query.actingSubject;
-        const reader = publicOnly ? { viewer: ANONYMOUS_VIEWER } : await readerFor(request, query.actingSubject);
+        const reader = await readerFor(request, query.actingSubject);
         const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
           () => work.media!.store.avatarDelivery(params.selection));
         if (!basis || !avatarImageEligible(basis)) return unavailable();
@@ -446,7 +447,6 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return await deliver(work.media, { objectNamespace: basis.objectNamespace,
             sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
         }
-        if (publicOnly) throw new MediaInvalid('actingSubject is required for an authenticated read');
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();

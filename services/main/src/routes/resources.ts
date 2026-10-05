@@ -6,7 +6,7 @@ import { selectAdmittedAvatar, selectAdmittedShowcase } from '../modules/media/c
 import { showcaseBatchCommand, showcaseBatchResult, showcaseSelectionCommand, showcaseSelectionResult,
   showcaseTrailerCommand, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from '../modules/media/showcase-contract.ts';
 import { publicAgent } from '../modules/profiles/read.ts';
-import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaMissing } from '../modules/media/store.ts';
+import { DEFAULT_MEDIA_CONTEXT, MediaMissing } from '../modules/media/store.ts';
 import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
   MAX_SUMMARY_REFERENCE_LENGTH, SUMMARY_REFERENCE_PATTERN, type SummaryReader } from '../modules/media/summary.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
@@ -49,11 +49,13 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       : undefined };
   const readerFor = async (request: Request, actingSubject: string | undefined, batch = true): Promise<{ reader: SummaryReader; principal: VerifiedPrincipal | null }> => {
     if (!request.headers.get('authorization')) return { reader: anonymousReader,principal: null };
-    if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
     const contextPrincipal = () => work.account.verify(request, ['context:read']);
     const principal = await workPrincipal();
+    // A bearer supplies current content preferences even on public reads that
+    // name no Agent; it supplies no private Work or context proof on its own.
+    if (!actingSubject) return { principal, reader: { ...anonymousReader, viewer: disclosureViewer(principal) } };
     return { principal,reader: { viewer: disclosureViewer(principal), canReadWorks: batch && work.mediaAccess
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
