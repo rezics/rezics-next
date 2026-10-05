@@ -72,6 +72,9 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
     setDrafts(latest.current);
   };
   const busy = (slot: StatusKey) => statuses[slot]?.kind === 'busy';
+  /** What a new change to a slot starts from: the selection Main recorded for the last change, else the one this change began on. */
+  const baseOf = (slot: SlotKey, previous: Draft | undefined) =>
+    previous?.savedAs ?? previous?.base ?? saved.images[slot]?.selection ?? null;
 
   // A saved change gives way to Main's selection once the refreshed page reads it.
   useEffect(() => {
@@ -139,7 +142,7 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
     const previous = latest.current[slot];
     release(previous);
     const savedImage = saved.images[slot];
-    putDraft(slot, { kind: 'image', base: previous?.base ?? savedImage?.selection ?? null, source: { url, size, file, asset: null },
+    putDraft(slot, { kind: 'image', base: baseOf(slot, previous), source: { url, size, file, asset: null },
       frame, focal: null, framed: null, uploadKey: `showcase:${crypto.randomUUID()}`,
       anchor: logoKey(slot) ? anchor ?? (previous?.kind === 'image' ? previous.anchor : null) ?? savedImage?.anchor ?? 'start-bottom' : null });
     setStatus(slot, undefined);
@@ -149,8 +152,8 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
   function adjust(slot: SlotKey, change: Partial<Pick<ImageDraft, 'frame' | 'focal' | 'anchor'>>) {
     const current = latest.current[slot];
     const image = saved.images[slot];
-    if (current?.kind === 'image') putDraft(slot, { ...current, ...change, savedAs: undefined });
-    else if (image) putDraft(slot, { kind: 'image', base: current?.base ?? image.selection, framed: null, uploadKey: null,
+    if (current?.kind === 'image') putDraft(slot, { ...current, ...change, base: baseOf(slot, current), savedAs: undefined });
+    else if (image) putDraft(slot, { kind: 'image', base: baseOf(slot, current), framed: null, uploadKey: null,
       source: { url: image.url, size: image.size, file: null, asset: image.asset }, frame: isBackground(slot) ? image.frame : null,
       focal: image.focal, anchor: image.anchor, ...change });
     setStatus(slot, undefined);
@@ -160,7 +163,7 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
     const current = latest.current[slot];
     release(current);
     const image = saved.images[slot];
-    putDraft(slot, image ? { kind: 'remove', base: current?.base ?? image.selection } : undefined);
+    putDraft(slot, image || current?.savedAs ? { kind: 'remove', base: baseOf(slot, current) } : undefined);
     setStatus(slot, undefined);
   }
 
@@ -297,10 +300,10 @@ export function ShowcaseEditor({ work, art, actingSubject, locale, messages, sav
       <TrailerCard saved={saved.trailer} draft={trailer} status={statuses.trailer} busy={busy('trailer') || reloading} t={t}
         onChange={url => {
           setStatus('trailer', undefined);
-          setTrailer(current => url.trim() === (saved.trailer?.url ?? '') && saved.trailer ? null
-            : { base: current?.base ?? saved.trailer?.selection ?? null, url });
+          setTrailer(current => url.trim() === (saved.trailer?.url ?? '') && saved.trailer && !current?.savedAs ? null
+            : { base: current?.savedAs ?? current?.base ?? saved.trailer?.selection ?? null, url });
         }}
-        onRemove={() => setTrailer(current => ({ base: current?.base ?? saved.trailer?.selection ?? null, url: '' }))}
+        onRemove={() => setTrailer(current => ({ base: current?.savedAs ?? current?.base ?? saved.trailer?.selection ?? null, url: '' }))}
         onDiscard={() => { setTrailer(null); setStatus('trailer', undefined); }}
         onSave={() => void saveTrailerLink()} onReload={() => reload('trailer')} />
     </div>

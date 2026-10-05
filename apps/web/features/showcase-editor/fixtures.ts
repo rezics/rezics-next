@@ -7,6 +7,7 @@ import landscapeUrl from '../showcase/art/landscape.svg?url&no-inline';
 import englishLight from '../showcase/art/logo-en-light.svg?url&no-inline';
 import japaneseLight from '../showcase/art/logo-ja-light.svg?url&no-inline';
 import portraitUrl from '../showcase/art/portrait.svg?url&no-inline';
+import type { ArtSelection } from './actions.ts';
 import type { SaveResult } from './refusal.ts';
 import type { Uploaded, UploadStage } from './upload.ts';
 
@@ -80,6 +81,19 @@ export const answers = {
   refused: (refusal: Extract<SaveResult, { status: 'refused' }>['refusal'], detail: string | null = null) =>
     async (): Promise<SaveResult> => ({ status: 'refused', refusal, code: null, detail, current: refusal === 'conflict' ? id() : null }),
 };
+/** Main's expected-selection rule for one Work: a save that does not start from the slot's current selection is a conflict. */
+export function mainLike(saved: WorkShowcase | null) {
+  const heads = new Map<string, string | null>((saved?.images ?? []).map(entry =>
+    [entry.role === 'logo' ? `logo:${entry.language}:${entry.tone}` : entry.role, entry.selection]));
+  return async (input: ArtSelection): Promise<SaveResult> => {
+    const slot = input.role === 'logo' ? `logo:${input.language}:${input.tone}` : input.role;
+    const head = heads.get(slot) ?? null;
+    if (input.expectedSelection !== head) return { status: 'refused', refusal: 'conflict', code: 'stale_head', detail: null, current: head };
+    const selection = id();
+    heads.set(slot, selection);
+    return { status: 'done', selection, replayed: false };
+  };
+}
 export function uploads(outcome: Uploaded, stages: readonly UploadStage[] = ['uploading', 'screening']) {
   return async (input: { onStage: (stage: UploadStage) => void }): Promise<Uploaded> => {
     for (const stage of stages) {

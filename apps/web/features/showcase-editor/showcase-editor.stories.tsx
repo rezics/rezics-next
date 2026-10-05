@@ -6,7 +6,7 @@ import { EditFrame } from '../work-levels-edit/edit-frame.tsx';
 import { copyOf as editCopy } from '../work-levels-edit/messages.ts';
 import { editHref } from '../work-levels-edit/route.ts';
 import { ShowcaseEditor, type ShowcaseEditorProps } from './editor.tsx';
-import { answers, drawnFile, type FixtureArt, loadTitle, opaquePng, savedFixture, uploads, work } from './fixtures.ts';
+import { answers, drawnFile, type FixtureArt, loadTitle, mainLike, opaquePng, savedFixture, uploads, work } from './fixtures.ts';
 import { messages } from './messages.ts';
 
 type Args = { art: FixtureArt; locale: UiLocale; saveArt: ShowcaseEditorProps['saveArt'];
@@ -31,7 +31,8 @@ function Page({ art, locale, saveArt, upload }: Args) {
 const meta = {
   title: 'Showcase editor/Editor',
   component: Page,
-  args: { art: 'complete', locale: 'en', saveArt: answers.done, upload: uploads({ status: 'cleared', asset: '01a0e3d1-0000-7000-8000-0000000000ff' }) },
+  args: { art: 'complete', locale: 'en', saveArt: answers.done as Args['saveArt'],
+    upload: uploads({ status: 'cleared', asset: '01a0e3d1-0000-7000-8000-0000000000ff' }) as Args['upload'] },
   parameters: { route: { pathname: localizedPath(editHref(work.id, 'showcase'), 'en') } },
   async afterEach({ id }) {
     if (import.meta.env.VITE_SHOWCASE_EDITOR_VISUAL !== '1') return;
@@ -112,9 +113,12 @@ export const Complete: Story = {
 export const CompletePhone: Story = { ...Complete, globals: phone };
 export const CompleteTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { ...desktop, locale: 'zh-Hant' } };
 
-/** Choosing a background shows it framed at once; saving uploads it, waits for screening, then selects it. */
+/**
+ * Choosing a background shows it framed at once; saving uploads it, waits for screening, then selects it. A second
+ * change before the page reads Main again starts from the selection just recorded, so Main does not call it a conflict.
+ */
 export const ChooseAndSave: Story = {
-  args: { art: 'empty' },
+  args: { art: 'empty', saveArt: mainLike(savedFixture('empty')) },
   globals: desktop,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -128,6 +132,11 @@ export const ChooseAndSave: Story = {
     await userEvent.click(landscape.getByRole('button', { name: 'Save' }));
     await expect(await landscape.findByText(/Checking the image/)).toBeVisible();
     await expect(await landscape.findByText(/Saved\. Every Zone/, {}, { timeout: 4000 })).toBeVisible();
+    await expect(landscape.getByText('Saved', { exact: true })).toBeVisible();
+    await userEvent.click(landscape.getByRole('button', { name: 'Remove the focal area' }));
+    await userEvent.click(landscape.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(landscape.getByText(/Saved\. Every Zone/)).toBeVisible());
+    await expect(landscape.queryByRole('alert')).toBeNull();
   },
 };
 
