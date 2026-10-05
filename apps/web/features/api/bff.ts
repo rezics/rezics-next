@@ -82,7 +82,7 @@ export function mainRequestHeaders(
  * Media bytes are the same in every language. Main labels them public only when it decided without
  * any reader identity (`services/main/src/routes/media.ts`), so those keep its revalidating policy.
  */
-export const mediaRead = (method: string, segments: readonly string[]) =>
+const mediaRead = (method: string, segments: readonly string[]) =>
   method === 'GET' && segments[1] === 'media';
 
 export function browserResponseHeaders(upstream: Headers, mainOrigin: string, media = false): Headers {
