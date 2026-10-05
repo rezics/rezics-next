@@ -5,7 +5,11 @@ ALTER TABLE access.editorial_event DROP CONSTRAINT editorial_event_pkey,
   ADD COLUMN entry bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ADD COLUMN epoch bigint NOT NULL DEFAULT 0,
   ADD COLUMN xid xid8 NOT NULL DEFAULT '0'::xid8;
+-- Existing rows are immutable (migration 882); the one-time epoch backfill
+-- bypasses that guard inside this migration's transaction only.
+ALTER TABLE access.editorial_event DISABLE TRIGGER editorial_event_immutable;
 UPDATE access.editorial_event SET epoch = (SELECT generation FROM access.recovery_fence WHERE id);
+ALTER TABLE access.editorial_event ENABLE TRIGGER editorial_event_immutable;
 ALTER TABLE access.editorial_event ALTER COLUMN xid SET DEFAULT pg_current_xact_id();
 CREATE UNIQUE INDEX editorial_event_position ON access.editorial_event(sequence) WHERE sequence IS NOT NULL;
 CREATE INDEX editorial_event_pending ON access.editorial_event(epoch,xid,entry) WHERE sequence IS NULL;
