@@ -161,6 +161,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
         label: { value: label, language: 'en' }, displayLabel: label, inclusion: 'required' }],
     }, key(`position:${id}`));
     result.positions[id!] = { structure: base.structure, occurrence: changed.occurrences[0]!, work: work.work };
+    await authorize(`semantic:read:${changed.occurrences[0]!}`, 'semantic.read');
   }
   const definitions = new Map<string, Written>();
   const currentDefinition = async (notation: string) => {
