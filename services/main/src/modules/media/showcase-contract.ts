@@ -15,6 +15,14 @@ export const LOGO_ANCHORS = [
   'center-middle',
   'center-bottom',
 ] as const;
+
+// Literal tuples, not a mapped array, so typed clients see the exact values
+// instead of `never`.
+const showcaseRole = t.Union([t.Literal('background-landscape'), t.Literal('background-portrait'),
+  t.Literal('logo'), t.Literal('cutout')]);
+const logoAnchor = t.Union([t.Literal('start-bottom'), t.Literal('center-top'), t.Literal('center-middle'),
+  t.Literal('center-bottom')]);
+
 export type ShowcaseRole = (typeof SHOWCASE_ROLES)[number];
 export type LogoAnchor = (typeof LOGO_ANCHORS)[number];
 export type LogoTone = 'dark' | 'light';
@@ -201,10 +209,10 @@ export const showcaseSelectionCommand = t.Object(
     profile: t.Literal('work-showcase-selection-v1'),
     context: t.Optional(context),
     expectedSelection: t.Nullable(uuid),
-    role: t.Union(SHOWCASE_ROLES.map((role) => t.Literal(role))),
+    role: showcaseRole,
     language: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
     tone: t.Optional(t.Union([t.Literal('dark'), t.Literal('light')])),
-    anchor: t.Optional(t.Union(LOGO_ANCHORS.map((anchor) => t.Literal(anchor)))),
+    anchor: t.Optional(logoAnchor),
     asset: t.Nullable(uuid),
     crop: t.Optional(area),
     focalArea: t.Optional(area),
@@ -233,7 +241,7 @@ export const showcaseBatchCommand = t.Object(
 );
 
 const showcaseImage = t.Object({
-  role: t.Union(SHOWCASE_ROLES.map((role) => t.Literal(role))),
+  role: showcaseRole,
   selection: uuid,
   asset: uuid,
   use: uuid,
@@ -249,7 +257,7 @@ const showcaseImage = t.Object({
   focalArea: area,
   language: t.Optional(t.String()),
   tone: t.Optional(t.Union([t.Literal('dark'), t.Literal('light')])),
-  anchor: t.Optional(t.Union(LOGO_ANCHORS.map((anchor) => t.Literal(anchor)))),
+  anchor: t.Optional(logoAnchor),
   srcset: t.Array(
     t.Object({
       url: t.String(),
