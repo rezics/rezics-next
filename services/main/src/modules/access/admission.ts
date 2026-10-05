@@ -987,6 +987,16 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+      let participationSources: AuthoritySource[] = [];
+      let participationDenied: AdmissionDenied | null = null;
+      // Fence Realm policy before selecting membership rows, as Realm managers
+      // do. A denied retry can still recover its receipt without dispatching.
+      try {
+        participationSources = await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
+      } catch (error) {
+        if (!(error instanceof AdmissionDenied) || !existing) throw error;
+        participationDenied = error;
+      }
       const witnessCurrent = !existing?.authority_witness
         || await authorityWitnessCurrent(client, existing.authority_witness);
 
@@ -1043,7 +1053,7 @@ export class AccessAdmissionRegistry {
           || (savedBaseline.submission_contribution ?? null) !== (request.baselineContribution ?? null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = witnessCurrent && request.principal.emailVerified === true
+        const dispatchEligible = !participationDenied && witnessCurrent && request.principal.emailVerified === true
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
@@ -1139,7 +1149,8 @@ export class AccessAdmissionRegistry {
         { table: 'authority_subject', id: request.actingSubject },
       ];
       let publishingProof: RepresentedWorkProof | null = null;
-      authoritySources.push(...await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject));
+      if (participationDenied) throw participationDenied;
+      authoritySources.push(...participationSources);
       const administratorCandidate = !existing && authorityPath === 'represented-agent'
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
@@ -1276,7 +1287,9 @@ export class AccessAdmissionRegistry {
         throw new AuthorityChecked();
       }
 
-      if (baseline?.realm_membership) {
+      // 'open' is policy authority without a membership row. Claim still
+      // rechecks that policy through baselineProofCurrent and participation.
+      if (baseline?.realm_membership && baseline.realm_membership !== 'open') {
         const [kind, membershipId, generation] = baseline.realm_membership.split(':');
         authoritySources.push({ table: kind === 'owner' ? 'permission_grant'
           : kind === 'private' ? 'private_membership' : 'membership', id: membershipId!, generation });

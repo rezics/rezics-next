@@ -4,9 +4,103 @@ import { realmVisibilityFixture } from '../../../services/main/tests/realm-visib
 import { encodeReadCursor } from '../../../services/main/src/modules/work/read-session.ts';
 import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
+import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
+import type { AuthorityWitness } from '../../../services/main/src/modules/access/authority-witness.ts';
+import { AccessRealmJoining } from '../../../services/main/src/modules/access/realm-management-joining.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
+
+test('policy-only Realm replies retain identity witnesses and lose dispatch when outsider policy closes', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    expect((await h.accessPool.query(`SELECT 1 FROM access.membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2
+      UNION ALL SELECT 1 FROM access.private_membership
+      WHERE kind = 'realm' AND owner_subject = $1 AND principal_id = $3`,
+    [h.realm, h.pen, h.principalId])).rowCount).toBe(0);
+    expect((await h.accessPool.query(`SELECT 1 FROM access.permission_grant
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'reply.place'`,
+    [h.pen, `reply:place:${h.realm}`])).rowCount).toBe(0);
+    const request = () => ({ principal: h.principal, actingSubject: h.pen, action: 'reply.place',
+      scope: `reply:place:${h.realm}`, idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
+    const admitted = await h.access.register(request());
+    const saved = (await h.accessPool.query<{ realm_membership: string; authority_witness: AuthorityWitness[] }>(`
+      SELECT b.realm_membership,a.authority_witness FROM access.admission a
+      JOIN access.baseline_admission b ON b.admission_id = a.id WHERE a.id = $1`, [admitted.id])).rows[0]!;
+    expect(saved.realm_membership).toBe('open');
+    expect(saved.authority_witness.map(source => source.table).sort())
+      .toEqual(['authority_subject', 'principal', 'representation']);
+    expect((await h.access.claim(admitted.id, admitted.requestDigest, h.principal)).state).toBe('claimed');
+
+    for (const [visibility, reviewMode] of [
+      ['public', 'mandatory'], ['public', 'trusted-members'], ['restricted', 'open'], ['private', 'open'],
+    ] as const) {
+      await h.policy('public', 'open');
+      const intent = request();
+      const pending = await h.access.register(intent);
+      await h.policy(visibility, reviewMode);
+      await expect(h.access.claim(pending.id, pending.requestDigest, h.principal)).rejects.toBeInstanceOf(AdmissionDenied);
+      expect((await h.access.register(intent)).dispatchEligible, `${visibility}/${reviewMode}`).toBe(false);
+      expect((await h.accessPool.query('SELECT state FROM access.admission WHERE id = $1', [pending.id])).rows[0]!.state)
+        .toBe('registered');
+      await expect(h.access.register(request())).rejects.toBeInstanceOf(AdmissionDenied);
+    }
+  } finally { await h.close(); }
+}, 180_000);
+
+test('public submissions use author baseline and open Realm self-join uses recipient consent', async () => {
+  const h = await realmVisibilityFixture();
+  try {
+    await h.policy('public', 'open');
+    // The fixture offers an explicit submission grant; remove it to exercise
+    // the author's baseline rather than a substitute grant path.
+    await h.accessPool.query(`UPDATE access.permission_grant SET active = false,generation = generation + 1
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'submission.submit'`,
+    [h.pen, `submission:submit:${h.realm}`]);
+    const submitted = await h.submit(h.pen);
+    expect(submitted.result.status, JSON.stringify(submitted.result.body)).toBe(201);
+    expect(submitted.result.body.submission).toMatchObject({ state: 'accepted', reviewer: null });
+    const proof = (await h.accessPool.query<{ realm_membership: string | null; authority_witness: AuthorityWitness[] }>(`
+      SELECT b.realm_membership,a.authority_witness FROM access.admission a
+      JOIN access.baseline_admission b ON b.admission_id = a.id
+      WHERE a.action = 'submission.submit' AND a.idempotency_key = $1`, [submitted.key])).rows[0]!;
+    expect(proof.realm_membership).toBeNull();
+    expect(proof.authority_witness.map(source => source.table).sort())
+      .toEqual(['authority_subject', 'principal', 'representation']);
+
+    const candidate = await h.contribution('A pending public submission', h.pen);
+    const intent = { principal: h.principal, actingSubject: h.pen, action: 'submission.submit',
+      scope: `submission:submit:${h.realm}`, baselineContribution: candidate.contribution,
+      idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) };
+    const pending = await h.access.register(intent);
+    const closed = await h.settingsInput('public', 'open');
+    const settings = { ...closed, settings: { ...closed.settings, whoMaySubmit: 'closed' } };
+    expect((await h.call('PUT', `${h.root}/settings`, settings)).status).toBe(201);
+    await expect(h.access.claim(pending.id, pending.requestDigest, h.principal)).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await h.access.register(intent)).dispatchEligible).toBe(false);
+    expect((await h.submit(h.pen)).result.status).toBe(403);
+
+    // Self-join needs the recipient's consent mandate, with no Realm grant.
+    await h.grant(h.pen, 'work:create:root', 'access.membership.consent');
+    const joining = new AccessRealmJoining(h.accessPool, h.env);
+    const input = await h.settingsInput('public', 'open');
+    expect((await h.call('PUT', `${h.root}/settings`, {
+      ...input, settings: { ...input.settings, selfJoin: true },
+    })).status).toBe(201);
+    const basis = await joining.policyFor(h.principal, h.realm, h.pen);
+    expect(basis).toMatchObject({ selfJoin: true, state: 'absent' });
+    const join = { actingSubject: h.pen, expectedMembershipGeneration: basis.membershipGeneration,
+      expectedPolicyRevision: basis.policyRevision, termsRevision: basis.termsRevision, listed: true };
+    const key = randomUUID();
+    const joined = await joining.selfJoin(h.principal, h.realm, join, key);
+    expect(joined).toMatchObject({ member: h.pen, membershipGeneration: '1', replayed: false });
+    expect(await joining.selfJoin(h.principal, h.realm, join, key)).toMatchObject({
+      membershipId: joined.membershipId, membershipGeneration: '1', replayed: true,
+    });
+  } finally { await h.close(); }
+}, 180_000);
 
 // Origin is bound before identity/publication, so even an interrupted creation
 // never exposes Realm text through the separately public reply API.
