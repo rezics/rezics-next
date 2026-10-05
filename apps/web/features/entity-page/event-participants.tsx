@@ -75,7 +75,7 @@ export const readEventParticipants = cache(
     const found = await Promise.all(
       people.map(async (subject) => {
         const looked = await settle(() =>
-          main.v1.projections.get({ query: { subject, frame: [event], actingSubject } }),
+          main.v1.projections.get({ query: { subject, frame: event, actingSubject } }),
         );
         return looked.ok ? looked.data.items : [];
       }),
