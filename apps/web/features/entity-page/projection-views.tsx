@@ -7,6 +7,7 @@ import type { HrefFor, StatementItem, StatementPage } from './types.ts';
 import { Pages, Quiet, Value } from './views.tsx';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import type { PredicateLabels } from './predicate-labels.ts';
+import { withoutOwnName } from './statement-groups.ts';
 
 // A place's facts. Main answers only what holds within the place's coordinates, most specific first, and says how far each
 // claim reaches (`frameMatch`); this page keeps Main's order and groups it by that reach, never by a rule of its own.
@@ -25,6 +26,7 @@ export function ProjectionFactsView({
   page,
   labels = new Map(),
   names,
+  ownName,
   cursor,
   hrefFor,
   t,
@@ -33,6 +35,8 @@ export function ProjectionFactsView({
   page: Loaded<StatementPage>;
   labels?: PredicateLabels;
   names: Names;
+  /** The page's own name, which its heading already shows. */
+  ownName?: string;
   cursor: string | undefined;
   hrefFor: HrefFor;
   t: Copy;
@@ -51,7 +55,7 @@ export function ProjectionFactsView({
     );
   }
   const claims = page.data.groups.flatMap((group) =>
-    group.items.map((item) => ({ predicate: group.predicate, item })),
+    withoutOwnName(group, ownName).map((item) => ({ predicate: group.predicate, item })),
   );
   const titles: Record<Reach, string> = {
     here: t.factsHere,
@@ -74,12 +78,10 @@ export function ProjectionFactsView({
                   {inReach.map(({ predicate, item }, index) => (
                     <div
                       key={`${item.revision}-${index}`}
-                      className={labels.has(predicate) ? 'grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4' : 'grid gap-1'}
+                      className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4"
                     >
-                      <dt
-                        className="break-words font-medium text-muted-foreground text-sm"
-                      >
-                        {labels.get(predicate) ? <LocalizedText text={labels.get(predicate)!} /> : null}
+                      <dt className="break-words font-medium text-muted-foreground text-sm">
+                        {labels.has(predicate) ? <LocalizedText text={labels.get(predicate)!} /> : t.otherFacts}
                       </dt>
                       <dd className="min-w-0">
                         <Value item={item} names={names} hrefFor={hrefFor} t={t} />

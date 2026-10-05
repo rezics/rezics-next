@@ -39,6 +39,7 @@ export default {
   factsEverywhere: 'どこでも成り立つ',
   statements: 'ステートメント', statementsUnavailable: 'ステートメントを読み込めませんでした。',
   noStatements: 'ステートメントはまだありません', noStatementsBody: '承認された内容はまだありません。',
+  otherFacts: 'その他の事実',
   statementsList: 'ステートメント',
   valueSome: '不明な値', valueNone: '値なし',
   relations: '関係', relationsUnavailable: '関係を読み込めませんでした。',

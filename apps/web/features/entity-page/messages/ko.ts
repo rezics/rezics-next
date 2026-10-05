@@ -39,6 +39,7 @@ export default {
   factsEverywhere: '어디에서나 성립',
   statements: '진술', statementsUnavailable: '진술을 불러오지 못했습니다.',
   noStatements: '아직 진술이 없습니다', noStatementsBody: '아직 승인된 내용이 없습니다.',
+  otherFacts: '기타 사실',
   statementsList: '진술',
   valueSome: '알 수 없는 값', valueNone: '값 없음',
   relations: '관계', relationsUnavailable: '관계를 불러오지 못했습니다.',

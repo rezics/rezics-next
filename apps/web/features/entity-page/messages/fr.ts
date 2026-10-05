@@ -39,6 +39,7 @@ export default {
   factsEverywhere: 'Vaut partout',
   statements: 'Déclarations', statementsUnavailable: 'Les déclarations n’ont pas pu être chargées.',
   noStatements: 'Aucune déclaration', noStatementsBody: 'Rien n’a encore été accepté à ce sujet.',
+  otherFacts: 'Autres faits',
   statementsList: 'Déclarations',
   valueSome: 'Valeur inconnue', valueNone: 'Aucune valeur',
   relations: 'Relations', relationsUnavailable: 'Les relations n’ont pas pu être chargées.',

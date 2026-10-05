@@ -106,6 +106,7 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   };
   const frames = continuityFrame(continuity);
   const [{ avatarQuery }, { signedIn, actingSubject }] = await Promise.all([browseReader(), readingAgent()]);
+  const ownName = page.summary.name.value;
   const isPlace = page.target.base === 'projection';
   const draw = page.sections.filter(section => drawnSections.includes(section.id)
     && (!only || only.includes(section.id)));
@@ -147,7 +148,7 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
           <StatementsSection section={section} cursor={cursors.statements} position={position} frame={frames}
-            projection={isPlace} {...common} /></Suspense>;
+            projection={isPlace} ownName={ownName} {...common} /></Suspense>;
         case 'relations': return <Suspense key={section.id} fallback={loading(section, t.relations)}>
           <RelationsSection section={section} cursor={cursors.relations} position={position} frame={frames}
             hideIdentity={identitySections && page.target.base === 'resource'} {...common} /></Suspense>;

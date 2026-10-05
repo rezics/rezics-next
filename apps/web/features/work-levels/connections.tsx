@@ -12,7 +12,7 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink, SummaryLink, type SummaryHref } from './names.tsx';
-import { labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
+import { type Appearance, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
 
@@ -42,14 +42,31 @@ function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy
   return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
 }
 
-function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
-  const { item, t, people } = props;
+/** What else the occurrence names beside its Work, such as the role the subject had there, and the name credited for it. */
+function Alongside({ appearance, t, hrefFor, people, locale }: {
+  appearance: Appearance; t: Copy; hrefFor?: SummaryHref; people?: People; locale: UiLocale;
+}) {
+  return <>
+    {appearance.alongside.map((part, index) => <span key={index} data-appearance-part className="inline-flex min-w-0 items-baseline gap-x-1">
+      <span aria-hidden="true" className="text-muted-foreground">·</span>
+      <span className="sr-only"><RowLabel label={part.label} locale={locale} t={t} /></span>
+      <Participant item={{ relation: '', target: part.target, unresolvedSource: false, evidence: null }} t={t}
+        hrefFor={hrefFor} people={people} />
+    </span>)}
+    {appearance.creditedName ? <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
+      <bdi lang={appearance.creditedName.language} dir="auto">{appearance.creditedName.lexical}</bdi></span> : null}
+  </>;
+}
+
+function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People; locale: UiLocale }) {
+  const { item, t, people, locale } = props;
   const name = item.target.kind === 'resource' && item.target.summary?.status === 'available'
     ? item.target.summary.name.value : item.target.kind === 'external'
       ? (item.target.agent ? people?.get(item.target.agent)?.name : undefined) ?? item.target.label : null;
   const credited = name !== null && item.creditedName?.lexical !== name ? item.creditedName : undefined;
   return <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-1">
-    <Participant {...props} />
+    <Participant item={item} t={t} hrefFor={props.hrefFor} people={people} />
+    {item.appearance ? <Alongside appearance={item.appearance} t={t} hrefFor={props.hrefFor} people={people} locale={locale} /> : null}
     {credited ? <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
       <bdi lang={credited.language} dir="auto">{credited.lexical}</bdi></span> : null}
   </span>;
@@ -91,7 +108,7 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
           <ul className="grid gap-1">
             {row.items.map((item, index) => <li key={`${item.relation}-${index}`}
               className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <Target item={item} t={t} hrefFor={hrefFor} people={people} /><Unresolved item={item} t={t} />
+              <Target item={item} t={t} hrefFor={hrefFor} people={people} locale={locale} /><Unresolved item={item} t={t} />
             </li>)}
           </ul>
         </dd>
@@ -102,7 +119,7 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
         className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-border/70 px-3 py-1 text-sm">
         {row.projection.toRole === 'character' && ['work', 'occurrence'].includes(row.projection.fromRole) ? null
           : <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>}
-        <Target item={item} t={t} hrefFor={hrefFor} people={people} />
+        <Target item={item} t={t} hrefFor={hrefFor} people={people} locale={locale} />
       </li>))}
     </ul> : null}
   </div>;

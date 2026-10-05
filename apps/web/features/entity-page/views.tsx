@@ -21,6 +21,7 @@ import { idOf } from '../work-page/route.ts';
 import type { DiscussionPage, Loaded } from '../work-page/types.ts';
 import type { Copy } from './messages.ts';
 import type { PredicateLabels } from './predicate-labels.ts';
+import { presentStatements } from './statement-groups.ts';
 import type {
   EntitySection,
   HrefFor,
@@ -207,11 +208,44 @@ export function HoldsIn({ item, names, t }: { item: StatementItem; names: Names;
   );
 }
 
-/** Accepted statements about the resource, grouped by predicate, continuing by Main's cursor. */
+/** One predicate's heading and its values, in the label column beside them from `sm` up. */
+function StatementGroupView({
+  heading,
+  items,
+  names,
+  hrefFor,
+  t,
+}: {
+  heading: ReactNode;
+  items: readonly StatementItem[];
+  names: Names;
+  hrefFor: HrefFor;
+  t: Copy;
+}) {
+  return (
+    <div data-statement-group className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4">
+      <h3 className="break-words font-medium text-muted-foreground text-sm">{heading}</h3>
+      <ul className="grid min-w-0 gap-1">
+        {items.map((item, index) => (
+          <li key={`${item.revision}-${index}`} className="min-w-0">
+            <Value item={item} names={names} hrefFor={hrefFor} t={t} />
+            <HoldsIn item={item} names={names} t={t} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Accepted statements about the resource, grouped by predicate, continuing by Main's cursor. A predicate without a label
+ * in the reader's language never shows a blank heading: its values gather under "Other facts".
+ */
 export function StatementsView({
   page,
   labels = new Map(),
   names,
+  ownName,
   cursor,
   hrefFor,
   t,
@@ -220,6 +254,8 @@ export function StatementsView({
   page: Loaded<StatementPage>;
   labels?: PredicateLabels;
   names: Names;
+  /** The page's own name, which its heading already shows. */
+  ownName?: string;
   cursor: string | undefined;
   hrefFor: HrefFor;
   t: Copy;
@@ -237,39 +273,31 @@ export function StatementsView({
       </Region>
     );
   }
-  const { groups, nextCursor } = page.data;
+  const { labelled, other } = presentStatements(page.data.groups, labels, ownName);
   return (
     <Region id="statements" title={t.statements}>
-      {groups.length ? (
+      {labelled.length || other.length ? (
         <div aria-label={t.statementsList} className="grid gap-5">
-          {groups.map((group) => (
-            <div
+          {labelled.map((group) => (
+            <StatementGroupView
               key={group.predicate}
-              data-statement-group
-              className={labels.has(group.predicate) ? 'grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4' : 'grid gap-1'}
-            >
-              {labels.has(group.predicate) ? <h3
-                className="break-words font-medium text-muted-foreground text-sm"
-              >
-                {labels.get(group.predicate) ? <LocalizedText text={labels.get(group.predicate)!} /> : null}
-              </h3> : null}
-              <ul className="grid min-w-0 gap-1">
-                {group.items.map((item, index) => (
-                  <li key={`${item.revision}-${index}`} className="min-w-0">
-                    <Value item={item} names={names} hrefFor={hrefFor} t={t} />
-                    <HoldsIn item={item} names={names} t={t} />
-                  </li>
-                ))}
-              </ul>
-            </div>
+              heading={<LocalizedText text={labels.get(group.predicate)!} />}
+              items={group.items}
+              names={names}
+              hrefFor={hrefFor}
+              t={t}
+            />
           ))}
+          {other.length ? (
+            <StatementGroupView heading={t.otherFacts} items={other} names={names} hrefFor={hrefFor} t={t} />
+          ) : null}
         </div>
       ) : (
         <Quiet title={t.noStatements} body={t.noStatementsBody} />
       )}
       <Pages
         cursor={cursor}
-        next={nextCursor}
+        next={page.data.nextCursor}
         section="statements"
         hrefFor={hrefFor}
         messages={messages}
@@ -310,7 +338,7 @@ export function RelationsView({
       </Region>
     );
   }
-  const rows = relationRows(page.data.items);
+  const rows = relationRows(page.data.items, { together: true });
   const franchises = franchisesOf(page.data.items);
   const levels = levelsCopy(locale);
   return (

@@ -16,8 +16,8 @@ import { readPredicateLabels } from './predicate-labels.ts';
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
 
-export async function StatementsSection({ section, cursor, position, frame, projection = false, ...rest }: SectionProps
-  & { cursor: string | undefined; position?: string; frame?: readonly string[];
+export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, ...rest }: SectionProps
+  & { cursor: string | undefined; ownName?: string; position?: string; frame?: readonly string[];
     /** A place's facts: those covered by its coordinates, most specific first, each saying how far it reaches. */
     projection?: boolean }) {
   const page = await readStatements(section, cursor, position, frame);
@@ -29,8 +29,8 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
     ...item.qualifiers.applicability]))) : new Map();
   return projection
-    ? <ProjectionFactsView page={page} labels={labels} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
-    : <StatementsView page={page} labels={labels} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
+    ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t} messages={rest.messages} />
+    : <StatementsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
       messages={rest.messages} />;
 }
 

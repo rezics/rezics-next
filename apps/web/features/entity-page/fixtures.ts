@@ -4,7 +4,10 @@
 import { direction } from '@rezics/main/language';
 import { uuidToSid } from '@rezics/model/address/sid';
 import { typeEntry } from '../catalogue/types.ts';
-import type { EntityProjection, SectionId, StatementItem, StatementPage, TargetBase } from './types.ts';
+import { summary } from '../work-levels/fixtures.ts';
+import type { AvailableSummary } from '../work-levels/types.ts';
+import type { PredicateLabels } from './predicate-labels.ts';
+import type { EntityProjection, RelationsPage, SectionId, StatementItem, StatementPage, TargetBase } from './types.ts';
 
 const iri = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const sourcePosition = { dataEpoch: '8c483e38-59e7-4d95-b27b-de9cd6742a3e', sequence: '4812' };
@@ -81,3 +84,37 @@ export const componentStatements: StatementPage = { ...statements(), groups: [{ 
   items: [{ kind: 'component-property', revision: revision(7), predicate: 'https://schema.org/name', qualifiers, sources: [],
     value: { kind: 'language-string', lexical: 'معرض الهولوغرام', language: 'ar', direction: 'rtl' } }] }] };
 export const noStatements: StatementPage = { ...statements(), groups: [], count: { value: 0, kind: 'exact-page', total: null } };
+
+/** The labels Main selected for the statements' predicates; `memberOf` has none in the reader's language. */
+export const predicateLabels: PredicateLabels = new Map(Object.entries({ name: 'Name', alternateName: 'Also known as', birthDate: 'Born' })
+  .map(([term, value]) => [`https://schema.org/${term}`, { value, language: 'en', direction: direction('en', value) }]));
+
+const appearanceProjection = (toRole: string, label: string, ref: string, creditedName?: { lexical: string; language: string }) => ({
+  fromRole: 'subject', toRole, presentation: null,
+  labels: { noun: label, heading: label, plurals: { other: label }, grammaticalForms: [] },
+  language: 'en', script: 'Latn', direction: direction('en', label), reviewStatus: 'reviewed', source: null, licence: null, fallback: null,
+  arguments: [{ role: 'subject', type: 'resource', value: { kind: 'resource', ref: iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d') },
+    ...creditedName ? { creditedName } : {} }, { role: toRole, type: 'resource', value: { kind: 'resource', ref } }] });
+
+/** Where a character appears, as Main renders an occurrence of three roles seen from the character: the Work and its role apart. */
+export function appearances(): RelationsPage {
+  const subject = iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
+  const occurrence = (n: number, work: AvailableSummary, role: AvailableSummary, credited?: { lexical: string; language: string }) => ({
+    relation: iri(`a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a0${n}`), kind: 'occurrence', revision: iri(`a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0b0${n}`),
+    evidence: null, sourceVersionStatus: 'exact',
+    rendering: { profile: 'relation-rendering-v1', occurrence: null, viewingRole: 'subject',
+      meaning: { definition: iri('a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0c01'), revision: iri('a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0c02'), lifecycle: 'active', roles: [] },
+      bindings: [{ role: 'subject', participant: { kind: 'resource', ref: subject } },
+        { role: 'role', participant: { kind: 'resource', ref: role.reference } },
+        { role: 'work', participant: { kind: 'resource', ref: work.reference } }],
+      projections: [appearanceProjection('role', 'Role', role.reference, credited),
+        appearanceProjection('work', 'Appears in', work.reference)] },
+    counterparts: [role, work] });
+  const work = (id: string, name: string) => summary(iri(id), name, 'en', 'work') as AvailableSummary;
+  const role = (id: string, name: string) => summary(iri(id), name, 'en', 'resource') as AvailableSummary;
+  return { profile: 'resource-relations-v1', resource: subject, next: null, sourcePosition,
+    items: [occurrence(1, work('b1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0001', 'A Certain Magical Index'),
+      role('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0001', 'Supporting character'), { lexical: 'Mikoto', language: 'en' }),
+    occurrence(2, work('b1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0002', 'A Certain Scientific Railgun'),
+      role('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0002', 'Lead character'))] } as unknown as RelationsPage;
+}

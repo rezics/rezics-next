@@ -267,7 +267,7 @@ function RelationshipControlState({
       <a
         href={signInHref}
         aria-label={followAccessibleLabel ? `${followAccessibleLabel} · ${t.signIn}` : undefined}
-        className={cn(buttonVariants({ pill: true, size: compact ? 'xs' : 'sm' }), className)}
+        className={cn(buttonVariants({ pill: true, size: compact ? 'xs' : 'sm' }), 'w-fit max-w-full justify-self-start', className)}
       >
         <PlusIcon aria-hidden="true" />
         {membership ? t.join : (followLabel ?? t.follow)}
@@ -285,7 +285,7 @@ function RelationshipControlState({
     );
   return (
     <div
-      className={cn('flex min-w-0 flex-wrap items-center gap-1.5', className)}
+      className={cn('flex w-fit min-w-0 max-w-full flex-wrap items-center gap-1.5 justify-self-start', className)}
       data-relationship={target}
       data-hydrated={hydrated ? 'true' : undefined}
     >

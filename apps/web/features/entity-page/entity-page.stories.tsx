@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { addressPath, resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -12,7 +13,7 @@ import { EntityHeader } from './header.tsx';
 import { drawnSections } from './views.tsx';
 import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
-import { baseSections, componentStatements, noStatements, projectionFor, statements } from './fixtures.ts';
+import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements } from './fixtures.ts';
 import { standaloneHrefFor } from './route.ts';
 import type { TargetBase } from './types.ts';
 
@@ -40,7 +41,7 @@ const statementNames = new Map([[`https://rezics.com/id/c1e3a5f7-9b2d-4f6e-8c0a-
 export const Statements: Story = {
   render: (_args, context) => {
     const locale = context.globals.locale as UiLocale;
-    return <Page locale={locale}><StatementsView page={{ ok: true, data: statements('next') }} names={statementNames}
+    return <Page locale={locale}><StatementsView page={{ ok: true, data: statements('next') }} labels={predicateLabels} ownName="Kirito" names={statementNames}
       cursor={undefined} {...common(locale)} /></Page>;
   },
   async play({ canvasElement }) {
@@ -52,6 +53,12 @@ export const Statements: Story = {
     await expect(canvas.getByRole('link', { name: 'Aincrad guild' })).toHaveAttribute('href',
       localizedPath(resourceHref('/e/', 'c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c'), 'en'));
     await expect(canvas.getByText('Unknown value')).toBeVisible();
+    // The name the heading already shows is not repeated, a predicate without a label is gathered under "Other facts", and
+    // no group draws an empty heading.
+    await expect(canvas.getAllByText('Kirito')).toHaveLength(1);
+    await expect(canvas.getByText('キリト')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 3, name: 'Other facts' })).toBeVisible();
+    for (const heading of canvas.getAllByRole('heading', { level: 3 })) await expect(heading).not.toBeEmptyDOMElement();
     // The list continues by Main's cursor, on the same address.
     await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
       localizedPath(`${resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d')}?statements=next#statements`, 'en'));
@@ -60,7 +67,7 @@ export const Statements: Story = {
 
 export const DefinitionLabels: Story = {
   render: () => <Page><StatementsView page={{ ok: true, data: statements() }} names={statementNames} cursor={undefined}
-    labels={new Map([['https://schema.org/alternateName', { value: '別名', language: 'ja', direction: 'ltr' }]])}
+    labels={new Map([['https://schema.org/alternateName', { value: '別名', language: 'ja', direction: direction('ja', '別名') }]])}
     {...common('ja')} /></Page>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -112,6 +119,22 @@ export const Relations: Story = {
     await expect(canvas.getByRole('heading', { name: 'Relations' })).toBeVisible();
     // A counterpart that is a Work links to its own host.
     await expect(canvas.getAllByRole('link').some(link => addressPath(link.getAttribute('href') ?? '')?.lookup.scope === 'work')).toBe(true);
+  },
+};
+
+export const Appearances: Story = {
+  render: (_args, context) => {
+    const locale = context.globals.locale as UiLocale;
+    return <Page locale={locale}><RelationsView page={{ ok: true, data: appearances() }} cursor={undefined} {...common(locale)} /></Page>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    // Each appearance reads as its Work with the role it had there, and the credited name where one is recorded.
+    const rows = canvas.getAllByRole('listitem').filter(item => item.textContent?.includes('A Certain'));
+    await expect(rows).toHaveLength(2);
+    await expect(rows[0]).toHaveTextContent(/A Certain Magical Index\s*·\s*RoleSupporting character\s*as Mikoto/);
+    await expect(rows[1]).toHaveTextContent(/A Certain Scientific Railgun\s*·\s*RoleLead character/);
+    await expect(canvasElement.querySelector('[data-role-chip]')).toBeNull();
   },
 };
 

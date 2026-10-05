@@ -39,6 +39,7 @@ export default {
   factsEverywhere: '處處成立',
   statements: '陳述', statementsUnavailable: '無法載入陳述。',
   noStatements: '尚無陳述', noStatementsBody: '目前還沒有被接受的陳述。',
+  otherFacts: '其他事實',
   statementsList: '陳述',
   valueSome: '未知的值', valueNone: '無值',
   relations: '關係', relationsUnavailable: '無法載入關係。',

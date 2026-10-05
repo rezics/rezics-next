@@ -49,6 +49,7 @@ const en = {
   factsEverywhere: 'Holds everywhere',
   statements: 'Statements', statementsUnavailable: 'Statements could not be loaded.',
   noStatements: 'No statements yet', noStatementsBody: 'Nothing has been accepted about this yet.',
+  otherFacts: 'Other facts',
   statementsList: 'Statements',
   valueSome: 'Unknown value', valueNone: 'No value',
   relations: 'Relations', relationsUnavailable: 'Relations could not be loaded.',

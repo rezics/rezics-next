@@ -39,6 +39,7 @@ export default {
   factsEverywhere: 'Vale en todas partes',
   statements: 'Afirmaciones', statementsUnavailable: 'No se pudieron cargar las afirmaciones.',
   noStatements: 'Aún no hay afirmaciones', noStatementsBody: 'Todavía no se ha aceptado nada sobre esto.',
+  otherFacts: 'Otros datos',
   statementsList: 'Afirmaciones',
   valueSome: 'Valor desconocido', valueNone: 'Sin valor',
   relations: 'Relaciones', relationsUnavailable: 'No se pudieron cargar las relaciones.',

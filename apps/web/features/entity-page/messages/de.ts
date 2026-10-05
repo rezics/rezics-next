@@ -39,6 +39,7 @@ export default {
   factsEverywhere: 'Gilt überall',
   statements: 'Aussagen', statementsUnavailable: 'Aussagen konnten nicht geladen werden.',
   noStatements: 'Noch keine Aussagen', noStatementsBody: 'Dazu wurde noch nichts angenommen.',
+  otherFacts: 'Weitere Fakten',
   statementsList: 'Aussagen',
   valueSome: 'Unbekannter Wert', valueNone: 'Kein Wert',
   relations: 'Beziehungen', relationsUnavailable: 'Beziehungen konnten nicht geladen werden.',
