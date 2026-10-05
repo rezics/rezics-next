@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   type MediaImageMetadata,
   MediaImageProvider,
@@ -144,4 +146,17 @@ test('a Zone home reads the metadata of its heroes\' images in one batch, first 
   const images = await readHeroImages([shelf, hero], 'en', async urls => { requested = urls; return {}; });
   expect(images).toEqual({});
   expect(requested).toEqual([landscape.url, portrait.url, cutout.url, logo.url, cover.url]);
+});
+
+test('the reads a server render runs take no values from client modules, which throw when called there', () => {
+  const web = join(import.meta.dir, '..');
+  for (const file of ['features/api/showcase.ts', 'features/api/media-metadata.ts', 'features/realm/modules.ts',
+    'features/showcase/stage.ts']) {
+    for (const [, names, module] of readFileSync(join(web, file), 'utf8')
+      .matchAll(/^import\s+(?!type\b)\{([^}]*)\}\s+from\s+'@rezics\/ui\/([\w-]+)'/gm)) {
+      if (names!.split(',').every(name => !name.trim() || name.trim().startsWith('type '))) continue;
+      const source = readFileSync(join(web, '../../packages/ui/src/components', `${module}.tsx`), 'utf8');
+      expect(source.trimStart().startsWith("'use client'"), `${file} calls @rezics/ui/${module}`).toBe(false);
+    }
+  }
 });

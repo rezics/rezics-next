@@ -1,5 +1,6 @@
 import type { MediaImageControl, MediaImageMetadata, MediaImageReference } from '@rezics/ui/media-image';
-import { mediaImageKey } from '@rezics/ui/media-image';
+// The key's own module: this file also runs in server renders, where client modules cannot be called.
+import { mediaImageKey } from '@rezics/ui/media-image-key';
 import { BFF_PREFIX } from './browser.ts';
 
 const selection = /^selection:([0-9a-f-]{36})$/;

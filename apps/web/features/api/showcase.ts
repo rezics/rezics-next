@@ -1,4 +1,5 @@
-import { mediaImageKey, type MediaImageMetadata } from '@rezics/ui/media-image';
+import type { MediaImageMetadata } from '@rezics/ui/media-image';
+import { mediaImageKey } from '@rezics/ui/media-image-key';
 import type { MainClient } from '../discover/types.ts';
 import { mainApiWithToken } from './main.ts';
 import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';

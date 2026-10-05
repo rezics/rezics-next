@@ -5,6 +5,7 @@ import { EyeOffIcon } from 'lucide-react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { safeDocumentUrl } from './document-url.tsx';
+import { mediaImageKey } from './media-image-key.tsx';
 
 export interface MediaImageViewer {
   ready: boolean;
@@ -43,7 +44,7 @@ export const mediaImageLabels = {
 };
 export type MediaImageLabels = { [K in keyof typeof mediaImageLabels]: string };
 const anonymous: MediaImageViewer = { ready: true, signedIn: false, age: 'unknown', optIns: { general: true, r15: false, sexual: false, grotesque: false }, nsfwDisplay: 'mask' };
-export const mediaImageKey = ({ representationId, mediaUseId }: MediaImageReference) => `${representationId}:${mediaUseId ?? ''}`;
+export { mediaImageKey };
 
 interface ImageContext {
   viewer: MediaImageViewer;
