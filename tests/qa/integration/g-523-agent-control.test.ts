@@ -571,7 +571,7 @@ test('G-523: edge revocation cancels real registered and running Work commands a
     const drain = `/v1/access/revocations/${revocationId}?issuerSubject=${encodeURIComponent(organization)}`;
     expect((await h.call('GET',drain,a.token)).body).toMatchObject({
       state: 'draining',affectedWork: 2,pending: 2,target: { kind: 'representation_edge',id: edgeId } });
-    await expect(h.registry.claim(idleAdmission.id,idleAdmission.requestDigest)).rejects.toThrow('epoch is stale');
+    await expect(h.registry.claim(idleAdmission.id,idleAdmission.requestDigest)).rejects.toThrow(/authority changed before (claim|dispatch)/);
     await expect(h.accessPool.query(`UPDATE access.revocation SET state = 'completed',
       completed_at = clock_timestamp() WHERE id = $1`,[revocationId]))
       .rejects.toThrow('revocation still has admitted work pending');
@@ -813,7 +813,7 @@ test('G-523: stale, expired, concurrent and recovery-held acceptance has no part
       ).status,
     ).toBe(200);
     await expect(registry.claim(admission.id, 'a'.repeat(64))).rejects.toThrow(
-      'admission scope epoch is stale',
+      /authority changed before (claim|dispatch)/,
     );
   } finally {
     await h.close();
@@ -821,7 +821,7 @@ test('G-523: stale, expired, concurrent and recovery-held acceptance has no part
 }, 120_000);
 
 // Direct and topology controller departures must serialize on the same fences.
-test('G-523: controller edge revocation and controller leave use Work then topology without deadlock', async () => {
+test('G-523: controller edge revocation and controller leave serialize on topology without deadlock', async () => {
   const h = await startAgentControlHarness('g-523-lock-order');
   try {
     const a = await h.user('controller');
@@ -867,7 +867,7 @@ test('G-523: controller edge revocation and controller leave use Work then topol
           expectedObjectGeneration: '0', expectedTopologyEpoch: topologyEpoch }),
       h.call('POST', '/v1/agents/controller-changes', a.token, controllerBody(organization,controlId,epoch)),
     ]);
-    expect(gates.slice(0,2)).toEqual(['work:create:root','access:representation-topology']);
+    expect(gates.slice(0,2)).toEqual(['access:representation-topology','access:representation-topology']);
     const edge = results[0]!;
     if (edge.status === 'rejected') expect(edge.reason instanceof ControlConflict || edge.reason instanceof ControlStale).toBe(true);
     const leave = results[1]!;
