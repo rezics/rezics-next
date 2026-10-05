@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
+import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale } from '../realm-admin/history.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -196,6 +196,7 @@ export class AccessMemberships {
   configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
   private normalize(error: unknown): Error {
+    if (error instanceof RealmHistoryAdmissionStale) return new MembershipStale(error.message);
     if (error && typeof error === 'object' && 'code' in error) {
       const code = String(error.code);
       if (code === '23505') return new MembershipConflict('membership key conflicts');
@@ -304,6 +305,8 @@ export class AccessMemberships {
     }
     const followSpace = input.kind === 'realm' && input.action === 'join'
       ? await prepareRealmFollow(this.pool,input.ownerSubject) : null;
+    const historyAdmission = input.kind === 'realm' && input.action === 'join'
+      ? await prepareRealmHistoryAdmission(this.pool,input.historyEnvironment,input.ownerSubject) : undefined;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -450,7 +453,7 @@ export class AccessMemberships {
       }
       if (input.action === 'join') {
         if (input.kind === 'realm') await recordRealmHistoryAdmission(client, input.historyEnvironment,
-          input.ownerSubject, 'agent', membershipId, generation);
+          input.ownerSubject, 'agent', membershipId, generation, historyAdmission);
         await client.query(`INSERT INTO access.membership_consent_use
           (consent_id, membership_id, generation) VALUES ($1,$2,$3)`,
         [input.consentReference, membershipId, generation]);

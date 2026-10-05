@@ -1,14 +1,17 @@
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { RealmDirectoryIndex } from '../../../services/main/src/modules/realm-directory/index.ts';
+import { RealmDirectoryWorker } from '../../../services/main/src/modules/realm-directory/worker.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
 
 interface DirectoryItem { id: string; reviewMode: 'mandatory' | 'trusted-members' | 'open'; name: { value: string; language: string };
   description: { value: string } | null; membership: { count: { kind: string; value: number | null } };
   icon: { kind: string }; links: { realm: string } }
 interface DirectoryPage { items: DirectoryItem[]; nextCursor: string | null;
+  sourcePosition: { dataEpoch: string; sequence: string };
   count: { value: number; kind: 'exact-page'; total: null } }
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -51,7 +54,19 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     };
     await publish(first.realm, 'Readers Guild', '读者公会', 120);
     const secondProfile = await publish(second.realm, 'Book Circle', '图书圈', 50);
-    const get = (path: string) => stack.call('GET', path);
+    const worker = new RealmDirectoryWorker({ environment: stack.env, access: stack.access, account: {} as never });
+    const refresh = async () => {
+      for (let step = 0; step < 128; step++) {
+        if (await worker.tick()) return;
+      }
+      throw new Error('Directory background refresh exceeded its step budget');
+    };
+    const get = async (path: string) => {
+      try { await refresh(); }
+      catch (error) { if (!(error instanceof WorkReadUnavailable)) throw error; }
+      return stack.call('GET', path);
+    };
+    await refresh();
     const beforeCalls = stack.fuseki.queries;
     const activity = await json<DirectoryPage>(await get('/v1/realms?limit=1'));
     // One additional batch joins Realm identities to Space canonical addresses.
@@ -190,6 +205,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     // Populate a small multi-scale directory directly; invalidate because this
     // fixture deliberately bypasses graph receipts. Product writes use refresh.
     for (const size of [129, 513]) {
+      const published = await json<DirectoryPage>(await get('/v1/realms?sort=newest&q=Scale&limit=20'));
       const ids = Array.from({ length: size === 129 ? 129 : 384 }, () => ({ realm: `https://rezics.com/id/${randomUUID()}`,
         space: `https://rezics.com/id/${randomUUID()}`, head: `https://rezics.com/id/${randomUUID()}` }));
       await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -201,14 +217,18 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
           ${ids.map(row => `${iri(row.head)} a rv:RevisionAnchor ; rv:component ${iri(row.realm)} ;
             rv:dataEpoch "${stack.env.lineage.dataEpoch}" ; rv:sequence 1 .`).join('\n')}
         } }`);
-      await stack.access.realmDirectory.invalidate();
-      // Cold refresh checkpoints bounded batches and resumes on the next request.
-      for (let retry = 0; retry < 128; retry++) {
-        const warm = await get('/v1/realms?sort=newest&q=Scale&limit=20');
-        if (warm.status === 200) break;
-        expect(warm.status, await warm.clone().text()).toBe(503);
-        expect(retry).toBeLessThan(127);
+      // Force a rebuild without revoking the safe, completed fixture snapshot.
+      // Product erasure receipts choose this same background rebuild path.
+      await stack.accessPool.query(`UPDATE access.realm_directory_position
+        SET build_data_epoch = NULL,revision = revision + 1 WHERE singleton`);
+      // Every incomplete step, including a restart, preserves the published page.
+      for (let step = 0; step < 128; step++) {
+        if (await worker.tick()) break;
+        expect(step).toBeLessThan(127);
         Object.assign(stack.access, { realmDirectory: new RealmDirectoryIndex(stack.accessPool) });
+        const retained = await json<DirectoryPage>(await stack.call('GET', '/v1/realms?sort=newest&q=Scale&limit=20'));
+        expect(retained.sourcePosition).toEqual(published.sourcePosition);
+        expect(retained.items.map(item => item.id)).toEqual(published.items.map(item => item.id));
       }
       let next: string | null = null;
       const seen = new Set<string>();
@@ -220,11 +240,14 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       expect(seen.size).toBe(size);
       const planner = await stack.accessPool.connect();
       try {
+        await planner.query('ANALYZE access.realm_directory');
         await planner.query('BEGIN');
         await planner.query('SET LOCAL enable_seqscan = off');
         for (const [column, index] of [['created', 'created'], ['activity', 'activity'], ['count_value', 'members']]) {
           const plan = await planner.query(`EXPLAIN (ANALYZE, FORMAT JSON)
-            SELECT realm FROM access.realm_directory ORDER BY -${column}, realm LIMIT 21`);
+            SELECT realm FROM access.realm_directory
+            WHERE generation = $1::smallint ORDER BY -${column}, realm LIMIT 21`,
+          [(await planner.query('SELECT generation FROM access.realm_directory_position WHERE singleton')).rows[0].generation]);
           expect(JSON.stringify(plan.rows)).toContain(`realm_directory_${index}`);
           expect(plan.rows[0]['QUERY PLAN'][0].Plan['Actual Rows']).toBe(21);
         }

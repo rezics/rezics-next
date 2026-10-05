@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminLimit, RealmAdminStale,
   type MemberCommand } from '../realm-admin/contract.ts';
-import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
+import { recordRealmHistoryAdmission, RealmHistoryAdmissionStale, type RealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 
 /** Changes the existing Agent membership episode; consent stays recipient-owned.
  * Bans do not silently restore revoked roles when they expire or are lifted. */
 export async function changeRealmMember(client: PoolClient, realm: string, input: MemberCommand,
-  principalId: string, receiptId: string, env?: WorkActivationEnvironment) {
+  principalId: string, receiptId: string, env?: WorkActivationEnvironment, historyAdmission?: RealmHistoryAdmission) {
   if ((input.action === 'add') !== (input.consent !== null)
     || input.action !== 'ban' && input.durationSeconds !== null) throw new RealmAdminInvalid('Invalid member change');
   // The generic membership owner also holds this gate, so consent use and
@@ -60,7 +60,13 @@ export async function changeRealmMember(client: PoolClient, realm: string, input
     [membershipId, membershipGeneration, state, policy.revision, terms, input.consent, principalId]);
     if (input.action === 'add') await client.query(`INSERT INTO access.membership_consent_use
       (consent_id,membership_id,generation) VALUES ($1,$2,$3)`, [input.consent, membershipId, membershipGeneration]);
-    if (input.action === 'add') await recordRealmHistoryAdmission(client, env, realm, 'agent', membershipId, membershipGeneration);
+    if (input.action === 'add') {
+      try { await recordRealmHistoryAdmission(client, env, realm, 'agent', membershipId, membershipGeneration, historyAdmission); }
+      catch (error) {
+        if (error instanceof RealmHistoryAdmissionStale) throw new RealmAdminStale(error.message);
+        throw error;
+      }
+    }
   }
   if ((input.action === 'remove' || input.action === 'ban') && member) {
     let remaining = 256;

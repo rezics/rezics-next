@@ -4,6 +4,7 @@ import type { VerifiedPrincipal } from './admission.ts';
 import { AccessMembershipConsents } from './membership-consents.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale } from './memberships.ts';
 import { changeRealmMember } from './realm-management-members.ts';
+import { prepareRealmHistoryAdmission, type RealmHistoryAdmission } from '../realm-admin/history.ts';
 import { membershipRoot, realmActor, realmIdPattern, realmKeyPattern, realmManager, realmTransaction } from './realm-management-authority.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
 import { readRealmPolicy } from '../space/policy.ts';
@@ -139,7 +140,7 @@ export class AccessRealmJoining {
   }
 
   private async join(client: PoolClient, principal: VerifiedPrincipal, principalId: string, realm: string,
-    input: SelfJoinCommand, key: string, identity: SpaceIdentity | null) {
+    input: SelfJoinCommand, key: string, identity: SpaceIdentity | null, historyAdmission?: RealmHistoryAdmission) {
     if (!identity) throw new RealmAdminDenied('Realm Space is unavailable');
     await registerFollowSpace(client,identity);
     let consent;
@@ -155,7 +156,7 @@ export class AccessRealmJoining {
     }
     await changeRealmMember(client,realm,{ actingSubject: input.actingSubject,member: input.actingSubject,
       expectedGeneration: '0',expectedMembershipGeneration: input.expectedMembershipGeneration,
-      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID(),this.env);
+      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID(),this.env,historyAdmission);
     const member = (await this.member(client,realm,input.actingSubject))!;
     await client.query(`INSERT INTO access.realm_roster_listing (membership_id,membership_generation,realm,member,listed)
       VALUES ($1,$2,$3,$4,$5)`,[member.id,member.generation,realm,input.actingSubject,input.listed]);
@@ -166,16 +167,17 @@ export class AccessRealmJoining {
 
   async selfJoin(principal: VerifiedPrincipal, realm: string, input: SelfJoinCommand, key: string) {
     const identity = await publicTargetRead(this.env.fuseki,session => followSpace(session,realm));
+    const graph = await readRealmPolicy(this.env,realm);
+    const historyAdmission = await prepareRealmHistoryAdmission(this.pool,this.env,realm);
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
       return this.receipt(client,actor.id,key,['self-join',realm,input],async () => {
         const policy = await this.policy(client,realm);
-        const graph = await readRealmPolicy(this.env,realm);
         if (!policy.self_join || !policy.open || graph?.admission !== 'open') {
           throw new RealmAdminDenied('This Realm does not allow self-joining');
         }
-        return this.join(client,principal,actor.id,realm,input,key,identity);
+        return this.join(client,principal,actor.id,realm,input,key,identity,historyAdmission);
       });
     });
   }
@@ -183,6 +185,7 @@ export class AccessRealmJoining {
   async respond(principal: VerifiedPrincipal, realm: string, id: string, input: InvitationResponse, key: string) {
     const identity = input.action === 'accept'
       ? await publicTargetRead(this.env.fuseki,session => followSpace(session,realm)) : null;
+    const historyAdmission = input.action === 'accept' ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
@@ -208,7 +211,7 @@ export class AccessRealmJoining {
           await this.policy(client,realm);
           await this.join(client,principal,actor.id,realm,{ actingSubject: input.actingSubject,
             expectedMembershipGeneration: row.membership_generation,expectedPolicyRevision: row.policy_revision,
-            termsRevision: row.terms_revision,listed: input.listed },key,identity);
+            termsRevision: row.terms_revision,listed: input.listed },key,identity,historyAdmission);
         }
         row.state = input.action === 'accept' ? 'accepted' : 'declined';
         await client.query(`UPDATE access.realm_invitation SET state = $2,responded_at = clock_timestamp() WHERE id = $1`,[id,row.state]);

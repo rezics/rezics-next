@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
+import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -76,6 +76,7 @@ export class AccessPrivateMemberships {
   configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
   private normalize(error: unknown): Error {
+    if (error instanceof RealmHistoryAdmissionStale) return new MembershipStale(error.message);
     if (error && typeof error === 'object' && 'code' in error) {
       const code = String(error.code);
       if (code === '23505') return new MembershipConflict('private membership key conflicts');
@@ -261,6 +262,8 @@ export class AccessPrivateMemberships {
     }
     const followSpace = input.kind === 'realm' && input.action === 'join'
       ? await prepareRealmFollow(this.pool,input.ownerSubject) : null;
+    const historyAdmission = input.kind === 'realm' && input.action === 'join'
+      ? await prepareRealmHistoryAdmission(this.pool,input.historyEnvironment,input.ownerSubject) : undefined;
     const client = await this.pool.connect();
     try {
       const currentEpoch = await this.begin(client, true);
@@ -428,7 +431,7 @@ export class AccessPrivateMemberships {
         WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
       const authorityEpoch = bumped.rows[0]!.authority_epoch;
       if (input.kind === 'realm' && input.action === 'join') await recordRealmHistoryAdmission(client,
-        input.historyEnvironment, input.ownerSubject, 'private', member.id, member.generation);
+        input.historyEnvironment, input.ownerSubject, 'private', member.id, member.generation, historyAdmission);
       await client.query(`INSERT INTO access.private_membership_history
         (membership_id, generation, state, policy_revision, terms_revision,
           consent_reference, changed_by_principal) VALUES ($1,$2,$3,$4,$5,$6,$7)`,

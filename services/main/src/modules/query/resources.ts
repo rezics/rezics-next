@@ -7,6 +7,7 @@ import {
   WorkReadInvalid,
   WorkReadMoved,
   WorkReadUnavailable,
+  type ReadPosition,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { readResourceSummaries } from '../media/summary.ts';
@@ -157,6 +158,7 @@ interface PageCursor {
   seen: number;
   seeks?: Record<string, { id: string; key: string }>;
   done?: string[];
+  directorySource?: ReadPosition;
 }
 async function publicAgents(session: WorkReadSession, agents: readonly string[]) {
   if (!agents.length) return new Set<string>();
@@ -428,6 +430,7 @@ async function readResourceListAtPosition(
       throw new WorkReadInvalid('Resource cursor is invalid');
   }
   const state = { ...prior, seeks: { ...prior.seeks }, done: [...(prior.done ?? [])] };
+  let directoryBasis: { position: string; sourcePosition: ReadPosition } | undefined;
   const items: ResourceCard[] = [];
   const descriptors = new Map<string, Candidate>();
   let scanned = 0,
@@ -634,6 +637,12 @@ async function readResourceListAtPosition(
             cursor: '',
             seek,
           });
+          if (state.directorySource && (state.directorySource.dataEpoch !== page.sourcePosition.dataEpoch
+            || state.directorySource.sequence !== page.sourcePosition.sequence)) {
+            throw new WorkReadMoved('Realm directory source changed');
+          }
+          state.directorySource = page.sourcePosition;
+          directoryBasis = page;
           complete = !page.next;
           candidates.push(
             ...page.rows.map((row) => ({
@@ -797,6 +806,8 @@ async function readResourceListAtPosition(
       delivery[index] === 'visible' && (item.kind !== 'agent' || deliveredAgents.has(item.id)),
   );
   const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
+  if (directoryBasis) await session.deps.access.realmDirectory!.fence(
+    directoryBasis.position, false, directoryBasis.sourcePosition);
   if (index) await fenceLabelIndex(session, index);
   state.seen += visible.length;
   const next = more
@@ -804,8 +815,10 @@ async function readResourceListAtPosition(
     : null;
   return {
     profile: 'resource-list-v1' as const,
-    sourcePosition: session.position,
-    stale: active.stale || final.stale,
+    sourcePosition: kinds.length === 1 && kinds[0] === 'realm' && directoryBasis
+      ? directoryBasis.sourcePosition : session.position,
+    stale: active.stale || final.stale || !!directoryBasis
+      && directoryBasis.sourcePosition.sequence !== session.position.sequence,
     ...listResult(visible, next, prior.seen),
   };
 }

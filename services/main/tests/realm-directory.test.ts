@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { Pool, PoolClient } from 'pg';
 import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp } from '../src/app.ts';
@@ -8,6 +9,81 @@ import { searchText } from '../src/modules/realm-directory/read.ts';
 import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved }
   from '../src/modules/work/read-session.ts';
+import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
+import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale }
+  from '../src/modules/realm-admin/history.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+
+test('Realm directory pages use the last built position and perform no graph reads or row locking', async () => {
+  const queries: string[] = [];
+  let countRevision = '4';
+  const query = async (sql: string) => {
+    queries.push(sql);
+    let rows: object[] = [];
+    if (sql.includes('FROM access.recovery_fence')) rows = [{ id: true }];
+    else if (sql.includes('FROM access.realm_directory_position')) rows = [{ data_epoch: 'epoch', sequence: '17', generation: 1,
+      phase: 'graph', target_sequence: '23', rebuilding: true }];
+    else if (sql.includes('FROM access.realm_count_position')) rows = [{ revision: countRevision }];
+    else if (sql.includes('FROM access.realm_directory d')) rows = [
+      { realm: 'one', rank: '-7', count_value: '2', count_revision: '4' },
+      { realm: 'two', rank: '-6', count_value: '1', count_revision: '3' },
+    ];
+    return { rows, rowCount: rows.length };
+  };
+  const index = new RealmDirectoryIndex({ connect: async () => ({ query, release() {} }) } as unknown as Pool);
+  const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '23' },
+    query: () => { throw new Error('GET must not refresh Fuseki'); } } as never;
+  const page = await index.page(session, { sort: 'members', q: '', limit: 1 });
+  expect(page.sourcePosition).toEqual({ dataEpoch: 'epoch', sequence: '17' });
+  expect(page.rows).toHaveLength(1);
+  expect(queries[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  expect(queries.some(sql => /FOR (UPDATE|SHARE)|^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
+  expect(decodeReadCursor(page.next!, ['realm-directory-v3', 'members', '', null, null], page.sourcePosition)?.after).toBe('one');
+  countRevision = '5';
+  await expect(index.page(session, { sort: 'members', q: '', limit: 1, cursor: page.next! })).rejects.toBeInstanceOf(WorkReadMoved);
+  await expect(index.page(session, { sort: 'members', q: '', cursor: 'invalid' })).rejects.toBeInstanceOf(WorkReadInvalid);
+});
+
+test('Realm history cuts are prepared outside the transaction and reject changed recovery, policy or epoch locally', async () => {
+  let transaction = false, recovery = '4', restricted = true, graphCalls = 0;
+  const writes: unknown[][] = [];
+  const pool = { query: async () => ({ rows: [{ generation: recovery, restricted }] }) } as unknown as Pool;
+  const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: { query: async () => {
+    if (transaction) throw new Error('Graph HTTP while holding membership locks');
+    graphCalls++;
+    return { results: { bindings: [{ sequence: { value: '17' } }] } };
+  } } } as unknown as WorkActivationEnvironment;
+  const client = { query: async (sql: string, values: unknown[] = []) => {
+    let rows: object[] = [];
+    if (sql.includes('SELECT 1 FROM access.recovery_fence')) rows = recovery === values[0] ? [{}] : [];
+    else if (sql.includes('SELECT history')) rows = [{ history: restricted ? 'from-admission' : 'everything' }];
+    else if (sql.includes('INSERT INTO access.realm_history_admission')) { writes.push(values); rows = [{}]; }
+    return { rows, rowCount: rows.length };
+  } } as unknown as PoolClient;
+  const cut = await prepareRealmHistoryAdmission(pool, env, 'realm');
+  transaction = true;
+  await recordRealmHistoryAdmission(client, env, 'realm', 'agent', 'episode', '1', cut);
+  expect(writes[0]).toEqual(['agent', 'episode', '1', 'epoch', '17', '4']);
+  recovery = '6';
+  await expect(recordRealmHistoryAdmission(client, env, 'realm', 'private', 'other', '1', cut))
+    .rejects.toBeInstanceOf(RealmHistoryAdmissionStale);
+  recovery = '4'; restricted = false;
+  await expect(recordRealmHistoryAdmission(client, env, 'realm', 'agent', 'other', '1', cut))
+    .rejects.toBeInstanceOf(RealmHistoryAdmissionStale);
+  restricted = true; env.lineage.dataEpoch = 'restored';
+  await expect(recordRealmHistoryAdmission(client, env, 'realm', 'agent', 'other', '1', cut))
+    .rejects.toBeInstanceOf(RealmHistoryAdmissionStale);
+  expect(graphCalls).toBe(1);
+  expect(writes).toHaveLength(1);
+});
+
+test('Realm history preparation for everything episodes needs no Fuseki call', async () => {
+  const pool = { query: async () => ({ rows: [{ generation: '4', restricted: false }] }) } as unknown as Pool;
+  const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: { query: () => {
+    throw new Error('Unrestricted join must not wait on the history graph');
+  } } } as unknown as WorkActivationEnvironment;
+  expect(await prepareRealmHistoryAdmission(pool, env, 'realm')).toMatchObject({ restricted: false, recoveryGeneration: '4' });
+});
 
 test('Realm directory search handles contiguous Han and Unicode compatibility characters', () => {
   expect(searchText('读者公会', '者公')).toBe(true);

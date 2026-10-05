@@ -11,7 +11,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { generation, reason, commandFields, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale,
   RealmAdminUnavailable } from './contract.ts';
-import { recordRealmHistoryAdmission } from './history.ts';
+import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale } from './history.ts';
 import { JOIN_REQUEST_READ_COST, JOIN_REQUEST_SEARCH_SQL, joinRequestCursor, requestSearch,
   requestCursorBinding, encodeRequestCursor, decodeRequestCursor } from './join-requests-read.ts';
 import { prepareRealmFollow } from '../follows/recovery.ts';
@@ -74,9 +74,24 @@ export class RealmJoinRequests {
   constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment) {}
 
   private async discoverableRequest(realm: string) {
+    const recovery = (await this.pool.query<{ generation: string }>(
+      'SELECT generation::text FROM access.recovery_fence WHERE id AND open')).rows[0];
+    if (!recovery) throw new RealmAdminUnavailable('Access recovery is in progress');
     await assertGraphAdmissionOpen(this.env.fuseki,this.env.lineage);
     const graph = await readRealmPolicy(this.env,realm);
     if (!graph || graph.admission !== 'request') throw new RealmJoinRequestMissing('Realm is unavailable');
+    return recovery.generation;
+  }
+  private async requestRecovery(client: PoolClient, generation: string) {
+    try {
+      if (!(await client.query(`SELECT 1 FROM access.recovery_fence WHERE id AND open
+        AND generation = $1 FOR SHARE NOWAIT`, [generation])).rowCount) {
+        throw new RealmAdminStale('Join request recovery basis changed');
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code === '55P03') throw new RealmAdminStale('Join request recovery basis is busy');
+      throw error;
+    }
   }
   private async policy(client: PoolClient, realm: string) {
     const row = (await client.query<{ revision: string; terms_revision: string; open: boolean; admission: string; self_join: boolean }>(`
@@ -113,9 +128,9 @@ export class RealmJoinRequests {
       FROM access.realm_join_request_member_revision WHERE realm = $1 AND member = $2),0)::text AS generation`,[realm,member])).rows[0]!.generation;
   }
   basis(principal: VerifiedPrincipal, realm: string, actingSubject: string) {
-    return this.discoverableRequest(realm).then(() => realmTransaction(this.pool,realm,false,async client => {
+    return this.discoverableRequest(realm).then(recovery => realmTransaction(this.pool,realm,false,async client => {
       await realmActor(client,principal,actingSubject,'access.membership.consent');
-      await this.discoverableRequest(realm);
+      await this.requestRecovery(client,recovery);
       const policy = await this.policy(client,realm);
       const member = await this.episode(client,realm,actingSubject);
       return { policyRevision: policy.revision,termsRevision: policy.terms_revision,
@@ -125,11 +140,11 @@ export class RealmJoinRequests {
   async request(principal: VerifiedPrincipal, realm: string, input: JoinRequestCommand, key: string) {
     validKey(key);
     if (!Value.Check(joinRequestCommand,input) || !input.reason.trim()) throw new RealmAdminInvalid('Invalid join request');
-    await this.discoverableRequest(realm);
+    const recovery = await this.discoverableRequest(realm);
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
-      await this.discoverableRequest(realm);
+      await this.requestRecovery(client,recovery);
       const policy = await this.policy(client,realm);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`join-request:${actor.id}:${key}`]);
       const hash = digest([realm,input]);
@@ -270,6 +285,8 @@ export class RealmJoinRequests {
     validKey(key);
     if (!Value.Check(joinRequestDecision,input) || !input.reason.trim()) throw new RealmAdminInvalid('Invalid request decision');
     const identity = input.decision==='accepted' ? await prepareRealmFollow(this.pool,realm,this.env.fuseki) : null;
+    const historyAdmission = input.decision === 'accepted'
+      ? await prepareRealmHistoryAdmission(this.pool,this.env,realm) : undefined;
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
       await membershipRoot(client);
@@ -304,7 +321,11 @@ export class RealmJoinRequests {
       await client.query(`INSERT INTO access.membership_history
         (membership_id,generation,state,policy_revision,terms_revision,consent_reference,changed_by_principal)
         VALUES ($1,$2,'joined',$3,$4,$5,$6)`,[id,generation,row.policy_revision,row.terms_revision,reference,manager.id]);
-      await recordRealmHistoryAdmission(client,this.env,realm,'agent',id,generation);
+      try { await recordRealmHistoryAdmission(client,this.env,realm,'agent',id,generation,historyAdmission); }
+      catch (error) {
+        if (error instanceof RealmHistoryAdmissionStale) throw new RealmAdminStale(error.message);
+        throw error;
+      }
       await client.query("UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1 WHERE id = 'work:create:root'");
       return this.finish(client,realm,request,manager.id,input.actingSubject,key,hash,'accepted',input.reason,next,id,generation);
     });

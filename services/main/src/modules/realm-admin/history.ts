@@ -1,32 +1,71 @@
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { AdmissionUnavailable } from '../access/admission.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
 export interface RealmHistoryFloor { dataEpoch: string; sequence: string }
+export interface RealmHistoryAdmission extends RealmHistoryFloor {
+  recoveryGeneration: string;
+  restricted: boolean;
+}
+export class RealmHistoryAdmissionStale extends Error {}
 export const REALM_HISTORY_COST = { admissionGraphReads: 1, admissionRows: 2,
-  accessPointReads: 1, lineageRows: 32 } as const;
+  preparationPointReads: 1, admissionPointReads: 2, accessPointReads: 1, lineageRows: 32 } as const;
+
+/** Read before acquiring any membership locks. The recovery generation fences
+ * a restore between this HTTP read and the local admission transaction. */
+export async function prepareRealmHistoryAdmission(pool: Pool, env: WorkActivationEnvironment | undefined,
+  realm: string): Promise<RealmHistoryAdmission | undefined> {
+  if (!env) return;
+  const basis = (await pool.query<{ generation: string; restricted: boolean }>(`SELECT f.generation::text,
+    EXISTS (SELECT 1 FROM access.realm_admin_settings WHERE realm = $1 AND history = 'from-admission') AS restricted
+    FROM access.recovery_fence f WHERE f.id AND f.open`, [realm])).rows[0];
+  if (!basis) throw new AdmissionUnavailable('Realm admission recovery is held');
+  let sequence = '0';
+  if (basis.restricted) {
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    if (rows.length !== 1 || !/^\d+$/.test(rows[0]?.sequence?.value ?? '')) {
+      throw new AdmissionUnavailable('Realm admission graph position is unavailable');
+    }
+    sequence = rows[0]!.sequence!.value;
+  }
+  return { dataEpoch: env.lineage.dataEpoch, sequence, recoveryGeneration: basis.generation,
+    restricted: basis.restricted };
+}
 
 /** Called inside the successful membership transaction, once per episode.
  * Only from-admission joins acquire a cut. Earlier/everything episodes retain
  * full history, including adapters whose graph owner has not been wired yet.
  * No oldest/current timestamp approximation, and no lazy first-read admission. */
 export async function recordRealmHistoryAdmission(client: PoolClient, env: WorkActivationEnvironment | undefined,
-  realm: string, kind: 'agent' | 'private', membership: string, generation: string) {
+  realm: string, kind: 'agent' | 'private', membership: string, generation: string,
+  admission: RealmHistoryAdmission | undefined) {
   if (!env) return;
-  const restricted = await client.query(`SELECT 1 FROM access.realm_admin_settings
-    WHERE realm = $1 AND history = 'from-admission'`, [realm]);
-  if (!restricted.rowCount) return;
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
-    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
-      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-  } LIMIT 2`, 4096)).results?.bindings ?? [];
-  if (rows.length !== 1 || !/^\d+$/.test(rows[0]?.sequence?.value ?? '')) {
-    throw new AdmissionUnavailable('Realm admission graph position is unavailable');
+  if (!admission || admission.dataEpoch !== env.lineage.dataEpoch) {
+    throw new RealmHistoryAdmissionStale('Realm admission epoch changed');
   }
-  await client.query(`INSERT INTO access.realm_history_admission (kind,membership_id,generation,data_epoch,sequence)
-    VALUES ($1,$2,$3,$4,$5)`, [kind,membership,generation,env.lineage.dataEpoch,rows[0]!.sequence!.value]);
+  try {
+    const recovery = await client.query(`SELECT 1 FROM access.recovery_fence
+      WHERE id AND open AND generation = $1 FOR SHARE NOWAIT`, [admission.recoveryGeneration]);
+    const restricted = await client.query(`SELECT history FROM access.realm_admin_settings
+      WHERE realm = $1 FOR SHARE NOWAIT`, [realm]);
+    if (!recovery.rowCount || (restricted.rows[0]?.history === 'from-admission') !== admission.restricted) {
+      throw new RealmHistoryAdmissionStale('Realm admission basis changed');
+    }
+  } catch (error) {
+    if ((error as { code?: string }).code === '55P03') throw new RealmHistoryAdmissionStale('Realm admission basis is busy');
+    throw error;
+  }
+  if (!admission.restricted) return;
+  const recorded = await client.query(`INSERT INTO access.realm_history_admission (kind,membership_id,generation,data_epoch,sequence)
+    SELECT $1,$2,$3,$4,$5 FROM access.recovery_fence WHERE id AND open AND generation = $6
+    ON CONFLICT DO NOTHING RETURNING membership_id`,
+  [kind,membership,generation,admission.dataEpoch,admission.sequence,admission.recoveryGeneration]);
+  if (!recorded.rowCount) throw new RealmHistoryAdmissionStale('Realm admission episode changed');
 }
 
 /** Revisions after the admission cut are readable, including newer restore

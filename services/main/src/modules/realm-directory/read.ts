@@ -82,6 +82,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         : profile?.count ?? { kind: 'unknown', value: null } },
       links: { realm: `/v1/realms/${candidate.realm.slice(-36)}` } };
   });
-  await index.fence(page.position, input.sort === 'growing');
-  return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items, page.next) };
+  await index.fence(page.position, input.sort === 'growing', page.sourcePosition);
+  return { profile: 'realm-directory-v1' as const, topic, ...pageResult(session, items, page.next),
+    sourcePosition: page.sourcePosition };
 }
