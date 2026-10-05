@@ -9,6 +9,8 @@ import {
 } from './api.ts';
 import { browseQuery, type BrowseState } from './browse-state.ts';
 import { browseReader } from './server.ts';
+import { readChapterText } from './chapter-text-read.ts';
+import type { SearchLoaded } from '../search/types.ts';
 
 export type BrowseResult<T> = { ok: true; data: T } | { ok: false; moved: boolean };
 export async function readBrowse<T>(call: () => Promise<T>): Promise<BrowseResult<T>> {
@@ -23,6 +25,7 @@ export interface LoadedBrowse {
   topics: ConceptChoice[];
   sections: BrowseResult<DiscoverySection[]> | null;
   results: BrowseResult<ListPage<ResourceCard>> | null;
+  chapterText?: SearchLoaded | null;
   actingSubject?: string;
   avatarQuery?: string;
   locale: UiLocale;
@@ -41,7 +44,7 @@ export async function loadDiscoverState(
     !state.conditions.exclude.length &&
     !state.includeTypes?.length && !state.excludeTypes?.length && !state.language &&
     state.scope.kind === 'global';
-  const [topics, results, sections] = await Promise.all([
+  const [topics, results, sections, chapterText] = await Promise.all([
     readBrowse(() =>
       api.concepts({
         limit: 8,
@@ -65,6 +68,7 @@ export async function loadDiscoverState(
             ).items,
         )
       : Promise.resolve(null),
+    readChapterText(reader.anonymous, state, locale),
   ]);
   return {
     state,
@@ -72,6 +76,7 @@ export async function loadDiscoverState(
     topics: topics.ok ? topics.data.items : [],
     sections,
     results,
+    chapterText,
     actingSubject: reader.actingSubject,
     avatarQuery: reader.avatarQuery,
   };

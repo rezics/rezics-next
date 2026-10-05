@@ -229,10 +229,13 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(async () => {
       await page.goto(`/en/discover?q=${phrase}`);
-      await expect(page.getByRole('link', { name: chapterTitle, exact: true })).toBeVisible({ timeout: 5000 });
+      const chapterHits = page.getByRole('region', { name: 'Found in chapter text', exact: true });
+      await expect(chapterHits.getByRole('link', { name: chapterTitle, exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(chapterHits.getByRole('link', { name: title, exact: true })).toBeVisible();
     }).toPass({ timeout: 90_000 });
     await screenshot(page, info, 'chapter-search-hit');
-    await page.getByRole('link', { name: chapterTitle, exact: true }).click();
+    await page.getByRole('region', { name: 'Found in chapter text', exact: true })
+      .getByRole('link', { name: chapterTitle, exact: true }).click();
     await page.waitForURL(/\/read\//);
     await expect(page.locator('[data-author-note="before"]')).toContainText(before);
     await expect(page.locator('[data-author-note="after"]')).toContainText(after);
