@@ -322,24 +322,26 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
       ORDER BY attempt_order DESC LIMIT 5`, [a.principal.issuer, a.principal.subject, person]);
     expect(JSON.stringify(plan.rows)).toContain('consumption_session_inventory');
     // Exercise the actual Content owner transaction with a counted real SQL
-    // connection. Large existing history does not add statements to a write.
+    // connection, and the position read after commit. Large existing history
+    // does not add statements to a write. The route checks the owner first.
     let statements = 0;
     const countedPool = { connect: async () => {
       const client = await stack.contentPool.connect();
       const query = client.query.bind(client);
       return { query: (...args: unknown[]) => { statements++; return Reflect.apply(query, client, args); },
         release: () => client.release() } as unknown as PoolClient;
+    }, query: (...args: unknown[]) => {
+      statements++;
+      return Reflect.apply(stack.contentPool.query, stack.contentPool, args);
     } } as unknown as Pool;
     const countedStore = new ConsumptionSessionStore(countedPool, library);
-    const assertOwner = async () => {
-      expect(await stack.access.canReadAsBaselineMember({ ...a.principal, emailVerified: true }, person)).toBe(true);
-    };
+    expect(await stack.access.canReadAsBaselineMember({ ...a.principal, emailVerified: true }, person)).toBe(true);
     const measured = await countedStore.write({ principal: a.principal, agent: person, target: target.work,
-      changes: {}, expectedVersion: 0, idempotencyKey: randomUUID() }, async () => planned.selections, assertOwner);
+      changes: {}, expectedVersion: 0, idempotencyKey: randomUUID() }, async () => planned.selections);
     expect(statements).toBeLessThanOrEqual(SESSION_COST.writeSql);
     statements = 0;
     await countedStore.write({ principal: a.principal, agent: person, id: measured.id,
-      changes: { state: 'active' }, expectedVersion: 1, idempotencyKey: randomUUID() }, async () => [], assertOwner);
+      changes: { state: 'active' }, expectedVersion: 1, idempotencyKey: randomUUID() }, async () => []);
     expect(statements).toBeLessThanOrEqual(SESSION_COST.writeSql);
 
     for (const agent of [a.actor, service]) {

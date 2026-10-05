@@ -2,6 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
+import type { ContentPosition } from '../../../../content/src/core.ts';
+import { ContentUnavailable } from '../../../../content/src/errors.ts';
+import { appendContentEvent } from '../../../../content/src/event-sequencer.ts';
+import { settledContentPosition } from '../content-sequence.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 
 export class RealmReplyInvalid extends Error {}
@@ -68,10 +72,20 @@ function assertIdentity(input: ReplyIdentityInput): void {
   assertText(input.rootRevision);
 }
 
-/** Content owner writes use the same owner-control sequence and receipt/outbox
- * tables as ContentCore. Access admission IDs are the owner operation IDs. */
+/** Content owner writes use the same receipt/outbox tables and sequencer as
+ * ContentCore. Access admission IDs are the owner operation IDs. */
 export class RealmReplyContentStore {
+  /** Receipts a transaction recorded; their positions are resolved after commit. */
+  private readonly recorded = new WeakMap<PoolClient, string[]>();
   constructor(private readonly pool: Pool) {}
+
+  private async positionOf(operationId: string): Promise<ContentPosition> {
+    try { return await settledContentPosition(this.pool, operationId); }
+    catch (error) {
+      if (error instanceof ContentUnavailable) throw new RealmReplyUnavailable(error.message);
+      throw error;
+    }
+  }
 
   async origin(reply: string): Promise<{ realm: string | null } | null> {
     const row = (await this.pool.query<{ origin_realm: string | null }>(
@@ -92,13 +106,13 @@ export class RealmReplyContentStore {
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
+    const recorded: string[] = [];
+    this.recorded.set(client, recorded);
+    let result: T;
     try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      const result = await work(client);
+      await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      result = await work(client);
       await client.query('COMMIT');
-      return result;
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
       if (error && typeof error === 'object' && 'code' in error) {
@@ -108,7 +122,12 @@ export class RealmReplyContentStore {
         }
       }
       throw error;
-    } finally { client.release(); }
+    } finally {
+      this.recorded.delete(client);
+      client.release();
+    }
+    for (const operation of recorded) await this.positionOf(operation);
+    return result;
   }
 
   private async prior(client: PoolClient, admission: RegisteredAdmission, action: string): Promise<boolean> {
@@ -125,20 +144,11 @@ export class RealmReplyContentStore {
   }
 
   private async receipt(client: PoolClient, admission: RegisteredAdmission, action: string,
-    variantId: string, revisionId: string, eventType: string, payload: Record<string, unknown>): Promise<void> {
-    const position = await client.query<{ data_epoch: string; sequence: string }>(`
-      UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-      RETURNING data_epoch, sequence::text AS sequence`);
-    if (!position.rows[0]) throw new RealmReplyUnavailable('Content owner position is absent');
-    const { data_epoch, sequence } = position.rows[0];
-    await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome,
-      variant_id, revision_id, data_epoch, sequence)
-      VALUES ($1, $2, $3, 'succeeded', $4, $5, $6, $7)`,
-    [admission.id, admission.requestDigest, action, variantId, revisionId, data_epoch, sequence]);
-    await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id,
-      event_type, recipe, revision_id, payload)
-      VALUES ($1, $2, $3, $4, $5, 'realm-reply-v1', $6, $7::jsonb)`,
-    [randomUUID(), data_epoch, sequence, admission.id, eventType, revisionId, JSON.stringify(payload)]);
+    variantId: string | null, revisionId: string | null, eventType: string, payload: Record<string, unknown>,
+    outcome: 'succeeded' | 'rejected' = 'succeeded'): Promise<void> {
+    await appendContentEvent(client, { operationId: admission.id, requestDigest: admission.requestDigest,
+      action, outcome, variantId, revisionId, eventType, recipe: 'realm-reply-v1', payload });
+    this.recorded.get(client)?.push(admission.id);
   }
 
   async readReply(reply: string): Promise<ReplyIdentityInput | null> {
@@ -170,17 +180,7 @@ export class RealmReplyContentStore {
         if (prior.action !== 'reply.create' || prior.request_digest !== admission.requestDigest) throw new RealmReplyConflict('reply cancellation differs');
         return prior.outcome === 'succeeded';
       }
-      const position = (await client.query<{ data_epoch: string; sequence: string }>(`
-        UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-        RETURNING data_epoch, sequence::text`)).rows[0];
-      if (!position) throw new RealmReplyUnavailable('Content owner position is absent');
-      await client.query(`INSERT INTO content.receipt
-        (operation_id, request_digest, action, outcome, data_epoch, sequence)
-        VALUES ($1,$2,'reply.create','rejected',$3,$4)`, [admission.id, admission.requestDigest, position.data_epoch, position.sequence]);
-      await client.query(`INSERT INTO content.outbox
-        (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'content.reply.cancelled','realm-reply-v1','{}')`,
-      [randomUUID(), position.data_epoch, position.sequence, admission.id]);
+      await this.receipt(client, admission, 'reply.create', null, null, 'content.reply.cancelled', {}, 'rejected');
       return false;
     });
   }
@@ -420,7 +420,7 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
     if (admission.action !== 'reply.place' || admission.scope !== `reply:place:${input.realm}`) {
       throw new RealmReplyDenied('placement admission is for another Realm');
     }
-    return this.transaction(async client => {
+    const prepared = await this.transaction(async (client): Promise<PlacementPreparation> => {
       if (await this.prior(client, admission, 'publication.prepare')) {
         const found = await this.placement(client, admission.id);
         if (!found) throw new RealmReplyUnavailable('placement preparation is absent');
@@ -493,24 +493,24 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
         input.revisionId, 'content.realm-reply.prepared',
         { realm: input.realm, reply: input.reply, revisionId: input.revisionId,
           reviewDecisionId });
-      const position = await client.query<{ data_epoch: string; sequence: string }>(
-        'SELECT data_epoch::text, sequence::text FROM content.receipt WHERE operation_id = $1',
-        [admission.id]);
       return { ...(policyRevision ? { directPolicyRevision: policyRevision } : {}),
         operationId: admission.id, realm: input.realm, reply: input.reply,
         revisionId: input.revisionId, revisionDigest: input.revisionDigest,
         reviewDecisionId, reviewGeneration: approval.rows[0].review_generation, reviewDigest: approval.rows[0].request_digest,
-        ownerDataEpoch: position.rows[0]!.data_epoch, ownerSequence: position.rows[0]!.sequence,
+        ownerDataEpoch: '', ownerSequence: '',
         author: row.author,
         rootTarget: row.root_target, rootRevision: row.root_revision,
         parentReply: row.parent_reply, parentRevision: row.parent_revision,
         contextRevision: row.context_revision, replayed: false };
     });
+    // The graph records the preparation's exact Content position.
+    const at = await this.positionOf(admission.id);
+    return { ...prepared, ownerDataEpoch: at.dataEpoch, ownerSequence: at.sequence };
   }
 
   private async placement(client: PoolClient, operationId: string): Promise<Omit<PlacementPreparation, 'replayed'> | null> {
     const result = await client.query<{ direct_policy_revision: string | null; realm: string; revision_id: string; review_decision_id: string;
-      request_digest: string; review_generation: string; data_epoch: string; sequence: string;
+      request_digest: string; review_generation: string; data_epoch: string | null; sequence: string | null;
       byte_digest: string; id: string; author: string; root_target: string; root_revision: string;
       parent_reply: string | null; parent_revision: string | null; context_revision: string | null }>(`
       SELECT p.direct_policy_revision, p.realm, p.revision_id::text, p.review_decision_id::text, d.review_generation, c.request_digest, r.byte_digest,
@@ -530,7 +530,7 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
       operationId, realm: row.realm, reply: row.id, revisionId: row.revision_id,
       revisionDigest: row.byte_digest, reviewDecisionId: row.review_decision_id, reviewGeneration: row.review_generation,
       reviewDigest: row.request_digest,
-      ownerDataEpoch: row.data_epoch, ownerSequence: row.sequence,
+      ownerDataEpoch: row.data_epoch ?? '', ownerSequence: row.sequence ?? '',
       author: row.author, rootTarget: row.root_target, rootRevision: row.root_revision,
       parentReply: row.parent_reply, parentRevision: row.parent_revision,
       contextRevision: row.context_revision };
@@ -538,9 +538,12 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
 
   async readPlacement(operationId: string): Promise<PlacementPreparation | null> {
     const client = await this.pool.connect();
-    try {
-      const row = await this.placement(client, operationId);
-      return row ? { ...row, replayed: true } : null;
-    } finally { client.release(); }
+    let row: Awaited<ReturnType<RealmReplyContentStore['placement']>>;
+    try { row = await this.placement(client, operationId); }
+    finally { client.release(); }
+    if (!row) return null;
+    if (row.ownerSequence) return { ...row, replayed: true };
+    const at = await this.positionOf(operationId);
+    return { ...row, ownerDataEpoch: at.dataEpoch, ownerSequence: at.sequence, replayed: true };
   }
 }

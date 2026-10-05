@@ -75,8 +75,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
           ...additions.filter(item => item.target !== target)];
         const value = await work.sessions.write({ principal, agent: actingSubject, target, changes,
           expectedVersion, idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        () => workRead(work, request, { actingSubject }, session => resolveSessionSelections(session, inputs)),
-        async () => { await own(request, actingSubject); });
+        () => workRead(work, request, { actingSubject }, session => resolveSessionSelections(session, inputs)));
         return Response.json(value, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -91,8 +90,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
           id: `https://rezics.com/id/${params.id}`, changes, expectedVersion,
           idempotencyKey: request.headers.get('idempotency-key') ?? '' },
         () => changes.addSelections ? workRead(work, request, { actingSubject },
-          session => resolveSessionSelections(session, changes.addSelections!)) : Promise.resolve([]),
-        async () => { await own(request, actingSubject); });
+          session => resolveSessionSelections(session, changes.addSelections!)) : Promise.resolve([]));
         return Response.json(value, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     });

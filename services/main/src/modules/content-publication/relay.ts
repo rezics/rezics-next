@@ -212,7 +212,12 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   if (checkpoint.dataEpoch !== highWater.dataEpoch || BigInt(checkpoint.sequence) > BigInt(highWater.sequence)) {
     throw new ContentProjectionGap('Content checkpoint is outside current owner epoch');
   }
-  const events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, MAX_EVENTS_PER_POLL);
+  let events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, MAX_EVENTS_PER_POLL);
+  // Writers number their own events after commit; a caught-up relay numbers any
+  // whose writer stopped between commit and numbering.
+  if (!events.length && await content.sequencePending()) {
+    events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, MAX_EVENTS_PER_POLL);
+  }
   const event = events[0];
   if (!event) {
     if (checkpoint.sequence !== highWater.sequence) throw new ContentProjectionGap('Content outbox has a source gap');

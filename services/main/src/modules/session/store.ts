@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { advanceContentSequence } from '../content-sequence.ts';
+import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { ReaderLibraryStatusStore } from '../library/status.ts';
 import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 import { readId } from '../work/read-contract.ts';
@@ -32,8 +32,10 @@ function checked(row: Row): SessionState {
 
 /** All writes lock one command and one owner/Work. The Library owner command
  * runs in this same Content transaction. No worker, cross-owner delivery queue
- * or private graph projection is required. Advisory locks follow PostgreSQL's
- * transaction-scoped behavior: https://www.postgresql.org/docs/current/explicit-locking.html */
+ * or private graph projection is required. Callers verify the Account and Access
+ * owner before write(); the transaction re-checks only Content-local identity.
+ * Advisory locks follow PostgreSQL's transaction-scoped behavior:
+ * https://www.postgresql.org/docs/current/explicit-locking.html */
 export class ConsumptionSessionStore {
   constructor(private readonly pool: Pool, private readonly library: ReaderLibraryStatusStore) {}
 
@@ -77,7 +79,7 @@ export class ConsumptionSessionStore {
       ? encodeReadCursor(binding, position, page.at(-1)!.attempt_order) : null };
   }
 
-  async write(input: SessionCommand, resolve: Resolve, assertOwner: () => Promise<void>) {
+  async write(input: SessionCommand, resolve: Resolve) {
     const identity = owner(input);
     const create = input.id === undefined;
     if (!KEY.test(input.idempotencyKey) || !Number.isSafeInteger(input.expectedVersion)
@@ -95,11 +97,11 @@ export class ConsumptionSessionStore {
       c.finishedOn === undefined ? ['keep'] : c.finishedOn,
       c.addSelections?.map(s => [s.target, s.language ?? null, s.format ?? null]) ?? [],
       c.position ? [c.position.target, c.position.unit, c.position.value] : null]);
+    const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
     const client = await this.pool.connect();
+    let saved: SessionState;
     try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
+      await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [JSON.stringify(['session-key', ...identity.slice(0, 2), input.idempotencyKey])]);
       const prior = await client.query<{ request_digest: string; result: SessionState }>(`
@@ -108,7 +110,6 @@ export class ConsumptionSessionStore {
       [...identity.slice(0, 2), input.idempotencyKey]);
       if (prior.rows[0]) {
         if (prior.rows[0].request_digest !== digest) throw new SessionConflict('Idempotency key has another session intent');
-        await assertOwner();
         await client.query('COMMIT');
         return { ...prior.rows[0].result, replayed: true };
       }
@@ -129,7 +130,6 @@ export class ConsumptionSessionStore {
           WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND id = $4 FOR UPDATE`, [...identity, input.id]);
         current = checked(locked.rows[0]!);
         if (current.version !== input.expectedVersion) {
-          await assertOwner();
           throw new StaleSession(current, { ...c, expectedVersion: input.expectedVersion });
         }
       }
@@ -168,7 +168,6 @@ export class ConsumptionSessionStore {
         await client.query(`UPDATE reader.library_status SET last_read_at = greatest(last_read_at,$3::timestamptz)
           WHERE agent=$1 AND work=$2`, [input.agent, result.target.work, result.changedAt]);
       }
-      const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
       await advanceContentSequence(client, {
         operationId: operation, requestDigest: digest, action: create ? 'session.create' : 'session.update',
         outcome: 'succeeded', eventType: create ? 'session.created' : 'session.updated',
@@ -178,11 +177,12 @@ export class ConsumptionSessionStore {
         (principal_issuer, principal_subject, idempotency_key, request_digest, session, result, content_operation)
         VALUES ($1,$2,$3,$4,$5,$6,$7)`, [...identity.slice(0, 2), input.idempotencyKey, digest,
         result.id, JSON.stringify(result), operation]);
-      await assertOwner();
       await client.query('COMMIT');
-      return { ...result, replayed: false };
+      saved = result;
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
+    await settledContentPosition(this.pool, operation);
+    return { ...saved, replayed: false };
   }
 
   private async project(client: PoolClient, input: SessionCommand, state: SessionState) {

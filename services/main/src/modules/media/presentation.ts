@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { advanceContentSequence } from '../content-sequence.ts';
+import type { ContentPosition } from '../../../../content/src/core.ts';
+import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { editorialFieldSlot, validEditorialControlBasis, validProtectionTransition,
   type EditorialControlBasis, type EditorialFieldTarget } from '../protection/field-control.ts';
 import { validLabels, UNASSESSED, type Assessment } from '../suitability/policy.ts';
@@ -96,23 +97,34 @@ export function validateImageInference(input: ImageInferenceInput): ImageNsfw {
 
 export class MediaPresentationStore {
   constructor(private readonly pool: Pool) {}
-  private async transaction<T>(run: (client: PoolClient) => Promise<T>,
-    rejection?: {operation:string;digest:string;action:string}): Promise<T> {
+  /** The command's operation is acknowledged with its exact position, resolved
+   * after commit; a recorded rejection is numbered before it is reported. */
+  private async transaction<T>(operation: string, run: (client: PoolClient) => Promise<T>,
+    rejection?: {digest:string;action:string}): Promise<T & { position: ContentPosition }> {
     const client = await this.pool.connect();
+    let outcome: { value: T } | { error: unknown; recorded: boolean };
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
-      const result = await run(client); await client.query('COMMIT'); return result;
+      const value = await run(client); await client.query('COMMIT');
+      outcome = { value };
     } catch (error) {
+      let recorded = false;
       if (rejection && (error instanceof MediaFenced || error instanceof MediaStale || error instanceof MediaMissing)
-        && !(await client.query('SELECT 1 FROM content.receipt WHERE operation_id = $1',[rejection.operation])).rowCount) {
-        await advanceContentSequence(client,{operationId:rejection.operation,requestDigest:rejection.digest,
+        && !(await client.query('SELECT 1 FROM content.receipt WHERE operation_id = $1',[operation])).rowCount) {
+        await advanceContentSequence(client,{operationId:operation,requestDigest:rejection.digest,
           action:rejection.action,outcome:error instanceof MediaStale?'stale_head':'rejected',reason:error.message,
-          eventType:'media.presentation.rejected',recipe:'media-v1',payload:{operationId:rejection.operation}});
+          eventType:'media.presentation.rejected',recipe:'media-v1',payload:{operationId:operation}});
         await client.query('COMMIT');
+        recorded = true;
       } else await client.query('ROLLBACK');
-      throw error;
+      outcome = { error, recorded };
     }
     finally { client.release(); }
+    if ('error' in outcome) {
+      if (outcome.recorded) await settledContentPosition(this.pool, operation).catch(() => undefined);
+      throw outcome.error;
+    }
+    return { ...outcome.value, position: await settledContentPosition(this.pool, operation) };
   }
   /** One bounded SQL batch, with only exact representation/use and head probes. */
   async metadata(refs: readonly MetadataRef[]): Promise<Array<MetadataBasis | null>> {
@@ -157,8 +169,8 @@ export class MediaPresentationStore {
           AND p.crop IS NOT DISTINCT FROM u.crop))
       LEFT JOIN content.receipt campaign_receipt ON campaign_receipt.operation_id = u.operation_id
         AND u.role LIKE 'campaign-%'
-      LEFT JOIN content.outbox campaign_event ON campaign_event.data_epoch = campaign_receipt.data_epoch
-        AND campaign_event.sequence = campaign_receipt.sequence AND campaign_event.event_type = 'media.use.created'
+      LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
+        AND campaign_event.event_type = 'media.use.created'
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head
       LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id
@@ -230,13 +242,12 @@ export class MediaPresentationStore {
   async changeField(admission: MediaAdmission, input: MediaFieldInput) {
     validateMediaField(input);
     const operation = `media-field:${admission.admissionId}`;
-    return this.transaction(async client => {
+    return this.transaction(operation, async client => {
       const prior = await this.replay(client, operation, admission.requestDigest, 'media.field.change');
       if (prior) {
         if (prior.outcome === 'stale_head') throw new MediaStale(prior.reason);
         if (prior.outcome !== 'succeeded') throw new MediaFenced(prior.reason);
-        return { revision: IRI((await client.query('SELECT id FROM media.field_revision WHERE operation_id = $1', [operation])).rows[0]?.id), replayed: true,
-          position: { owner: 'content' as const, dataEpoch: prior.data_epoch, sequence: String(prior.sequence) } };
+        return { revision: IRI((await client.query('SELECT id FROM media.field_revision WHERE operation_id = $1', [operation])).rows[0]?.id), replayed: true };
       }
       if (input.field === 'conceal') await client.query('SELECT id FROM media.use WHERE id = $1 FOR UPDATE',[input.use]);
       const resource = (await client.query(`SELECT p.id,a.owner,u.actor,u.context FROM media.representation p
@@ -255,24 +266,23 @@ export class MediaPresentationStore {
       if (input.mode !== 'edit' && !validProtectionTransition(row.protection_head ? 'review-required' : 'open',
         input.mode === 'unlock' ? 'relax' : row.protection_head ? 'confirm' : 'tighten'))
         throw new MediaStale('media protection mode changed');
-      const position = await advanceContentSequence(client, { operationId: operation, requestDigest: admission.requestDigest,
+      await advanceContentSequence(client, { operationId: operation, requestDigest: admission.requestDigest,
         action: 'media.field.change', outcome: 'succeeded', eventType: 'media.field.changed', recipe: 'media-v1',
         payload: { representation: resource.id, use: input.use ?? null, field: input.field } });
       const revision = await this.append(client,row,operation,admission.actingSubject,input.value,input.mode,input.authority);
-      return { revision: IRI(revision), replayed: false, position };
-    },{operation,digest:admission.requestDigest,action:'media.field.change'});
+      return { revision: IRI(revision), replayed: false };
+    },{digest:admission.requestDigest,action:'media.field.change'});
   }
   async recordInference(admission: MediaAdmission, input: ImageInferenceInput, producer: 'client' | 'server' = 'client') {
     const result = validateImageInference(input);
     const operation = `media-inference:${admission.admissionId}`;
-    return this.transaction(async client => {
+    return this.transaction(operation, async client => {
       const prior = await this.replay(client,operation,admission.requestDigest,'media.inference.record');
       if (prior) {
         if (prior.outcome === 'stale_head') throw new MediaStale(prior.reason);
         if (prior.outcome !== 'succeeded') throw new MediaFenced(prior.reason);
         const evidence = (await client.query('SELECT id,result FROM media.inference_observation WHERE operation_id = $1',[operation])).rows[0]!;
-        return { observation: evidence.id,result: evidence.result, replayed: true,
-          position: { owner: 'content' as const,dataEpoch: prior.data_epoch,sequence: String(prior.sequence) } };
+        return { observation: evidence.id as string, result: evidence.result as ImageNsfw, replayed: true };
       }
       const resource = (await client.query(`SELECT p.byte_digest,a.owner FROM media.representation p
         JOIN media.asset a ON a.id = p.asset_id JOIN media.asset_state s ON s.id = a.state_head
@@ -281,7 +291,7 @@ export class MediaPresentationStore {
       if (!resource || producer === 'client' && resource.owner !== admission.actingSubject) throw new MediaMissing('editable image is unavailable');
       if (resource.byte_digest !== input.sha256) throw new MediaStale('image bytes changed');
       const row = await this.slot(client,'nsfw',input.representation);
-      const position = await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,
+      await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,
         action:'media.inference.record',outcome:'succeeded',eventType:'media.inference.recorded',recipe:'media-v1',
         payload:{representation:input.representation,producer}});
       const observation = randomUUID();
@@ -292,21 +302,21 @@ export class MediaPresentationStore {
         input.scores ? JSON.stringify(input.scores) : null,admission.actingSubject,operation]);
       if (!row.value_head && !row.protection_head && result !== 'unknown')
         await this.append(client,row,operation,admission.actingSubject,result,'edit',producer);
-      return {observation,result,replayed:false,position};
-    },{operation,digest:admission.requestDigest,action:'media.inference.record'});
+      return {observation,result,replayed:false};
+    },{digest:admission.requestDigest,action:'media.inference.record'});
   }
   async createDocumentUse(admission: MediaAdmission, input: DocumentImageUseInput) {
     if (!UUID.test(input.representation) || !UUID.test(input.occurrence) || !NATIVE.test(input.target)
       || input.context !== DEFAULT_MEDIA_CONTEXT && !NATIVE.test(input.context) || typeof input.conceal !== 'boolean')
       throw new MediaInvalid('invalid document image occurrence');
     const operation = `media-document-use:${admission.admissionId}`;
-    return this.transaction(async client => {
+    return this.transaction(operation, async client => {
       const prior = await this.replay(client,operation,admission.requestDigest,'media.use.create');
       if (prior) {
         if (prior.outcome !== 'succeeded') throw new MediaFenced('media admission was fenced');
         const use = (await client.query('SELECT id,asset_id FROM media.use WHERE operation_id = $1',[operation])).rows[0]!;
-        return {use:use.id,asset:use.asset_id,representation:input.representation,occurrence:input.occurrence,replayed:true,
-          position:{owner:'content' as const,dataEpoch:prior.data_epoch,sequence:String(prior.sequence)}};
+        return {use:use.id as string,asset:use.asset_id as string,representation:input.representation,
+          occurrence:input.occurrence,replayed:true};
       }
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[
         `media-document-occurrence:${input.target}:${input.occurrence}`]);
@@ -319,7 +329,7 @@ export class MediaPresentationStore {
           AND s.moderation = 'none' AND media.delivery_clearance(p) = 'cleared' AND v.draft_head IS NOT NULL FOR SHARE OF a,p`,
       [input.representation,admission.actingSubject])).rows[0];
       if (!resource) throw new MediaMissing('image is unavailable');
-      const position = await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,
+      await advanceContentSequence(client,{operationId:operation,requestDigest:admission.requestDigest,
         action:'media.use.create',outcome:'succeeded',eventType:'media.use.created',recipe:'media-v1',payload:{target:input.target}});
       const use = randomUUID();
       await client.query(`INSERT INTO media.use(id,asset_id,asset_variant_id,asset_revision_id,representation_id,
@@ -333,7 +343,7 @@ export class MediaPresentationStore {
           action:'media.field.change',outcome:'succeeded',eventType:'media.field.changed',recipe:'media-v1',payload:{use,field:'conceal'}});
         await this.append(client,row,concealOperation,admission.actingSubject,true,'edit','author');
       }
-      return {use,asset:resource.id,representation:input.representation,occurrence:input.occurrence,replayed:false,position};
-    },{operation,digest:admission.requestDigest,action:'media.use.create'});
+      return {use,asset:resource.id as string,representation:input.representation,occurrence:input.occurrence,replayed:false};
+    },{digest:admission.requestDigest,action:'media.use.create'});
   }
 }

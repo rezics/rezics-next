@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { appendContentEvent } from '../../../../content/src/event-sequencer.ts';
+import { settledContentPosition } from '../content-sequence.ts';
 import { PROTECTION_RULE, CONTENT_DRAFT_PROTECTION, type ProtectionAction, type ProtectionMode } from './schema.ts';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import { validProtectionTransition } from './field-control.ts';
@@ -81,7 +83,7 @@ function validBasis(input: Basis | CorrectionDecisionInput): void {
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     const result = await work(client);
     await client.query('COMMIT');
     return result;
@@ -91,20 +93,18 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } finally { client.release(); }
 }
 
+/** Inside the transaction the position is not yet assigned; command() returns
+ * the sequencer's exact position after commit in place of this marker. */
+const UNNUMBERED: OwnerPosition = { owner: 'content', dataEpoch: '', sequence: '' };
+
 async function record(client: PoolClient, args: { operationId: string; digest: string; action: ContentProtectionAction;
   code: ProtectionRejection | null; variantId: string | null; revisionId: string | null; payload: object }): Promise<OwnerPosition> {
-  const position = (await client.query<{ data_epoch: string; sequence: string }>(`UPDATE content.owner_control
-    SET sequence = sequence + 1 WHERE singleton RETURNING data_epoch::text, sequence::text`)).rows[0];
-  if (!position) throw new Error('Content owner position is unavailable');
   const outcome = args.code === null ? 'succeeded' : args.code.startsWith('stale_') ? 'stale_head' : 'rejected';
-  await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, variant_id, revision_id,
-    reason, data_epoch, sequence) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [args.operationId, args.digest, args.action,
-    outcome, args.variantId, args.revisionId, args.code, position.data_epoch, position.sequence]);
-  await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
-    VALUES ($1, $2, $3, $4, $5, 'editorial-protection-v1', $6, $7::jsonb)`, [randomUUID(), position.data_epoch, position.sequence,
-    args.operationId, EVENTS[args.action][args.code === null ? 0 : 1], args.revisionId,
-    JSON.stringify({ ...args.payload, code: args.code })]);
-  return { owner: 'content', dataEpoch: position.data_epoch, sequence: position.sequence };
+  await appendContentEvent(client, { operationId: args.operationId, requestDigest: args.digest, action: args.action,
+    outcome, reason: args.code, variantId: args.variantId, revisionId: args.revisionId,
+    eventType: EVENTS[args.action][args.code === null ? 0 : 1], recipe: 'editorial-protection-v1',
+    payload: { ...args.payload, code: args.code } });
+  return UNNUMBERED;
 }
 
 const asProtection = (row: Record<string, any>): ProtectionState => ({ id: row.id, epoch: String(row.epoch),
@@ -129,14 +129,13 @@ export class ContentProtectionStore {
   constructor(private readonly pool: Pool) {}
 
   /** Serialize one operation identity, replay its receipt or run the new effect once. */
-  private command<T>(action: ContentProtectionAction, operationId: string, digest: string,
+  private async command<T>(action: ContentProtectionAction, operationId: string, digest: string,
     work: (client: PoolClient, reject: (code: ProtectionRejection, variantId: string | null) => Promise<OwnerOutcome<T>>)
       => Promise<OwnerOutcome<T>>): Promise<OwnerOutcome<T>> {
-    return transaction(this.pool, async client => {
+    const outcome = await transaction<OwnerOutcome<T>>(this.pool, async client => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
-      const saved = await client.query<{ request_digest: string; action: string; reason: string | null;
-        data_epoch: string; sequence: string }>(`SELECT request_digest, action, reason, data_epoch::text, sequence::text
-        FROM content.receipt WHERE operation_id = $1`, [operationId]);
+      const saved = await client.query<{ request_digest: string; action: string; reason: string | null }>(
+        `SELECT request_digest, action, reason FROM content.receipt WHERE operation_id = $1`, [operationId]);
       const row = saved.rows[0];
       if (row) {
         if (row.request_digest !== digest || row.action !== action) {
@@ -144,12 +143,13 @@ export class ContentProtectionStore {
         }
         return { operationId, outcome: row.reason ? 'rejected' : 'succeeded', code: row.reason as ProtectionRejection | null,
           value: row.reason ? null : await this.recorded(client, action, operationId) as T,
-          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence }, replayed: true };
+          position: UNNUMBERED, replayed: true };
       }
       return work(client, async (code, variantId) => ({ operationId, outcome: 'rejected', code, value: null,
         position: await record(client, { operationId, digest, action, code, variantId, revisionId: null,
           payload: { variantId } }), replayed: false }));
     });
+    return { ...outcome, position: await settledContentPosition(this.pool, outcome.operationId) };
   }
 
   private async recorded(client: PoolClient, action: ContentProtectionAction, operationId: string): Promise<unknown> {

@@ -7,10 +7,11 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
-import { advanceContentSequence } from '../../../services/main/src/modules/content-sequence.ts';
+import { advanceContentSequence, settledContentPosition } from '../../../services/main/src/modules/content-sequence.ts';
 import { planExport } from '../../../services/main/src/modules/export/planner.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { StaleSession } from '../../../services/main/src/modules/session/contract.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
@@ -55,16 +56,16 @@ test('G-896: export, cancellation and reading session positions remain contiguou
     const command = { principal: { issuer: 'https://g-896.test', subject: randomUUID() }, agent: id(),
       target: work, changes: { state: 'active' as const }, expectedVersion: 0, idempotencyKey: randomUUID() };
     const resolve = async () => [{ target, language: 'en', format: null, progress: 'locator' as const }];
-    const assertOwner = async () => {};
-    const session = await sessions.write(command, resolve, assertOwner);
-    expect((await sessions.write(command, resolve, assertOwner)).replayed).toBe(true);
+    const session = await sessions.write(command, resolve);
+    expect((await sessions.write(command, resolve)).replayed).toBe(true);
     await sessions.write({ ...command, id: session.id, target: undefined,
       changes: { state: 'paused' }, expectedVersion: session.version, idempotencyKey: randomUUID() },
-    async () => [], assertOwner);
-    const beforeDenied = await content.ownerPosition();
-    await expect(sessions.write({ ...command, idempotencyKey: randomUUID() }, resolve,
-      async () => { throw new Error('authority expired'); })).rejects.toThrow('authority expired');
-    expect(await content.ownerPosition()).toEqual(beforeDenied);
+    async () => []);
+    const beforeStale = await content.ownerPosition();
+    await expect(sessions.write({ ...command, id: session.id, target: undefined,
+      changes: { state: 'finished' }, expectedVersion: session.version, idempotencyKey: randomUUID() },
+    async () => [])).rejects.toBeInstanceOf(StaleSession);
+    expect(await content.ownerPosition()).toEqual(beforeStale);
 
     const environment = { fuseki: new FusekiClient(Bun.env.FUSEKI_URL),
       lineage: { dataEpoch: 'unused-for-owner-events', routingEpoch: '1' }, objectDirectory: '.temp' };
@@ -89,7 +90,7 @@ test('G-896: export, cancellation and reading session positions remain contiguou
   }
 });
 
-test('G-896: helper receipt and event commit together, rollback together and cannot leave a gap on insert failure', async () => {
+test('G-896: helper receipt and event commit together without a position, roll back together and are numbered after commit', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Use the isolated QA integration tier');
   const databases = await cloneQaOwnerDatabases(runId, ['content']);
@@ -103,12 +104,12 @@ test('G-896: helper receipt and event commit together, rollback together and can
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const position = await advanceContentSequence(client, event);
-      expect((await client.query(`SELECT r.data_epoch, r.sequence::text, o.event_type FROM content.receipt r
-        JOIN content.outbox o USING (operation_id, data_epoch, sequence) WHERE r.operation_id = $1`,
-      [event.operationId])).rows).toEqual([{ data_epoch: position.dataEpoch, sequence: position.sequence,
-        event_type: event.eventType }]);
-      // A second connection sees neither uncommitted row nor the new position.
+      expect(await advanceContentSequence(client, event)).toEqual({ owner: 'content', operationId: event.operationId });
+      // Writers take no position: the owner row stays unlocked for unrelated writers.
+      expect((await client.query(`SELECT r.data_epoch, r.sequence, o.event_type FROM content.receipt r
+        JOIN content.outbox o USING (operation_id) WHERE r.operation_id = $1`,
+      [event.operationId])).rows).toEqual([{ data_epoch: null, sequence: null, event_type: event.eventType }]);
+      // A second connection sees neither uncommitted row nor a new position.
       expect(await content.ownerPosition()).toEqual(initial);
       expect(await content.readOutbox(initial.dataEpoch, initial.sequence, 100)).toEqual([]);
       await client.query('ROLLBACK');
@@ -124,8 +125,8 @@ test('G-896: helper receipt and event commit together, rollback together and can
       expect(await content.ownerPosition()).toEqual(initial);
       expect((await pool.query('SELECT operation_id FROM content.receipt WHERE operation_id = $1',
         [event.operationId])).rows).toEqual([]);
-      const committed = await advanceContentSequence(client, event);
-      expect(committed.sequence).toBe((BigInt(initial.sequence) + 1n).toString());
+      const committed = await settledContentPosition(pool, await advanceContentSequence(client, event));
+      expect(committed).toEqual({ ...initial, sequence: (BigInt(initial.sequence) + 1n).toString() });
       expect((await content.readOutbox(initial.dataEpoch, initial.sequence, 100)).map(row => row.position))
         .toEqual([committed]);
       await expect(advanceContentSequence(client, event)).rejects.toMatchObject({ code: '23505' });

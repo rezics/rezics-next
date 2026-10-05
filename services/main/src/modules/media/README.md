@@ -14,7 +14,7 @@ selection history stay out of TDB2, where
 | --- | --- | --- |
 | Asset revision anchor | `content.variant` + `content.revision` | Variant `urn:rezics:variant:<asset>` on resource `https://rezics.com/id/<asset>`, language `zxx` unless the image carries language. Model `media-asset-v1`; its manifest lists exact representations. The asset head is `content.variant.draft_head`, written by `ContentCore.saveDraft`. |
 | Image-only publication body | `content.revision`, `content.publication_preparation`, graph `content-publication-v1` | Model `media-set-v1` lists ordered exact Use IDs with their asset revision, representation and SHA-256. The existing pin, graph decision (`rv:contentModel "media-set-v1"`) and Realm selection of that exact decision apply unchanged. No text document is created. |
-| Receipts and positions | `content.receipt`, `content.owner_control` | Registered `media.*` actions. Every media command records an owner position. |
+| Receipts and positions | `content.receipt`, `content.owner_control` | Registered `media.*` actions. Every media command records a receipt; the Content sequencer numbers it after commit and the command returns that position. Media rows reference their receipt by operation, not by a copied position. |
 | Outbox | `content.outbox` | One event per media receipt. Uses event types `media.*` and recipe `media-v1`. |
 | Immutable guard | `content.no_mutation()` | Used for `asset_state`, `use` and `selection_revision`. |
 | Object adapter | `S3ImmutableObjects` | Prefix `media/asset/<asset>/`. Quarantine key: `media-quarantine/<upload>`. |
@@ -268,7 +268,7 @@ that receipt before testing the saved asset state. `restoreIdenticalCopies` then
 restores at most 100 eligible histories per call; it leaves other staff decisions,
 actual staff rejection and deleted/erased assets alone. A later suppression has a new
 identity, so the previous lift cannot admit newly restricted bytes. Preservation
-holds still prevent erasure. All MediaStore positions use `advanceContentSequence`.
+holds still prevent erasure. All MediaStore receipts use `advanceContentSequence`; positions come from `settledContentPosition` after commit.
 
 | Internal operation | Bound and lookup |
 | --- | --- |

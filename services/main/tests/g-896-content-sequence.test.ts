@@ -6,26 +6,20 @@ import { advanceContentSequence, ContentSequenceUnavailable,
   type ContentSequenceEvent } from '../src/modules/content-sequence.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-// Existing owners already pair these advances with receipt/outbox writes. Their
-// owners can adopt the shared helper and remove entries; new sites cannot enter.
-const legacyAdvances: Record<string, number> = {
-  'services/content/src/core.ts': 1,
-  'services/content/src/comments.ts': 2,
-  'services/content/src/moderation.ts': 1,
-  'services/main/src/modules/media-screen/store.ts': 3,
-  'services/main/src/modules/progress/store.ts': 1,
-  'services/main/src/modules/protection/content-store.ts': 1,
-  'services/main/src/modules/realm-reply/content-store.ts': 2,
-};
+const sequencer = 'services/content/src/event-sequencer.ts';
 
-test('G-896: raw Content sequence advances stay inside the helper or existing owner allowlist', async () => {
+test('G-896: no writer advances the Content owner position or appends outside the sequencer module', async () => {
+  // Only content.sequence_events (migration 791) numbers events; writers append
+  // through appendContentEvent, which keeps one event per receipt and no position.
   const unexpected: string[] = [];
   for await (const path of new Bun.Glob('services/**/src/**/*.ts').scan({ cwd: root })) {
-    if (path === 'services/main/src/modules/content-sequence.ts') continue;
     const source = readFileSync(resolve(root, path), 'utf8');
-    const count = [...source.matchAll(/UPDATE\s+content\.owner_control\s+SET\s+sequence\s*=/gi)].length
+    const advances = [...source.matchAll(/UPDATE\s+content\.owner_control\s+SET\s+sequence\s*=/gi)].length
       + [...source.matchAll(/\.update\(ownerControl\)/g)].length;
-    if (count > (legacyAdvances[path] ?? 0)) unexpected.push(`${path}: ${count} raw advances`);
+    const appends = path === sequencer ? 0
+      : [...source.matchAll(/INSERT\s+INTO\s+content\.(receipt|outbox)\b(?!_)/gi)].length;
+    if (advances) unexpected.push(`${path}: ${advances} owner position advances`);
+    if (appends) unexpected.push(`${path}: ${appends} raw receipt or event inserts`);
   }
   expect(unexpected.sort()).toEqual([]);
 });
@@ -34,25 +28,25 @@ const event: ContentSequenceEvent = { operationId: 'g-896', requestDigest: 'a'.r
   action: 'export.create', outcome: 'rejected', reason: 'cancelled', eventType: 'export.create.cancelled',
   recipe: 'export-v1', payload: {} };
 
-test('G-896: helper uses one atomic statement and preserves the exact returned owner position', async () => {
+test('G-896: helper appends receipt and event in one statement and returns the pending operation', async () => {
   const queries: { sql: string; values: unknown[] }[] = [];
   const client = { query: async (sql: string, values: unknown[]) => {
     queries.push({ sql, values });
-    return { rows: [{ data_epoch: 'epoch', sequence: '9007199254740993' }] };
+    return { rowCount: 1, rows: [] };
   } } as unknown as PoolClient;
-  expect(await advanceContentSequence(client, event)).toEqual({ owner: 'content',
-    dataEpoch: 'epoch', sequence: '9007199254740993' });
+  expect(await advanceContentSequence(client, event)).toEqual({ owner: 'content', operationId: 'g-896' });
   expect(queries).toHaveLength(1);
   expect(queries[0]!.sql).toContain('INSERT INTO content.receipt');
   expect(queries[0]!.sql).toContain('INSERT INTO content.outbox');
+  expect(queries[0]!.sql).not.toContain('owner_control');
   expect(queries[0]!.values.slice(0, 5)).toEqual([
     event.operationId, event.requestDigest, event.action, event.outcome, event.reason,
   ]);
-  expect(queries[0]!.values.slice(6)).toEqual([event.eventType, event.recipe, '{}']);
+  expect(queries[0]!.values.slice(8)).toEqual([event.eventType, event.recipe, '{}']);
 });
 
-test('G-896: helper fails closed on missing control and propagates transaction failure', async () => {
-  const absent = { query: async () => ({ rows: [] }) } as unknown as PoolClient;
+test('G-896: helper fails closed when the receipt is not recorded and propagates transaction failure', async () => {
+  const absent = { query: async () => ({ rowCount: 0, rows: [] }) } as unknown as PoolClient;
   await expect(advanceContentSequence(absent, event)).rejects.toBeInstanceOf(ContentSequenceUnavailable);
   const failure = new Error('outbox rejected');
   const failed = { query: async () => { throw failure; } } as unknown as PoolClient;

@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const REVISION = /^urn:rezics:content:revision:[0-9a-f-]{36}$/;
@@ -89,8 +90,10 @@ export class StructureProgressStore {
     const digest = createHash('sha256').update(JSON.stringify([input.structure, input.occurrence,
       selectionKey, input.completed, input.position, input.expectedVersion])).digest('hex');
     const client = await this.pool.connect();
+    let saved: StructureProgress;
+    let operation: string | null = null;
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -135,7 +138,7 @@ export class StructureProgressStore {
       const version = Number(current.rows[0]?.version ?? 0);
       if (version !== input.expectedVersion) throw new StaleStructureProgress('progress version changed');
       const next = version + 1;
-      const operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
+      operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
         input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
       if (version === 0) {
         await client.query(`INSERT INTO structure.progress
@@ -158,23 +161,13 @@ export class StructureProgressStore {
       [input.principal.issuer, input.principal.subject, input.idempotencyKey, digest,
         input.structure, input.occurrence, selectionKey, next, input.completed, input.position,
         operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished]);
-      const owner = await client.query<{ data_epoch: string; sequence: string }>(
-        `UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-         RETURNING data_epoch, sequence::text AS sequence`);
-      if (owner.rowCount !== 1) throw new Error('Content owner position unavailable');
-      await client.query(`INSERT INTO content.receipt
-        (operation_id, request_digest, action, outcome, data_epoch, sequence)
-        VALUES ($1,$2,'structure.progress','succeeded',$3,$4)`,
-      [operation, digest, owner.rows[0]!.data_epoch, owner.rows[0]!.sequence]);
-      await client.query(`INSERT INTO content.outbox
-        (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'structure.progress.written','structure-progress-v1',$5::jsonb)`,
-      [randomUUID(), owner.rows[0]!.data_epoch, owner.rows[0]!.sequence, operation,
-        JSON.stringify({ structure: input.structure, occurrence: input.occurrence,
-          read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished })]);
+      await advanceContentSequence(client, { operationId: operation, requestDigest: digest,
+        action: 'structure.progress', outcome: 'succeeded', eventType: 'structure.progress.written',
+        recipe: 'structure-progress-v1', payload: { structure: input.structure, occurrence: input.occurrence,
+          read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished } });
       await this.projectLibrary(client, input);
       await client.query('COMMIT');
-      return { ...state(identity, { completed: input.completed,
+      saved = { ...state(identity, { completed: input.completed,
         position: input.position, version: next }), replayed: false };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -183,5 +176,9 @@ export class StructureProgressStore {
       }
       throw error;
     } finally { client.release(); }
+    // The save is acknowledged once its event is numbered, so ordered consumers
+    // (rankings, relays) see it before the reader's next request.
+    await settledContentPosition(this.pool, operation!);
+    return saved;
   }
 }

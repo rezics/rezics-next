@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { sequenceContentEvents } from '../../../../content/src/event-sequencer.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { RV } from './activate.ts';
 import { canonicalRowText, ownerCatalog, scanOwnerTable,
@@ -256,15 +257,28 @@ async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>)
   } finally { client.release(); }
 }
 
-/** Called with externally quiesced writers. A repeatable-read scan binds owner rows and exact bytes. */
+const unnumbered = 'SELECT 1 FROM content.receipt WHERE sequence IS NULL LIMIT 1';
+
+/** Called with externally quiesced writers. Their committed events are numbered
+ * first, so the owner cut covers every receipt the scan binds. A repeatable-read
+ * scan binds owner rows and exact bytes. */
 export async function captureContentRecoveryCoverage(pool: Pool,
   references: readonly GraphContentReference[]): Promise<ContentRecoveryCoverage> {
+  for (let attempt = 0; ; attempt++) {
+    await sequenceContentEvents(pool);
+    if (!(await pool.query(unnumbered)).rowCount) break;
+    if (attempt === 50) throw new ContentRecoveryConflict('Content events are not numbered');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
   return readOnly(pool, async client => {
     const control = await client.query<{ data_epoch: string; sequence: string }>(
       'SELECT data_epoch::text, sequence::text FROM content.owner_control WHERE singleton = true');
     const owner = control.rows[0];
     if (control.rowCount !== 1 || !owner || !UUID.test(owner.data_epoch)
       || !DECIMAL.test(owner.sequence)) throw new ContentRecoveryConflict('Content owner cut is unavailable');
+    if ((await client.query(unnumbered)).rowCount) {
+      throw new ContentRecoveryConflict('Content writers are not quiesced');
+    }
     const catalog = await ownerCatalog(client);
     const owned = ownedReferences(catalog, references);
     await assertRevisionPins(client, owned.pinned, owner.data_epoch, owner.sequence);

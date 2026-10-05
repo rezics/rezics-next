@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { appendContentEvent } from '../../../../content/src/event-sequencer.ts';
+import { settledContentPosition } from '../content-sequence.ts';
 import { SCREEN_LIMITS, SCREEN_POLICY, screenUnavailable, type ScreenVerdict } from './policy.ts';
 
 export interface ScreenLease {
@@ -14,11 +16,16 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export class MediaScreenStore {
   constructor(private readonly pool: Pool) {}
-  private async transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+  /** Commits, then waits until a recorded screen receipt is numbered. */
+  private async transaction<T>(run: (client: PoolClient) => Promise<T>, operation?: () => string | null): Promise<T> {
     const client = await this.pool.connect();
-    try { await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'"); const result = await run(client); await client.query('COMMIT'); return result; }
+    let result: T;
+    try { await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'"); result = await run(client); await client.query('COMMIT'); }
     catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
+    const recorded = operation?.();
+    if (recorded) await settledContentPosition(this.pool, recorded);
+    return result;
   }
   /** One indexed queue/expired-lease probe. SKIP LOCKED lets another Main instance
    * proceed without duplicate work; the held lease also fences final settlement. */
@@ -58,6 +65,7 @@ export class MediaScreenStore {
           OR p.availability <> 'available' OR p.clearance <> 'screening')
       ORDER BY j.created_at, j.id LIMIT 1`, [SCREEN_POLICY.profile])).rows[0];
     if (!candidate) return;
+    let recorded: string | null = null;
     await this.transaction(async client => {
       await client.query('SELECT id FROM media.asset WHERE id = $1 FOR SHARE', [candidate.asset_id]);
       const row = (await client.query(`SELECT j.id FROM media.transform_job j
@@ -67,17 +75,13 @@ export class MediaScreenStore {
             OR p.availability <> 'available' OR p.clearance <> 'screening') FOR UPDATE OF j`, [candidate.id])).rows[0];
       if (!row) return;
       const operation = `media-screen:${row.id}`;
-      const at = (await client.query(`UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-        RETURNING data_epoch, sequence::text`)).rows[0]!;
-      await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, reason, data_epoch, sequence)
-        VALUES ($1,$2,'media.screen.settle','rejected','input-unavailable',$3,$4)`,
-      [operation, hash(operation), at.data_epoch, at.sequence]);
-      await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'media.screen.cancelled','media-v1',$5)`,
-      [randomUUID(), at.data_epoch, at.sequence, operation, { asset: candidate.asset_id }]);
+      await appendContentEvent(client, { operationId: operation, requestDigest: hash(operation),
+        action: 'media.screen.settle', outcome: 'rejected', reason: 'input-unavailable',
+        eventType: 'media.screen.cancelled', recipe: 'media-v1', payload: { asset: candidate.asset_id } });
       await client.query(`UPDATE media.transform_job SET status = 'cancelled', reason = 'input-unavailable',
         settle_operation_id = $2, settled_at = clock_timestamp() WHERE id = $1`, [row.id, operation]);
-    });
+      recorded = operation;
+    }, () => recorded);
   }
 
   /** Sixteen crashed attempts cannot strand an image in screening forever. */
@@ -91,6 +95,7 @@ export class MediaScreenStore {
       token: row.lease_token, attempt: row.attempt }, screenUnavailable(), true);
   }
   private async finish(lease: ScreenLease, verdict: ScreenVerdict, exhausted: boolean): Promise<boolean> {
+    let recorded: string | null = null;
     return this.transaction(async client => {
       // Asset before job matches activation and erasure lock ordering.
       const current = (await client.query(`SELECT s.lifecycle, s.erasure_epoch FROM media.asset a
@@ -102,20 +107,17 @@ export class MediaScreenStore {
         FOR UPDATE`, [lease.job, lease.source, lease.token, exhausted])).rows[0];
       if (!job) return false;
       const operation = `media-screen:${lease.job}`;
-      const at = (await client.query(`UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-        RETURNING data_epoch, sequence::text`)).rows[0]!;
-      await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, data_epoch, sequence)
-        VALUES ($1,$2,'media.screen.settle','succeeded',$3,$4)`, [operation, hash(JSON.stringify(verdict)), at.data_epoch, at.sequence]);
-      await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'media.screen.settled','media-v1',$5)`,
-      [randomUUID(), at.data_epoch, at.sequence, operation, { asset: lease.asset, representation: lease.source, clearance: verdict.clearance }]);
+      await appendContentEvent(client, { operationId: operation, requestDigest: hash(JSON.stringify(verdict)),
+        action: 'media.screen.settle', outcome: 'succeeded', eventType: 'media.screen.settled', recipe: 'media-v1',
+        payload: { asset: lease.asset, representation: lease.source, clearance: verdict.clearance } });
+      recorded = operation;
       await client.query(`UPDATE media.transform_job SET status = $3, settle_operation_id = $2,
         reason = $4, settled_at = clock_timestamp() WHERE id = $1`,
       [lease.job, operation, exhausted ? 'failed' : 'succeeded', exhausted ? 'screen-unavailable' : null]);
       await client.query(`INSERT INTO media.screen_result (job_id, source_id, clearance, reason, evidence, operation_id)
         VALUES ($1,$2,$3,$4,$5,$6)`, [lease.job, lease.source, verdict.clearance, verdict.reason, verdict.evidence, operation]);
       return true;
-    });
+    }, () => recorded);
   }
   /** Internal capability for G-565 after its staff authority/decision commit.
    * One original CAS and one receipt; delivery slots resolve clearance on read.
@@ -125,6 +127,7 @@ export class MediaScreenStore {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     if (!uuid.test(source) || !uuid.test(decision) || !['held', 'cleared', 'rejected'].includes(expected)
       || !['cleared', 'rejected'].includes(clearance)) throw new Error('invalid staff clearance');
+    let recorded: string | null = null;
     return this.transaction(async client => {
       const operation = `media-review:${decision}`;
       const digest = hash(JSON.stringify({ source, expected, decision, clearance }));
@@ -138,24 +141,21 @@ export class MediaScreenStore {
         JOIN media.asset_state s ON s.id = a.state_head JOIN media.representation p ON p.asset_id = a.id
         WHERE p.id = $1 AND p.kind = 'original' AND p.availability = 'available' FOR UPDATE OF a, p`, [source])).rows[0];
       if (!row || row.lifecycle !== 'active' || row.clearance !== expected) return 'stale';
-      const at = (await client.query(`UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-        RETURNING data_epoch, sequence::text`)).rows[0]!;
-      await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, data_epoch, sequence)
-        VALUES ($1,$2,'media.screen.review','succeeded',$3,$4)`, [operation, digest, at.data_epoch, at.sequence]);
-      await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'media.screen.reviewed','media-v1',$5)`,
-      [randomUUID(), at.data_epoch, at.sequence, operation, { asset: row.asset, representation: source, clearance, decision }]);
+      await appendContentEvent(client, { operationId: operation, requestDigest: digest,
+        action: 'media.screen.review', outcome: 'succeeded', eventType: 'media.screen.reviewed', recipe: 'media-v1',
+        payload: { asset: row.asset, representation: source, clearance, decision } });
+      recorded = operation;
       await client.query(`INSERT INTO media.clearance_decision (id, source_id, decision_id, clearance, operation_id)
         VALUES ($1,$2,$3,$4,$5)`, [randomUUID(), source, decision, clearance, operation]);
       if (clearance === 'rejected' && row.moderation !== 'suppressed') {
         await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
-          lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
-          VALUES ($1,$2,$3,$4,'suppressed',$5,$6,$7,$8,$9,$10,$11)`,
+          lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
+          VALUES ($1,$2,$3,$4,'suppressed',$5,$6,$7,$8,$9)`,
         [randomUUID(), row.asset, row.state_head, row.disclosure, row.lifecycle, row.erasure_epoch,
-          row.actor, row.authority_epoch, operation, at.data_epoch, at.sequence]);
+          row.actor, row.authority_epoch, operation]);
       }
       return 'applied';
-    });
+    }, () => recorded);
   }
 
   /** Durable cross-owner retry queue: at most eight cases per tick, no byte copies. */

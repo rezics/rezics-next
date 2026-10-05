@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCommentTarget } from '../../../packages/model/src/locator.ts';
-import { ContentConflict, ContentUnavailable, type ContentPosition } from './core.ts';
+import type { ContentPosition } from './core.ts';
+import { ContentConflict, ContentUnavailable } from './errors.ts';
+import { appendContentEvent, contentEventPosition } from './event-sequencer.ts';
 import { retainedDocumentBody } from './document-body.ts';
 import { checkDocument, documentParagraphs } from '@rezics/document';
 
@@ -211,6 +213,16 @@ async function lock(client: PoolClient, admissionId: string): Promise<void> {
   ]);
 }
 
+async function begin(client: PoolClient): Promise<void> {
+  await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+}
+
+/** A comment is listed and read once its receipt holds a position. */
+const POSITIONED = `SELECT c.*, r.byte_digest, c.body AS comment_body,
+  receipt.data_epoch, receipt.sequence::text AS sequence
+  FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
+  JOIN content.receipt receipt ON receipt.operation_id = c.operation_id AND receipt.sequence IS NOT NULL`;
+
 /** Content owns the immutable annotation anchor and writes its receipt and outbox
  * in the same transaction. The exact revision bytes are checked under a row lock. */
 export class ContentComments {
@@ -229,13 +241,13 @@ export class ContentComments {
     }
     const operationId = `content-comment:${command.admissionId}`;
     const client = await this.pool.connect();
+    let saved: { row: Record<string, any>; replayed: boolean };
     try {
-      await client.query('BEGIN');
+      await begin(client);
       await lock(client, command.admissionId);
       const previous = await client.query(
         `SELECT c.*, r.byte_digest,
-        c.body AS comment_body, receipt.sequence::text AS sequence
-        , receipt.action, receipt.request_digest AS receipt_digest
+        c.body AS comment_body, receipt.action, receipt.request_digest AS receipt_digest
         FROM content.receipt receipt LEFT JOIN content.comment c ON c.operation_id = receipt.operation_id
         LEFT JOIN content.revision r ON r.id = c.revision_id
         WHERE receipt.operation_id = $1`,
@@ -248,146 +260,127 @@ export class ContentComments {
         }
         if (!row.id) throw new ContentCommentMissing('comment admission was fenced');
         await client.query('COMMIT');
-        return asComment(row, true);
-      }
-      const source = await client.query(
-        `SELECT r.id, r.variant_id, r.byte_digest,
-        r.byte_length, r.serialized_bytes, r.body, r.availability, v.resource_id
-        FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
-        WHERE r.id = $1 FOR SHARE OF r`,
-        [command.revisionId],
-      );
-      const row = source.rows[0];
-      if (!row || row.resource_id !== command.resourceId) {
-        throw new ContentCommentMissing('exact comment source is unavailable');
-      }
-      const bytes = row.serialized_bytes as Buffer | null;
-      if (
-        row.availability !== 'available' ||
-        !bytes ||
-        bytes.length !== row.byte_length ||
-        hash(bytes) !== row.byte_digest
-      ) {
-        throw new ContentUnavailable('exact comment source bytes are unavailable');
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(bytes.toString('utf8'));
-      } catch {
-        throw new ContentUnavailable('exact comment source bytes are corrupt');
-      }
-      if (
-        !parsed ||
-        Array.isArray(parsed) ||
-        typeof parsed !== 'object' ||
-        stable(parsed) !== stable(row.body)
-      ) {
-        throw new ContentUnavailable('exact comment source body differs');
-      }
-      let authoredSource: ReturnType<typeof retainedDocumentBody>;
-      try {
-        authoredSource = retainedDocumentBody(parsed as Record<string, unknown>);
-      } catch {
-        throw new ContentCommentInvalid('source text or document projection is invalid');
-      }
-      const { prefix, suffix } = resolveParagraphSelector(
-        authoredSource.body,
-        command.exact,
-        authoredSource.document,
-      );
-      const owner = await client.query(`UPDATE content.owner_control SET sequence = sequence + 1
-        WHERE singleton RETURNING data_epoch, sequence::text AS sequence`);
-      if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
-      const { data_epoch, sequence } = owner.rows[0];
-      const id = randomUUID();
-      await client.query(
-        `INSERT INTO content.receipt
-        (operation_id, request_digest, action, outcome, variant_id, revision_id,
-          data_epoch, sequence) VALUES ($1,$2,'comment.create','succeeded',$3,$4,$5,$6)`,
-        [
-          operationId,
-          command.requestDigest,
-          row.variant_id,
-          command.revisionId,
-          data_epoch,
-          sequence,
-        ],
-      );
-      await client.query(
-        `INSERT INTO content.comment
-        (id, operation_id, request_digest, revision_id, resource_id, variant_id,
-          author, exact, prefix, suffix, body, data_epoch, sequence)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [
-          id,
-          operationId,
-          command.requestDigest,
-          command.revisionId,
-          command.resourceId,
-          row.variant_id,
-          command.author,
-          command.exact,
-          prefix,
-          suffix,
-          command.body,
-          data_epoch,
-          sequence,
-        ],
-      );
-      await client.query(
-        `INSERT INTO content.outbox
-        (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
-        VALUES ($1,$2,$3,$4,'content.comment.created','content-body-v1',$5,$6::jsonb)`,
-        [
-          randomUUID(),
-          data_epoch,
-          sequence,
-          operationId,
-          command.revisionId,
-          JSON.stringify({ comment: id, revisionId: command.revisionId }),
-        ],
-      );
-      await client.query('COMMIT');
-      return asComment(
-        {
-          id,
-          author: command.author,
-          resource_id: command.resourceId,
-          variant_id: row.variant_id,
-          revision_id: command.revisionId,
-          byte_digest: row.byte_digest,
-          comment_body: command.body,
-          exact: command.exact,
-          prefix,
-          suffix,
-          data_epoch,
-          sequence,
-        },
-        false,
-      );
+        saved = { row, replayed: true };
+      } else saved = { row: await this.record(client, command, operationId), replayed: false };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
+    const position = await contentEventPosition(this.pool, operationId);
+    return asComment({ ...saved.row, data_epoch: position.dataEpoch, sequence: position.sequence },
+      saved.replayed);
+  }
+
+  /** The new comment's row; commits the caller's transaction. */
+  private async record(client: PoolClient, command: ContentCommentCommand,
+    operationId: string): Promise<Record<string, any>> {
+    const source = await client.query(
+      `SELECT r.id, r.variant_id, r.byte_digest,
+      r.byte_length, r.serialized_bytes, r.body, r.availability, v.resource_id
+      FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
+      WHERE r.id = $1 FOR SHARE OF r`,
+      [command.revisionId],
+    );
+    const row = source.rows[0];
+    if (!row || row.resource_id !== command.resourceId) {
+      throw new ContentCommentMissing('exact comment source is unavailable');
+    }
+    const bytes = row.serialized_bytes as Buffer | null;
+    if (
+      row.availability !== 'available' ||
+      !bytes ||
+      bytes.length !== row.byte_length ||
+      hash(bytes) !== row.byte_digest
+    ) {
+      throw new ContentUnavailable('exact comment source bytes are unavailable');
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new ContentUnavailable('exact comment source bytes are corrupt');
+    }
+    if (
+      !parsed ||
+      Array.isArray(parsed) ||
+      typeof parsed !== 'object' ||
+      stable(parsed) !== stable(row.body)
+    ) {
+      throw new ContentUnavailable('exact comment source body differs');
+    }
+    let authoredSource: ReturnType<typeof retainedDocumentBody>;
+    try {
+      authoredSource = retainedDocumentBody(parsed as Record<string, unknown>);
+    } catch {
+      throw new ContentCommentInvalid('source text or document projection is invalid');
+    }
+    const { prefix, suffix } = resolveParagraphSelector(
+      authoredSource.body,
+      command.exact,
+      authoredSource.document,
+    );
+    // Comments on one revision commit in list order, so the numbered ones are
+    // always a prefix of it and a listing's frozen cut never gains a member.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `content-comment-order:${command.revisionId}`,
+    ]);
+    const id = randomUUID();
+    await appendContentEvent(client, {
+      operationId,
+      requestDigest: command.requestDigest,
+      action: 'comment.create',
+      outcome: 'succeeded',
+      variantId: row.variant_id,
+      revisionId: command.revisionId,
+      eventType: 'content.comment.created',
+      recipe: 'content-body-v1',
+      payload: { comment: id, revisionId: command.revisionId },
+    });
+    await client.query(
+      `INSERT INTO content.comment
+      (id, operation_id, request_digest, revision_id, resource_id, variant_id,
+        author, exact, prefix, suffix, body)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        id,
+        operationId,
+        command.requestDigest,
+        command.revisionId,
+        command.resourceId,
+        row.variant_id,
+        command.author,
+        command.exact,
+        prefix,
+        suffix,
+        command.body,
+      ],
+    );
+    await client.query('COMMIT');
+    return {
+      id,
+      author: command.author,
+      resource_id: command.resourceId,
+      variant_id: row.variant_id,
+      revision_id: command.revisionId,
+      byte_digest: row.byte_digest,
+      comment_body: command.body,
+      exact: command.exact,
+      prefix,
+      suffix,
+    };
   }
 
   async read(commentId: string): Promise<ContentComment | null> {
     if (!uuid.test(commentId)) throw new ContentCommentInvalid('invalid comment id');
-    const result = await this.pool.query(
-      `SELECT c.*, r.byte_digest,
-      c.body AS comment_body, c.sequence::text AS sequence
-      FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
-      WHERE c.id = $1`,
-      [commentId],
-    );
+    const result = await this.pool.query(`${POSITIONED} WHERE c.id = $1`, [commentId]);
     return result.rowCount ? asComment(result.rows[0], false) : null;
   }
 
-  /** A stable prefix of one revision's immutable comments. The owner sequence
-   * lock in create orders commits with list_order allocation. The cursor grants
-   * no authority; callers must check current disclosure on every page. */
+  /** A stable prefix of one revision's numbered comments. Create serializes one
+   * revision's comments, so its numbered comments are a list_order prefix. The
+   * cursor grants no authority; callers must check current disclosure on every page. */
   async list(
     revisionId: string,
     pageSize = 50,
@@ -417,8 +410,10 @@ export class ContentComments {
         throw new ContentCommentCursorStale('Content owner epoch changed');
       }
       const maximum = await client.query<{ last: string }>(
-        `SELECT COALESCE(MAX(list_order), 0)::text AS last
-        FROM content.comment WHERE revision_id = $1`,
+        `SELECT c.list_order::text AS last FROM content.comment c
+        JOIN content.receipt receipt ON receipt.operation_id = c.operation_id
+          AND receipt.sequence IS NOT NULL
+        WHERE c.revision_id = $1 ORDER BY c.list_order DESC LIMIT 1`,
         [revisionId],
       );
       const lastOrder = maximum.rows[0]?.last ?? '0';
@@ -430,10 +425,7 @@ export class ContentComments {
       const throughOrder = prior?.throughOrder ?? lastOrder;
       const afterOrder = prior?.afterOrder ?? '0';
       const result = await client.query(
-        `SELECT c.*, r.byte_digest,
-        c.body AS comment_body, c.sequence::text AS sequence,
-        c.list_order::text AS list_order
-        FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
+        `${POSITIONED.replace('SELECT c.*,', 'SELECT c.*, c.list_order::text AS list_order,')}
         WHERE c.revision_id = $1 AND c.list_order > $2::bigint
           AND c.list_order <= $3::bigint
         ORDER BY c.list_order LIMIT $4`,
@@ -476,12 +468,13 @@ export class ContentComments {
       [`content-comment:${admissionId}`],
     );
     const row = result.rows[0];
-    return row
-      ? {
-          outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
-          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
-        }
-      : null;
+    if (!row) return null;
+    return {
+      outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
+      position: row.sequence
+        ? { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence }
+        : await contentEventPosition(this.pool, `content-comment:${admissionId}`),
+    };
   }
 
   async cancel(
@@ -496,12 +489,12 @@ export class ContentComments {
     }
     const operationId = `content-comment:${admissionId}`;
     const client = await this.pool.connect();
+    let outcome: 'succeeded' | 'cancelled';
     try {
-      await client.query('BEGIN');
+      await begin(client);
       await lock(client, admissionId);
       const previous = await client.query(
-        `SELECT request_digest, action, outcome, data_epoch,
-        sequence::text AS sequence FROM content.receipt WHERE operation_id = $1`,
+        `SELECT request_digest, action, outcome FROM content.receipt WHERE operation_id = $1`,
         [operationId],
       );
       if (previous.rowCount) {
@@ -509,44 +502,27 @@ export class ContentComments {
         if (row.request_digest !== requestDigest || row.action !== 'comment.create') {
           throw new ContentConflict('comment operation key reused');
         }
-        await client.query('COMMIT');
-        return {
-          outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
-          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
-        };
-      }
-      const owner = await client.query(`UPDATE content.owner_control SET sequence = sequence + 1
-        WHERE singleton RETURNING data_epoch, sequence::text AS sequence`);
-      if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
-      const { data_epoch, sequence } = owner.rows[0];
-      await client.query(
-        `INSERT INTO content.receipt
-        (operation_id, request_digest, action, outcome, data_epoch, sequence, reason)
-        VALUES ($1,$2,'comment.create','rejected',$3,$4,'admission-fenced')`,
-        [operationId, requestDigest, data_epoch, sequence],
-      );
-      await client.query(
-        `INSERT INTO content.outbox
-        (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
-        VALUES ($1,$2,$3,$4,'content.comment.cancelled','content-body-v1',$5::jsonb)`,
-        [
-          randomUUID(),
-          data_epoch,
-          sequence,
+        outcome = row.outcome === 'succeeded' ? 'succeeded' : 'cancelled';
+      } else {
+        await appendContentEvent(client, {
           operationId,
-          JSON.stringify({ admissionId, reason: 'admission-fenced' }),
-        ],
-      );
+          requestDigest,
+          action: 'comment.create',
+          outcome: 'rejected',
+          reason: 'admission-fenced',
+          eventType: 'content.comment.cancelled',
+          recipe: 'content-body-v1',
+          payload: { admissionId, reason: 'admission-fenced' },
+        });
+        outcome = 'cancelled';
+      }
       await client.query('COMMIT');
-      return {
-        outcome: 'cancelled',
-        position: { owner: 'content', dataEpoch: data_epoch, sequence },
-      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
+    return { outcome, position: await contentEventPosition(this.pool, operationId) };
   }
 }

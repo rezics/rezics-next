@@ -8,8 +8,9 @@ inside the Content database and is safe to call again.
 
 `saveDraft` uses an expected draft head and operation ID. It preserves the exact
 UTF-8 JSON bytes and a SHA-256 digest while deriving JSONB for structured reads.
-The SQL transaction commits the revision, head, receipt, owner position and outbox
-event together. A stale head receives a terminal receipt without a new revision.
+The SQL transaction commits the revision, head, receipt and outbox event together,
+without a position; a stale head receives a terminal receipt without a new revision.
+The call returns once its event is numbered (see positions below).
 Variant identity is immutable and independent of its language tag, so two variants
 may share the same language.
 
@@ -33,8 +34,9 @@ graph receipt/position from a trusted outcome reconciler; pending or ambiguous
 outcomes retain their pins. Active publications keep their pin. Rejected outcomes
 release it only after a terminal proof. The module does not execute graph commands.
 Callers may require the revision to be the current draft head and supply the
-expected Content owner epoch; both are checked before a new pin is written. A
-supplied owner epoch is also checked under the owner row lock at settlement.
+expected Content owner epoch; both are checked before a new pin is written and
+again at settlement. The epoch is read, not locked: a position takes the epoch
+current when it is numbered, so callers compare the returned position's epoch.
 
 `readExactBatch` requires one current batch authorization callback for the requested
 revision, admits at most 64 distinct revisions and 4 MiB, and returns per-item
@@ -45,6 +47,23 @@ checkpoint. `ContentProjectionCursor` initializes at zero for a fresh consumer,
 checks the owner epoch on every read, and advances by one retained event only
 after the graph effect or a verified no-op. `readProjectionPublication` checks a
 terminal outbox event against the settled pin and its exact source reference.
+
+Positions. Every owner in the Content database records a command with
+`appendContentEvent`: one receipt and one event, without a position, inside the
+writer's own transaction, so unrelated writes never wait on a shared row. Only
+the sequencer (`content.sequence_events`, migration 791) locks
+`content.owner_control`; after commit it numbers every committed, unnumbered
+receipt and its event at the next contiguous `(data_epoch, sequence)` positions,
+in insertion order. A transaction that commits late is numbered by a later run
+and is never skipped; the numbering uses no transaction counter, so a logical
+restore keeps delivering. Writers call `contentEventPosition` after commit (never
+inside a transaction) and acknowledge only with the exact position; when the
+sequencer is held, for example during a rebuild activation, the call reports
+`ContentPositionPending` after five seconds and a retry of the same operation
+returns the position. A caught-up projection relay calls `sequencePending` so an
+event whose writer stopped after commit is still numbered. Consumers read only
+numbered rows, so `ContentProjectionCursor` keeps its one-event contiguous
+acknowledgement.
 
 The integration test creates a disposable loopback PostgreSQL cluster under
 `.temp/`, so it requires the pinned `initdb` and `pg_ctl` binaries. It does not

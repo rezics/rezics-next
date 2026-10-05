@@ -2,7 +2,7 @@ import { withPreservationFence, type PreservationFence } from '../public-report/
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
-import { advanceContentSequence } from '../content-sequence.ts';
+import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import { MediaPresentationStore } from './presentation.ts';
 import { MediaRenditionStore } from '../media-rendition/store.ts';
 import { MediaShowcaseStore } from './showcase-store.ts';
@@ -168,9 +168,6 @@ export function copySuppressionId(decisionId: string, digest: string): string {
   return operationUuid(`media-copy:${decisionId}:${digest}`);
 }
 
-function position(row: { data_epoch: string; sequence: string }): ContentPosition {
-  return { owner: 'content', dataEpoch: row.data_epoch, sequence: String(row.sequence) };
-}
 
 function checkAdmission(admission: MediaAdmission): void {
   if (!uuid.test(admission.admissionId) || !uuid.test(admission.principalId)
@@ -180,26 +177,38 @@ function checkAdmission(admission: MediaAdmission): void {
   }
 }
 
+/** Receipts each open transaction recorded, numbered after its commit. */
+const recorded = new WeakMap<PoolClient, string[]>();
+
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
+  const operations: string[] = [];
+  recorded.set(client, operations);
+  let result: T;
   try {
-    await client.query('BEGIN');
-    const result = await work(client);
+    await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+    result = await work(client);
     await client.query('COMMIT');
-    return result;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally {
+    recorded.delete(client);
+    client.release();
+  }
+  // A command is acknowledged once its events are numbered. The sequencer numbers
+  // in insertion order, so the transaction's last receipt covers the earlier ones.
+  const last = operations.at(-1);
+  if (last) await settledContentPosition(pool, last);
+  return result;
 }
 
 /** Lock the operation, then return its prior receipt if one exists. */
 async function prior(client: PoolClient, operationId: string, digest: string, action: string) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
   const result = await client.query<{ request_digest: string; action: string; outcome: string;
-    reason: string | null; data_epoch: string; sequence: string }>(
-    `SELECT request_digest, action, outcome, reason, data_epoch, sequence::text AS sequence
-     FROM content.receipt WHERE operation_id = $1`, [operationId]);
+    reason: string | null }>(
+    `SELECT request_digest, action, outcome, reason FROM content.receipt WHERE operation_id = $1`, [operationId]);
   const row = result.rows[0];
   if (row && (row.request_digest !== digest || row.action !== action)) {
     throw new MediaConflict('media operation key binds another intent');
@@ -209,8 +218,9 @@ async function prior(client: PoolClient, operationId: string, digest: string, ac
 
 async function receipt(client: PoolClient, args: { operationId: string; digest: string;
   action: string; outcome: 'succeeded' | 'stale_head' | 'rejected'; reason?: string;
-  eventType: string; payload: Record<string, unknown> }): Promise<ContentPosition> {
-  return advanceContentSequence(client, { ...args, requestDigest: args.digest, recipe: RECIPE });
+  eventType: string; payload: Record<string, unknown> }): Promise<void> {
+  await advanceContentSequence(client, { ...args, requestDigest: args.digest, recipe: RECIPE });
+  recorded.get(client)?.push(args.operationId);
 }
 
 export function assetIri(asset: string): string { return `${ID}${asset}`; }
@@ -236,6 +246,11 @@ export class MediaStore {
     this.showcase = new MediaShowcaseStore(pool);
   }
 
+  /** After commit: the command result with its receipt's exact Content position. */
+  private async positioned<T>(operationId: string, result: T): Promise<T & { position: ContentPosition }> {
+    return { ...result, position: await settledContentPosition(this.pool, operationId) };
+  }
+
   /** Create the asset when absent, then reserve one bounded quarantine upload. */
   async reserveUpload(admission: MediaAdmission, input: ReserveUploadInput): Promise<UploadReservation> {
     checkAdmission(admission);
@@ -246,7 +261,8 @@ export class MediaStore {
       throw new MediaInvalid('upload reservation is invalid');
     }
     const operationId = `media-upload:${admission.admissionId}`;
-    return transaction(this.pool, async client => {
+    return this.positioned(operationId, await transaction(this.pool, async (client):
+      Promise<Omit<UploadReservation, 'position'>> => {
       const previous = await prior(client, operationId, admission.requestDigest, 'media.upload.reserve');
       if (previous) {
         if (previous.outcome !== 'succeeded') throw new MediaFenced('media upload admission was fenced');
@@ -256,8 +272,7 @@ export class MediaStore {
         const upload = row.rows[0]!;
         return { asset: upload.asset_id, upload: upload.id,
           quarantineKey: `media-quarantine/${upload.id}`, objectNamespace: assetNamespace(upload.asset_id),
-          expiresAt: upload.expires_at.toISOString(), stateHead: upload.state_head,
-          position: position(previous), replayed: true };
+          expiresAt: upload.expires_at.toISOString(), stateHead: upload.state_head, replayed: true };
       }
       const asset = input.asset ?? randomUUID();
       const upload = randomUUID();
@@ -276,7 +291,7 @@ export class MediaStore {
       } else {
         stateHead = randomUUID();
       }
-      const at = await receipt(client, { operationId, digest: admission.requestDigest,
+      await receipt(client, { operationId, digest: admission.requestDigest,
         action: 'media.upload.reserve', outcome: 'succeeded', eventType: 'media.upload.reserved',
         payload: { asset, upload, created: !input.asset } });
       if (!input.asset) {
@@ -284,10 +299,9 @@ export class MediaStore {
           state_head, operation_id) VALUES ($1,$2,$3,'image',$4,$5,$6)`,
         [asset, assetVariant(asset), admission.actingSubject, assetNamespace(asset), stateHead, operationId]);
         await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure,
-          moderation, lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
-          VALUES ($1,$2,NULL,$3,'none','active',0,$4,$5,$6,$7,$8)`,
-        [stateHead, asset, input.disclosure, admission.actingSubject, admission.authorityEpoch,
-          operationId, at.dataEpoch, at.sequence]);
+          moderation, lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
+          VALUES ($1,$2,NULL,$3,'none','active',0,$4,$5,$6)`,
+        [stateHead, asset, input.disclosure, admission.actingSubject, admission.authorityEpoch, operationId]);
       }
       const reserved = await client.query<{ expires_at: Date }>(`INSERT INTO media.upload (id, asset_id,
         principal_id, operation_id, erasure_epoch, declared_media_type, declared_byte_length,
@@ -298,8 +312,8 @@ export class MediaStore {
         input.sha256, `media-quarantine/${upload}`]);
       return { asset, upload, quarantineKey: `media-quarantine/${upload}`,
         objectNamespace: assetNamespace(asset), expiresAt: reserved.rows[0]!.expires_at.toISOString(),
-        stateHead, position: at, replayed: false };
-    });
+        stateHead, replayed: false };
+    }));
   }
 
   async readUpload(upload: string): Promise<UploadRow | null> {
@@ -328,7 +342,8 @@ export class MediaStore {
     if (!current) throw new MediaMissing('media upload is unavailable');
     const operationId = `media-activate:${upload}`;
     const digest = hash(JSON.stringify({ family: 'media-upload-settle-v1', upload, verdict }));
-    return transaction(this.pool, async client => {
+    return this.positioned(operationId, await transaction(this.pool, async (client):
+      Promise<Omit<ActivatedUpload, 'position'>> => {
       const previous = await prior(client, operationId, digest, 'media.upload.settle');
       const rep = async () => (await client.query<{ id: string; byte_digest: string }>(
         'SELECT id, byte_digest FROM media.representation WHERE upload_id = $1', [upload])).rows[0];
@@ -336,20 +351,20 @@ export class MediaStore {
         const row = await rep();
         return { asset: current.asset, upload, representation: row?.id ?? '', sha256: row?.byte_digest ?? '',
           status: previous.outcome === 'succeeded' ? 'activated' : 'rejected', reason: previous.reason,
-          position: position(previous), replayed: true };
+          replayed: true };
       }
       if (verdict.status === 'rejected') {
-        const at = await receipt(client, { operationId, digest, action: 'media.upload.settle',
+        await receipt(client, { operationId, digest, action: 'media.upload.settle',
           outcome: 'rejected', reason: verdict.reason, eventType: 'media.upload.rejected',
           payload: { asset: current.asset, upload, reason: verdict.reason } });
         await client.query(`UPDATE media.upload SET status = 'rejected', reason = $2,
           settle_operation_id = $3, settled_at = clock_timestamp() WHERE id = $1`,
         [upload, verdict.reason, operationId]);
         return { asset: current.asset, upload, representation: '', sha256: '', status: 'rejected',
-          reason: verdict.reason, position: at, replayed: false };
+          reason: verdict.reason, replayed: false };
       }
       const representation = randomUUID();
-      const at = await receipt(client, { operationId, digest, action: 'media.upload.settle',
+      await receipt(client, { operationId, digest, action: 'media.upload.settle',
         outcome: 'succeeded', eventType: 'media.upload.activated',
         payload: { asset: current.asset, upload, representation, sha256: verdict.sha256 } });
       await client.query(`INSERT INTO media.representation (id, asset_id, kind, upload_id, byte_digest,
@@ -358,16 +373,16 @@ export class MediaStore {
       [representation, current.asset, upload, verdict.sha256, verdict.byteLength, verdict.mediaType,
         verdict.width, verdict.height, operationId]);
       await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
-        lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
+        lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
         SELECT $1, a.id, a.state_head, s.disclosure, 'suppressed', s.lifecycle, s.erasure_epoch,
-          s.actor, s.authority_epoch, $2, $3, $4 FROM media.asset a
+          s.actor, s.authority_epoch, $2 FROM media.asset a
         JOIN media.asset_state s ON s.id = a.state_head
-        WHERE a.id = $5 AND s.moderation <> 'suppressed'
-          AND media.digest_suppressed($6)`,
-      [randomUUID(), operationId, at.dataEpoch, at.sequence, current.asset, verdict.sha256]);
+        WHERE a.id = $3 AND s.moderation <> 'suppressed'
+          AND media.digest_suppressed($4)`,
+      [randomUUID(), operationId, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
-        reason: null, position: at, replayed: false };
-    });
+        reason: null, replayed: false };
+    }));
   }
 
   /** Stage two: the activated original becomes the asset head through Content's CAS.
@@ -447,13 +462,13 @@ export class MediaStore {
     }
     const operationId = `media-state:${admission.admissionId}`;
     const write = () =>
-      transaction<CommandOutcome>(this.pool, async (client) => {
+      transaction<Omit<CommandOutcome, 'position'>>(this.pool, async (client) => {
       const previous = await prior(client, operationId, admission.requestDigest, 'media.asset.state');
       if (previous) {
         const state = await client.query<{ id: string; predecessor: string }>(
           'SELECT id, predecessor FROM media.asset_state WHERE operation_id = $1', [operationId]);
         return { outcome: previous.outcome as CommandOutcome['outcome'], id: state.rows[0]?.id ?? null,
-          predecessor: state.rows[0]?.predecessor ?? null, position: position(previous), replayed: true };
+          predecessor: state.rows[0]?.predecessor ?? null, replayed: true };
       }
       const current = await client.query<{ owner: string; state_head: string; lifecycle: string;
         erasure_epoch: string; moderation: string;
@@ -465,28 +480,28 @@ export class MediaStore {
       const invalid = row.lifecycle === 'erased'
         || (row.lifecycle === 'deleted' && input.lifecycle === 'deleted');
       if (row.state_head !== input.expectedState || invalid) {
-        const at = await receipt(client, { operationId, digest: admission.requestDigest,
+        await receipt(client, { operationId, digest: admission.requestDigest,
           action: 'media.asset.state', outcome: 'stale_head',
           reason: invalid ? 'lifecycle-terminal' : 'expected state differs',
           eventType: 'media.asset.state.stale', payload: { asset: input.asset, expected: input.expectedState } });
-        return { outcome: 'stale_head', id: null, predecessor: row.state_head, position: at, replayed: false };
+        return { outcome: 'stale_head', id: null, predecessor: row.state_head, replayed: false };
       }
       const advances = input.lifecycle !== 'active' && input.lifecycle !== row.lifecycle;
       const epoch = advances ? String(BigInt(row.erasure_epoch) + 1n) : row.erasure_epoch;
       const id = randomUUID();
-      const at = await receipt(client, { operationId, digest: admission.requestDigest,
+      await receipt(client, { operationId, digest: admission.requestDigest,
         action: 'media.asset.state', outcome: 'succeeded', eventType: 'media.asset.state.changed',
         payload: { asset: input.asset, state: id, disclosure: input.disclosure, lifecycle: input.lifecycle } });
       await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
-        lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [id, input.asset, row.state_head, input.disclosure, row.moderation, input.lifecycle, epoch,
-        admission.actingSubject, admission.authorityEpoch, operationId, at.dataEpoch, at.sequence]);
+        admission.actingSubject, admission.authorityEpoch, operationId]);
       if (input.lifecycle === 'erased') {
         await client.query(`UPDATE media.representation SET availability = 'erased'
           WHERE asset_id = $1 AND availability = 'available'`, [input.asset]);
       }
-      return { outcome: 'succeeded', id, predecessor: row.state_head, position: at, replayed: false };
+      return { outcome: 'succeeded', id, predecessor: row.state_head, replayed: false };
     });
     if (input.lifecycle === 'erased') {
       if (!preservation)
@@ -498,9 +513,9 @@ export class MediaStore {
         write,
       );
       if (result.held) throw new MediaFenced('media is retained under a preservation hold');
-      return result.value;
+      return this.positioned(operationId, result.value);
     }
-    return write();
+    return this.positioned(operationId, await write());
   }
 
   /** Avatar selection CAS: one Use for the exact current asset revision and original,
@@ -515,13 +530,14 @@ export class MediaStore {
       throw new MediaInvalid('avatar selection is invalid');
     }
     const operationId = `media-avatar:${admission.admissionId}`;
-    return transaction(this.pool, async client => {
+    return this.positioned(operationId, await transaction(this.pool, async (client):
+      Promise<Omit<CommandOutcome, 'position'>> => {
       const previous = await prior(client, operationId, admission.requestDigest, 'media.selection.change');
       if (previous) {
         const selected = await client.query<{ id: string; predecessor: string | null }>(
           'SELECT id, predecessor FROM media.selection_revision WHERE operation_id = $1', [operationId]);
         return { outcome: previous.outcome as CommandOutcome['outcome'], id: selected.rows[0]?.id ?? null,
-          predecessor: selected.rows[0]?.predecessor ?? null, position: position(previous), replayed: true };
+          predecessor: selected.rows[0]?.predecessor ?? null, replayed: true };
       }
       await client.query(`INSERT INTO media.selection_slot (target, context, role, policy)
         VALUES ($1,$2,'avatar',$3) ON CONFLICT DO NOTHING`, [input.target, input.context, AVATAR_POLICY]);
@@ -545,14 +561,14 @@ export class MediaStore {
         basis = { revision: row.draft_head, representation: row.body.representations[0].id };
       }
       if (head !== input.expectedSelection) {
-        const at = await receipt(client, { operationId, digest: admission.requestDigest,
+        await receipt(client, { operationId, digest: admission.requestDigest,
           action: 'media.selection.change', outcome: 'stale_head', reason: 'expected selection differs',
           eventType: 'media.selection.stale', payload: { target: input.target, context: input.context } });
-        return { outcome: 'stale_head', id: null, predecessor: head, position: at, replayed: false };
+        return { outcome: 'stale_head', id: null, predecessor: head, replayed: false };
       }
       const id = randomUUID();
       const use = basis ? randomUUID() : null;
-      const at = await receipt(client, { operationId, digest: admission.requestDigest,
+      await receipt(client, { operationId, digest: admission.requestDigest,
         action: 'media.selection.change', outcome: 'succeeded', eventType: 'media.selection.changed',
         payload: { target: input.target, context: input.context, selection: id, removed: !basis } });
       if (basis && input.asset) {
@@ -563,12 +579,12 @@ export class MediaStore {
           input.context, input.crop, admission.actingSubject, operationId]);
       }
       await client.query(`INSERT INTO media.selection_revision (id, target, context, role, predecessor,
-        use_id, actor, authority_epoch, operation_id, data_epoch, sequence)
-        VALUES ($1,$2,$3,'avatar',$4,$5,$6,$7,$8,$9,$10)`,
+        use_id, actor, authority_epoch, operation_id)
+        VALUES ($1,$2,$3,'avatar',$4,$5,$6,$7,$8)`,
       [id, input.target, input.context, head, use, admission.actingSubject, admission.authorityEpoch,
-        operationId, at.dataEpoch, at.sequence]);
-      return { outcome: 'succeeded', id, predecessor: head, position: at, replayed: false };
-    });
+        operationId]);
+      return { outcome: 'succeeded', id, predecessor: head, replayed: false };
+    }));
   }
 
   /** Exact current basis for image-only publication items: the actor's own public,
@@ -600,10 +616,9 @@ export class MediaStore {
     items: ReadonlyArray<PublicationItemBasis & { use: string }>): Promise<ContentPosition> {
     const operationId = `media-set:${admissionId}`;
     const digest = hash(JSON.stringify({ family: 'media-set-uses-v1', target, items }));
-    return transaction(this.pool, async client => {
-      const previous = await prior(client, operationId, digest, 'media.use.create');
-      if (previous) return position(previous);
-      const at = await receipt(client, { operationId, digest, action: 'media.use.create',
+    await transaction(this.pool, async client => {
+      if (await prior(client, operationId, digest, 'media.use.create')) return;
+      await receipt(client, { operationId, digest, action: 'media.use.create',
         outcome: 'succeeded', eventType: 'media.use.created',
         payload: { target, uses: items.map(item => item.use) } });
       for (const item of items) {
@@ -613,8 +628,8 @@ export class MediaStore {
         [item.use, item.asset, assetVariant(item.asset), item.revision, item.representation, target,
           DEFAULT_MEDIA_CONTEXT, actor, operationId]);
       }
-      return at;
     });
+    return settledContentPosition(this.pool, operationId);
   }
 
   /** Delivery basis for a publication item or immutable campaign art Use. */
@@ -639,8 +654,8 @@ export class MediaStore {
       JOIN content.revision revision ON revision.id = u.asset_revision_id AND revision.availability = 'available'
       LEFT JOIN content.receipt campaign_receipt ON campaign_receipt.operation_id = u.operation_id
         AND u.role LIKE 'campaign-%'
-      LEFT JOIN content.outbox campaign_event ON campaign_event.data_epoch = campaign_receipt.data_epoch
-        AND campaign_event.sequence = campaign_receipt.sequence AND campaign_event.event_type = 'media.use.created'
+      LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
+        AND campaign_event.event_type = 'media.use.created'
       WHERE u.id = ANY($1::uuid[]) AND (u.role = 'publication-item' OR u.role LIKE 'campaign-%')
         AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
@@ -732,13 +747,13 @@ export class MediaStore {
         if (row.moderation === 'suppressed' || row.lifecycle === 'erased') continue;
         const operationId = `media-copy:${suppressionId}:${asset.id}`;
         const id = randomUUID();
-        const at = await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
+        await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
           outcome: 'succeeded', eventType: 'media.copy.suppressed', payload: { asset: asset.id } });
         await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
-          lifecycle, erasure_epoch, actor, authority_epoch, operation_id, data_epoch, sequence)
-          VALUES ($1,$2,$3,$4,'suppressed',$5,$6,$7,$8,$9,$10,$11)`,
+          lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
+          VALUES ($1,$2,$3,$4,'suppressed',$5,$6,$7,$8,$9)`,
         [id, asset.id, row.state_head, row.disclosure, row.lifecycle, row.erasure_epoch, row.actor,
-          row.authority_epoch, operationId, at.dataEpoch, at.sequence]);
+          row.authority_epoch, operationId]);
         suppressed++;
       }
       return { suppressed, continuation: candidates.rows.length > limit ? batch.at(-1)!.id : null };
@@ -796,7 +811,7 @@ export class MediaStore {
         'SELECT 1 WHERE media.digest_suppressed($1)', [row.byte_digest])).rowCount) {
         throw new MediaStale('identical-copy restoration requires an upheld appeal');
       }
-      const at = await receipt(client, {
+      await receipt(client, {
         operationId,
         digest: requestDigest,
         action: 'media.screen.review',
@@ -815,8 +830,8 @@ export class MediaStore {
       );
       await client.query(
         `INSERT INTO media.asset_state (id,asset_id,predecessor,disclosure,moderation,
-        lifecycle,erasure_epoch,actor,authority_epoch,operation_id,data_epoch,sequence)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        lifecycle,erasure_epoch,actor,authority_epoch,operation_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           randomUUID(),
           row.asset_id,
@@ -828,8 +843,6 @@ export class MediaStore {
           row.actor,
           row.authority_epoch,
           operationId,
-          at.dataEpoch,
-          at.sequence,
         ],
       );
       return operationId;
@@ -870,7 +883,7 @@ export class MediaStore {
             && !(current.operation_id === current.activation
               && current.clearance_reason === 'identical-copy-suppressed'))) continue;
         const operationId = `media-copy-restore:${lift.decisionId}:${asset.id}`;
-        const at = await receipt(client, { operationId, digest: hash(operationId), action: 'media.screen.review',
+        await receipt(client, { operationId, digest: hash(operationId), action: 'media.screen.review',
           outcome: 'succeeded', eventType: 'media.copy.restored',
           payload: { asset: asset.id, suppression: lift.id, caseId: lift.caseId, decisionId: lift.decisionId } });
         if (current.clearance_reason === 'identical-copy-suppressed') {
@@ -879,10 +892,10 @@ export class MediaStore {
           [randomUUID(), current.source, operationUuid(operationId), operationId]);
         }
         await client.query(`INSERT INTO media.asset_state (id,asset_id,predecessor,disclosure,moderation,
-          lifecycle,erasure_epoch,actor,authority_epoch,operation_id,data_epoch,sequence)
-          VALUES ($1,$2,$3,$4,'none',$5,$6,$7,$8,$9,$10,$11)`,
+          lifecycle,erasure_epoch,actor,authority_epoch,operation_id)
+          VALUES ($1,$2,$3,$4,'none',$5,$6,$7,$8,$9)`,
         [randomUUID(), asset.id, current.state_head, current.disclosure, current.lifecycle,
-          current.erasure_epoch, current.actor, current.authority_epoch, operationId, at.dataEpoch, at.sequence]);
+          current.erasure_epoch, current.actor, current.authority_epoch, operationId]);
         restored++;
       }
       return { restored, continuation: candidates.rows.length > limit ? batch.at(-1)!.id : null };
@@ -891,11 +904,14 @@ export class MediaStore {
 
   /** Current owner result for an admission; used for replay after Access denies a re-claim. */
   async readOutcome(operationId: string): Promise<{ outcome: string; position: ContentPosition } | null> {
-    const result = await this.pool.query<{ outcome: string; data_epoch: string; sequence: string }>(
+    const result = await this.pool.query<{ outcome: string; data_epoch: string; sequence: string | null }>(
       `SELECT outcome, data_epoch, sequence::text AS sequence FROM content.receipt WHERE operation_id = $1`,
       [operationId]);
     const row = result.rows[0];
-    return row ? { outcome: row.outcome, position: position(row) } : null;
+    if (!row) return null;
+    return { outcome: row.outcome, position: row.sequence
+      ? { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence }
+      : await settledContentPosition(this.pool, operationId) };
   }
 
   /** Fence an admission whose dispatch Access closed; an existing outcome is returned unchanged. */
@@ -904,15 +920,14 @@ export class MediaStore {
     if (!/^media-(upload|state|avatar|field|inference|document-use):[0-9a-f-]{36}$/.test(operationId) || !sha.test(requestDigest)) {
       throw new MediaInvalid('invalid media admission fence');
     }
-    return transaction(this.pool, async client => {
+    return this.positioned(operationId, await transaction(this.pool, async (client):
+      Promise<{ outcome: 'succeeded' | 'cancelled' }> => {
       const previous = await prior(client, operationId, requestDigest, action);
-      if (previous) {
-        return { outcome: previous.outcome === 'succeeded' ? 'succeeded' : 'cancelled', position: position(previous) };
-      }
-      const at = await receipt(client, { operationId, digest: requestDigest, action, outcome: 'rejected',
+      if (previous) return { outcome: previous.outcome === 'succeeded' ? 'succeeded' : 'cancelled' };
+      await receipt(client, { operationId, digest: requestDigest, action, outcome: 'rejected',
         reason: 'admission-fenced', eventType: 'media.admission.fenced', payload: { operationId } });
-      return { outcome: 'cancelled', position: at };
-    });
+      return { outcome: 'cancelled' };
+    }));
   }
 
   /** Batched avatar basis: at most two primary-key slot probes per target in one query.
@@ -931,19 +946,21 @@ export class MediaStore {
       chosen AS (SELECT DISTINCT ON (w.target) w.target, s.context, media.delivered_selection(s) AS head FROM wanted w
         JOIN media.selection_slot s ON s.target = w.target AND s.context = w.context AND s.role = 'avatar'
         ORDER BY w.target, w.rank)
-      SELECT c.target, c.context, c.head AS selection, r.sequence::text AS selection_position,
+      SELECT c.target, c.context, c.head AS selection, selection_receipt.sequence::text AS selection_position,
         u.id AS use, u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
         p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
-        st.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence,
+        state_receipt.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence,
         COALESCE(nr.value, CASE WHEN legacy.reason = 'likely-explicit' THEN '"nsfw"'::jsonb
           WHEN legacy.reason IS NULL AND legacy.evidence ? 'scores' THEN '"sfw"'::jsonb ELSE '"unknown"'::jsonb END) AS nsfw,
         ar.id AS age_revision,ar.predecessor AS age_predecessor,ar.value AS age_rating,ar.source AS age_source,
         ar.created_at AS age_created, cr.value AS conceal
       FROM owner o LEFT JOIN chosen c ON true
       LEFT JOIN media.selection_revision r ON r.id = c.head
+      LEFT JOIN content.receipt selection_receipt ON selection_receipt.operation_id = r.operation_id
       LEFT JOIN media.use u ON u.id = r.use_id
       LEFT JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.asset_state st ON st.id = a.state_head
+      LEFT JOIN content.receipt state_receipt ON state_receipt.operation_id = st.operation_id
       LEFT JOIN media.representation p ON p.id = u.representation_id
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head

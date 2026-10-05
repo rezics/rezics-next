@@ -1,16 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Pool, PoolClient } from 'pg';
-import { outbox, ownerControl, receipt } from './typed-schema.ts';
+import { ownerControl } from './typed-schema.ts';
 import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
+import { ContentConflict, ContentLimitExceeded, ContentUnavailable } from './errors.ts';
+import { appendContentEvent, contentEventPosition, sequenceContentEvents,
+  type ContentEvent } from './event-sequencer.ts';
 import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from './document-body.ts';
 import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
 
-export class ContentConflict extends Error {}
-export class ContentUnavailable extends Error {}
-export class ContentLimitExceeded extends Error {}
+export { ContentConflict, ContentLimitExceeded, ContentPositionPending, ContentUnavailable } from './errors.ts';
+export { appendContentEvent, contentEventPosition, sequenceContentEvents, type ContentEvent } from './event-sequencer.ts';
 
 function revisionImageUses(body: Record<string, unknown>) {
   const notes = retainedPostNotes(body.notes);
@@ -219,7 +221,7 @@ function checkUuid(value: string, name: string): void {
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     const result = await work(client);
     await client.query('COMMIT');
     return result;
@@ -229,38 +231,18 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } finally { client.release(); }
 }
 
+async function ownerEpoch(client: PoolClient): Promise<string | undefined> {
+  return (await client.query<{ data_epoch: string }>(
+    'SELECT data_epoch FROM content.owner_control WHERE singleton')).rows[0]?.data_epoch;
+}
+
 async function operationLock(client: PoolClient, operationId: string): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
 }
 
-async function nextPosition(client: PoolClient): Promise<ContentPosition> {
-  const rows = await drizzle({ client }).update(ownerControl)
-    .set({ sequence: sql`${ownerControl.sequence} + 1` })
-    .where(eq(ownerControl.singleton, true))
-    .returning({ dataEpoch: ownerControl.dataEpoch, sequence: ownerControl.sequence });
-  if (rows.length !== 1) throw new ContentUnavailable('Content owner position unavailable');
-  return { owner: 'content', dataEpoch: rows[0]!.dataEpoch, sequence: rows[0]!.sequence.toString() };
-}
-
-async function writeReceiptEvent(client: PoolClient, args: {
-  operationId: string; digest: string; action: string; outcome: string; variantId: string | null;
-  revisionId: string | null; reason?: string; position: ContentPosition; eventType: string;
-  recipe?: string;
-  payload: Record<string, unknown>;
-}): Promise<void> {
-  const db = drizzle({ client });
-  await db.insert(receipt).values({
-    operationId: args.operationId, requestDigest: args.digest, action: args.action,
-    outcome: args.outcome, variantId: args.variantId, revisionId: args.revisionId,
-    reason: args.reason ?? null, dataEpoch: args.position.dataEpoch,
-    sequence: BigInt(args.position.sequence),
-  });
-  await db.insert(outbox).values({
-    id: randomUUID(), dataEpoch: args.position.dataEpoch,
-    sequence: BigInt(args.position.sequence), operationId: args.operationId,
-    eventType: args.eventType, recipe: args.recipe ?? RECIPE, revisionId: args.revisionId,
-    payload: args.payload,
-  });
+/** Record the receipt and event; the caller resolves its position after commit. */
+async function recordEvent(client: PoolClient, event: Omit<ContentEvent, 'recipe'> & { recipe?: string }): Promise<void> {
+  await appendContentEvent(client, { ...event, recipe: event.recipe ?? RECIPE });
 }
 
 function position(row: { data_epoch: string; sequence: string }): ContentPosition {
@@ -331,7 +313,8 @@ export class ContentCore {
     if (!row) return null;
     return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
       revisionId: row.revision_id, predecessor: null,
-      position: position(row), replayed: true };
+      position: row.sequence ? position(row) : await contentEventPosition(this.pool, operationId),
+      replayed: true };
   }
 
   /** Fence a claimed draft after Access closes dispatch. The operation lock orders
@@ -340,28 +323,24 @@ export class ContentCore {
     checkUuid(admissionId, 'admission id');
     if (!/^[0-9a-f]{64}$/.test(requestDigest)) throw new ContentConflict('invalid draft request digest');
     const operationId = `content-draft:${admissionId}`;
-    return transaction(this.pool, async client => {
+    const result = await transaction(this.pool, async client => {
       await operationLock(client, operationId);
-      const prior = await client.query(`SELECT action, outcome, revision_id, request_digest,
-        data_epoch, sequence::text AS sequence FROM content.receipt
-        WHERE operation_id = $1 FOR UPDATE`, [operationId]);
+      const prior = await client.query(`SELECT action, outcome, revision_id, request_digest
+        FROM content.receipt WHERE operation_id = $1`, [operationId]);
       if (prior.rowCount) {
         const row = prior.rows[0];
         if (row.action !== 'draft.save' || row.request_digest !== requestDigest) {
           throw new ContentConflict('draft receipt differs');
         }
-        return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
-          revisionId: row.revision_id, predecessor: null,
-          position: position(row), replayed: true };
+        return { outcome: row.outcome === 'rejected' ? 'cancelled' as const : row.outcome as 'succeeded' | 'stale_head',
+          revisionId: row.revision_id as string | null, predecessor: null, replayed: true };
       }
-      const sourcePosition = await nextPosition(client);
-      await writeReceiptEvent(client, { operationId, digest: requestDigest,
-        action: 'draft.save', outcome: 'rejected', variantId: null, revisionId: null,
-        reason: 'admission-fenced', position: sourcePosition,
+      await recordEvent(client, { operationId, requestDigest,
+        action: 'draft.save', outcome: 'rejected', reason: 'admission-fenced',
         eventType: 'content.draft.stale', payload: { admissionId, reason: 'admission-fenced' } });
-      return { outcome: 'cancelled', revisionId: null, predecessor: null,
-        position: sourcePosition, replayed: false };
+      return { outcome: 'cancelled' as const, revisionId: null, predecessor: null, replayed: false };
     });
+    return { ...result, position: await contentEventPosition(this.pool, operationId) };
   }
 
   /** Internal ownership lookup for current disclosure, independent of byte health. */
@@ -373,10 +352,12 @@ export class ContentCore {
     return result.rows[0]?.resource_id ?? null;
   }
 
+  /** The last position the sequencer assigned. */
   async ownerPosition(): Promise<ContentPosition> {
-    const result = await this.pool.query('SELECT data_epoch, sequence::text AS sequence FROM content.owner_control WHERE singleton');
-    if (result.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
-    return position(result.rows[0]);
+    const rows = await drizzle({ client: this.pool }).select({ dataEpoch: ownerControl.dataEpoch,
+      sequence: ownerControl.sequence }).from(ownerControl).where(eq(ownerControl.singleton, true));
+    if (rows.length !== 1) throw new ContentUnavailable('Content owner position unavailable');
+    return { owner: 'content', dataEpoch: rows[0]!.dataEpoch, sequence: rows[0]!.sequence.toString() };
   }
 
   /** Current draft identity at one Content owner snapshot. Private search checks
@@ -424,7 +405,8 @@ export class ContentCore {
   }
 
   /** Fence the Content owner cut during the short cross-owner rebuild activation.
-   * Writers advance owner_control and therefore wait until the graph CAS resolves. */
+   * Only the sequencer advances owner_control, so writers still commit while this
+   * holds it; their events stay unnumbered until the graph CAS resolves. */
   async withOwnerPositionLock<T>(expected: ContentPosition, work: () => Promise<T>): Promise<T> {
     if (expected.owner !== 'content' || !/^[0-9a-f-]{36}$/.test(expected.dataEpoch)
       || !/^(0|[1-9][0-9]*)$/.test(expected.sequence)) {
@@ -451,12 +433,18 @@ export class ContentCore {
     if (!result.rowCount) return null;
     const row = result.rows[0];
     const client = await this.pool.connect();
-    try {
-      const reference = await readReference(client, row.revision_id);
-      if (!reference) throw new ContentUnavailable('prepared exact revision unavailable');
-      return { operationId, reference, position: position(row), status: row.status,
-        pinActive: row.pin_active, replayed: true };
-    } finally { client.release(); }
+    let reference: ExactContentReference | null;
+    try { reference = await readReference(client, row.revision_id); }
+    finally { client.release(); }
+    if (!reference) throw new ContentUnavailable('prepared exact revision unavailable');
+    return { operationId, reference,
+      position: row.sequence ? position(row) : await contentEventPosition(this.pool, operationId),
+      status: row.status, pinActive: row.pin_active, replayed: true };
+  }
+
+  /** Number committed events whose writers have not; consumers call this before reading. */
+  sequencePending(): Promise<number> {
+    return sequenceContentEvents(this.pool);
   }
 
   async saveDraft(command: SaveDraftCommand): Promise<SaveDraftResult> {
@@ -549,15 +537,14 @@ export class ContentCore {
       : hash(stable({ action: 'draft.save', variant: command.variant,
       expectedHead: command.expectedHead, model: command.model,
       sourceRevision: command.sourceRevision, provenance: command.provenance, byteDigest }));
-    return transaction(this.pool, async (client) => {
+    const result = await transaction(this.pool, async (client): Promise<Omit<SaveDraftResult, 'position'>> => {
       await operationLock(client, command.operationId);
       const previous = await client.query('SELECT * FROM content.receipt WHERE operation_id = $1', [command.operationId]);
       if (previous.rowCount) {
         const row = previous.rows[0];
         if (row.request_digest !== digest || row.action !== 'draft.save') throw new ContentConflict('operation key reused with another request');
         return { outcome: row.outcome === 'rejected' ? 'cancelled' : row.outcome,
-          revisionId: row.revision_id, predecessor: command.expectedHead,
-          position: position(row), replayed: true } as SaveDraftResult;
+          revisionId: row.revision_id, predecessor: command.expectedHead, replayed: true };
       }
       if (command.provenance.kind === 'admitted-public-domain-v1') {
         const proof = command.provenance as unknown as AdmittedPublicDomainProvenance;
@@ -617,13 +604,11 @@ export class ContentCore {
         throw new ContentConflict('variant identity differs');
       }
       if (!variant || variant.draft_head !== command.expectedHead) {
-        const sourcePosition = await nextPosition(client);
-        await writeReceiptEvent(client, { operationId: command.operationId, digest, action: 'draft.save',
-          outcome: 'stale_head', variantId: variant?.id ?? null, revisionId: null,
-          reason: 'expected head differs', position: sourcePosition, eventType: 'content.draft.stale',
+        await recordEvent(client, { operationId: command.operationId, requestDigest: digest, action: 'draft.save',
+          outcome: 'stale_head', variantId: variant?.id ?? null,
+          reason: 'expected head differs', eventType: 'content.draft.stale',
           payload: { variantId: command.variant.id, expectedHead: command.expectedHead } });
-        return { outcome: 'stale_head', revisionId: null, predecessor: command.expectedHead,
-          position: sourcePosition, replayed: false };
+        return { outcome: 'stale_head', revisionId: null, predecessor: command.expectedHead, replayed: false };
       }
       const revisionId = randomUUID();
       try {
@@ -640,9 +625,8 @@ export class ContentCore {
       [revisionId, command.variant.id, command.expectedHead, command.operationId, FORMAT, command.model,
         command.sourceRevision, JSON.stringify(command.provenance), byteDigest, bytes.length, bytes, command.serializedJson]);
       await client.query('UPDATE content.variant SET draft_head = $2 WHERE id = $1', [command.variant.id, revisionId]);
-      const sourcePosition = await nextPosition(client);
-      await writeReceiptEvent(client, { operationId: command.operationId, digest, action: 'draft.save',
-        outcome: 'succeeded', variantId: command.variant.id, revisionId, position: sourcePosition,
+      await recordEvent(client, { operationId: command.operationId, requestDigest: digest, action: 'draft.save',
+        outcome: 'succeeded', variantId: command.variant.id, revisionId,
         eventType: 'content.revision.saved', payload: { variantId: command.variant.id, revisionId,
           predecessor: command.expectedHead, byteDigest, byteLength: bytes.length } });
       if (command.model === 'member-reply-v1') {
@@ -652,9 +636,9 @@ export class ContentCore {
         [command.variant.resourceId, command.variant.id, command.provenance.author,
           body.rootTarget, command.sourceRevision, command.operationId, body.originRealm ?? null]);
       }
-      return { outcome: 'succeeded', revisionId, predecessor: command.expectedHead,
-        position: sourcePosition, replayed: false };
+      return { outcome: 'succeeded', revisionId, predecessor: command.expectedHead, replayed: false };
     });
+    return { ...result, position: await contentEventPosition(this.pool, command.operationId) };
   }
 
   async preparePublication(operationId: string, revisionId: string, expectedDigest: string,
@@ -665,7 +649,7 @@ export class ContentCore {
     if (expectedOwnerEpoch !== undefined) checkUuid(expectedOwnerEpoch, 'expected Content owner epoch');
     const digest = hash(stable({ action: 'publication.prepare', operationId, revisionId,
       expectedDigest, requireCurrentDraftHead, expectedOwnerEpoch: expectedOwnerEpoch ?? null }));
-    return transaction(this.pool, async (client) => {
+    const result = await transaction(this.pool, async (client): Promise<Omit<PublicationPreparation, 'position'>> => {
       await operationLock(client, operationId);
       const occupied = await client.query('SELECT action FROM content.receipt WHERE operation_id = $1', [operationId]);
       if (occupied.rowCount && occupied.rows[0].action !== 'publication.prepare') throw new ContentConflict('operation key reused');
@@ -677,9 +661,7 @@ export class ContentCore {
       const reference = await readReference(client, revisionId);
       if (!reference || reference.byteDigest !== expectedDigest) throw new ContentUnavailable('exact revision unavailable or digest differs');
       if (old.rowCount) {
-        const receipt = await client.query('SELECT data_epoch, sequence::text AS sequence FROM content.receipt WHERE operation_id = $1', [operationId]);
-        return { operationId, reference, position: position(receipt.rows[0]),
-          status: old.rows[0].status, pinActive: old.rows[0].pin_active, replayed: true };
+        return { operationId, reference, status: old.rows[0].status, pinActive: old.rows[0].pin_active, replayed: true };
       }
       if (reference.provenance.kind === 'admitted-public-domain-v1') {
         const assessmentId = reference.provenance.rightsAssessmentId;
@@ -701,20 +683,19 @@ export class ContentCore {
         const head = await client.query('SELECT draft_head FROM content.variant WHERE id = $1 FOR UPDATE', [reference.variantId]);
         if (head.rows[0]?.draft_head !== revisionId) throw new ContentConflict('Content draft head is stale');
       }
-      if (expectedOwnerEpoch !== undefined) {
-        const owner = await client.query('SELECT data_epoch FROM content.owner_control WHERE singleton FOR UPDATE');
-        if (owner.rows[0]?.data_epoch !== expectedOwnerEpoch) {
-          throw new ContentConflict('Content owner epoch is stale');
-        }
+      // The epoch is read, not locked: positions take the epoch current when the
+      // sequencer numbers them, and callers compare the returned position's epoch.
+      if (expectedOwnerEpoch !== undefined && await ownerEpoch(client) !== expectedOwnerEpoch) {
+        throw new ContentConflict('Content owner epoch is stale');
       }
       await client.query(`INSERT INTO content.publication_preparation
         (operation_id, revision_id, request_digest) VALUES ($1,$2,$3)`, [operationId, revisionId, digest]);
-      const sourcePosition = await nextPosition(client);
-      await writeReceiptEvent(client, { operationId, digest, action: 'publication.prepare', outcome: 'succeeded',
-        variantId: reference.variantId, revisionId, position: sourcePosition,
+      await recordEvent(client, { operationId, requestDigest: digest, action: 'publication.prepare', outcome: 'succeeded',
+        variantId: reference.variantId, revisionId,
         eventType: 'content.publication.prepared', payload: { reference } });
-      return { operationId, reference, position: sourcePosition, status: 'pending', pinActive: true, replayed: false };
+      return { operationId, reference, status: 'pending', pinActive: true, replayed: false };
     });
+    return { ...result, position: await contentEventPosition(this.pool, operationId) };
   }
 
   async settlePublication(operationId: string, preparationId: string, proof: GraphTerminalProof,
@@ -730,28 +711,25 @@ export class ContentCore {
     const proofDigest = hash(stable(proof));
     const digest = hash(stable({ action: 'publication.settle', preparationId, proof,
       expectedOwnerEpoch: expectedOwnerEpoch ?? null }));
-    return transaction(this.pool, async (client) => {
+    const result = await transaction(this.pool, async (client) => {
       await operationLock(client, operationId);
       const old = await client.query('SELECT * FROM content.receipt WHERE operation_id = $1', [operationId]);
       if (old.rowCount) {
         if (old.rows[0].request_digest !== digest || old.rows[0].action !== 'publication.settle') throw new ContentConflict('operation key reused');
-        return { status: proof.outcome, pinActive: proof.outcome === 'active', position: position(old.rows[0]), replayed: true };
+        return { status: proof.outcome, pinActive: proof.outcome === 'active', recorded: true, replayed: true };
       }
       const result = await client.query('SELECT * FROM content.publication_preparation WHERE operation_id = $1 FOR UPDATE', [preparationId]);
       if (!result.rowCount) throw new ContentUnavailable('publication preparation missing');
       const preparation = result.rows[0];
       if (preparation.revision_id !== proof.revisionId) throw new ContentConflict('graph proof names another revision');
-      if (expectedOwnerEpoch !== undefined) {
-        const owner = await client.query('SELECT data_epoch FROM content.owner_control WHERE singleton FOR UPDATE');
-        if (owner.rows[0]?.data_epoch !== expectedOwnerEpoch) {
-          throw new ContentConflict('Content owner epoch is stale before settlement');
-        }
+      if (expectedOwnerEpoch !== undefined && await ownerEpoch(client) !== expectedOwnerEpoch) {
+        throw new ContentConflict('Content owner epoch is stale before settlement');
       }
       if (preparation.status !== 'pending') {
         if (preparation.status !== proof.outcome || preparation.terminal_proof_digest !== proofDigest) {
           throw new ContentConflict('publication already settled with another proof');
         }
-        return { status: proof.outcome, pinActive: preparation.pin_active, position: null, replayed: true };
+        return { status: proof.outcome, pinActive: preparation.pin_active as boolean, recorded: false, replayed: true };
       }
       await client.query(`UPDATE content.publication_preparation SET status = $2, pin_active = $3,
         graph_receipt = $4, graph_data_epoch = $5, graph_sequence = $6,
@@ -760,15 +738,16 @@ export class ContentCore {
         proof.dataEpoch, proof.sequence, proofDigest]);
       const reference = await readReference(client, preparation.revision_id);
       if (!reference) throw new ContentUnavailable('prepared revision unavailable');
-      const sourcePosition = await nextPosition(client);
-      await writeReceiptEvent(client, { operationId, digest, action: 'publication.settle',
+      await recordEvent(client, { operationId, requestDigest: digest, action: 'publication.settle',
         recipe: reference.model === 'member-reply-v1' ? 'realm-reply-v1' : undefined,
         outcome: proof.outcome === 'active' ? 'succeeded' : 'rejected', variantId: reference.variantId,
-        revisionId: preparation.revision_id, position: sourcePosition,
+        revisionId: preparation.revision_id,
         eventType: proof.outcome === 'active' ? 'content.publication.active' : 'content.publication.rejected',
         payload: { preparationId, revisionId: preparation.revision_id, graph: proof } });
-      return { status: proof.outcome, pinActive: proof.outcome === 'active', position: sourcePosition, replayed: false };
+      return { status: proof.outcome, pinActive: proof.outcome === 'active', recorded: true, replayed: false };
     });
+    const { recorded, ...settled } = result;
+    return { ...settled, position: recorded ? await contentEventPosition(this.pool, operationId) : null };
   }
 
   async readExactBatch(revisionIds: string[], authorize: (revisionIds: readonly string[]) => Promise<ReadonlySet<string>>): Promise<ExactReadResult[]> {

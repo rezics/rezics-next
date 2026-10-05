@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { advanceContentSequence } from '../content-sequence.ts';
+import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import {
   completeRenditionLadderSql,
   pixelCrop,
@@ -91,23 +91,22 @@ export class MediaShowcaseStore {
       throw new MediaInvalid('invalid campaign art');
     const operation = `media-campaign:${admission.admissionId}`;
     const client = await this.pool.connect();
+    let result: Omit<CommandOutcome, 'position'>;
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [operation]);
       const prior = (await client.query(`SELECT r.*,u.id FROM content.receipt r
         LEFT JOIN media.use u ON u.operation_id=r.operation_id WHERE r.operation_id=$1`, [operation])).rows[0];
-      let result: CommandOutcome;
       if (prior) {
         if (prior.request_digest !== admission.requestDigest || prior.action !== 'media.use.create')
           throw new MediaConflict('campaign key binds another intent');
-        result = { outcome: prior.outcome, id: prior.id ?? null, predecessor: null,
-          position: { owner: 'content', dataEpoch: prior.data_epoch, sequence: String(prior.sequence) }, replayed: true };
+        result = { outcome: prior.outcome, id: prior.id ?? null, predecessor: null, replayed: true };
       } else {
         const source = await this.source(client, input.asset, admission.actingSubject, true);
         const inspected = await inspect(source);
         admitShowcaseImage(input, inspected);
         const id = randomUUID();
-        const position = await advanceContentSequence(client, { operationId: operation,
+        await advanceContentSequence(client, { operationId: operation,
           requestDigest: admission.requestDigest, action: 'media.use.create', outcome: 'succeeded',
           eventType: 'media.use.created', recipe: 'media-v1', payload: { target: input.target, zone: input.zone, use: id } });
         await client.query(`INSERT INTO media.use
@@ -117,14 +116,14 @@ export class MediaShowcaseStore {
         [id, input.asset, `urn:rezics:variant:${input.asset}`, source.revision, source.representation,
           input.target, input.context, role, input.crop, input.focalArea, input.anchor ?? null,
           inspected.width, inspected.height, inspected.hasAlpha, admission.actingSubject, operation]);
-        result = { outcome: 'succeeded', id, predecessor: null, position, replayed: false };
+        result = { outcome: 'succeeded', id, predecessor: null, replayed: false };
       }
       await client.query('COMMIT');
-      return result;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally { client.release(); }
+    return { ...result, position: await settledContentPosition(this.pool, operation) };
   }
 
   private async source(client: PoolClient, asset: string, actor: string, publicOnly = false): Promise<SourceBasis> {
@@ -166,6 +165,7 @@ export class MediaShowcaseStore {
       throw new MediaInvalid('invalid showcase selection');
     const operationId = `media-avatar:${admission.admissionId}`;
     const client = await this.pool.connect();
+    let result: Omit<CommandOutcome, 'position'>;
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [operationId]);
@@ -177,7 +177,6 @@ export class MediaShowcaseStore {
           [operationId],
         )
       ).rows[0];
-      let result: CommandOutcome;
       if (prior) {
         if (
           prior.request_digest !== admission.requestDigest ||
@@ -188,11 +187,6 @@ export class MediaShowcaseStore {
           outcome: prior.outcome,
           id: prior.id ?? null,
           predecessor: prior.predecessor ?? prior.payload.current ?? null,
-          position: {
-            owner: 'content',
-            dataEpoch: prior.data_epoch,
-            sequence: String(prior.sequence),
-          },
           replayed: true,
         };
       } else {
@@ -211,7 +205,7 @@ export class MediaShowcaseStore {
           )
         ).rows[0].head as string | null;
         if (head !== input.expectedSelection) {
-          const position = await this.receipt(client, admission, 'stale_head', {
+          await this.receipt(client, admission, 'stale_head', {
             target: input.target,
             context: input.context,
             role,
@@ -221,7 +215,6 @@ export class MediaShowcaseStore {
             outcome: 'stale_head',
             id: null,
             predecessor: head,
-            position,
             replayed: false,
           };
         } else {
@@ -234,7 +227,7 @@ export class MediaShowcaseStore {
           }
           const id = randomUUID();
           const use = source ? randomUUID() : null;
-          const position = await this.receipt(client, admission, 'succeeded', {
+          await this.receipt(client, admission, 'succeeded', {
             target: input.target,
             context: input.context,
             role,
@@ -268,8 +261,8 @@ export class MediaShowcaseStore {
             );
           await client.query(
             `INSERT INTO media.selection_revision
-            (id,target,context,role,predecessor,use_id,trailer_url,actor,authority_epoch,operation_id,data_epoch,sequence)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            (id,target,context,role,predecessor,use_id,trailer_url,actor,authority_epoch,operation_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
             [
               id,
               input.target,
@@ -281,21 +274,19 @@ export class MediaShowcaseStore {
               admission.actingSubject,
               admission.authorityEpoch,
               operationId,
-              position.dataEpoch,
-              position.sequence,
             ],
           );
-          result = { outcome: 'succeeded', id, predecessor: head, position, replayed: false };
+          result = { outcome: 'succeeded', id, predecessor: head, replayed: false };
         }
       }
       await client.query('COMMIT');
-      return result;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
+    return { ...result, position: await settledContentPosition(this.pool, operationId) };
   }
 
   /** A new language needs room among the Work's logo slots. Removed slots keep

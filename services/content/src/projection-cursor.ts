@@ -39,10 +39,12 @@ export class ContentProjectionCursor {
     }
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      // Only the checkpoint is locked: the owner row belongs to the sequencer, and
+      // an epoch cut racing this check leaves a checkpoint that read() rejects.
       const current = await client.query(`SELECT c.data_epoch, c.sequence::text AS sequence,
         o.data_epoch AS owner_epoch FROM content.projection_checkpoint c
-        CROSS JOIN content.owner_control o WHERE c.consumer = $1 AND o.singleton FOR UPDATE OF c, o`, [consumer]);
+        CROSS JOIN content.owner_control o WHERE c.consumer = $1 AND o.singleton FOR UPDATE OF c`, [consumer]);
       const row = current.rows[0];
       if (!row || row.owner_epoch !== expected.dataEpoch || row.data_epoch !== expected.dataEpoch
         || row.sequence !== expected.sequence) throw new ContentConflict('projection checkpoint changed');
