@@ -19,7 +19,7 @@ export const DISCOVERY_RANKING_REFRESH_COST = {
   accessStatements: 30, relayQueries: 4,
 } as const;
 export const DISCOVERY_RANKING_HEALTH_COST = {
-  servingGenerations: 1, accessStatements: 13, erasureWindow: 64, workPayloads: 0, candidateProbes: 0,
+  servingGenerations: 1, recentGenerations: 2, accessStatements: 18, erasureWindow: 64, workPayloads: 0, candidateProbes: 0,
 } as const;
 export const discoveryRankingHealth = t.Object({
   status: t.Union([t.Literal('ready'), t.Literal('unavailable')]),
@@ -29,6 +29,10 @@ export const discoveryRankingHealth = t.Object({
   sequenceLag: t.Nullable(t.String({ pattern: '^(0|[1-9][0-9]*)$' })),
   stale: t.Boolean(),
   refresh: t.Nullable(discoveryRefreshHealth),
+  buildFailure: t.Nullable(t.Object({
+    generation: t.String({ format: 'uuid' }),
+    reason: t.String({ minLength: 1, maxLength: 200 }),
+  })),
 });
 
 /** Availability follows the serving public ranking, not the separate standing
@@ -38,6 +42,7 @@ export async function readDiscoveryRankingHealth(session: WorkReadSession) {
   if (!session.deps.recommendations) throw new WorkReadUnavailable('Public ranking owner is unavailable');
   const generation = await session.deps.recommendations.publicRankingStatus();
   // A diagnostic owner outage must not take a serving public ranking offline.
+  const buildFailure = await session.deps.recommendations.publicRankingBuildFailure().catch(() => null);
   const refresh = await session.deps.discovery?.refreshHealth().catch(() => null) ?? null;
   const lag = generation?.dataEpoch === session.position.dataEpoch
     ? BigInt(session.position.sequence) - BigInt(generation.sequence) : null;
@@ -47,6 +52,6 @@ export async function readDiscoveryRankingHealth(session: WorkReadSession) {
     projectionPosition: generation ? { dataEpoch: generation.dataEpoch, sequence: generation.sequence } : null,
     sequenceLag: lag !== null && lag >= 0n ? String(lag) : null,
     stale: lag !== 0n,
-    refresh,
+    refresh, buildFailure,
   };
 }

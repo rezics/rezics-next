@@ -42,7 +42,7 @@ test('G1033: deferred bases and unavailable diagnostics never downgrade a servin
   const sample = { items: [{ scopeKey: 'a'.repeat(64), status: 'skipped', reason: 'basis-unavailable',
     retryAt: '2026-10-04T00:00:00Z' }], truncated: false };
   const session = { position, deps: {
-    recommendations: { publicRankingStatus: async () => ({ ...position, generation: '00000000-0000-4000-8000-000000001033' }) },
+    recommendations: { publicRankingBuildFailure: async () => null, publicRankingStatus: async () => ({ ...position, generation: '00000000-0000-4000-8000-000000001033' }) },
     discovery: { refreshHealth: async () => sample },
   } } as unknown as WorkReadSession;
   const health = await readDiscoveryRankingHealth(session);

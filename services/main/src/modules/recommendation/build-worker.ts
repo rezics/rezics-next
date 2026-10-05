@@ -42,7 +42,10 @@ export class RankingBuildWorker {
     try {
       const batch = await this.rankings.runBatch(generation, epoch);
       recordWorkerOutcome({ outcome: 'worked', processed: 1, unit: 'batch' });
-      if (batch.failed) { recordWorkerOutcome({ outcome: 'blocked' }); this.held = undefined; return; }
+      if (batch.failed) {
+        console.error('ranking build failed', { generation, reason: batch.failed, checkpoint: batch.checkpoint });
+        recordWorkerOutcome({ outcome: 'blocked' }); this.held = undefined; return;
+      }
       if (!batch.snapshotComplete) return;
       try { await this.rankings.finish(generation, epoch); this.held = undefined; }
       catch (error) { if (!(error instanceof RecommendationNotReady)) throw error; recordWorkerOutcome({ outcome: 'deferred' }); }

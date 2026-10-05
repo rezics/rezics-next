@@ -1,6 +1,9 @@
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 
+/** One lineage fence and one indexed population query for a bounded target set. */
+export const WORK_CANDIDATE_MEMBERSHIP_COST = { graphCalls: 2, queriesPerSignalBatch: 1 } as const;
+
 export async function graphZeroSnapshot(env: WorkActivationEnvironment): Promise<string> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
@@ -13,11 +16,14 @@ export async function graphZeroSnapshot(env: WorkActivationEnvironment): Promise
 
 /** Current native Works present at the pinned graph sequence, ordered for the zero-score tail. */
 export function graphZeroCandidates(env: WorkActivationEnvironment) {
-  return async (after: string | null, snapshotTarget: string, limit: number): Promise<string[]> => {
+  return async (after: string | null, snapshotTarget: string, limit: number,
+    candidates?: readonly string[]): Promise<string[]> => {
+    if (candidates?.length === 0) return [];
     await assertGraphAdmissionOpen(env.fuseki, env.lineage);
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
       PREFIX schema: <https://schema.org/>
       SELECT ?work WHERE {
+        ${candidates ? `VALUES ?work { ${candidates.map(iri).join(' ')} }` : ''}
         GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork . }
         FILTER(STRSTARTS(STR(?work), "https://rezics.com/id/"))
         FILTER EXISTS { GRAPH ${iri(GRAPHS.revisions)} {

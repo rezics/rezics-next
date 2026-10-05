@@ -13,7 +13,7 @@ import { healthRoutes } from '../src/routes/health.ts';
 const source = { dataEpoch: 'restored-epoch', sequence: '7424' };
 const id = '00000000-0000-4000-8000-000000001029';
 function session(generation: { generation: string; dataEpoch: string; sequence: string } | null) {
-  return { position: source, deps: { recommendations: { publicRankingStatus: async () => generation } } } as unknown as WorkReadSession;
+  return { position: source, deps: { recommendations: { publicRankingBuildFailure: async () => null, publicRankingStatus: async () => generation } } } as unknown as WorkReadSession;
 }
 
 test('G1029: discovery readiness follows its serving ranking and reports lag while a replacement builds', async () => {

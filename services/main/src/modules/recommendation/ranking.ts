@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { DISCOVERY_SERVICE_PRINCIPAL } from '../discovery/automation.ts';
-import { automaticPublicRanking, DISCOVERY_RANKING_REFRESH_COST, PUBLIC_DISCOVERY_RANKING,
+import { automaticPublicRanking, DISCOVERY_RANKING_HEALTH_COST, DISCOVERY_RANKING_REFRESH_COST, PUBLIC_DISCOVERY_RANKING,
   publicRankingAutomation, type PublicRankingAutomation } from '../discovery/public-ranking.ts';
 import {
   activateHead, authorizeManager, claimLease, digest, fenceLease, inAccess, markFailed,
@@ -57,8 +57,11 @@ export interface RankingOptions {
   /** Current Context definition and selection proof supplied by the Context owner. */
   verifySemantic?: (viewer: RankingViewer, basis: RankingBasis) => Promise<boolean>;
   zeroSnapshot?: () => Promise<string>;
-  /** Ordered Work heads within the pinned graph checkpoint; absent in legacy synthetic fixtures. */
-  zeroCandidates?: (after: string | null, snapshotTarget: string, limit: number) => Promise<string[]>;
+  /** Ordered Work heads within the pinned graph checkpoint. An optional bounded
+   * candidate set restricts the same population query to receipt targets.
+   * Absent in legacy synthetic fixtures. */
+  zeroCandidates?: (after: string | null, snapshotTarget: string, limit: number,
+    candidates?: readonly string[]) => Promise<string[]>;
   /** Live trust fence covers both scored candidates and the zero-score tail. */
   unverifiedWorks?: (works: readonly string[]) => Promise<ReadonlySet<string>>;
   leaseMs?: number;
@@ -248,6 +251,22 @@ export class RankingGenerations {
     return { generation: row.generation, dataEpoch: row.data_epoch, sequence };
   }
 
+  /** The scope's indexed recent window covers the single automatic pending
+   * build and its last outcome. A ready replacement clears an older failure. */
+  async publicRankingBuildFailure() {
+    const scope = scopeKey(PUBLIC_DISCOVERY_RANKING, null, this.options.dataEpoch);
+    return inAccess(this.options.access, async client => {
+      await requireRecoveryOpen(client);
+      const rows = (await client.query<{ generation: string; state: string; reason: string | null }>(`
+        SELECT id::text AS generation,state,failure_reason AS reason FROM access.derived_generation
+        WHERE family='ranking' AND scope_key=$1 ORDER BY created_at DESC,id
+        LIMIT $2`, [scope, DISCOVERY_RANKING_HEALTH_COST.recentGenerations])).rows;
+      const completed = rows.find(row => row.state !== 'building');
+      return completed?.state === 'failed' && completed.reason !== null
+        ? { generation: completed.generation, reason: completed.reason } : null;
+    });
+  }
+
   /** Heal the public head without a human management grant. Existing heads stay
    * in place until a validated replacement wins the exact-revision activation.
    * The regular build worker advances the same durable leases/checkpoints. */
@@ -334,8 +353,9 @@ export class RankingGenerations {
   async runBatch(generation: string, leaseEpoch: string): Promise<BatchResult> {
     const basis = (await this.options.access.query<{ population: RankingPopulation['kind']; realm: string | null;
       principal_id: string | null; partition_count: number; data_epoch: string; checkpoint: string;
-      target: string }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch,
-        i.checkpoint_sequence::text AS checkpoint, g.input_manifest->'source'->>'snapshotTarget' AS target
+      target: string; zero_snapshot: string | null }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch,
+        i.checkpoint_sequence::text AS checkpoint, g.input_manifest->'source'->>'snapshotTarget' AS target,
+        g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
       FROM access.derived_generation g JOIN access.ranking_generation r ON r.generation_id = g.id
       JOIN access.derived_generation_input i ON i.generation_id = g.id AND i.source = 'main-graph'
       WHERE g.id = $1 AND g.state = 'building'`, [generation]).catch((cause) => {
@@ -362,7 +382,7 @@ export class RankingGenerations {
         expected++;
       }
       if (batches.length && !contiguous.length) {
-        await this.fail(generation, leaseEpoch, 'source-gap');
+        await this.fail(generation, leaseEpoch, `source-gap at ${expected}`);
         return { relayBatches: 0, signals: 0, checkpoint: basis.checkpoint, snapshotComplete: false,
           failed: 'source-gap' };
       }
@@ -378,8 +398,9 @@ export class RankingGenerations {
     }
     const counts = new Map<string, number>();
     for (const event of events) counts.set(event.sequence, (counts.get(event.sequence) ?? 0) + 1);
-    if (batches.some(batch => (counts.get(batch.sequence) ?? 0) !== batch.event_count)) {
-      await this.fail(generation, leaseEpoch, 'source-incomplete');
+    const incomplete = batches.find(batch => (counts.get(batch.sequence) ?? 0) !== batch.event_count);
+    if (incomplete) {
+      await this.fail(generation, leaseEpoch, `source-incomplete at ${incomplete.sequence}`);
       return { relayBatches: 0, signals: 0, checkpoint: basis.checkpoint, snapshotComplete: false,
         failed: 'source-incomplete' };
     }
@@ -388,14 +409,18 @@ export class RankingGenerations {
       return order !== 0n ? (order < 0n ? -1 : 1) : (a.envelope.data?.ordinal ?? 0) - (b.envelope.data?.ordinal ?? 0);
     });
     // Only succeeded, validated observation changes are admitted signals.
-    const signals: SlotSignal[] = [];
+    let signals: SlotSignal[] = [];
+    const targets = new Set<string>();
     for (const event of events) {
       if (event.envelope.type !== OBSERVATION_CHANGED) continue;
       const receipt = event.envelope.data?.receipt ?? {};
       if (receipt.action !== 'rating.observation.set' || receipt.outcome !== 'succeeded') continue;
-      const { work, realm, ratingSlot, ratingObservation, ratingAvailability, ratingValue,
+      const { work, main, target, realm, ratingSlot, ratingObservation, ratingAvailability, ratingValue,
         admissionId, requestDigest, authorityEpoch } = receipt as Record<string, unknown>;
-      const valid = typeof work === 'string' && nativeIri.test(work) && typeof realm === 'string'
+      const targetForm = target !== undefined;
+      const valid = (targetForm
+        ? typeof target === 'string' && nativeIri.test(target) && work === undefined && main === undefined
+        : typeof work === 'string' && nativeIri.test(work)) && typeof realm === 'string'
         && nativeIri.test(realm) && typeof ratingSlot === 'string' && slotPattern.test(ratingSlot)
         && typeof ratingObservation === 'string' && nativeIri.test(ratingObservation)
         && typeof admissionId === 'string'
@@ -406,15 +431,30 @@ export class RankingGenerations {
           && (ratingValue as number) >= 1 && (ratingValue as number) <= 10)
           || (ratingAvailability === 'withdrawn' && ratingValue === undefined));
       if (!valid) {
-        await this.fail(generation, leaseEpoch, 'source-invalid');
+        await this.fail(generation, leaseEpoch, `source-invalid at ${event.sequence}`);
         return { relayBatches: 0, signals: 0, checkpoint: basis.checkpoint, snapshotComplete: false,
           failed: 'source-invalid' };
       }
       if (basis.population === 'realm' && realm !== basis.realm) continue;
-      signals.push({ slot: ratingSlot as string, candidate: work as string, sequence: event.sequence,
+      if (targetForm) targets.add(target as string);
+      signals.push({ slot: ratingSlot as string, candidate: (targetForm ? target : work) as string, sequence: event.sequence,
         event: event.event_id, admission: admissionId as string, requestDigest: requestDigest as string,
         authorityEpoch: authorityEpoch as string,
         weight: ratingAvailability === 'available' ? BigInt(ratingValue as number) : 0n });
+    }
+    if (targets.size) {
+      if (!this.options.zeroCandidates || basis.zero_snapshot === null) {
+        throw new RecommendationUnavailable('rating target Work population is unavailable');
+      }
+      let works: Set<string>;
+      try {
+        works = new Set(await this.options.zeroCandidates(null, basis.zero_snapshot, targets.size, [...targets]));
+      } catch (cause) {
+        throw new RecommendationUnavailable('rating target Work population is unavailable', { cause });
+      }
+      // Kind and snapshot membership come from the same graph query as the
+      // zero-score tail. An admitted non-Work target is irrelevant to this grain.
+      signals = signals.filter(signal => !targets.has(signal.candidate) || works.has(signal.candidate));
     }
     const last = batches.at(-1)?.sequence ?? basis.checkpoint;
     return inAccess(this.options.access, async client => {

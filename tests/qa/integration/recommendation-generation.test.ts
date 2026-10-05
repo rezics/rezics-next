@@ -412,7 +412,7 @@ test('REC03: a failed second generation leaves the first active and served', asy
   const epoch = await s.store.claim(second);
   expect((await s.store.runBatch(second, epoch)).failed).toBe('source-invalid');
   const failed = await s.call(`/v1/recommendations/generations/${second}?actingSubject=${encodeURIComponent(operator.agent)}`, operatorToken);
-  expect(failed.body).toMatchObject({ state: 'failed', failureReason: 'source-invalid', activeRevision: null });
+  expect(failed.body).toMatchObject({ state: 'failed', failureReason: 'source-invalid at 2', activeRevision: null });
   const refused = await s.activate(second, '1');
   expect(refused).toMatchObject({ status: 409, body: { code: 'generation_not_ready' } });
   const head = await s.call(`/v1/recommendations/generations/${first}?actingSubject=${encodeURIComponent(operator.agent)}`, operatorToken);
