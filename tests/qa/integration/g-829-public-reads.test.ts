@@ -176,6 +176,7 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       '/v1/resources/:resource/parts': `${base}/parts`,
       '/v1/resources/:resource/wholes': `/v1/resources/${shortId(part.work)}/wholes`,
       '/v1/resources/:resource/relations': `/v1/resources/${shortId(part.work)}/relations`,
+      '/v1/resources/:resource/continuities': `${base}/continuities`,
       '/v1/resources/:resource/rating-contexts': `${base}/rating-contexts`,
       '/v1/resources/:resource/ratings': `${base}/ratings?context=${encodeURIComponent(context.context)}`,
       '/v1/resources/:resource/reviews': `${base}/reviews?context=${encodeURIComponent(context.context)}`,
