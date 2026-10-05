@@ -60,7 +60,7 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
   expect(ownBody).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'image', selection: first, url: urlOf(first) } });
   const bytes = await avatarOf(writer, first);
   expect(bytes.status).toBe(200);
-  expect(bytes.headers.get('cache-control')).toBe('private, no-cache');
+  expect(bytes.headers.get('cache-control')).toBe('private, no-store');
   expect(bytes.headers.get('etag')).toBe(`"${sha(cover)}"`);
   expect(sha(new Uint8Array(await bytes.arrayBuffer()))).toBe(sha(cover));
   // Asset disclosure alone cannot give a draft's representation shared-cache headers.
@@ -68,10 +68,10 @@ test('G-530: a draft Work\'s cover is unavailable to anonymous, strangers and re
   for (const path of [urlOf(first), firstRepresentation]) {
     const privateBytes = await readBytes(writer, path);
     expect(privateBytes.status).toBe(200);
-    expect(privateBytes.headers.get('cache-control')).toBe('private, no-cache');
+    expect(privateBytes.headers.get('cache-control')).toBe('private, no-store');
     const revalidated = await readBytes(writer, path, `"${sha(cover)}"`);
     expect(revalidated.status).toBe(304);
-    expect(revalidated.headers.get('cache-control')).toBe('private, no-cache');
+    expect(revalidated.headers.get('cache-control')).toBe('private, no-store');
     expect(revalidated.headers.get('etag')).toBe(`"${sha(cover)}"`);
     expect((await revalidated.arrayBuffer()).byteLength).toBe(0);
   }

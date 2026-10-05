@@ -107,7 +107,7 @@ test('public publication-item delivery shares cache headers and validators with 
   }
 });
 
-test('draft-target media revalidates only in private caches; revoked, anonymous and bearer-only readers receive no bytes or 304', async () => {
+test('draft-target media is never stored by browsers; revoked, anonymous and bearer-only readers receive no bytes or 304', async () => {
   const { main, member, privateWork, accessPool } = await stack();
   const get = (path: string, headers: Record<string, string> = {}) =>
     main.handle(new Request(`http://main.local${path}`, { headers }));
@@ -125,12 +125,12 @@ test('draft-target media revalidates only in private caches; revoked, anonymous 
   await reader.grant(`work:read:${hidden.work}`, 'work.read');
   const etag = `"${sha(bytes)}"`;
   const granted = await expectStatus(await reader.read(path), 200);
-  expect(granted.headers.get('cache-control')).toBe('private, no-cache');
+  expect(granted.headers.get('cache-control')).toBe('private, no-store');
   expect(sha(new Uint8Array(await granted.arrayBuffer()))).toBe(sha(bytes));
   const namedPath = `${path}?actingSubject=${encodeURIComponent(reader.actor)}`;
   const namedHeaders = { 'if-none-match': etag, authorization: `Bearer ${reader.token}` };
   const revalidated = await expectStatus(await get(namedPath, namedHeaders), 304);
-  expect(revalidated.headers.get('cache-control')).toBe('private, no-cache');
+  expect(revalidated.headers.get('cache-control')).toBe('private, no-store');
   expect(revalidated.headers.get('etag')).toBe(etag);
   expect((await revalidated.arrayBuffer()).byteLength).toBe(0);
   for (const headers of [{}, { authorization: `Bearer ${reader.token}` }, { 'if-none-match': etag },

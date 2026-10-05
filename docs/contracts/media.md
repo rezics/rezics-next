@@ -159,7 +159,8 @@ Public art and covers share one cached copy across readers, including requests
 with a bearer or an acting Agent: identical public bytes are `public, no-cache`,
 with their digest as ETag. A byte read naming no Agent is decided as the
 anonymous reader first, so public delivery costs no Account introspection.
-Private or draft targets are `private, no-cache`; an Asset's public disclosure
+Private or draft targets are `private, no-store`, so private bytes never rest in a
+shared device's browser cache (VIEW07); an Asset's public disclosure
 does not make its target or context public. Every conditional read repeats
 the current disclosure, selection and clearance checks before answering 304,
 so replacement, removal or revoked access cannot reuse an earlier response.

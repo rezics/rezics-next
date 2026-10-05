@@ -130,7 +130,7 @@ async function deliver(request: Request, media: MediaDependencies, basis: { obje
   mediaType: string }, publicTarget: boolean): Promise<Response> {
   const headers = { etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
     // Revalidation keeps shared caches from outliving a revoked selection or disclosure.
-    'cache-control': publicTarget ? 'public, no-cache' : 'private, no-cache' };
+    'cache-control': publicTarget ? 'public, no-cache' : 'private, no-store' };
   if (notModified(request.headers.get('if-none-match'), headers.etag)) return new Response(null, { status: 304, headers });
   const bytes = await media.objects(basis.objectNamespace).get(basis.sha256);
   return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType, ...headers } });
