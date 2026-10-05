@@ -547,16 +547,16 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     // Each mismatch is committed in the disposable replay copy, then reversed
     // before the successful release. The source primary and its fences stay put.
     const extraSubject = `https://rezics.com/id/${randomUUID()}`;
-    const sourceRevision = (await restoredAccess.query<{ revision: string }>(
-      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision;
+    const lastChange = (await restoredAccess.query<{ id: string }>(
+      'SELECT coalesce(max(id), 0)::text AS id FROM access.also_enjoyed_source_change')).rows[0]!.id;
     await restoredAccess.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')",
       [extraSubject]);
     await expect(releaseRestoredGraphHold(fuseki, restoredAccess, restoredRelay,
       nextLineage, restoredEvidence)).rejects.toThrow('Access state differs from recovery coverage');
     await restoredAccess.query('DELETE FROM access.authority_subject WHERE id = $1', [extraSubject]);
-    // Inserting and deleting the fault also invalidates recommendations. Restore
+    // Inserting and deleting the fault also invalidates recommendations. Remove
     // that fixture side effect before testing an independent Account mismatch.
-    await restoredAccess.query('UPDATE access.also_enjoyed_source_fence SET revision = $1 WHERE id', [sourceRevision]);
+    await restoredAccess.query('DELETE FROM access.also_enjoyed_source_change WHERE id > $1', [lastChange]);
     expect((await accessStateTables(restoredAccess)).tables).toEqual(capturedAccess.tables);
     const originalName = (await restoredAccount.query<{ name: string }>(
       'SELECT name FROM public."user" WHERE id = $1', [member.id])).rows[0]?.name;

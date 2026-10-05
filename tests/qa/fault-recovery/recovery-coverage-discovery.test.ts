@@ -139,26 +139,17 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
       'access.admission', 'access.group_change_receipt', 'access.group_impact_proposal',
       'access.group_impact_activation', 'access.search_read_lease']));
     const outboxBeforeFence = await accessOutboxCoverage(accessPool);
-    const revisionBeforeFence = BigInt((await accessPool.query<{ revision: string }>(
-      'SELECT revision::text FROM access.discovery_source_fence WHERE id')).rows[0]!.revision);
-    const alsoEnjoyedBefore = BigInt((await accessPool.query<{ revision: string }>(
-      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision);
+    // Engaging the fence appends one change row to each source change log; the
+    // fence revisions move only when a projection build folds them.
+    const sourceChanges = ['access.discovery_source_change', 'access.also_enjoyed_source_change'];
     await engageAccessRecoveryFence(accessPool);
     const afterFence = await accessStateTables(accessPool);
-    expect(BigInt((await accessPool.query<{ revision: string }>(
-      'SELECT revision::text FROM access.discovery_source_fence WHERE id')).rows[0]!.revision))
-      .toBe(revisionBeforeFence + 1n);
-    expect(afterFence.tables['access.discovery_source_fence']?.digest)
-      .not.toBe(accessBaseline.tables['access.discovery_source_fence']?.digest);
-    expect(BigInt((await accessPool.query<{ revision: string }>(
-      'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]!.revision))
-      .toBe(alsoEnjoyedBefore + 1n);
-    expect(afterFence.tables['access.also_enjoyed_source_fence']?.digest)
-      .not.toBe(accessBaseline.tables['access.also_enjoyed_source_fence']?.digest);
+    for (const name of sourceChanges) {
+      expect(BigInt(afterFence.tables[name]!.count)).toBe(BigInt(accessBaseline.tables[name]!.count) + 1n);
+      expect(afterFence.tables[name]?.digest).not.toBe(accessBaseline.tables[name]?.digest);
+    }
     for (const [name, coverage] of Object.entries(accessBaseline.tables)) {
-      if (!['access.discovery_source_fence', 'access.also_enjoyed_source_fence'].includes(name)) {
-        expect(afterFence.tables[name]).toEqual(coverage);
-      }
+      if (!sourceChanges.includes(name)) expect(afterFence.tables[name]).toEqual(coverage);
     }
     expect(await accessOutboxCoverage(accessPool)).toEqual(outboxBeforeFence);
     expect(afterFence.state).toEqual(await accessStateCoverage(accessPool));
