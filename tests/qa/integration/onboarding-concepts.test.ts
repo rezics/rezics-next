@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 interface Defined { scheme: string; schemeHead: string; concept: string; sense: string }
 interface Choices { languages: string[]; groups: { type: string; concepts: { id: string; name: { value: string };
@@ -69,6 +70,8 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
       selectionBasis: 'realm-manager-review' as const, actingSubject: author.actor };
     expect((await selectRealmLocal(stack.env, stack.admission(author.actor, `publication:adopt:${realm.realm}`,
       'publication.adopt', realmSelectionDigest(selection)), selection)).outcome).toBe('succeeded');
+    await waitForRealmDirectory(stack.env, () => call('GET', '/v1/realms'),
+      page => page.items.some(item => item.id === realm.realm));
     const suggested = await json<Suggestions>(await call('GET',
       `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(fiction.concept)}&languages=zh-Hans&locale=en`));
     expect(suggested.items).toContainEqual(expect.objectContaining({ realm: realm.realm,
