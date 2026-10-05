@@ -1,3 +1,4 @@
+// sql-relations-allow: access.target_rating_context_component -- Migration 1080 drops these totals; the test proves they are gone.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ROLLUP_COST } from '../../../services/main/src/modules/rating/rollup-read.ts';
