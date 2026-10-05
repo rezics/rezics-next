@@ -6,7 +6,7 @@ import { readMediaViewer } from '../../features/api/media-viewer.ts';
 import { serviceOrigin } from '../../features/api/origins.ts';
 import { serverDeadline } from '../../features/api/server-read.ts';
 import { ACCESS_COOKIE } from '../../features/auth/cookies.ts';
-import { sessionAgentState } from '../../features/auth/session.ts';
+import { sessionAgentState, sessionReadSubject } from '../../features/auth/session.ts';
 import { WebMediaProvider } from '../../features/document-editor/media-provider.tsx';
 import { TypeRegistryProvider } from '../../features/catalogue/type-registry.tsx';
 import { readTypes } from '../../features/catalogue/types-read.ts';
@@ -51,7 +51,7 @@ export default async function LocaleLayout({
     <TypeRegistryProvider registry={registry}>
       <WebMediaProvider
         viewer={viewer}
-        actingSubject={identity?.initialActingSubject}
+        actingSubject={sessionReadSubject(identity)}
         locale={locale}
       >
         {children}

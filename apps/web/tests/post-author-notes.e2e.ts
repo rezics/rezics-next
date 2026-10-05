@@ -72,6 +72,21 @@ test('A writer publishes separate chapter notes and reads them through chapter s
       member: { email: string; password: string };
     }).member;
     await signInAtAccounts(page, '/en', member);
+    const sessionKey = (await page.context().cookies()).find(cookie => cookie.name === 'rezics_session_key')?.value;
+    expect(sessionKey).toBeTruthy();
+    const sessionResponse = await page.request.get('/api/main/v1/me/session-agent', {
+      headers: { 'x-session-key': sessionKey! },
+    });
+    expect(sessionResponse.status()).toBe(200);
+    const sessionState = await sessionResponse.json() as {
+      sessionAgent: { actingSubject: string; eligible: boolean; revision: string }; initialActingSubject: string | null;
+    };
+    const sessionPath = info.outputPath('reader-session-selection.json');
+    writeFileSync(sessionPath, JSON.stringify(sessionState, null, 2));
+    await info.attach('reader-session-selection', { contentType: 'application/json', path: sessionPath });
+    expect(sessionState.sessionAgent.eligible).toBe(true);
+    expect(sessionState.sessionAgent.revision).toBeTruthy();
+    expect(sessionState.initialActingSubject).toBeNull();
     const key = randomUUID();
     const writer = await page.request.post('/api/main/v1/agents', {
       headers: { 'idempotency-key': `author-notes-writer-${key}` },
@@ -164,6 +179,7 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     const suitabilityPath = info.outputPath('chapter-suitability.json');
     writeFileSync(suitabilityPath, suitabilityEvidence);
     await info.attach('chapter-suitability', { contentType: 'application/json', path: suitabilityPath });
+    expect(suitabilityInput.actingSubject).toBe(sessionState.sessionAgent.actingSubject);
     expect(suitability.status(), suitabilityEvidence).toBe(200);
     await expect(page.locator('[data-reader-text]')).toHaveText(text);
     await screenshot(page, info, 'old-address-landing');

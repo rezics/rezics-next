@@ -13,7 +13,13 @@ import { requestLocale } from '../../i18n/server.ts';
 export interface MainSessionAgentState {
   sessionAgent: { actingSubject: string | null; eligible: boolean; revision: string | null };
   mainAgent: { actingSubject: string | null; eligible: boolean; revision: string | null };
+  /** Suggested selection before the session has a saved revision; null after selection or explicit clearing. */
   initialActingSubject: string | null;
+}
+
+/** Page reads use the eligible saved session selection, never its initialization suggestion. */
+export function sessionReadSubject(state: MainSessionAgentState | null): string | null {
+  return state?.sessionAgent.eligible ? state.sessionAgent.actingSubject : null;
 }
 
 /** The signed-in person as the site shows them; plain data, safe to pass to client components. */

@@ -1,6 +1,7 @@
 'use client';
 
 import { imagePresentation, type ImageAgeRating, type MediaImageViewer } from '@rezics/ui/media-image';
+import { Button } from '@rezics/ui/button';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { contentRatingTarget, resolveContentRatings, type ContentRatings } from '../api/content-rating.ts';
@@ -12,6 +13,7 @@ interface RatingContext {
   locale: UiLocale;
   ratings: ContentRatings;
   mount: (target: string) => () => void;
+  retry: (target: string) => void;
 }
 const RatingContext = createContext<RatingContext | null>(null);
 const emptyRatings: ContentRatings = {};
@@ -37,9 +39,8 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
   const resolver = useRef<Resolver>(resolve ?? (targets => resolveContentRatings(targets, actingSubject)));
   resolver.current = resolve ?? (targets => resolveContentRatings(targets, actingSubject));
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  const mount = useCallback((target: string) => {
-    mounted.current.set(target, (mounted.current.get(target) ?? 0) + 1);
-    if (!scheduled.current && !requested.current.has(target)) {
+  const schedule = useCallback(() => {
+    if (!scheduled.current) {
       scheduled.current = true;
       queueMicrotask(() => {
         if (!live.current || generation.current.number !== currentGeneration) return;
@@ -60,13 +61,27 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
         }
       });
     }
+  }, [currentGeneration]);
+  const mount = useCallback((target: string) => {
+    mounted.current.set(target, (mounted.current.get(target) ?? 0) + 1);
+    if (!requested.current.has(target)) schedule();
     return () => {
       const count = mounted.current.get(target) ?? 0;
       if (count > 1) mounted.current.set(target, count - 1);
       else mounted.current.delete(target);
     };
-  }, [currentGeneration]);
-  const context = useMemo(() => ({ viewer, locale, ratings, mount }), [viewer, locale, ratings, mount]);
+  }, [schedule]);
+  const retry = useCallback((target: string) => {
+    if (!mounted.current.has(target)) return;
+    requested.current.delete(target);
+    setLoaded(prior => {
+      const next = prior.generation === currentGeneration ? { ...prior.ratings } : {};
+      delete next[target];
+      return { generation: currentGeneration, ratings: next };
+    });
+    schedule();
+  }, [currentGeneration, schedule]);
+  const context = useMemo(() => ({ viewer, locale, ratings, mount, retry }), [viewer, locale, ratings, mount, retry]);
   return <RatingContext.Provider value={context}>{children}</RatingContext.Provider>;
 }
 
@@ -81,9 +96,18 @@ export function WebRatedContent({ target, children, className }: {
   if (!target || !context) return <>{children}</>;
   const labels = mediaMessages[context?.locale ?? 'en'];
   const rating = context?.ratings[target];
-  const state = !valid || rating === null ? 'unavailable'
+  // Missing/malformed assessments and transport failures are failed lookups, not unavailable text.
+  // Keep the body gated until a valid assessment arrives; retry never overrides age/preferences.
+  const state = !valid ? 'unavailable' : rating === null ? 'failed'
     : rating === undefined ? 'loading' : imagePresentation({ nsfw: 'sfw', ageRating: rating }, context.viewer);
   if (state === 'visible') return <>{children}</>;
+  if (state === 'failed') return <div role="status"
+    className={className ?? 'grid gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground'}>
+    <p>{labels.ratingFailed}</p>
+    <Button size="sm" variant="outline" className="justify-self-start" onClick={() => context.retry(target)}>
+      {labels.retryRating}
+    </Button>
+  </div>;
   return <div role="status" className={className ?? 'rounded-xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground'}>
     {state === 'loading' ? labels.loading : state === 'rating-hidden' ? labels.ratingHidden : labels.unavailable}
   </div>;

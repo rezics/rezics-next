@@ -1,6 +1,7 @@
 import type { ImageAgeRating } from '@rezics/ui/media-image';
 import { BFF_PREFIX } from './browser.ts';
 
+/** Null is an unresolved assessment, never evidence that the body is unavailable or unrated. */
 export type ContentRatings = Readonly<Record<string, ImageAgeRating | null>>;
 export const contentRatingTarget = (target: string) => /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target);
 
@@ -23,6 +24,8 @@ export async function resolveContentRatings(targets: string[], actingSubject?: s
   const wanted = new Set(targets);
   const response = await fetcher(`${BFF_PREFIX}/v1/suitability/reads`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store',
+    // Without an eligible page identity, public reads must omit the session cookie/bearer.
+    credentials: actingSubject ? 'same-origin' : 'omit',
     body: JSON.stringify({ targets, ...(actingSubject ? { actingSubject } : {}) }),
     signal: AbortSignal.timeout(10_000),
   });

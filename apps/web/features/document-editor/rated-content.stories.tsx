@@ -54,14 +54,55 @@ export const UnknownAssessmentKeepsItsOwnState: Story = {
   },
 };
 
-export const UnavailableAssessment: Story = {
+export const FailedLookupCanRetry: Story = {
   render: () => <WebRatedContentProvider viewer={viewer} locale="en" resolve={async () => { throw new Error('Offline'); }}>
     <div className="max-w-lg p-6"><WebRatedContent target={target}><p>Unavailable body text</p></WebRatedContent></div>
   </WebRatedContentProvider>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText('Content unavailable')).toBeVisible();
+    await expect(await canvas.findByText('The age rating could not be checked. Try again to show this text.')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(canvas.queryByText('Content unavailable')).toBeNull();
     await expect(canvas.queryByText('Unavailable body text')).toBeNull();
+  },
+};
+
+const recoveredRead = fn(async (): Promise<ContentRatings> => {
+  if (recoveredRead.mock.calls.length === 1) throw new Error('Offline');
+  return { [target]: { status: 'unassessed' } };
+});
+export const RetryRestoresPublicText: Story = {
+  render: () => <WebRatedContentProvider viewer={viewer} locale="en" resolve={recoveredRead}>
+    <div className="max-w-lg space-y-4 p-6">
+      <WebRatedContent target={target}><p>Public chapter text</p></WebRatedContent>
+      <WebRatedContent target={target}><p>Same public text elsewhere</p></WebRatedContent>
+    </div>
+  </WebRatedContentProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findAllByRole('button', { name: 'Try again' })).toHaveLength(2);
+    await expect(canvas.queryByText('Public chapter text')).toBeNull();
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Try again' })[0]!);
+    await expect(await canvas.findByText('Public chapter text')).toBeVisible();
+    await expect(canvas.getByText('Same public text elsewhere')).toBeVisible();
+    await expect(recoveredRead).toHaveBeenCalledTimes(2);
+  },
+};
+
+const restrictedRead = fn(async (): Promise<ContentRatings> => {
+  if (restrictedRead.mock.calls.length === 1) return { [target]: null };
+  return { [target]: { status: 'assessed', labels: ['r18'] } };
+});
+export const RetryStillEnforcesAge: Story = {
+  render: () => <WebRatedContentProvider viewer={{ ...viewer, age: 'under-15' }} locale="en" resolve={restrictedRead}>
+    <div className="max-w-lg p-6"><WebRatedContent target={target}><p>Adult chapter text</p></WebRatedContent></div>
+  </WebRatedContentProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Try again' }));
+    await expect(await canvas.findByText('This content is hidden by your age rating preferences.')).toBeVisible();
+    await expect(canvas.queryByText('Adult chapter text')).toBeNull();
+    await expect(canvas.queryByRole('button', { name: 'Try again' })).toBeNull();
   },
 };
 
