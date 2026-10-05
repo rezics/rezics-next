@@ -17,6 +17,7 @@ import type { ReadStart } from './read.ts';
 import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
+import { WorkArtHero, type WorkShowcaseHeader } from '../showcase/work-header.tsx';
 import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, drawOrder, hubAnchors } from './hub.ts';
 import { WorkTabs } from './work-tabs.tsx';
 import { OnThisPage, StickyAction } from './work-nav.tsx';
@@ -41,7 +42,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
  * main column. Tabs belong to wide screens; a phone gets "On this page".
  */
 export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
-  ratingLine, readAction, status, shortcuts, sections = [],
+  ratingLine, showcase, readAction, status, shortcuts, sections = [],
   signedIn = false, signInHref, actingSubject,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
@@ -59,6 +60,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   sections?: readonly { id: string; label: string }[];
   /** The rating summary under the title, streamed on its own. */
   ratingLine?: ReactNode;
+  /** The Work's showcase art: the page opens with it, and the header lies over it. Without it the header stays plain. */
+  showcase?: WorkShowcaseHeader | null;
   signedIn?: boolean;
   /** Where the shelf and rating controls send a signed-out reader; sign-in returns here. */
   signInHref?: string;
@@ -77,6 +80,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       labels={{ overview: messages.overview, contents: messages.contents, versions: messages.versions,
         discussion: messages.discussion, history: messages.history }} />
   </>;
+  const header = <WorkHeader work={work} credits={credits} ratingLine={ratingLine} showcase={showcase ?? undefined}
+    locale={locale} messages={messages} />;
   const primary = readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
     messages={messages} /> : readAction;
   if (!showsBookControls(experience)) {
@@ -85,8 +90,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
         <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="grid min-w-0 content-start gap-3">
-            <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale}
-              messages={messages} />
+            {showcase ? <WorkArtHero header={showcase}>{header}</WorkArtHero> : header}
             {shortcuts}
           </div>
           <div id={ACTION_ID} className="flex flex-wrap content-start items-center gap-2 sm:max-w-56 sm:flex-col sm:items-stretch">
@@ -104,39 +108,52 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       </PageContainer>
     </ReaderActionsProvider>;
   }
+  const bookGrid = `grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-x-6
+    lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 xl:grid-cols-[17rem_minmax(0,1fr)]
+    xl:gap-x-16`;
+  const columns = <>
+    {/* On a phone this column dissolves into the grid so the thumbnail sits beside the title and the actions span the width. */}
+    <div className="contents lg:sticky lg:top-6 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:content-start
+      lg:gap-6 lg:self-start">
+      <div className="col-start-1 row-start-1 flex justify-center lg:col-auto lg:row-auto">
+        {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
+      </div>
+      {/* Under art the title leaves this row, so the actions sit beside the thumbnail instead of under it. */}
+      <div id={ACTION_ID} className={cn(`grid w-full content-start gap-3 sm:max-w-sm lg:col-auto lg:row-auto lg:max-w-none`,
+        showcase ? 'col-start-2 row-start-1 self-center' : 'col-span-2 row-start-2')}>
+        {primary}
+        {status}
+        <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
+        <RateWork work={work.id} locale={locale} className="mt-1" />
+        <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
+          signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
+        <ReportAction target={work.id} kind="work" />
+      </div>
+    </div>
+    <div className={cn('grid min-w-0 content-start gap-3 lg:col-start-2',
+      showcase ? 'col-span-2 row-start-2 empty:hidden lg:col-span-1 lg:row-start-1' : 'col-start-2 row-start-1')}>
+      {showcase ? null : header}
+      {shortcuts}
+    </div>
+    <div className="col-span-2 row-start-3 grid min-w-0 content-start gap-8 lg:col-span-1 lg:col-start-2 lg:row-start-2">
+      {nav}
+      {children}
+    </div>
+  </>;
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
     {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}
-    <PageContainer className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-5 max-lg:pb-24 [text-autospace:normal]
-      sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-x-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr]
-      lg:gap-x-12 lg:gap-y-6 xl:grid-cols-[17rem_minmax(0,1fr)] xl:gap-x-16">
-      {/* On a phone this column dissolves into the grid so the thumbnail sits beside the title and the actions span the width. */}
-      <div className="contents lg:sticky lg:top-6 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:content-start
-        lg:gap-6 lg:self-start">
-        <div className="col-start-1 row-start-1 flex justify-center lg:col-auto lg:row-auto">
-          {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
-        </div>
-        <div id={ACTION_ID} className="col-span-2 row-start-2 grid w-full content-start gap-3 sm:max-w-sm
-          lg:col-auto lg:row-auto lg:max-w-none">
-          {primary}
-          {status}
-          <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
-          <RateWork work={work.id} locale={locale} className="mt-1" />
-          <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
-            signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
-          <ReportAction target={work.id} kind="work" />
-        </div>
-      </div>
-      <div className="col-start-2 row-start-1 grid min-w-0 content-start gap-3 lg:col-start-2">
-        <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} />
-        {shortcuts}
-      </div>
-      <div className="col-span-2 row-start-3 grid min-w-0 content-start gap-8 lg:col-span-1 lg:col-start-2 lg:row-start-2">
-        {nav}
-        {children}
-      </div>
-      <StickyAction label={messages.nextAction} />
-    </PageContainer>
+    {showcase
+      // The art opens the page above the cover rail, which then starts below it with the same columns.
+      ? <PageContainer className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
+        <WorkArtHero header={showcase}>{header}</WorkArtHero>
+        <div className={bookGrid}>{columns}</div>
+        <StickyAction label={messages.nextAction} />
+      </PageContainer>
+      : <PageContainer className={`${bookGrid} max-lg:pb-24 [text-autospace:normal]`}>
+        {columns}
+        <StickyAction label={messages.nextAction} />
+      </PageContainer>}
   </ReaderActionsProvider>;
 }
 

@@ -51,13 +51,25 @@ export async function readWorkShowcase(
   targets: readonly string[],
   context: string,
 ): Promise<ReadonlyMap<string, WorkShowcase>> {
+  return readShowcaseBatch(targets, context);
+}
+
+/** A Work page reads the Work's own art, with no Zone or Realm context to override it. */
+export function readOwnWorkShowcase(work: string): Promise<ReadonlyMap<string, WorkShowcase>> {
+  return readShowcaseBatch([work]);
+}
+
+async function readShowcaseBatch(
+  targets: readonly string[],
+  context?: string,
+): Promise<ReadonlyMap<string, WorkShowcase>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
     const { data, error } = await mainApiWithToken(undefined).v1.resources.showcase.post({
       profile: 'work-showcase-batch-v1',
       targets: wanted,
-      context,
+      ...(context ? { context } : {}),
     });
     if (error || !data || !data.complete) return new Map();
     const admitted = new Set(wanted);

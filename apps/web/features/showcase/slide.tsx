@@ -33,7 +33,7 @@ export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
   ));
 }
 
-function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
+export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
   const sources = pictureSources(art);
   const fallback = art.landscape ?? art.portrait;
   if (!fallback) return null;

@@ -11,6 +11,8 @@ import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsL
   from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { WorkHeader as Header } from './types.ts';
+import { type WorkShowcaseHeader, workHeaderLogo, WorkTrailer } from '../showcase/work-header.tsx';
+import { WorkArtTitle } from '../showcase/work-header-title.tsx';
 
 function serialStats(work: Pick<Header, 'completionStatus' | 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>,
   now: Date, locale: UiLocale, t: ReturnType<typeof materializeData<WorkPageMessages>>) {
@@ -50,13 +52,18 @@ export function WorkStats({ work, now, locale, messages }: {
   </dl>;
 }
 
+const titleClass = `text-balance font-semibold font-work-title text-2xl/tight tracking-tight
+  [overflow-wrap:anywhere] sm:text-4xl/[1.12] lg:text-[2.75rem]/[1.12]`;
+
 /**
  * The Work's identity beside its cover, in Goodreads' order: title in the
  * Work-title face, who made it, the rating summary, a plain line of what it
  * is and, for a serial, its state. Model detail lives in Details below.
  */
-export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages }: {
+export function WorkHeader({ work, credits, ratingLine, showcase, now = new Date(), locale, messages }: {
   work: Header; credits: ReactNode; ratingLine?: ReactNode;
+  /** The Work's showcase art; the frame places the header over it, and the title and trailer follow it. */
+  showcase?: WorkShowcaseHeader;
   /** The moment "Updated 3 days ago" is measured from; stories fix it. */
   now?: Date;
   locale: UiLocale; messages: WorkPageMessages;
@@ -71,8 +78,10 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
   return <header className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start justify-items-start gap-3 text-start">
     {work.disclosure === 'restricted'
       ? <Badge variant="warning" title={t.restrictedHelp}><LockIcon aria-hidden="true" />{t.restricted}</Badge> : null}
-    <h1 lang={work.title.language} dir={work.title.direction} className="text-balance font-semibold font-work-title
-      text-2xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-4xl/[1.12] lg:text-[2.75rem]/[1.12]">{work.title.value}</h1>
+    {showcase
+      ? <WorkArtTitle logo={workHeaderLogo(showcase, work.title.language)} title={work.title.value}
+        lang={work.title.language} dir={work.title.direction} className={titleClass} />
+      : <h1 lang={work.title.language} dir={work.title.direction} className={titleClass}>{work.title.value}</h1>}
     {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
       className="max-w-2xl text-pretty font-medium text-foreground/80 text-lg">{work.tagline.value}</p> : null}
     {titleNeedsLanguageNote(work.title, locale) ? <p className="text-muted-foreground text-xs">
@@ -85,6 +94,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
     {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
     <WorkStats work={work} now={now} locale={locale} messages={messages} />
+    {showcase ? <WorkTrailer header={showcase} title={work.title.value} /> : null}
   </header>;
 }
 

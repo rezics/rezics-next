@@ -1,0 +1,54 @@
+/* A Work page's header over its showcase art. The colours are set here because the art is dark whatever the theme. */
+.work-hero {
+  --foreground: #fff;
+  --muted-foreground: #d3deee;
+  --border: #ffffff59;
+  --primary: #bcd8ff;
+  --hero-height: min(42vw, 60svh, 30rem);
+  --hero-lead: 0rem;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: end;
+  min-height: var(--hero-height);
+  overflow: hidden;
+  border-radius: 1rem;
+  background: #101b2c;
+  color: #fff;
+}
+.work-hero-copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 56rem;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  padding-block-start: calc(clamp(1rem, 3vw, 2.5rem) + var(--hero-lead));
+}
+.work-hero-logo {
+  display: block;
+  max-width: min(100%, 24rem);
+}
+.work-hero-logo[hidden] {
+  display: none;
+}
+.work-hero-logo img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: clamp(3.5rem, 12svh, 7rem);
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 2px 6px #07101d);
+}
+[dir='rtl'] .work-hero-logo img {
+  object-position: right center;
+}
+.work-hero .showcase-action {
+  margin-block-start: 0.25rem;
+}
+/* Live text covers much of the art, so the scrim darkens all of it rather than only the foot. */
+.work-hero .showcase-scrim {
+  background:
+    linear-gradient(0deg, #07101df5 0%, #07101de0 55%, #07101d40 100%),
+    linear-gradient(90deg, #07101d6b, transparent);
+}
