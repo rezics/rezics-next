@@ -86,6 +86,12 @@ Maintainer and product manager, 2026-10-04.
 52. <a id="decision-52"></a>[Scope and evaluator](../contracts/context.md#scope-and-evaluator): applicability is the same in every Realm; continuity, canonicity and canon policy are separate records.
 53. <a id="decision-53"></a>[Scoped targets and roll-ups](../contracts/ratings.md#scoped-targets-and-roll-ups): the question decides the grain; roll-ups are named metrics over additive components.
 
+## Showcase
+
+Maintainer, 2026-10-05.
+
+54. <a id="decision-54"></a>[Showcase carousel](../contracts/presentation.md#showcase-carousel) and [showcase art](../contracts/media.md#showcase-art): the window sets the stage, slides are layers, art belongs to the Work, banners never slide.
+
 Settled research, also adopted on 2026-09-29:
 
 - R30: [URLs and SEO](urls-and-seo.md).

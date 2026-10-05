@@ -89,6 +89,26 @@ editor presets, not storage limits. A ratio names the display frame; the Use
 retains its own source, crop, focal point and contain/cover fit. Exact selection
 precedes an admitted role-local fallback. A missing banner leaves no banner
 region, and no cover becomes a banner implicitly. These APIs remain pending.
+A banner is one static image; the sliding hero is the
+[showcase](presentation.md#showcase-carousel).
+
+## Showcase art
+
+Maintainer decision, 2026-10-05. Showcase art belongs to the Work, so every
+Zone that features it, the Work page and lists reuse one upload; a Zone's slide
+may override it for a campaign. Its roles are background landscape (16:9),
+background portrait (3:4), logo and cutout. A logo is language-neutral (`zxx`)
+or names its language, comes in a dark or light tone and carries an anchor;
+logos and cutouts need an alpha channel. Each selection is a Use with its own
+crop and focal area, and selections extend the avatar selection slots with
+these roles rather than add a store, under the authority that selects the Work's
+cover. A trailer is a link on the Work, not media.
+
+Main derives width renditions (AVIF and WebP) of each selected showcase image
+from its crop when it is selected, and reads return them as `srcset`
+candidates. A rendition never adds a ratio or a selection. The reason is that
+showcase art is the largest image a page loads, and the stage asks for it at
+every width from a phone to a desktop.
 
 ## Post attachments and preview selection
 

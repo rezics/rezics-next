@@ -131,6 +131,73 @@ Assess full-image readability, visible crop boundaries and access to the rest of
 the Feed before adopting the numeric height budget. The confirmed external
 behavior and its limits are recorded with the [media decision evidence](media.md#decision-evidence-and-remaining-validation).
 
+## Showcase carousel
+
+Maintainer decision, 2026-10-05. A Zone's hero is a showcase: a carousel of
+layered media slides, as on the Steam, Microsoft and Epic stores, IMDb and the
+streaming services. A banner is a different thing: one static image that never
+slides ([media](media.md#covers-banners-and-aspect-ratios)). The reason is that
+every product studied sets the stage from the window and builds slides from
+layers, so one upload serves every device and every language without
+per-device art sets.
+
+- **The window sets the stage**, never the content or a device name. A compact
+  portrait window (narrower than 768 CSS px and taller than wide) shows a 3:4
+  card with the next one peeking; any other window shows 16:9; a wide screen
+  with a fine pointer adds the list of coming slides beside it. The small
+  viewport height caps the stage so the page below stays reachable, and desktop
+  widths are capped and centred. One breakpoint table produces the CSS, the
+  `<picture>` sources and the first slide's preload, so the image always matches
+  its frame. The stage is CSS only, because the server does not know the
+  viewport. Tablets and foldables fall into these shapes by their window; on a
+  window split by a hinge (viewport segments, Chromium only), a slide stays in
+  one segment.
+- **Layers.** A slide has text-free background art (landscape 16:9, optionally
+  portrait 3:4, each with a focal area), an optional cutout over it, a title,
+  and live text and actions drawn by the platform: kicker, tagline, the action
+  in the Work's own verb and "Why here?". Text, ratings and prices are never
+  baked into art. A slide has at most three image layers.
+- **Title.** An official logo in the reader's language or a language-neutral
+  one, with the localized title as its text alternative; otherwise live text
+  styled by an effect preset from the Zone's tokens (plain, outline, gradient,
+  glow), tuned per script (no tracking for CJK, strokes painted under the fill).
+  A logo in another language never replaces the reader's title. Logos come in a
+  dark and a light tone for the scrim under them and sit at one of four anchors.
+- **Odd ratios.** Art authored for a shape fills it, cropped around its focal
+  area. Anything else, such as a cover, screenshot or poster, is shown whole on
+  an ambient backdrop made from itself; nothing is stretched or cropped beyond
+  its focal area. Mixed media galleries use a filmstrip: a fixed height with each
+  item as wide as its ratio.
+- **Fallback.** A slide's own art, then the Work's [showcase art](media.md#showcase-art),
+  then a slide composed from the Work's cover: blurred cover backdrop, the cover
+  and live text. Every Work can be featured without new art.
+- **Cutouts and motion.** A cutout that breaks out of the frame is drawn in a
+  stage layer outside the scrolling track, which would clip it. Parallax follows
+  the pointer on hover devices and the scroll where scroll-driven animations
+  exist; reduced motion turns all of it off.
+- **Rotation** runs only on wide screens with a fine pointer, about seven seconds
+  a slide, with a visible pause control and per-slide progress. It pauses on
+  hover, focus, an off-screen stage and a hidden tab, and stops for good after
+  the first manual move. It never runs on touch or with reduced motion. The
+  first slide draws most of the attention, so editors lead with it and keep to
+  five slides.
+- **Trailers** are external video links (YouTube, Bilibili and similar) whose
+  player loads only when asked, in a privacy-enhanced embed; nothing plays by
+  itself. Hosted short loops wait for a hosted video media type, which is not
+  admitted.
+
+Evidence, gathered 2026-10-05: hero stages and asset switching measured in a
+browser at 390, 820, 1280 and 1920 px on IMDb, Steam, the Microsoft Store, Epic,
+PlayStation, bilibili, Tencent Video and Apple TV (only Epic and Apple TV switch
+to portrait art on phones; all draw titles, prices and actions as live text);
+the [Steam](https://partner.steamgames.com/doc/store/assets/libraryassets),
+[Microsoft Store](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/screenshots-and-images)
+and [Epic](https://dev.epicgames.com/docs/epic-games-store/sales-and-marketing/marketing/storefront-media-guide)
+asset rules (text-free hero art, separate logo layers, a separate portrait image
+for phones); the [carousel pattern](https://www.w3.org/WAI/ARIA/apg/patterns/carousel/),
+[pause, stop, hide](https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html)
+and [click distribution by slide](https://erikrunyon.com/2013/01/carousel-interaction-stats/).
+
 ## Query Blocks and themes
 
 Search/Feed/Graph/Collection Blocks compile typed descriptors through the same
