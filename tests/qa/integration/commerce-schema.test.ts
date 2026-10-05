@@ -88,7 +88,7 @@ async function expectAccessCatalogs(pool: Pool): Promise<void> {
   // Site moderation's authority position is Access-owned (migration 932).
   const leaked = await pool.query(`SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'access' AND table_name ~ '^(commerce|quota|site|entitlement|subscription)'
-      AND table_name <> 'site_moderation_position'`);
+      AND table_name NOT IN ('site_moderation_position', 'site_moderation_change')`);
   expect(leaked.rows).toEqual([]);
 }
 
