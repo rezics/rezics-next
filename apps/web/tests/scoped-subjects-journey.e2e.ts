@@ -241,7 +241,7 @@ test.describe('reading', () => {
     await expect(page).toHaveURL(/continuity=/);
     await expect(main.getByText('Grandfather of Ben Solo').first()).toBeVisible({ timeout: 60_000 });
     await expect(main.getByText('Father of Luke Skywalker')).toHaveCount(0);
-    await expect(page.locator('[data-continuity-note]')).toContainText('Star Wars Canon');
+    await expect(main.locator('[data-continuity-note]').first()).toContainText('Star Wars Canon');
     await capture(page, '12-anakin-canon');
 
     await choose('Star Wars Legends');
