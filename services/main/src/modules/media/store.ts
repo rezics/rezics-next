@@ -318,14 +318,19 @@ export class MediaStore {
 
   async readUpload(upload: string): Promise<UploadRow | null> {
     if (!uuid.test(upload)) throw new MediaInvalid('invalid upload id');
+    // Upload clearance records admission and moderation independently of byte
+    // availability. Erasure must not turn a previously admitted upload into a rejection.
     const result = await this.pool.query(`SELECT u.id, u.asset_id, u.status, u.declared_media_type,
       u.declared_byte_length, u.declared_digest, u.quarantine_key, a.object_namespace, a.owner,
       u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason,
-      media.delivery_clearance(r) AS clearance, CASE
-        WHEN media.delivery_clearance(r) = 'rejected' THEN 'restricted'
-        WHEN media.delivery_clearance(r) = 'cleared' THEN NULL ELSE r.clearance_reason END AS clearance_reason
+      CASE WHEN r.id IS NULL THEN NULL WHEN restriction.rejected THEN 'rejected'
+        ELSE 'cleared' END AS clearance,
+      CASE WHEN restriction.rejected THEN 'restricted' ELSE NULL END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
-      LEFT JOIN media.representation r ON r.upload_id = u.id WHERE u.id = $1`, [upload]);
+      LEFT JOIN media.representation r ON r.upload_id = u.id
+      LEFT JOIN LATERAL (SELECT media.digest_suppressed(r.byte_digest)
+        OR (r.clearance = 'rejected' AND r.clearance_reason = 'staff-rejected') AS rejected)
+        restriction ON true WHERE u.id = $1`, [upload]);
     const row = result.rows[0];
     return row ? { id: row.id, asset: row.asset_id, status: row.status, mediaType: row.declared_media_type,
       byteLength: row.declared_byte_length, sha256: row.declared_digest, quarantineKey: row.quarantine_key,

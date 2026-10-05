@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { png, startMediaStack, type MediaStack } from '../integration/media-support.ts';
+import { randomUUID } from 'node:crypto';
+import { png, sha, startMediaStack, type MediaStack } from '../integration/media-support.ts';
 import { benign, clearQueued, flagged, screening, seedHistoricalScreen } from '../integration/g-571-screen-support.ts';
 import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { MediaScreenWorker } from '../../../services/main/src/modules/media-screen/worker.ts';
@@ -36,19 +37,61 @@ test('G571: concurrent historical leasing runs one screen; deletion and erasure 
   const s = await stack();
   await clearQueued(s);
   const owner = await s.member('epoch-loss');
-  const image = await owner.upload(png(41, 41));
-  await seedHistoricalScreen(s, image.representation);
   const { store } = screening(s);
-  const leases = await Promise.all([store.leaseNext(), store.leaseNext()]);
-  expect(leases.filter(Boolean)).toHaveLength(1);
-  const lease = leases.find(Boolean)!;
-  const removed = await owner.send('POST', `/v1/media/assets/${image.asset}/state`, {
-    profile: 'media-asset-state-v1', expectedState: image.stateHead, disclosure: 'public', lifecycle: 'erased',
-    actingSubject: owner.actor });
-  expect(removed.status).toBe(201);
-  expect(await store.settle(lease, screenVerdict(benign))).toBe(false);
-  expect((await s.contentPool.query('SELECT 1 FROM media.screen_result WHERE source_id = $1', [image.representation])).rowCount).toBe(0);
-  expect((await s.store.readUpload(image.upload))?.clearance).toBe('cleared');
+  for (const [index, lifecycle] of (['deleted', 'erased'] as const).entries()) {
+    const image = await owner.upload(png(41 + index, 41));
+    await seedHistoricalScreen(s, image.representation);
+    const leases = await Promise.all([store.leaseNext(), store.leaseNext()]);
+    expect(leases.filter(Boolean)).toHaveLength(1);
+    const lease = leases.find(Boolean)!;
+    const removed = await owner.send('POST', `/v1/media/assets/${image.asset}/state`, {
+      profile: 'media-asset-state-v1', expectedState: image.stateHead, disclosure: 'public', lifecycle,
+      actingSubject: owner.actor });
+    expect(removed.status).toBe(201);
+    expect(await store.settle(lease, screenVerdict(benign))).toBe(false);
+    expect(await store.settle(lease, screenVerdict(flagged))).toBe(false);
+    expect((await s.store.readUpload(image.upload))).toMatchObject({ clearance: 'cleared', clearanceReason: null });
+    expect((await (await owner.read(`/v1/media/uploads/${image.upload}`)).json()))
+      .toMatchObject({ clearance: 'cleared', clearanceReason: null });
+    expect((await s.call('GET', `/v1/media/representations/${image.representation}/bytes`)).status).toBe(404);
+    if (lifecycle === 'deleted') {
+      const state = await removed.json() as { id: string };
+      expect((await owner.send('POST', `/v1/media/assets/${image.asset}/state`, {
+        profile: 'media-asset-state-v1', expectedState: state.id, disclosure: 'public', lifecycle: 'active',
+        actingSubject: owner.actor })).status).toBe(201);
+      // Restoring the asset keeps the advanced epoch, so the original lease stays obsolete.
+      expect(await store.settle(lease, screenVerdict(flagged))).toBe(false);
+    }
+    expect((await s.contentPool.query('SELECT 1 FROM media.screen_result WHERE source_id = $1', [image.representation])).rowCount).toBe(0);
+    expect((await s.contentPool.query('SELECT 1 FROM content.receipt WHERE operation_id = $1',
+      [`media-screen:${lease.job}`])).rowCount).toBe(0);
+    expect((await s.contentPool.query('SELECT clearance FROM media.representation WHERE id = $1',
+      [image.representation])).rows[0].clearance).toBe('screening');
+    await store.cancelObsolete();
+  }
+}, 180_000);
+
+test('G571: erased uploads retain staff rejection and exact-byte suppression without exposing the reason', async () => {
+  const s = await stack();
+  const owner = await s.member('erased-restrictions');
+  const { store } = screening(s);
+  for (const [index, restriction] of (['staff', 'digest'] as const).entries()) {
+    const bytes = png(46 + index, 46);
+    const image = await owner.upload(bytes);
+    if (restriction === 'staff') {
+      expect(await store.reviewOriginal(image.representation, 'cleared', randomUUID(), 'rejected')).toBe('applied');
+    } else {
+      expect((await s.store.suppressIdenticalCopies(sha(bytes))).suppressed).toBe(1);
+    }
+    const current = (await s.store.readAsset(image.asset))!;
+    expect((await owner.send('POST', `/v1/media/assets/${image.asset}/state`, {
+      profile: 'media-asset-state-v1', expectedState: current.state, disclosure: 'public', lifecycle: 'erased',
+      actingSubject: owner.actor })).status).toBe(201);
+    expect(await s.store.readUpload(image.upload)).toMatchObject({ clearance: 'rejected', clearanceReason: 'restricted' });
+    expect(await (await owner.read(`/v1/media/uploads/${image.upload}`)).json())
+      .toMatchObject({ clearance: 'rejected', clearanceReason: 'restricted' });
+    expect((await s.call('GET', `/v1/media/representations/${image.representation}/bytes`)).status).toBe(404);
+  }
 }, 180_000);
 
 test('G571: historical case retry survives a lost response without blocking image delivery', async () => {
