@@ -138,3 +138,20 @@ export const TrailerFacade: Story = {
     await waitFor(() => expect(document.querySelector('iframe[src*="youtube-nocookie"]')).toBeNull());
   },
 };
+
+/** The art opens the Overview only; the other tabs keep the compact header. */
+export const ContentsTab: Story = {
+  globals: { viewport: { value: 'phone' } },
+  parameters: { route: { pathname: localizedPath(workHref(fixture.workRef, 'contents'), 'en') } },
+  async play({ canvasElement }) {
+    await expect(canvasElement.querySelector('.work-hero')).toBeNull();
+    await expect(
+      within(canvasElement).getByRole('heading', { level: 1, name: 'Astral Tide' }),
+    ).toBeVisible();
+    await expect(within(canvasElement).queryByRole('button', { name: 'Watch trailer' })).toBeNull();
+  },
+};
+export const ContentsTabDesktop: Story = {
+  ...ContentsTab,
+  globals: { viewport: { value: 'desktop' } },
+};

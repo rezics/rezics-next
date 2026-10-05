@@ -18,6 +18,7 @@ import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
 import { WorkArtHero, type WorkShowcaseHeader } from '../showcase/work-header.tsx';
+import { ArtGrid, HiddenOnOverview, OverviewOnly } from '../showcase/work-header-tab.tsx';
 import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, drawOrder, hubAnchors } from './hub.ts';
 import { WorkTabs } from './work-tabs.tsx';
 import { OnThisPage, StickyAction } from './work-nav.tsx';
@@ -80,8 +81,12 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       labels={{ overview: messages.overview, contents: messages.contents, versions: messages.versions,
         discussion: messages.discussion, history: messages.history }} />
   </>;
-  const header = <WorkHeader work={work} credits={credits} ratingLine={ratingLine} showcase={showcase ?? undefined}
-    locale={locale} messages={messages} />;
+  const header = <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} />;
+  // With art the Overview opens with it, and the other tabs keep the compact header above.
+  const artHeader = showcase ? <OverviewOnly workRef={workRef}><WorkArtHero header={showcase}>
+    <WorkHeader work={work} credits={credits} ratingLine={ratingLine} showcase={showcase} locale={locale}
+      messages={messages} /></WorkArtHero></OverviewOnly> : null;
+  const compactHeader = showcase ? <HiddenOnOverview workRef={workRef}>{header}</HiddenOnOverview> : header;
   const primary = readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
     messages={messages} /> : readAction;
   if (!showsBookControls(experience)) {
@@ -90,7 +95,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
         <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="grid min-w-0 content-start gap-3">
-            {showcase ? <WorkArtHero header={showcase}>{header}</WorkArtHero> : header}
+            {artHeader}
+            {compactHeader}
             {shortcuts}
           </div>
           <div id={ACTION_ID} className="flex flex-wrap content-start items-center gap-2 sm:max-w-56 sm:flex-col sm:items-stretch">
@@ -118,9 +124,11 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       <div className="col-start-1 row-start-1 flex justify-center lg:col-auto lg:row-auto">
         {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
       </div>
-      {/* Under art the title leaves this row, so the actions sit beside the thumbnail instead of under it. */}
-      <div id={ACTION_ID} className={cn(`grid w-full content-start gap-3 sm:max-w-sm lg:col-auto lg:row-auto lg:max-w-none`,
-        showcase ? 'col-start-2 row-start-1 self-center' : 'col-span-2 row-start-2')}>
+      <div id={ACTION_ID} className={cn(`col-span-2 row-start-2 grid w-full content-start gap-3 sm:max-w-sm lg:col-auto
+        lg:row-auto lg:max-w-none`,
+      // Under art the title leaves this row on a phone, so the actions sit beside the thumbnail instead of under it.
+      'max-lg:group-data-[art]/art:col-span-1 max-lg:group-data-[art]/art:col-start-2 max-lg:group-data-[art]/art:row-start-1',
+      'max-lg:group-data-[art]/art:self-center')}>
         {primary}
         {status}
         <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
@@ -130,9 +138,9 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
         <ReportAction target={work.id} kind="work" />
       </div>
     </div>
-    <div className={cn('grid min-w-0 content-start gap-3 lg:col-start-2',
-      showcase ? 'col-span-2 row-start-2 empty:hidden lg:col-span-1 lg:row-start-1' : 'col-start-2 row-start-1')}>
-      {showcase ? null : header}
+    <div className="col-start-2 row-start-1 grid min-w-0 content-start gap-3 empty:hidden lg:col-start-2
+      max-lg:group-data-[art]/art:col-span-2 max-lg:group-data-[art]/art:col-start-1 max-lg:group-data-[art]/art:row-start-2">
+      {compactHeader}
       {shortcuts}
     </div>
     <div className="col-span-2 row-start-3 grid min-w-0 content-start gap-8 lg:col-span-1 lg:col-start-2 lg:row-start-2">
@@ -146,8 +154,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     {showcase
       // The art opens the page above the cover rail, which then starts below it with the same columns.
       ? <PageContainer className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
-        <WorkArtHero header={showcase}>{header}</WorkArtHero>
-        <div className={bookGrid}>{columns}</div>
+        {artHeader}
+        <ArtGrid workRef={workRef} className={`group/art ${bookGrid}`}>{columns}</ArtGrid>
         <StickyAction label={messages.nextAction} />
       </PageContainer>
       : <PageContainer className={`${bookGrid} max-lg:pb-24 [text-autospace:normal]`}>
