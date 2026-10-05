@@ -1,0 +1,8 @@
+id: no-math-random
+snapshots:
+  const jitter = Math.random() * 100;:
+    labels:
+    - source: Math.random()
+      style: primary
+      start: 15
+      end: 28

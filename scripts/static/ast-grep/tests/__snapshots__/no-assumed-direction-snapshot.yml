@@ -1,0 +1,58 @@
+id: no-assumed-direction
+snapshots:
+  'const name = { value: ''Hello'', language: ''en'', direction: ''ltr'' };':
+    labels:
+    - source: 'direction: ''ltr'''
+      style: primary
+      start: 47
+      end: 63
+    - source: direction
+      style: secondary
+      start: 47
+      end: 56
+    - source: '''ltr'''
+      style: secondary
+      start: 58
+      end: 63
+  'const text = { value: ''Hello'', lang: '''' };':
+    labels:
+    - source: 'lang: '''''
+      style: primary
+      start: 31
+      end: 39
+    - source: lang
+      style: secondary
+      start: 31
+      end: 35
+    - source: ''''''
+      style: secondary
+      start: 37
+      end: 39
+  'const text = { value: ''Hello'', lang: ''en'', dir: ''ltr'' as const };':
+    labels:
+    - source: 'dir: ''ltr'' as const'
+      style: primary
+      start: 43
+      end: 62
+    - source: dir
+      style: secondary
+      start: 43
+      end: 46
+    - source: '''ltr'''
+      style: secondary
+      start: 48
+      end: 53
+  'const text = { value: ''Hello'', lang: ''en'', dir: ''ltr'' };':
+    labels:
+    - source: 'dir: ''ltr'''
+      style: primary
+      start: 43
+      end: 53
+    - source: dir
+      style: secondary
+      start: 43
+      end: 46
+    - source: '''ltr'''
+      style: secondary
+      start: 48
+      end: 53

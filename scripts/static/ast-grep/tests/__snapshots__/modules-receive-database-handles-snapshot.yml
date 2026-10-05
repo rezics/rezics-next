@@ -1,0 +1,14 @@
+id: modules-receive-database-handles
+snapshots:
+  const client = new Client(url);:
+    labels:
+    - source: new Client(url)
+      style: primary
+      start: 15
+      end: 30
+  const pool = new Pool({ connectionString });:
+    labels:
+    - source: new Pool({ connectionString })
+      style: primary
+      start: 13
+      end: 43

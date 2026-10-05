@@ -1,0 +1,46 @@
+id: no-inline-copy
+snapshots:
+  'const copy = { en: "Hello", "zh-Hans": "你好" };':
+    labels:
+    - source: '"zh-Hans": "你好"'
+      style: primary
+      start: 28
+      end: 47
+    - source: '"zh-Hans"'
+      style: secondary
+      start: 28
+      end: 37
+  const x = <button aria-label="Close" />;:
+    labels:
+    - source: '"Close"'
+      style: primary
+      start: 29
+      end: 36
+    - source: aria-label
+      style: secondary
+      start: 18
+      end: 28
+    - source: aria-label="Close"
+      style: secondary
+      start: 18
+      end: 36
+  const x = <img alt="Cover" />; const y = <input placeholder="Search" title="Search" />;:
+    labels:
+    - source: '"Cover"'
+      style: primary
+      start: 19
+      end: 26
+    - source: alt
+      style: secondary
+      start: 15
+      end: 18
+    - source: alt="Cover"
+      style: secondary
+      start: 15
+      end: 26
+  const x = <span>Close</span>;:
+    labels:
+    - source: Close
+      style: primary
+      start: 16
+      end: 21

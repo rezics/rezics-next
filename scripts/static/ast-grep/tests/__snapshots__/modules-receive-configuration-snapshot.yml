@@ -1,0 +1,14 @@
+id: modules-receive-configuration
+snapshots:
+  const url = process.env.DATABASE_URL;:
+    labels:
+    - source: process.env
+      style: primary
+      start: 12
+      end: 23
+  const { TOKEN } = process.env;:
+    labels:
+    - source: process.env
+      style: primary
+      start: 18
+      end: 29

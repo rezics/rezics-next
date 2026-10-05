@@ -1,0 +1,62 @@
+id: no-native-inputs
+snapshots:
+  const x = <input name="spoiler" type="checkbox" />;:
+    labels:
+    - source: <input name="spoiler" type="checkbox" />
+      style: primary
+      start: 10
+      end: 50
+    - source: type="checkbox"
+      style: secondary
+      start: 32
+      end: 47
+  const x = <input type="radio" name="agent" />;:
+    labels:
+    - source: <input type="radio" name="agent" />
+      style: primary
+      start: 10
+      end: 45
+    - source: type="radio"
+      style: secondary
+      start: 17
+      end: 29
+  const x = <input type="radio"></input>;:
+    labels:
+    - source: <input type="radio">
+      style: primary
+      start: 10
+      end: 30
+    - source: type="radio"
+      style: secondary
+      start: 17
+      end: 29
+  const x = <input type={'checkbox'} />;:
+    labels:
+    - source: <input type={'checkbox'} />
+      style: primary
+      start: 10
+      end: 37
+    - source: type={'checkbox'}
+      style: secondary
+      start: 17
+      end: 34
+  function AccountsRole() { return <input type={"radio"} value="support" />; }:
+    labels:
+    - source: <input type={"radio"} value="support" />
+      style: primary
+      start: 33
+      end: 73
+    - source: type={"radio"}
+      style: secondary
+      start: 40
+      end: 54
+  function AccountsTrustDevice() { return <input type="checkbox" disabled={busy} checked={trustDevice} />; }:
+    labels:
+    - source: <input type="checkbox" disabled={busy} checked={trustDevice} />
+      style: primary
+      start: 40
+      end: 103
+    - source: type="checkbox"
+      style: secondary
+      start: 47
+      end: 62

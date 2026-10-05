@@ -1,0 +1,14 @@
+id: no-dynamic-code
+snapshots:
+  const run = new Function("a", "return a");:
+    labels:
+    - source: new Function("a", "return a")
+      style: primary
+      start: 12
+      end: 41
+  eval(source);:
+    labels:
+    - source: eval(source)
+      style: primary
+      start: 0
+      end: 12

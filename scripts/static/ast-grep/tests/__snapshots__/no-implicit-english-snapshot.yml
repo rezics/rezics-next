@@ -1,0 +1,40 @@
+id: no-implicit-english
+snapshots:
+  const language = input.language ?? 'en';:
+    labels:
+    - source: input.language ?? 'en'
+      style: primary
+      start: 17
+      end: 39
+  const language = row.lang || 'en';:
+    labels:
+    - source: row.lang || 'en'
+      style: primary
+      start: 17
+      end: 33
+  const query = `FILTER(LANG(?label) = "en")`;:
+    labels:
+    - source: '`FILTER(LANG(?label) = "en")`'
+      style: primary
+      start: 14
+      end: 43
+  const query = `rdfs:label ${lit(title)}@en .`;:
+    labels:
+    - source: '`rdfs:label ${lit(title)}@en .`'
+      style: primary
+      start: 14
+      end: 45
+  'const row = { language: ''en'', title };':
+    labels:
+    - source: 'language: ''en'''
+      style: primary
+      start: 14
+      end: 28
+    - source: language
+      style: secondary
+      start: 14
+      end: 22
+    - source: '''en'''
+      style: secondary
+      start: 24
+      end: 28

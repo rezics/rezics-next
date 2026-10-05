@@ -1,0 +1,26 @@
+id: no-native-select
+snapshots:
+  const x = <select name='scope' />;:
+    labels:
+    - source: <select name='scope' />
+      style: primary
+      start: 10
+      end: 33
+  const x = <select name='scope'><option value='all'>All</option></select>;:
+    labels:
+    - source: <select name='scope'>
+      style: primary
+      start: 10
+      end: 31
+  function AccountsLanguage() { return <select aria-label="Language"><option>English</option></select>; }:
+    labels:
+    - source: <select aria-label="Language">
+      style: primary
+      start: 37
+      end: 67
+  import { NativeSelect } from '@rezics/ui/native-select';:
+    labels:
+    - source: import { NativeSelect } from '@rezics/ui/native-select';
+      style: primary
+      start: 0
+      end: 56

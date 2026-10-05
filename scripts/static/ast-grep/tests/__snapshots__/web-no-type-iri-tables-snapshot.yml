@@ -1,0 +1,26 @@
+id: web-no-type-iri-tables
+snapshots:
+  const book = types.includes(`https://schema.org/Book`);:
+    labels:
+    - source: '`https://schema.org/Book`'
+      style: primary
+      start: 28
+      end: 53
+  const isPrompt = types.includes("https://rezics.com/vocab/PromptTemplate");:
+    labels:
+    - source: '"https://rezics.com/vocab/PromptTemplate"'
+      style: primary
+      start: 32
+      end: 73
+  'const kinds: Record<string, string> = { "https://schema.org/Book": "book" };':
+    labels:
+    - source: '"https://schema.org/Book"'
+      style: primary
+      start: 40
+      end: 65
+  const x = types.includes("https://schema.org/Recipe");:
+    labels:
+    - source: '"https://schema.org/Recipe"'
+      style: primary
+      start: 25
+      end: 52

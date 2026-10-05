@@ -1,0 +1,92 @@
+id: web-links-use-address-js
+snapshots:
+  'const address = { prefix: ''/w/'' + id, key: name, suffixSource: '''' };':
+    labels:
+    - source: '''/w/'''
+      style: primary
+      start: 26
+      end: 31
+  const href = "/w/abc";:
+    labels:
+    - source: '"/w/abc"'
+      style: primary
+      start: 13
+      end: 21
+  const href = "/zh-Hans/w/abc";:
+    labels:
+    - source: '"/zh-Hans/w/abc"'
+      style: primary
+      start: 13
+      end: 29
+  const href = "https://rezics.com/en/a/abc";:
+    labels:
+    - source: '"https://rezics.com/en/a/abc"'
+      style: primary
+      start: 13
+      end: 42
+  const href = '/r/fiction';:
+    labels:
+    - source: '''/r/fiction'''
+      style: primary
+      start: 13
+      end: 25
+  const href = '/w/' + id;:
+    labels:
+    - source: '''/w/'''
+      style: primary
+      start: 13
+      end: 18
+  const href = `${origin}/w/${id}`;:
+    labels:
+    - source: '`${origin}/w/${id}`'
+      style: primary
+      start: 13
+      end: 32
+  const href = `/${locale}/concepts/${id}`;:
+    labels:
+    - source: '`/${locale}/concepts/${id}`'
+      style: primary
+      start: 13
+      end: 40
+  const href = `/@${handle}`;:
+    labels:
+    - source: '`/@${handle}`'
+      style: primary
+      start: 13
+      end: 26
+  const href = `/en/e/${id}`;:
+    labels:
+    - source: '`/en/e/${id}`'
+      style: primary
+      start: 13
+      end: 26
+  const href = `/z/${ref}/characters`;:
+    labels:
+    - source: '`/z/${ref}/characters`'
+      style: primary
+      start: 13
+      end: 35
+  const href = resourceHref('/w/' + id, id);:
+    labels:
+    - source: '''/w/'''
+      style: primary
+      start: 26
+      end: 31
+  const link = <Link href="/w/example" />;:
+    labels:
+    - source: '"/w/example"'
+      style: primary
+      start: 24
+      end: 36
+  test('ordinary journey', () => visit('/en/r/private-books'));:
+    labels:
+    - source: '''/en/r/private-books'''
+      style: primary
+      start: 37
+      end: 58
+  test('raw UUID oracle', () => parse('/a/0199a0fe-0b21-7000-8000-123456789abc'));:
+    labels:
+    - source: '''/a/0199a0fe-0b21-7000-8000-123456789abc'''
+      style: primary
+      start: 36
+      end: 77

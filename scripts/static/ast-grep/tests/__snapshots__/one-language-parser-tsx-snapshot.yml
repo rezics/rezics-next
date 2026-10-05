@@ -1,0 +1,20 @@
+id: one-language-parser-tsx
+snapshots:
+  const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;:
+    labels:
+    - source: /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/
+      style: primary
+      start: 20
+      end: 56
+  'const languageTag = t.String({ pattern: ''^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$'' });':
+    labels:
+    - source: '''^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$'''
+      style: primary
+      start: 40
+      end: 77
+  const tag = Intl.getCanonicalLocales(value)[0];:
+    labels:
+    - source: Intl.getCanonicalLocales(value)
+      style: primary
+      start: 12
+      end: 43

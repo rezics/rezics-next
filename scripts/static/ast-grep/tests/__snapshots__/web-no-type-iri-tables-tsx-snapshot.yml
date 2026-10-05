@@ -1,0 +1,14 @@
+id: web-no-type-iri-tables-tsx
+snapshots:
+  'const kind = types.includes("https://rezics.com/vocab/SkillPackage") ? <b /> : null;':
+    labels:
+    - source: '"https://rezics.com/vocab/SkillPackage"'
+      style: primary
+      start: 28
+      end: 67
+  const x = <Work type="https://schema.org/Recipe" />;:
+    labels:
+    - source: '"https://schema.org/Recipe"'
+      style: primary
+      start: 21
+      end: 48
