@@ -29,10 +29,10 @@ export function TitleEffectField({ effect, sample, sampleLanguage, onChange, t }
       {titleEffects.map(option => <SegmentGroupItem key={option} value={option}><SegmentGroupItemText>{labels[option]}</SegmentGroupItemText></SegmentGroupItem>)}
     </SegmentGroup>
     <div role="img" aria-label={`${t.effectSample}: ${labels[effect]}`}
-      className="grid gap-2 rounded-2xl bg-[linear-gradient(135deg,#0b1c33,#07101d_60%,#1b3a63)] px-5 py-6 sm:px-8">
+      className="grid gap-2 rounded-2xl bg-[linear-gradient(135deg,#0b1c33,#07101d_60%,#1b3a63)] px-5 py-6 text-white sm:px-8">
       <span className="text-[#c9d6ea] text-xs uppercase tracking-wide">{t.effectSample}</span>
-      <p lang={sampleLanguage} data-effect={effect} className="showcase-title text-[clamp(1.75rem,5vw,2.75rem)]">{sample}</p>
-      <p lang={SCRIPT_SAMPLE.lang} data-effect={effect} className="showcase-title text-[clamp(1.75rem,5vw,2.75rem)]">{SCRIPT_SAMPLE.value}</p>
+      <p lang={sampleLanguage} data-effect={effect} className="showcase-title" style={{ fontSize: 'clamp(1.75rem, 5vw, 2.75rem)' }}>{sample}</p>
+      <p lang={SCRIPT_SAMPLE.lang} data-effect={effect} className="showcase-title" style={{ fontSize: 'clamp(1.75rem, 5vw, 2.75rem)' }}>{SCRIPT_SAMPLE.value}</p>
     </div>
   </section>;
 }

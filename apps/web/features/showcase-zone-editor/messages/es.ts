@@ -87,6 +87,7 @@ export default {
 
   previewHint: 'Aquí también se muestran las diapositivas fuera de su calendario. Los lectores ven cada una solo dentro de su calendario, y como mucho cinco a la vez. La vista previa no rota, para que la diapositiva que editas siga a la vista.',
   previewNothing: 'Añade una diapositiva para ver el escenario.',
+  previewMasked: 'Una imagen cuyo contenido no se ha etiquetado aparece como un icono de imagen oculta, aquí y para los lectores.',
 
   unsaved: 'Cambios sin guardar', allSaved: 'Todo está guardado',
   save: 'Guardar escaparate', saving: 'Guardando…', discard: 'Descartar cambios',

@@ -98,6 +98,7 @@ const en = {
 
   previewHint: 'Slides outside their schedule are shown here too. Readers see each one only within its schedule, and at most five at a time. The preview does not rotate, so the slide you are editing stays in view.',
   previewNothing: 'Add a slide to see the stage.',
+  previewMasked: 'An image whose content hasn’t been labelled appears as a hidden-image icon, here and for readers.',
 
   unsaved: 'Unsaved changes', allSaved: 'Everything is saved',
   save: 'Save showcase', saving: 'Saving…', discard: 'Discard changes',

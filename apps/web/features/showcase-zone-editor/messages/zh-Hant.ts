@@ -87,6 +87,7 @@ export default {
 
   previewHint: '不在排程內的投影片也會顯示在這裡。讀者只會在排程時間內看到各張投影片，且同時最多五張。預覽不會自動輪播，讓你正在編輯的投影片保持在視野中。',
   previewNothing: '加入投影片即可看到舞台。',
+  previewMasked: '尚未標示內容分級的圖片會顯示為「已隱藏」圖示，這裡和讀者看到的一樣。',
 
   unsaved: '尚有未儲存的變更', allSaved: '所有內容都已儲存',
   save: '儲存展示', saving: '儲存中…', discard: '捨棄變更',

@@ -87,6 +87,7 @@ export default {
 
   previewHint: 'Folien außerhalb ihres Zeitplans werden hier ebenfalls gezeigt. Leser sehen jede nur innerhalb ihres Zeitplans und höchstens fünf gleichzeitig. Die Vorschau wechselt nicht automatisch, damit die Folie, die du bearbeitest, im Blick bleibt.',
   previewNothing: 'Füge eine Folie hinzu, um die Bühne zu sehen.',
+  previewMasked: 'Ein Bild, dessen Inhalt noch nicht eingestuft wurde, erscheint hier wie bei Lesern als Symbol für ein verborgenes Bild.',
 
   unsaved: 'Ungespeicherte Änderungen', allSaved: 'Alles ist gespeichert',
   save: 'Präsentation speichern', saving: 'Wird gespeichert…', discard: 'Änderungen verwerfen',

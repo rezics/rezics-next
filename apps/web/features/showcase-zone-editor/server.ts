@@ -1,4 +1,4 @@
-import type { ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneShowcaseArt, ZoneShowcaseImage, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { readWorkShowcase } from '../api/showcase.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -12,12 +12,27 @@ import { MAX_SLIDES, readStoredPresentation, type StoredPresentation } from './s
 
 const iri = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
+/** Main's media path through the BFF, which sends the session's token; Main then needs the Agent the editor acts as. */
+function asAgent(url: string, actingSubject: string) {
+  const path = new URL(url, 'https://rezics.invalid');
+  path.searchParams.set('actingSubject', actingSubject);
+  return `${path.pathname}${path.search}`;
+}
+
+/** Art whose every image is fetched as the acting Agent, as the editor's own previews are. */
+export function artAsAgent(art: ZoneShowcaseArt, actingSubject: string): ZoneShowcaseArt {
+  const image = <Image extends ZoneShowcaseImage>(item: Image): Image => ({ ...item, url: asAgent(item.url, actingSubject),
+    ...item.candidates ? { candidates: item.candidates.map(candidate => ({ ...candidate, url: asAgent(candidate.url, actingSubject) })) } : {} });
+  return { ...art, landscape: art.landscape && image(art.landscape), portrait: art.portrait && image(art.portrait),
+    cutout: art.cutout && image(art.cutout), logos: art.logos?.map(image) };
+}
+
 /**
  * The Works the slides name, as the stage draws them: the card with the Work's own showcase art,
  * read as a reader of the Zone's Realm would. A Work Main cannot show readers is null, and the
  * stage drops its slide, as the Zone's home does.
  */
-export async function loadSlideWorks(input: { realm: string; locale: UiLocale; works: readonly string[]; avatarQuery?: string }):
+export async function loadSlideWorks(input: { realm: string; locale: UiLocale; works: readonly string[]; actingSubject?: string }):
   Promise<Record<string, ZoneWork | null>> {
   const targets = [...new Set(input.works)].filter(work => iri.test(work)).slice(0, MAX_SLIDES);
   if (!targets.length) return {};
@@ -32,12 +47,13 @@ export async function loadSlideWorks(input: { realm: string; locale: UiLocale; w
     })),
     readWorkShowcase(targets, `https://rezics.com/id/${realm}`),
   ]);
-  const context = { locale: input.locale, ref: realm, realm, unrouted: true, avatarQuery: input.avatarQuery ?? '' };
+  const context = { locale: input.locale, ref: realm, realm, unrouted: true,
+    avatarQuery: input.actingSubject ? `?actingSubject=${encodeURIComponent(input.actingSubject)}` : '' };
   return Object.fromEntries(targets.map((target, index) => {
     const header = headers[index];
     if (!header) return [target, null];
     const own = art.get(target);
-    return [target, { ...zoneWork(header, context, null), ...own ? { showcaseArt: workShowcaseArt(own) } : {} }];
+    return [target, { ...zoneWork(header, context, null), ...own ? { showcaseArt: input.actingSubject ? artAsAgent(workShowcaseArt(own), input.actingSubject) : workShowcaseArt(own) } : {} }];
   }));
 }
 
@@ -72,10 +88,10 @@ export async function readZoneShowcase(main: MainClient, zone: string, actingSub
 }
 
 /** The campaign images Main delivers for a Zone's slides, by Use (`GET /v1/zones/{id}/presentation`, a public read). */
-export async function readCampaignRegistry(zone: string) {
+export async function readCampaignRegistry(zone: string, actingSubject: string | null = null) {
   try {
     const { data, error } = await mainApiWithToken(undefined).v1.zones({ id: zone.slice(-36) }).presentation.get({ query: {} });
-    return data && !error ? registryOf(data.slideMedia) : {};
+    return data && !error ? registryOf(data.slideMedia, actingSubject) : {};
   } catch {
     return {};
   }

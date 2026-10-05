@@ -87,6 +87,7 @@ export default {
 
   previewHint: '不在排期内的幻灯片也会显示在这里。读者只会在排期内看到各张幻灯片，且同时最多五张。预览不会自动轮播，让你正在编辑的幻灯片保持在视野中。',
   previewNothing: '添加幻灯片即可看到舞台。',
+  previewMasked: '尚未标注内容分级的图片会显示为“已隐藏”图标，这里和读者看到的一样。',
 
   unsaved: '有未保存的更改', allSaved: '所有内容都已保存',
   save: '保存展示', saving: '保存中…', discard: '放弃更改',

@@ -56,10 +56,10 @@ export type StoredSlide = {
 export type PresentationDocument = Record<string, unknown> & {
   slides: StoredSlide[];
   tokens: Record<string, unknown> & { titleEffect: ZoneTitleEffect };
-  modules: { id: string; type: string }[];
+  modules: ({ id: string; type: string } & Record<string, unknown>)[];
 };
 
-/** How a Zone keeps its presentation: a document the editor changes, an external reference it cannot, or none yet. */
+/** How a Zone keeps its presentation: a document the editor changes, one it cannot (an external reference, or a format it does not read), or none yet. */
 export type StoredPresentation =
   | { kind: 'document'; document: PresentationDocument }
   | { kind: 'reference' }
@@ -67,12 +67,16 @@ export type StoredPresentation =
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The presentation in a Zone configuration as Main's read returned it; Main has already adapted a v1 document to v2. */
+/**
+ * The presentation in a Zone configuration as Main's read returned it (Main has already adapted a v1
+ * document to v2). Only a Zone with no presentation starts a new document: anything stored that this
+ * editor cannot read is never replaced, since saving would drop what it does not know.
+ */
 export function readStoredPresentation(configuration: unknown): StoredPresentation {
   const presentation = isRecord(configuration) ? configuration.presentation : undefined;
-  if (typeof presentation === 'string') return { kind: 'reference' };
+  if (presentation === undefined || presentation === null) return { kind: 'none' };
   if (!isRecord(presentation) || presentation.profile !== 'zone-presentation-v2' || !Array.isArray(presentation.slides)
-    || !isRecord(presentation.tokens) || !Array.isArray(presentation.modules)) return { kind: 'none' };
+    || !isRecord(presentation.tokens) || !Array.isArray(presentation.modules)) return { kind: 'reference' };
   const effect = presentation.tokens.titleEffect;
   return { kind: 'document', document: { ...presentation, slides: presentation.slides as StoredSlide[],
     modules: presentation.modules as PresentationDocument['modules'],
@@ -165,8 +169,7 @@ export function documentFor(base: PresentationDocument, slides: readonly SlideDr
   if (slides.length && !next.modules.some(module => module.type === 'hero-carousel')) {
     const ids = new Set(next.modules.map(module => module.id));
     const id = ['picks', 'showcase'].find(candidate => !ids.has(candidate)) ?? newSlideId(ids);
-    next.modules = [{ id, type: 'hero-carousel', title: hero.title, source: { kind: 'query-block', block: 'new-adoptions' } } as PresentationDocument['modules'][number],
-      ...next.modules];
+    next.modules = [{ id, type: 'hero-carousel', title: hero.title, source: { kind: 'query-block', block: 'new-adoptions' } }, ...next.modules];
   }
   return next;
 }

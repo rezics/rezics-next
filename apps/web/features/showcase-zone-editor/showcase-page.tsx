@@ -40,9 +40,9 @@ export async function RealmShowcasePage({ address, locale, main, actingSubject, 
     <EmptyState icon={LinkIcon} title={t.externalTitle} description={t.externalBody} headingLevel={3} /></section>;
   const slides = state.presentation.kind === 'document' ? state.presentation.document.slides : [];
   const [registry, works, zoneMessages] = await Promise.all([
-    readCampaignRegistry(zone),
+    readCampaignRegistry(zone, actingSubject),
     state.realm ? loadSlideWorks({ realm: state.realm, locale, works: slides.flatMap(slide => slide.work ? [slide.work] : []),
-      avatarQuery: `?actingSubject=${encodeURIComponent(actingSubject)}` }) : Promise.resolve({}),
+      actingSubject }) : Promise.resolve({}),
     getMessages('zones', locale),
   ]);
   return <section aria-labelledby="showcase-heading" className="grid gap-6">

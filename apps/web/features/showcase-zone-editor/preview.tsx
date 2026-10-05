@@ -78,6 +78,7 @@ export function ZonePreview({ slidesFor, effect, locale, t, e }: {
     {slides.length ? stage(false) : <p className="grid min-h-40 place-content-center rounded-xl border border-border/70 border-dashed p-6 text-center text-muted-foreground text-sm">
       {t.previewNothing}</p>}
     <p className="text-muted-foreground text-xs">{t.previewHint}</p>
+    <p className="text-muted-foreground text-xs">{t.previewMasked}</p>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <p className="text-muted-foreground text-xs">{shape === 'desktop' ? e.previewPointer : null}</p>
       {slides.length ? <Dialog open={enlarged} onOpenChange={details => setEnlarged(details.open)} lazyMount unmountOnExit>

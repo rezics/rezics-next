@@ -27,7 +27,8 @@ const asShowcaseImage = (role: ShowcaseImage['role'], image: CampaignImage, extr
     crop: image.crop ?? 'xywh=percent:0,0,100,100', focalArea: image.focalArea ?? null, srcset: image.srcset, ...extra }) as ShowcaseImage;
 
 /** The campaign images of Main's presentation read, keyed by Use. */
-export function registryOf(slideMedia: ZonePresentationRead['slideMedia']): Registry {
+/** `actingSubject` names the Agent whose session fetches the images through the BFF; Main refuses a signed-in read without one. */
+export function registryOf(slideMedia: ZonePresentationRead['slideMedia'], actingSubject: string | null = null): Registry {
   const registry: Registry = {};
   for (const { art } of slideMedia) {
     const images: ShowcaseImage[] = [
@@ -37,7 +38,7 @@ export function registryOf(slideMedia: ZonePresentationRead['slideMedia']): Regi
       ...art.logos.map((logo: CampaignLogo) => asShowcaseImage('logo', logo, { language: logo.language, tone: logo.tone, anchor: logo.anchor })),
     ];
     const item: WorkShowcase = { reference: '', status: 'available', images, trailer: null } as unknown as WorkShowcase;
-    for (const image of Object.values(savedArt(item, null).images)) if (image) registry[image.selection] = image;
+    for (const image of Object.values(savedArt(item, actingSubject).images)) if (image) registry[image.selection] = image;
   }
   return registry;
 }

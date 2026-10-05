@@ -12,7 +12,7 @@ import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { languageName } from '../showcase-editor/language.ts';
 import type { WorkLevelsEditMessages } from '../work-levels-edit/messages.ts';
 import { workIri } from '../work-levels-edit/route.ts';
-import { WorkPicker } from '../work-levels-edit/work-picker.tsx';
+import { type WorkLoader, WorkPicker } from '../work-levels-edit/work-picker.tsx';
 import type { ZoneEditorCopy } from './messages.ts';
 import { localInput, type SlideDraft, type SlideProblem, type SlideTarget, TEXT_LIMIT, utcFromInput } from './slides.ts';
 
@@ -37,8 +37,8 @@ export function WorkLine({ work, loading, t }: { work: ZoneWork | null | undefin
 }
 
 /** Where a slide leads: a Work found by search (or named by its address), or a page of this site. */
-export function TargetFields({ slide, work, loading, locale, pickerMessages, problems, onTarget, onPick, t }: {
-  slide: SlideDraft; work: ZoneWork | null | undefined; loading: boolean; locale: UiLocale; pickerMessages: WorkLevelsEditMessages;
+export function TargetFields({ slide, work, loading, locale, pickerMessages, loadWorks, problems, onTarget, onPick, t }: {
+  slide: SlideDraft; work: ZoneWork | null | undefined; loading: boolean; locale: UiLocale; pickerMessages: WorkLevelsEditMessages; loadWorks?: WorkLoader;
   problems: readonly SlideProblem[]; onTarget: (target: SlideTarget) => void; onPick: (work: string) => void; t: ZoneEditorCopy;
 }) {
   const id = useId();
@@ -60,7 +60,7 @@ export function TargetFields({ slide, work, loading, locale, pickerMessages, pro
       {target.work && !changing ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3">
         <WorkLine work={work} loading={loading} t={t} />
         <Button type="button" variant="outline" size="sm" onClick={() => setChanging(true)}>{t.workChange}</Button>
-      </div> : <WorkPicker name={`${id}-work`} locale={locale} t={picker} label={t.workField} invalid={!target.work && problems.some(problem => problem.kind === 'no-work')}
+      </div> : <WorkPicker name={`${id}-work`} locale={locale} t={picker} label={t.workField} load={loadWorks} invalid={!target.work && problems.some(problem => problem.kind === 'no-work')}
         onChange={chosen => { if (chosen) { setChanging(false); onPick(workIri(chosen.id)); } }} />}
     </div> : <label className="grid gap-1 text-sm">
       <span className="font-medium">{t.linkField}</span>
@@ -83,7 +83,7 @@ export function WordsFields({ slide, locale, problems, onChange, t }: {
     const value = language ? slide[name === 'kicker' ? 'kickers' : 'titles'][language] ?? '' : slide[name];
     const invalid = long(name, language);
     const key = `${id}-${name}-${language ?? 'default'}`;
-    return <label key={key} className="grid gap-1 text-sm">
+    return <label key={key} className="grid content-start gap-1 text-sm">
       <span className="font-medium">{label}</span>
       <Input value={value} lang={language ?? undefined} aria-invalid={invalid || undefined} aria-describedby={`${key}-help`} autoComplete="off"
         onChange={event => {
@@ -140,14 +140,14 @@ export function ScheduleFields({ slide, problems, onChange, t }: {
     return <div className="grid gap-1 text-sm">
       <label htmlFor={`${id}-${name}`} className="font-medium">{label}</label>
       <div className="flex gap-2">
-        <Input id={`${id}-${name}`} type="datetime-local" value={value} aria-invalid={Boolean(schedule) || undefined} aria-describedby={`${id}-help`}
+        <Input id={`${id}-${name}`} type="datetime-local" className="min-w-0 flex-1" value={value} aria-invalid={Boolean(schedule) || undefined} aria-describedby={`${id}-help`}
           onChange={event => { const next = utcFromInput(event.target.value); if (next !== 'invalid') onChange({ [name]: next }); }} />
         <Button type="button" variant="ghost" size="sm" disabled={!value} onClick={() => onChange({ [name]: null })}>{t.clearTime}</Button>
       </div>
     </div>;
   };
   return <Section title={t.scheduleHeading} help={t.scheduleHelp}>
-    <div className="grid gap-4 sm:grid-cols-2">{input('startsAt', t.startsAt)}{input('endsAt', t.endsAt)}</div>
+    <div className="grid max-w-md gap-4">{input('startsAt', t.startsAt)}{input('endsAt', t.endsAt)}</div>
     <p id={`${id}-help`} className={cn('text-xs', schedule ? 'text-destructive' : 'text-muted-foreground')}>
       {schedule?.kind === 'schedule' ? (schedule.reason === 'empty' ? t.scheduleEmpty : t.scheduleInvalid) : zone ? t.scheduleZone({ zone }) : ''}</p>
   </Section>;

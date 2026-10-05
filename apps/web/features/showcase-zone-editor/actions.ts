@@ -92,8 +92,7 @@ export async function addCampaignArt(input: CampaignArtInput): Promise<CampaignA
 export async function readSlideWorks(input: { realm: string; locale: string; works: string[] }): Promise<Record<string, ZoneWork | null>> {
   if (!iri.test(input.realm) || !isUiLocale(input.locale) || !Array.isArray(input.works)) return {};
   const { actingSubject } = await reader();
-  return loadSlideWorks({ realm: input.realm, locale: input.locale as UiLocale, works: input.works,
-    ...actingSubject ? { avatarQuery: `?actingSubject=${encodeURIComponent(actingSubject)}` } : {} });
+  return loadSlideWorks({ realm: input.realm, locale: input.locale as UiLocale, works: input.works, ...actingSubject ? { actingSubject } : {} });
 }
 
 export type LatestShowcase = { status: 'read'; state: ZoneShowcaseState; registry: Registry } | { status: 'unavailable' };
@@ -103,6 +102,6 @@ export async function readLatestShowcase(input: { zone: string }): Promise<Lates
   if (!uuid.test(input.zone)) return { status: 'unavailable' };
   const { main, actingSubject } = await reader();
   if (!actingSubject) return { status: 'unavailable' };
-  const [read, registry] = await Promise.all([readZoneShowcase(main, input.zone, actingSubject), readCampaignRegistry(input.zone)]);
+  const [read, registry] = await Promise.all([readZoneShowcase(main, input.zone, actingSubject), readCampaignRegistry(input.zone, actingSubject)]);
   return read.ok ? { status: 'read', state: read.state, registry } : { status: 'unavailable' };
 }

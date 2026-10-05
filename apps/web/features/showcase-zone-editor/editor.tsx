@@ -13,7 +13,7 @@ import type { ShowcaseEditorMessages } from '../showcase-editor/messages.ts';
 import { uploadShowcaseImage } from '../showcase-editor/upload.ts';
 import type { WorkLevelsEditMessages } from '../work-levels-edit/messages.ts';
 import { workIri } from '../work-levels-edit/route.ts';
-import { WorkPicker } from '../work-levels-edit/work-picker.tsx';
+import { type WorkLoader, WorkPicker } from '../work-levels-edit/work-picker.tsx';
 import type { addCampaignArt, readLatestShowcase, readSlideWorks, saveShowcase } from './actions.ts';
 import { useArtDrafts } from './art-drafts.ts';
 import { artSourceOf, previewSlides, type Registry, savedArtOf } from './art.ts';
@@ -61,6 +61,8 @@ export interface ZoneShowcaseEditorProps {
   readWorks: typeof readSlideWorks;
   readLatest: typeof readLatestShowcase;
   upload?: typeof uploadShowcaseImage;
+  /** Finds Works by title for the picker; Main's typeahead unless a story or test supplies its own. */
+  loadWorks?: WorkLoader;
   /** The time schedules are read against, for stories and tests. */
   now?: number;
 }
@@ -77,7 +79,7 @@ const baselineOf = (document: PresentationDocument): Baseline =>
   ({ slides: document.slides.map(slide => draftOf(slide)), effect: document.tokens.titleEffect });
 
 export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: initialHead, stored, registry: initialRegistry, works: initialWorks,
-  heroTitle, messages, editorMessages, pickerMessages, save, addArt, readWorks, readLatest, upload = uploadShowcaseImage, now: nowProp }: ZoneShowcaseEditorProps) {
+  heroTitle, messages, editorMessages, pickerMessages, save, addArt, readWorks, readLatest, upload = uploadShowcaseImage, loadWorks, now: nowProp }: ZoneShowcaseEditorProps) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const e = useMemo(() => ({ ...materializeData(editorMessages, { locale }), savedNotice: t.slotAdded, savedReplayed: t.slotAddedReplayed,
     refusalDenied: t.slotRefusalDenied, refusalGone: t.slotRefusalGone, uploadHeld: t.slotUploadHeld, uploadSlow: t.slotUploadSlow,
@@ -181,6 +183,12 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
     if (latest.status !== 'read' || latest.state.presentation.kind === 'reference') return setStatus({ kind: 'reload-failed' });
     const document = documentOf(latest.state.presentation);
     const theirs = baselineOf(document);
+    // What the person has not changed follows the Zone; what they changed stays theirs.
+    if (fingerprint(slides, baseline.effect) === fingerprint(baseline.slides, baseline.effect)) {
+      setSlides(theirs.slides);
+      setSelected(theirs.slides[0]?.key ?? null);
+    }
+    if (effect === baseline.effect) setEffect(theirs.effect);
     setHead(latest.state.revision);
     setBase(document);
     setBaseline(theirs);
@@ -227,7 +235,7 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
               <h4 className="font-semibold">{t.addWorkHeading}</h4>
               <p className="text-muted-foreground text-sm">{t.addWorkHelp}</p>
             </div>
-            <WorkPicker name="zone-showcase-new-work" locale={locale} t={materializeData(pickerMessages, { locale })} label={t.addWorkHeading}
+            <WorkPicker name="zone-showcase-new-work" locale={locale} t={materializeData(pickerMessages, { locale })} label={t.addWorkHeading} load={loadWorks}
               onChange={chosen => { if (chosen) addSlide(blankSlide(taken(), { kind: 'work', work: workIri(chosen.id) })); }} />
             <Button type="button" variant="ghost" size="sm" className="w-fit" onClick={() => setPickingWork(false)}>{t.cancel}</Button>
           </div> : <div className="flex flex-wrap items-center gap-2">
@@ -242,7 +250,7 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
           <h3 id="zone-showcase-slide" className="font-semibold text-lg">
             {t.slideLabel({ index: String(slides.indexOf(selectedSlide) + 1) })} · {slideName(selectedSlide, worksOf(selectedSlide), locale, t)}</h3>
           <TargetFields slide={selectedSlide} work={worksOf(selectedSlide)}
-            loading={selectedSlide.target.kind === 'work' && loadingWorks.has(selectedSlide.target.work)} locale={locale} pickerMessages={pickerMessages}
+            loading={selectedSlide.target.kind === 'work' && loadingWorks.has(selectedSlide.target.work)} locale={locale} pickerMessages={pickerMessages} loadWorks={loadWorks}
             problems={slideProblems(selectedSlide)} onTarget={target => updateSlide(selectedSlide.key, { target })}
             onPick={work => updateSlide(selectedSlide.key, { target: { kind: 'work', work } })} t={t} />
           <WordsFields slide={selectedSlide} locale={locale} problems={slideProblems(selectedSlide)} onChange={change => updateSlide(selectedSlide.key, change)} t={t} />
