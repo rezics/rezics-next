@@ -9,12 +9,13 @@ import { type SeedApi, SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import { assertSeedRequest } from '../../../scripts/dev/seed/request-schema.ts';
 import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
 import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
+import { seedRealms } from '../../../scripts/dev/seed/realms-step.ts';
 import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
 import { checkPublicReads } from '../../../scripts/dev/seed/checks-step.ts';
 import { seedChapterProgress } from '../../../scripts/dev/seed/progress.ts';
 import { prepareHomeV2Chapters } from '../../../scripts/dev/seed/home-v2.ts';
 import { derivedId } from '../../../services/main/src/modules/structure/graph.ts';
-import { refreshSeedTokens, type SeedState, type WorkReceipt }
+import { refreshSeedTokens, stableId, type SeedState, type WorkReceipt }
   from '../../../scripts/dev/seed/state.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { demoClassics } from '../../fixtures/sources/open-library.ts';
@@ -204,6 +205,40 @@ describe('dev seed plan', () => {
     expect(retried.find(body => body.title === 'Bilingual book club discussion prompt'))
       .toMatchObject({ semanticTypes: ['https://schema.org/DigitalDocument'] });
     expect(state.created.size).toBe(works.length - demoClassics.length);
+  });
+
+  test('adopts Realms an earlier seed created under another body through their Zones, without a write', async () => {
+    const native = (id: string) => `https://rezics.com/id/${id}`;
+    const spaceOf = (id: string) => native(stableId(`space:${id}`));
+    const realmOf = (id: string) => native(stableId(`realm:${id}`));
+    const posts: string[] = [];
+    const api = {
+      post: async (path: string) => {
+        posts.push(path);
+        throw new SeedApiError('Main /v1/spaces', 409, '{"code":"idempotency_conflict"}');
+      },
+      get: async (path: string) => {
+        const [route] = path.split('?');
+        const zone = route!.match(/^\/v1\/zones\/([^/]+)\/configuration$/)?.[1];
+        if (zone) {
+          const plan = realms.find(realm => stableId(`zone:${realm.id}`).endsWith(zone.slice(-12)));
+          if (!plan) throw new SeedApiError('zone', 404, '{}');
+          return { configuration: { space: spaceOf(plan.id), defaultRealm: realmOf(plan.id) } };
+        }
+        const plan = realms.find(realm => route === `/v1/realms/${realmOf(realm.id).slice(-36)}`);
+        return { id: realmOf(plan!.id), space: spaceOf(plan!.id) };
+      } } as unknown as SeedApi;
+    const writeCounts = { written: 0, replayed: 0, reconciled: 0, lookups: 0 };
+    const state = { api, endpoints: { writeCounts }, createdRealms: [], created: new Map(), seededZones: [],
+      sessions: [undefined, ...realms].map((_, index) => ({ id: `s${index}`, accountId: `a${index}`, token: `t${index}`,
+        actingSubject: native(`00000000-0000-4000-a000-00000000000${index}`) })),
+      operatorInput: null, operatorSession: null,
+      optional: async (_label: string, operation: () => Promise<unknown>) => operation() } as unknown as SeedState;
+    await seedRealms(state);
+    expect(posts).toEqual(realms.map(() => '/v1/spaces'));
+    expect(state.createdRealms.map(realm => [realm.id, realm.receipt.space, realm.receipt.realm]))
+      .toEqual(realms.map(realm => [realm.id, spaceOf(realm.id), realmOf(realm.id)]));
+    expect(writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: realms.length });
   });
 
   test('reset targets only the fixed dev project or this worktree and refuses displaced object paths', () => {

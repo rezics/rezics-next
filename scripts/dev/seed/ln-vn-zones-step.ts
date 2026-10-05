@@ -8,6 +8,7 @@ import { SHOWCASE } from '../../../tests/fixtures/vndb/load.ts';
 import { ZONE_PRESETS, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { seedKey, works } from './plan.ts';
+import { adoptZoneSpace } from './realms-step.ts';
 import { refreshSeedTokens, stableId, type SeedState } from './state.ts';
 import { call, createOwnWork, ensureHeader, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
   type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
@@ -122,10 +123,8 @@ export async function applyLnVnZones(input: ApplyInput): Promise<LnVnZonesManife
   }
   const zones: ZoneRecord[] = [];
   for (const spec of specs) {
-    const space = await call<{ space: string; realm: string }>(port, 'POST', '/v1/spaces', {
-      profile: 'space-realm-v2', name: spec.name,handle: spec.routeSegment,capabilities: ['realm'], actingSubject: port.actingSubject,
-    }, seedKey('vndb-space', spec.id));
     const zone = iri(`vndb-zone:${spec.id}`);
+    const space = await createSpace(port, spec, zone);
     const collection = iri(`vndb-collection:${spec.id}`);
     await port.grant(`zone:edit:${zone}`, 'zone.edit');
     await port.grant(`semantic:read:${zone}`, 'semantic.read');
@@ -165,6 +164,27 @@ export async function applyLnVnZones(input: ApplyInput): Promise<LnVnZonesManife
   zones.sort((left, right) => left.id.localeCompare(right.id));
   return { zones, samples: published.map(({ id, iri: work, mainVersion }) => ({ id, iri: work, mainVersion })),
     catalogueWorks: [...catalogueWorks].sort(), showcase: input.showcaseIri, libraryVersion };
+}
+
+/** The create key keeps the body of the revision that first made this Space. A conflict
+ * means the Space exists, so adopt it through its Zone instead of reusing the key. */
+export async function createSpace(port: SeedPort, spec: ZoneSpec, zone: string): Promise<{ space: string; realm: string }> {
+  const result = await port.request('POST', '/v1/spaces', {
+    profile: 'space-realm-v2', name: spec.name, handle: spec.routeSegment, capabilities: ['realm'],
+    actingSubject: port.actingSubject }, seedKey('vndb-space', spec.id));
+  if (result.status < 400) return result.body as { space: string; realm: string };
+  const code = (result.body as { code?: string } | null)?.code;
+  if (result.status !== 409 || code !== 'idempotency_conflict') fail(result, 'POST /v1/spaces');
+  // The Zone read needs a grant, and grants expire between runs.
+  await port.grant(`zone:official:${zone}`, 'zone.official');
+  const adopted = await adoptZoneSpace(async path => {
+    const found = await port.request('GET', path);
+    if (found.status === 404) return null;
+    if (found.status !== 200) fail(found, `GET ${path}`);
+    return found.body as Record<string, unknown>;
+  }, zone, port.actingSubject);
+  if (!adopted) fail(result, 'POST /v1/spaces');
+  return adopted;
 }
 
 function loadZone(file: string): ZoneSpec {

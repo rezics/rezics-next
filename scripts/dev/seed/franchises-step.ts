@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
-import { SeedApiError } from './api.ts';
+import { SeedApiError, type SeedApi } from './api.ts';
 import { catalogueResourceId, loadCatalogue, type CatalogueResponse } from '../../../tests/fixtures/catalogue/load.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { relationLexiconSeed } from './relation-lexicon-data.ts';
@@ -92,10 +92,58 @@ async function ensureCatalogueLexicon(state: SeedState, input: LocalOperatorInpu
   }
 }
 
+const RELEASE_PATH = /^\/v1\/works\/([0-9a-f-]{36})\/releases\/([0-9a-f-]{36})$/;
+const RELEASE_FACTS = ['kind', 'status', 'titleLanguage', 'tracklistLanguage', 'title', 'editionStatement', 'publisher',
+  'publicationYear', 'isbn13', 'originalUrl', 'fixedRelease', 'platform', 'territory'] as const;
+type ReleaseBody = Record<string, unknown> & { id: string; expectedHead: string | null;
+  coverage: { realization: string }[] };
+
+type Row = Record<string, unknown>;
+const byJson = (rows: unknown[]) => [...rows].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+
+/** The facts a release write and its public read share, in one order and shape. */
+export function releaseFacts(release: Row) {
+  const list = (value: unknown) => (value as Row[] | undefined) ?? [];
+  return { ...Object.fromEntries(RELEASE_FACTS.map(field => [field, release[field] ?? null])),
+    identifiers: byJson(list(release.identifiers).map(({ provider, value }) => ({ provider, value }))),
+    coverage: byJson(list(release.coverage).map(({ realization, revision, completeness, portion }) =>
+      ({ realization, revision, completeness, portion: portion ?? null }))) };
+}
+
+/** A closed release changes only as a correction citing evidence, so a plan that
+ * differs from the stored facts is sent against the current head, and one that
+ * matches sends nothing. The covered realization is the evidence: the release
+ * facts are that realization's published edition. */
+export async function convergeRelease(api: Pick<SeedApi, 'get' | 'put'>, token: string, path: string, planned: ReleaseBody,
+  key: string, reconciled: () => void): Promise<CatalogueResponse | null> {
+  const ids = path.match(RELEASE_PATH);
+  let current: Row;
+  try {
+    current = await api.get(`${path}?${new URLSearchParams({ actingSubject: String(planned.actingSubject) })}`, token);
+  } catch (error) {
+    if (error instanceof SeedApiError && error.status === 404) return null;
+    throw error;
+  }
+  const revision = String(current.revision);
+  if (JSON.stringify(releaseFacts(planned)) === JSON.stringify(releaseFacts(current))) {
+    reconciled();
+    return { status: 200, body: { work: `https://rezics.com/id/${ids![1]}`, release: planned.id, revision, replayed: true } };
+  }
+  const correction = { ...planned, expectedHead: revision, evidence: planned.coverage[0]!.realization };
+  const digest = createHash('sha256').update(JSON.stringify(correction)).digest('hex').slice(0, 24);
+  return { status: 200, body: await api.put(path, correction, token, `${key}:correction:${digest}`) };
+}
+
 async function seedRequest(state: SeedState, token: string, method: string, path: string,
   body?: unknown, key?: string): Promise<CatalogueResponse> {
   try {
     if (method === 'GET') return { status: 200, body: await state.api.get(path, token) };
+    const release = method === 'PUT' && RELEASE_PATH.test(path) ? body as ReleaseBody : null;
+    if (release?.profile === 'release-v2' && release.expectedHead === null) {
+      const converged = await convergeRelease(state.api, token, path, release, key ?? 'catalogue:v1:write',
+        () => { if (state.endpoints.writeCounts) state.endpoints.writeCounts.reconciled++; });
+      if (converged) return converged;
+    }
     const written = method === 'PUT'
       ? await state.api.put(path, body, token, key ?? 'catalogue:v1:write')
       : await state.api.post(path, body, token, key ?? 'catalogue:v1:write');

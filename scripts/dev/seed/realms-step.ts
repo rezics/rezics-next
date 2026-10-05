@@ -49,16 +49,55 @@ function configuredModsContext(presentation: unknown): string | null {
     ? source.context : null;
 }
 
+const officialZone = (realm: string) => `https://rezics.com/id/${stableId(`zone:${realm}`)}`;
+
+export type SpaceRead = (path: string) => Promise<Record<string, unknown> | null>;
+
+export function isIdempotencyConflict(error: unknown): boolean {
+  if (!(error instanceof SeedApiError) || error.status !== 409) return false;
+  try { return (JSON.parse(error.detail) as { code?: string }).code === 'idempotency_conflict'; }
+  catch { return false; }
+}
+
+/** A Space created under an earlier request body cannot replay its key with the
+ * current body, and Spaces have no read by handle. The plan fixes each Zone's id,
+ * and a configured Zone names its Space and default Realm, so the Space is found
+ * through those public reads. The Realm must belong to that Space. Two reads, no write. */
+export async function adoptZoneSpace(get: SpaceRead, zone: string, actor: string): Promise<SpaceReceipt | null> {
+  const query = `?${new URLSearchParams({ actingSubject: actor })}`;
+  const current = await get(`/v1/zones/${zone.slice(-36)}/configuration${query}`);
+  const configuration = current?.configuration as { space?: unknown; defaultRealm?: unknown } | undefined;
+  const { space, defaultRealm } = configuration ?? {};
+  if (typeof space !== 'string' || typeof defaultRealm !== 'string') return null;
+  const realm = await get(`/v1/realms/${defaultRealm.slice(-36)}${query}`);
+  return realm?.id === defaultRealm && realm.space === space ? { space, realm: defaultRealm, replayed: true } : null;
+}
+
 export async function seedRealms(state: SeedState) {
   const { api, created, createdRealms, seededZones, operatorInput, operatorSession } = state;
   const owner = state.sessions[0]!;
   for (const [index, realm] of realms.entries()) {
     // Separate stewards retain their own member quotas on a previously seeded stack.
     const steward = state.sessions[index + 1]!;
+    const get: SpaceRead = path => api.get<Record<string, unknown>>(path, steward.token).catch((error: unknown) => {
+      if (error instanceof SeedApiError && error.status === 404) return null;
+      throw error;
+    });
     const receipt = await state.optional('Space / Realm creation', () => api.post<SpaceReceipt>('/v1/spaces', {
       profile: 'space-realm-v2', name: realm.seedName,handle: 'handle' in realm ? realm.handle : realm.id,capabilities: ['realm'],
       actingSubject: steward.actingSubject }, steward.token,
-      seedKey('realm', 'handle' in realm ? `${realm.id}:${realm.handle}` : realm.id)));
+      seedKey('realm', 'handle' in realm ? `${realm.id}:${realm.handle}` : realm.id))
+      .catch(async (error: unknown) => {
+        if (!isIdempotencyConflict(error)) throw error;
+        const zone = officialZone(realm.id);
+        // The Zone read needs the steward's grant, which expires between runs.
+        if (operatorInput) await grantOfficialZoneSeed({ ...operatorInput, ownerAccountSubject: steward.accountId,
+          actingSubject: steward.actingSubject }, zone);
+        const adopted = await adoptZoneSpace(get, zone, steward.actingSubject);
+        if (!adopted) throw error;
+        if (state.endpoints.writeCounts) state.endpoints.writeCounts.lookups++;
+        return adopted;
+      }));
     if (receipt) createdRealms.push({ id: realm.id, receipt, steward });
   }
   for (const realm of realms) {
@@ -71,7 +110,7 @@ export async function seedRealms(state: SeedState) {
       await grantHomeSeedAuthority(operatorInput, readGrants.slice(offset, offset + 9));
     }
     const collection = `https://rezics.com/id/${stableId(`curated:${realm.id}`)}`;
-    const zone = `https://rezics.com/id/${stableId(`zone:${realm.id}`)}`;
+    const zone = officialZone(realm.id);
     await grantCuratedCollectionSeed(operatorInput, collection);
     // An earlier seed created this Collection under an older name; replay reads it instead of recreating it.
     const curated = await api.post<{ structure: string; revision: string }>('/v1/collections', {
