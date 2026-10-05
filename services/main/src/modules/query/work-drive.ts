@@ -10,10 +10,8 @@ export function resourceWorkType(
 ): string | undefined {
   const types = new Set(
     definitions
-      .filter(
-        (row) =>
-          row.base === 'work' && !row.default && row.type !== 'https://schema.org/CreativeWork',
-      )
+      // The default Work anchor matches every Work, so it never narrows the postings.
+      .filter((row) => row.base === 'work' && !row.default)
       .map((row) => row.type),
   );
   return conditions
@@ -26,14 +24,13 @@ export function resourceWorkType(
     .find((type) => types.has(type));
 }
 
-/** Work subtypes use the registry's base, including admitted extensions. The
+/** Work types, the default anchor included, use the registry's base, including admitted extensions. The
  * live ownership/disclosure join remains authoritative after this index hint. */
 export function resourceTypeKinds(
   conditions: readonly ResourceCondition[],
   definitions: readonly { type: string; base: string }[],
 ): ResourceCard['kind'][] {
   const owned: Record<string, ResourceCard['kind'][]> = {
-    'https://schema.org/CreativeWork': ['work'],
     'http://www.w3.org/2004/02/skos/core#Concept': ['concept'],
     'https://rezics.com/vocab/Realm': ['realm'],
     'https://rezics.com/vocab/Zone': ['site'],

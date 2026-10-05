@@ -83,8 +83,7 @@ export async function resolveFollowIdentity(
     : types.includes(`${RV}Concept`) ||
         types.includes('http://www.w3.org/2004/02/skos/core#Concept')
       ? 'concept'
-      : types.includes('https://schema.org/CreativeWork') ||
-          registered.some((entry) => entry.base === 'work')
+      : admittedTypes.some((entry) => entry.base === 'work' && types.includes(entry.type))
         ? 'work'
         : types.includes(`${RV}Collection`)
           ? 'collection'

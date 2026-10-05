@@ -85,7 +85,10 @@ export function normalizeFrame(coordinates: readonly Coordinate[]): Coordinate[]
 
 /** Structural owner types take precedence over descriptive dimensions, as dimensionOf does. */
 export const structuralCoordinateTypes: readonly (readonly [string, FrameDimension])[] = [
-  ['https://schema.org/CreativeWork', 'work'], [`https://rezics.com/vocab/TextContribution`, 'realization'],
+  // The Work anchor is the registry's default Work type, not a named domain class.
+  ...(Object.values(typeRegistry) as readonly { type: string; base: string; default?: boolean }[])
+    .filter(entry => entry.default && entry.base === 'work').map(entry => [entry.type, 'work'] as const),
+  [`https://rezics.com/vocab/TextContribution`, 'realization'],
   [`https://rezics.com/vocab/Realization`, 'realization'], [`https://rezics.com/vocab/Release`, 'release'],
   [`https://rezics.com/vocab/FixedRelease`, 'release'], ['https://schema.org/ListItem', 'position'],
 ];
