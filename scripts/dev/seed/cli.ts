@@ -25,6 +25,7 @@ import { seedOfficialZones } from './official-zones-step.ts';
 import { seedZoneSites } from './zone-sites-step.ts';
 import { officialPackageSlugs, seedOfficialThemes } from './official-theme-step.ts';
 import { seedOfficialWiki } from './official-wiki-step.ts';
+import { seedShowcase } from './showcase-step.ts';
 import { people, realms, works } from './plan.ts';
 import { seedProfileBios } from './profile-bios-step.ts';
 import { seedProfileCredits } from './profile-credits-step.ts';
@@ -142,7 +143,7 @@ export const steps: readonly SeedStep[] = [
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedZoneSites, seedBookConcepts,
   seedOfficialThemes,
-  seedOfficialWiki,
+  seedOfficialWiki, seedShowcase,
   seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
   seedReviews, seedCommunityVotes, seedCoReaders,
   checkPublicReads, printSeedReport,

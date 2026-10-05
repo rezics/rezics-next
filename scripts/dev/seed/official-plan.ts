@@ -445,10 +445,11 @@ const feed = (block: string) => ({ kind: 'query-block' as const, block });
 /**
  * A Zone's layout. Fiction reads like a serial publication; the other Zones
  * open with their picks, what is new, one editors' list and their decisions.
- * Modules with nothing to show yet stay off the page.
+ * Modules with nothing to show yet stay off the page. `slides` are the
+ * showcase's campaign slides, which a later step fills in once the Works exist.
  */
 export function officialPresentation(realm: OfficialRealmId, preset: ZonePresentation['preset'],
-  modContext?: string): ZonePresentation {
+  modContext?: string, slides: ZonePresentation['slides'] = []): ZonePresentation {
   const lists = zoneContent[realm].lists.map(list => ({ id: list.id,
     source: { kind: 'collection' as const, collection: editorList(realm, list.id) } }));
   const [first, ...more] = lists;
@@ -462,7 +463,7 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
       de: 'Aktuelle Entscheidungen', fr: 'Décisions récentes', es: 'Decisiones recientes' }),
     source: feed('recent-decisions'), options: { rail: true, limit: 6 } };
   const base = { profile: 'zone-presentation-v2' as const, preset, tokens: ZONE_PRESETS[preset],
-    navigation: [], slides: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
+    navigation: [], slides, ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
   if (realm === 'games') {
     const source = (index: number) => lists[index]!.source;
     return { ...base, modules: [

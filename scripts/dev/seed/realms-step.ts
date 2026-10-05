@@ -2,6 +2,7 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantOfficialZoneSe
 import { realms, seedKey } from './plan.ts';
 import { stableId, type SeedState, type SpaceReceipt } from './state.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
+import { retainedSlides } from './showcase-plan.ts';
 import { SeedApiError } from './api.ts';
 import { readOrCreateOfficialZone, updateOfficialZonePresentation } from './zones.ts';
 
@@ -102,7 +103,9 @@ export async function seedRealms(state: SeedState) {
       ? configuredModsContext(currentZone.configuration.presentation)
         ?? await state.optional('Mods game and loader concepts', () => modsContext(state, parent.steward))
       : undefined;
-    const presentation = officialPresentation(realm.id, realm.preset, context ?? undefined);
+    // The showcase step fills the slides once the Works exist; replaying the layout keeps them.
+    const presentation = officialPresentation(realm.id, realm.preset, context ?? undefined,
+      retainedSlides(currentZone.configuration.presentation));
     await updateOfficialZonePresentation(operatorSession.api, {
       zone, actor: parent.steward.actingSubject, token: operatorSession.token, head: currentZone,
       defaultRealm: parent.receipt.realm, candidates: [
