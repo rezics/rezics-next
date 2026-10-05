@@ -53,6 +53,12 @@ const officialZone = (realm: string) => `https://rezics.com/id/${stableId(`zone:
 
 export type SpaceRead = (path: string) => Promise<Record<string, unknown> | null>;
 
+/** The Zone read needs `zone:edit` scope and authority. A steward without either (a fresh stack, a
+ * client that never asked for the scope) answers 401 or 403, which means no Zone to adopt, not a failure. */
+export function isUnreadable(error: unknown): boolean {
+  return error instanceof SeedApiError && [401, 403, 404].includes(error.status);
+}
+
 export function isIdempotencyConflict(error: unknown): boolean {
   if (!(error instanceof SeedApiError) || error.status !== 409) return false;
   try { return (JSON.parse(error.detail) as { code?: string }).code === 'idempotency_conflict'; }
@@ -80,7 +86,7 @@ export async function seedRealms(state: SeedState) {
     // Separate stewards retain their own member quotas on a previously seeded stack.
     const steward = state.sessions[index + 1]!;
     const get: SpaceRead = path => api.get<Record<string, unknown>>(path, steward.token).catch((error: unknown) => {
-      if (error instanceof SeedApiError && error.status === 404) return null;
+      if (isUnreadable(error)) return null;
       throw error;
     });
     // The Zone's Space is the plan's Space: its key may have changed since (a handle was added), and replaying the

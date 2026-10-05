@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { SeedApiError } from './api.ts';
-import { adoptZoneSpace, isIdempotencyConflict, type SpaceRead } from './realms-step.ts';
+import { adoptZoneSpace, isIdempotencyConflict, isUnreadable, type SpaceRead } from './realms-step.ts';
 
 const native = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-a000-${suffix.padStart(12, '0')}`;
 const zone = native('1');
@@ -39,4 +39,10 @@ test('only an idempotency conflict marks a Space as made under an earlier body',
   expect(isIdempotencyConflict(new SeedApiError('Main /v1/spaces', 409, '{"code":"handle_taken"}'))).toBe(false);
   expect(isIdempotencyConflict(new SeedApiError('Main /v1/spaces', 400, '{"code":"idempotency_conflict"}'))).toBe(false);
   expect(isIdempotencyConflict(new Error('offline'))).toBe(false);
+});
+
+test('a Zone read the steward may not make is unreadable, not a failure', () => {
+  for (const status of [401, 403, 404]) expect(isUnreadable(new SeedApiError('Main /v1/zones', status, '{}'))).toBe(true);
+  expect(isUnreadable(new SeedApiError('Main /v1/zones', 500, '{}'))).toBe(false);
+  expect(isUnreadable(new Error('offline'))).toBe(false);
 });

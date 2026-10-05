@@ -169,9 +169,11 @@ test.each(['member', 'administrator'] as const)(
     const accounts = people.length + communityPeople.length;
     const agents = accounts + penNames.length;
     let firstWorks: string[] | undefined;
+    // Optional seed steps swallow their errors into findings; a failed expectation must show them.
+    let attemptFindings = new Set<string>();
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const findings = new Set<string>();
+        const findings = (attemptFindings = new Set<string>());
         const state: SeedState = {
           api: new SeedApi(endpoints),
           endpoints,
@@ -324,6 +326,10 @@ test.each(['member', 'administrator'] as const)(
           }),
         );
       }
+    } catch (error) {
+      if (attemptFindings.size)
+        console.error(`Seed findings before the failure:\n${[...attemptFindings].join('\n')}`);
+      throw error;
     } finally {
       clearInterval(timer);
       await delivering;
