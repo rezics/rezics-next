@@ -165,9 +165,9 @@ BEGIN
   END LOOP;
 END $$`;
 
-/** Each file has its own rollback boundary so its locks never span the whole
- * pending inventory. A dependent file whose prerequisite is also pending may
- * fail conservatively: no writers are stopped after an unproven rehearsal. */
+/** Pending files share their owner's transaction so later files can consume
+ * earlier schema and data changes. The transaction deadline bounds the entire
+ * owner's rehearsal, including locks held by earlier migrations. */
 export async function rehearseRefreshMigrations(root: string, env: Record<string, string>,
   pending: readonly string[], createClient: (url: string) => RehearsalClient = url => new Client({
     connectionString: url, connectionTimeoutMillis: 5_000,
@@ -183,20 +183,20 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
     let migration = files[0]!.name;
     try {
       await client.connect();
-      for (const file of files) {
-        migration = file.name;
-        await client.query('BEGIN');
-        try {
-          await client.query(isolateRehearsalSequences);
+      await client.query('BEGIN');
+      try {
+        await client.query(isolateRehearsalSequences);
+        for (const file of files) {
+          migration = file.name;
           await client.query(readFileSync(join(root, file.name), 'utf8'));
-        } catch (error) {
-          // A transaction timeout closes the connection and rolls back on the
-          // server; a failed cleanup query must not hide its original diagnostic.
-          try { await client.query('ROLLBACK'); } catch { /* Connection may be closed. */ }
-          throw error;
         }
-        await client.query('ROLLBACK');
+      } catch (error) {
+        // A transaction timeout closes the connection and rolls back on the
+        // server; a failed cleanup query must not hide its original diagnostic.
+        try { await client.query('ROLLBACK'); } catch { /* Connection may be closed. */ }
+        throw error;
       }
+      await client.query('ROLLBACK');
     } catch (error) {
       throw new Error(`Migration rehearsal failed: ${migration}: ${error instanceof Error ? error.message : String(error)}. Writers were not stopped`,
         { cause: error });

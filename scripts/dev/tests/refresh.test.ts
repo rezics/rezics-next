@@ -255,7 +255,7 @@ describe('pending SQL migration rehearsal', () => {
     return { dir, first, second, content };
   }
 
-  test('only pending files run in migration order on their owner database with separate rollbacks', async () => {
+  test('only pending files run in migration order with one rollback per owner database', async () => {
     const { dir, first, second, content } = fixture();
     const events: string[] = [];
     try {
@@ -265,11 +265,51 @@ describe('pending SQL migration rehearsal', () => {
         end: async () => { events.push('end'); },
       }));
       expect(events).toEqual(['connect:access-db', 'BEGIN', 'isolate-sequences',
-        readFileSync(join(dir, first), 'utf8'), 'ROLLBACK', 'BEGIN', 'isolate-sequences',
+        readFileSync(join(dir, first), 'utf8'),
         readFileSync(join(dir, second), 'utf8'), 'ROLLBACK', 'end',
         'connect:content-db', 'BEGIN', 'isolate-sequences', readFileSync(join(dir, content), 'utf8'), 'ROLLBACK', 'end']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+
+  for (const fails of [false, true]) {
+    test(fails ? 'a failing dependent second migration names that file and leaves writers running'
+      : 'a second pending migration can consume the first migration before owner rollback', async () => {
+      const { dir, first, second } = fixture();
+      const events: string[] = [];
+      let tableExists = false;
+      writeFileSync(join(dir, first), 'CREATE TABLE dependency(value integer CHECK (value > 0));');
+      writeFileSync(join(dir, second), `INSERT INTO dependency VALUES (${fails ? -1 : 1});`);
+      const operations = actions(events);
+      operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [second, first], () => ({
+        connect: async () => { events.push('connect'); },
+        query: async sql => {
+          events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql);
+          if (sql.startsWith('CREATE TABLE')) tableExists = true;
+          if (sql.startsWith('INSERT')) {
+            if (!tableExists) throw new Error('relation dependency does not exist');
+            if (fails) throw new Error('dependency value violates check constraint');
+          }
+          if (sql === 'ROLLBACK') tableExists = false;
+        },
+        end: async () => { events.push('end'); },
+      }));
+      try {
+        const run = executeRefresh(refreshPlan({ ...current, pendingMigrations: [second, first] }), operations);
+        if (fails) {
+          await expect(run).rejects.toThrow(`Migration rehearsal failed: ${second}: dependency value violates check constraint`);
+          expect(events).not.toContain('stopWriters');
+          expect(events).not.toContain('recordSuccess');
+        } else {
+          await run;
+          expect(events.indexOf('stopWriters')).toBeGreaterThan(events.indexOf('ROLLBACK'));
+          expect(events.at(-1)).toBe('recordSuccess');
+        }
+        expect(events.slice(0, 7)).toEqual(['connect', 'BEGIN', 'isolate-sequences',
+          readFileSync(join(dir, first), 'utf8'), readFileSync(join(dir, second), 'utf8'), 'ROLLBACK', 'end']);
+        expect(tableExists).toBe(false);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
 
   for (const diagnostic of ['immutable rows cannot be updated', 'canceling statement due to lock timeout',
     'terminating connection due to transaction timeout']) {
@@ -299,37 +339,45 @@ describe('pending SQL migration rehearsal', () => {
     await rehearseRefreshMigrations(root, env, [], () => { throw new Error('Must not connect'); });
   });
 
-  test.skipIf(process.env.REZICS_REFRESH_SEQUENCE_PROBE !== '1')('live PostgreSQL rehearsal restores rows and existing sequence state', async () => {
-    const git = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { cwd: root, encoding: 'utf8' });
-    if (git.status !== 0) throw new Error('Cannot locate the shared checkout');
-    const sharedEnv = readEnv(join(dirname(git.stdout.trim()), '.temp/stack/rezics-dev/dev.env'));
-    const { dir, first } = fixture();
-    const client = new Client({ connectionString: sharedEnv.ACCESS_DATABASE_URL, connectionTimeoutMillis: 5_000,
-      lock_timeout: 1_000, statement_timeout: 5_000, options: '-c transaction_timeout=10000' });
-    writeFileSync(join(dir, first), `SELECT nextval('pg_temp.refresh_probe_sequence');
-      SELECT setval('pg_temp.refresh_probe_sequence', 900);
-      UPDATE refresh_probe_rows SET value = 2;`);
-    try {
-      await rehearseRefreshMigrations(dir, sharedEnv, [first], () => ({
-        connect: async () => {
-          await client.connect();
-          await client.query('CREATE TEMP SEQUENCE refresh_probe_sequence START 42');
-          await client.query('SELECT nextval(\'pg_temp.refresh_probe_sequence\')');
-          await client.query('CREATE TEMP TABLE refresh_probe_rows(value integer)');
-          await client.query('INSERT INTO refresh_probe_rows VALUES (1)');
-        },
-        query: sql => client.query(sql),
-        end: async () => {
-          try {
-            expect((await client.query('SELECT last_value::text, is_called FROM pg_temp.refresh_probe_sequence')).rows)
-              .toEqual([{ last_value: '42', is_called: true }]);
-            expect((await client.query('SELECT value FROM refresh_probe_rows')).rows).toEqual([{ value: 1 }]);
-          } finally { await client.end(); }
-        },
-      }));
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  }, 30_000);
+  for (const fails of [false, true]) {
+    test.skipIf(process.env.REZICS_REFRESH_SEQUENCE_PROBE !== '1')(`live PostgreSQL dependent migrations ${fails ? 'fail in the second file' : 'pass'} and restore schema, rows and sequences`, async () => {
+      const git = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+        { cwd: root, encoding: 'utf8' });
+      if (git.status !== 0) throw new Error('Cannot locate the shared checkout');
+      const sharedEnv = readEnv(join(dirname(git.stdout.trim()), '.temp/stack/rezics-dev/dev.env'));
+      const { dir, first, second } = fixture();
+      const client = new Client({ connectionString: sharedEnv.ACCESS_DATABASE_URL, connectionTimeoutMillis: 5_000,
+        lock_timeout: 1_000, statement_timeout: 5_000, options: '-c transaction_timeout=10000' });
+      writeFileSync(join(dir, first), 'CREATE TEMP TABLE refresh_probe_dependency(value integer CHECK (value > 0));');
+      writeFileSync(join(dir, second), `SELECT nextval('pg_temp.refresh_probe_sequence');
+        SELECT setval('pg_temp.refresh_probe_sequence', 900);
+        UPDATE refresh_probe_rows SET value = 2;
+        INSERT INTO refresh_probe_dependency VALUES (${fails ? -1 : 1});`);
+      try {
+        const run = rehearseRefreshMigrations(dir, sharedEnv, [second, first], () => ({
+          connect: async () => {
+            await client.connect();
+            await client.query('CREATE TEMP SEQUENCE refresh_probe_sequence START 42');
+            await client.query('SELECT nextval(\'pg_temp.refresh_probe_sequence\')');
+            await client.query('CREATE TEMP TABLE refresh_probe_rows(value integer)');
+            await client.query('INSERT INTO refresh_probe_rows VALUES (1)');
+          },
+          query: sql => client.query(sql),
+          end: async () => {
+            try {
+              expect((await client.query('SELECT last_value::text, is_called FROM pg_temp.refresh_probe_sequence')).rows)
+                .toEqual([{ last_value: '42', is_called: true }]);
+              expect((await client.query('SELECT value FROM refresh_probe_rows')).rows).toEqual([{ value: 1 }]);
+              expect((await client.query("SELECT to_regclass('pg_temp.refresh_probe_dependency') AS relation")).rows)
+                .toEqual([{ relation: null }]);
+            } finally { await client.end(); }
+          },
+        }));
+        if (fails) await expect(run).rejects.toThrow(`Migration rehearsal failed: ${second}:`);
+        else await run;
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    }, 30_000);
+  }
 });
 
 describe('official Zone approval refresh', () => {
