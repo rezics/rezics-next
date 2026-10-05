@@ -241,6 +241,8 @@ test('GOV23: adopted proposal executes one scoped roster effect and recovers the
     expect((await post(account.tokenB, { ...input, ...revokedBodyGrant,
       effect: thirdEffect, effectDigest: thirdDigest, expectedTargetState: thirdState },
     'revoked-body-grant')).status).toBe(403);
+    // A saved target/graph receipt does not bypass the execution authority fence.
+    expect((await post(account.tokenB, input, 'execute-once')).status).toBe(403);
     expect(await policyRevision()).toBe('3');
     // Native exact-scope gate lookup does not grow with unrelated scopes.
     for (const total of [100, 1_000, 10_000]) {

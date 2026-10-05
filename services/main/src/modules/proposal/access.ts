@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { authorityWitnessCurrent, type AuthorityWitness } from '../access/authority-witness.ts';
 import { lockAdmissionKey } from '../access/scope-gates.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable,
   type GraphTerminalProof, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
@@ -18,6 +19,7 @@ export interface ProposalExecutionAdmission extends RegisteredAdmission {
 type Row = { id: string; principal_id: string; acting_subject: string; scope_id: string;
   action: string; idempotency_key: string; request_digest: string; authority_epoch: string;
   registered_at: Date; expires_at: Date; state: RegisteredAdmission['state'];
+  authority_witness: AuthorityWitness[] | null; eligible: boolean;
   graph_receipt: string | null; graph_outcome: string | null; graph_data_epoch: string | null;
   graph_sequence: string | null };
 
@@ -61,23 +63,27 @@ function admitted(row: Row, basis: ProposalExecutionBasis, replayed: boolean,
     state: row.state, dispatchEligible, replayed, basis };
 }
 
-/** Access proof and one reservation; O(1) indexed body/grant/mandate reads. */
+/** Access proof and one reservation; retries read one gate and at most four
+ * exact indexed authority sources, independent of unrelated grants or bodies. */
 export class AccessProposalExecutions {
   constructor(private readonly pool: Pool) {}
 
   private async prior(client: PoolClient, principal: VerifiedPrincipal, key: string,
     requestDigest: string, basis: ProposalExecutionBasis): Promise<ProposalExecutionAdmission | null> {
     const row = (await client.query<Row>(`SELECT a.* FROM access.admission a JOIN access.principal p
-      ON p.id = a.principal_id AND p.active
+      ON p.id = a.principal_id
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND a.action = $3
-        AND a.idempotency_key = $4 FOR UPDATE`,
+        AND a.idempotency_key = $4`,
     [principal.issuer, principal.subject, proposalExecutionAction, key])).rows[0];
     if (!row) return null;
     const proof = (await client.query<{ proposal: string; proposal_revision: string; resolution: string;
       body_subject: string; effect_digest: string; effect_target: string; expected_target_state: string;
-      capability: string; capability_scope: string; capability_grant_id: string; representation_id: string }>(
+      capability: string; capability_scope: string; capability_grant_id: string; representation_id: string;
+      capability_grant_generation: string; representation_generation: string;
+      principal_epoch: string; body_generation: string }>(
       `SELECT proposal, proposal_revision, resolution, body_subject, effect_digest, effect_target,
-        expected_target_state, capability, capability_scope, capability_grant_id, representation_id
+        expected_target_state, capability, capability_scope, capability_grant_id, representation_id,
+        capability_grant_generation, representation_generation, principal_epoch, body_generation
         FROM access.proposal_execution_admission WHERE admission_id = $1`, [row.id])).rows[0];
     if (row.request_digest !== requestDigest || row.scope_id !== governanceBodyScopeId(basis.body)
       || !proof || proof.proposal !== basis.proposal || proof.proposal_revision !== basis.proposalRevision
@@ -88,7 +94,30 @@ export class AccessProposalExecutions {
       || proof.capability_grant_id !== basis.capabilityGrantId || proof.representation_id !== basis.representationId) {
       throw new AdmissionConflict('proposal operation ID binds another effect');
     }
-    return admitted(row, basis, true, row.state === 'claimed' && row.expires_at > new Date());
+    const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
+      'SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
+    [row.scope_id])).rows[0];
+    if (!gate?.open || !gate.dispatch_open || gate.authority_epoch !== row.authority_epoch) {
+      throw new AdmissionDenied('body execution gate is closed');
+    }
+    // Lock the exact sources before the admission, matching source revocation's
+    // source-before-drain order. Older rows retain these generations in their
+    // immutable proposal proof even when they have no shared witness.
+    const witness: AuthorityWitness[] = row.authority_witness ?? [
+      { table: 'principal', id: row.principal_id, generation: proof.principal_epoch },
+      { table: 'authority_subject', id: proof.body_subject, generation: proof.body_generation },
+      { table: 'representation', id: proof.representation_id, generation: proof.representation_generation },
+      { table: 'permission_grant', id: proof.capability_grant_id, generation: proof.capability_grant_generation },
+    ];
+    if (!await authorityWitnessCurrent(client, witness.filter(source => source.table === 'principal'))) {
+      throw new AdmissionDenied('principal is inactive');
+    }
+    if (!await authorityWitnessCurrent(client, witness.filter(source => source.table !== 'principal'))) {
+      throw new AdmissionDenied('current body mandate and capability grant required');
+    }
+    const locked = (await client.query<Row>(`SELECT *, expires_at > clock_timestamp() AS eligible
+      FROM access.admission WHERE id = $1 FOR UPDATE`, [row.id])).rows[0]!;
+    return admitted(locked, basis, true, locked.state === 'claimed' && locked.eligible);
   }
 
   async replay(principal: VerifiedPrincipal, basis: ProposalExecutionBasis, key: string,
@@ -146,12 +175,17 @@ export class AccessProposalExecutions {
       if (!mandate || !grant) throw new AdmissionDenied('current body mandate and capability grant required');
       const row = (await client.query<Row>(`INSERT INTO access.admission (id, principal_id,
         acting_subject, scope_id, action, idempotency_key, request_digest, authority_epoch,
-        registered_at, expires_at, state, claimed_at)
+        registered_at, expires_at, state, claimed_at, authority_witness)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp(),
           LEAST(clock_timestamp() + interval '30 seconds',$9::timestamptz,$10::timestamptz),
-          'claimed',clock_timestamp()) RETURNING *`,
+          'claimed',clock_timestamp(),$11::jsonb) RETURNING *`,
       [randomUUID(), identity.id, basis.body, scope, proposalExecutionAction, key,
-        requestDigest, gate.authority_epoch, mandate.valid_until, grant.valid_until])).rows[0]!;
+        requestDigest, gate.authority_epoch, mandate.valid_until, grant.valid_until, JSON.stringify([
+          { table: 'principal', id: identity.id, generation: identity.enforcement_epoch },
+          { table: 'authority_subject', id: basis.body, generation: mandate.body_generation },
+          { table: 'representation', id: mandate.id, generation: mandate.generation },
+          { table: 'permission_grant', id: grant.id, generation: grant.generation },
+        ])])).rows[0]!;
       await client.query(`INSERT INTO access.proposal_execution_admission (admission_id, proposal,
         proposal_revision, resolution, body_subject, effect_digest, effect_target,
         expected_target_state, capability, capability_scope, capability_grant_id,
