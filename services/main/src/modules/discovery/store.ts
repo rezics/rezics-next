@@ -35,6 +35,7 @@ import {
 } from './automation.ts';
 import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 import { readDiscoveryRefreshHealth } from './refresh-health.ts';
+import { DISCOVERY_DELTA_COST } from './changes.ts';
 import {
   discoveryWriter,
   replaceDiscoveryWorks,
@@ -65,6 +66,7 @@ export interface DiscoveryGeneration {
   storage_generation?: string | null;
   storage_version?: string;
   covered_sequence?: string;
+  covered_access_revision?: string;
   catchup_works?: string[];
   rebuild_pending?: boolean;
 }
@@ -278,20 +280,79 @@ export async function foldSourceFence(client: PoolClient): Promise<DiscoverySour
   return row;
 }
 
-/** The Access sources are unchanged since the generation's basis fold. */
-export const discoveryAccessCurrent = (
-  row: Pick<DiscoveryGeneration, 'access_revision'>,
-  fence: DiscoverySourceFence,
-) => !fence.changed && row.access_revision === fence.revision;
+/** Judgment contexts whose changes reach a basis; '' marks a scope-wide change.
+ * Mine projects no classifications, so no judgment reaches it. */
+export const discoverySourceContexts = (basis: Pick<DiscoveryBasis, 'scope' | 'realm'>) =>
+  basis.scope === 'mine' ? [''] : ['', 'global', ...(basis.realm ? [basis.realm] : [])];
+
+/** A refresh resolves at most as many judged Statements to Works as a delta
+ * may carry events; more rebuild the population instead. */
+export const DISCOVERY_SOURCE_KEY_COST = { statements: DISCOVERY_DELTA_COST.events, queries: 1 } as const;
+
+/** The fence and the Access changes after one basis that reach it, in one
+ * snapshot. `changed`: a reaching change awaits its fold. `wide`: a scope- or
+ * context-wide change was folded after the basis. `statements`: at most the
+ * requested number of judged Statements folded after it. */
+export interface DiscoverySourceChanges extends DiscoverySourceFence {
+  wide: boolean;
+  statements: string[];
+}
+
+/** The folded Access revision a generation covers: its basis, or a later one
+ * a refresh acknowledged after finding no reaching change in its population. */
+export const discoveryAccessBasis = (
+  row: Pick<DiscoveryGeneration, 'access_revision' | 'covered_access_revision'>,
+) => row.covered_access_revision ?? row.access_revision;
+
+/** Takes no lock. Fold first when the result must account for committed rows. */
+export async function sourceChanges(
+  client: PoolClient,
+  basis: Pick<DiscoveryBasis, 'scope' | 'realm'>,
+  revision: string,
+  statements = 0,
+): Promise<DiscoverySourceChanges> {
+  await requireRecoveryOpen(client);
+  return sourceChangesWithin(client, basis, revision, statements);
+}
+
+/** `sourceChanges` in a transaction that already holds the open recovery fence. */
+export async function sourceChangesWithin(
+  client: PoolClient,
+  basis: Pick<DiscoveryBasis, 'scope' | 'realm'>,
+  revision: string,
+  statements = 0,
+): Promise<DiscoverySourceChanges> {
+  const row = (
+    await client.query<DiscoverySourceChanges>(
+      `SELECT d.revision::text, f.generation::text,
+    EXISTS (SELECT 1 FROM access.discovery_source_change c WHERE c.context_key = ANY($1::text[])) AS changed,
+    EXISTS (SELECT 1 FROM access.discovery_source_key k WHERE k.context_key = ANY($1::text[])
+      AND k.statement = '' AND k.revision > $2::bigint) AS wide,
+    ARRAY(SELECT k.statement FROM access.discovery_source_key k WHERE k.context_key = ANY($1::text[])
+      AND k.statement <> '' AND k.revision > $2::bigint LIMIT $3) AS statements
+    FROM access.discovery_source_fence d CROSS JOIN access.recovery_fence f WHERE d.id AND f.id`,
+      [discoverySourceContexts(basis), revision, statements],
+    )
+  ).rows[0];
+  if (!row) throw new RecommendationUnavailable('Discovery source fence is unavailable');
+  return row;
+}
+
+/** No Access change reaches the basis: read with at least one Statement. */
+export const discoveryAccessCurrent = (changes: DiscoverySourceChanges) =>
+  !changes.changed && !changes.wide && !changes.statements.length;
 
 function assertPosition(row: DiscoveryGeneration, position: ReadPosition) {
   if (row.source_epoch !== position.dataEpoch || row.source_sequence !== position.sequence) {
     throw new RecommendationRestart('Discovery graph changed');
   }
 }
+/** Only recovery or a wide change closes a build. Judged Statements after its
+ * basis do not: it completes against that basis and the next refresh projects
+ * their Works, so a stream of votes cannot restart it forever. */
 async function assertFence(client: PoolClient, row: DiscoveryGeneration) {
-  const fence = await sourceFence(client);
-  if (!discoveryAccessCurrent(row, fence) || fence.generation !== row.recovery_generation) {
+  const since = await sourceChanges(client, row, discoveryAccessBasis(row));
+  if (since.wide || since.generation !== row.recovery_generation) {
     throw new RecommendationRestart('Discovery Access basis changed');
   }
 }
@@ -301,6 +362,7 @@ export async function generation(client: PoolClient, id: string): Promise<Discov
       `SELECT d.*, g.state, h.revision::text AS active_head,
     d.source_sequence::text, d.access_revision::text, d.work_count::text, d.storage_version::text,
     coalesce(c.sequence,d.source_sequence)::text AS covered_sequence,
+    coalesce(c.access_revision,d.access_revision)::text AS covered_access_revision,
     g.input_manifest->>'sourceProfile' AS source_profile
     FROM access.discovery_generation d JOIN access.derived_generation g ON g.id = d.generation_id
     LEFT JOIN access.discovery_coverage c ON c.generation_id=d.generation_id
@@ -370,7 +432,10 @@ export class DiscoveryProjection {
     basis: DiscoveryBasis,
     position: ReadPosition,
     key: ReceiptKey,
-    reuse?: { generation: string; works: string[] },
+    /** `access` is the folded revision through which `works` include the Works
+     * of every judged Statement that reaches the basis. Without it, no such
+     * Statement may have been folded after the prior generation's basis. */
+    reuse?: { generation: string; works: string[]; access?: string },
   ) {
     return inAccess(this.pool, async (client) => {
       await requireRecoveryOpen(client);
@@ -413,10 +478,15 @@ export class DiscoveryProjection {
       );
       if (reuse) {
         const prior = await generation(client, reuse.generation);
+        const covered = discoveryAccessBasis(prior);
+        const since = await sourceChangesWithin(client, prior, covered, reuse.access ? 0 : 1);
         if (
           prior.state !== 'ready' ||
           prior.source_epoch !== position.dataEpoch ||
-          !discoveryAccessCurrent(prior, fence) ||
+          since.wide ||
+          (reuse.access
+            ? BigInt(reuse.access) < BigInt(covered) || BigInt(reuse.access) > BigInt(fence.revision)
+            : since.statements.length > 0) ||
           prior.recovery_generation !== fence.generation ||
           prior.source_profile !== DISCOVERY_SOURCE_PROFILE ||
           digest(basisOf(prior)) !== digest(owned) ||
@@ -454,7 +524,7 @@ export class DiscoveryProjection {
             owned.owner,
             position.dataEpoch,
             position.sequence,
-            fence.revision,
+            reuse.access ?? fence.revision,
             fence.generation,
             prior.storage_generation ?? prior.generation_id,
             (BigInt(prior.storage_version ?? '0') + 1n).toString(),
@@ -796,8 +866,10 @@ export class DiscoveryProjection {
       if (digest(basisOf(row)) !== digest(basis)) {
         throw new RecommendationUnavailable('Discovery basis is unavailable');
       }
-      const fence = await sourceFence(client);
-      if (row.source_epoch !== position.dataEpoch || row.recovery_generation !== fence.generation) {
+      // A judged Statement anywhere in a reaching context makes the page stale
+      // until a refresh projects or acknowledges it.
+      const since = await sourceChanges(client, row, discoveryAccessBasis(row), 1);
+      if (row.source_epoch !== position.dataEpoch || row.recovery_generation !== since.generation) {
         if (pinned) throw new RecommendationRestart('Discovery recovery basis expired');
         throw new RecommendationUnavailable('Discovery recovery basis is unavailable');
       }
@@ -806,7 +878,7 @@ export class DiscoveryProjection {
         stale:
           row.source_profile !== DISCOVERY_SOURCE_PROFILE ||
           (row.covered_sequence ?? row.source_sequence) !== position.sequence ||
-          !discoveryAccessCurrent(row, fence) ||
+          !discoveryAccessCurrent(since) ||
           row.state !== 'ready' ||
           head.active_generation !== row.generation_id,
       };

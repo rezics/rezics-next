@@ -9,12 +9,17 @@ import type { ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { DISCOVERY_COST, type OwnedDiscoveryBasis } from './contract.ts';
 import {
-  discoveryAccessCurrent,
+  discoveryAccessBasis,
   discoveryScopeKey,
+  discoveryStorage,
+  DISCOVERY_SOURCE_KEY_COST,
+  foldSourceFence,
   generation,
+  sourceChanges,
+  sourceChangesWithin,
   sourceFence,
   type DiscoveryGeneration,
-  type DiscoverySourceFence,
+  type DiscoverySourceChanges,
 } from './store.ts';
 import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 import type { DiscoveryChanges } from './changes.ts';
@@ -57,23 +62,21 @@ export function discoveryRetryDelay(attempts = '1'): number {
     DISCOVERY_REFRESH_COST.retryMs * 2 ** Math.min(4, Math.max(0, Number(attempts) - 1)),
   );
 }
+/** `since` holds the changes folded after the row's Access basis. A change
+ * still awaiting its fold is after every revision; the next tick folds it. */
 export const discoveryGenerationCurrent = (
   row: Pick<
     DiscoveryGeneration,
-    | 'source_epoch'
-    | 'source_sequence'
-    | 'access_revision'
-    | 'recovery_generation'
-    | 'source_profile'
-    | 'covered_sequence'
+    'source_epoch' | 'source_sequence' | 'recovery_generation' | 'source_profile' | 'covered_sequence'
   >,
   position: ReadPosition,
-  fence: DiscoverySourceFence,
+  since: Pick<DiscoverySourceChanges, 'wide' | 'statements' | 'generation'>,
 ) =>
   row.source_epoch === position.dataEpoch &&
   (row.covered_sequence ?? row.source_sequence) === position.sequence &&
-  discoveryAccessCurrent(row, fence) &&
-  row.recovery_generation === fence.generation &&
+  !since.wide &&
+  !since.statements.length &&
+  row.recovery_generation === since.generation &&
   row.source_profile === DISCOVERY_SOURCE_PROFILE;
 
 /** A due-index claim serializes each population, not the graph or other jobs.
@@ -228,9 +231,13 @@ export class DiscoveryRefreshStore {
     });
   }
 
+  /** `access` names the folded revision and the judged Statements after the
+   * active generation's Access basis that reach this population. */
   async inspect(job: RefreshJob, position: ReadPosition) {
     return inAccess(this.pool, async (client) => {
-      const fence = await sourceFence(client);
+      // Folding first gives every committed change its key and revision. A
+      // fold locks the fence row until this transaction ends; writers never do.
+      await foldSourceFence(client);
       const held = await client.query(
         `SELECT scope_key FROM access.discovery_refresh
         WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp() FOR UPDATE`,
@@ -260,9 +267,18 @@ export class DiscoveryRefreshStore {
           ).rows[0] ?? null;
         if (!principal) return { fresh: false, row: null, principal: null, inactive: true };
       }
-      if (prior && discoveryGenerationCurrent(prior, position, fence)) {
+      const since = prior
+        ? await sourceChangesWithin(
+            client,
+            prior,
+            discoveryAccessBasis(prior),
+            DISCOVERY_SOURCE_KEY_COST.statements + 1,
+          )
+        : null;
+      if (prior && since && discoveryGenerationCurrent(prior, position, since)) {
         return { fresh: true, row: null, principal };
       }
+      const access = since ? { revision: since.revision, statements: since.statements } : null;
       const pending = (
         await client.query<{ id: string; validated_sequence: string | null }>(
           `SELECT g.id,
@@ -276,9 +292,11 @@ export class DiscoveryRefreshStore {
       ).rows[0];
       let reuse =
         prior?.state === 'ready' &&
+        since &&
         prior.source_epoch === position.dataEpoch &&
-        discoveryAccessCurrent(prior, fence) &&
-        prior.recovery_generation === fence.generation &&
+        !since.wide &&
+        since.statements.length <= DISCOVERY_SOURCE_KEY_COST.statements &&
+        prior.recovery_generation === since.generation &&
         prior.source_profile === DISCOVERY_SOURCE_PROFILE
           ? prior
           : null;
@@ -287,19 +305,22 @@ export class DiscoveryRefreshStore {
           await repairAbandonedDiscoveryVersion(client, reuse);
           if (!(await discoveryStorageReusable(client, reuse))) reuse = null;
         }
-        return { fresh: false, row: null, principal, reuse };
+        return { fresh: false, row: null, principal, reuse, access };
       }
       const row = {
         ...(await generation(client, pending.id)),
         validated_sequence: pending.validated_sequence ?? null,
       };
+      // A build outlives judged Statements after its basis; only a wide change
+      // or recovery makes it obsolete.
+      const own = await sourceChangesWithin(client, row, discoveryAccessBasis(row));
       if (
         row.source_epoch === position.dataEpoch &&
-        row.recovery_generation === fence.generation &&
+        row.recovery_generation === own.generation &&
         row.source_profile === DISCOVERY_SOURCE_PROFILE &&
-        (row.complete || discoveryAccessCurrent(row, fence))
+        (row.complete || !own.wide)
       )
-        return { fresh: false, row, principal, reuse };
+        return { fresh: false, row, principal, reuse, access };
       // Obsolete work can never activate. Closing it releases the one-building
       // constraint and fences a delayed manager/worker commit through its state.
       await rollbackDiscoveryVersion(client, row);
@@ -308,7 +329,26 @@ export class DiscoveryRefreshStore {
         finished_at = clock_timestamp(), failure_reason = 'discovery-source-changed' WHERE id = $1`,
         [row.generation_id],
       );
-      return { fresh: false, row: null, principal, reuse };
+      return { fresh: false, row: null, principal, reuse, access };
+    });
+  }
+
+  /** Which of at most 2,000 Works a generation holds, one primary-key probe
+   * each. A judged Statement reaches only Works already in the population:
+   * judgments change classifications, never membership. */
+  async members(row: DiscoveryGeneration, works: readonly string[]): Promise<string[]> {
+    if (works.length > DISCOVERY_SOURCE_KEY_COST.statements)
+      throw new RecommendationStale('Discovery membership probe exceeds its bound');
+    if (!works.length) return [];
+    return inAccess(this.pool, async (client) => {
+      await requireRecoveryOpen(client);
+      return (
+        await client.query<{ work: string }>(
+          `SELECT DISTINCT work FROM access.discovery_entries($1,$2)
+        WHERE generation_id=$1 AND work_type='' AND term='' AND work=ANY($3::text[])`,
+          [...discoveryStorage(row), works],
+        )
+      ).rows.map((item) => item.work);
     });
   }
 
@@ -336,8 +376,8 @@ export class DiscoveryRefreshStore {
     changes?: DiscoveryChanges | null,
   ): Promise<void> {
     await inAccess(this.pool, async (client) => {
-      const fence = await sourceFence(client);
-      if (!discoveryAccessCurrent(row, fence) || row.recovery_generation !== fence.generation) {
+      const since = await sourceChanges(client, row, discoveryAccessBasis(row));
+      if (since.wide || row.recovery_generation !== since.generation) {
         throw new RecommendationStale('Discovery validation source changed');
       }
       const held = await client.query(
@@ -379,14 +419,23 @@ export class DiscoveryRefreshStore {
     });
   }
 
-  /** An exact irrelevant interval advances one watermark, allocating no rows. */
-  async acknowledge(job: RefreshJob, row: DiscoveryGeneration, position: ReadPosition) {
+  /** An exact irrelevant interval advances the graph and Access watermarks,
+   * allocating no rows. `access` is a folded revision whose reaching changes
+   * after the row's basis the caller found outside its population; anything
+   * folded later stays after the new watermark. */
+  async acknowledge(
+    job: RefreshJob,
+    row: DiscoveryGeneration,
+    position: ReadPosition,
+    access: string,
+  ) {
     await inAccess(this.pool, async (client) => {
       const fence = await sourceFence(client);
       if (
-        !discoveryAccessCurrent(row, fence) ||
         row.recovery_generation !== fence.generation ||
-        row.source_epoch !== position.dataEpoch
+        row.source_epoch !== position.dataEpoch ||
+        BigInt(access) < BigInt(discoveryAccessBasis(row)) ||
+        BigInt(access) > BigInt(fence.revision)
       )
         throw new RecommendationStale('Discovery acknowledgment fence changed');
       const held = await client.query(
@@ -396,9 +445,10 @@ export class DiscoveryRefreshStore {
       );
       if (!held.rowCount) throw new RecommendationStale('Refresh lease changed');
       await client.query(
-        `INSERT INTO access.discovery_coverage (generation_id,sequence) VALUES ($1,$2)
-        ON CONFLICT (generation_id) DO UPDATE SET sequence=greatest(access.discovery_coverage.sequence,EXCLUDED.sequence)`,
-        [row.generation_id, position.sequence],
+        `INSERT INTO access.discovery_coverage (generation_id,sequence,access_revision) VALUES ($1,$2,$3)
+        ON CONFLICT (generation_id) DO UPDATE SET sequence=greatest(access.discovery_coverage.sequence,EXCLUDED.sequence),
+          access_revision=greatest(access.discovery_coverage.access_revision,EXCLUDED.access_revision)`,
+        [row.generation_id, position.sequence, access],
       );
     });
   }

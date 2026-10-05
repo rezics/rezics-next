@@ -20,20 +20,22 @@ test('a slow catalog read defers enrollment while the refresh tick still claims 
 
 test('a saved discovery generation from the old source query rebuilds at the same relay position', () => {
   const position = { dataEpoch: 'epoch', sequence: '806' };
-  const fence = { revision: '54', changed: false, generation: '0' };
-  const prior = { source_epoch: 'epoch', source_sequence: '806', access_revision: '54',
+  const since = { generation: '0', wide: false, statements: [] };
+  const prior = { source_epoch: 'epoch', source_sequence: '806',
     recovery_generation: '0', source_profile: null };
-  expect(discoveryGenerationCurrent(prior, position, fence)).toBe(false);
+  expect(discoveryGenerationCurrent(prior, position, since)).toBe(false);
   expect(discoveryGenerationCurrent({ ...prior, source_profile: DISCOVERY_SOURCE_PROFILE },
-    position, fence)).toBe(true);
+    position, since)).toBe(true);
 });
 
-test('an Access source change not yet folded outdates the generation at its own revision', () => {
+test('a judged Statement or a wide Access change folded after the basis outdates the generation', () => {
   const position = { dataEpoch: 'epoch', sequence: '806' };
-  const prior = { source_epoch: 'epoch', source_sequence: '806', access_revision: '54',
+  const prior = { source_epoch: 'epoch', source_sequence: '806',
     recovery_generation: '0', source_profile: DISCOVERY_SOURCE_PROFILE };
   expect(discoveryGenerationCurrent(prior, position,
-    { revision: '54', changed: true, generation: '0' })).toBe(false);
+    { generation: '0', wide: false, statements: ['https://rezics.com/id/statement'] })).toBe(false);
   expect(discoveryGenerationCurrent(prior, position,
-    { revision: '55', changed: false, generation: '0' })).toBe(false);
+    { generation: '0', wide: true, statements: [] })).toBe(false);
+  expect(discoveryGenerationCurrent(prior, position,
+    { generation: '1', wide: false, statements: [] })).toBe(false);
 });

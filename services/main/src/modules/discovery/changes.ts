@@ -10,6 +10,37 @@ export interface DiscoveryChanges {
   created: string[];
 }
 
+/** The Works whose current main version each judged Statement is about, in
+ * one graph query. A Statement about anything else classifies no projected
+ * Work. Null when the relation exceeds its bound: the caller rebuilds. */
+export async function discoveryStatementWorks(
+  session: WorkReadSession,
+  statements: readonly string[],
+): Promise<string[] | null> {
+  if (!statements.length) return [];
+  if (
+    statements.length > DISCOVERY_DELTA_COST.events ||
+    statements.some((statement) => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(statement))
+  )
+    return null;
+  const rows = await session
+    .query(
+      `SELECT DISTINCT ?statement ?work WHERE {
+    VALUES ?statement { ${statements.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?statement rdf:subject ?main .
+      ?main a rv:MainVersion ; rv:work ?work . ?work rv:mainVersion ?main }
+  } LIMIT ${statements.length + 1}`,
+      statements.length,
+    )
+    .catch((error) => {
+      if (error instanceof WorkReadLimit || error instanceof FusekiQueryResponseTooLarge)
+        return null;
+      throw error;
+    });
+  if (!rows || rows.some((row) => !row.statement || !row.work)) return null;
+  return [...new Set(rows.map((row) => row.work!.value))].sort();
+}
+
 /** Exact contiguous outbox coverage, never a best-effort list of changed Works.
  * A retention gap, malformed batch or an unclassified event disables reuse. */
 export async function discoveryChanges(

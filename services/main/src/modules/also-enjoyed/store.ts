@@ -9,8 +9,10 @@ import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAcces
   from '../recommendation/derived-generation.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 
+/** `foldMs` paces the scheduled fold that keeps both change logs bounded
+ * between manual builds; each fold removes at most 100,000 rows per log. */
 export const ALSO_ENJOYED_COST = { ratingRows: 32, shelfRows: 64, pairWorks: 2,
-  pairsPerWork: 64, pageRows: 64, leaseMs: 30_000 } as const;
+  pairsPerWork: 64, pageRows: 64, leaseMs: 30_000, foldMs: 10_000 } as const;
 const FAMILY = 'also-enjoyed';
 const SCOPE = digest(['also-enjoyed-public-v1']);
 type Phase = 'ratings' | 'shelves' | 'pairs' | 'complete';
@@ -49,19 +51,25 @@ export async function alsoEnjoyedAccessFence(client: PoolClient, fold = false): 
 }
 
 /** One snapshot spans three owners. The source fences make an old active
- * generation ineligible immediately, even before a replacement is built. */
+ * generation ineligible immediately, even before a replacement is built. A build
+ * completes against its basis: a change after it outdates the generation for
+ * reads but never restarts it, so continuous shelf and rating writes cannot
+ * keep a build from finishing. */
 export class AlsoEnjoyedStore {
   constructor(private readonly access: Pool, private readonly content: Pool) {}
 
-  async authorize(context: ManageContext) {
-    await inAccess(this.access, client => authorizeManager(client, context));
+  /** Folds both change logs without a build. Any basis older than the new
+   * revisions was already outdated by the rows folded into them. */
+  async fold() {
+    await alsoEnjoyedContentFence(this.content, true);
+    await inAccess(this.access, async client => {
+      await requireRecoveryOpen(client);
+      await alsoEnjoyedAccessFence(client, true);
+    });
   }
 
-  private async accessFence() {
-    return inAccess(this.access, async client => {
-      await requireRecoveryOpen(client);
-      return alsoEnjoyedAccessFence(client);
-    });
+  async authorize(context: ManageContext) {
+    await inAccess(this.access, client => authorizeManager(client, context));
   }
 
   async register(context: ManageContext, position: ReadPosition, key: ReceiptKey) {
@@ -164,9 +172,9 @@ export class AlsoEnjoyedStore {
     const candidates = rows.filter(row => row.agent);
     if (!candidates.length) return new Set<string>();
     return workRead(work, new Request(request.url), {}, async session => {
-      if (session.position.dataEpoch !== generation.graph_epoch
-        || session.position.sequence !== generation.graph_sequence) {
-        throw new RecommendationRestart('Rating graph changed during build');
+      // A later graph position only makes this batch newer than the basis.
+      if (session.position.dataEpoch !== generation.graph_epoch) {
+        throw new RecommendationRestart('Rating graph epoch changed during build');
       }
       const found = await session.query(`SELECT ?observation WHERE {
         VALUES (?observation ?head) { ${candidates.map(row =>
@@ -190,15 +198,10 @@ export class AlsoEnjoyedStore {
     const generation = await this.generation(id);
     if (generation.state !== 'building') throw new RecommendationRestart('Generation is closed');
     await workRead(work, new Request(request.url, { method: 'POST' }), {}, async session => {
-      if (session.position.dataEpoch !== generation.graph_epoch
-        || session.position.sequence !== generation.graph_sequence) {
-        throw new RecommendationRestart('Co-reader graph changed during build');
+      if (session.position.dataEpoch !== generation.graph_epoch) {
+        throw new RecommendationRestart('Co-reader graph epoch changed during build');
       }
     });
-    if (!covers(await alsoEnjoyedContentFence(this.content), generation.content_revision)
-      || !covers(await this.accessFence(), generation.access_revision)) {
-      throw new RecommendationRestart('Co-reader source changed during build');
-    }
     const ratings = generation.phase === 'ratings' ? await this.ratingBatch(generation.after_key) : [];
     const shelves = generation.phase === 'shelves' ? await this.shelfBatch(generation.after_key) : [];
     const visible = generation.phase === 'shelves'
@@ -210,17 +213,11 @@ export class AlsoEnjoyedStore {
         WHERE generation_id = $1 AND source_eligible AND work > $2
         ORDER BY work LIMIT $3`, [id, generation.after_key, ALSO_ENJOYED_COST.pairWorks])).rows
         .map(row => row.work)) : [];
-    if (!covers(await alsoEnjoyedContentFence(this.content), generation.content_revision)) {
-      throw new RecommendationRestart('Content shelves changed during build');
-    }
-    // The batch was read before this check. A change committing after it leaves
-    // these rows at the basis and outdates the generation for the next check.
+    // Rows read after a source change are newer than the basis; the change
+    // still outdates the generation, so no read treats it as covered.
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, id, epoch, ALSO_ENJOYED_COST.leaseMs);
-      if (!covers(await alsoEnjoyedAccessFence(client), generation.access_revision)) {
-        throw new RecommendationRestart('Access signals changed during build');
-      }
       if (generation.phase === 'ratings') {
         for (const row of ratings) if (row.agent && rated.has(row.observation)) {
           await client.query(`INSERT INTO access.also_enjoyed_signal
@@ -303,17 +300,15 @@ export class AlsoEnjoyedStore {
   async activate(context: ManageContext, generation: string, expectedRevision: string | null,
     key: ReceiptKey, position: ReadPosition) {
     const row = await this.generation(generation);
+    // A complete generation activates at its own cut; reads report it stale
+    // while any later source change exists.
     if (row.phase !== 'complete' || row.graph_epoch !== position.dataEpoch
-      || row.graph_sequence !== position.sequence
-      || !covers(await alsoEnjoyedContentFence(this.content), row.content_revision)
-      || !covers(await this.accessFence(), row.access_revision)) {
+      || BigInt(row.graph_sequence) > BigInt(position.sequence)) {
       throw new RecommendationRestart('Co-reader generation source changed');
     }
     return inAccess(this.access, async client => {
+      await requireRecoveryOpen(client);
       const principal = await authorizeManager(client, context);
-      if (!covers(await alsoEnjoyedAccessFence(client), row.access_revision)) {
-        throw new RecommendationRestart('Access signals changed');
-      }
       return activateHead(client, principal, key, generation, expectedRevision);
     });
   }

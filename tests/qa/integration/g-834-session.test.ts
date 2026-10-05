@@ -71,7 +71,10 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
       [person, target.work])).rows[0],
       commands: (await stack.contentPool.query(`SELECT count(*)::text AS count FROM reader.library_status_command
         WHERE agent = $1`, [person])).rows[0],
-      sourceFence: (await stack.contentPool.query('SELECT revision::text FROM reader.also_enjoyed_source_fence WHERE id')).rows[0],
+      // A shelf change appends a row and leaves the revision to the next fold.
+      sourceFence: (await stack.contentPool.query(`SELECT revision::text,
+        (SELECT count(*) FROM reader.also_enjoyed_source_change)::text AS changes
+        FROM reader.also_enjoyed_source_fence WHERE id`)).rows[0],
       shelfFence: await library.fence(person),
     });
     await library.write({ agent: person, work: legacy.work, status: 'read', startedOn: '2025-02-01',

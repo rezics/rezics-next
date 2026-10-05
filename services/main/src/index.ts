@@ -579,6 +579,7 @@ const worker = new ContentProjectionWorker(
 const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, access, account, media,
   discoveryRefreshInputs: new DiscoveryRefreshInputs(relayPool, relayConsumer!),
   judgments: new AccessJudgments(pool),
+  alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;

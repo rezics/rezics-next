@@ -25,8 +25,13 @@ import {
   type RefreshJob,
 } from './refresh-store.ts';
 import { admitDiscoveryBasis, projectDiscoveryBatch } from './source.ts';
-import { discoveryChanges, type DiscoveryChanges } from './changes.ts';
-import type { DiscoveryProjection } from './store.ts';
+import { discoveryChanges, discoveryStatementWorks, type DiscoveryChanges } from './changes.ts';
+import {
+  DISCOVERY_SOURCE_KEY_COST,
+  type DiscoveryGeneration,
+  type DiscoveryProjection,
+} from './store.ts';
+import { ALSO_ENJOYED_COST } from '../also-enjoyed/store.ts';
 
 export type RefreshOutcome =
   | 'idle'
@@ -46,12 +51,23 @@ export class DiscoveryRefreshWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<unknown> | undefined;
   private foregroundTicks = 0;
+  private coReaderFoldDue = 0;
 
   constructor(
     private readonly deps: MainWorkDependencies,
     private readonly store: DiscoveryRefreshStore,
     private readonly projection: DiscoveryProjection,
   ) {}
+
+  private async judgedWorks(
+    session: WorkReadSession,
+    prior: DiscoveryGeneration,
+    statements: readonly string[],
+  ): Promise<string[] | null> {
+    if (!statements.length) return [];
+    const works = await discoveryStatementWorks(session, statements);
+    return works && (await this.store.members(prior, works));
+  }
 
   private async caughtUp(session: WorkReadSession): Promise<boolean> {
     const relay = await this.deps.relayPosition?.read();
@@ -105,6 +121,13 @@ export class DiscoveryRefreshWorker {
 
   async tick(): Promise<RefreshOutcome> {
     await this.store.purge();
+    // Co-reader builds are manual, so this tick also folds their change logs.
+    if (this.deps.alsoEnjoyed && performance.now() >= this.coReaderFoldDue) {
+      this.coReaderFoldDue = performance.now() + ALSO_ENJOYED_COST.foldMs;
+      await this.deps.alsoEnjoyed.fold().catch((error: unknown) => {
+        console.error('co-reader fold deferred', recommendationFailureCause(error), error);
+      });
+    }
     try {
       await this.enroll();
     } catch (error) {
@@ -183,8 +206,19 @@ export class DiscoveryRefreshWorker {
                     job.basis,
                   )
               : null;
-          if (!state.row && changes && state.reuse && !changes.works.length) {
-            return { acknowledge: state.reuse, position: session.position };
+          // Judged Statements folded after the active basis reach only the
+          // Works they classify there; votes elsewhere are acknowledged.
+          const judged =
+            changes && state.reuse && state.access
+              ? await this.judgedWorks(session, state.reuse, state.access.statements)
+              : null;
+          const works = changes && judged ? [...new Set([...changes.works, ...judged])].sort() : null;
+          if (!state.row && works && state.reuse && state.access && !works.length) {
+            return {
+              acknowledge: state.reuse,
+              position: session.position,
+              access: state.access.revision,
+            };
           }
           const row =
             state.row ??
@@ -196,8 +230,12 @@ export class DiscoveryRefreshWorker {
                 idempotencyKey: `refresh:${job.scope_key}:${job.lease_epoch}`,
                 requestDigest: digest([job.basis, session.position]),
               },
-              changes && state.reuse
-                ? { generation: state.reuse.generation_id, works: changes.works }
+              works && state.reuse && state.access && works.length <= DISCOVERY_SOURCE_KEY_COST.statements
+                ? {
+                    generation: state.reuse.generation_id,
+                    works,
+                    access: state.access.revision,
+                  }
                 : undefined,
             ));
           generationId = row.generation_id;
@@ -234,7 +272,7 @@ export class DiscoveryRefreshWorker {
       );
       if (typeof prepared === 'string') outcome = prepared;
       else if ('acknowledge' in prepared && prepared.acknowledge) {
-        await this.store.acknowledge(job, prepared.acknowledge, prepared.position);
+        await this.store.acknowledge(job, prepared.acknowledge, prepared.position, prepared.access);
         generationId = null;
         outcome = 'current';
       } else {

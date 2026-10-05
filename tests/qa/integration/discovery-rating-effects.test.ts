@@ -93,8 +93,16 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
       }
       throw new Error('Standing projection did not become current within its build budget');
     };
-    const sqlMeter = new AsyncLocalStorage<{ statements: number }>(),
+    const sqlMeter = new AsyncLocalStorage<{ statements: number; graph: number }>(),
       metered = new WeakSet<PoolClient>();
+    // The app's Realm directory refresh polls the same graph client on its own
+    // timer; count only the queries issued within the measured tick.
+    const graphQuery = f.fuseki.query.bind(f.fuseki);
+    f.fuseki.query = (sparql, maxBytes) => {
+      const meter = sqlMeter.getStore();
+      if (meter) meter.graph++;
+      return graphQuery(sparql, maxBytes);
+    };
     f.accessPool.on('acquire', (client) => {
       if (metered.has(client)) return;
       metered.add(client);
@@ -106,15 +114,14 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
       } as typeof client.query;
     });
     const measured = async (kind: 'irrelevant' | 'local', scale: number) => {
-      const before = f.fuseki.queries,
-        sql = { statements: 0 };
+      const sql = { statements: 0, graph: 0 };
       const outcome = await sqlMeter.run(sql, tick);
       expect(outcome).toBe(kind === 'irrelevant' ? 'current' : 'activated');
-      const cost = { graph: f.fuseki.queries - before, sql: sql.statements };
-      expect(cost).toEqual(kind === 'irrelevant' ? { graph: 4, sql: 46 } : { graph: 8, sql: 126 });
+      const cost = { graph: sql.graph, sql: sql.statements };
+      expect(cost).toEqual(kind === 'irrelevant' ? { graph: 4, sql: 47 } : { graph: 8, sql: 128 });
       evidence.push({ kind, scale, cost });
     };
-    // Repair writes append unfolded changes; only a refresh registration folds them.
+    // Repair writes append unfolded changes; only a refresh folds them.
     const fenceSql = `SELECT revision::text,
       (SELECT count(*) FROM access.discovery_source_change)::text AS changes
       FROM access.discovery_source_fence WHERE id`;

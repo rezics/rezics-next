@@ -5,7 +5,7 @@ import { recordRatingAggregateHead } from '../../../services/main/src/modules/ac
 import { alsoEnjoyedAccessFence, alsoEnjoyedContentFence }
   from '../../../services/main/src/modules/also-enjoyed/store.ts';
 import { automaticDiscovery } from '../../../services/main/src/modules/discovery/automation.ts';
-import { DiscoveryProjection, discoveryAccessCurrent, foldSourceFence, sourceFence }
+import { DiscoveryProjection, discoveryAccessCurrent, foldSourceFence, sourceChanges, sourceFence }
   from '../../../services/main/src/modules/discovery/store.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
@@ -191,7 +191,7 @@ test('a vote commits while a discovery batch is committing, and the next stalene
   expect(read.generation_id).toBe(registered.generation_id);
   expect(read.stale).toBe(true);
 
-  // The next registration folds the committed vote into the basis it records.
+  // The next fold gives the committed vote its key above the generation's basis.
   const client = await access.connect();
   try {
     await client.query('BEGIN');
@@ -199,10 +199,63 @@ test('a vote commits while a discovery batch is committing, and the next stalene
     await client.query('COMMIT');
     expect(folded.changed).toBe(false);
     expect(BigInt(folded.revision)).toBe(BigInt(registered.access_revision) + 1n);
-    expect(discoveryAccessCurrent({ access_revision: folded.revision }, await sourceFence(client))).toBe(true);
-    expect(discoveryAccessCurrent(registered, await sourceFence(client))).toBe(false);
+    expect(discoveryAccessCurrent(await sourceChanges(client, basis, folded.revision, 1))).toBe(true);
+    expect(discoveryAccessCurrent(await sourceChanges(client, basis, registered.access_revision, 1))).toBe(false);
+    // Mine projects no classifications, so no vote reaches it.
+    expect(discoveryAccessCurrent(await sourceChanges(client, { scope: 'mine', realm: null },
+      registered.access_revision, 1))).toBe(true);
   } finally { client.release(); }
 }, 60_000);
+
+test('a judgment reaches the bases of its context; a hint every Work there; a deactivation every basis', async () => {
+  const [realm, otherRealm, statement, concept] = [native(), native(), native(), native()];
+  const declarer = randomUUID();
+  await access.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    [declarer, issuer, randomUUID()]);
+  const fold = async () => {
+    const client = await begin(access);
+    try { return (await foldSourceFence(client)).revision; } finally { await end(client, 'COMMIT'); }
+  };
+  const reach = async (scope: 'global' | 'realm' | 'mine', at: string, inRealm: string | null = null) => {
+    const client = await begin(access);
+    try {
+      const since = await sourceChanges(client, { scope, realm: inRealm }, at, 2);
+      return { wide: since.wide, statements: since.statements };
+    } finally { await end(client, 'COMMIT'); }
+  };
+  const voted = await fold();
+  await access.query(`INSERT INTO access.judgment_aggregate (statement, context_key, fit_positive)
+    VALUES ($1, $2, 1)`, [statement, realm]);
+  const hinted = await fold();
+  expect(await reach('realm', voted, realm)).toEqual({ wide: false, statements: [statement] });
+  expect(await reach('realm', voted, otherRealm)).toEqual({ wide: false, statements: [] });
+  expect(await reach('global', voted)).toEqual({ wide: false, statements: [] });
+  expect(await reach('realm', hinted, realm)).toEqual({ wide: false, statements: [] });
+
+  await access.query(`INSERT INTO access.judgment_concept_hint (concept, context_key) VALUES ($1, 'global')`, [concept]);
+  await access.query(`UPDATE access.judgment_concept_hint SET hint = 'minor', generation = 1,
+    declared_by_principal = $2, updated_at = clock_timestamp() WHERE concept = $1 AND context_key = 'global'`,
+  [concept, declarer]);
+  const deactivated = await fold();
+  expect(await reach('global', hinted)).toEqual({ wide: true, statements: [] });
+  expect(await reach('realm', hinted, otherRealm)).toEqual({ wide: true, statements: [] });
+  expect(await reach('mine', hinted)).toEqual({ wide: false, statements: [] });
+
+  await access.query('UPDATE access.principal SET active = false WHERE id = $1', [declarer]);
+  await fold();
+  expect(await reach('mine', deactivated)).toEqual({ wide: true, statements: [] });
+}, 30_000);
+
+test('a shelf change outside read and reading is not a co-reader input', async () => {
+  const shelves = new ReaderLibraryStatusStore(content);
+  const before = await changes(content, 'reader.also_enjoyed_source_change');
+  const wanted = { agent: native(), work: native(), status: 'want-to-read' as const,
+    expectedVersion: 0, idempotencyKey: randomUUID() };
+  await shelves.write(wanted);
+  expect(await changes(content, 'reader.also_enjoyed_source_change')).toBe(before);
+  await shelves.write({ ...wanted, status: 'reading', expectedVersion: 1, idempotencyKey: randomUUID() });
+  expect(await changes(content, 'reader.also_enjoyed_source_change')).toBe(before + 1);
+}, 30_000);
 
 test('a held source change with the lower transaction id is never covered by a later fold', async () => {
   const xid = async (client: PoolClient) =>

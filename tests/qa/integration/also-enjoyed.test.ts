@@ -206,7 +206,13 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     const staleBuild = await store.register(context, current.sourcePosition, receipt());
     await stack.accessPool.query(`UPDATE access.agent_library_visibility SET visibility = 'private',
       version = version + 1 WHERE agent_id = $1`, [readers[0]!.actor]);
-    await expect(store.advance(staleBuild.generation, context, deps, buildRequest)).rejects.toThrow();
+    // The build completes against its basis and may activate; the revocation
+    // after that basis still withholds every co-reader it derived.
+    while ((await store.generation(staleBuild.generation)).phase !== 'complete') {
+      await store.advance(staleBuild.generation, context, deps, buildRequest);
+    }
+    expect((await store.activate(context, staleBuild.generation, '1', receipt(), current.sourcePosition))
+      .outcome).toBe('succeeded');
     const stale = await json<CardPage>(await read());
     expect(stale.stale).toBe(true);
     expect(stale.items.find(item => item.id === candidate.work)?.basis).toBe('similar');
