@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { lockAdmissionKey } from '../access/scope-gates.ts';
+import { authorityWitnessCurrent, type AuthorityWitness } from '../access/authority-witness.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable, type GraphTerminalProof,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { pollScopeId, voteOperationAction, type VoteOperation } from './schema.ts';
@@ -62,6 +63,14 @@ interface AdmissionRow {
   id: string; principal_id: string; acting_subject: string; scope_id: string; action: string;
   idempotency_key: string; request_digest: string; authority_epoch: string; registered_at: Date;
   expires_at: Date; state: RegisteredAdmission['state']; eligible: boolean;
+  authority_witness: AuthorityWitness[] | null;
+}
+
+interface SavedVoteProof {
+  operation: VoteOperation; policy_id: string | null; policy_revision: string | null;
+  representation_id: string; representation_generation: string;
+  grant_id: string | null; grant_generation: string | null;
+  principal_epoch: string; acting_subject_generation: string;
 }
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -226,22 +235,33 @@ export class AccessVotes {
       if (!identity) throw new AdmissionDenied('principal is inactive');
       await lockAdmissionKey(client, identity.id, action, key);
       const existing = (await client.query<AdmissionRow>(`SELECT *, expires_at > clock_timestamp() AS eligible
-        FROM access.admission WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3 FOR UPDATE`,
+        FROM access.admission WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
       [identity.id, action, key])).rows[0];
       if (existing) {
-        const saved = (await client.query<{ operation: VoteOperation; policy_id: string | null;
-          policy_revision: string | null; candidate_digest: string }>(`SELECT operation, policy_id,
-          policy_revision, candidate_digest FROM access.vote_admission WHERE admission_id = $1`,
+        const saved = (await client.query<SavedVoteProof>(`SELECT * FROM access.vote_admission WHERE admission_id = $1`,
         [existing.id])).rows[0];
         if (!saved || existing.request_digest !== requestDigest || existing.scope_id !== scope
           || existing.acting_subject !== authority.actingSubject || saved.operation !== authority.operation) {
           throw new AdmissionConflict('vote idempotency key binds another intent');
         }
-        const live = existing.state === 'claimed' && existing.eligible
-          && existing.authority_epoch === gate.authority_epoch
-          && !!await this.mandate(client, identity.id, authority, action);
+        // Four exact indexed sources at most. Lock them before the admission,
+        // matching a revoker's source-before-drain order. Earlier vote rows
+        // already saved these generations in their immutable owner proof.
+        const witness: AuthorityWitness[] = existing.authority_witness ?? [
+          { table: 'principal', id: identity.id, generation: saved.principal_epoch },
+          { table: 'authority_subject', id: existing.acting_subject, generation: saved.acting_subject_generation },
+          { table: 'representation', id: saved.representation_id, generation: saved.representation_generation },
+          ...(saved.grant_id && saved.grant_generation !== null
+            ? [{ table: 'permission_grant' as const, id: saved.grant_id, generation: saved.grant_generation }] : []),
+        ];
+        const sourcesCurrent = (!bodyPath || saved.grant_id !== null && saved.grant_generation !== null)
+          && await authorityWitnessCurrent(client, witness);
+        const locked = (await client.query<AdmissionRow>(`SELECT *, expires_at > clock_timestamp() AS eligible
+          FROM access.admission WHERE id = $1 FOR UPDATE`, [existing.id])).rows[0]!;
+        const live = sourcesCurrent && locked.state === 'claimed' && locked.eligible
+          && locked.authority_epoch === gate.authority_epoch;
         await client.query('COMMIT');
-        return registered(existing, authority.operation, saved.policy_id
+        return registered(locked, authority.operation, saved.policy_id
           ? { id: saved.policy_id, revision: saved.policy_revision! } : null, live, true);
       }
       const mandate = await this.mandate(client, identity.id, authority, action);
@@ -271,12 +291,17 @@ export class AccessVotes {
       }
       const inserted = (await client.query<AdmissionRow>(`INSERT INTO access.admission
         (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
-          authority_epoch, registered_at, expires_at, state, claimed_at)
+          authority_epoch, registered_at, expires_at, state, claimed_at, authority_witness)
         SELECT $1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp(),
-          LEAST(clock_timestamp() + interval '30 seconds', $9::timestamptz), 'claimed', clock_timestamp()
+          LEAST(clock_timestamp() + interval '30 seconds', $9::timestamptz), 'claimed', clock_timestamp(), $10::jsonb
         WHERE $9::timestamptz > clock_timestamp()
         RETURNING *, true AS eligible`, [Bun.randomUUIDv7(), identity.id, authority.actingSubject, scope,
-        action, key, requestDigest, gate.authority_epoch, validUntil])).rows[0];
+        action, key, requestDigest, gate.authority_epoch, validUntil, JSON.stringify([
+          { table: 'principal', id: identity.id, generation: identity.enforcement_epoch },
+          { table: 'authority_subject', id: authority.actingSubject, generation: mandate.subject_generation },
+          { table: 'representation', id: mandate.id, generation: mandate.generation },
+          ...(grant ? [{ table: 'permission_grant', id: grant.id, generation: grant.generation }] : []),
+        ])])).rows[0];
       if (!inserted) throw new AdmissionDenied('authority expired during admission');
       await client.query(`INSERT INTO access.vote_admission (admission_id, operation, poll, body_subject,
           holder_subject, proxy_subject, seat, source_entitlement, authority_path, representation_id,

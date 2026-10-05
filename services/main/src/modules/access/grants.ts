@@ -419,6 +419,9 @@ export class AccessGrants {
         }
         ceiling = { id: lineage.upstreamGrantId!, generation: row.generation, action: ACTION,
           depth: row.depth + 1, root: row.root };
+        // The trigger counts at most 256 live descendants. Serialize that count
+        // and insertion for this root while independent roots remain writable.
+        await lockAccessKey(client, `grant-root:${ceiling.root}`);
       }
       const recipient = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [recipientSubject]);

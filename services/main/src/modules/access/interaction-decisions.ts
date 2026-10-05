@@ -270,6 +270,7 @@ export class AccessInteractions {
       const expiresAt = new Date(now.getTime() + 60_000);
       await insertFrame(client, { id: decisionId, kind: 'interaction', principalId: identity.id,
         principalEpoch: identity.enforcement_epoch, actingSubject, actingSubjectGeneration: actor.generation,
+        // Legacy frame metadata only; any group authority belongs in exact inputs.
         action, scopeId: scope, authorityEpoch: gate.authority_epoch, groupGeneration: gate.group_generation,
         recoveryGeneration, policyId: null, policyRevision: null, recipientSubject: recipient, outcome,
         publicResult: publicDecisionResult(outcome), reason, deciding: null, trace: [],

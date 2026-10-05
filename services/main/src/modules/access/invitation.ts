@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import {
   AGENT_ACCESS_COST,
   ACCEPT_ACTION,
@@ -362,15 +363,21 @@ export class AccessInvitations {
           } else {
             if (row.offer === 'manage')
               await requireOwnedScope(client, row.issuer_subject, row.scope_id);
+            const ceilings = [];
+            for (const action of row.actions) {
+              ceilings.push(await requireCeiling(client, row.issuer_subject, action,
+                row.grant_valid_until, row.scope_id));
+            }
+            // Acquire the bounded ceiling set in ID order so invitations with
+            // reordered actions cannot deadlock each other's fan-out locks.
+            if (row.offer === 'manage') {
+              for (const id of [...new Set(ceilings.map(ceiling => ceiling.id))].sort()) {
+                await lockAccessKey(client, `invitation-ceiling:${id}`);
+              }
+            }
             for (const [index, action] of row.actions.entries()) {
               const id = index === 0 ? (input.edgeId ?? input.grantId)! : randomUUID();
-              const ceiling = await requireCeiling(
-                client,
-                row.issuer_subject,
-                action,
-                row.grant_valid_until,
-                row.scope_id,
-              );
+              const ceiling = ceilings[index]!;
               if (row.offer === 'represent') {
                 await client.query(
                   `INSERT INTO access.representation_edge (id,representative_subject,represented_subject,

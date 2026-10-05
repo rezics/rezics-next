@@ -156,7 +156,7 @@ export async function saveInvitedWorkProof(client: PoolClient, admissionId: stri
  * a new registration, but cannot revive this admission. */
 export async function selectedRepresentedWorkProof(client: PoolClient,
   saved: SavedRepresentedWorkProof, principalEpoch: string,
-  groupGeneration: string, graph?: Pick<FusekiClient, 'query'>): Promise<boolean> {
+  graph?: Pick<FusekiClient, 'query'>): Promise<boolean> {
   const edit = ['work.edit', 'relation.change', 'work.derive'].includes(saved.action) && saved.scope_id.startsWith('work:edit:');
   if (!(saved.action === 'work.create' && saved.scope_id === 'work:create:root' || edit)
     || !saved.represented_representation_id
@@ -236,7 +236,9 @@ export async function selectedRepresentedWorkProof(client: PoolClient,
   }
   return !edit && saved.represented_grant_generation === null
     && saved.group_grant_id !== null && saved.group_member_id !== null
-    && (saved.authority_witness || saved.group_generation === groupGeneration)
+    // Group authority must pin its member, grant and ancestry. Legacy group
+    // admissions cannot use a scope's frozen inventory revision as a fence.
+    && Array.isArray(saved.authority_witness)
     && await selectedGroupWorkProof(client, saved.acting_subject,
       saved.group_member_id, saved.group_grant_id);
 }

@@ -182,6 +182,8 @@ export class AccessPolicyDecisions {
         principalEpoch: principal.enforcement_epoch, actingSubject: request.actingSubject,
         actingSubjectGeneration: actor?.generation ?? null, action: request.action,
         scopeId: request.scopeId, authorityEpoch: gate.authority_epoch,
+        // Legacy frame metadata only. Group authority must be recorded as exact
+        // decision inputs, never fenced by the scope's frozen group revision.
         groupGeneration: gate.group_generation, recoveryGeneration, policyId: policy.id,
         policyRevision: policy.head_revision, recipientSubject: null, outcome: decided.outcome,
         publicResult: publicDecisionResult(decided.outcome), reason: decided.reason,
@@ -214,13 +216,13 @@ export class AccessPolicyDecisions {
       }
       if (frame.expired) throw new ProofHandleStale('proof handle expired');
       const current = (await client.query<{ fresh: boolean }>(`SELECT
-          g.open AND g.authority_epoch = $2 AND g.group_generation = $3
-          AND p.ended_at IS NULL AND p.head_revision = $4 AND pr.active AND pr.enforcement_epoch = $5
-          AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM access.authority_subject s
-            WHERE s.id = $6 AND s.active AND s.generation = $7)) AS fresh
+          g.open AND g.authority_epoch = $2
+          AND p.ended_at IS NULL AND p.head_revision = $3 AND pr.active AND pr.enforcement_epoch = $4
+          AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM access.authority_subject s
+            WHERE s.id = $5 AND s.active AND s.generation = $6)) AS fresh
         FROM access.scope_gate g JOIN access.policy p ON p.scope_id = g.id
-        JOIN access.principal pr ON pr.id = $8 WHERE g.id = $1`, [scopeId, frame.authority_epoch,
-        frame.group_generation, frame.policy_revision, frame.principal_epoch, actingSubject,
+        JOIN access.principal pr ON pr.id = $7 WHERE g.id = $1`, [scopeId, frame.authority_epoch,
+        frame.policy_revision, frame.principal_epoch, actingSubject,
         frame.acting_subject_generation, identity.id])).rows[0];
       if (!current?.fresh || recoveryGeneration !== frame.recovery_generation) {
         throw new ProofHandleStale('proof handle authority changed');

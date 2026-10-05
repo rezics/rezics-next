@@ -299,6 +299,10 @@ test('IAM33: a proof handle is revalidated after revoke, expiry, leave/rejoin, r
     expect([handle.result, handle.reusable, handle.sources.map(source => source.id).sort()])
       .toEqual(['allow', true, [direct, binding].sort()]);
     expect((await revalidate(handle.decisionId, a)).status).toBe(200);
+    // Historical frame metadata is not an authority source. Exact decision
+    // inputs still fence this handle after an unrelated inventory revision.
+    await h.q('UPDATE access.scope_gate SET group_generation = group_generation + 1 WHERE id = $1', [wiki.scope]);
+    expect((await revalidate(handle.decisionId, a)).status).toBe(200);
     // Actor switch and another principal cannot reuse the bound handle.
     expect((await revalidate(handle.decisionId, b)).body.code).toBe('proof_handle_mismatch');
     expect((await revalidate(handle.decisionId, a, h.managerToken)).status).toBe(403);

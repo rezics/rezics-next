@@ -316,11 +316,15 @@ test('vote schema: Access 070-073 install empty and upgrade from the pre-vote he
       const snapshot = async () => (await upgrade.query(`SELECT
         (SELECT count(*) FROM access.representation_request)::int AS requests,
         (SELECT row_to_json(r)::text FROM access.representation r WHERE id = $1) AS mandate,
-        (SELECT row_to_json(a)::text FROM access.admission a WHERE id = $2) AS admission`,
+        (SELECT (to_jsonb(a) - 'authority_witness')::text FROM access.admission a WHERE id = $2) AS admission`,
       [legacy, admissionId])).rows[0];
       const before = await snapshot();
       await migrate(upgrade, fromVote);
       expect(await snapshot()).toEqual(before);
+      // Upgrades retain the old command's fields; a new nullable source witness
+      // does not manufacture authority for the retained legacy admission.
+      expect((await upgrade.query('SELECT authority_witness FROM access.admission WHERE id = $1',
+        [admissionId])).rows[0].authority_witness).toBeNull();
       // Non-voting mandates keep their earlier update rules after the upgrade.
       const revoked = await upgrade.query<{ generation: string }>(`UPDATE access.representation SET active = false
         WHERE id = $1 RETURNING generation`, [legacy]);

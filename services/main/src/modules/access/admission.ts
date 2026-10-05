@@ -1072,7 +1072,7 @@ export class AccessAdmissionRegistry {
           && gate.open && gate.dispatch_open
           && existing.authority_epoch === gate.authority_epoch
           && await selectedRepresentedWorkProof(client, existing,
-            principal.enforcement_epoch, gate.group_generation, this.baselineGraph);
+            principal.enforcement_epoch, this.baselineGraph);
         if (!transaction) await client.query('COMMIT');
         return {
           id: existing.id, principalId: existing.principal_id,
@@ -1314,12 +1314,12 @@ export class AccessAdmissionRegistry {
             represented_grant_id, represented_grant_generation,
             represented_subject_generation, represented_principal_epoch,
             role_binding_id, role_binding_generation, role_family_id, role_revision,
-            scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state)
+            scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state, authority_witness)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
            $11, $12, $13, $14, $15, $16, $17, $18, $19,
            $20, $21, $22, $23, $24, $25, $26, $27, $28,
            $29, $30, $31, $32, $33, $34, $35, $36, $37,
-           clock_timestamp() + interval '30 seconds', 'registered')
+           clock_timestamp() + interval '30 seconds', 'registered', $38::jsonb)
          RETURNING expires_at, registered_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
           directGrantGeneration, attributionGeneration, directSubjectGeneration,
@@ -1334,8 +1334,7 @@ export class AccessAdmissionRegistry {
           representedSubjectGeneration, representedPrincipalEpoch,
           roleBindingId, roleBindingGeneration, roleFamilyId, roleRevision,
           request.scope, request.action, request.idempotencyKey,
-          request.requestDigest, gate.authority_epoch]);
-      await client.query('UPDATE access.admission SET authority_witness = $2::jsonb WHERE id = $1', [id, JSON.stringify(witness)]);
+          request.requestDigest, gate.authority_epoch, JSON.stringify(witness)]);
       if (baseline) {
         await saveBaselineProof(client, id, baseline);
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
@@ -1557,7 +1556,7 @@ export class AccessAdmissionRegistry {
         && (row.action === 'work.create' && row.scope_id === 'work:create:root'
           || ['work.edit', 'relation.change', 'work.derive'].includes(row.action) && row.represented_representation_id)
         && !await selectedRepresentedWorkProof(client, row,
-          principal.rows[0]!.enforcement_epoch, gateResult.rows[0]!.group_generation, this.baselineGraph)) {
+          principal.rows[0]!.enforcement_epoch, this.baselineGraph)) {
         throw new AdmissionDenied('represented authority changed before claim');
       }
       if (row.authority_witness && !await authorityWitnessCurrent(client, row.authority_witness)) {
