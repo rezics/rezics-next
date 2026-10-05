@@ -5,15 +5,22 @@ import { unerased } from '../work/public-patterns.ts';
  * can bind several Books; callers must retain that multiplicity. */
 export function postBookPlacement(post: string, book: string, main: string,
   occurrence = '?postOccurrence') {
+  return `GRAPH ${iri(GRAPHS.current)} { ${post} a rv:Post . }
+    ${bookChapterPlacement(post, book, main, occurrence)}`;
+}
+
+/** Content search also admits independently maintained Works used as chapters.
+ * Their live Book use supplies a disclosure parent without changing identity. */
+export function bookChapterPlacement(resource: string, book: string, main: string,
+  occurrence = '?postOccurrence') {
   return `GRAPH ${iri(GRAPHS.current)} {
-    ${post} a rv:Post .
     ${book} a <https://schema.org/Book> ; rv:mainVersion ${main} .
     ${main} a rv:MainVersion ; rv:work ${book} .
     ?postStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
       rv:structureOf ${main} ; rv:selectedGeneration ?postGeneration .
     ?postGeneration rv:generationState rv:Active .
     ?postPlacement a rv:OccurrencePlacement ; rv:generation ?postGeneration ;
-      rv:occurrenceRole rv:ChapterRole ; <https://schema.org/item> ${post} ; rv:occurrence ${occurrence} .
+      rv:occurrenceRole rv:ChapterRole ; <https://schema.org/item> ${resource} ; rv:occurrence ${occurrence} .
     FILTER NOT EXISTS { ?postPlacement rv:removedBy ?postRemoval }
   }`;
 }
