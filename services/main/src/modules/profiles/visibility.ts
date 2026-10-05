@@ -78,10 +78,12 @@ export class AgentLibraryVisibilityStore {
     const digest = createHash('sha256').update(JSON.stringify([agent, visibility, expectedVersion])).digest('hex');
     return this.transaction(async client => {
       const actor = await requirePrincipal(client, principal);
-      await requireMandate(client, actor.id, agent, 'agent.control');
+      // Acquire UPDATE before mandate validation takes SHARE on this same row;
+      // two concurrent writers must queue rather than deadlock on lock upgrades.
       const agentRow = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR UPDATE`, [agent]);
       if (!agentRow.rowCount) throw new LibraryVisibilityDenied('Agent unavailable');
+      await requireMandate(client, actor.id, agent, 'agent.control');
       const prior = (await client.query<{ request_digest: string; visibility: LibraryVisibility;
         version: number; changed_at: Date }>(`SELECT request_digest, visibility, version, changed_at
         FROM access.agent_library_visibility_receipt

@@ -25,6 +25,52 @@ import { PersonPreferencesStore } from '../../../services/main/src/modules/prefe
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
+test.each([0, 1])('concurrent library visibility at version %s returns one stale conflict and preserves replay', async expectedVersion => {
+  const stack = await startMediaStack('library-visibility-concurrency', { library: true });
+  try {
+    const member = await stack.member('library-owner');
+    await member.grant(`agent:control:${member.actor}`, 'agent.control');
+    const path = `/v1/agents/${member.actor.slice(-36)}/library-visibility`;
+    const write = (version: number, key: string) => member.send('PUT', path,
+      { visibility: 'public', expectedVersion: version }, key);
+    if (expectedVersion) expect((await write(0, randomUUID())).status).toBe(200);
+
+    // KEY SHARE allows mandate validation's SHARE lock, but holds both UPDATE
+    // requests until they have arrived. Upgrading two SHARE locks then deadlocks.
+    const blocker = await stack.accessPool.connect();
+    const keys = [randomUUID(), randomUUID()];
+    let racing: Promise<Response[]>;
+    let bothWaiting = false;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT id FROM access.authority_subject WHERE id = $1 FOR KEY SHARE', [member.actor]);
+      racing = Promise.all(keys.map(key => write(expectedVersion, key)));
+      const deadline = Date.now() + 1_500;
+      while (Date.now() < deadline) {
+        const waiting = await stack.accessPool.query<{ count: number }>(`SELECT count(*)::int AS count
+          FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'
+            AND query LIKE '%SELECT id FROM access.authority_subject%FOR UPDATE%'`);
+        if (waiting.rows[0]!.count === 2) { bothWaiting = true; break; }
+        await Bun.sleep(10);
+      }
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+    }
+    const results = await racing!;
+    expect(bothWaiting).toBe(true);
+    expect(results.map(result => result.status).sort()).toEqual([200, 409]);
+    const winner = results.findIndex(result => result.status === 200);
+    const saved = await results[winner]!.json();
+    expect(saved).toMatchObject({ visibility: 'public', version: expectedVersion + 1, replayed: false });
+    expect(await results[1 - winner]!.json()).toMatchObject({ code: 'stale_library_visibility' });
+    expect(await (await write(expectedVersion, keys[winner]!)).json()).toEqual({ ...saved, replayed: true });
+    expect((await write(expectedVersion, keys[1 - winner]!)).status).toBe(409);
+    expect((await stack.accessPool.query(`SELECT 1 FROM access.agent_library_visibility_receipt
+      WHERE principal_id = $1 AND idempotency_key = ANY($2::text[])`, [member.principalId, keys])).rowCount).toBe(1);
+  } finally { await stack.stop(); }
+}, 120_000);
+
 test.each(['initial context', 'retained context'])(
   'G285 G352: reader status, own ratings, serial progress and discovery survive ordinary member authority (%s)', async () => {
   const stack = await startMediaStack('reader-library');
