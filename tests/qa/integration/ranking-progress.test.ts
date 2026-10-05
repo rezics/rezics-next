@@ -148,3 +148,49 @@ test('G385: ten or more review rank changes advance the ranking checkpoint in po
     expect(await projection.tick()).toBe(0);
   } finally { await stack.stop(); }
 });
+
+test('A ranking checkpoint ahead of the restored Content owner rebuilds scores from source events', async () => {
+  const stack = await startMediaStack('ranking-source-restore');
+  try {
+    const member = await stack.member('ranking-reader');
+    const work = await stack.publicWork(member.actor);
+    const structure = id();
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} a rv:Structure ;
+        rv:structureOf ${iri(work.mainVersion)} . }
+    }`);
+    const store = new StructureProgressStore(stack.contentPool);
+    await store.write({ principal: member.principal, structure, occurrence: id(),
+      completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const projection = new ReadRankingProjection(stack.accessPool, stack.content, stack.contentPool, stack.env);
+    for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
+    const before = await projection.current(), owner = await stack.content.ownerPosition();
+    const bucket = rankingBuckets(new Date(), 'day').current;
+    await stack.accessPool.query(`UPDATE access.read_ranking_checkpoint SET content_sequence = $1`,
+      [(BigInt(owner.sequence) + 100n).toString()]);
+    // Scores from the later source history must disappear, not survive a lowered frontier.
+    await stack.accessPool.query(`UPDATE access.read_ranking_score SET score = 99, growth = 99
+      WHERE generation = $1`, [before.generation]);
+    await expect(projection.current()).rejects.toThrow('catching up');
+    expect(await projection.tick()).toBeGreaterThan(0);
+    for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* replay all owner history */ }
+    const restored = await projection.current();
+    expect(restored.generation).not.toBe(before.generation);
+    expect(BigInt(restored.contentSequence)).toBeLessThanOrEqual(BigInt(owner.sequence));
+    const scores = () => stack.accessPool.query<{ metric: string; score: string }>(`SELECT metric, score::text
+      FROM access.read_ranking_score WHERE generation = $1 AND bucket = $2 AND interval = 'day' AND work = $3
+      ORDER BY metric`, [restored.generation, bucket, work.work]);
+    expect((await scores()).rows).toEqual([{ metric: 'finished-chapters', score: '1' },
+      { metric: 'reads', score: '1' }]);
+    expect(await projection.tick()).toBe(0);
+    expect((await scores()).rows.map(row => row.score)).toEqual(['1', '1']);
+    expect((await stack.accessPool.query(`SELECT 1 FROM access.read_ranking_score WHERE generation = $1`,
+      [before.generation])).rowCount).toBe(0);
+
+    await store.write({ principal: member.principal, structure, occurrence: id(),
+      completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    expect(await projection.tick()).toBe(1);
+    expect((await projection.current()).generation).toBe(restored.generation);
+    expect((await scores()).rows.map(row => row.score)).toEqual(['2', '2']);
+  } finally { await stack.stop(); }
+});

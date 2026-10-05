@@ -597,14 +597,17 @@ export class EditorialReviewStore {
           if (retained?.blocker?.code === 'owner_command_refused') state.blockers.push(retained.blocker);
         }
       }
-      const binding = { proposal: id,timeline: 'editorial-v1' }, after = cursorDecode(cursor,binding);
+      // Proposal writes serialize by proposal, so immutable entry numbers keep
+      // this timeline ordered even while an older unrelated writer holds the
+      // notification sequencer's horizon. Numbering later must not change keys.
+      const binding = { proposal: id,timeline: 'editorial-entry-v1' }, after = cursorDecode(cursor,binding);
       if (after !== null && (typeof after !== 'string' || !/^(0|[1-9][0-9]*)$/.test(after))) throw new EditorialInvalid('Invalid timeline cursor');
       const events = (await client.query<{ sequence: string; kind: string; actor: string; revision: number; occurredAt: string;
-        review: { id: string; outcome: string; message: string } | null }>(`SELECT e.sequence::text,e.kind,e.actor,e.revision,
+        review: { id: string; outcome: string; message: string } | null }>(`SELECT e.entry::text AS sequence,e.kind,e.actor,e.revision,
         e.created_at::text AS "occurredAt", (SELECT jsonb_build_object('id',r.id,'outcome',r.outcome,'message',r.message)
           FROM access.editorial_review r WHERE r.proposal = e.proposal AND r.revision = e.revision AND r.reviewer = e.actor
             AND r.created_at <= e.created_at ORDER BY r.sequence DESC LIMIT 1) AS review
-        FROM access.editorial_event e WHERE e.proposal = $1 AND e.sequence > $2 ORDER BY e.sequence LIMIT $3`,[id,after ?? '0',limit + 1])).rows;
+        FROM access.editorial_event e WHERE e.proposal = $1 AND e.entry > $2 ORDER BY e.entry LIMIT $3`,[id,after ?? '0',limit + 1])).rows;
       const page = events.slice(0,limit);
       const stale = (await client.query<{ id: string }>(`SELECT id FROM access.editorial_review
         WHERE proposal = $1 AND revision < $2 AND outcome = 'approve' ORDER BY sequence DESC LIMIT 51`,[id,row.latest])).rows;

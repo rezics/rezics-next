@@ -148,6 +148,7 @@ export class ReadRankingProjection {
     if (!reviewHead) throw new RankingProjectionUnavailable('Review ranking source is unavailable');
     const reset = !existing || existing.content_epoch !== owner.dataEpoch
       || existing.graph_epoch !== this.env.lineage.dataEpoch
+      || BigInt(existing.content_sequence) > BigInt(owner.sequence)
       || BigInt(existing.review_position) > BigInt(reviewHead.position);
     const after = reset ? '0' : existing.content_sequence;
     const events = (await this.contentPool.query<{ id: string; sequence: string; operation_id: string;
@@ -259,6 +260,7 @@ export class ReadRankingProjection {
       FROM access.reader_review_rank_head WHERE singleton`)).rows[0];
     if (!row || row.content_epoch !== owner.dataEpoch
       || row.graph_epoch !== this.env.lineage.dataEpoch
+      || BigInt(row.content_sequence) > BigInt(owner.sequence)
       || !reviewHead || BigInt(row.review_position) > BigInt(reviewHead.position)
       || (BigInt(row.content_sequence) < BigInt(progressHead.sequence) || progressHead.pending
         || row.review_position !== reviewHead.position || reviewHead.pending)
