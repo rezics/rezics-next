@@ -6,12 +6,15 @@ import { SeedApiError } from './api.ts';
  * The create key stays bound to the first request body. A later Space, steward
  * or package change must not replay that create: read the Zone and apply
  * presentation through its configuration command. Package digest approval is
- * the theme step that follows this placement. One configuration read, and at
- * most one create and one configuration write.
+ * the theme step that follows this placement. One configuration read, at most
+ * one Realm read when the planned default differs, and at most one create and
+ * one configuration write.
  */
 export interface OfficialZoneHead {
   revision: string;
   configuration: {
+    /** Null when the read omitted the Zone's Space; the planned Realm is then kept out. */
+    space: string | null;
     defaultRealm: string | null;
     official: Record<string, never> | null;
     presentation: unknown;
@@ -54,7 +57,7 @@ function idempotencyConflict(error: unknown): boolean {
  * create means the Zone already exists under an older request body. */
 export async function readOrCreateOfficialZone(
   api: Pick<ZoneSeedApi, 'get' | 'post'>,
-  input: ZoneIdentity & { space: string; key: string },
+  input: ZoneIdentity & { space: string; key: string; name?: string; language?: string },
 ): Promise<OfficialZoneHead> {
   const path = configurationPath(input.zone, input.actor);
   const read = () => api.get<OfficialZoneHead>(path, input.token);
@@ -70,6 +73,8 @@ export async function readOrCreateOfficialZone(
       {
         zone: input.zone,
         space: input.space,
+        // Name stays in the first create body. A later read must not change that key.
+        ...(input.name !== undefined ? { name: input.name, language: input.language } : {}),
         disclosure: 'public',
         actingSubject: input.actor,
       },
@@ -88,10 +93,31 @@ export async function readOrCreateOfficialZone(
   }
 }
 
-/** Write the seed layout only when the current head differs. A Main that
- * rejects localized tab labels receives the same layout with default labels. */
+/** An earlier seed may have created this Zone's Realm under another key.
+ * A Realm on a different Space is readable and still unavailable as the default. */
+async function officialZoneDefaultRealm(
+  api: Pick<ZoneSeedApi, 'get'>,
+  input: ZoneIdentity & { space: string | null; planned: string; current: string | null },
+): Promise<string | null> {
+  if (input.planned === input.current || !input.space) return input.current;
+  try {
+    const realm = await api.get<{ id?: unknown; space?: unknown }>(
+      `/v1/realms/${input.planned.slice(-36)}?${new URLSearchParams({ actingSubject: input.actor })}`,
+      input.token,
+    );
+    if (realm.id === input.planned && realm.space === input.space) return input.planned;
+  } catch (error) {
+    // A private or absent Realm has the same public answer. Other failures stay visible.
+    if (!(error instanceof SeedApiError) || error.status !== 404) throw error;
+  }
+  return input.current;
+}
+
+/** Write the seed layout only when the retained head differs. A Main that
+ * rejects localized tab labels receives the same layout with default labels.
+ * At most one Realm read and one configuration write. */
 export async function updateOfficialZonePresentation(
-  api: Pick<ZoneSeedApi, 'put'>,
+  api: Pick<ZoneSeedApi, 'get' | 'put'>,
   input: ZoneIdentity & {
     head: OfficialZoneHead;
     defaultRealm: string;
@@ -100,13 +126,21 @@ export async function updateOfficialZonePresentation(
   },
 ): Promise<void> {
   const current = {
-    defaultRealm: input.head.configuration.defaultRealm,
+    defaultRealm: input.head.configuration.defaultRealm ?? null,
     official: input.head.configuration.official,
     presentation: input.head.configuration.presentation,
   };
+  const defaultRealm = await officialZoneDefaultRealm(api, {
+    zone: input.zone,
+    actor: input.actor,
+    token: input.token,
+    space: input.head.configuration.space,
+    planned: input.defaultRealm,
+    current: current.defaultRealm,
+  });
   for (const [index, candidate] of input.candidates.entries()) {
     const desired = {
-      defaultRealm: input.defaultRealm,
+      defaultRealm,
       official: {},
       presentation: candidate.presentation,
     };

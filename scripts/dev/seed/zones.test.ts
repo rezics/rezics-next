@@ -16,8 +16,12 @@ const zoneId = zone.slice(-36);
 const layout = { profile: 'zone-presentation-v1', modules: [{ id: 'picks' }] };
 const plain = { profile: 'zone-presentation-v1', modules: [{ id: 'picks', label: 'Picks' }] };
 
-function head(presentation: unknown, defaultRealm: string | null = realm): OfficialZoneHead {
-  return { revision, configuration: { defaultRealm, official: {}, presentation } };
+function head(
+  presentation: unknown,
+  defaultRealm: string | null = realm,
+  zoneSpace: string | null = space,
+): OfficialZoneHead {
+  return { revision, configuration: { space: zoneSpace, defaultRealm, official: {}, presentation } };
 }
 
 function problem(status: number, code: string): SeedApiError {
@@ -175,6 +179,41 @@ describe('Official Zone placement on a persistent stack', () => {
     expect(fixture.writes().map((call) => call.method)).toEqual(['POST', 'PUT']);
   });
 
+  test('a missing named Zone keeps its name and language on the first create', async () => {
+    let stored: OfficialZoneHead | null = null;
+    const fixture = client((call) => {
+      if (call.method === 'GET') {
+        if (!stored) throw problem(404, 'zone_unavailable');
+        return stored;
+      }
+      stored = head(null);
+      return { zone, replayed: false };
+    });
+    await readOrCreateOfficialZone(fixture.api, {
+      ...identity,
+      space,
+      key: 'dev-seed:v1:wiki-zone:franchise-wiki',
+      name: 'Franchise Wiki',
+      language: 'en',
+    });
+    expect(fixture.writes()).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/zones',
+        token: 'steward',
+        key: 'dev-seed:v1:wiki-zone:franchise-wiki',
+        body: {
+          zone,
+          space,
+          name: 'Franchise Wiki',
+          language: 'en',
+          disclosure: 'public',
+          actingSubject: actor,
+        },
+      },
+    ]);
+  });
+
   test('a drifted create key is not fatal when the Zone can be read afterwards', async () => {
     let reads = 0;
     const fixture = client((call) => {
@@ -261,5 +300,123 @@ describe('Official Zone placement on a persistent stack', () => {
       key: (_current, variant) => `config${variant}`,
     });
     expect(fixture.writes().map((call) => call.key)).toEqual(['config']);
+  });
+
+  test('an existing Zone whose default Realm differs from the plan keeps it when the layout already matches', async () => {
+    const kept = 'https://rezics.com/id/00000000-0000-4000-a000-000000000099';
+    const absent = client((call) => {
+      if (call.path.startsWith('/v1/realms/')) throw problem(404, 'realm_unavailable');
+      return { revision };
+    });
+    await updateOfficialZonePresentation(absent.api, {
+      ...identity,
+      head: head(layout, kept),
+      defaultRealm: realm,
+      candidates: [
+        { variant: '', presentation: layout },
+        { variant: ':plain', presentation: plain },
+      ],
+      key: () => 'unused',
+    });
+    expect(absent.writes()).toEqual([]);
+    expect(absent.calls.map((call) => call.path)).toEqual([
+      `/v1/realms/${realm.slice(-36)}?${new URLSearchParams({ actingSubject: actor })}`,
+    ]);
+
+    const elsewhere = 'https://rezics.com/id/00000000-0000-4000-a000-000000000098';
+    const otherSpace = client((call) => {
+      if (call.path.startsWith('/v1/realms/')) {
+        return { profile: 'realm-read-v1', id: realm, space: elsewhere };
+      }
+      return { revision };
+    });
+    await updateOfficialZonePresentation(otherSpace.api, {
+      ...identity,
+      head: head(layout, kept),
+      defaultRealm: realm,
+      candidates: [{ variant: '', presentation: layout }],
+      key: () => 'unused',
+    });
+    expect(otherSpace.writes()).toEqual([]);
+  });
+
+  test('a layout change on an existing Zone still writes, using the current Realm when the plan is elsewhere', async () => {
+    const kept = 'https://rezics.com/id/00000000-0000-4000-a000-000000000099';
+    const elsewhere = 'https://rezics.com/id/00000000-0000-4000-a000-000000000098';
+    const fixture = client((call) => {
+      if (call.path.startsWith('/v1/realms/')) {
+        return { profile: 'realm-read-v1', id: realm, space: elsewhere };
+      }
+      return { revision };
+    });
+    await updateOfficialZonePresentation(fixture.api, {
+      ...identity,
+      head: head({ profile: 'zone-presentation-v1', modules: [] }, kept),
+      defaultRealm: realm,
+      candidates: [{ variant: '', presentation: layout }],
+      key: (current, variant) => `config:${current.slice(-4)}${variant}`,
+    });
+    expect(fixture.writes()).toEqual([
+      {
+        method: 'PUT',
+        path: `/v1/zones/${zoneId}/configuration`,
+        token: 'steward',
+        key: `config:${revision.slice(-4)}`,
+        body: {
+          expectedHead: revision,
+          actingSubject: actor,
+          defaultRealm: kept,
+          official: {},
+          presentation: layout,
+        },
+      },
+    ]);
+  });
+
+  test('a planned Realm that resolves on the Zone Space replaces the current default', async () => {
+    const kept = 'https://rezics.com/id/00000000-0000-4000-a000-000000000099';
+    const fixture = client((call) => {
+      if (call.path.startsWith('/v1/realms/')) return { profile: 'realm-read-v1', id: realm, space };
+      return { revision };
+    });
+    await updateOfficialZonePresentation(fixture.api, {
+      ...identity,
+      head: head(layout, kept),
+      defaultRealm: realm,
+      candidates: [{ variant: '', presentation: layout }],
+      key: () => 'dev-seed:v1:official-zone:mods:planned',
+    });
+    expect(fixture.writes()).toEqual([
+      {
+        method: 'PUT',
+        path: `/v1/zones/${zoneId}/configuration`,
+        token: 'steward',
+        key: 'dev-seed:v1:official-zone:mods:planned',
+        body: {
+          expectedHead: revision,
+          actingSubject: actor,
+          defaultRealm: realm,
+          official: {},
+          presentation: layout,
+        },
+      },
+    ]);
+  });
+
+  test('a Realm read failure other than absence stops the update before any write', async () => {
+    const kept = 'https://rezics.com/id/00000000-0000-4000-a000-000000000099';
+    const fixture = client(() => {
+      throw problem(503, 'realm_read_unavailable');
+    });
+    await expect(
+      updateOfficialZonePresentation(fixture.api, {
+        ...identity,
+        head: head(layout, kept),
+        defaultRealm: realm,
+        candidates: [{ variant: '', presentation: layout }],
+        key: () => 'unused',
+      }),
+    ).rejects.toThrow('realm_read_unavailable');
+    expect(fixture.writes()).toEqual([]);
   });
 });

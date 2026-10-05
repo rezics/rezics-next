@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { isDeepStrictEqual } from 'node:util';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { type SeedApi } from './api.ts';
 import { officialTheme } from './official-plan.ts';
@@ -10,6 +9,7 @@ import {
   grantOfficialZoneSeed,
 } from './operator.ts';
 import { seedKey } from './plan.ts';
+import { readOrCreateOfficialZone, updateOfficialZonePresentation } from './zones.ts';
 import {
   afterCatchUp,
   refreshSeedTokens,
@@ -47,7 +47,7 @@ const collections = Object.fromEntries(
 
 interface WikiPort {
   api: Pick<SeedApi, 'post' | 'get' | 'getPublic'>;
-  official: Pick<SeedApi, 'put'>;
+  official: Pick<SeedApi, 'get' | 'put'>;
   actor: string;
   token: string;
   officialToken: string;
@@ -146,7 +146,8 @@ async function publish(port: WikiPort, key: string, title: string, body: string)
 }
 
 /** Stable creation receipts and current inventories make a fresh or interrupted seed replayable.
- * O(chapters + inventory pages + mounts) reads; chapter writes are batches of at most 16. */
+ * O(chapters + inventory pages + mounts) reads, plus one Zone read before create.
+ * Chapter writes are batches of at most 16. */
 export async function applyOfficialWiki(port: WikiPort) {
   const { api, actor, token } = port;
   const space = await api.post<SpaceReceipt>(
@@ -162,19 +163,15 @@ export async function applyOfficialWiki(port: WikiPort) {
     token,
     seedKey('wiki-space', slug),
   );
-  await api.post(
-    '/v1/zones',
-    {
-      zone: wikiZone,
-      space: space.space,
-      name: spec.name,
-      language: spec.language,
-      disclosure: 'public',
-      actingSubject: actor,
-    },
+  await readOrCreateOfficialZone(api, {
+    zone: wikiZone,
+    space: space.space,
+    actor,
     token,
-    seedKey('wiki-zone', slug),
-  );
+    key: seedKey('wiki-zone', slug),
+    name: spec.name,
+    language: spec.language,
+  });
   const story = await publish(
     port,
     'story',
@@ -300,7 +297,8 @@ export async function applyOfficialWiki(port: WikiPort) {
   const configuration = await api.get<{
     revision: string;
     configuration: {
-      defaultRealm?: string;
+      space?: unknown;
+      defaultRealm?: unknown;
       official?: unknown;
       presentation?: unknown;
     };
@@ -308,41 +306,43 @@ export async function applyOfficialWiki(port: WikiPort) {
     `/v1/zones/${short(wikiZone)}/configuration?${new URLSearchParams({ actingSubject: actor })}`,
     token,
   );
-  const desired = {
-    defaultRealm: space.realm,
-    official: {},
-    presentation: {
-      profile: 'zone-presentation-v1',
-      preset: spec.preset,
-      tokens: ZONE_PRESETS[spec.preset],
-      navigation: spec.navigation,
-      banners: [],
-      official: { theme: officialTheme(slug) },
-      modules: spec.mounts.map((mount) => ({
-        id: mount.id,
-        type: 'shelf',
-        title: mount.name,
-        source: { kind: 'collection', collection: collections[mount.id]! },
-        options: { limit: 12 },
-      })),
-    },
-  };
-  const actual = {
-    defaultRealm: configuration.configuration.defaultRealm,
-    official: configuration.configuration.official,
-    presentation: configuration.configuration.presentation,
-  };
-  if (!isDeepStrictEqual(actual, desired))
-    await port.official.put(
-      `/v1/zones/${short(wikiZone)}/configuration`,
-      {
-        expectedHead: configuration.revision,
-        actingSubject: actor,
-        ...desired,
+  const recorded = configuration.configuration;
+  const officialMarker = recorded.official;
+  await updateOfficialZonePresentation(port.official, {
+    zone: wikiZone,
+    actor,
+    token: port.officialToken,
+    head: {
+      revision: configuration.revision,
+      configuration: {
+        space: typeof recorded.space === 'string' ? recorded.space : null,
+        defaultRealm: typeof recorded.defaultRealm === 'string' ? recorded.defaultRealm : null,
+        official: officialMarker !== null && typeof officialMarker === 'object' && !Array.isArray(officialMarker)
+          ? {} : null,
+        presentation: recorded.presentation ?? null,
       },
-      port.officialToken,
-      seedKey('wiki-configuration', short(configuration.revision)),
-    );
+    },
+    defaultRealm: space.realm,
+    candidates: [{
+      variant: '',
+      presentation: {
+        profile: 'zone-presentation-v1',
+        preset: spec.preset,
+        tokens: ZONE_PRESETS[spec.preset],
+        navigation: spec.navigation,
+        banners: [],
+        official: { theme: officialTheme(slug) },
+        modules: spec.mounts.map((mount) => ({
+          id: mount.id,
+          type: 'shelf',
+          title: mount.name,
+          source: { kind: 'collection', collection: collections[mount.id]! },
+          options: { limit: 12 },
+        })),
+      },
+    }],
+    key: (revision) => seedKey('wiki-configuration', short(revision)),
+  });
   return {
     space: space.space,
     zone: wikiZone,
