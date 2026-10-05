@@ -253,6 +253,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/package-installations/{installation}/generations/{generation}', 'read'],
   ['GET', '/v1/package-lock-replays/{replay}', 'read'],
   ['GET', '/v1/package-locks/{lock}', 'read'],
+  ['GET', '/v1/posts/{id}', 'read'],
   ['GET', '/v1/package-resolutions/cargo/{resolution}', 'read'],
   ['GET', '/v1/package-resolutions/mods/{resolution}', 'read'],
   ['GET', '/v1/package-resolutions/nix/{resolution}', 'read'],
