@@ -131,6 +131,55 @@ test('independent notification appends commit within one second while another wr
   }
 });
 
+test('engaging recovery waits for an appender to commit even without a caller recovery guard', async () => {
+  const held = await access.connect(),
+    fence = await access.connect();
+  let fencing: Promise<{ generation: string } | { error: unknown }> | undefined;
+  try {
+    await held.query('BEGIN');
+    await append(held);
+    const holderPid = (await held.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!
+      .pid;
+    const fencePid = (await fence.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!
+      .pid;
+    const before = (
+      await access.query<{ generation: string }>(
+        'SELECT generation::text FROM access.recovery_fence WHERE id',
+      )
+    ).rows[0]!.generation;
+    await fence.query('BEGIN');
+    await fence.query("SET LOCAL lock_timeout = '2s'");
+    await fence.query("SET LOCAL statement_timeout = '3s'");
+    fencing = engageAccessRecoveryFence({ query: fence.query.bind(fence) } as unknown as Pool).then(
+      (generation) => ({ generation }),
+      (error: unknown) => ({ error }),
+    );
+    const deadline = performance.now() + 1_000;
+    let blockers: number[] = [];
+    do {
+      blockers = (
+        await access.query<{ blockers: number[] }>('SELECT pg_blocking_pids($1) AS blockers', [
+          fencePid,
+        ])
+      ).rows[0]!.blockers;
+      if (blockers.includes(holderPid)) break;
+      await Bun.sleep(10);
+    } while (performance.now() < deadline);
+    expect(blockers).toContain(holderPid);
+    await held.query('COMMIT');
+    const generation = String(BigInt(before) + 1n);
+    expect(await fencing).toEqual({ generation });
+    await fence.query('COMMIT');
+    await releaseAccessRecoveryFence(access, generation);
+  } finally {
+    await held.query('ROLLBACK');
+    await fencing;
+    await fence.query('ROLLBACK');
+    held.release();
+    fence.release();
+  }
+});
+
 test('a held lower xid stops both consumers and is delivered before a later committed xid', async () => {
   const prefix = await append(access);
   const held = await access.connect(),

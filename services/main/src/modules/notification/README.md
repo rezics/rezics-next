@@ -38,8 +38,9 @@ schema: Access migrations 062–064 and 440–441; cases GOV05–GOV08.
   bounded below `pg_snapshot_xmin(pg_current_snapshot())` in the current epoch.
   Only the consumer locks and advances its own cursor after intake; a partial
   intake or lost acknowledgement retries the immutable event identity.
-- The producer epoch is `recovery_fence.generation`: the recovery fence drains
-  ordinary writers and release increments it before reopening. Older epochs
+- The producer epoch is `recovery_fence.generation`: the append function reads
+  it `FOR SHARE` through commit, so the recovery fence drains every appender;
+  release increments it before reopening. Older epochs
   drain before new events without comparing their xids to the current horizon,
   because a logical restore preserves event rows but resets the transaction
   counter. Migrated events use xid zero and their original position as id;
@@ -82,7 +83,7 @@ schema: Access migrations 062–064 and 440–441; cases GOV05–GOV08.
 | `runOnce(n)` | n ≤ 32 leased rows; ≤ 16 statements per row plus one provider call and at most one lookup. |
 | Subject reader selection | One map lookup and exactly one owner-specific read per delivery; registrations are fixed during Main startup. |
 | Scheduled delivery tick | At most 32 expired leases recovered plus 32 due rows dispatched; one active tick per Main process. |
-| Access producer append | One event insert, one identity allocation and one recovery generation read; no shared row update. |
+| Access producer append | One event insert, one identity allocation and one shared recovery generation row lock; no shared row update. |
 | Access producer tick (each consumer) | One cursor row lock and one `(epoch, xid, id)` index range of ≤ 16 committed events; unchanged ≤ 256 recipients per event. Active lower xids delay the current epoch without skipping late commits. |
 | `readStream` | 9 statements; one index range on `(principal_id, stream, generation, sequence)` of ≤ 51 rows, independent of other recipients (EXPLAIN checked at 100/1,000/10,000). |
 | Display read | The same ≤ 51-row page plus at most 50 exact owner disclosure reads, at most 50 current public Agent reads and avatar probes. A denied or unsupported subject yields no subject reference or display fields. Groups cover only the page and contain at most 10 visible items. |

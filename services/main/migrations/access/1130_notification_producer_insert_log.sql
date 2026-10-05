@@ -26,9 +26,11 @@ UPDATE access.notification_producer_cursor
 
 -- Recovery release advances generation before writers reopen. That epoch must
 -- lead xid: pg_dump preserves rows but not the cluster's transaction counter.
+-- Every appender holds the shared fence lock through commit, even when its
+-- caller has no recovery guard. Generation changes must drain the old epoch.
 CREATE OR REPLACE FUNCTION access.append_notification_producer_event(_kind text, _event uuid)
 RETURNS void LANGUAGE sql AS $$
     INSERT INTO access.notification_producer_event (epoch, kind, event_id)
-        SELECT generation, _kind, _event FROM access.recovery_fence WHERE id;
+        SELECT generation, _kind, _event FROM access.recovery_fence WHERE id FOR SHARE;
 $$;
 DROP TABLE access.notification_producer_head;
