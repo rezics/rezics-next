@@ -357,8 +357,12 @@ export const PinATopic: Story = {
     // Before searching: the reader's unpinned topics and popular ones.
     await expect(dialog.getByRole('region', { name: 'Your topics' })).toHaveTextContent('Mystery');
     const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    // The dialog focuses its first field, the topic search, once it opens; a focus landing mid-typing would
+    // disturb the popup, so the story starts only after it.
+    await waitFor(() => expect(search).toHaveFocus());
     await openTopics(search, 'Cozy games');
     await userEvent.type(search, 'fan');
+    await waitFor(() => expect(search).toHaveValue('fan'));
     await chooseTopic('Fantasy');
     await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();
     await expect(dialog.getByRole('region', { name: 'Broader' })).toHaveTextContent('Fiction');
