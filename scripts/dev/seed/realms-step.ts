@@ -1,9 +1,9 @@
-import { isDeepStrictEqual } from 'node:util';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantOfficialZoneSeed } from './operator.ts';
 import { realms, seedKey } from './plan.ts';
 import { stableId, type SeedState, type SpaceReceipt } from './state.ts';
 import { officialPresentation, withoutTabLabels } from './official-plan.ts';
 import { SeedApiError } from './api.ts';
+import { readOrCreateOfficialZone, updateOfficialZonePresentation } from './zones.ts';
 
 /** Replay the same exact definitions for navigation and classification decisions. */
 export async function modsConcepts(state: SeedState, steward: SeedState['createdRealms'][number]['steward']) {
@@ -93,13 +93,9 @@ export async function seedRealms(state: SeedState) {
     const stewardInput = { ...operatorInput, ownerAccountSubject: parent.steward.accountId,
       actingSubject: parent.steward.actingSubject };
     await grantOfficialZoneSeed(stewardInput, zone);
-    await api.post('/v1/zones', { zone, space: parent.receipt.space, disclosure: 'public',
-      actingSubject: parent.steward.actingSubject }, parent.steward.token, seedKey('zone', realm.id));
-    const currentZone = await api.get<{ revision: string; configuration: {
-      defaultRealm: string | null; official: Record<string,never> | null;
-      presentation: unknown } }>(
-      `/v1/zones/${zone.slice(-36)}/configuration?actingSubject=${encodeURIComponent(parent.steward.actingSubject)}`,
-      parent.steward.token);
+    const currentZone = await readOrCreateOfficialZone(api, {
+      zone, space: parent.receipt.space, actor: parent.steward.actingSubject,
+      token: parent.steward.token, key: seedKey('zone', realm.id) });
     // The layout lives with the official Zones' content (official-plan.ts), which fills it later in the run.
     // A Main without localized tab labels gets the same layout with default labels.
     const context = realm.id === 'mods'
@@ -107,22 +103,12 @@ export async function seedRealms(state: SeedState) {
         ?? await state.optional('Mods game and loader concepts', () => modsContext(state, parent.steward))
       : undefined;
     const presentation = officialPresentation(realm.id, realm.preset, context ?? undefined);
-    const current = { defaultRealm: currentZone.configuration.defaultRealm,
-      official: currentZone.configuration.official, presentation: currentZone.configuration.presentation };
-    for (const [variant, candidate] of [['', presentation], [':plain', withoutTabLabels(presentation)]] as const) {
-      const desiredZone = { defaultRealm: parent.receipt.realm, official: {},
-        presentation: candidate };
-      if (isDeepStrictEqual(current, desiredZone)) break;
-      try {
-        await operatorSession.api.put(`/v1/zones/${zone.slice(-36)}/configuration`, {
-          expectedHead: currentZone.revision, actingSubject: parent.steward.actingSubject,
-          ...desiredZone }, operatorSession.token,
-        seedKey('official-zone', `${realm.id}:${currentZone.revision.slice(-36)}${variant}`));
-        break;
-      } catch (error) {
-        if (variant || !(error instanceof SeedApiError) || error.status !== 400) throw error;
-      }
-    }
+    await updateOfficialZonePresentation(operatorSession.api, {
+      zone, actor: parent.steward.actingSubject, token: operatorSession.token, head: currentZone,
+      defaultRealm: parent.receipt.realm, candidates: [
+        { variant: '', presentation },
+        { variant: ':plain', presentation: withoutTabLabels(presentation) }],
+      key: (revision, variant) => seedKey('official-zone', `${realm.id}:${revision.slice(-36)}${variant}`) });
     seededZones.push(zone);
   }
 }
