@@ -198,8 +198,24 @@ export class LibraryBundleExporter {
         context?.targetGrain === 'projection' ? [head.target] : []))];
       const projections = await readPersonalProjectionResources(session, projectionTargets);
       for (const { head, rating, context } of evidence) {
-        if (!rating)
-          throw new WorkReadUnavailable('Target rating export evidence unavailable');
+        // An erased revision still names this person's row. Record the loss so
+        // one unreadable body does not stop the rest of the export.
+        if (!rating) {
+          exported.push({
+            key: head.key,
+            row: {
+              ...row('retained', `target-rating:${head.key}`, null),
+              target: head.target,
+              raw: {
+                ratingContext: head.context,
+                observationRevision: head.revision,
+                residuals: [{ kind: 'rating_unavailable', path: '/annotation/oa:hasBody',
+                  detail: { reason: 'Rating revision is unavailable' } }],
+              },
+            },
+          });
+          continue;
+        }
         // Preserve a withdrawal as provenance without fabricating an assessing body.
         let target: string | Record<string, unknown> = head.target;
         const residuals: Array<{ kind: string; path: string; detail: Record<string, unknown> }> = [];
