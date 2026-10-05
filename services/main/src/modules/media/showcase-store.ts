@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { advanceContentSequence } from '../content-sequence.ts';
-import { pixelCrop, RENDITION_LIMITS, type ImageSize } from '../media-rendition/policy.ts';
+import {
+  completeRenditionLadderSql,
+  pixelCrop,
+  RENDITION_LIMITS,
+  type ImageSize,
+} from '../media-rendition/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaConflict, MediaInvalid, MediaMissing } from './contract.ts';
 import type { CommandOutcome, MediaAdmission } from './store.ts';
 import {
@@ -62,6 +67,7 @@ export const SHOWCASE_BATCH_SQL = `WITH owner AS (
         AND d.kind='rendition' AND d.availability='available'
         AND d.profile ~ '^image-width-[1-9][0-9]{0,3}-(avif|webp)-v1$'
         AND d.media_type IN ('image/avif','image/webp') AND media.delivery_clearance(d)='cleared'
+        AND ${completeRenditionLadderSql('p.id', 'u.crop', 'd')}
       ORDER BY d.pixel_width,d.media_type,d.id LIMIT ${RENDITION_LIMITS.candidates}) candidate
   ) candidates ON p.id IS NOT NULL
   ORDER BY c.target,c.role`;

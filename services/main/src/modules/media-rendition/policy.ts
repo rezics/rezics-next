@@ -33,6 +33,25 @@ export interface RenditionCandidate extends ImageSize {
   type: RenditionType;
 }
 
+/** Queue inserts the entire plan atomically. A codec becomes usable only when
+ * every requested profile still has a deliverable representation. Both owner
+ * reads use this policy with fixed SQL aliases, never request-supplied text. */
+export function completeRenditionLadderSql(
+  source: string,
+  crop: string,
+  candidate: string,
+): string {
+  return `NOT EXISTS (SELECT 1 FROM media.transform_job ladder
+    WHERE ladder.source_id = ${source} AND COALESCE(ladder.crop,'') = COALESCE(${crop},'')
+      AND ladder.profile ~ '^image-width-[1-9][0-9]{0,3}-(avif|webp)-v1$'
+      AND ladder.profile LIKE '%-' || split_part(${candidate}.media_type,'/',2) || '-v1'
+      AND (ladder.status <> 'succeeded' OR NOT EXISTS (
+        SELECT 1 FROM media.representation ready
+        WHERE ready.source_id = ladder.source_id AND ready.profile = ladder.profile
+          AND ready.crop IS NOT DISTINCT FROM ladder.crop AND ready.kind = 'rendition'
+          AND ready.availability = 'available' AND media.delivery_clearance(ready) = 'cleared')))`;
+}
+
 export function checkSize(size: ImageSize): void {
   if (
     ![size.width, size.height].every(

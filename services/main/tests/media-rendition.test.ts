@@ -277,7 +277,7 @@ test('source integrity and unavailable Uses queue no jobs, and a worker deadline
   const digest = createHash('sha256').update(bytes).digest('hex');
   const worker = new MediaRenditionWorker(
     {
-      leaseNext: async () => ({ digest, namespace: 'media/' }),
+      leaseCrop: async () => [{ digest, namespace: 'media/' }],
       settle: async () => {
         throw new Error('must not settle');
       },
@@ -286,7 +286,10 @@ test('source integrity and unavailable Uses queue no jobs, and a worker deadline
       inspect: async () => {
         throw new Error('unused');
       },
-      transform: async (_bytes, _type, _plan, signal) =>
+      transform: async () => {
+        throw new Error('unused');
+      },
+      transformCrop: async (_bytes, _type, _plans, signal) =>
         new Promise((_resolve, reject) =>
           signal?.addEventListener(
             'abort',
@@ -308,4 +311,87 @@ test('source integrity and unavailable Uses queue no jobs, and a worker deadline
   );
   await worker.tick();
   expect(aborted).toBe(true);
+});
+
+test('one crop transform writes every clipped width and codec from one materialized source decode', async () => {
+  const transformer = new LocalImageTransformer();
+  const bytes = await colourBands(800, 400, true);
+  const plans = renditionProfiles(400).map((profile) => ({
+    profile,
+    crop: 'xywh=percent:50,0,50,100',
+  }));
+  const outputs = await transformer.transformCrop(bytes, 'image/png', plans);
+  expect(outputs.map((output) => [output.width, output.height, output.type])).toEqual([
+    [320, 320, 'image/avif'],
+    [320, 320, 'image/webp'],
+    [400, 400, 'image/avif'],
+    [400, 400, 'image/webp'],
+  ]);
+  for (const output of outputs) {
+    const pixels = await sharp(output.bytes).ensureAlpha().raw().toBuffer();
+    expect(pixels[0]).toBeLessThan(30);
+    expect(pixels[2]).toBeGreaterThan(200);
+    expect(pixels[3]).toBeGreaterThanOrEqual(126);
+    expect(pixels[3]).toBeLessThanOrEqual(130);
+  }
+  await expect(
+    transformer.transformCrop(bytes, 'image/png', [plans[0]!, { ...plans[1]!, crop: null }]),
+  ).rejects.toThrow('plans');
+}, 15_000);
+
+test('one worker tick fetches and transforms a crop once and persists all its leased profiles', async () => {
+  const bytes = new Uint8Array([1]);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const leases = renditionProfiles(640).map((profile) => ({
+    profile,
+    crop: null,
+    digest,
+    namespace: 'media/',
+  }));
+  let gets = 0,
+    decodes = 0,
+    puts = 0,
+    settled = 0;
+  const outputs = leases.map((lease) => ({
+    bytes,
+    width: parseProfile(lease.profile).width,
+    height: 1,
+    type: parseProfile(lease.profile).type,
+  }));
+  const worker = new MediaRenditionWorker(
+    {
+      leaseCrop: async () => leases,
+      settle: async (lease: unknown, output: unknown, persist: () => Promise<string>) => {
+        expect(lease).toBe(leases[settled]);
+        expect(output).toBe(outputs[settled++]);
+        await persist();
+        return true;
+      },
+    } as unknown as MediaRenditionStore,
+    {
+      inspect: async () => {
+        throw new Error('unused');
+      },
+      transform: async () => {
+        throw new Error('must not decode each profile');
+      },
+      transformCrop: async (_bytes, _type, plans) => {
+        decodes++;
+        expect(plans).toEqual(leases.map(({ profile, crop }) => ({ profile, crop })));
+        return outputs;
+      },
+    },
+    () => ({
+      get: async () => {
+        gets++;
+        return bytes;
+      },
+      put: async () => {
+        puts++;
+        return digest;
+      },
+    }),
+  );
+  await worker.tick();
+  expect({ gets, decodes, puts, settled }).toEqual({ gets: 1, decodes: 1, puts: 4, settled: 4 });
 });

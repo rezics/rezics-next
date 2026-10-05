@@ -4,6 +4,7 @@ import { advanceContentSequence } from '../content-sequence.ts';
 import { MediaInvalid, MediaMissing } from '../media/store.ts';
 import {
   checkSize,
+  completeRenditionLadderSql,
   parseProfile,
   pixelCrop,
   renditionProfiles,
@@ -79,6 +80,8 @@ export const RENDITION_CANDIDATES_SQL = `SELECT u.id AS use,p.id,p.pixel_width,p
     WHERE r.source_id = source.id AND COALESCE(r.crop,'') = COALESCE(u.crop,'')
       AND r.kind = 'rendition' AND r.availability = 'available'
       AND r.profile ~ '${PROFILE}' AND r.media_type IN ('image/avif','image/webp')
+      AND media.delivery_clearance(r) = 'cleared'
+      AND ${completeRenditionLadderSql('source.id', 'u.crop', 'r')}
     ORDER BY r.pixel_width,r.media_type,r.id LIMIT ${RENDITION_LIMITS.candidates}
   ) p
   WHERE u.id = ANY($1::uuid[]) AND s.lifecycle = 'active' AND s.moderation = 'none'
@@ -179,6 +182,16 @@ export class MediaRenditionStore {
   /** Two indexed ready-queue heads (queued and expired), one job per tick.
    * Obsolete/exhausted heads retire here rather than a scan over healthy jobs. */
   async leaseNext(leaseMs: number = RENDITION_LIMITS.leaseMs): Promise<RenditionLease | null> {
+    return (await this.leaseJobs(leaseMs, false))[0] ?? null;
+  }
+
+  /** One source/crop per tick, at most twelve jobs, under the same queue lock.
+   * Other workers cannot take a sibling while this crop has a live lease. */
+  async leaseCrop(leaseMs: number = RENDITION_LIMITS.leaseMs): Promise<RenditionLease[]> {
+    return this.leaseJobs(leaseMs, true);
+  }
+
+  private async leaseJobs(leaseMs: number, wholeCrop: boolean): Promise<RenditionLease[]> {
     if (!Number.isInteger(leaseMs) || leaseMs < 1 || leaseMs > RENDITION_LIMITS.leaseMs)
       throw new MediaInvalid('invalid rendition lease');
     return this.transaction(async (client) => {
@@ -192,7 +205,22 @@ export class MediaRenditionStore {
         ) ready ON ready.id = j.id WHERE j.status = 'queued' OR (j.status = 'leased'
           AND j.lease_expires_at <= clock_timestamp()) ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED`)
       ).rows[0];
-      if (!job || !['queued', 'leased'].includes(job.status)) return null;
+      if (!job || !['queued', 'leased'].includes(job.status)) return [];
+      if (wholeCrop) {
+        const lock = await client.query<{ locked: boolean }>(
+          'SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS locked',
+          [JSON.stringify(['media-rendition', job.source_id, job.crop])],
+        );
+        if (!lock.rows[0]?.locked) return [];
+        const live = await client.query(
+          `SELECT id FROM media.transform_job
+          WHERE source_id = $1 AND COALESCE(crop,'') = COALESCE($2,'')
+            AND profile ~ '${PROFILE}' AND status = 'leased'
+            AND lease_expires_at > clock_timestamp() LIMIT 1`,
+          [job.source_id, job.crop],
+        );
+        if (live.rowCount) return [];
+      }
       const source = (
         await client.query(
           `SELECT a.object_namespace,p.media_type FROM media.asset a
@@ -211,30 +239,49 @@ export class MediaRenditionStore {
           source ? 'failed' : 'cancelled',
           source ? 'attempts-exhausted' : 'input-unavailable',
         );
-        return null;
+        return [];
       }
-      const token = randomUUID();
-      const leased = await client.query(
-        `UPDATE media.transform_job SET status = 'leased',attempt = attempt + 1,
+      const jobs = wholeCrop
+        ? (
+            await client.query(
+              `SELECT * FROM media.transform_job
+        WHERE source_id = $1 AND COALESCE(crop,'') = COALESCE($2,'') AND profile ~ '${PROFILE}'
+          AND (status = 'queued' OR (status = 'leased' AND lease_expires_at <= clock_timestamp()))
+        ORDER BY created_at,id LIMIT ${RENDITION_LIMITS.candidates} FOR UPDATE`,
+              [job.source_id, job.crop],
+            )
+          ).rows
+        : [job];
+      const leases: RenditionLease[] = [];
+      for (const sibling of jobs) {
+        if (sibling.attempt >= RENDITION_LIMITS.attempts) {
+          await this.terminal(client, sibling.id, sibling.asset_id, 'failed', 'attempts-exhausted');
+          continue;
+        }
+        const token = randomUUID();
+        const leased = await client.query(
+          `UPDATE media.transform_job SET status = 'leased',attempt = attempt + 1,
         lease_token = $2,lease_expires_at = clock_timestamp() + $3 * interval '1 millisecond'
         WHERE id = $1 AND (status = 'queued' OR lease_expires_at <= clock_timestamp()) RETURNING id`,
-        [job.id, token, leaseMs],
-      );
-      if (!leased.rowCount) return null;
-      return {
-        job: job.id,
-        asset: job.asset_id,
-        source: job.source_id,
-        digest: job.input_digest,
-        namespace: source.object_namespace,
-        mediaType: source.media_type,
-        crop: job.crop,
-        epoch: String(job.erasure_epoch),
-        authorityEpoch: job.authority_epoch,
-        profile: job.profile,
-        token,
-        attempt: job.attempt + 1,
-      };
+          [sibling.id, token, leaseMs],
+        );
+        if (!leased.rowCount) continue;
+        leases.push({
+          job: sibling.id,
+          asset: sibling.asset_id,
+          source: sibling.source_id,
+          digest: sibling.input_digest,
+          namespace: source.object_namespace,
+          mediaType: source.media_type,
+          crop: sibling.crop,
+          epoch: String(sibling.erasure_epoch),
+          authorityEpoch: sibling.authority_epoch,
+          profile: sibling.profile,
+          token,
+          attempt: sibling.attempt + 1,
+        });
+      }
+      return leases;
     });
   }
 

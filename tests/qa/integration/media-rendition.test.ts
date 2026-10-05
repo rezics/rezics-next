@@ -14,6 +14,7 @@ import {
   RENDITION_LIMITS,
 } from '../../../services/main/src/modules/media-rendition/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
+import { renditionProfiles } from '../../../services/main/src/modules/media-rendition/policy.ts';
 import { sha, startMediaStack, type MediaStack } from './media-support.ts';
 
 let started: Promise<MediaStack> | undefined;
@@ -172,6 +173,106 @@ test('a selected Use queues idempotent crop-width jobs, executes both real codec
   expect(await requestUseRenditions(renditions, objects, differentCrop)).toEqual({ queued: 4 });
   for (let i = 0; i < 4; i++) await worker.tick();
   expect((await renditions.candidatesBatch([differentCrop])).get(differentCrop)).toHaveLength(4);
+}, 60_000);
+
+test('both owner reads withhold each codec until its whole ladder is deliverable, including after candidate loss', async () => {
+  const fixture = await selectedImage('complete-ladder', 1280, 720);
+  const { store, renditions, objects, use, bytes, image, work, owner, contentPool } = fixture;
+  const selected = await store.showcase.select(
+    {
+      admissionId: randomUUID(),
+      principalId: owner.principalId,
+      actingSubject: owner.actor,
+      authorityEpoch: '0',
+      requestDigest: sha(randomUUID()),
+    },
+    {
+      target: work.work,
+      context: DEFAULT_MEDIA_CONTEXT,
+      role: 'background-landscape',
+      asset: image.asset,
+      crop: null,
+      focalArea: null,
+      expectedSelection: null,
+    },
+    () => transformer.inspect(bytes, 'image/png'),
+  );
+  expect(selected.outcome).toBe('succeeded');
+  const profiles = renditionProfiles(1280);
+  const outputs = await transformer.transformCrop(
+    bytes,
+    'image/png',
+    profiles.map((profile) => ({ profile, crop: null })),
+  );
+  expect(await requestUseRenditions(renditions, objects, use)).toEqual({ queued: 8 });
+  for (let index = 0; index < profiles.length; index++) {
+    const lease = (await renditions.leaseNext())!;
+    const output = outputs[profiles.indexOf(lease.profile)]!;
+    expect(
+      await renditions.settle(lease, output, () => objects(lease.namespace).put(output.bytes)),
+    ).toBe(true);
+    const candidates = (await renditions.candidatesBatch([use])).get(use)!;
+    const showcase = (await store.showcase.readBatch([work.work], DEFAULT_MEDIA_CONTEXT)).art.get(
+      work.work,
+    )!.images[0].srcset;
+    const expectedTypes =
+      index < 6
+        ? []
+        : index === 6
+          ? Array(4).fill('image/avif')
+          : Array.from({ length: 4 }, () => ['image/avif', 'image/webp']).flat();
+    expect(candidates.map((candidate) => candidate.type)).toEqual(expectedTypes);
+    expect(showcase.map((candidate) => candidate.type)).toEqual(expectedTypes);
+    expect(candidates.map((candidate) => candidate.width)).toEqual(
+      index < 6
+        ? []
+        : index === 6
+          ? [320, 640, 960, 1280]
+          : [320, 320, 640, 640, 960, 960, 1280, 1280],
+    );
+  }
+  await contentPool.query(
+    `UPDATE media.representation SET availability = 'unavailable'
+    WHERE source_id = $1 AND profile = 'image-width-1280-avif-v1'`,
+    [image.representation],
+  );
+  expect(
+    (await renditions.candidatesBatch([use])).get(use)!.map((candidate) => candidate.type),
+  ).toEqual(Array(4).fill('image/webp'));
+  expect(
+    (await store.showcase.readBatch([work.work], DEFAULT_MEDIA_CONTEXT)).art
+      .get(work.work)!
+      .images[0].srcset.map((candidate) => candidate.type),
+  ).toEqual(Array(4).fill('image/webp'));
+}, 60_000);
+
+test('crop leases are disjoint between workers and a live sibling prevents a second decode', async () => {
+  const fixture = await selectedImage('crop-lease', 640, 360);
+  await requestUseRenditions(fixture.renditions, fixture.objects, fixture.use);
+  const [first, second] = await Promise.all([
+    fixture.renditions.leaseCrop(),
+    fixture.renditions.leaseCrop(),
+  ]);
+  const leases = first.length ? first : second;
+  expect(leases).toHaveLength(4);
+  expect(first.length && second.length).toBe(0);
+  expect(await fixture.renditions.leaseCrop()).toEqual([]);
+  const outputs = await transformer.transformCrop(
+    fixture.bytes,
+    'image/png',
+    leases.map(({ profile, crop }) => ({ profile, crop })),
+  );
+  for (const [index, lease] of leases.entries()) {
+    const output = outputs[index];
+    expect(
+      await fixture.renditions.settle(lease, output, () =>
+        fixture.objects(lease.namespace).put(output.bytes),
+      ),
+    ).toBe(true);
+  }
+  expect((await fixture.renditions.candidatesBatch([fixture.use])).get(fixture.use)).toHaveLength(
+    4,
+  );
 }, 60_000);
 
 interface PlanNode {
@@ -393,8 +494,8 @@ test('an object storage outage retries after lease expiry and sixteen interrupte
     ),
   );
   class ShortLeaseStore extends MediaRenditionStore {
-    override leaseNext() {
-      return super.leaseNext(100);
+    override leaseCrop() {
+      return super.leaseCrop(100);
     }
   }
   const failed = new MediaRenditionWorker(
@@ -403,6 +504,10 @@ test('an object storage outage retries after lease expiry and sixteen interrupte
       inspect: transformer.inspect.bind(transformer),
       transform: async (_bytes, _type, plan) =>
         outputs.find((output) => output.type === parseProfile(plan.profile).type)!,
+      transformCrop: async (_bytes, _type, plans) =>
+        plans.map((plan) =>
+          outputs.find((output) => output.type === parseProfile(plan.profile).type)!,
+        ),
     },
     (namespace) => ({
       get: (digest) => objects(namespace).get(digest),
@@ -534,7 +639,8 @@ test('erasure during decoding refuses activation, and erasure waits for an in-fl
     decoding.renditions,
     {
       inspect: transformer.inspect.bind(transformer),
-      transform: async (input, type, plan, signal) => {
+      transform: transformer.transform.bind(transformer),
+      transformCrop: async (input, type, plans, signal) => {
         const asset = (await decoding.store.readAsset(decoding.image.asset))!;
         const response = await decoding.owner.send(
           'POST',
@@ -548,7 +654,7 @@ test('erasure during decoding refuses activation, and erasure waits for an in-fl
           },
         );
         expect(response.status).toBe(201);
-        return transformer.transform(input, type, plan, signal);
+        return transformer.transformCrop(input, type, plans, signal);
       },
     },
     (namespace) => ({

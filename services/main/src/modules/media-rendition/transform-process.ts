@@ -36,37 +36,57 @@ async function transform(): Promise<void> {
     const size = metadata.autoOrient;
     checkSize(size);
     if (!process.send) throw new Error('missing rendition parent');
-    const plan = JSON.parse(process.argv[3]!) as RenditionPlan | null;
-    if (plan === null) {
-      process.send({ ...size, hasAlpha: metadata.hasAlpha, type: null, byteLength: 0, sha256: null });
+    const plans = JSON.parse(process.argv[3]!) as RenditionPlan[] | null;
+    if (plans === null) {
+      process.send([
+        { ...size, hasAlpha: metadata.hasAlpha, type: null, byteLength: 0, sha256: null },
+      ]);
       return;
     }
-    const profile = parseProfile(plan.profile);
-    const region = pixelCrop(plan.crop, size);
-    let pipeline = decoder
+    if (
+      !plans.length ||
+      plans.length > RENDITION_LIMITS.candidates ||
+      plans.some((plan) => plan.crop !== plans[0]!.crop)
+    )
+      throw new Error('invalid rendition plans');
+    const region = pixelCrop(plans[0]!.crop, size);
+    // Materialize oriented crop pixels once. Cloning a compressed-input pipeline
+    // would decode again for every output; raw input makes that impossible.
+    const decoded = await decoder
       .autoOrient()
       .extract(region)
-      .resize({ width: profile.width, withoutEnlargement: true });
-    // Both codecs retain alpha; no flatten/removeAlpha or metadata copy occurs.
-    pipeline =
-      profile.type === 'image/avif'
-        ? pipeline.avif({ quality: 60, effort: 3, chromaSubsampling: '4:4:4' })
-        : pipeline.webp({ quality: 80, alphaQuality: 100, effort: 3 });
-    const { data, info } = await pipeline
+      .raw()
       .timeout({ seconds: 25 })
       .toBuffer({ resolveWithObject: true });
-    checkSize(info);
-    if (!data.length || data.length > RENDITION_LIMITS.bytes || info.width > region.width)
-      throw new Error('rendition output bound');
-    process.send({
-      width: info.width,
-      height: info.height,
-      hasAlpha: metadata.hasAlpha,
-      type: profile.type,
-      byteLength: data.length,
-      sha256: createHash('sha256').update(data).digest('hex'),
-    });
-    await Bun.write(Bun.stdout, data);
+    const reports = [];
+    for (const plan of plans) {
+      const profile = parseProfile(plan.profile);
+      let pipeline = sharp(decoded.data, { raw: decoded.info }).resize({
+        width: profile.width,
+        withoutEnlargement: true,
+      });
+      // Both codecs retain alpha; no flatten/removeAlpha or metadata copy occurs.
+      pipeline =
+        profile.type === 'image/avif'
+          ? pipeline.avif({ quality: 60, effort: 3, chromaSubsampling: '4:4:4' })
+          : pipeline.webp({ quality: 80, alphaQuality: 100, effort: 3 });
+      const { data, info } = await pipeline
+        .timeout({ seconds: 25 })
+        .toBuffer({ resolveWithObject: true });
+      checkSize(info);
+      if (!data.length || data.length > RENDITION_LIMITS.bytes || info.width > region.width)
+        throw new Error('rendition output bound');
+      reports.push({
+        width: info.width,
+        height: info.height,
+        hasAlpha: metadata.hasAlpha,
+        type: profile.type,
+        byteLength: data.length,
+        sha256: createHash('sha256').update(data).digest('hex'),
+      });
+      await Bun.write(Bun.stdout, data);
+    }
+    process.send(reports);
   } catch {
     process.exitCode = 1;
   }

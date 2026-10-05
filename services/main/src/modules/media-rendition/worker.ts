@@ -19,7 +19,8 @@ export class MediaRenditionWorker {
       throw new Error('invalid rendition deadline');
   }
   async tick(): Promise<void> {
-    const lease = await this.store.leaseNext();
+    const leases = await this.store.leaseCrop();
+    const lease = leases[0];
     if (!lease) {
       recordWorkerOutcome({ outcome: 'idle', processed: 0, unit: 'item' });
       return;
@@ -37,10 +38,10 @@ export class MediaRenditionWorker {
             throw new Error('rendition input integrity');
           }
           controller.signal.throwIfAborted();
-          return this.transformer.transform(
+          return this.transformer.transformCrop(
             bytes,
             lease.mediaType,
-            { profile: lease.profile, crop: lease.crop },
+            leases.map((lease) => ({ profile: lease.profile, crop: lease.crop })),
             controller.signal,
           );
         })(),
@@ -53,9 +54,15 @@ export class MediaRenditionWorker {
       ]);
       controller.abort();
       if (timer) clearTimeout(timer);
-      const settled = await this.store.settle(lease, output, () =>
-        this.objects(lease.namespace).put(output.bytes),
-      );
+      if (output.length !== leases.length) throw new Error('incomplete rendition output');
+      let settled = true;
+      for (const [index, lease] of leases.entries()) {
+        const rendition = output[index]!;
+        settled =
+          (await this.store.settle(lease, rendition, () =>
+            this.objects(lease.namespace).put(rendition.bytes),
+          )) && settled;
+      }
       recordWorkerOutcome({ outcome: settled ? 'worked' : 'retry', processed: 1, unit: 'item' });
     } catch {
       // Lease expiry retries interrupted decode and object storage outages. The

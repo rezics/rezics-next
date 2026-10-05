@@ -142,10 +142,10 @@ test('showcase selection reuses avatar authority, exact Use bases, idempotency, 
   // Both codecs become candidates from the actual selected Use, with no second
   // producer call from the client. The owner worker executes real native bytes.
   const worker = new MediaRenditionWorker(store.renditions, new LocalImageTransformer(), objects);
-  for (let n = 0; n < 2; n++) await worker.tick();
+  await worker.tick();
   const rendered = available((await read([work.work])).items[0]).images[0];
-  expect(rendered.srcset.length).toBe(2);
-  expect(rendered.srcset.map((candidate) => candidate.type).sort()).toEqual([
+  expect(rendered.srcset.length).toBe(8);
+  expect([...new Set(rendered.srcset.map((candidate) => candidate.type))].sort()).toEqual([
     'image/avif',
     'image/webp',
   ]);

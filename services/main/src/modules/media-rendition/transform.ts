@@ -11,19 +11,33 @@ import {
 } from './policy.ts';
 
 export interface ImageTransformer {
-  inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize & { hasAlpha?: boolean }>;
+  inspect(
+    bytes: Uint8Array,
+    mediaType: string,
+    signal?: AbortSignal,
+  ): Promise<ImageSize & { hasAlpha?: boolean }>;
   transform(
     bytes: Uint8Array,
     mediaType: string,
     plan: RenditionPlan,
     signal?: AbortSignal,
   ): Promise<RenditionOutput>;
+  transformCrop(
+    bytes: Uint8Array,
+    mediaType: string,
+    plans: readonly RenditionPlan[],
+    signal?: AbortSignal,
+  ): Promise<RenditionOutput[]>;
 }
 export class LocalImageTransformer implements ImageTransformer {
   constructor(private readonly timeoutMs: number = RENDITION_LIMITS.timeoutMs) {
     checkDeadline(timeoutMs);
   }
-  async inspect(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<ImageSize & { hasAlpha: boolean }> {
+  async inspect(
+    bytes: Uint8Array,
+    mediaType: string,
+    signal?: AbortSignal,
+  ): Promise<ImageSize & { hasAlpha: boolean }> {
     return transformInProcess(bytes, mediaType, null, this.timeoutMs, signal);
   }
   async transform(
@@ -35,6 +49,18 @@ export class LocalImageTransformer implements ImageTransformer {
     const result = await transformInProcess(bytes, mediaType, plan, this.timeoutMs, signal);
     if (!result.type) throw new Error('missing rendition type');
     return { ...result, type: result.type };
+  }
+  async transformCrop(
+    bytes: Uint8Array,
+    mediaType: string,
+    plans: readonly RenditionPlan[],
+    signal?: AbortSignal,
+  ): Promise<RenditionOutput[]> {
+    const output = await runTransform(bytes, mediaType, plans, this.timeoutMs, signal);
+    return output.map((result) => {
+      if (!result.type) throw new Error('missing rendition type');
+      return { ...result, type: result.type };
+    });
   }
 }
 function checkDeadline(timeoutMs: number): void {
@@ -78,6 +104,27 @@ export async function transformInProcess(
   signal?: AbortSignal,
   entryPoint = new URL('./transform-process.ts', import.meta.url),
 ): Promise<ImageSize & { bytes: Uint8Array; type: RenditionType | null; hasAlpha: boolean }> {
+  const [result] = await runTransform(
+    bytes,
+    mediaType,
+    plan ? [plan] : null,
+    timeoutMs,
+    signal,
+    entryPoint,
+  );
+  return result!;
+}
+
+async function runTransform(
+  bytes: Uint8Array,
+  mediaType: string,
+  plans: readonly RenditionPlan[] | null,
+  timeoutMs: number,
+  signal?: AbortSignal,
+  entryPoint = new URL('./transform-process.ts', import.meta.url),
+): Promise<
+  Array<ImageSize & { bytes: Uint8Array; type: RenditionType | null; hasAlpha: boolean }>
+> {
   checkDeadline(timeoutMs);
   signal?.throwIfAborted();
   if (
@@ -86,8 +133,17 @@ export async function transformInProcess(
     !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(mediaType)
   )
     throw new Error('invalid rendition input');
-  if (plan) parseProfile(plan.profile);
-  let result: ProcessReport | undefined;
+  if (plans) {
+    if (
+      !plans.length ||
+      plans.length > RENDITION_LIMITS.candidates ||
+      new Set(plans.map((plan) => plan.profile)).size !== plans.length ||
+      plans.some((plan) => plan.crop !== plans[0]!.crop)
+    )
+      throw new Error('invalid rendition plans');
+    for (const plan of plans) parseProfile(plan.profile);
+  }
+  let result: ProcessReport[] | undefined;
   let invalid = false;
   const child = Bun.spawn(
     [
@@ -96,7 +152,7 @@ export async function transformInProcess(
       '--smol',
       fileURLToPath(entryPoint),
       mediaType,
-      JSON.stringify(plan),
+      JSON.stringify(plans),
     ],
     {
       env: {},
@@ -106,7 +162,9 @@ export async function transformInProcess(
       ipc(message: unknown) {
         try {
           if (result) throw new Error('duplicate rendition result');
-          result = report(message, plan);
+          if (!Array.isArray(message) || message.length !== (plans?.length ?? 1))
+            throw new Error('invalid rendition reports');
+          result = message.map((value, index) => report(value, plans?.[index] ?? null));
         } catch {
           invalid = true;
           child.kill('SIGKILL');
@@ -129,7 +187,7 @@ export async function transformInProcess(
     let length = 0;
     try {
       for await (const chunk of child.stdout) {
-        if (length + chunk.byteLength > (plan ? RENDITION_LIMITS.bytes : 0)) {
+        if (length + chunk.byteLength > RENDITION_LIMITS.bytes * (plans?.length ?? 0)) {
           invalid = true;
           kill();
           break;
@@ -151,11 +209,24 @@ export async function transformInProcess(
       exit !== 0 ||
       invalid ||
       !result ||
-      data.length !== result.byteLength ||
-      (plan && createHash('sha256').update(data).digest('hex') !== result.sha256)
+      data.length !== result.reduce((sum, value) => sum + value.byteLength, 0)
     )
       throw new Error('local image transform unavailable');
-    return { width: result.width, height: result.height, type: result.type, bytes: data, hasAlpha: result.hasAlpha };
+    let offset = 0;
+    return result.map((value) => {
+      const bytes = data.subarray(offset, offset + value.byteLength);
+      offset += value.byteLength;
+      if (plans && createHash('sha256').update(bytes).digest('hex') !== value.sha256)
+        throw new Error('local image transform unavailable');
+      // Inspect returns no codec and no bytes; callers use only its dimensions and alpha.
+      return {
+        width: value.width,
+        height: value.height,
+        type: value.type,
+        bytes,
+        hasAlpha: value.hasAlpha,
+      };
+    });
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', kill);
