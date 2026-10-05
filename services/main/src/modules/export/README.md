@@ -1,15 +1,16 @@
 # Export owner
 
 `POST /v1/exports` verifies the Account `export:create` scope, registers and
-claims an Access `export.create` admission, reads an exact owner position, and
-seals a Content export manifest and receipt in one transaction. The receipt's
-Content epoch and sequence settle the Access admission. `GET /v1/exports/:export`
+claims an Access `export.create` admission and seals a Content export manifest
+and receipt in one transaction. After commit the Content sequencer numbers the
+receipt; its exact epoch and sequence settle the Access admission. `GET /v1/exports/:export`
 requires `export:read` and rechecks the source and disclosure before serving the
 sealed plan. Repeating a key returns the same manifest only while the source
 basis still matches; an ambiguous owner failure returns a pending operation so
 the retained receipt can reconcile the original admission.
 
-Content migration 180 adds the owner position, canonical plan payload and
+Content migration 180 adds the owner position (since migration 791 read from the
+manifest's receipt by operation), canonical plan payload and
 `export.create` receipt action to the tables introduced in migration 121. The
 writer persists member, residual and rights-basis rows alongside the payload.
 It never treats an Access position as a Content position. Stale, refused and

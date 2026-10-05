@@ -4,7 +4,8 @@ The first owner binding is `content-draft-protection-v1`: one Content variant's
 `draft_head` and optional `protection_head`. Migration 130 serializes every draft
 writer, protection change and correction application on the existing variant row.
 It appends immutable protection, proposal, decision and application records. The
-Content receipt, owner position and outbox are written in the same transaction.
+Content receipt and outbox are written in the same transaction; the command
+returns the position the Content sequencer assigns after commit.
 Migration 131 adds a proposal-scoped private-principal comparison key; public
 proposal reads omit it. `null` protection means asserted absence for this profile.
 Main resolves a lost Content acknowledgement from that operation's receipt and

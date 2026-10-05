@@ -413,7 +413,7 @@ export class ContentCore {
       throw new ContentConflict('invalid Content owner cut');
     }
     return transaction(this.pool, async client => {
-      await client.query("SET LOCAL lock_timeout = '15s'");
+      await client.query("SET LOCAL lock_timeout = '15s'; SET LOCAL statement_timeout = '20s'");
       const result = await client.query(`SELECT data_epoch, sequence::text AS sequence
         FROM content.owner_control WHERE singleton FOR UPDATE`);
       if (result.rowCount !== 1 || result.rows[0].data_epoch !== expected.dataEpoch

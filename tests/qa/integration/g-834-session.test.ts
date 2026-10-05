@@ -357,19 +357,23 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
       WHERE principal_subject = $1`, [a.principal.subject])).rejects.toMatchObject({ code: '23514' });
 
     // Disabling the Person removes its baseline without violating the current
-    // controller floor by deleting its sole controller mandate.
+    // controller floor by deleting its sole controller mandate. The Account and
+    // Access owner check precedes the Content transaction, which holds no network
+    // call: a write admitted before the revocation commits, and every request
+    // after it is refused, including a replay of an earlier key.
     const revoke = async () => stack.accessPool.query(`UPDATE access.authority_subject SET active = false
       WHERE id = $1`, [person]);
     const authorityKey = randomUUID();
     const beforeRevoke = await count();
     library.write = async (...args) => { const result = await originalWrite(...args); await revoke(); return result; };
     try {
+      expect((await create(target.work, { state: 'active' }, authorityKey)).status).toBe(201);
+      expect(await count()).toBe(beforeRevoke + 1);
       expect((await create(target.work, { state: 'active' }, authorityKey)).status).toBe(403);
-      expect(await count()).toBe(beforeRevoke);
       expect((await create(target.work, { startedOn: '2026-09' }, startKey)).status).toBe(403);
       expect((await page()).status).toBe(403);
     } finally { library.write = originalWrite; }
-    expect((await stack.contentPool.query('SELECT 1 FROM reader.consumption_session_command WHERE idempotency_key = $1', [authorityKey])).rows).toEqual([]);
+    expect(await count()).toBe(beforeRevoke + 1);
     expect((await library.batch(person, [legacy.work]))[0]).toMatchObject({ status: 'read', version: 1,
       startedOn: '2025-02-01', finishedOn: '2025-02-28' });
   } finally { await stack.stop(); }
