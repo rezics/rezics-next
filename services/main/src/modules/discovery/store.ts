@@ -287,7 +287,10 @@ export const discoverySourceContexts = (basis: Pick<DiscoveryBasis, 'scope' | 'r
 
 /** A refresh resolves at most as many judged Statements to Works as a delta
  * may carry events; more rebuild the population instead. */
-export const DISCOVERY_SOURCE_KEY_COST = { statements: DISCOVERY_DELTA_COST.events, queries: 1 } as const;
+export const DISCOVERY_SOURCE_KEY_COST = {
+  statements: DISCOVERY_DELTA_COST.events,
+  queries: 1,
+} as const;
 
 /** The fence and the Access changes after one basis that reach it, in one
  * snapshot. `changed`: a reaching change awaits its fold. `wide`: a scope- or
@@ -485,7 +488,8 @@ export class DiscoveryProjection {
           prior.source_epoch !== position.dataEpoch ||
           since.wide ||
           (reuse.access
-            ? BigInt(reuse.access) < BigInt(covered) || BigInt(reuse.access) > BigInt(fence.revision)
+            ? BigInt(reuse.access) < BigInt(covered) ||
+              BigInt(reuse.access) > BigInt(fence.revision)
             : since.statements.length > 0) ||
           prior.recovery_generation !== fence.generation ||
           prior.source_profile !== DISCOVERY_SOURCE_PROFILE ||

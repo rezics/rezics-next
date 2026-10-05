@@ -67,7 +67,11 @@ export function discoveryRetryDelay(attempts = '1'): number {
 export const discoveryGenerationCurrent = (
   row: Pick<
     DiscoveryGeneration,
-    'source_epoch' | 'source_sequence' | 'recovery_generation' | 'source_profile' | 'covered_sequence'
+    | 'source_epoch'
+    | 'source_sequence'
+    | 'recovery_generation'
+    | 'source_profile'
+    | 'covered_sequence'
   >,
   position: ReadPosition,
   since: Pick<DiscoverySourceChanges, 'wide' | 'statements' | 'generation'>,

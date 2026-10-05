@@ -212,7 +212,8 @@ export class DiscoveryRefreshWorker {
             changes && state.reuse && state.access
               ? await this.judgedWorks(session, state.reuse, state.access.statements)
               : null;
-          const works = changes && judged ? [...new Set([...changes.works, ...judged])].sort() : null;
+          const works =
+            changes && judged ? [...new Set([...changes.works, ...judged])].sort() : null;
           if (!state.row && works && state.reuse && state.access && !works.length) {
             return {
               acknowledge: state.reuse,
@@ -230,7 +231,10 @@ export class DiscoveryRefreshWorker {
                 idempotencyKey: `refresh:${job.scope_key}:${job.lease_epoch}`,
                 requestDigest: digest([job.basis, session.position]),
               },
-              works && state.reuse && state.access && works.length <= DISCOVERY_SOURCE_KEY_COST.statements
+              works &&
+                state.reuse &&
+                state.access &&
+                works.length <= DISCOVERY_SOURCE_KEY_COST.statements
                 ? {
                     generation: state.reuse.generation_id,
                     works,

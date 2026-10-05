@@ -57,15 +57,26 @@ terminal receipt as well as the event, and rejects conflicting fields.
   even a harmless label/move inside `composition.change` uses that conservative
   fallback. This is a remaining owner-event precision limitation.
 
-Access source writes (judgment votes and spoiler hints, moderation enforcement,
-principal deactivation and rating inventory repairs) append one row per
-transaction to `access.discovery_source_change` and never lock
-`discovery_source_fence`. Registration folds the committed rows into the
-revision its basis records; the basis stays current while that revision is
-unchanged and no row remains. Batches and reads take no fence lock, so a vote
-never waits for a build or a build for a vote. A change that commits during a
-batch, including one from an older transaction, outdates the generation at the
-next check (`tests/qa/integration/source-fence-concurrency.test.ts`).
+Access source writes never lock `discovery_source_fence`. Each appends a row to
+`access.discovery_source_change` naming what it reaches: a vote its judgment
+context and Statement, a spoiler hint its context, while moderation enforcement,
+principal deactivation and rating inventory repairs are scope-wide. Refresh ticks
+and registrations fold committed rows into a new revision and keep, per key, the
+latest revision that changed it (`access.discovery_source_key`). A basis is
+outdated only by keys above it in the contexts it reads: a Realm vote reaches
+that Realm, a global vote every population except Mine, a scope-wide change all.
+
+A build in progress completes against its basis whatever votes follow it, so a
+steady stream of votes cannot restart it; only recovery or a scope- or
+context-wide change closes it. The next refresh resolves the judged Statements to
+the Works whose main version they are about, re-projects those already in the
+population as a delta and acknowledges the rest by advancing the generation's
+Access watermark. More than 2,000 Statements rebuild the population. Reads report
+a generation stale while a reaching change is unfolded or above its watermark. A
+change that commits during a batch, including one from an older transaction, is
+never covered by that batch's basis
+(`tests/qa/integration/source-fence-concurrency.test.ts`,
+`tests/qa/integration/discovery-continuous-writes.test.ts`).
 
 [`versions.ts`](versions.ts) replaces only changed Work posting lists and affected
 term/Concept counters. Logical generations share a storage root with validity
@@ -118,6 +129,11 @@ rebuilt in 1.92, 14.20 and 141.34 seconds; the largest run again used 352 ticks
 and 1,807 graph calls. The prior 10,000-Work measurement was 135.15 seconds.
 These are repeated measurements on the shared host, within the five-minute
 budget, rather than a claim that rebuild latency is identical between runs.
+Keyed Access changes (2026-10-06) add one read of the changes after the active
+basis to each tick and one to a delta registration: 47 and 128 statements
+(`discovery-rating-effects.test.ts`, QA `20261005t160958-b67f00`). The native
+10,000-Work probe then rebuilt in 25.17 seconds and refreshed one Work in 1.17
+seconds (QA `20261005t162543-2caa3a`).
 
 The read regression (`discovery-history-seeks.test.ts`, QA
 `20261004t150839-f2576c`) captures actual owner statements over 20,000 Works and
