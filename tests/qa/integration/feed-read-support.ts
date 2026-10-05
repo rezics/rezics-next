@@ -24,6 +24,7 @@ import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/s
 import { startMediaStack } from './media-support.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { isForegroundOperation } from './support/operation-cost.ts';
 
 /** The Home reads whose cost the budget and load tests hold. */
 export const HOME_READS = {
@@ -74,7 +75,8 @@ export const budgetFor = (name: string, signed: boolean) => name === 'continue' 
   : name === 'suggestions' ? HOME_READ_BUDGET.suggestions : signed ? HOME_READ_BUDGET.signed : HOME_READ_BUDGET.anonymous;
 
 /**
- * Counts every SQL statement this process sends. Each transaction opened with
+ * Counts foreground SQL statements and asynchronous commits using the same
+ * scheduler attribution as graph queries. Each transaction opened with
  * asynchronous commit is also proved, on its own backend, to change no row:
  * its table write counters do not move between BEGIN and COMMIT (the backend
  * flushes them only between transactions, so the delta is this transaction's)
@@ -93,7 +95,7 @@ export function meterStatements() {
   prototype.query = function (this: object, ...args: unknown[]) {
     const text = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string } | undefined)?.text ?? '';
     const promised = typeof args.at(-1) !== 'function';
-    statements++;
+    if (isForegroundOperation()) statements++;
     if (promised && /^BEGIN; SET LOCAL synchronous_commit = off$/.test(text)) {
       return (async () => {
         const result = await (original.apply(this, args) as Promise<unknown>);
@@ -105,7 +107,7 @@ export function meterStatements() {
     if (state && /^(COMMIT|ROLLBACK)$/.test(text)) {
       open.delete(this);
       if (text === 'COMMIT' && promised) {
-        asyncCommits++;
+        if (isForegroundOperation()) asyncCommits++;
         return (async () => {
           const changedRows = await writes(this) - state.before;
           const changing = state.sent.filter(statement => /^\s*(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|COPY)\b/i.test(statement));

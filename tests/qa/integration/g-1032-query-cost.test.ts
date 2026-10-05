@@ -455,6 +455,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           },
         );
         const statements = sql.count() - beforeSql;
+        const measurementStatements = 2 * (sql.asyncCommits() - beforeAsyncCommits);
         evidence.push({
           name,
           viewer: bearer ? 'signed' : 'anonymous',
@@ -467,7 +468,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           seekRows,
           cardWorks,
           statements,
-          measurementStatements: 2 * (sql.asyncCommits() - beforeAsyncCommits),
+          measurementStatements,
           sqlFamilies: capturedSql.snapshot().families,
           sqlShapes: capturedSql.snapshot().shapes,
           accountChecks: accountChecks - beforeAccount,
@@ -496,10 +497,8 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           expect(cardWorks).toBeLessThanOrEqual(query.limit ?? 20);
           expect(statements).toBeLessThanOrEqual(RESOURCE_LIST_COST.postgresStatements);
           // meterStatements proves asynchronous read commits write no tuples;
-          // its two pg_stat_xact probes per commit also appear in OTLP.
-          expect(profile.postgresStatements).toBe(
-            statements + 2 * (sql.asyncCommits() - beforeAsyncCommits),
-          );
+          // its two pg_stat_xact probes per foreground commit also appear in OTLP.
+          expect(profile.postgresStatements).toBe(statements + measurementStatements);
           expect(captured.filter((text) => text.includes('SELECT ?r ?concept'))).toHaveLength(0);
           expect(
             captured.filter((text) => text.includes('SELECT DISTINCT ?r ?type WHERE')),

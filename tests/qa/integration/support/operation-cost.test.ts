@@ -116,6 +116,7 @@ test('discovery, co-reader, producer and digest scheduling excludes descendants 
     ...([{}, {}, '', '', ''] as unknown as ConstructorParameters<typeof NotificationDigestWorker>),
   );
   const producerOwner = {
+    observeLag: async () => {},
     runRelationshipRecoveryOnce: tick,
     runAccessOnce: async () => {
       await tick();
