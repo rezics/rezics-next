@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { uuidToSid } from '@rezics/model/address';
+import { documentText, type DocumentSnapshot } from '@rezics/document';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
@@ -18,11 +19,29 @@ const pathOf = (page: Page) => { const url = new URL(page.url()); return `${url.
 async function write(page: Page, label: string, text: string) {
   const editor = page.getByRole('textbox', { name: label, exact: true });
   await expect(editor).toBeVisible({ timeout: 60_000 });
+  const side = label === 'Author’s note before the chapter' ? 'before'
+    : label === 'Author’s note after the chapter' ? 'after' : null;
+  const persisted = page.waitForResponse(response => {
+    const request = response.request();
+    if (request.method() !== 'POST'
+      || !/\/(content-drafts|contributions|contribution-edits)$/.test(new URL(request.url()).pathname)) return false;
+    const input = request.postDataJSON();
+    const part = side ? input.notes?.[side] : input;
+    return part && (part.body === text || part.document
+      && documentText(part.document as DocumentSnapshot) === text);
+  }, { timeout: 60_000 });
   await editor.click();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.insertText(text);
   await expect(editor).toHaveText(text);
+  const response = await persisted;
+  expect([200, 201]).toContain(response.status());
+  const savedRevision = await response.json() as { revisionId?: string; draftRevision?: string };
+  expect(savedRevision.revisionId ?? savedRevision.draftRevision).toBeTruthy();
   await expect(saved(page)).toHaveText(/^Saved · /, { timeout: 30_000 });
+  if (savedRevision.revisionId) {
+    await expect.poll(() => new URL(page.url()).searchParams.get('revision')).toBe(savedRevision.revisionId);
+  }
 }
 
 async function publish(page: Page) {
@@ -100,6 +119,11 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await write(page, 'Author’s note after the chapter', after);
     const chapterPath = pathOf(page);
     const post = /\/chapters\/([0-9a-f-]{36})/.exec(chapterPath)![1]!;
+    const revision = new URL(page.url()).searchParams.get('revision');
+    const ownDraft = await page.request.get(`/api/main/v1/content-revisions/${revision}?actingSubject=${encodeURIComponent(agent)}`);
+    expect(ownDraft.status()).toBe(200);
+    expect(await ownDraft.json()).toMatchObject({ body: { body: text,
+      notes: { before: { body: before }, after: { body: after } } } });
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Author’s note before the chapter' })).toHaveText(before);
     await expect(page.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveText(after);

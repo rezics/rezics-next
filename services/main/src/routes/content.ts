@@ -140,9 +140,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           comment.resourceId)) {
           return problem(404, 'comment_unavailable', 'Comment is unavailable');
         }
-        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
           ASK { GRAPH <urn:rezics:graph:current> {
-            ${iri(comment.resourceId)} a schema:CreativeWork } }`);
+            ${iri(comment.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
         const exact = (await work.content.readExactBatch([comment.revisionId],
           async ids => new Set(ids)))[0];
@@ -190,9 +190,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const resourceId = await work.content.owningResourceForRevision(params.revision);
         if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject,
           resourceId)) return problem(404, 'comment_unavailable', 'Comments are unavailable');
-        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
           ASK { GRAPH <urn:rezics:graph:current> {
-            ${iri(resourceId)} a schema:CreativeWork } }`);
+            ${iri(resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comments are unavailable');
         let page;
         try {
@@ -355,8 +355,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject, resourceId)) {
           return problem(404, 'revision_unavailable', 'Revision is unavailable');
         }
-        const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
-          ASK { GRAPH <urn:rezics:graph:current> { ${iri(resourceId)} a schema:CreativeWork } }`);
+        const current = await fuseki.query(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
+          ASK { GRAPH <urn:rezics:graph:current> {
+            ${iri(resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);
         if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
