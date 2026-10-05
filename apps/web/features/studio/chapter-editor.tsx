@@ -46,7 +46,7 @@ export interface ChapterEditorProps {
 }
 
 /**
- * One chapter of a Book, written into its Content draft. Saves carry the head
+ * One chapter Post of a Book, written into its Content draft. Saves carry the head
  * they were typed on, so a save from another tab or device is met as a
  * conflict naming the head that won. Publishing sends the exact saved bytes;
  * an update names the publication it replaces.

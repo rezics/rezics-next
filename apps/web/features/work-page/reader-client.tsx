@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { Popover, PopoverBody, PopoverContent, PopoverHeader, PopoverTrigger } from '@rezics/ui/popover';
 import { CheckIcon, MinusIcon, PlusIcon, TypeIcon } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { browserMainApi } from '../api/browser.ts';
 import { preferenceCookie } from '../shell/preferences.ts';
@@ -11,6 +11,50 @@ import { completeReaderSettings, lineWidths, paragraphPosition, READER_COOKIE, t
   type ReaderSettings,
   serializeReaderSettings, textSizes, typefaces } from './reader-settings.ts';
 import type { ChapterRead, Progress } from './types.ts';
+import { PostWorkLinks, type PostWorkLinkItem } from './post-work-link.tsx';
+import type { UiLocale } from '../../i18n/define.ts';
+import type { WorkPageMessages } from './messages.ts';
+
+interface ChapterWorkLinksPage { items: readonly PostWorkLinkItem[]; nextCursor: string | null }
+type WorkLinksInput = { post: string; actingSubject: string | null; language: string; cursor?: string };
+export type ChapterWorkLinksRead = (input: WorkLinksInput) => Promise<ChapterWorkLinksPage>;
+
+const readWorkLinks: ChapterWorkLinksRead = async ({ post, actingSubject, language, cursor }) => {
+  const { data, error } = await browserMainApi(window.location.origin, { anonymous: !actingSubject })
+    .v1.posts({ id: post.slice(-36) }).identifications.get({
+      query: { actingSubject: actingSubject ?? undefined, language, limit: 20, cursor },
+    });
+  if (error || !data) throw new Error('Post identification read failed');
+  return data;
+};
+
+/** Identification is a separate read: empty success adds no row, and its cursor stays in the reader address. */
+export function ChapterWorkLinks({ post, actingSubject, language, locale, href, messages, read = readWorkLinks }: {
+  post: string; actingSubject: string | null; language: string; locale: UiLocale; href: string;
+  messages: WorkPageMessages; read?: ChapterWorkLinksRead;
+}) {
+  const search = useSearchParams();
+  const cursor = search.get('postWorkCursor') || undefined;
+  const [attempt, setAttempt] = useState(0);
+  const key = JSON.stringify([post, actingSubject, language, cursor, attempt]);
+  const [state, setState] = useState<{ key: string; page: ChapterWorkLinksPage | null } | null>(null);
+  useEffect(() => {
+    let active = true;
+    void read({ post, actingSubject, language, cursor }).then(page => {
+      if (active) setState({ key, page });
+    }).catch(() => { if (active) setState({ key, page: null }); });
+    return () => { active = false; };
+  }, [post, actingSubject, language, cursor, key, read]);
+  if (state?.key !== key) return null;
+  if (!state.page) return <div role="status" className="grid justify-items-start gap-2 text-sm text-muted-foreground">
+    <p>{messages.regionUnavailable}</p>
+    <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>{messages.retry}</Button>
+  </div>;
+  const next = new URL(href, 'https://web.invalid');
+  if (state.page.nextCursor) next.searchParams.set('postWorkCursor', state.page.nextCursor);
+  return <PostWorkLinks items={state.page.items} locale={locale}
+    moreHref={state.page.nextCursor ? `${next.pathname}${next.search}` : null} />;
+}
 
 export interface SettingsLabels {
   settings: string; textSize: string; smallerText: string; largerText: string; lineWidth: string;

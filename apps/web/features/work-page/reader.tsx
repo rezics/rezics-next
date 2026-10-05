@@ -24,7 +24,8 @@ import { signInPath } from '../auth/paths.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { numberedTitle, paragraphs, volumeName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { ChapterKeys, ReaderChrome, ReaderSurface, ReadingProgress } from './reader-client.tsx';
+import { ChapterKeys, ChapterWorkLinks, ReaderChrome, ReaderSurface, ReadingProgress,
+  type ChapterWorkLinksRead } from './reader-client.tsx';
 import { parsePosition, type ReaderSettings } from './reader-settings.ts';
 import { RetryButton } from './retry-button.tsx';
 import { chapterHref, idOf, workHref } from './route.ts';
@@ -322,6 +323,7 @@ export function ChapterReader({
   actingSubject,
   locale,
   messages,
+  identificationsRead,
 }: {
   workRef: string;
   work: WorkHeader;
@@ -332,6 +334,7 @@ export function ChapterReader({
   actingSubject: string | null;
   locale: UiLocale;
   messages: WorkPageMessages;
+  identificationsRead?: ChapterWorkLinksRead;
 }) {
   const t = materializeData(messages, { locale });
   const body: unknown = chapter.content.body.body;
@@ -436,6 +439,8 @@ export function ChapterReader({
           >
             {title}
           </h1>
+          <ChapterWorkLinks post={chapter.content.reference.resourceId} actingSubject={actingSubject}
+            language={chapter.language} locale={locale} href={here} messages={messages} read={identificationsRead} />
           {resume ? (
             <a
               href={`#p-${resume}`}

@@ -1,7 +1,7 @@
 import { chapterHref, textHref, workHref } from './route.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { ContentsRegion } from './contents.tsx';
@@ -9,15 +9,18 @@ import type { ContentsPage } from './types.ts';
 import { ChapterNotFound, ChapterReader, ChapterUnavailable, TextNotFound, TextReader } from './reader.tsx';
 import { defaultReaderSettings } from './reader-settings.ts';
 import { ChapterSkeleton } from './work-states.tsx';
+import type { ChapterWorkLinksRead } from './reader-client.tsx';
 
 const chapterPath = chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000003');
+const noIdentifications: ChapterWorkLinksRead = async () => ({ items: [], nextCursor: null });
 
 const meta = {
   title: 'Work page/Reader',
   component: ChapterReader,
   args: { workRef: fixture.workRef, work: fixture.work, chapter: fixture.chapter, language: undefined,
     settings: defaultReaderSettings, progress: fixture.progress,
-    actingSubject: 'https://rezics.com/id/aac18373-3fe4-46e0-9da8-3b2864fbad2b', locale: 'en', messages: messages.en },
+    actingSubject: 'https://rezics.com/id/aac18373-3fe4-46e0-9da8-3b2864fbad2b', locale: 'en', messages: messages.en,
+    identificationsRead: noIdentifications },
   parameters: { route: { pathname: chapterPath } },
 } satisfies Meta<typeof ChapterReader>;
 export default meta;
@@ -36,6 +39,54 @@ export const Reading: Story = {
     await expect(within(chapters).getByRole('link', { name: 'Next chapter' })).toHaveAttribute('rel', 'next');
     await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef), 'en'));
     await expect(canvas.getByRole('button', { name: 'Mark chapter as read' })).toBeEnabled();
+    await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
+  },
+};
+
+const identifiedWork = { work: 'https://rezics.com/id/00000000-0000-4000-8000-000000000017',
+  title: { value: 'The Rain Map', language: 'en' } };
+const identifiedRead = fn<ChapterWorkLinksRead>(async () => ({ items: [identifiedWork], nextCursor: null }));
+export const IdentifiedAsWork: Story = {
+  args: { identificationsRead: identifiedRead },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const links = await canvas.findByRole('navigation', { name: 'Also a Work' });
+    await expect(within(links).getByRole('link', { name: 'The Rain Map' }))
+      .toHaveAttribute('href', localizedPath(workHref(identifiedWork.work.slice(-36)), 'en'));
+    await expect(identifiedRead).toHaveBeenCalledWith({ post: fixture.chapter.content.reference.resourceId,
+      actingSubject: meta.args.actingSubject, language: fixture.chapter.language, cursor: undefined });
+    await expect(canvasElement.querySelector('article header')).toContainElement(links);
+  },
+};
+
+const continuedRead = fn<ChapterWorkLinksRead>(async () => ({ items: [identifiedWork], nextCursor: 'third-page' }));
+export const IdentifiedWorksContinuation: Story = {
+  args: { identificationsRead: continuedRead },
+  parameters: { route: { pathname: chapterPath, search: '?postWorkCursor=second-page' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const more = await canvas.findByRole('link', { name: 'More Works' });
+    await expect(more).toHaveAttribute('href', localizedPath(`${chapterPath}?postWorkCursor=third-page`, 'en'));
+    await expect(continuedRead).toHaveBeenCalledWith({ post: fixture.chapter.content.reference.resourceId,
+      actingSubject: meta.args.actingSubject, language: fixture.chapter.language, cursor: 'second-page' });
+  },
+};
+
+const recoveredWorkLinks = fn<ChapterWorkLinksRead>(async () => {
+  if (recoveredWorkLinks.mock.calls.length === 1) throw new Error('Offline');
+  return { items: [], nextCursor: null };
+});
+export const WorkLinksRetryThenLeaveNoTrace: Story = {
+  args: { identificationsRead: recoveredWorkLinks },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(messages.en.regionUnavailable)).toBeVisible();
+    await expect(canvasElement.querySelector('[data-reader-text]')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: /^Retry$/ }));
+    await waitFor(() => expect(recoveredWorkLinks).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(canvas.queryByText(messages.en.regionUnavailable)).toBeNull());
+    await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /^Retry$/ })).toBeNull();
   },
 };
 

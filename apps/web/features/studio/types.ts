@@ -50,12 +50,12 @@ export function failureOf(status: number): ReadFailure {
   return 'unavailable';
 }
 
-/** How Studio writes a Work: a Book in chapters, a recipe on its own, anything else as one text. */
+/** Studio presentation kinds: Books organize chapter Posts; recipes and other Works have their own text. */
 export type WorkKind = 'book' | 'recipe' | 'document' | 'chapter';
 
 /**
- * How Studio writes a Work, from the registry's presentation for its types. A
- * Work without a type is a chapter, which only a Book's contents name.
+ * Presentation from the registry's types. The legacy untyped-chapter fallback
+ * stays inside a Book's contents; chapter creation writes a Post, not a Work.
  */
 export function workKind(types: readonly string[]): WorkKind {
   if (!types.length) return 'chapter';
