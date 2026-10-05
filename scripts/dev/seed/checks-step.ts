@@ -11,8 +11,18 @@ import { reviews } from './reviews-plan.ts';
  * co-readers behind "Readers also enjoyed". Each failure is a finding, so the seed exits non-zero. */
 async function checkCommunity(state: SeedState) {
   const { api, findings } = state;
-  const listed = await api.getPublic<{ items: { id: string }[] }>('/v1/realms?limit=20');
-  const community = [...state.communityRealms.values()].filter(item => listed.items.some(realm => realm.id === item.realm));
+  // Other fixtures crowd the directory, so the demo's Realms are looked for page by page until all are found.
+  const listed = new Set<string>();
+  let directory: string | null = null;
+  const demo = () => [...state.communityRealms.values()].filter(item => listed.has(item.realm));
+  for (let page = 0; page < 200 && demo().length < communityRealms.length; page++) {
+    const found: { items: { id: string }[]; nextCursor: string | null } = await api.getPublic(
+      `/v1/realms?limit=20${directory ? `&cursor=${encodeURIComponent(directory)}` : ''}`);
+    for (const realm of found.items) listed.add(realm.id);
+    directory = found.nextCursor;
+    if (!directory) break;
+  }
+  const community = demo();
   if (community.length !== communityRealms.length) {
     findings.add(`Community Realms: ${community.length}/${communityRealms.length} listed in the Realm directory`);
   }

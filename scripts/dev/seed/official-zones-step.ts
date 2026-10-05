@@ -9,7 +9,7 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContri
   grantImportedWorkSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
-import { localizedBilingual, people, profilePlan, realms as plannedRealms, seedKey, works } from './plan.ts';
+import { localizedBilingual, people, profilePlan, seedKey, works } from './plan.ts';
 import { seedReply } from './replies.ts';
 import { modsConcepts } from './realms-step.ts';
 import { onEarlierWork, replayEarlierWork } from './contributions-work.ts';
@@ -63,12 +63,6 @@ const kinds = { document: DOCUMENT, mod: 'https://rezics.com/vocab/ModPackage',
 interface Published { contribution: string; decision: string; draftRevision: string }
 interface Placed { work: WorkReceipt; language: string; published: Published | null }
 
-/** The key part naming an official Realm in the commands that write into it; see `Official.keyed`. */
-export function realmKeyed(id: string, realm: string): string {
-  const planned = plannedRealms.find(item => item.id === id);
-  return planned && 'handle' in planned ? `${id}:${short(realm)}` : id;
-}
-
 class Official {
   readonly works = new Map<string, Placed>();
   readonly agents = new Map<string, string>();
@@ -97,12 +91,6 @@ class Official {
     if (!realm) throw new Error(`Official Realm ${id} was not created`);
     return realm;
   }
-  /**
-   * Keys of the commands that write into a Realm. A Realm planned with a handle was created under a key that names it,
-   * so on a stack seeded before the handle it replaced an earlier Realm of the same plan id, and that Realm's records
-   * hold the plain keys. The replacement's records carry it in their keys; every other Realm keeps its plain ones.
-   */
-  keyed(id: OfficialRealmId): string { return realmKeyed(id, this.realm(id).receipt.realm); }
   /** Fixture authority on the local stack, for `actor` as the person `as` represents. */
   input(as: Session, actor: string): LocalOperatorInput {
     return { ...this.operator, ownerAccountSubject: as.accountId, actingSubject: actor };
@@ -509,7 +497,7 @@ async function modClassifications(o: Official) {
       await o.api.post('/v1/classification-decisions', {
         profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
         outcome: 'accepted', actingSubject: steward.actingSubject }, steward.token,
-      seedKey('official-mod-classification', `${o.keyed('mods')}:${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
+      seedKey('official-mod-classification', `${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
     }
   }
 }
@@ -670,7 +658,7 @@ async function adoptions(o: Official) {
         profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: realm.receipt.realm },
         work: work.work.work, mainVersion: work.work.mainVersion, contribution: work.contribution,
         publicationDecision: work.decision, expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
-        actingSubject: realm.steward.actingSubject }, realm.steward.token, seedKey('realm-adoption', `${o.keyed(id)}:${workId}`)));
+        actingSubject: realm.steward.actingSubject }, realm.steward.token, seedKey('realm-adoption', `${id}:${workId}`)));
       if (adopted) count++;
     }
   }
@@ -746,7 +734,7 @@ async function joining(o: Official) {
       await o.api.put(`${root}/settings`, { actingSubject: steward.actingSubject, expectedGeneration: current.generation,
         reason: 'Open the official community to readers and publish its rules',
         settings: { ...current.settings, selfJoin: true, rules }, expectedRulesRevision: current.ruleBasis.revision },
-      steward.token, seedKey('official-settings', `${o.keyed(id)}:${current.generation}`));
+      steward.token, seedKey('official-settings', `${id}:${current.generation}`));
     }
     for (const member of demoSessions(o.state.sessions).filter(session => session.id !== steward.id)) {
       const result = await o.state.optional('Official Realm join', async () => {
@@ -759,7 +747,7 @@ async function joining(o: Official) {
           termsRevision: policy.termsRevision,
           // One demo person joins without being listed, as anyone may.
           listed: member.id !== 'leo' }, member.token,
-        seedKey('official-join', `${o.keyed(id)}:${member.id}:${policy.membershipGeneration}`));
+        seedKey('official-join', `${id}:${member.id}:${policy.membershipGeneration}`));
       });
       if (result) joined++;
     }
@@ -799,7 +787,7 @@ async function profiles(o: Official) {
           `${root}/moderators/${short(moderator.actingSubject)}/public-choice`, {
             profile: 'realm-public-moderator-choice-v1', expectedHead: null, public: true,
             actingSubject: moderator.actingSubject }, await token(person),
-          seedKey('official-moderator-choice', `${o.keyed(id)}:${person}`)).catch(error => {
+          seedKey('official-moderator-choice', `${id}:${person}`)).catch(error => {
           // A choice made on an earlier run stands; only its first command has no head.
           if (error instanceof SeedApiError && error.status === 409) return true;
           throw error;
@@ -821,7 +809,7 @@ async function profiles(o: Official) {
           bannerSelection: null, rules: profile.rules.map(rule => ({ ...rule,
             title: localizedBilingual(rule.title), body: localizedBilingual(rule.body), governanceRule: null })),
           count: { kind: 'exact', value: null }, moderators } },
-      await token(realm.steward.id), seedKey('official-profile-v2', `${o.keyed(id)}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
+      await token(realm.steward.id), seedKey('official-profile-v2', `${id}:${header?.profileRevision?.slice(-12) ?? 'first'}`));
     });
   }
 }

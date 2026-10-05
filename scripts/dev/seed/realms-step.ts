@@ -83,21 +83,23 @@ export async function seedRealms(state: SeedState) {
       if (error instanceof SeedApiError && error.status === 404) return null;
       throw error;
     });
-    const receipt = await state.optional('Space / Realm creation', () => api.post<SpaceReceipt>('/v1/spaces', {
-      profile: 'space-realm-v2', name: realm.seedName,handle: 'handle' in realm ? realm.handle : realm.id,capabilities: ['realm'],
-      actingSubject: steward.actingSubject }, steward.token,
-      seedKey('realm', 'handle' in realm ? `${realm.id}:${realm.handle}` : realm.id))
-      .catch(async (error: unknown) => {
-        if (!isIdempotencyConflict(error)) throw error;
-        const zone = officialZone(realm.id);
-        // The Zone read needs the steward's grant, which expires between runs.
-        if (operatorInput) await grantOfficialZoneSeed({ ...operatorInput, ownerAccountSubject: steward.accountId,
-          actingSubject: steward.actingSubject }, zone);
-        const adopted = await adoptZoneSpace(get, zone, steward.actingSubject);
-        if (!adopted) throw error;
+    // The Zone's Space is the plan's Space: its key may have changed since (a handle was added), and replaying the
+    // current key would then find or make another Space that the Zone does not belong to. Read the Zone first.
+    const zone = officialZone(realm.id);
+    const receipt = await state.optional('Space / Realm creation', async () => {
+      // The Zone read needs the steward's grant, which expires between runs.
+      if (operatorInput) await grantOfficialZoneSeed({ ...operatorInput, ownerAccountSubject: steward.accountId,
+        actingSubject: steward.actingSubject }, zone);
+      const adopted = await adoptZoneSpace(get, zone, steward.actingSubject);
+      if (adopted) {
         if (state.endpoints.writeCounts) state.endpoints.writeCounts.lookups++;
         return adopted;
-      }));
+      }
+      return api.post<SpaceReceipt>('/v1/spaces', {
+        profile: 'space-realm-v2', name: realm.seedName,handle: 'handle' in realm ? realm.handle : realm.id,capabilities: ['realm'],
+        actingSubject: steward.actingSubject }, steward.token,
+      seedKey('realm', 'handle' in realm ? `${realm.id}:${realm.handle}` : realm.id));
+    });
     if (receipt) createdRealms.push({ id: realm.id, receipt, steward });
   }
   for (const realm of realms) {

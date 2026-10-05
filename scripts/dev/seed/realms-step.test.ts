@@ -40,3 +40,27 @@ test('only an idempotency conflict marks a Space as made under an earlier body',
   expect(isIdempotencyConflict(new SeedApiError('Main /v1/spaces', 400, '{"code":"idempotency_conflict"}'))).toBe(false);
   expect(isIdempotencyConflict(new Error('offline'))).toBe(false);
 });
+
+test('a Realm whose Zone already names its Space keeps that Space, whatever key now creates one', async () => {
+  const { realms } = await import('./plan.ts');
+  const { seedRealms } = await import('./realms-step.ts');
+  const { stableId } = await import('./state.ts');
+  const spaces = new Map(realms.map((realm, index) => [stableId(`zone:${realm.id}`), { space: native(`a${index}`), realm: native(`b${index}`) }]));
+  const posts: string[] = [];
+  const state = { sessions: Array.from({ length: realms.length + 1 }, (_, index) => ({ id: `person-${index}`, accountId: `account-${index}`,
+    cookie: '', token: `token-${index}`, issuedAt: 0, actingSubject: native(`c${index}`) })),
+  created: new Map(), createdRealms: [], seededZones: [], operatorInput: null, operatorSession: null,
+  endpoints: { writeCounts: { written: 0, replayed: 0, reconciled: 0, lookups: 0 } },
+  optional: async <T>(_label: string, operation: () => Promise<T>) => operation(),
+  api: { post: async (path: string) => { posts.push(path); throw new Error('Space created beside the Zone\'s'); },
+    get: async (path: string) => {
+      const zone = /\/v1\/zones\/([0-9a-f-]{36})\/configuration/.exec(path)?.[1];
+      if (zone) return { configuration: { space: spaces.get(zone)!.space, defaultRealm: spaces.get(zone)!.realm } };
+      const realm = [...spaces.values()].find(held => path.includes(held.realm.slice(-36)))!;
+      return { id: realm.realm, space: realm.space };
+    } } } as unknown as Parameters<typeof seedRealms>[0];
+  await seedRealms(state);
+  expect(posts).toEqual([]);
+  expect(state.createdRealms.map(item => item.receipt.realm)).toEqual(realms.map((_, index) => native(`b${index}`)));
+  expect(state.endpoints.writeCounts?.lookups).toBe(realms.length);
+});

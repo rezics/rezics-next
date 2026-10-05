@@ -1,16 +1,7 @@
 import { expect, test } from 'bun:test';
-import { modReleaseBound, realmKeyed, type ModRead } from './official-zones-step.ts';
+import { modReleaseBound, type ModRead } from './official-zones-step.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-a000-000000000001';
-const realm = 'https://rezics.com/id/00000000-0000-4000-a000-000000000002';
-
-test('a Realm planned with a handle names itself in its keys, since an earlier Realm holds the plain ones', () => {
-  expect(realmKeyed('mods', realm)).toBe('mods:00000000-0000-4000-a000-000000000002');
-});
-
-test('a Realm planned without a handle keeps its plain keys', () => {
-  expect(realmKeyed('fiction', realm)).toBe('fiction');
-});
 
 function releases(pages: { items: { version: string | null; gameVersions: string[]; mod: { ecosystem: string } | null }[]; nextCursor: string | null }[]) {
   const seen: string[] = [];

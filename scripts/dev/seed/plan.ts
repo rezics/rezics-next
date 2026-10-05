@@ -109,6 +109,8 @@ export const profilePlan = {
     ...works.filter(work => work.author && work.author !== 'moonlight')
       .map(work => ({ agent: work.author!, work: work.id, role: 'author' as const })),
     ...['pride', 'alice'].map(work => ({ agent: 'northstar', work, role: 'editor' })),
+    // The web serial the releases step makes. One made before Works named their author has no credit; a new one has it.
+    { agent: 'mei', work: 'star-harbor', role: 'author' },
   ] as ReadonlyArray<{ agent: string; work: string; role: 'author' | 'translator' | 'editor' }>,
   bios: [
     { agent: 'mei', language: 'en', text: 'Lin Mei writes 雨夜书店 (The Rainy Night Bookshop), a serial about '
