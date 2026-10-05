@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 async function json<T>(response: Response, status: number): Promise<T> {
   const body = await response.text();
@@ -37,7 +38,8 @@ test('Community creation reserves one handle and filters the directory by global
       .toMatchObject({ holder: created.space,canonical: { key: command.handle },capabilities: { realm: created.realm } });
     const selected = await json<{ topic: { id: string; label: { value: string } };
       items: Array<{ id: string; handle: string | null }> }>(
-      await stack.call('GET', `/v1/realms?topic=${encodeURIComponent(topic)}&language=zh-CN`), 200);
+      await waitForRealmDirectory(stack.env, () => stack.call('GET', `/v1/realms?topic=${encodeURIComponent(topic)}&language=zh-CN`),
+        page => page.items.some(item => item.id === created.realm)), 200);
     expect(selected.topic).toMatchObject({ id: topic, label: { value: '奇幻' } });
     expect(selected.items).toMatchObject([{ id: created.realm, handle: 'fantasy-readers' }]);
     expect((await stack.call('GET', `/v1/realms?topic=${encodeURIComponent(

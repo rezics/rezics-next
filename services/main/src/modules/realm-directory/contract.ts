@@ -16,10 +16,15 @@ export const realmDirectoryPage = t.Object({ profile: t.Literal('realm-directory
   topic: t.Nullable(t.Object({ id: readId, label: readName })),
   items: t.Array(realmDirectoryItem, { maxItems: 20 }), ...pageFields });
 
-/** Pages: one indexed SQL keyset query and one page of live summaries, no refresh.
+/** Before the first publish, the route's existing 503 availability response
+ * carries Retry-After; an empty exact page would imply a completed projection.
+ * A cold GET only nudges the scheduler. Published pages may lag new writes and
+ * carry their published sourcePosition; they never rebuild in the request.
+ * Pages: one indexed SQL keyset query and one page of live summaries, no refresh.
  * Background refresh copies/clears at most 64 local rows per tick and hydrates
  * only affected Realms; restore/erasure rebuilds in bounded source batches.
  * Substring search can scan the SQL index relation.
  * No candidate population ceiling; response and source batch sizes are separate. */
 export const REALM_DIRECTORY_COST = { pageSize: 20, sourceBatch: 32,
-  profileBatch: 4, refreshBatches: 2, graphCalls: 163, deadlineMs: 10_000 } as const;
+  profileBatch: 4, refreshBatches: 2, graphCalls: 163, deadlineMs: 10_000,
+  refreshIntervalMs: 1000, retryAfterSeconds: 1 } as const;

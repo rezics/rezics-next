@@ -12,6 +12,7 @@ import { configureDisclosure, configureDisclosurePool, DisclosureStore } from '.
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { RV } from '../../../services/main/src/modules/work/activate.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 interface Page { items: { id: string; realm?: string }[]; nextCursor: string | null; complete: boolean }
 
@@ -80,6 +81,8 @@ test('G-964: query, name search and Discover page only listed public Spaces; sug
       `/v1/discovery/generations/${built.generation}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, 'GET', owner.token));
     await h.json(await call('/v1/discovery/generation-activations', { profile: 'discovery-generation-activation-v1',
       actingSubject: owner.actor, generation: built.generation, expectedHeadRevision: head.activeHeadRevision }, 'POST', owner.token));
+    await waitForRealmDirectory(s.env, () => call(`/v1/realms?q=${token}`),
+      page => page.items.length === realms.length && page.items.every(item => realms.includes(item.id)));
     for (const [type, expected] of [[`${RV}Realm`, realms], [`${RV}Zone`, zones], [`${RV}Space`, [...realms, ...zones]]] as const)
       for (const sort of ['newest', 'relevance']) {
         let cursor: string | null = null;

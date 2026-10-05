@@ -18,6 +18,8 @@ import { backfillPublicNames } from '../../../services/main/src/modules/search/n
 import type { OwnedDiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
 import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
 import { startMediaStack } from './media-support.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
+import { measureGraphReads } from './support/graph-reads.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 interface Health { status: string; generation: string | null;
@@ -68,6 +70,9 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
       DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Realm } }
       INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Zone } }
       WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Realm } }`);
+    // These fixture edits bypass graph receipts; discard any earlier directory
+    // snapshot so the normal background worker rebuilds the edited source.
+    await f.access.realmDirectory.invalidate();
     await store.enroll([publicBasis, ...rejected]);
     await f.accessPool.query(`UPDATE access.discovery_refresh_catalog SET due_at=clock_timestamp()+interval '1 hour'`);
     const deps = { environment: f.env, access: f.access, media: f.media, discovery: projection,
@@ -81,9 +86,9 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     for (const [index, basis] of rejected.entries()) {
       const key = discoveryScopeKey(basis);
       await dueOnly(basis);
-      const calls = f.fuseki.queries;
-      expect(await deferred.tick()).toBe(index === 4 ? 'basis-invalid' : index === 5 ? 'inactive' : 'basis-unavailable');
-      expect(f.fuseki.queries - calls).toBeLessThanOrEqual(DISCOVERY_REFRESH_COST.graphCalls);
+      const measured = await measureGraphReads(() => deferred.tick());
+      expect(measured.value).toBe(index === 4 ? 'basis-invalid' : index === 5 ? 'inactive' : 'basis-unavailable');
+      expect(measured.calls).toBeLessThanOrEqual(DISCOVERY_REFRESH_COST.graphCalls);
       const job = (await f.accessPool.query(`SELECT last_outcome,attempts::text,
         due_at-clock_timestamp()>interval '4 minutes' AS parked FROM access.discovery_refresh WHERE scope_key=$1`, [key])).rows[0];
       expect(job).toMatchObject({ parked: true, attempts: '0' });
@@ -112,6 +117,7 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     expect(ready).toMatchObject({ status: 'ready', generation: expect.any(String), refresh: { truncated: false } });
     expect(ready!.refresh.items.map(item => item.scopeKey).sort()).toEqual(rejected.map(discoveryScopeKey).sort());
     expect(ready!.refresh.items.every(item => item.status === 'skipped')).toBe(true);
+    await waitForRealmDirectory(f.env, () => app.handle(new Request('http://main.local/v1/realms')));
     const sections = await app.handle(new Request('http://main.local/v1/discovery/sections'));
     expect(sections.status, await sections.clone().text()).toBe(200);
     const body = await sections.json() as { items: { id: string; page: { items: { id: string }[] } }[] };
@@ -185,10 +191,10 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
     expect(await deferred.tick()).toBe('basis-unavailable');
 
     const meter = meteredPool(f.accessPool), bounded = new DiscoveryProjection(meter.pool);
-    const graphCalls = f.fuseki.queries;
-    expect((await bounded.refreshHealth()).items).toHaveLength(rejected.length);
+    const healthRead = await measureGraphReads(() => bounded.refreshHealth());
+    expect(healthRead.value.items).toHaveLength(rejected.length);
     expect(meter.count()).toBeLessThanOrEqual(DISCOVERY_REFRESH_HEALTH_COST.accessStatements);
-    expect(f.fuseki.queries).toBe(graphCalls);
+    expect(healthRead.calls).toBe(0);
     // Many healthy bases must not make an empty/short diagnostic window scan
     // the entire catalogue. Test the actual production SQL and existing index.
     await f.accessPool.query(`INSERT INTO access.discovery_refresh(scope_key,basis,due_at,last_outcome)

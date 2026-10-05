@@ -1,7 +1,9 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { MediaUnavailable } from '../modules/media/store.ts';
-import { realmDirectoryPage } from '../modules/realm-directory/contract.ts';
+import { realmDirectoryPage, REALM_DIRECTORY_COST } from '../modules/realm-directory/contract.ts';
+import { RealmDirectoryWarming } from '../modules/realm-directory/index.ts';
+import { realmDirectoryLifecycle } from '../modules/realm-directory/worker.ts';
 import { readRealmDirectory } from '../modules/realm-directory/read.ts';
 import { readSharedVocabulary, SHARED_VOCABULARY_COST } from '../modules/realm-directory/vocabulary.ts';
 import { pageQuery, readLanguage } from '../modules/work/read-contract.ts';
@@ -29,6 +31,11 @@ function publicRequest(request: Request): Request {
 }
 
 function directoryError(error: unknown): Response {
+  if (error instanceof WorkReadUnavailable && error.cause instanceof RealmDirectoryWarming) {
+    const response = problem(503, 'realm_directory_unavailable', 'Realm directory is unavailable');
+    response.headers.set('retry-after', String(REALM_DIRECTORY_COST.retryAfterSeconds));
+    return response;
+  }
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_realm_directory', error.message);
   if (error instanceof WorkReadMoved) return problem(409, 'read_basis_changed', 'Restart from the first page');
   if (error instanceof WorkReadLimit) return problem(422, 'realm_directory_budget_exceeded', error.message);
@@ -42,7 +49,7 @@ export const openApiOperations = { '/v1/realms': { get: { bearer: false } },
   '/v1/classification-vocabulary': { get: { bearer: false } } } as const;
 
 export function realmDirectoryRoutes(work: MainWorkDependencies) {
-  return new Elysia().get('/v1/classification-vocabulary', {
+  return new Elysia().use(realmDirectoryLifecycle(work)).get('/v1/classification-vocabulary', {
     detail: { deprecated: true, description: 'Deprecated. Use /v1/discovery/concepts for searchable, cursor-paged topics.' },
     query: t.Object({ language: t.Optional(readLanguage),
       q: t.Optional(t.String({ minLength: 1, maxLength: 80 })) }, { additionalProperties: false }),

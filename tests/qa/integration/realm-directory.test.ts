@@ -1,11 +1,12 @@
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { RealmDirectoryIndex } from '../../../services/main/src/modules/realm-directory/index.ts';
-import { RealmDirectoryWorker } from '../../../services/main/src/modules/realm-directory/worker.ts';
+import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
+import { measureGraphReads } from './support/graph-reads.ts';
 
 interface DirectoryItem { id: string; reviewMode: 'mandatory' | 'trusted-members' | 'open'; name: { value: string; language: string };
   description: { value: string } | null; membership: { count: { kind: string; value: number | null } };
@@ -17,6 +18,18 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
   if (response.status !== status) throw new Error(`Expected ${status}, received ${response.status}: ${body}`);
   return JSON.parse(body) as T;
+}
+function barrier() {
+  let release!: () => void;
+  const promise = new Promise<void>(resolve => { release = resolve; });
+  return { promise, release };
+}
+async function checkpoint(promise: Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([promise, new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Background directory checkpoint did not arrive')), 15_000);
+  })]); }
+  finally { clearTimeout(timer); }
 }
 
 test('Realm directory: public profiles, activity/member/newest pages, CJK search and disclosure', async () => {
@@ -54,23 +67,13 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     };
     await publish(first.realm, 'Readers Guild', '读者公会', 120);
     const secondProfile = await publish(second.realm, 'Book Circle', '图书圈', 50);
-    const worker = new RealmDirectoryWorker({ environment: stack.env, access: stack.access, account: {} as never });
-    const refresh = async () => {
-      for (let step = 0; step < 128; step++) {
-        if (await worker.tick()) return;
-      }
-      throw new Error('Directory background refresh exceeded its step budget');
-    };
-    const get = async (path: string) => {
-      try { await refresh(); }
-      catch (error) { if (!(error instanceof WorkReadUnavailable)) throw error; }
-      return stack.call('GET', path);
-    };
+    const get = (path: string) => stack.call('GET', path);
+    const refresh = () => waitForRealmDirectory(stack.env, () => get('/v1/realms'));
     await refresh();
-    const beforeCalls = stack.fuseki.queries;
-    const activity = await json<DirectoryPage>(await get('/v1/realms?limit=1'));
+    const activityRead = await measureGraphReads(() => get('/v1/realms?limit=1'));
+    const activity = await json<DirectoryPage>(activityRead.value);
     // One additional batch joins Realm identities to Space canonical addresses.
-    expect(stack.fuseki.queries - beforeCalls).toBeLessThanOrEqual(16);
+    expect(activityRead.calls).toBeLessThanOrEqual(16);
     expect(activity.items.map(item => item.id)).toEqual([second.realm]);
     expect(activity.items[0]?.reviewMode).toBe('mandatory');
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
@@ -112,6 +115,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       publicationDecision: work.variants[0]!.decision,
       expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
       actingSubject: editor.actor }), 201);
+    await refresh();
     expect((await json<DirectoryPage>(await get('/v1/realms?limit=1'))).items.map(item => item.id))
       .toEqual([first.realm]);
     expect((await get(`/v1/realms?limit=1&cursor=${activity.nextCursor}`)).status).toBe(409);
@@ -123,6 +127,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(erasedPin)} rv:contentRevision ${iri(erasedRevision)} .
         ${iri(erasedRevision)} a rv:ErasedRevision } }`);
     await stack.access.realmDirectory.invalidate(); // Fixture bypasses the erasure command.
+    await refresh();
     expect((await json<DirectoryPage>(await get('/v1/realms?limit=1'))).items.map(item => item.id))
       .toEqual([second.realm]);
 
@@ -130,6 +135,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       ${iri(first.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
       ${iri(first.space)} rv:disclosure rv:Private } } WHERE {}`);
     await stack.access.realmDirectory.invalidate(); // Fixture bypasses receipted commands.
+    await refresh();
     const privateExcluded = await json<DirectoryPage>(await get('/v1/realms?q=Guild'));
     expect(privateExcluded.items).toEqual([]);
     expect((await stack.call('GET', '/v1/realms?q=Guild', { token: editor.token })).status).toBe(200);
@@ -180,6 +186,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
       ...exactBody, publication: { ...exactBody.publication, count: { kind: 'exact', value: 999 } } })).status).toBe(400);
     const exactProfile = await json<{ revision: string }>(await editor.send('PUT',
       `/v1/realms/${second.realm.slice(-36)}/profile`, exactBody), 201);
+    await refresh();
     const exactPage = await json<DirectoryPage>(await get('/v1/realms?sort=members&limit=1'));
     expect(exactPage.items).toMatchObject([{ id: second.realm, membership: { count: { kind: 'exact', value: 2 } } }]);
     const header = await json<{ membership: { count: { kind: string; value: number; revision: string } } }>(
@@ -199,6 +206,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     await json(await editor.send('PUT', `/v1/realms/${second.realm.slice(-36)}/profile`, {
       ...exactBody, expectedHead: exactProfile.revision,
       publication: { ...exactBody.publication, count: { kind: 'unknown', value: null } } }), 201);
+    await refresh();
     expect((await json<DirectoryPage>(await get('/v1/realms?q=Circle'))).items[0]?.membership.count)
       .toEqual({ kind: 'unknown', value: null });
 
@@ -212,24 +220,47 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
         INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
           ${ids.map(row => `${iri(row.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(row.space)} ;
             rv:head ${iri(row.head)} ; rdfs:label "Scale directory"@en .
-            ${iri(row.space)} rdfs:label "Scale directory"@en ; a rv:Space ; rv:realmCapability ${iri(row.realm)} ; rv:disclosure rv:Public .`).join('\n')}
+            ${iri(row.space)} rdfs:label "Scale directory ${size}"@en ; a rv:Space ; rv:realmCapability ${iri(row.realm)} ; rv:disclosure rv:Public .`).join('\n')}
         } GRAPH ${iri(GRAPHS.revisions)} {
           ${ids.map(row => `${iri(row.head)} a rv:RevisionAnchor ; rv:component ${iri(row.realm)} ;
             rv:dataEpoch "${stack.env.lineage.dataEpoch}" ; rv:sequence 1 .`).join('\n')}
         } }`);
       // Force a rebuild without revoking the safe, completed fixture snapshot.
       // Product erasure receipts choose this same background rebuild path.
-      await stack.accessPool.query(`UPDATE access.realm_directory_position
-        SET build_data_epoch = NULL,revision = revision + 1 WHERE singleton`);
-      // Every incomplete step, including a restart, preserves the published page.
-      for (let step = 0; step < 128; step++) {
-        if (await worker.tick()) break;
-        expect(step).toBeLessThan(127);
-        Object.assign(stack.access, { realmDirectory: new RealmDirectoryIndex(stack.accessPool) });
-        const retained = await json<DirectoryPage>(await stack.call('GET', '/v1/realms?sort=newest&q=Scale&limit=20'));
+      const firstPrepared = barrier(), secondPrepared = barrier(), firstRelease = barrier(), secondRelease = barrier();
+      const query = stack.fuseki.query.bind(stack.fuseki);
+      let fences = 0;
+      stack.fuseki.query = async (...args) => {
+        if (args[0].includes('SELECT ?sequence WHERE') && args[0].includes('FILTER NOT EXISTS')) {
+          fences++;
+          if (fences === 1) { firstPrepared.release(); await firstRelease.promise; }
+          if (fences === 2) { secondPrepared.release(); await secondRelease.promise; }
+        }
+        return query(...args);
+      };
+      try {
+        await stack.accessPool.query(`UPDATE access.realm_directory_position
+          SET build_data_epoch = NULL,revision = revision + 1 WHERE singleton`);
+        await checkpoint(firstPrepared.promise);
+        const retained = await json<DirectoryPage>(await get('/v1/realms?sort=newest&q=Scale&limit=20'));
         expect(retained.sourcePosition).toEqual(published.sourcePosition);
         expect(retained.items.map(item => item.id)).toEqual(published.items.map(item => item.id));
+        firstRelease.release();
+        await checkpoint(secondPrepared.promise);
+        expect((await stack.accessPool.query(`SELECT count(*)::int AS n FROM access.realm_directory
+          WHERE generation <> (SELECT generation FROM access.realm_directory_position WHERE singleton)`)).rows[0].n).toBe(64);
+        // A newly composed reader sees the completed generation while a
+        // committed partial successor survives in owner storage.
+        const resumed = new RealmDirectoryIndex(stack.accessPool);
+        const session = new WorkReadSession({ environment: stack.env, access: stack.access, account: {} as never },
+          new Request('http://main.local/v1/realms'), {}, published.sourcePosition);
+        expect((await resumed.page(session, { sort: 'newest', q: 'scale', limit: 20 })).rows.map(row => row.realm))
+          .toEqual(published.items.map(item => item.id));
+      } finally {
+        firstRelease.release(); secondRelease.release(); stack.fuseki.query = query;
       }
+      await waitForRealmDirectory(stack.env, () => get(`/v1/realms?sort=newest&q=Scale%20directory%20${size}&limit=20`),
+        page => page.items.length === 20);
       let next: string | null = null;
       const seen = new Set<string>();
       do {

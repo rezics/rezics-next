@@ -1,6 +1,5 @@
 import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { MediaScreenWorker } from './modules/media-screen/worker.ts';
-import { RealmDirectoryWorker } from './modules/realm-directory/worker.ts';
 import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { MediaRenditionWorker } from './modules/media-rendition/worker.ts';
 import { LocalImageTransformer } from './modules/media-rendition/transform.ts';
@@ -603,8 +602,6 @@ feedWorker?.start();
 const occurrenceLabelWorker = new OccurrenceLabelWorker(environment);
 occurrenceLabelWorker.start();
 realmPolicyRecovery.start();
-const realmDirectoryWorker = new RealmDirectoryWorker({ environment, account, access, media });
-realmDirectoryWorker.start();
 worker.start();
 const libraryImportRetentionWorker = new LibraryImportRetentionWorker(contentPool,pool);
 libraryImportRetentionWorker.start();
@@ -631,7 +628,6 @@ async function stop(): Promise<void> {
   try {
   await occurrenceLabelWorker.stop();
   await realmPolicyRecovery.stop();
-  await realmDirectoryWorker.stop();
   await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();
   await mediaRenditionWorker.stop();

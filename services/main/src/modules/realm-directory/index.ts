@@ -7,6 +7,8 @@ import { directorySource, type Candidate } from './source.ts';
 import { REALM_DIRECTORY_COST } from './contract.ts';
 
 export type RealmDirectorySort = 'activity' | 'members' | 'newest' | 'growing';
+/** Cause of the existing unavailable response, rather than an empty exact page. */
+export class RealmDirectoryWarming extends Error {}
 export interface DirectoryRow { realm: string; space: string; profile: PublicProfile | null;
   rank: string; count_value: string; count_revision: string }
 interface DirectoryPosition {
@@ -24,6 +26,9 @@ interface DirectoryPosition {
  * whole directory in JS. */
 export class RealmDirectoryIndex {
   constructor(private readonly pool: Pool) {}
+  private refreshNudge: (() => void) | undefined;
+  get closed(): boolean { return this.pool.ending || this.pool.ended; }
+  setRefreshNudge(nudge: () => void): void { this.refreshNudge = nudge; }
 
   async invalidate(): Promise<void> {
     await this.pool.query(`UPDATE access.realm_directory_position SET data_epoch = NULL,
@@ -191,7 +196,12 @@ export class RealmDirectoryIndex {
       }
       const source = (await client.query<DirectoryPosition>(
         'SELECT * FROM access.realm_directory_position WHERE singleton')).rows[0]!;
-      if (!source.data_epoch || source.data_epoch !== session.position.dataEpoch) throw new WorkReadUnavailable('Realm directory is not built');
+      if (!source.data_epoch || source.data_epoch !== session.position.dataEpoch) {
+        this.refreshNudge?.();
+        throw new WorkReadUnavailable('Realm directory is not built', {
+          cause: new RealmDirectoryWarming('Realm directory is warming up'),
+        });
+      }
       const sourcePosition: ReadPosition = { dataEpoch: source.data_epoch, sequence: source.sequence };
       const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
         : decodeReadCursor(input.cursor ?? session.options.cursor, binding, sourcePosition);

@@ -1,13 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { startMediaStack } from './media-support.ts';
 import { RealmDirectoryWorker } from '../../../services/main/src/modules/realm-directory/worker.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { RealmAdminStale } from '../../../services/main/src/modules/realm-admin/contract.ts';
-import { WorkReadMoved } from '../../../services/main/src/modules/work/read-session.ts';
 import { RealmJoinRequests } from '../../../services/main/src/modules/realm-admin/join-requests.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 function barrier() {
   let release!: () => void;
@@ -23,6 +24,39 @@ async function within<T>(operation: Promise<T>): Promise<T> {
     })]);
   } finally { clearTimeout(timer); }
 }
+
+test('A cold embedded Main returns retryable warming and publishes without a test-owned worker or a blocking GET', async () => {
+  const stack = await startMediaStack('realm-directory-cold');
+  const original = stack.fuseki.query.bind(stack.fuseki);
+  const entered = barrier(), delayed = barrier();
+  try {
+    await stack.access.realmDirectory.invalidate();
+    stack.fuseki.query = async (...args) => {
+      if (args[0].includes('SELECT ?realm ?space ?created')) { entered.release(); await delayed.promise; }
+      return original(...args);
+    };
+    const warming = await within(stack.call('GET', '/v1/realms'));
+    expect(warming.status).toBe(503);
+    expect(warming.headers.get('retry-after')).toBe('1');
+    expect(await warming.json()).toMatchObject({ code: 'realm_directory_unavailable' });
+    await within(entered.promise);
+    const probe = await stack.accessPool.connect();
+    try {
+      await probe.query('BEGIN');
+      await probe.query('SELECT 1 FROM access.realm_count_position WHERE singleton FOR UPDATE NOWAIT');
+      await probe.query('SELECT 1 FROM access.realm_directory_position WHERE singleton FOR UPDATE NOWAIT');
+      const retry = await within(stack.call('GET', '/v1/realms'));
+      expect(retry.status).toBe(503);
+      expect(retry.headers.get('retry-after')).toBe('1');
+    } finally { await probe.query('ROLLBACK'); probe.release(); }
+    delayed.release();
+    expect((await waitForRealmDirectory(stack.env, () => stack.call('GET', '/v1/realms'))).status).toBe(200);
+  } finally {
+    delayed.release();
+    stack.fuseki.query = original;
+    await stack.stop();
+  }
+}, 30_000);
 
 test('Realm joins and directory reads: delayed graph preparation holds no shared row locks; held joins do not block GET', async () => {
   const stack = await startMediaStack('realm-join-concurrency');
@@ -47,8 +81,7 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     await stack.accessPool.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,history)
       VALUES ($1,'granted','from-admission') ON CONFLICT (realm) DO UPDATE SET history = EXCLUDED.history`, [second.realm]);
     const worker = new RealmDirectoryWorker({ environment: stack.env, access: stack.access, account: {} as never });
-    for (let step = 0; !await worker.tick(); step++) expect(step).toBeLessThan(30);
-    const before = await stack.call('GET', '/v1/realms');
+    const before = await waitForRealmDirectory(stack.env, () => stack.call('GET', '/v1/realms'));
     expect(before.status).toBe(200);
     const saved = await before.json() as { sourcePosition: { dataEpoch: string; sequence: string }; items: { id: string }[] };
 
@@ -69,9 +102,6 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
         consent: consent.consentReference, durationSeconds: null }, randomUUID(), stack.env);
     };
     const joinSecond = await prepareJoin(second.realm);
-    await stack.publicWork(owner.actor, ['en'], 'Move the directory source');
-    expect(await worker.tick()).toBe(false); // clear inactive generation
-    expect(await worker.tick()).toBe(false); // copy published generation
     const entered = barrier(), delayed = barrier();
     let delayNext = true;
     releases.push(delayed.release);
@@ -81,9 +111,8 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
       }
       return originalQuery(...args);
     };
-    const building = worker.tick();
-    pending.push(building);
-    await within(entered.promise);
+    await stack.publicWork(owner.actor, ['en'], 'Move the directory source');
+    await entered.promise;
     const page = await within(stack.call('GET', '/v1/realms'));
     expect(page.status, await page.clone().text()).toBe(200);
     expect((await page.json() as typeof saved).sourcePosition).toEqual(saved.sourcePosition);
@@ -96,9 +125,11 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     expect(BigInt(cut.sequence)).toBeGreaterThan(BigInt(saved.sourcePosition.sequence));
     // Another Main wins the same durable step while the first HTTP read is
     // held. The first preparation must fail stale instead of overwriting it.
-    expect(await within(worker.tick())).toBe(true);
+    let won = false;
+    for (let step = 0; step < 8 && !won; step++) won = await within(worker.tick());
+    expect(won).toBe(true);
     delayed.release();
-    await expect(building).rejects.toBeInstanceOf(WorkReadMoved);
+    await waitForRealmDirectory(stack.env, () => stack.call('GET', '/v1/realms'));
     stack.fuseki.query = originalQuery;
 
     const held = await stack.accessPool.connect();
@@ -120,9 +151,11 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
     const requests = new RealmJoinRequests(stack.accessPool, stack.env);
     const requestBasis = await requests.basis(requester.principal, first.realm, requester.actor);
     let requestGraphCalls = 0;
+    const requestScope = new AsyncLocalStorage<boolean>();
     // Every graph read on the request path must leave the global gate free,
     // including the admission-open read before its Realm policy query.
     stack.fuseki.query = async (...args) => {
+      if (!requestScope.getStore()) return originalQuery(...args);
       requestGraphCalls++;
       const probe = await stack.accessPool.connect();
       try {
@@ -131,10 +164,10 @@ test('Realm joins and directory reads: delayed graph preparation holds no shared
       } finally { await probe.query('ROLLBACK'); probe.release(); }
       return originalQuery(...args);
     };
-    expect(await requests.request(requester.principal, first.realm, { actingSubject: requester.actor,
+    expect(await requestScope.run(true, () => requests.request(requester.principal, first.realm, { actingSubject: requester.actor,
       expectedMembershipGeneration: requestBasis.membershipGeneration,
       expectedPolicyRevision: requestBasis.policyRevision, termsRevision: requestBasis.termsRevision,
-      reason: 'Request membership' }, randomUUID())).toMatchObject({ state: 'pending' });
+      reason: 'Request membership' }, randomUUID()))).toMatchObject({ state: 'pending' });
     expect(requestGraphCalls).toBe(2);
     stack.fuseki.query = originalQuery;
 

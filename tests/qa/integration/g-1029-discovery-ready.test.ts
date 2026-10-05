@@ -15,6 +15,8 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { cloneOwners, meteredPool, requireQa } from './recommendation-support.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
+import { measureGraphReads } from './support/graph-reads.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 async function until<T>(read: () => Promise<T | null>, label: string): Promise<T> {
@@ -144,6 +146,7 @@ test('G1029: restored migrated owners bootstrap and resume the public ranking, t
     await worker.stop(); worker = undefined;
     expect(available).toMatchObject({ status: 'ready', generation: ready, sequenceLag: '0', stale: false });
     expect((await stack.accessPool.query('SELECT state FROM access.derived_generation WHERE id=$1', [obsolete.generation])).rows[0].state).toBe('building');
+    await waitForRealmDirectory(stack.env, () => read('/v1/realms'));
     const sections = await read('/v1/discovery/sections');
     expect(sections.status, await sections.clone().text()).toBe(200);
     expect(((await sections.json()) as Sections).items.find(item => item.id === 'popular')!.page.items.map(item => item.id).sort())
@@ -192,11 +195,11 @@ test('G1029: restored migrated owners bootstrap and resume the public ranking, t
     expect(accessMeter.count()).toBeLessThanOrEqual(DISCOVERY_RANKING_REFRESH_COST.accessStatements);
     expect(relayMeter.count()).toBeLessThanOrEqual(DISCOVERY_RANKING_REFRESH_COST.relayQueries);
     accessMeter.reset(); relayMeter.reset();
-    const graphQueries = stack.fuseki.queries;
-    expect(await rankings.publicRankingStatus()).toMatchObject({ generation: replacement.generation });
+    const measuredHealth = await measureGraphReads(() => rankings.publicRankingStatus());
+    expect(measuredHealth.value).toMatchObject({ generation: replacement.generation });
     expect(accessMeter.count()).toBeLessThanOrEqual(DISCOVERY_RANKING_HEALTH_COST.accessStatements);
     expect(relayMeter.count()).toBe(1);
-    expect(stack.fuseki.queries).toBe(graphQueries);
+    expect(measuredHealth.calls).toBe(0);
     snapshotUnavailable = true;
     await expect(rankings.refreshPublicRanking()).rejects.toBeInstanceOf(RecommendationUnavailable);
     expect((await health()).status).toBe(200);

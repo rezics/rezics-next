@@ -6,6 +6,7 @@ import { readRealmPolicy } from '../../../services/main/src/modules/space/policy
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 // Origin is bound before identity/publication, so even an interrupted creation
 // never exposes Realm text through the separately public reply API.
@@ -72,6 +73,8 @@ test('G-298: origin disclosure, all visibility/review transitions, indexed reads
     expect(local.status, JSON.stringify(local.body)).toBe(200);
     expect(local.body.items.map((item: { id: string }) => item.id)).toContain(h.work.work);
     const cursor = encodeReadCursor(['realm-works-v1', h.realm, null], local.body.sourcePosition, h.work.work);
+    await waitForRealmDirectory(h.env, () => h.app.handle(new Request('http://main.local/v1/realms?q=Visibility')),
+      page => page.items.some(item => item.id === h.realm));
     const warmDirectory = await h.call('GET', '/v1/realms?q=Visibility', undefined, null);
     expect(warmDirectory.status).toBe(200);
     expect(JSON.stringify(warmDirectory.body)).toContain(h.realm);
@@ -99,6 +102,8 @@ test('G-298: origin disclosure, all visibility/review transitions, indexed reads
     const memberPlacement = await h.call('POST', '/v1/realm-reply-placements', memberDirect.placement);
     expect(memberPlacement.status, JSON.stringify(memberPlacement.body)).toBe(201);
     expect((await h.submit()).result.body.submission.state).toBe('accepted');
+    await waitForRealmDirectory(h.env, () => h.app.handle(new Request('http://main.local/v1/realms?q=Visibility')),
+      page => page.items.every(item => item.id !== h.realm));
     const directory = await h.call('GET', '/v1/realms?q=Visibility', undefined, null);
     expect(directory.status, JSON.stringify(directory.body)).toBe(200);
     expect(JSON.stringify(directory.body)).not.toContain(h.realm);
