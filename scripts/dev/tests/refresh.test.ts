@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { Client } from 'pg';
+import { readEnv } from '../config.ts';
 import { AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
-  refreshHeavyLockHeld, refreshProcessAlive } from '../refresh-stack.ts';
+  refreshHeavyLockHeld, refreshProcessAlive, rehearseRefreshMigrations } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -25,7 +27,7 @@ describe('shared stack refresh planning', () => {
   test('a missing pinned image is built before stopped-writer storage and model maintenance', () => {
     expect(refreshPlan({ ...current, imagePresent: false, storageChanged: true,
       pendingMigrations: ['access/new.sql'], modelCurrent: false }).steps).toEqual([
-      'build-image', 'stop-writers', 'prepare-storage', 'align-model',
+      'build-image', 'rehearse-migrations', 'stop-writers', 'prepare-storage', 'align-model',
       'restart-resources', 'wait-ready', 'approve-zones', 'record-success',
     ]);
   });
@@ -38,6 +40,7 @@ describe('shared stack refresh planning', () => {
   ] as const) {
     test(`${reason} prepares storage and aligns the model before restarting`, () => {
       expect(refreshPlan({ ...current, ...changes }).steps).toEqual([
+        ...('pendingMigrations' in changes ? ['rehearse-migrations'] as const : []),
         'stop-writers', 'prepare-storage', 'align-model', 'restart-resources', 'wait-ready', 'approve-zones', 'record-success',
       ]);
     });
@@ -88,7 +91,8 @@ function actions(events: string[], fail?: keyof RefreshActions): RefreshActions 
     events.push(name);
     if (name === fail) throw new Error(`failed ${name}`);
   };
-  return { buildImage: step('buildImage'), stopWriters: step('stopWriters'), prepareStorage: step('prepareStorage'),
+  return { buildImage: step('buildImage'), rehearseMigrations: step('rehearseMigrations'),
+    stopWriters: step('stopWriters'), prepareStorage: step('prepareStorage'),
     alignModel: step('alignModel'), restartResources: step('restartResources'), waitReady: step('waitReady'),
     approveZones: step('approveZones'), stopAppHost: step('stopAppHost'), recordSuccess: step('recordSuccess') };
 }
@@ -116,6 +120,18 @@ describe('shared stack refresh execution and guards', () => {
     events.length = 0;
     await executeRefresh(refreshPlan(current), actions(events));
     expect(events).toEqual([]);
+  });
+
+  test('a failing pending migration aborts before stopping writers and reports its error', async () => {
+    const events: string[] = [];
+    const plan = refreshPlan({ ...current, pendingMigrations: ['services/main/migrations/access/broken.sql'] });
+    await expect(executeRefresh(plan, actions(events, 'rehearseMigrations')))
+      .rejects.toThrow('failed rehearseMigrations');
+    expect(events).toEqual(['rehearseMigrations']);
+    const retry: string[] = [];
+    await executeRefresh(plan, actions(retry));
+    expect(retry).toEqual(['rehearseMigrations', 'stopWriters', 'prepareStorage', 'alignModel',
+      'restartResources', 'waitReady', 'approveZones', 'recordSuccess']);
   });
 
   for (const failure of ['prepareStorage', 'alignModel', 'restartResources', 'waitReady', 'approveZones'] as const) {
@@ -219,6 +235,101 @@ describe('shared stack refresh execution and guards', () => {
       });
     }
   }, 60_000);
+});
+
+describe('pending SQL migration rehearsal', () => {
+  const env = { ACCESS_DATABASE_URL: 'access-db', MAIN_RELAY_DATABASE_URL: 'relay-db',
+    CONTENT_DATABASE_URL: 'content-db', ACCOUNT_DATABASE_URL: 'account-db' };
+
+  function fixture() {
+    mkdirSync(join(root, '.temp'), { recursive: true });
+    const dir = mkdtempSync(join(root, '.temp/refresh-migrations-'));
+    for (const owner of ['services/main/migrations/access', 'services/main/migrations/relay',
+      'services/content/migrations', 'services/account/migrations']) mkdirSync(join(dir, owner), { recursive: true });
+    const first = 'services/main/migrations/access/001_backfill.sql';
+    const second = 'services/main/migrations/access/002_constraint.sql';
+    const content = 'services/content/migrations/001_content.sql';
+    writeFileSync(join(dir, first), 'UPDATE access.event SET epoch = 1;');
+    writeFileSync(join(dir, second), 'ALTER TABLE access.event ADD CHECK (epoch > 0);');
+    writeFileSync(join(dir, content), 'ALTER TABLE content.event ADD COLUMN epoch bigint;');
+    return { dir, first, second, content };
+  }
+
+  test('only pending files run in migration order on their owner database with separate rollbacks', async () => {
+    const { dir, first, second, content } = fixture();
+    const events: string[] = [];
+    try {
+      await rehearseRefreshMigrations(dir, env, [content, second, first], url => ({
+        connect: async () => { events.push(`connect:${url}`); },
+        query: async sql => { events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql); },
+        end: async () => { events.push('end'); },
+      }));
+      expect(events).toEqual(['connect:access-db', 'BEGIN', 'isolate-sequences',
+        readFileSync(join(dir, first), 'utf8'), 'ROLLBACK', 'BEGIN', 'isolate-sequences',
+        readFileSync(join(dir, second), 'utf8'), 'ROLLBACK', 'end',
+        'connect:content-db', 'BEGIN', 'isolate-sequences', readFileSync(join(dir, content), 'utf8'), 'ROLLBACK', 'end']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  for (const diagnostic of ['immutable rows cannot be updated', 'canceling statement due to lock timeout',
+    'terminating connection due to transaction timeout']) {
+    test(`${diagnostic} rolls back, closes the client and preserves writers`, async () => {
+      const { dir, first, second, content } = fixture();
+      const events: string[] = [];
+      const operations = actions(events);
+      operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [first, second, content], url => ({
+        connect: async () => { events.push(`connect:${url}`); },
+        query: async sql => {
+          events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql);
+          if (sql.startsWith('UPDATE')) throw new Error(diagnostic);
+          if (sql === 'ROLLBACK' && diagnostic.includes('transaction timeout')) throw new Error('Connection closed');
+        },
+        end: async () => { events.push('end'); },
+      }));
+      try {
+        await expect(executeRefresh(refreshPlan({ ...current, pendingMigrations: [first, second, content] }), operations))
+          .rejects.toThrow(`Migration rehearsal failed: ${first}: ${diagnostic}. Writers were not stopped`);
+        expect(events).toEqual(['connect:access-db', 'BEGIN', 'isolate-sequences',
+          readFileSync(join(dir, first), 'utf8'), 'ROLLBACK', 'end']);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+
+  test('no pending migrations opens no database connections', async () => {
+    await rehearseRefreshMigrations(root, env, [], () => { throw new Error('Must not connect'); });
+  });
+
+  test.skipIf(process.env.REZICS_REFRESH_SEQUENCE_PROBE !== '1')('live PostgreSQL rehearsal restores rows and existing sequence state', async () => {
+    const git = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: root, encoding: 'utf8' });
+    if (git.status !== 0) throw new Error('Cannot locate the shared checkout');
+    const sharedEnv = readEnv(join(dirname(git.stdout.trim()), '.temp/stack/rezics-dev/dev.env'));
+    const { dir, first } = fixture();
+    const client = new Client({ connectionString: sharedEnv.ACCESS_DATABASE_URL, connectionTimeoutMillis: 5_000,
+      lock_timeout: 1_000, statement_timeout: 5_000, options: '-c transaction_timeout=10000' });
+    writeFileSync(join(dir, first), `SELECT nextval('pg_temp.refresh_probe_sequence');
+      SELECT setval('pg_temp.refresh_probe_sequence', 900);
+      UPDATE refresh_probe_rows SET value = 2;`);
+    try {
+      await rehearseRefreshMigrations(dir, sharedEnv, [first], () => ({
+        connect: async () => {
+          await client.connect();
+          await client.query('CREATE TEMP SEQUENCE refresh_probe_sequence START 42');
+          await client.query('SELECT nextval(\'pg_temp.refresh_probe_sequence\')');
+          await client.query('CREATE TEMP TABLE refresh_probe_rows(value integer)');
+          await client.query('INSERT INTO refresh_probe_rows VALUES (1)');
+        },
+        query: sql => client.query(sql),
+        end: async () => {
+          try {
+            expect((await client.query('SELECT last_value::text, is_called FROM pg_temp.refresh_probe_sequence')).rows)
+              .toEqual([{ last_value: '42', is_called: true }]);
+            expect((await client.query('SELECT value FROM refresh_probe_rows')).rows).toEqual([{ value: 1 }]);
+          } finally { await client.end(); }
+        },
+      }));
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 30_000);
 });
 
 describe('official Zone approval refresh', () => {

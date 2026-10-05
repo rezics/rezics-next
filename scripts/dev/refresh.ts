@@ -1,6 +1,6 @@
 export const refreshResources = ['account', 'main', 'main-relay'] as const;
 export type RefreshResource = typeof refreshResources[number];
-export type RefreshStep = 'build-image' | 'stop-writers' | 'prepare-storage' | 'align-model'
+export type RefreshStep = 'build-image' | 'rehearse-migrations' | 'stop-writers' | 'prepare-storage' | 'align-model'
   | 'restart-resources' | 'wait-ready' | 'approve-zones' | 'record-success';
 
 export const appHostRestartInstruction = 'In the main checkout, run task dev:stop, then task dev, then retry task dev:refresh';
@@ -45,6 +45,7 @@ export function refreshPlan(input: RefreshInputs): { steps: RefreshStep[]; block
   const restart = prepare || !input.modelCurrent || input.unhealthyResources.length > 0;
   const steps: RefreshStep[] = [];
   if (!input.imagePresent) steps.push('build-image');
+  if (input.pendingMigrations.length) steps.push('rehearse-migrations');
   if (restart) steps.push('stop-writers');
   if (prepare) steps.push('prepare-storage');
   if (prepare || !input.modelCurrent) steps.push('align-model');
@@ -68,6 +69,7 @@ export function assertRefreshCheckout(worktree: boolean, branch: string, dirty: 
 
 export interface RefreshActions {
   buildImage(): Promise<void>;
+  rehearseMigrations(): Promise<void>;
   stopWriters(): Promise<void>;
   prepareStorage(): Promise<void>;
   alignModel(): Promise<void>;
@@ -84,6 +86,7 @@ export async function executeRefresh(plan: ReturnType<typeof refreshPlan>, actio
   if (plan.blockers.length) throw new Error(plan.blockers.join('\n'));
   const operations: Record<RefreshStep, () => Promise<void>> = {
     'build-image': () => actions.buildImage(),
+    'rehearse-migrations': () => actions.rehearseMigrations(),
     'stop-writers': () => actions.stopWriters(),
     'prepare-storage': () => actions.prepareStorage(),
     'align-model': () => actions.alignModel(),

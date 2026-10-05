@@ -139,6 +139,71 @@ export async function pendingRefreshMigrations(root: string, env: Record<string,
   return pending;
 }
 
+interface RehearsalClient {
+  connect(): Promise<unknown>;
+  query(sql: string): Promise<unknown>;
+  end(): Promise<unknown>;
+}
+
+/** RESTART allocates transactional sequence storage. Plain rollback does not
+ * undo nextval/setval on existing sequences (including calls from triggers).
+ * Preserve their state in the rehearsal storage; rollback restores the original.
+ * The transaction deadline bounds how long these locks can delay live writers. */
+const isolateRehearsalSequences = `DO $$
+DECLARE sequence_name text; sequence_value bigint; sequence_called boolean;
+BEGIN
+  FOR sequence_name IN
+    SELECT format('%I.%I', n.nspname, c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind = 'S' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    ORDER BY n.nspname, c.relname
+  LOOP
+    EXECUTE format('SELECT last_value, is_called FROM %s', sequence_name)
+      INTO sequence_value, sequence_called;
+    EXECUTE format('ALTER SEQUENCE %s RESTART WITH %s', sequence_name, sequence_value);
+    PERFORM pg_catalog.setval(sequence_name::regclass, sequence_value, sequence_called);
+  END LOOP;
+END $$`;
+
+/** Each file has its own rollback boundary so its locks never span the whole
+ * pending inventory. A dependent file whose prerequisite is also pending may
+ * fail conservatively: no writers are stopped after an unproven rehearsal. */
+export async function rehearseRefreshMigrations(root: string, env: Record<string, string>,
+  pending: readonly string[], createClient: (url: string) => RehearsalClient = url => new Client({
+    connectionString: url, connectionTimeoutMillis: 5_000,
+    lock_timeout: 1_000, statement_timeout: 5_000, query_timeout: 6_000,
+    options: '-c transaction_timeout=10000 -c idle_in_transaction_session_timeout=5000',
+  })): Promise<void> {
+  const databases: Record<SchemaOwner, string> = { access: env.ACCESS_DATABASE_URL!,
+    relay: env.MAIN_RELAY_DATABASE_URL!, content: env.CONTENT_DATABASE_URL!, account: env.ACCOUNT_DATABASE_URL! };
+  for (const owner of Object.keys(migrationDirectories) as SchemaOwner[]) {
+    const files = migrationRecords(root, owner).filter(file => pending.includes(file.name));
+    if (!files.length) continue;
+    const client = createClient(databases[owner]);
+    let migration = files[0]!.name;
+    try {
+      await client.connect();
+      for (const file of files) {
+        migration = file.name;
+        await client.query('BEGIN');
+        try {
+          await client.query(isolateRehearsalSequences);
+          await client.query(readFileSync(join(root, file.name), 'utf8'));
+        } catch (error) {
+          // A transaction timeout closes the connection and rolls back on the
+          // server; a failed cleanup query must not hide its original diagnostic.
+          try { await client.query('ROLLBACK'); } catch { /* Connection may be closed. */ }
+          throw error;
+        }
+        await client.query('ROLLBACK');
+      }
+    } catch (error) {
+      throw new Error(`Migration rehearsal failed: ${migration}: ${error instanceof Error ? error.message : String(error)}. Writers were not stopped`,
+        { cause: error });
+    } finally { await client.end(); }
+  }
+}
+
 /** Read the lock without reaping stale tickets: dry-run has no writes. */
 export function refreshHeavyLockHeld(path: string, alive = (pid: number): boolean => {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -287,6 +352,11 @@ export async function refreshSharedStack(root: string, args: string[], preparati
       buildImage: async () => {
         compose(root, ['build', 'fuseki'], 300_000);
         console.log(`  Built image: ${snapshot.image}`);
+      },
+      rehearseMigrations: async () => {
+        const env = readEnv(join(stackDirectory(root, { profile: 'dev' }), 'dev.env'));
+        await rehearseRefreshMigrations(root, env, snapshot.input.pendingMigrations);
+        console.log('  Pending SQL migrations rehearsed and rolled back; writers still running');
       },
       stopWriters: async () => {
         for (const name of [...refreshResources].reverse()) {
