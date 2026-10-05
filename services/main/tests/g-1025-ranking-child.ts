@@ -89,6 +89,34 @@ try {
     }
   }
   assertWorkCostAtScales(profiles,{ fusekiRequests: 12,postgresStatements: 12 });
+  // Folding the review head into the checkpoint read must preserve missing
+  // source rejection and the grace period for committed, unsequenced reviews.
+  const reviewHead = (await home.stack.accessPool.query<{ position: string }>(
+    'DELETE FROM access.reader_review_rank_head WHERE singleton RETURNING position::text')).rows[0]!;
+  try {
+    await assert.rejects(() => projection.current(), /catching up/);
+  } finally {
+    await home.stack.accessPool.query('INSERT INTO access.reader_review_rank_head(position) VALUES($1)',
+      [reviewHead.position]);
+  }
+  const updated = (await home.stack.accessPool.query<{ updated_at: Date }>(
+    'SELECT updated_at FROM access.read_ranking_checkpoint WHERE singleton')).rows[0]!;
+  try {
+    await home.stack.accessPool.query('SELECT access.append_reader_review_rank_change($1, clock_timestamp(), 1)',
+      [visible.work]);
+    await home.stack.accessPool.query(`UPDATE access.read_ranking_checkpoint
+      SET updated_at=clock_timestamp() WHERE singleton`);
+    await projection.current();
+    await home.stack.accessPool.query(`UPDATE access.read_ranking_checkpoint
+      SET updated_at=clock_timestamp() - interval '61 seconds' WHERE singleton`);
+    await assert.rejects(() => projection.current(), /catching up/);
+  } finally {
+    await home.stack.accessPool.query('DELETE FROM access.reader_review_rank_change WHERE work=$1 AND position IS NULL',
+      [visible.work]);
+    await home.stack.accessPool.query('UPDATE access.read_ranking_checkpoint SET updated_at=$1 WHERE singleton',
+      [updated.updated_at]);
+  }
+  await projection.current();
   // Strong revocation updates admission in its transaction, without a graph
   // rescan or stale denied prefix in the next page.
   await home.stack.accessPool.query(`INSERT INTO access.scope_gate(id,open) VALUES($1,false)

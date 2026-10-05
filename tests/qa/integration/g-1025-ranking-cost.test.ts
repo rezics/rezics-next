@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runWorkProfileChild } from '../support/work-profile-child.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
+import type { WorkProfile } from '../support/work-profile.ts';
 
 test('G1025: ranked reads seek one admitted page behind 4/16/64 privately read Books', async () => {
   if (!process.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
@@ -13,7 +14,9 @@ test('G1025: ranked reads seek one admitted page behind 4/16/64 privately read B
   const evidence = JSON.parse(readFileSync(resultPath, 'utf8')) as {
     rejected: number;
     newSeeks: number;
+    profile: WorkProfile;
   }[];
   expect(evidence).toHaveLength(6);
   expect(evidence.every((row) => row.newSeeks === 1)).toBe(true);
+  expect(new Set(evidence.map((row) => row.profile.postgresStatements)).size).toBe(1);
 }, 420_000);

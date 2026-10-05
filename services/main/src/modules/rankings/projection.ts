@@ -251,19 +251,22 @@ export class ReadRankingProjection {
   async current(): Promise<RankingCheckpoint> {
     const owner = await this.content.ownerPosition();
     const progressHead = await this.progressHead(owner.dataEpoch);
+    // Checkpoint and review source share one Access snapshot. Each page fences
+    // twice, so a separate head read would add two statements to its cost.
     const row = (await this.access.query<{ generation: string; content_epoch: string;
-      content_sequence: string; graph_epoch: string; review_position: string; updated_at: Date }>(`SELECT generation,
-      content_epoch, content_sequence::text, graph_epoch, review_position::text, updated_at
-      FROM access.read_ranking_checkpoint WHERE singleton`)).rows[0];
-    const reviewHead = (await this.access.query<{ position: string; pending: boolean }>(`SELECT position::text,
-      EXISTS (SELECT 1 FROM access.reader_review_rank_change WHERE position IS NULL) AS pending
-      FROM access.reader_review_rank_head WHERE singleton`)).rows[0];
+      content_sequence: string; graph_epoch: string; review_position: string; updated_at: Date;
+      review_head: string | null; review_pending: boolean }>(`SELECT c.generation,
+      c.content_epoch, c.content_sequence::text, c.graph_epoch, c.review_position::text, c.updated_at,
+      h.position::text AS review_head,
+      EXISTS (SELECT 1 FROM access.reader_review_rank_change WHERE position IS NULL) AS review_pending
+      FROM access.read_ranking_checkpoint c
+      LEFT JOIN access.reader_review_rank_head h ON h.singleton WHERE c.singleton`)).rows[0];
     if (!row || row.content_epoch !== owner.dataEpoch
       || row.graph_epoch !== this.env.lineage.dataEpoch
       || BigInt(row.content_sequence) > BigInt(owner.sequence)
-      || !reviewHead || BigInt(row.review_position) > BigInt(reviewHead.position)
+      || row.review_head === null || BigInt(row.review_position) > BigInt(row.review_head)
       || (BigInt(row.content_sequence) < BigInt(progressHead.sequence) || progressHead.pending
-        || row.review_position !== reviewHead.position || reviewHead.pending)
+        || row.review_position !== row.review_head || row.review_pending)
         && Date.now() - row.updated_at.getTime() > 60_000) {
       throw new RankingProjectionUnavailable('Rankings are catching up with owner events');
     }
