@@ -53,6 +53,11 @@ export function legacyPropositionLabel(id: string, definition: { en: string; zh:
     'comingOfAge', 'historical', 'adventure'].includes(id) ? '' : ` · ${definition.zh}`}`;
 }
 
+/** A legacy label the current scheme shares names the current Sense itself: rejecting it would undo each run's accept. */
+export function legacyToReject(legacy: { sense: string } | undefined, current: { sense: string }) {
+  return legacy && legacy.sense !== current.sense ? legacy : null;
+}
+
 /** An existing isolated proposition with that exact label, never the current scheme's shorter one. */
 export function legacyConcept(items: readonly { concept: string; label: string }[], label: string) {
   return items.find(item => item.label === label) ?? null;
@@ -136,9 +141,9 @@ export async function seedBookConcepts(state: SeedState) {
     for (const concept of bookConcepts[id] ?? []) {
       const proposition = propositions.get(concept)!;
       const old = legacy.get(concept);
-      if (old) {
-        await rejectLegacy(state, target, old, { kind: 'global' }, owner, `${id}:${concept}:global`);
-        await rejectLegacy(state, target, old, { kind: 'realm-classification', id: realm.receipt.realm },
+      if (legacyToReject(old, proposition)) {
+        await rejectLegacy(state, target, old!, { kind: 'global' }, owner, `${id}:${concept}:global`);
+        await rejectLegacy(state, target, old!, { kind: 'realm-classification', id: realm.receipt.realm },
           realm.steward, `${id}:${concept}:${realm.id}`);
       }
       await accept(state, target, proposition, { kind: 'global' }, owner, `${id}:${concept}:global`);

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { legacyConcept, legacyPropositionLabel } from './genres-step.ts';
+import { legacyConcept, legacyPropositionLabel, legacyToReject } from './genres-step.ts';
 import { bookConcepts, freeConcepts, genreConcepts, seededBookIds } from './genres-plan.ts';
 
 test('G-426 bilingual genre vocabulary has ordered in-scheme parents and every seeded Book uses it', () => {
@@ -35,4 +35,10 @@ test('G-426 bilingual genre vocabulary has ordered in-scheme parents and every s
     .toBe('old');
   expect(legacyConcept([{ concept: 'current', label: 'Mystery' }], legacy)).toBeNull();
   expect(legacyPropositionLabel('adventure', genreConcepts.adventure)).toBe('Adventure');
+});
+
+test('a legacy Sense is rejected only when it is not the current scheme\'s own', () => {
+  expect(legacyToReject({ sense: 'old' }, { sense: 'current' })).toEqual({ sense: 'old' });
+  expect(legacyToReject({ sense: 'current' }, { sense: 'current' })).toBeNull();
+  expect(legacyToReject(undefined, { sense: 'current' })).toBeNull();
 });
