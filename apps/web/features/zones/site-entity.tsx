@@ -9,7 +9,7 @@ import { zoneText } from '../realm/adapt.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { buildEntity } from '../wiki/entity.ts';
-import type { ZoneSite } from '../wiki/links.ts';
+import { keepReading, type ZoneSite } from '../wiki/links.ts';
 import { withPosition } from '../wiki/position.ts';
 import { type PositionState, positionNote } from '../wiki/state.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
@@ -49,11 +49,10 @@ export async function ZoneEntityPage({
   const base = standaloneHrefFor(cursors, path);
   const hrefFor: HrefFor = (link) =>
     link.kind === 'continue'
-      ? withPosition(base(link), site.choice)
-      : withPosition(
-          link.base === 'work' ? resourceHref('/w/', link.iri) : entityHref(link.iri),
-          link.base === 'work' ? { kind: 'default' } : site.choice,
-        );
+      ? keepReading(site, base(link))
+      : link.base === 'work'
+        ? withPosition(resourceHref('/w/', link.iri), { kind: 'default' })
+        : keepReading(site, entityHref(link.iri));
   const generic = (
     <EntityPage
       resource={id}
@@ -63,6 +62,7 @@ export async function ZoneEntityPage({
       cursors={cursors}
       position={site.main}
       ratingScope={{ scope: 'realm', realm: view.realm.header.id }}
+      continuity={site.continuity?.choice}
     />
   );
   const Slot = view.pkg?.slots.entity;
@@ -76,12 +76,12 @@ export async function ZoneEntityPage({
     state,
     mount,
     lists,
-    fullPage: withPosition(entityHref(id), site.choice),
+    fullPage: keepReading(site, entityHref(id)),
   });
   if (!entity) return generic;
   const where = mount ? lists.find((list) => list.segment === mount) : undefined;
   const here: { segment: string; name: ZoneText; href: string } | null = where
-    ? { ...where, href: withPosition(spaceHref(site.ref, 'site', [where.segment]), site.choice) }
+    ? { ...where, href: keepReading(site, spaceHref(site.ref, 'site', [where.segment])) }
     : null;
   const rest = (
     <EntityPage
@@ -94,6 +94,7 @@ export async function ZoneEntityPage({
       header={false}
       identitySections
       ratingScope={{ scope: 'realm', realm: view.realm.header.id }}
+      continuity={site.continuity?.choice}
       sections={['ratings', 'reviews', 'discussion']}
     />
   );

@@ -28,6 +28,8 @@ import { defaultPresentation, moduleTitle, type ZonePresentation } from '../zone
 import { zoneTheme } from '../zones/theme.ts';
 import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
+import { withContinuity } from '../wiki/continuity.ts';
+import { zoneContinuity } from '../wiki/zone-continuity.ts';
 import { parsePosition } from '../wiki/position.ts';
 import { positionOf } from '../wiki/state.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
@@ -283,6 +285,7 @@ export async function RealmFrame({
   const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
   // A Zone whose package reads at the reader's position in a story offers the choice on every page.
   const positions = realm.zone ? await positionOf(pkg, realm.zone.id, parsePosition(search)) : null;
+  const continuity = await zoneContinuity(pkg, positions, search);
   // Join or Follow first, as every community page offers; the page style stays beside it.
   const actions = (
     <>
@@ -380,7 +383,12 @@ export async function RealmFrame({
         }
         position={
           site && positions ? (
-            <PositionBar state={positions} here={here} locale={locale} />
+            <PositionBar
+              state={positions}
+              here={continuity ? withContinuity(here, continuity.choice, continuity.fallback) : here}
+              locale={locale}
+              continuity={continuity}
+            />
           ) : undefined
         }
         crumbs={crumbs ? { label: messages.breadcrumbs, items: crumbs } : undefined}

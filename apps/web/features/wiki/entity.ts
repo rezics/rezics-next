@@ -5,6 +5,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { readEntityProjection, readRelations, readStatements, sectionOf } from '../entity-page/read.ts';
 import type { EntityProjection, StatementItem } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
+import { continuityFrame, offContinuity } from './continuity.ts';
 import { zoneText } from '../realm/adapt.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { namesOf } from '../work-levels/read.ts';
@@ -74,11 +75,13 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   const { summary } = projection;
   if (summary.status !== 'available') return null;
   const main = site.main;
+  // The continuity the reader chose, which Main applies as the frame of the facts and relations it returns.
+  const frame = continuityFrame(site.continuity?.choice ?? offContinuity);
   const statementsSection = sectionOf(projection, 'statements');
   const relationsSection = sectionOf(projection, 'relations');
   const [statements, relations] = await Promise.all([
-    statementsSection ? readStatements(statementsSection, undefined, main) : null,
-    relationsSection ? readRelations(relationsSection, undefined, main) : null]);
+    statementsSection ? readStatements(statementsSection, undefined, main, frame) : null,
+    relationsSection ? readRelations(relationsSection, undefined, main, frame) : null]);
 
   // A chapter's summary is named after its Work; the name the story gives it is the label its composition wrote.
   const own = (state && projection.target.base === 'occurrence' ? occurrenceName(state, projection.target.resource, locale) : null) ?? zoneText(summary.name);

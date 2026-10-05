@@ -2,6 +2,7 @@ import { zoneMemberHref } from '../address/path.ts';
 import { cache } from 'react';
 import { entityHref } from '../entity-page/route.ts';
 import { idOf } from '../work-page/route.ts';
+import { type ContinuityChoice, offContinuity, withContinuity } from './continuity.ts';
 import { type PositionChoice, withPosition } from './position.ts';
 import { readPositionedRoute } from './read.ts';
 
@@ -19,6 +20,14 @@ export interface ZoneSite {
   /** The choice the address carries (kept in every link) and the position Main's reads take. */
   choice: PositionChoice;
   main: string | undefined;
+  /** The continuity the reader reads in and the one the Zone starts readers in, for a Zone that offers the switch. */
+  continuity?: { choice: ContinuityChoice; fallback: ContinuityChoice };
+}
+
+/** `href` carrying the reader's place in the Zone, so each page they move to keeps it: the position and the continuity. */
+export function keepReading(site: Pick<ZoneSite, 'choice' | 'continuity'>, href: string): string {
+  return withContinuity(withPosition(href, site.choice), site.continuity?.choice ?? offContinuity,
+    site.continuity?.fallback ?? offContinuity);
 }
 
 /** The segment found for each kind of thing already looked up in this request: its next lookup tries that first. */
@@ -47,11 +56,9 @@ export async function mountOf(site: ZoneSite, resource: string, kind: string | n
 export async function zoneLink(site: ZoneSite, resource: string, kind: string | null): Promise<string> {
   const segment = await mountOf(site, resource, kind);
   const id = idOf(resource) ?? resource;
-  return withPosition(segment ? zoneMemberHref(site.ref, segment, id)
-    : entityHref(resource), site.choice);
+  return keepReading(site, segment ? zoneMemberHref(site.ref, segment, id) : entityHref(resource));
 }
 
 /** A page inside a mount, when the mount is known. */
-export const memberHref = (site: Pick<ZoneSite, 'ref' | 'choice'>, segment: string, resource: string) =>
-  withPosition(zoneMemberHref(site.ref, segment, resource),
-    site.choice);
+export const memberHref = (site: Pick<ZoneSite, 'ref' | 'choice' | 'continuity'>, segment: string, resource: string) =>
+  keepReading(site, zoneMemberHref(site.ref, segment, resource));

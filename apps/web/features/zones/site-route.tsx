@@ -25,15 +25,12 @@ import { pageUrl, representationPath } from '../seo/address.ts';
 import { workPageMetadata } from '../seo/work.ts';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { readMembers } from '../wiki/members.ts';
-import {
-  type PositionChoice,
-  parsePosition,
-  positionParam,
-  withPosition,
-} from '../wiki/position.ts';
+import { continuityParam } from '../wiki/continuity.ts';
+import { type PositionChoice, parsePosition, positionParam } from '../wiki/position.ts';
+import { zoneContinuity } from '../wiki/zone-continuity.ts';
 import { readPositionedRoute } from '../wiki/read.ts';
 import { occurrenceName, positionNote, positionOf } from '../wiki/state.ts';
-import type { ZoneSite } from '../wiki/links.ts';
+import { keepReading, type ZoneSite } from '../wiki/links.ts';
 import { loadWork, readText, resolveWork } from '../work-page/read.ts';
 import { idOf, shortId, type WorkTab } from '../work-page/route.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -205,19 +202,21 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   // A Zone whose package reads at the reader's position sends it with every read, as the signed-in reader.
   const choice: PositionChoice = parsePosition(search);
   const state = await positionOf(view.pkg, zone.id, choice);
+  const reading = await zoneContinuity(view.pkg, state, search);
   const site: ZoneSite = {
     zone: zone.id,
     ref,
     segments: view.mounts.map((mount) => mount.segment),
     choice,
     main: state?.main,
+    ...(reading ? { continuity: { choice: reading.choice, fallback: reading.fallback } } : {}),
   };
   const address = siteHref(locale, ref, path, { cursor, position: positionParam(choice) });
   const read = state
     ? await readPositionedRoute(zone.id, routePath(path), cursor, state.main)
     : await readZoneRoute(zone.id, routePath(path), cursor);
   if (!read.ok && read.failure === 'missing') notFound();
-  const kept = (href: string) => withPosition(href, choice);
+  const kept = (href: string) => keepReading(site, href);
   const home: SiteCrumb = { label: view.zone.name, href: kept(spaceHref(ref, 'site')) };
   const frame = (children: ReactNode, crumbs?: SiteCrumb[]) => (
     <RealmFrame
@@ -319,7 +318,10 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
           arrange={arrange}
           arrangeMembers={arrangeMembers}
           members={members}
-          query={{ position: positionParam(choice) }}
+          query={{
+            position: positionParam(choice),
+            continuity: reading ? continuityParam(reading.choice, reading.fallback) : undefined,
+          }}
           title={
             <span lang={name.lang || undefined} dir={name.dir}>
               {name.value}

@@ -519,6 +519,13 @@ export interface ZonePackage {
    * read; Main withholds what is revealed later, so a package never filters.
    */
   positions?: { mount: string };
+  /**
+   * Offers a continuity switch beside the position control, listing the continuities (Canon, Legends, a Work's own timeline)
+   * the Zone's first Work is part of. Readers start in none, so nothing is hidden until someone asks; `default` names the
+   * continuity a reader of this Zone starts in, by the name the Work's records give it (compared ignoring case; no match
+   * means none). The reader's choice is written to the address and Main applies it as the frame of its reads: a package never filters.
+   */
+  continuity?: { default?: string };
 }
 
 export function defineZonePackage<const Package extends ZonePackage>(pkg: Package): Package {

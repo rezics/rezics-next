@@ -5,7 +5,9 @@ import type { RealmView } from '../realm/realm-page.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ZoneSite } from '../wiki/links.ts';
 import { readMembers } from '../wiki/members.ts';
-import { parsePosition, withPosition } from '../wiki/position.ts';
+import { keepReading } from '../wiki/links.ts';
+import { parsePosition } from '../wiki/position.ts';
+import { zoneContinuity } from '../wiki/zone-continuity.ts';
 import { readPositionedRoute } from '../wiki/read.ts';
 import { positionNote, positionOf } from '../wiki/state.ts';
 import { cardRenderer, workRenderers } from './zone-home.tsx';
@@ -27,12 +29,14 @@ export async function ZoneSiteHome({ view, search }: { view: RealmView; search: 
   const { locale, ref } = view.context;
   const choice = parsePosition(search);
   const state = await positionOf(view.pkg, zone.id, choice);
+  const reading = await zoneContinuity(view.pkg, state, search);
   const site: ZoneSite = {
     zone: zone.id,
     ref,
     segments: view.mounts.map((mount) => mount.segment),
     choice,
     main: state?.main,
+    ...(reading ? { continuity: { choice: reading.choice, fallback: reading.fallback } } : {}),
   };
   const card = cardRenderer(
     view.zone,
@@ -59,7 +63,7 @@ export async function ZoneSiteHome({ view, search }: { view: RealmView; search: 
         return {
           segment: mount.segment,
           name: zoneText(mount.name),
-          href: withPosition(spaceHref(ref, 'site', [mount.segment]), choice),
+          href: keepReading(site, spaceHref(ref, 'site', [mount.segment])),
           works: works.slice(0, HOME_ITEMS),
           members: await readMembers(
             site,

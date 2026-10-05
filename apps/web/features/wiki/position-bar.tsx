@@ -1,4 +1,7 @@
 import type { UiLocale } from '../../i18n/define.ts';
+import { getMessages } from '../../i18n/server.ts';
+import { ContinuitySwitch } from './continuity-switch.tsx';
+import type { ZoneContinuity } from './zone-continuity.ts';
 import { copyOf } from './messages.ts';
 import { type PositionChoice, withPosition } from './position.ts';
 import { PositionControl } from './position-control.tsx';
@@ -14,10 +17,13 @@ export async function PositionBar({
   state,
   here,
   locale,
+  continuity,
 }: {
   state: PositionState;
   here: string;
   locale: UiLocale;
+  /** The continuity switch, beside the position, for a Zone whose package offers one. */
+  continuity?: ZoneContinuity | null;
 }) {
   const t = copyOf(locale);
   const note =
@@ -59,6 +65,17 @@ export async function PositionBar({
       }}
       everything={{ href: choice({ kind: 'all' }), current: state.mode === 'all' }}
       more={state.chooser.more}
-    />
+    >
+      {continuity && continuity.options.length ? (
+        <ContinuitySwitch
+          here={here}
+          current={continuity.choice}
+          fallback={continuity.fallback}
+          options={continuity.options}
+          locale={locale}
+          messages={await getMessages('scopedRating', locale)}
+        />
+      ) : null}
+    </PositionControl>
   );
 }
