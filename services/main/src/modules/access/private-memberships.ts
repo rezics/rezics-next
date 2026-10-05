@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
@@ -145,8 +146,9 @@ export class AccessPrivateMemberships {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client, true);
+      await this.begin(client, false);
       const principal = await this.recipient(client, input.principal, true);
+      await lockAccessKey(client, `private-membership-consent:${principal.id}:${input.idempotencyKey}`);
       const prior = await client.query<{ request_digest: string; consent_id: string }>(`
         SELECT request_digest, consent_id FROM access.private_membership_consent_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [principal.id, input.idempotencyKey]);
@@ -208,7 +210,7 @@ export class AccessPrivateMemberships {
     if (!uuid.test(consentReference)) throw new MembershipDenied('invalid consent reference');
     const client = await this.pool.connect();
     try {
-      await this.begin(client, true);
+      await this.begin(client, false);
       const principal = await this.recipient(client, asserted, false);
       const owned = await client.query(`SELECT id FROM access.private_membership_consent
         WHERE id = $1 AND principal_id = $2 FOR SHARE`, [consentReference, principal.id]);

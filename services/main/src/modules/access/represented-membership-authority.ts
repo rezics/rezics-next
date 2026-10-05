@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable } from './memberships.ts';
 
@@ -49,7 +50,7 @@ export class AccessRepresentedMembershipAuthority {
     return error instanceof Error ? error : new Error(String(error));
   }
 
-  private async begin(client: PoolClient): Promise<string> {
+  private async begin(client: PoolClient, changesEpoch = true): Promise<string> {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
@@ -58,7 +59,7 @@ export class AccessRepresentedMembershipAuthority {
     if (!fence.rows[0]?.open) throw new MembershipUnavailable('Access recovery held');
     const gate = await client.query<{ authority_epoch: string; open: boolean;
       dispatch_open: boolean }>(`SELECT authority_epoch, open, dispatch_open FROM access.scope_gate
-      WHERE id = $1 FOR UPDATE`, [ROOT]);
+      WHERE id = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [ROOT]);
     if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
       throw new MembershipDenied('Access authority gate closed');
     }
@@ -124,8 +125,9 @@ export class AccessRepresentedMembershipAuthority {
     }
     const client = await this.pool.connect();
     try {
-      await this.begin(client);
+      await this.begin(client, false);
       const p = await this.principal(client, principal, true);
+      await lockAccessKey(client, `representation-request:${p.id}:${idempotencyKey}`);
       const prior = await client.query<{ id: string }>(`SELECT id FROM access.representation_request
         WHERE recipient_principal = $1 AND idempotency_key = $2`, [p.id, idempotencyKey]);
       if (prior.rows[0]) {
@@ -171,7 +173,7 @@ export class AccessRepresentedMembershipAuthority {
     if (!agent.test(issuer) || !uuid.test(requestId)) throw new MembershipDenied('invalid request read');
     const client = await this.pool.connect();
     try {
-      await this.begin(client);
+      await this.begin(client, false);
       const p = await this.principal(client, principal);
       await this.assignment(client, p.id, issuer, 'access.representation.manage');
       await this.assignment(client, p.id, issuer,

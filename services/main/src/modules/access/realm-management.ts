@@ -37,7 +37,8 @@ export class AccessRealmManagement {
   constructor(private readonly pool: Pool) {}
   configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
-  private async transaction<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>, initialize = false) {
+  private async transaction<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>,
+    initialize = false, changesEpoch = true) {
     if (!native.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
     const client = await this.pool.connect().catch(() => { throw new RealmAdminUnavailable('Access is unavailable'); });
     try {
@@ -48,11 +49,11 @@ export class AccessRealmManagement {
       if (!fence.rowCount) throw new RealmAdminUnavailable('Access recovery is in progress');
       if (initialize) await client.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [realmAdminScope(realm)]);
       const gate = await client.query(`SELECT 1 FROM access.scope_gate WHERE id = $1
-        AND open AND dispatch_open FOR UPDATE`, [realmAdminScope(realm)]);
+        AND open AND dispatch_open FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [realmAdminScope(realm)]);
       if (!gate.rowCount) throw new RealmAdminDenied('Realm management is unavailable');
       await client.query(`INSERT INTO access.realm_admin_revision (realm) VALUES ($1) ON CONFLICT DO NOTHING`, [realm]);
       const row = (await client.query<{ generation: string }>(`SELECT generation::text
-        FROM access.realm_admin_revision WHERE realm = $1 FOR UPDATE`, [realm])).rows[0]!;
+        FROM access.realm_admin_revision WHERE realm = $1 FOR ${changesEpoch ? 'UPDATE' : 'SHARE'}`, [realm])).rows[0]!;
       const result = await run(client, row.generation);
       await client.query('COMMIT');
       return result;
@@ -63,6 +64,10 @@ export class AccessRealmManagement {
       if ((error as { code?: string }).code === '23505') throw new RealmAdminConflict('Identity is already in use');
       throw new RealmAdminUnavailable('Realm management could not complete');
     } finally { client.release(); }
+  }
+
+  private read<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>) {
+    return this.transaction(realm, run, false, false);
   }
 
   /** One-time owner enrollment from the server-read successful creation receipt.
@@ -193,7 +198,7 @@ export class AccessRealmManagement {
 
   async settings(principal: VerifiedPrincipal, realm: string, actor: string, env?: WorkActivationEnvironment) {
     await this.settlePolicy(realm, env);
-    return this.transaction(realm, async (client, generation) => {
+    return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.settings.manage');
       return { generation, ...await readRealmSettings(client, realm) };
     });
@@ -245,7 +250,7 @@ export class AccessRealmManagement {
   async spaceSettings(principal: VerifiedPrincipal, space: string, actor: string, env: WorkActivationEnvironment) {
     const realm = await this.spaceRealm(space, env);
     await this.settlePolicy(realm, env);
-    return this.transaction(realm, async (client, generation) => {
+    return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.settings.manage');
       return { space, realm, generation, settings: await readRealmAccessSettings(client, realm) };
     });
@@ -270,7 +275,7 @@ export class AccessRealmManagement {
   }
 
   roles(principal: VerifiedPrincipal, realm: string, actor: string) {
-    return this.transaction(realm, async (client, generation) => {
+    return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.roles.manage');
       const roles = (await client.query<Role>(`SELECT id, name, permissions FROM access.realm_admin_role
         WHERE realm = $1 ORDER BY id LIMIT $2`, [realm, REALM_ADMIN_COST.roles + 1])).rows;
@@ -286,7 +291,7 @@ export class AccessRealmManagement {
       || options.after && !native.test(options.after) || (options.search?.length ?? 0) > 80) {
       throw new RealmAdminInvalid('Invalid member page');
     }
-    return this.transaction(realm, async (client, generation) => {
+    return this.read(realm, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
       const matches = !options.search?.trim() ? null
         : await searchRealmMembers(client, realm, options.search, options.after, limit + 1);
@@ -416,7 +421,7 @@ export class AccessRealmManagement {
 
   preview(principal: VerifiedPrincipal, realm: string, input: RoleCommand) {
     if (!Value.Check(roleCommand, input)) throw new RealmAdminInvalid('Invalid role change');
-    return this.transaction(realm, async (client, generation) => {
+    return this.read(realm, async (client, generation) => {
       const actor = await this.authorize(client, principal, realm, input.actingSubject, 'realm.roles.manage');
       if (generation !== input.expectedGeneration) throw new RealmAdminStale('Realm management generation changed');
       return (await this.plan(client, realm, input, actor.validUntil)).impact;

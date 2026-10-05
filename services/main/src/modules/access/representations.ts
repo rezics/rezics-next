@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { lockAccessKey } from './scope-gates.ts';
 
 export class RepresentationDenied extends Error {}
 export class RepresentationConflict extends Error {}
@@ -155,6 +156,7 @@ export class AccessRepresentations {
       await this.begin(client);
       await this.gate(client, false);
       const principalId = await this.principal(client, principal, true);
+      await lockAccessKey(client, `representation-request:${principalId}:${idempotencyKey}`);
       const prior = await client.query<{ id: string }>(`SELECT id
         FROM access.representation_request
         WHERE recipient_principal = $1 AND idempotency_key = $2`,

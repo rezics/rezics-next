@@ -10,10 +10,11 @@ const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-
 const columns = 'realm,receipt_id,generation::text,visibility,review_mode,listing,history,admission';
 
 /** Resume the already committed Access intent, without manufacturing authority.
- * The same Realm gate as settings writes prevents a delayed recovery from
+ * The shared Realm gate excludes settings writes and prevents a delayed recovery from
  * publishing an older policy after a newer one. Graph receipt replay covers a
  * crash between graph commit and the Access acknowledgement.
- * FOR UPDATE holds until COMMIT: https://www.postgresql.org/docs/18/explicit-locking.html */
+ * The delivery row serializes recovery peers through COMMIT:
+ * https://www.postgresql.org/docs/18/explicit-locking.html */
 export async function settleRealmPolicy(pool: Pool, realm: string, env?: WorkActivationEnvironment): Promise<boolean> {
   if (!native.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
   const client = await pool.connect();
@@ -24,7 +25,7 @@ export async function settleRealmPolicy(pool: Pool, realm: string, env?: WorkAct
     const fence = await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE');
     if (!fence.rowCount) throw new RealmAdminUnavailable('Access recovery is in progress');
     // Match settings' lock order: fence, scope gate, delivery.
-    await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR UPDATE', [`governance:realm:${realm}`]);
+    await client.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE', [`governance:realm:${realm}`]);
     const pending = (await client.query<RealmPolicyDelivery>(`SELECT ${columns}
       FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered FOR UPDATE`, [realm])).rows[0];
     if (pending) {

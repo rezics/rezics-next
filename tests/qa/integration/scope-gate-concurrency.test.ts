@@ -6,7 +6,12 @@ import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionU
   engageAccessRecoveryFence, releaseAccessRecoveryFence,
   type AdmissionRequest, type RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
-import { AccessMemberships, type MembershipChange } from '../../../services/main/src/modules/access/memberships.ts';
+import { AccessMemberships, MembershipDenied, type MembershipChange } from '../../../services/main/src/modules/access/memberships.ts';
+import { AccessPrivateMemberships } from '../../../services/main/src/modules/access/private-memberships.ts';
+import { AccessRepresentations, RepresentationConflict } from '../../../services/main/src/modules/access/representations.ts';
+import { AccessRepresentedMembershipAuthority } from '../../../services/main/src/modules/access/represented-membership-authority.ts';
+import { AccessEligibleOrgMemberSet } from '../../../services/main/src/modules/access/eligible-org-member-set.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
 import { AccessRealmJoining } from '../../../services/main/src/modules/access/realm-management-joining.ts';
@@ -148,7 +153,7 @@ for (const mutation of ['ordinary-close', 'strong-close', 'epoch'] as const) {
   }, 30_000);
 }
 
-test('Consent issuance and role revisions share unchanged authority with ordinary admissions', async () => {
+test('Public/private consent, representation requests and role revisions share unchanged authority with ordinary admissions', async () => {
   const f = await fixture();
   const held = await f.pool.connect();
   try {
@@ -164,12 +169,56 @@ test('Consent issuance and role revisions share unchanged authority with ordinar
     expect(issued[0]!.consentReference).toBe(issued[1]!.consentReference);
     expect(issued.map(row => row.replayed).sort()).toEqual([false, true]);
     await within(consents.revoke(f.principal, issued[0]!.consentReference));
+    const privateConsents = new AccessPrivateMemberships(f.pool);
+    const privateIntent = { ...consentIntent, idempotencyKey: randomUUID() };
+    const privateIssued = await within(Promise.all([privateConsents.issue(privateIntent), privateConsents.issue(privateIntent)]));
+    expect(privateIssued[0]!.consentReference).toBe(privateIssued[1]!.consentReference);
+    expect(privateIssued.map(row => row.replayed).sort()).toEqual([false, true]);
+    await within(privateConsents.revoke(f.principal, privateIssued[0]!.consentReference));
+    const other = native();
+    await f.pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [other]);
+    await f.pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
+      VALUES ('org',$1,1,'terms')`, [f.actor]);
+    const requests = new AccessRepresentedMembershipAuthority(f.pool);
+    const requestId = randomUUID(), requestKey = randomUUID(), validUntil = new Date(Date.now() + 60_000);
+    const requested = await within(Promise.all([
+      requests.request(f.principal, requestId, other, f.actor, validUntil, requestKey, 'e'.repeat(64)),
+      requests.request(f.principal, requestId, other, f.actor, validUntil, requestKey, 'e'.repeat(64)),
+    ]));
+    expect(requested[0]).toEqual(requested[1]);
+    await expect(within(new AccessRepresentations(f.pool).request(f.principal, randomUUID(), other,
+      validUntil, requestKey, 'e'.repeat(64)))).rejects.toBeInstanceOf(RepresentationConflict);
+    await expect(within(requests.readRequest(f.principal, f.actor, requestId))).rejects.toBeInstanceOf(MembershipDenied);
+    await expect(within(new AccessEligibleOrgMemberSet(f.pool).read(f.principal, f.actor, randomUUID())))
+      .rejects.toBeInstanceOf(MembershipDenied);
     const roles = new AccessRoles(f.pool), family = randomUUID();
     const roleIntent = { principal: f.principal, issuerSubject: f.actor, expectedAuthorityEpoch: await f.epoch(),
       idempotencyKey: randomUUID(), requestDigest: 'd'.repeat(64) };
     expect(await within(Promise.all([roles.createFamily(roleIntent, family, []),
       roles.createFamily(roleIntent, family, [])]))).toEqual(['1', '1']);
     await held.query('COMMIT');
+  } finally { await held.query('ROLLBACK'); held.release(); await f.close(); }
+}, 30_000);
+
+test('Realm management reads and idle policy recovery share their Realm gate and revision', async () => {
+  const f = await fixture();
+  const held = await f.pool.connect();
+  const realmScope = `governance:realm:${f.actor}`;
+  try {
+    await f.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [realmScope]);
+    await f.pool.query('INSERT INTO access.realm_admin_revision (realm) VALUES ($1)', [f.actor]);
+    for (const action of ['realm.roles.manage', 'realm.settings.manage']) {
+      await f.pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [randomUUID(), f.principalId, f.actor, action]);
+      await f.pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [randomUUID(), f.actor, realmScope, action]);
+    }
+    await held.query('BEGIN');
+    await held.query('SELECT 1 FROM access.scope_gate WHERE id = $1 FOR SHARE', [realmScope]);
+    await held.query('SELECT 1 FROM access.realm_admin_revision WHERE realm = $1 FOR SHARE', [f.actor]);
+    const owner = new AccessRealmManagement(f.pool);
+    expect(await within(owner.roles(f.principal, f.actor, f.actor))).toEqual({ generation: '0', roles: [] });
+    expect((await within(owner.settings(f.principal, f.actor, f.actor))).generation).toBe('0');
   } finally { await held.query('ROLLBACK'); held.release(); await f.close(); }
 }, 30_000);
 
