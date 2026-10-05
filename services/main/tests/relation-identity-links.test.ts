@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { relationLexiconSeed, variantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { canonicalRelation, relationChangeDigest, undisclosedReferences, type ExactDefinition } from '../src/modules/relation/change.ts';
 import { PARTICIPATION_FORMAT_V2, checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
+import { semanticWriteReferences } from '../src/modules/semantic/admitted.ts';
 import { checkedComponentState, referencedResources } from '../src/modules/semantic/change.ts';
 import { SemanticChangeRejected } from '../src/modules/semantic/command.ts';
 import { selectedProjection } from '../src/modules/lexicon/render.ts';
@@ -186,4 +187,15 @@ test('applicability coordinates the target reader discloses need no semantic or 
   expect(undisclosedReferences([position, hidden, missing], summaries)).toEqual([hidden, missing]);
   expect(undisclosedReferences([position], summaries)).toEqual([]);
   expect(undisclosedReferences([hidden], [])).toEqual([hidden]);
+});
+
+test('definition write: role members the target reader discloses need no semantic read grant; the rest and the successor keep it', () => {
+  const target = native(70), concept = native(71), hidden = native(72), successor = native(73);
+  const state = (members: string[], next?: string) => checkedComponentState({ component: 'definition', kind: 'relation',
+    ...(next ? { lifecycle: 'retired', successor: next } : {}),
+    roles: [{ key: 'kind', minParticipants: 1, maxParticipants: 1, ordered: false, members }] });
+  expect(semanticWriteReferences(undefined, state([concept, hidden]), [hidden])).toEqual([hidden]);
+  expect(semanticWriteReferences(target, state([concept]), [])).toEqual([target]);
+  expect(semanticWriteReferences(target, state([concept], successor), [])).toEqual([target, successor]);
+  expect(semanticWriteReferences(undefined, state([concept, hidden]), [concept, hidden])).toEqual([concept, hidden]);
 });

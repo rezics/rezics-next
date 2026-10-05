@@ -5,10 +5,11 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { targetRead, targetSummaries } from '../target/resolve.ts';
 import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generation-guard.ts';
-import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
+import { ProjectionParticipantRefused, relationReferences, undisclosedReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
-import { changeSemanticComponent, checkedComponentState, readSemanticChangeTerminal, referencedResources,
+import { changeSemanticComponent, checkedComponentState, type ComponentInput, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
 import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
   SemanticTargetUnavailable, StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from './command.ts';
@@ -119,6 +120,17 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   }
 }
 
+/** The references a semantic write needs the semantic reader for: its target and states' references, less the
+ * role members the target reader already disclosed. */
+export function semanticWriteReferences(target: string | undefined, state: ComponentInput,
+  undisclosedMembers: readonly string[]): string[] {
+  const members = state.component === 'resource' ? [] : state.roles.flatMap(role => role.members ?? []);
+  const undisclosed = new Set(undisclosedMembers);
+  return [...new Set([...(target ? [target] : []),
+    ...referencedResources(state).filter(ref => !members.includes(ref) || undisclosed.has(ref)
+      || (state.component !== 'resource' && ref === state.successor))])];
+}
+
 export interface AdmittedSemanticChangeInput {
   target?: string;
   expectedHead: string | null;
@@ -135,7 +147,16 @@ export async function admittedSemanticChange(env: WorkActivationEnvironment,
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, action: 'semantic.change', family: 'semantic-change',
     scope: input.target ? `semantic:edit:${input.target}` : 'semantic:create:root', digest,
-    references: async () => [...new Set([...(input.target ? [input.target] : []), ...referencedResources(state)])],
+    references: async principal => {
+      // Kind-role members are typed coordinates (Concepts), not only semantic Resources: the target reader
+      // discloses them as it does a relation's applicability; the rest keep the semantic reader's refusal.
+      const members = state.component === 'resource' ? []
+        : [...new Set(state.roles.flatMap(role => role.members ?? []))];
+      const summaries = members.length
+        ? (await targetRead(env, { access, principal, actingSubject: input.actingSubject },
+          session => targetSummaries(session, members))).summaries : [];
+      return semanticWriteReferences(input.target, state, undisclosedReferences(members, summaries));
+    },
     dispatch: admission => changeSemanticComponent(env, { admission, ...(input.target ? { target: input.target } : {}),
       expectedHead: input.expectedHead, state }),
     readTerminal: id => readSemanticChangeTerminal(env, id),

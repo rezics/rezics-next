@@ -349,6 +349,17 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
 
     // An occurrence keeps one fact with both roles; redaction happens before typed rendering arguments.
     await f.grant('relation:create:root', 'relation.change');
+    // The source participant is another public vocabulary resource the pinned reader below cannot read.
+    const hiddenParticipant = await f.json<Write>(
+      await f.call('POST', '/v1/semantic/changes', {
+        profile: 'semantic-change-v1',
+        actingSubject: f.actor,
+        expectedHead: null,
+        state: { component: 'definition', kind: 'relation', roles },
+      }),
+      201,
+    );
+    await f.grant(`semantic:read:${hiddenParticipant.component}`, 'semantic.read');
     const occurrence = await f.json<{ occurrence: string; revision: string }>(
       await f.call('POST', '/v1/relations/changes', {
         profile: 'relation-change-v1',
@@ -356,7 +367,7 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
         expectedHead: null,
         definition: definition.revision,
         participations: [
-          { role: 'source', participant: { kind: 'resource', ref: definition.component } },
+          { role: 'source', participant: { kind: 'resource', ref: hiddenParticipant.component } },
           {
             role: 'target',
             participant: { kind: 'external', provider: 'example', namespace: 'work', key: 'one' },
@@ -408,13 +419,14 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
       { occurrence: occurrence.occurrence },
       'source',
       ['de'],
-      async (ref) => ref === occurrence.occurrence,
+      // The reader sees the occurrence and its definition, not the source participant.
+      async (ref) => ref === occurrence.occurrence || ref === definition.component,
       true, // This pinned editor read has explicit draft authority.
     );
     expect(pinned.meaning.revision).toBe(definition.revision);
     expect(pinned.projections[0]!.labels?.noun).toMatch(/^Fassung [AB]$/);
     expect(pinned.bindings[0]!.participant).toEqual({ kind: 'unavailable-reference' });
-    expect(JSON.stringify(pinned.projections[0]!.arguments)).not.toContain(definition.component);
+    expect(JSON.stringify(pinned.projections[0]!.arguments)).not.toContain(hiddenParticipant.component);
     const revisionManifest = (
       await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(historical.revision)} rv:manifest ?manifest } }`)
