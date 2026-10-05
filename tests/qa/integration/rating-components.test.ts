@@ -147,6 +147,9 @@ test('a target rated by more than 100 principals aggregates from its components,
     'UPDATE access.target_rating_component SET unvalued=slots,rating_count=0,rating_sum=0,histogram=$2 WHERE context=$1',
     [context, Array(10).fill(0)],
   );
+  // Above 100 raters only the components can answer, and they do not yet hold these values.
+  expect(await r.json(await r.call(r.owner, 'POST', '/v1/rating-aggregates', { profile: 'realm-target-latest-mean-v1', context, target,
+    actingSubject: r.owner.actor }), 503)).toMatchObject({ code: 'rating_aggregate_unavailable' });
   const batch = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
     context,
     target,
@@ -184,7 +187,7 @@ test('a component that no longer equals its heads makes a verifiable target unav
   expect(await r.aggregate(context, target)).toMatchObject({ count: 2, sum: 10 });
 }, 300_000);
 
-test('legacy heads remain unavailable on read and are reconstructed by resumable idempotent batches', async () => {
+test('a small legacy target reads head by head and is reconstructed by resumable idempotent batches', async () => {
   const context = (await r.context({ profile: 'realm-target-rating-context-v4', displayThreshold: 1,
     acceptedSubjectTypes: ['https://rezics.com/vocab/Character'] })).context;
   const target = await r.resource('Leafa');
@@ -213,7 +216,8 @@ test('legacy heads remain unavailable on read and are reconstructed by resumable
       target,
       actingSubject: r.owner.actor,
     });
-  expect((await read()).status).toBe(503);
+  // Up to 100 raters the heads are verified one by one, so the target answers before reconstruction and records nothing.
+  expect(await r.json(await read(), 200)).toMatchObject({ count: 3, population: 3, sum: 18, mean: 6 });
   expect((await r.components(context, target)).row.unvalued).toBe(3);
   const lost = `PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
     ${iri(
@@ -246,7 +250,7 @@ test('legacy heads remain unavailable on read and are reconstructed by resumable
       cursor: { ...first.cursor!, recoveryGeneration: '999999' },
     }),
   ).rejects.toThrow('stale');
-  expect((await read()).status).toBe(503);
+  expect(await r.json(await read(), 200)).toMatchObject({ count: 3, sum: 18 });
   const resumed = await reconstructLegacyTargetRatings(r.stack.env, r.stack.accessPool, {
     context,
     target,

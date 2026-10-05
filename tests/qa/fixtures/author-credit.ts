@@ -106,6 +106,8 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   const env = { fuseki, addresses: new AliasRegistry(accessPool),lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
     objectDirectory: apps.MAIN_OBJECT_DIRECTORY ?? objectDirectory };
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
+  // Production composes this too: without it public disclosure is empty, even for relation vocabulary.
+  access.configureBaseline(fuseki);
   const intake = new SourceIntakeStore(pool), conversions = new OpenLibraryConversionStore(pool, intake);
   const graph = new OpenLibrarySourceGraph(fuseki, env.lineage, conversions);
   const proposals = new SourceNativeWorkProposalStore(pool, graph, conversions);
