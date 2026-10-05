@@ -6,6 +6,7 @@ import { memoryReaderActions, storyWorkId } from '../catalogue/fixtures.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
+import { RatingLine } from './ratings.tsx';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
 
@@ -99,5 +100,44 @@ export const SignedOutGame: Story = {
   args: { signedIn: false },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: /Want to play/ })).toBeVisible();
+  },
+};
+
+function Counts({ experience }: { experience: keyof typeof kinds }) {
+  return (
+    <div className="p-6">
+      <RatingLine ratings={fixture.globalRatings} stats={fixture.workStats} experience={kinds[experience]} locale="en" messages={messages.en} />
+    </div>
+  );
+}
+/** The count of people on the shelf names the Work's own verb: playing, using, cooking, reading. */
+export const ReadingNowWords: Story = {
+  render: (args) => <Counts experience={args.experience} />,
+  args: { experience: 'game' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('38 people are currently playing')).toBeVisible();
+    await expect(canvas.queryByText(/currently reading/)).toBeNull();
+  },
+};
+export const UsingNowWords: Story = {
+  render: (args) => <Counts experience={args.experience} />,
+  args: { experience: 'software' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('38 people are currently using')).toBeVisible();
+  },
+};
+export const CookingNowWords: Story = {
+  render: (args) => <Counts experience={args.experience} />,
+  args: { experience: 'recipe' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('38 people are currently cooking')).toBeVisible();
+  },
+};
+export const ReadingNowKeepsBookWords: Story = {
+  render: (args) => <Counts experience={args.experience} />,
+  args: { experience: 'media' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('38 people are currently reading')).toBeVisible();
   },
 };

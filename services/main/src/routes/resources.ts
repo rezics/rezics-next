@@ -11,7 +11,7 @@ import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
   MAX_SUMMARY_REFERENCE_LENGTH, SUMMARY_REFERENCE_PATTERN, type SummaryReader } from '../modules/media/summary.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readSitemap } from '../modules/disclosure/sitemap.ts';
-import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { discloseInventory, hasDisclosure, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -135,8 +135,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const targets = summaries.summaries.filter(item => item.status === 'available' && item.type === 'work')
           .map(item => item.reference);
         const principal = request.headers.get('authorization') ? await work.account.verify(request,['work:read']) : null;
-        const batch = await withDisclosureViewer(principal ? disclosureViewer(principal) : ANONYMOUS_VIEWER,
-          () => work.media!.store.showcase.readBatch(targets,context));
+        const batch = await work.media.store.showcase.readBatch(targets,context);
         const facts: DisclosureTarget[] = [];
         const indexes = new Map<string, number[]>();
         for (const item of batch.art.values()) {

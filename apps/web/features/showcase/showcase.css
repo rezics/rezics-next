@@ -272,22 +272,6 @@
   z-index: 3;
   filter: drop-shadow(0 2px 6px #07101d);
 }
-.showcase-logo-top-start {
-  top: 8%;
-  inset-inline-start: 6%;
-}
-.showcase-logo-top-end {
-  top: 8%;
-  inset-inline-end: 6%;
-}
-.showcase-logo-bottom-start {
-  bottom: 43%;
-  inset-inline-start: 6%;
-}
-.showcase-logo-bottom-end {
-  bottom: 43%;
-  inset-inline-end: 6%;
-}
 .showcase-cutout-layer {
   position: absolute;
   inset-block: -5% 0;

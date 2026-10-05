@@ -73,10 +73,10 @@ export const fixtureArt: ZoneShowcaseArt = {
   },
   cutout: image(cutoutUrl, 420, 700),
   logos: [
-    { ...image(englishLight, 600, 200), language: 'en', tone: 'light', anchor: 'top-start' },
-    { ...image(englishDark, 600, 200), language: 'en', tone: 'dark', anchor: 'top-start' },
-    { ...image(japaneseLight, 600, 200), language: 'ja', tone: 'light', anchor: 'top-start' },
-    { ...image(japaneseDark, 600, 200), language: 'ja', tone: 'dark', anchor: 'top-start' },
+    { ...image(englishLight, 600, 200), language: 'en', tone: 'light', anchor: 'start-bottom' },
+    { ...image(englishDark, 600, 200), language: 'en', tone: 'dark', anchor: 'start-bottom' },
+    { ...image(japaneseLight, 600, 200), language: 'ja', tone: 'light', anchor: 'start-bottom' },
+    { ...image(japaneseDark, 600, 200), language: 'ja', tone: 'dark', anchor: 'start-bottom' },
   ],
 };
 export function showcaseFixtures(language: ShowcaseLanguage): ZoneShowcaseSlide[] {

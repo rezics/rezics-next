@@ -285,6 +285,21 @@ export default {
     other: insert("{{count}} personnes lisent en ce moment"),
   }, { count: asValue(number()) }),
   readingNowAtLeast: insert("{{count}}+ personnes lisent en ce moment", { count: String }),
+  playingNow: plural({
+    one: insert("{{count}} personne joue en ce moment"),
+    other: insert("{{count}} personnes jouent en ce moment"),
+  }, { count: asValue(number()) }),
+  playingNowAtLeast: insert("{{count}}+ personnes jouent en ce moment", { count: String }),
+  usingNow: plural({
+    one: insert("{{count}} personne utilise en ce moment"),
+    other: insert("{{count}} personnes utilisent en ce moment"),
+  }, { count: asValue(number()) }),
+  usingNowAtLeast: insert("{{count}}+ personnes utilisent en ce moment", { count: String }),
+  cookingNow: plural({
+    one: insert("{{count}} personne cuisine en ce moment"),
+    other: insert("{{count}} personnes cuisinent en ce moment"),
+  }, { count: asValue(number()) }),
+  cookingNowAtLeast: insert("{{count}}+ personnes cuisinent en ce moment", { count: String }),
   alsoEnjoyed: "Les lecteurs ont aussi aimé",
   similarBooks: "Livres similaires",
   similarWorks: "Œuvres similaires",

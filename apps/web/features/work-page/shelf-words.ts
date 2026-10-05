@@ -28,3 +28,11 @@ export function shelfWords(experience: Pick<WorkExperience, 'kind' | 'presentati
     case 'read': return undefined;
   }
 }
+
+/** The "N people are currently …" counts in each verb, as `shelfWords` names the shelf. */
+export const nowWords = {
+  read: { exact: 'readingNow', atLeast: 'readingNowAtLeast' },
+  play: { exact: 'playingNow', atLeast: 'playingNowAtLeast' },
+  cook: { exact: 'cookingNow', atLeast: 'cookingNowAtLeast' },
+  use: { exact: 'usingNow', atLeast: 'usingNowAtLeast' },
+} as const satisfies Record<ShelfVerb, { exact: keyof WorkPageMessages; atLeast: keyof WorkPageMessages }>;

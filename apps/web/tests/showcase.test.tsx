@@ -66,8 +66,8 @@ test('picture and preload media come from the same window shapes; portrait falls
 test('logos match the reader language or a language-neutral alternative and the requested tone', () => {
   const logos: ZoneShowcaseArt = {
     logos: [
-      { ...image, language: 'ja', tone: 'light', anchor: 'top-start' },
-      { ...image, language: '', tone: 'dark', anchor: 'top-end' },
+      { ...image, language: 'ja', tone: 'light', anchor: 'start-bottom' },
+      { ...image, language: '', tone: 'dark', anchor: 'center-top' },
     ],
   };
   expect(logoFor(logos, 'en')).toBeNull();

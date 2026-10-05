@@ -147,8 +147,7 @@ export interface ZoneShowcaseImage extends ZoneImage {
   view?: ZoneFocalArea;
 }
 
-export type ZoneLogoAnchor = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'
-  | 'start-bottom' | 'center-top' | 'center-middle' | 'center-bottom';
+export type ZoneLogoAnchor = 'start-bottom' | 'center-top' | 'center-middle' | 'center-bottom';
 export interface ZoneShowcaseLogo extends ZoneShowcaseImage {
   tone: 'light' | 'dark';
   anchor: ZoneLogoAnchor;

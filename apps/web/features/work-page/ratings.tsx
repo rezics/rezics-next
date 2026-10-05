@@ -17,7 +17,7 @@ import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
 import { ScopeOffer, type ScopeView } from './scope-bar.tsx';
 import { scopeName } from './scope-labels.ts';
-import { shelfWords } from './shelf-words.ts';
+import { nowWords, shelfVerb, shelfWords, type ShelfVerb } from './shelf-words.ts';
 import type { Loaded, RatingRead, StatCount, WorkStats } from './types.ts';
 
 export const RATINGS_REGION = 'work-ratings';
@@ -226,13 +226,14 @@ export function Mean({
   );
 }
 
-/** "3 people are currently reading", as Goodreads counts them, from public libraries only. */
-function ReadingNow({ count, locale, t }: { count: StatCount; locale: UiLocale; t: Translation }) {
+/** "3 people are currently reading", as Goodreads counts them, from public libraries only; in the Work's own verb. */
+function ReadingNow({ count, locale, t, verb }: { count: StatCount; locale: UiLocale; t: Translation; verb: ShelfVerb }) {
   if (!count.value) return null;
+  const words = nowWords[verb];
   return (
     <p className="flex items-center gap-1.5 text-muted-foreground text-sm">
       <UsersRoundIcon aria-hidden="true" className="size-4 shrink-0" />
-      {counted(count, t.readingNow, t.readingNowAtLeast, locale)}
+      {counted(count, t[words.exact], t[words.atLeast], locale)}
     </p>
   );
 }
@@ -276,7 +277,7 @@ export function RatingLine({
 }) {
   const t = materializeData(messages, { locale });
   const counts = stats?.ok ? stats.data : null;
-  const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
+  const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} verb={experience ? shelfVerb(experience) : 'read'} /> : null;
   const want = counts ? <WantToRead count={counts.wantToRead} locale={locale} words={experience && shelfWords(experience, messages)} /> : null;
   const group = 'grid justify-items-start gap-1.5';
   if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale)

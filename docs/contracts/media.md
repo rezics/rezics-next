@@ -108,7 +108,9 @@ cover. A trailer is a link on the Work, not media.
 observed `expectedSelection` and an `Idempotency-Key`. It uses the same
 `media:avatar:{work}` scope and `media.avatar` action as the Work's avatar.
 Logo keys use canonical BCP 47 language and tone; changing an anchor replaces
-that key's selection. Anchors are `start-bottom`, `center-top`, `center-middle`
+that key's selection. A Work keeps logos in at most eight languages, counting
+languages whose logo was removed; a ninth is refused with 422
+`showcase_logo_limit`. Anchors are `start-bottom`, `center-top`, `center-middle`
 and `center-bottom`. Crops and optional focal areas use `xywh=percent:` on
 oriented source pixels; a focal area lies within the selected crop. Landscape
 crops must be exactly 16:9 and at least 1280×720; portrait crops must be exactly
@@ -145,7 +147,7 @@ trailer. Each requested context's role/key wins over the default, including
 explicit removal and hidden art. Hidden or erased art is absent; an unreadable
 Work has only an unavailable descriptor. The batch uses one media query after
 the existing batched target disclosure and Access read, with at most twelve
-candidates per selected image; all selected logo languages are retained.
+candidates per selected image; all selected logo languages (at most eight) are retained.
 Responses revalidate on every read. Selection replacement and removal also
 invalidate the preceding Use's delivery URLs. Pending renditions leave an
 empty candidate list while the admitted original remains available with its

@@ -74,6 +74,8 @@ function StageContents({
   const t = materializeData(messages, { locale });
   const position = (index: number) =>
     t.slide({ index: String(index + 1), count: String(slides.length) });
+  const slideLabel = (slide: ZoneShowcaseSlide, index: number) =>
+    `${slide.title.value || messages.untitled} · ${position(index)}`;
   function move(index: number) {
     // The grid and late artwork can change Ark's cached snap points after its initial layout.
     api.refresh();
@@ -110,7 +112,7 @@ function StageContents({
                   <CarouselIndicator
                     key={slide.id}
                     index={index}
-                    aria-label={`${slide.title.value} · ${position(index)}`}
+                    aria-label={slideLabel(slide, index)}
                     aria-disabled={api.page === index}
                     className="showcase-progress-button"
                   >
@@ -199,7 +201,7 @@ function StageContents({
                 key={slide.id}
                 index={index}
                 coverImages={false}
-                aria-label={`${slide.title.value || messages.untitled} · ${position(index)}`}
+                aria-label={slideLabel(slide, index)}
                 className="showcase-item"
               >
                 <ShowcaseSlide
