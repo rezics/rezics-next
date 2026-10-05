@@ -214,6 +214,23 @@ test('module-level transaction paths cannot share then update a gate', () => {
   ).toEqual(['gate-lock-upgrade']);
 });
 
+test('FOR KEY SHARE reads are gate locks and OF clauses restrict their targets', () => {
+  for (const target of ['g', 'o']) {
+    const findings = serializationFindings(
+      [],
+      [
+        source(`async function command(db) {
+      await db.query("SELECT g.id FROM probe.scope_gate g CROSS JOIN probe.objects o WHERE g.id='scope' FOR KEY SHARE OF ${target}");
+      await db.query("UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'");
+    }`),
+      ],
+      [],
+    );
+    expect(findings.some((finding) => finding.rule === 'gate-lock-upgrade')).toBe(target === 'g');
+    if (target === 'g') expect(findings[0].detail).toContain('FOR KEY SHARE');
+  }
+});
+
 test('gate upgrades follow imported helpers, callbacks and method calls with substituted keys', () => {
   const findings = serializationFindings(
     [],
@@ -285,6 +302,36 @@ test('migration gate upgrades are checked per SQL function and cannot be allowli
     ],
   );
   expect(findings.map((finding) => finding.rule)).toEqual(['gate-lock-upgrade']);
+});
+
+test('migration functions accept direct updates and already exclusive gates', () => {
+  expect(
+    serializationFindings(
+      [
+        migration(`
+    CREATE FUNCTION probe.direct() RETURNS void LANGUAGE plpgsql AS $$ BEGIN
+      UPDATE probe.scope_gate SET open=false WHERE id='scope'; END $$;
+    CREATE FUNCTION probe.exclusive() RETURNS void LANGUAGE plpgsql AS $$ BEGIN
+      PERFORM 1 FROM probe.scope_gate WHERE id='scope' FOR UPDATE;
+      PERFORM 1 FROM probe.scope_gate WHERE id='scope' FOR KEY SHARE;
+      UPDATE probe.scope_gate SET open=false WHERE id='scope'; END $$;
+  `),
+      ],
+      [],
+      [],
+    ),
+  ).toEqual([]);
+  expect(
+    serializationFindings(
+      [
+        migration(`DO $$ BEGIN
+    PERFORM 1 FROM probe.scope_gate WHERE id='scope' FOR KEY SHARE;
+    UPDATE probe.scope_gate SET open=false WHERE id='scope'; END $$;`),
+      ],
+      [],
+      [],
+    ).map((finding) => finding.rule),
+  ).toEqual(['gate-lock-upgrade']);
 });
 
 test('conditional helper locks and transaction callback execution preserve exclusive fences', () => {
@@ -409,66 +456,53 @@ test('gate upgrades include current database functions and triggers, replacing h
   ).toEqual(['gate-lock-upgrade']);
 });
 
-test('scope gate bumps require a matching earlier FOR UPDATE on every transaction path', () => {
+test('direct compare-and-swap gate updates and FOR UPDATE reads are accepted', () => {
   for (const before of [
     '',
-    'await db.query("SELECT id FROM probe.scope_gate WHERE id=\'other\' FOR UPDATE");',
-    'await db.query("SELECT id FROM probe.scope_gate WHERE id=\'scope\' FOR NO KEY UPDATE");',
-    "await db.query(\"SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE\"); await db.query('COMMIT');",
-    'if (flag) await db.query("SELECT id FROM probe.scope_gate WHERE id=\'scope\' FOR UPDATE");',
+    "await db.query('SELECT id FROM probe.scope_gate WHERE id=$1 FOR UPDATE',[scope]);",
   ]) {
-    const findings = serializationFindings(
-      [],
-      [
-        source(`async function command(db,flag) { ${before}
-      await db.query("UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'");
-      await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
-    }`),
-      ],
-      [],
-    );
     expect(
-      findings.some((finding) => finding.rule === 'scope-gate-write-without-update-lock'),
-    ).toBe(true);
+      serializationFindings(
+        [],
+        [
+          source(`async function closeScope(db,scope,expectedEpoch) {
+      await db.query('BEGIN');
+      ${before}
+      await db.query('UPDATE probe.scope_gate SET open=false, authority_epoch=authority_epoch+1 WHERE id=$1 AND authority_epoch=$2 AND open RETURNING authority_epoch',[scope,expectedEpoch]);
+      await db.query('COMMIT');
+    }`),
+        ],
+        [],
+      ),
+    ).toEqual([]);
   }
-  expect(
-    serializationFindings(
-      [],
-      [
-        source(`async function command(db,flag) {
-    if(flag) await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
-    else await db.query("SELECT id FROM probe.scope_gate WHERE id='scope' FOR UPDATE");
-    await db.query("UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id='scope'");
-  }`),
-      ],
-      [],
-    ),
-  ).toEqual([]);
 });
 
-test('scope gate helpers retain their callers FOR UPDATE requirement', () => {
+test('gate helper updates reject shared caller locks and accept direct or exclusive callers', () => {
   const helper: SqlSource = {
     file: 'services/example/src/gates.ts',
     text: `export async function bump(db,key) {
     await db.query('UPDATE probe.scope_gate SET authority_epoch=authority_epoch+1 WHERE id=$1',[key]);
   }`,
   };
-  for (const lock of [true, false]) {
+  for (const lock of ['', 'FOR UPDATE', 'FOR SHARE', 'FOR KEY SHARE']) {
     const findings = serializationFindings(
       [],
       [
         helper,
         source(`import { bump } from '../gates.ts';
       async function command(db,key) {
-        ${lock ? "await db.query('SELECT id FROM probe.scope_gate WHERE id=$1 FOR UPDATE',[key]);" : ''}
+        await db.query('BEGIN');
+        ${lock ? `await db.query('SELECT id FROM probe.scope_gate WHERE id=$1 ${lock}',[key]);` : ''}
         await bump(db,key);
+        await db.query('COMMIT');
       }`),
       ],
       [],
     );
-    expect(
-      findings.some((finding) => finding.rule === 'scope-gate-write-without-update-lock'),
-    ).toBe(!lock);
+    expect(findings.some((finding) => finding.rule === 'gate-lock-upgrade')).toBe(
+      lock === 'FOR SHARE' || lock === 'FOR KEY SHARE',
+    );
   }
 });
 
@@ -527,24 +561,20 @@ test('retiring a singleton removes its historical definition from the live inven
   ).toEqual(['singleton-table']);
 });
 
-test('group management revision allowance never exempts an admission authority bump', () => {
+test('group management revision allowances never exempt shared-lock upgrades', () => {
   const entry = serializationAllowlist.find((entry) => entry.key === 'access:group-inventory')!;
-  const management = (column: string): SqlSource => ({
-    file: 'services/main/src/modules/access/groups.ts',
-    text: `async function command(db) {
-    await db.query("UPDATE access.scope_gate SET ${column}=${column}+1 WHERE id='access:group-inventory'");
-  }`,
-  });
   expect(entry.class).toBe('per-object management revision');
-  expect(serializationFindings([], [management('group_generation')])).toEqual([]);
-  expect(
-    serializationFindings([], [management('authority_epoch')]).map((finding) => finding.rule),
-  ).toEqual(['scope-gate-write-without-update-lock']);
-  expect(
-    serializationFindings([], [source(management('group_generation').text)]).map(
-      (finding) => finding.rule,
-    ),
-  ).toEqual(['scope-gate-write-without-update-lock']);
+  for (const column of ['group_generation', 'authority_epoch']) {
+    const text = `async function command(db) {
+      await db.query("SELECT id FROM access.scope_gate WHERE id='access:group-inventory' FOR KEY SHARE");
+      await db.query("UPDATE access.scope_gate SET ${column}=${column}+1 WHERE id='access:group-inventory'");
+    }`;
+    expect(
+      serializationFindings([], [{ file: 'services/main/src/modules/access/groups.ts', text }]).map(
+        (finding) => finding.rule,
+      ),
+    ).toEqual(['gate-lock-upgrade']);
+  }
 });
 
 test('reviewed external head and key creation have classified allowances without exempting author names', () => {

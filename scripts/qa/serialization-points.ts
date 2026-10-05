@@ -281,12 +281,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
 export interface SerializationFinding {
   file: string;
   line: number;
-  rule:
-    | 'singleton-table'
-    | 'constant-advisory-key'
-    | 'singleton-write'
-    | 'gate-lock-upgrade'
-    | 'scope-gate-write-without-update-lock';
+  rule: 'singleton-table' | 'constant-advisory-key' | 'singleton-write' | 'gate-lock-upgrade';
   target: string;
   detail: string;
 }
@@ -687,8 +682,7 @@ interface Effect {
   line: number;
   file?: string;
   conditions?: Condition[];
-  lock?: 'update' | 'no-key-update';
-  columns?: string[];
+  lock?: 'FOR SHARE' | 'FOR KEY SHARE';
 }
 function sqlEffects(fragment: SqlFragment): Effect[] {
   const input = lex(fragment.text);
@@ -747,15 +741,6 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
             relation: relation.name,
             key: rowKey(),
             line: line(statement[i].offset),
-            columns: statement
-              .slice(set + 1)
-              .filter(
-                (token, at, tokens) =>
-                  identifier(token) &&
-                  word(tokens[at + 1], '=') &&
-                  (at === 0 || word(tokens[at - 1], ',')),
-              )
-              .map((token) => token.text),
           });
       }
       if (word(statement[i], 'insert') && word(statement[i + 1], 'into')) {
@@ -775,16 +760,18 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
           });
       }
       if (!word(statement[i], 'for')) continue;
-      const kind = word(statement[i + 1], 'share')
-        ? 'share'
-        : word(statement[i + 1], 'update') ||
-            (word(statement[i + 1], 'no') &&
-              word(statement[i + 2], 'key') &&
-              word(statement[i + 3], 'update'))
-          ? 'exclusive'
-          : undefined;
+      const keyShare = word(statement[i + 1], 'key') && word(statement[i + 2], 'share');
+      const kind =
+        word(statement[i + 1], 'share') || keyShare
+          ? 'share'
+          : word(statement[i + 1], 'update') ||
+              (word(statement[i + 1], 'no') &&
+                word(statement[i + 2], 'key') &&
+                word(statement[i + 3], 'update'))
+            ? 'exclusive'
+            : undefined;
       if (!kind) continue;
-      let of = i + (word(statement[i + 1], 'no') ? 4 : 2);
+      let of = i + (word(statement[i + 1], 'no') ? 4 : keyShare ? 3 : 2);
       const aliases = new Set<string>();
       if (word(statement[of], 'of')) {
         of++;
@@ -814,12 +801,7 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
         if (!aliases.size || aliases.has(alias))
           effects.push({
             kind,
-            lock:
-              kind === 'exclusive'
-                ? word(statement[i + 1], 'no')
-                  ? 'no-key-update'
-                  : 'update'
-                : undefined,
+            lock: kind === 'share' ? (keyShare ? 'FOR KEY SHARE' : 'FOR SHARE') : undefined,
             relation: relation.name,
             key: rowKey(alias),
             line: line(statement[i].offset),
@@ -953,6 +935,63 @@ function compatible(conditions: Condition[]): boolean {
     if (formulas.every((item) => item.test(values) === item.truth)) return true;
   }
   return false;
+}
+
+function gateEffectFindings(
+  effects: Effect[],
+  file: string,
+  name?: string,
+): SerializationFinding[] {
+  const findings: SerializationFinding[] = [];
+  const shares: Effect[] = [];
+  const exclusive: Effect[] = [];
+  const order = new Map<Effect, number>();
+  let step = 0;
+  for (const effect of effects) {
+    order.set(effect, step++);
+    if (!compatible(effect.conditions ?? [])) continue;
+    if (effect.kind === 'boundary') {
+      shares.length = 0;
+      exclusive.length = 0;
+    }
+    if (effect.kind === 'exclusive') exclusive.push(effect);
+    if (effect.kind === 'share' && /(?:^|[._])gate$/.test(effect.relation)) shares.push(effect);
+    if (effect.kind !== 'write') continue;
+    const share = shares.find(
+      (prior) =>
+        prior.relation === effect.relation &&
+        (prior.key === effect.key || prior.key === '*' || effect.key === '*') &&
+        compatible([...(prior.conditions ?? []), ...(effect.conditions ?? [])]),
+    );
+    if (
+      share &&
+      effect.key !== '*' &&
+      exclusive.some(
+        (prior) =>
+          prior.relation === effect.relation &&
+          prior.key === effect.key &&
+          order.get(prior)! < order.get(share)! &&
+          (prior.conditions ?? []).every(
+            (condition) =>
+              !compatible([
+                ...(share.conditions ?? []),
+                ...(effect.conditions ?? []),
+                { ...condition, truth: !condition.truth },
+              ]),
+          ),
+      )
+    )
+      continue;
+    if (share)
+      findings.push({
+        file: effect.file ?? file,
+        line: effect.line,
+        rule: 'gate-lock-upgrade',
+        target: effect.relation,
+        detail: `${share.lock ?? 'FOR SHARE'} at ${share.file ?? file}:${share.line} precedes UPDATE of the same gate (${effect.key})${name ? ` via ${file}#${name}` : ''}; no exemption is permitted`,
+      });
+  }
+  return findings;
 }
 
 /** Use migration-head function and trigger definitions, not superseded trigger
@@ -1125,7 +1164,6 @@ function gateUpgrades(
   sources: SqlSource[],
   byFile: Map<string, SqlFragment[]>,
   effects: (fragment: SqlFragment) => Effect[],
-  allowlist: SerializationAllowance[],
 ): SerializationFinding[] {
   const traces = new Map<string, FunctionTrace>();
   const named = new Map<string, string>();
@@ -1265,13 +1303,10 @@ function gateUpgrades(
     calls(ast);
   }
   const embeddedCallbacks = new Set<string>();
-  const invokedFunctions = new Set<string>();
   for (const trace of traces.values())
     for (const event of trace.events) {
       if ('effect' in event) continue;
       const imported = imports.get(trace.file)?.get(event.call);
-      const target = named.get(`${trace.file}#${event.call}`) ?? (imported && named.get(imported));
-      if (target) invokedFunctions.add(target);
       if (named.has(`${trace.file}#${event.call}`) || (imported && named.has(imported))) {
         for (const arg of event.args) if (traces.has(arg)) embeddedCallbacks.add(arg);
       }
@@ -1356,96 +1391,9 @@ function gateUpgrades(
   const findings: SerializationFinding[] = [];
   for (const trace of traces.values()) {
     if (embeddedCallbacks.has(trace.id)) continue;
-    // A lock-free helper is valid when its caller already holds the fence.
-    // Check full transaction paths and entry points, rather than isolated callees.
-    const checkRequiredLock =
-      !invokedFunctions.has(trace.id) ||
-      trace.events.some((event) => 'effect' in event && event.effect.kind === 'boundary');
-    const shares: Effect[] = [];
-    const exclusive: Effect[] = [];
-    const order = new Map<Effect, number>();
-    let step = 0;
-    for (const effect of expand(trace, new Set())) {
-      order.set(effect, step++);
-      if (!compatible(effect.conditions ?? [])) continue;
-      if (effect.kind === 'boundary') {
-        shares.length = 0;
-        exclusive.length = 0;
-      }
-      if (effect.kind === 'exclusive') exclusive.push(effect);
-      if (effect.kind === 'share' && /(?:^|[._])gate$/.test(effect.relation)) shares.push(effect);
-      if (effect.kind !== 'write') continue;
-      if (checkRequiredLock && /(?:^|[._])scope_gate$/.test(effect.relation)) {
-        const managementRevision = allowlist.some(
-          (entry) =>
-            entry.class === 'per-object management revision' &&
-            effect.key === JSON.stringify(entry.key) &&
-            entry.writers.includes(effect.file!) &&
-            effect.columns?.length &&
-            effect.columns.every((column) => column === 'group_generation'),
-        );
-        const locks = exclusive.filter(
-          (prior) =>
-            prior.lock === 'update' &&
-            prior.relation === effect.relation &&
-            prior.key === effect.key,
-        );
-        // The union of conditional locks must cover every path to this write.
-        const uncovered = compatible([
-          ...(effect.conditions ?? []),
-          ...locks.map((prior) => ({
-            expression:
-              (prior.conditions ?? [])
-                .map((condition) =>
-                  condition.truth ? `(${condition.expression})` : `!(${condition.expression})`,
-                )
-                .join(' && ') || 'true',
-            truth: false,
-          })),
-        ]);
-        if (!managementRevision && uncovered)
-          findings.push({
-            file: effect.file!,
-            line: effect.line,
-            rule: 'scope-gate-write-without-update-lock',
-            target: effect.relation,
-            detail: `Scope gate bump (${effect.key}) lacks an earlier FOR UPDATE on this transaction path via ${trace.file}#${trace.name ?? 'callback'}; no authority exemption is permitted`,
-          });
-      }
-      const share = shares.find(
-        (prior) =>
-          prior.relation === effect.relation &&
-          (prior.key === effect.key || prior.key === '*' || effect.key === '*') &&
-          compatible([...(prior.conditions ?? []), ...(effect.conditions ?? [])]),
-      );
-      if (
-        share &&
-        effect.key !== '*' &&
-        exclusive.some(
-          (prior) =>
-            prior.relation === effect.relation &&
-            prior.key === effect.key &&
-            order.get(prior)! < order.get(share)! &&
-            (prior.conditions ?? []).every(
-              (condition) =>
-                !compatible([
-                  ...(share.conditions ?? []),
-                  ...(effect.conditions ?? []),
-                  { ...condition, truth: !condition.truth },
-                ]),
-            ),
-        )
-      )
-        continue;
-      if (share)
-        findings.push({
-          file: effect.file!,
-          line: effect.line,
-          rule: 'gate-lock-upgrade',
-          target: effect.relation,
-          detail: `FOR SHARE at ${share.file}:${share.line} precedes UPDATE of the same gate (${effect.key}) via ${trace.file}#${trace.name ?? 'callback'}; no exemption is permitted`,
-        });
-    }
+    findings.push(
+      ...gateEffectFindings(expand(trace, new Set()), trace.file, trace.name ?? 'callback'),
+    );
   }
   return findings;
 }
@@ -1522,29 +1470,10 @@ export function serializationFindings(
           text: body[2],
           line: source.text.slice(0, body.index! + body[0].indexOf(body[2])).split('\n').length,
         });
-        const shares: Effect[] = [];
-        for (const effect of effects) {
-          if (effect.kind === 'boundary') shares.length = 0;
-          if (effect.kind === 'share' && /(?:^|[._])gate$/.test(effect.relation))
-            shares.push(effect);
-          if (effect.kind !== 'write') continue;
-          const share = shares.find(
-            (prior) =>
-              prior.relation === effect.relation &&
-              (prior.key === effect.key || prior.key === '*' || effect.key === '*'),
-          );
-          if (share)
-            findings.push({
-              file: effect.file ?? source.file,
-              line: effect.line,
-              rule: 'gate-lock-upgrade',
-              target: effect.relation,
-              detail: `FOR SHARE at line ${share.line} precedes UPDATE of the same gate (${effect.key}); no exemption is permitted`,
-            });
-        }
+        findings.push(...gateEffectFindings(effects, source.file));
       }
   }
-  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations), allowlist));
+  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations)));
   return [
     ...new Map(
       findings.map((finding) => [
