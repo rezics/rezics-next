@@ -3,7 +3,7 @@ import { disclosureViewer, currentDisclosureViewer, withDisclosureViewer } from 
 import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
 import { websocket } from 'elysia/websocket';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import type { VerifiedPrincipal } from '../modules/access/admission.ts';
+import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../modules/access/admission.ts';
 import { PrivateSearchConnection, privateSearchProblem, type PrivateSearchSocketDependencies }
   from '../modules/contribution/private-search-socket.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmClassifiedPhrase,
@@ -14,7 +14,6 @@ import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-jo
 import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
 import { queryPublicDisclosedFields } from '../modules/work/search-disclosed-fields.ts';
 import { queryPublicGroupedStatementPhrase } from '../modules/work/search-grouped.ts';
-import { referenceReader } from '../modules/semantic/admitted.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../modules/media/store.ts';
 import { withStableSearchSnapshot, SearchIndexUnavailable, type SearchAttemptDiagnostic }
   from '../modules/work/search-readiness.ts';
@@ -163,6 +162,7 @@ export async function protectClassifiedResults<T extends { total: number; result
 
 /** Private delivery owners. A replica without them keeps the profile closed. */
 export interface SearchRouteDependencies extends MainWorkDependencies {
+  access: MainWorkDependencies['access'] & Partial<Pick<AccessAdmissionRegistry, 'canReadReferences'>>;
   privateSearch?: PrivateSearchSocketDependencies;
 }
 
@@ -465,13 +465,14 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         const result = await readerSnapshot(request, async () => {
           const publicFields = fieldOwners();
           if (body.profile === 'public-grouped-statement-phrase-v1') {
-            if (!work.judgments || !work.access.canReadSemanticResource) {
+            const readReferences = work.access.canReadReferences?.bind(work.access);
+            if (!work.judgments || !readReferences) {
               throw new PublicQueryUnavailable('grouped search admission owner is unavailable');
             }
             const selection = await presentationSelection(request);
             const principal = selection?.principal ?? await work.account.verify(request, ['work:read']);
             return queryPublicGroupedStatementPhrase(work.environment, work.judgments,
-              referenceReader(work.access, principal, body.actingSubject), body,
+              resources => readReferences(principal, body.actingSubject, resources), body,
               relation => present(selection, relation));
           }
           if (body.profile === 'public-disclosed-fields-phrase-v1') {

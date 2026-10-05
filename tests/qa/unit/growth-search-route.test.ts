@@ -33,7 +33,13 @@ function request(fuseki: FusekiClient) {
       objectDirectory: '/unused',
     },
     account: { verify: async () => ({ issuer: 'qa', subject: 'viewer' }) },
-    access: { canReadSemanticResource: async () => true },
+    access: {
+      canReadReferences: async (
+        _principal: unknown,
+        _actor: string,
+        resources: readonly string[],
+      ) => new Set(resources),
+    },
     judgments: { protectionCheck: async () => ({ protection: 'show-all' }) },
   };
   const app = searchRoutes(fuseki, work as unknown as Parameters<typeof searchRoutes>[1]);

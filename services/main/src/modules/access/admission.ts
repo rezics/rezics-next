@@ -24,7 +24,7 @@ import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
-import { publicSemantics } from './semantic-disclosure.ts';
+import { publicSemantics, readReferenceDisclosure } from './semantic-disclosure.ts';
 import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAuthority } from '../editorial-review/admission.ts';
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
@@ -403,6 +403,13 @@ export class AccessAdmissionRegistry {
     if ((await publicSemantics({ pool: this.pool, graph }, [resource], revision)).has(resource)) return true;
     if (!principal || !actingSubject || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
     return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read');
+  }
+
+  /** The page equivalent of semantic disclosure followed by Work disclosure. */
+  canReadReferences(principal: VerifiedPrincipal | null, actingSubject: string | null,
+    resources: readonly string[]): Promise<ReadonlySet<string>> {
+    return readReferenceDisclosure({ pool: this.pool, graph: this.baselineGraph },
+      principal, actingSubject, resources);
   }
 
   /** Official links also need a source-revision admission; this is target edit authority. */

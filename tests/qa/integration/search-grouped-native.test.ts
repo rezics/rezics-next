@@ -17,6 +17,8 @@ import { selectMainDefault, mainSelectionDigest }
 import { searchRoutes } from '../../../services/main/src/routes/search.ts';
 import { contextFixture, nativeId } from './context-fixture.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
+import { referenceDisclosureFixture } from '../fixtures/reference-disclosure.ts';
+import { referenceReader } from '../../../services/main/src/modules/semantic/admitted.ts';
 
 async function groupedFixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
@@ -166,19 +168,30 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
         'content-type': 'application/json' }, body: JSON.stringify({ ...body, ...override }),
     }));
     const nativeFuseki = f.env.fuseki;
-    let statementBatches = 0;
+    let statementBatches = 0, disclosureBatches = 0, acceptanceBatches = 0, acceptanceScopes = 0;
     f.env.fuseki = new Proxy(nativeFuseki, { get(target, property) {
       if (property === 'query') return async (...args: Parameters<typeof nativeFuseki.query>) => {
         if (args[0].includes('VALUES ?statement {')) statementBatches++;
+        if (args[0].includes('VALUES ?resource') && args[0].includes('rv:semanticHead')) disclosureBatches++;
+        if (args[0].includes('VALUES (?statement ?wantedGlobalSlot')) acceptanceBatches++;
+        if (args[0].includes('SELECT ?epoch ?sequence ?context ?policy WHERE')) acceptanceScopes++;
         return target.query(...args);
       };
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     } }) as typeof nativeFuseki;
+    access.configureBaseline(f.env.fuseki);
+    f.resetQueries();
     let firstResponse: Response;
     try { firstResponse = await query(); }
-    finally { f.env.fuseki = nativeFuseki; }
+    finally { f.env.fuseki = nativeFuseki; access.configureBaseline(nativeFuseki); }
     expect(statementBatches).toBe(1);
+    expect(disclosureBatches).toBe(1);
+    expect(acceptanceBatches).toBe(1);
+    expect(acceptanceScopes).toBe(1);
+    // Three native health requests also consume the route budget: 17 + 3 = 20,
+    // independent of the 11 references and 12 distinct Statements on this page.
+    expect(f.queries()).toBeLessThanOrEqual(17);
     const first = await f.json<{ total: number; groupGeneration: string;
       results: Array<{ work: string; participant: string; occurrence: string; score: number;
         facts: Array<{ supportingStatements: string[] }> }>; facets: Array<{ mode: string }> }>(
@@ -351,6 +364,128 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
   } finally { await f.close(); }
 }, 120_000);
 
+test('grouped disclosure pages preserve scalar grants, creator/member/admin proofs, closed scopes and hidden-equals-missing', async () => {
+  const f = await groupedFixture();
+  try {
+    const { refs, control } = await referenceDisclosureFixture(
+      f.accessPool,
+      f.env,
+      f.principalA,
+      f.actorA,
+    );
+    const grant = await f.grant(`semantic:read:${refs.granted}`, 'semantic.read');
+    await f.grant(`work:read:${refs.workGranted}`, 'work.read');
+    const access = new AccessAdmissionRegistry(f.accessPool);
+    access.configureBaseline(f.env.fuseki);
+    const principal = { issuer: f.account.issuer, subject: f.account.a.id, emailVerified: true };
+    const all = Object.values(refs);
+    const parity = async (viewer = principal) => {
+      const scalar = referenceReader(access, viewer, f.actorA);
+      const expected = new Set<string>();
+      for (const resource of all) if (await scalar(resource)) expected.add(resource);
+      f.resetQueries();
+      const page = await access.canReadReferences(viewer, f.actorA, all);
+      expect(f.queries()).toBeLessThanOrEqual(5);
+      expect(page).toEqual(expected);
+      expect(page.has(refs.hidden)).toBe(false);
+      expect(page.has(refs.missing)).toBe(false);
+      return page;
+    };
+    expect(await parity()).toEqual(
+      new Set([
+        refs.publicSemantic,
+        refs.publicWork,
+        refs.definition,
+        refs.zone,
+        refs.space,
+        refs.collection,
+        refs.protectedCollection,
+        refs.authoredWork,
+        refs.granted,
+        refs.workGranted,
+      ]),
+    );
+    expect(await parity({ ...principal, emailVerified: false })).toEqual(
+      new Set([
+        refs.publicSemantic,
+        refs.definition,
+        refs.zone,
+        refs.space,
+        refs.granted,
+        refs.workGranted,
+      ]),
+    );
+    expect(await access.canReadReferences(null, null, all)).toEqual(new Set([refs.publicSemantic]));
+    // Repeated receipts deny only that target, while independently certified owners remain readable.
+    expect((await parity()).has(refs.ambiguousSpace)).toBe(false);
+    expect((await parity()).has(refs.protectedDefinition)).toBe(false);
+    await f.revoke(grant);
+    expect((await parity()).has(refs.granted)).toBe(false);
+    await f.grant(`semantic:read:${refs.collection}`, 'semantic.read');
+    await f.accessPool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [
+      `semantic:read:${refs.collection}`,
+    ]);
+    expect((await parity()).has(refs.collection)).toBe(false);
+    // The Work read family remains independent of a closed semantic read family.
+    await f.accessPool.query('INSERT INTO access.scope_gate (id,open) VALUES ($1,false)', [
+      `semantic:read:${refs.authoredWork}`,
+    ]);
+    expect((await parity()).has(refs.authoredWork)).toBe(true);
+    const closing = await f.accessPool.connect();
+    let pending: Promise<ReadonlySet<string>> | undefined;
+    try {
+      await closing.query('BEGIN');
+      await closing.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [
+        `work:read:${refs.workGranted}`,
+      ]);
+      let completed = false;
+      pending = access.canReadReferences(principal, f.actorA, all).then((page) => {
+        completed = true;
+        return page;
+      });
+      await Bun.sleep(50);
+      expect(completed).toBe(false);
+      await closing.query('COMMIT');
+      expect((await pending).has(refs.workGranted)).toBe(false);
+    } finally {
+      await closing.query('ROLLBACK');
+      closing.release();
+      if (pending) await pending;
+    }
+    expect((await parity()).has(refs.workGranted)).toBe(false);
+    await f.accessPool.query('UPDATE access.scope_gate SET open = true WHERE id = $1', [
+      `work:read:${refs.workGranted}`,
+    ]);
+    await f.accessPool.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [
+      refs.authoredWork,
+      f.actorA,
+    ]);
+    expect((await parity()).has(refs.authoredWork)).toBe(false);
+    // Keep the controller floor while removing the reader's member/administrator/creator proof.
+    await f.accessPool.query(
+      `INSERT INTO access.representation
+      (id,principal_id,subject_id,action,valid_until) VALUES ($1,$2,$3,'agent.control','infinity')`,
+      [randomUUID(), f.principalB, f.actorA],
+    );
+    await f.accessPool.query('UPDATE access.representation SET active = false WHERE id = $1', [
+      control,
+    ]);
+    expect(await parity()).toEqual(new Set([refs.publicSemantic, refs.workGranted]));
+    await f.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
+    try {
+      await expect(access.canReadReferences(principal, f.actorA, all)).rejects.toThrow(
+        'recovery is held',
+      );
+      await expect(
+        access.canReadSemanticResource(principal, f.actorA, refs.publicSemantic),
+      ).rejects.toThrow('recovery is held');
+    } finally {
+      await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
+    }
+  } finally {
+    await f.close();
+  }
+}, 120_000);
 test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlapping paths and Context criteria exact', async () => {
   const f = await groupedFixture();
   try {

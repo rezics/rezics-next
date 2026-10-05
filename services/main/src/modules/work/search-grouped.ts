@@ -4,7 +4,8 @@ import { ContextCommandUnavailable, term } from '../context/command.ts';
 import { resolveInterpretation } from '../context/interpretation.ts';
 import type { AccessJudgments } from '../judgment/access.ts';
 import { readExactDefinition } from '../relation/change.ts';
-import { readPublicStatementsAt, resolveStatementAcceptance, StatementBatchBudgetExceeded,
+import { readPublicStatementsAt, resolveStatementAcceptancesAt, STATEMENT_ACCEPTANCE_BATCH_COST,
+  MAX_STATEMENT_ACCEPTANCE_BATCH, StatementBatchBudgetExceeded,
   StatementBatchUnavailable,
   type PublicStatementBatchRow } from '../statement/read.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
@@ -15,11 +16,14 @@ import { InvalidPublicQuery, queryPublicRealmPhrase } from './search-public.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
+import { REFERENCE_DISCLOSURE_COST } from '../access/semantic-disclosure.ts';
 
 export const GROUPED_SEARCH_COST = {
-  maxRelationRows: MAX_GROUPED_ROWS, maxStatements: 20, maxConditions: 2,
+  maxRelationRows: MAX_GROUPED_ROWS, maxStatements: MAX_STATEMENT_ACCEPTANCE_BATCH, maxConditions: 2,
   maxFacetBuckets: 20, maxHydratedSupports: 20,
-  maxOwnerAdmissions: 40, maxAcceptanceReads: 20, maxBadgeChecks: 20,
+  maxOwnerAdmissions: 40, maxAcceptanceReads: STATEMENT_ACCEPTANCE_BATCH_COST.graphReads, maxBadgeChecks: 20,
+  disclosureGraphReads: REFERENCE_DISCLOSURE_COST.graphReads,
+  acceptanceGraphReads: STATEMENT_ACCEPTANCE_BATCH_COST.graphReads,
 } as const;
 
 export type GroupCountGrain = 'work' | 'participant' | 'occurrence'
@@ -257,11 +261,14 @@ async function assertGroupedPosition(env: WorkActivationEnvironment,
 }
 
 /** One bounded public phrase relation, one structural Statement/occurrence
- * discovery read, one owner batch, then exact acceptance and protection proofs.
+ * discovery read, page disclosure, one owner batch, then page acceptance and
+ * exact protection proofs. The observed unrated plan needs 13 setup reads +
+ * at most 5 disclosure + 2 hydration + 3 acceptance + 1 final fence = 24;
+ * its ordinary grant path needs 20. Both retain the route's 72-call budget.
  * Discovered IDs are admitted before they enter any grouped count or facet. */
 export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvironment,
   judgments: Pick<AccessJudgments, 'protectionCheck'>,
-  canReadResource: (resource: string) => Promise<boolean>,
+  canReadResources: (resources: readonly string[]) => Promise<ReadonlySet<string>>,
   input: PublicGroupedStatementPhraseQuery,
   admitPhrase?: (relation: Awaited<ReturnType<typeof queryPublicRealmPhrase>>) =>
     Promise<Awaited<ReturnType<typeof queryPublicRealmPhrase>>>) {
@@ -373,18 +380,19 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
   }
   const admitted: Array<{ work: string; main: string; occurrence: string; participant: string;
     statement: string; applicability: string[] }> = [];
-  const readable = new Map<string, boolean>();
+  if (candidates.some(row => !row.work || !row.main || !row.occurrence || !row.participant || !row.statement)) {
+    throw new PublicQueryUnavailable('grouped discovery binding is incomplete');
+  }
+  const references = sorted(candidates.flatMap(row => [row.occurrence!.value, row.participant!.value]));
+  const readable = references.length ? await canReadResources(references) : new Set<string>();
+  if ([...readable].some(ref => !references.includes(ref))) {
+    throw new PublicQueryUnavailable('grouped disclosure returned an unrelated reference');
+  }
   for (const row of candidates) {
-    if (!row.work || !row.main || !row.occurrence || !row.participant || !row.statement) {
-      throw new PublicQueryUnavailable('grouped discovery binding is incomplete');
-    }
-    const occurrence = row.occurrence.value, participant = row.participant.value;
-    for (const resource of [occurrence, participant]) {
-      if (!readable.has(resource)) readable.set(resource, await canReadResource(resource));
-    }
-    if (!readable.get(occurrence) || !readable.get(participant)) continue;
-    admitted.push({ work: row.work.value, main: row.main.value, occurrence, participant,
-      statement: row.statement.value, applicability: parseApplicability(row.applicability?.value) });
+    const occurrence = row.occurrence!.value, participant = row.participant!.value;
+    if (!readable.has(occurrence) || !readable.has(participant)) continue;
+    admitted.push({ work: row.work!.value, main: row.main!.value, occurrence, participant,
+      statement: row.statement!.value, applicability: parseApplicability(row.applicability?.value) });
   }
   const statementIds = sorted(admitted.map(row => row.statement));
   if (statementIds.length > GROUPED_SEARCH_COST.maxStatements) {
@@ -401,19 +409,22 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     }
     throw error;
   }
+  let acceptances: Awaited<ReturnType<typeof resolveStatementAcceptancesAt>>;
+  try { acceptances = await resolveStatementAcceptancesAt(env, statementIds,
+    { kind: 'realm', realm: input.context.id }, phrase.sourcePosition); }
+  catch (error) {
+    if (error instanceof StatementBatchBudgetExceeded) throw new PublicQueryBudgetExceeded('grouped acceptance exceeds its bound');
+    if (error instanceof StatementBatchUnavailable || error instanceof ContextCommandUnavailable) {
+      throw new PublicQueryUnavailable('grouped Statement acceptance is unavailable');
+    }
+    throw error;
+  }
   const visible = new Map<string, { acceptanceContext: string; generation: string }>();
   for (const statement of statementIds) {
     const read = statements.get(statement);
     if (!read) throw new PublicQueryUnavailable('grouped Statement owner read is missing');
-    let acceptance: Awaited<ReturnType<typeof resolveStatementAcceptance>>;
-    try { acceptance = await resolveStatementAcceptance(env,
-      { kind: 'statement', statement }, { kind: 'realm', realm: input.context.id }); }
-    catch (error) {
-      if (error instanceof ContextCommandUnavailable) {
-        throw new PublicQueryUnavailable('grouped Statement acceptance is unavailable');
-      }
-      throw error;
-    }
+    const acceptance = acceptances.get(statement);
+    if (!acceptance) throw new PublicQueryUnavailable('grouped Statement acceptance is missing');
     if (acceptance.sourcePosition.sequence !== phrase.sourcePosition.sequence
       || acceptance.sourcePosition.dataEpoch !== phrase.sourcePosition.dataEpoch) {
       throw new SearchSnapshotMoved('grouped Statement acceptance moved');
