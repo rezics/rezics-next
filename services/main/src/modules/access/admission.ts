@@ -153,6 +153,14 @@ export class AdmissionDenied extends Error {}
 export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
+
+/** Observation register, claim and seal share the unchanged authority fence, so
+ * raters of different targets of one Context never wait on one row. Their owner
+ * takes an exclusive (Context, target) gate before it moves any inventory;
+ * closing the scope and bumping its epoch keep the exclusive lock. */
+function observationGateLock(action: string): 'SHARE' | 'UPDATE' {
+  return action === 'rating.observation.set' ? 'SHARE' : 'UPDATE';
+}
 class AuthorityChecked extends Error {}
 
 interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
@@ -935,7 +943,7 @@ export class AccessAdmissionRegistry {
       }
       const gateResult = await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open
-         FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [request.scope]);
+         FROM access.scope_gate WHERE id = $1 FOR ${observationGateLock(request.action)}`, [request.scope]);
       const gate = gateResult.rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
@@ -949,6 +957,11 @@ export class AccessAdmissionRegistry {
       if (principal?.active !== true) throw new AdmissionDenied('principal is not admitted');
       const principalId = principal.id;
       await requirePlatformParticipation(client, principalId);
+      // A shared gate no longer serializes retries of one key; this lock does.
+      if (observationGateLock(request.action) === 'SHARE') {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+          [`admission:${principalId}:${request.action}:${request.idempotencyKey}`]);
+      }
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
@@ -1375,12 +1388,13 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
-      const locator = await client.query<{ scope_id: string }>(
-        'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId]);
+      const locator = await client.query<{ scope_id: string; action: string }>(
+        'SELECT scope_id, action FROM access.admission WHERE id = $1', [admissionId]);
       if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
       const scope = locator.rows[0]!.scope_id;
       const gateResult = await client.query<GateRow & { group_generation: string }>(
-        'SELECT authority_epoch, group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE', [scope]);
+        `SELECT authority_epoch, group_generation, open, dispatch_open FROM access.scope_gate
+         WHERE id = $1 FOR ${observationGateLock(locator.rows[0]!.action)}`, [scope]);
       if (gateResult.rows[0]?.dispatch_open !== true) throw new AdmissionDenied('dispatch is fenced');
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
         `SELECT id, principal_id, acting_subject, authority_path, direct_grant_id,
@@ -1695,11 +1709,9 @@ export class AccessAdmissionRegistry {
         'SELECT scope_id, action FROM access.admission WHERE id = $1', [admissionId]);
       if (locator.rowCount !== 1) throw new AdmissionDenied('unknown admission');
       const scope = locator.rows[0]!.scope_id;
-      // Observation seals share the unchanged authority fence. Their owner takes
-      // an exclusive (Context, target) gate before it moves any inventory.
-      const lock = locator.rows[0]!.action === 'rating.observation.set' ? 'SHARE' : 'UPDATE';
       const gate = await client.query<GateRow>(
-        `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR ${lock}`, [scope]);
+        `SELECT authority_epoch, open, dispatch_open FROM access.scope_gate
+         WHERE id = $1 FOR ${observationGateLock(locator.rows[0]!.action)}`, [scope]);
       if (gate.rowCount !== 1) throw new AdmissionUnavailable('scope gate is unavailable');
       const result = await client.query<AdmissionRow & {
         graph_receipt: string | null; graph_outcome: string | null;

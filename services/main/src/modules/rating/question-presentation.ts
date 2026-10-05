@@ -42,6 +42,7 @@ import {
   QUESTION_PRESENTATION_KINDS,
   QUESTION_PRESENTATION_REVISION_PROFILES,
   QUESTION_PRESENTATION_COST,
+  checkedRetirement,
   questionPresentationAction,
   questionPresentationDigest,
   questionPresentationScope,
@@ -87,6 +88,8 @@ export interface QuestionPresentationIntent {
   target?: string;
   expectedHead: string | null;
   state: QuestionPresentationState;
+  /** Withdraw the public review with this draft, freeing the language for the cap. */
+  retire?: boolean;
 }
 export interface QuestionPresentationResult {
   component: string;
@@ -287,7 +290,7 @@ export async function changeQuestionPresentation(
   intent: QuestionPresentationIntent,
 ) {
   const state = checkedQuestionPresentation(intent.state);
-  const digest = questionPresentationDigest(intent.target, intent.expectedHead, state);
+  const digest = questionPresentationDigest(intent.target, intent.expectedHead, state, intent.retire);
   if (
     intent.admission.action !== questionPresentationAction(state) ||
     intent.admission.scope !== questionPresentationScope(state.context)
@@ -313,6 +316,9 @@ export async function changeQuestionPresentation(
   ) {
     throw new SemanticChangeRejected('invalid', 'A presentation keeps its Context and language');
   }
+  const retiring = checkedRetirement(intent.retire, intent.target, state);
+  if (retiring && !prior?.reviewedHead)
+    throw new SemanticChangeRejected('invalid', 'Only a reviewed presentation can be retired');
   const reject = async (reason: Parameters<typeof sealSemanticRejection>[4], condition: string) => {
     const terminal = await sealSemanticRejection(
       env,
@@ -354,7 +360,7 @@ export async function changeQuestionPresentation(
     next = currentTriples(
       state,
       revision,
-      state.reviewStatus === 'reviewed' ? revision : (prior?.reviewedHead ?? null),
+      state.reviewStatus === 'reviewed' ? revision : retiring ? null : (prior?.reviewedHead ?? null),
     );
   const validations = await profileValidations(
     env.fuseki,

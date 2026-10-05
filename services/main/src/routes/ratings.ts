@@ -47,7 +47,7 @@ import { targetRead, TargetNotBound } from '../modules/target/resolve.ts';
 import { readId } from '../modules/work/read-contract.ts';
 import { createAdmittedTargetRatingContext, setAdmittedTargetRating, readTargetRatingContext,
   resolveRatingTarget, readTargetRatingRevision, effectiveDisplayThreshold, TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID, ACCEPTED_TARGET_CONTEXT_ID,
-  TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
+  TARGET_OBSERVATION_ID, RatingWriteBusy } from '../modules/rating/target.ts';
 import { readOwnTargetObservation } from '../modules/rating/target-read.ts';
 import { queryTargetRatingAggregate, TARGET_AGGREGATE_PROFILE } from '../modules/rating/target-aggregate.ts';
 import { targetAggregateInput, targetAggregateResult, targetRatingContextInput, scopedTargetRatingContextInput, acceptedTargetRatingContextInput,
@@ -63,6 +63,9 @@ function ratingError(error: unknown): Response {
   if (error instanceof RatingTargetNotAccepted) return problem(error.status, error.code, error.message);
   if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
   if (error instanceof WorkReadMissing) return problem(404, 'resource_unavailable', error.message);
+  if (error instanceof RatingWriteBusy) {
+    return problem(409, 'rating_write_busy', 'The rating Context is busy; retry the same request', { 'retry-after': '1' });
+  }
   if (error instanceof RatingTargetGrainMismatch) {
     return problem(422, 'rating_target_grain_mismatch', 'Rating target grain differs from the Context');
   }

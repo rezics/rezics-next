@@ -20,7 +20,7 @@ export const QUESTION_PRESENTATION_FAMILY = 'rating-question-presentation-change
 export const QUESTION_PRESENTATION_ACTIONS = ratingQuestionPresentationActions;
 /** Writes touch two focuses and one language row. Reads inspect O(L) index rows
  * for each of at most 20 Contexts, resolve only selected objects, and share the
- * Work read's byte/call/deadline budget. At most 64 reviewed languages per Context. */
+ * Work read's byte/call/deadline budget. At most 64 readable, current reviewed languages per Context. */
 export const QUESTION_PRESENTATION_COST = {
   reviewedLanguagesPerContext: 64,
   reviewedIndexRows: 65,
@@ -143,10 +143,22 @@ export function checkedQuestionPresentation(input: unknown): QuestionPresentatio
     return invalid();
   return state;
 }
+/** Retiring withdraws a presentation's public review so its language no longer
+ * counts toward the cap. It is a draft of an existing presentation, which needs
+ * only the configuring authority a draft does. */
+export function checkedRetirement(
+  retire: boolean | undefined,
+  target: string | undefined,
+  state: QuestionPresentationState,
+) {
+  if (retire && (target === undefined || state.reviewStatus !== 'draft')) return invalid();
+  return retire === true;
+}
 export function questionPresentationDigest(
   target: string | undefined,
   expectedHead: string | null,
   state: QuestionPresentationState,
+  retire?: boolean,
 ) {
   if (target !== undefined) checkedNativeIri(target);
   if (expectedHead !== null) checkedNativeIri(expectedHead);
@@ -157,6 +169,8 @@ export function questionPresentationDigest(
       target: target ?? null,
       expectedHead,
       state: checkedQuestionPresentation(state),
+      // Absent unless set, so every earlier admission keeps its digest.
+      ...(checkedRetirement(retire, target, state) ? { retire: true } : {}),
     }),
   );
 }

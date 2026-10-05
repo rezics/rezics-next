@@ -337,6 +337,29 @@ export async function readTargetRatingReconstructionBatch(
   });
 }
 
+/** Keyset page of targets with heads sealed before values were recorded, in
+ * (Context, target) order; the partial index finds them without a table walk. */
+export async function listTargetsNeedingReconstruction(pool: Pool,
+  input: { context?: string; after?: { context: string; target: string }; limit?: number },
+  signal = AbortSignal.timeout(10_000)) {
+  const limit = input.limit ?? MAX_RATING_AGGREGATE_SLOTS;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RATING_AGGREGATE_SLOTS
+    || [input.context, input.after?.context, input.after?.target].some(value => value !== undefined && !nativeId.test(value))) {
+    throw new RatingInventoryConflict('invalid reconstruction listing');
+  }
+  return withInventoryClient(pool, signal, async client => {
+    const rows = (await client.query(
+      `SELECT context, target, slots, unvalued FROM access.target_rating_component
+       WHERE unvalued > 0 AND ($1::text IS NULL OR context = $1)
+         AND ($2::text IS NULL OR (context, target) > ($2, $3))
+       ORDER BY context, target LIMIT $4`,
+      [input.context ?? null, input.after?.context ?? null, input.after?.target ?? null, limit + 1])).rows;
+    const page = rows.slice(0, limit).map(row => ({ context: String(row.context), target: String(row.target),
+      slots: Number(row.slots), unvalued: Number(row.unvalued) }));
+    return { targets: page, next: rows.length > limit ? { context: page.at(-1)!.context, target: page.at(-1)!.target } : null };
+  });
+}
+
 /** One bounded owner snapshot; raw counting identities stay within Access. */
 export async function readRatingAggregateInventory(pool: Pool, context: string,
   mainVersion: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {

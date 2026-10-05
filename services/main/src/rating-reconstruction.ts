@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import {
+  listLegacyTargetsNeedingReconstruction,
   reconstructLegacyTargetRatings,
   type LegacyRatingCursor,
 } from './modules/rating/legacy-reconstruction.ts';
@@ -25,11 +26,15 @@ const batches = Number(take('--batches') ?? '1'),
   batchSize = Number(take('--batch-size') ?? '100');
 const restart = args.includes('--restart');
 if (restart) args.splice(args.indexOf('--restart'), 1);
+const list = args.includes('--list');
+if (list) args.splice(args.indexOf('--list'), 1);
+const afterContext = take('--after-context'),
+  afterTarget = take('--after-target');
 if (
   args.length ||
   !envFile ||
-  !context ||
-  !target ||
+  (!list && (!context || !target)) ||
+  (list && (target || batches !== 1 || restart || !afterContext !== !afterTarget)) ||
   !Number.isInteger(batches) ||
   batches < 1 ||
   batches > 32 ||
@@ -38,7 +43,8 @@ if (
   batchSize > 100
 ) {
   throw new Error(
-    'Use --env <apps.env> --context <IRI> --target <IRI> [--batches 1..32] [--batch-size 1..100] [--restart]',
+    'Use --env <apps.env> --context <IRI> --target <IRI> [--batches 1..32] [--batch-size 1..100] [--restart]\n' +
+      'or --env <apps.env> --list [--context <IRI>] [--batch-size 1..100] [--after-context <IRI> --after-target <IRI>]',
   );
 }
 const env = readEnv(resolve(envFile));
@@ -47,6 +53,29 @@ const requireValue = (name: string) => {
   if (!value) throw new Error(`Missing ${name} in the environment file`);
   return value;
 };
+if (list) {
+  const pool = new Pool({
+    connectionString: requireValue('ACCESS_DATABASE_URL'),
+    max: 1,
+    connectionTimeoutMillis: 5000,
+    statement_timeout: 5000,
+  });
+  try {
+    console.log(
+      JSON.stringify(
+        await listLegacyTargetsNeedingReconstruction(pool, {
+          ...(context ? { context } : {}),
+          ...(afterContext && afterTarget ? { after: { context: afterContext, target: afterTarget } } : {}),
+          limit: batchSize,
+        }),
+      ),
+    );
+  } finally {
+    await pool.end();
+  }
+  process.exit(0);
+}
+if (!context || !target) throw new Error('--context and --target are required');
 const identity = createHash('sha256').update(JSON.stringify({ context, target })).digest('hex');
 const checkpoint = join(process.cwd(), '.temp/rating-reconstruction', `${identity}.json`);
 let saved: { cursor: LegacyRatingCursor | null; complete: boolean } | undefined;

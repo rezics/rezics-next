@@ -42,12 +42,13 @@ export async function admittedQuestionPresentationChange(
     target?: string;
     expectedHead: string | null;
     state: unknown;
+    retire?: boolean;
     actingSubject: string;
     idempotencyKey: string;
   },
 ) {
   const state = checkedQuestionPresentation(input.state);
-  const digest = questionPresentationDigest(input.target, input.expectedHead, state);
+  const digest = questionPresentationDigest(input.target, input.expectedHead, state, input.retire);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['rating:configure']);
   const registered = await access.register({
@@ -81,6 +82,7 @@ export async function admittedQuestionPresentationChange(
           target: input.target,
           expectedHead: input.expectedHead,
           state,
+          retire: input.retire,
         });
         replayed = result.replayed;
       }

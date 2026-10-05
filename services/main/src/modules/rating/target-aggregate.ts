@@ -30,7 +30,9 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
     throw new RatingAggregateUnavailable('Target Context seal differs');
   }
   const components = snapshot.members.get(input.target) ?? null;
-  if (components && components.unvalued > 0)
+  // Heads exist only for a target of at most `verifiedHeads` raters; the check
+  // below recomputes its figures, so unrecorded values need no reconstruction.
+  if (components && components.unvalued > 0 && snapshot.heads === null)
     throw new RatingAggregateUnavailable('Target components need reconstruction');
   const verified = snapshot.heads !== null
     ? await verifyTargetRatingHeads(env, snapshot, snapshot.heads, components, input, context, signal, false, manifestBudget) : null;

@@ -3,6 +3,7 @@ import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import {
   RatingInventoryConflict,
   MAX_RATING_AGGREGATE_SLOTS,
+  listTargetsNeedingReconstruction,
   readTargetRatingReconstructionBatch,
   recordTargetRatingValues,
 } from '../access/rating-aggregate-inventory.ts';
@@ -33,6 +34,10 @@ export const LEGACY_RECONSTRUCTION_COST = {
   graphBytes: TARGET_AGGREGATE_COST.graphBytes,
   deadlineMs: TARGET_AGGREGATE_COST.deadlineMs,
 } as const;
+
+/** Targets whose heads still lack recorded values. Up to 100 raters stay readable
+ * through the head-by-head check; larger ones answer 503 until reconstructed. */
+export const listLegacyTargetsNeedingReconstruction = listTargetsNeedingReconstruction;
 
 export async function reconstructLegacyTargetRatings(
   env: WorkActivationEnvironment,

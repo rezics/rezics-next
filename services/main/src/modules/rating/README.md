@@ -54,9 +54,12 @@ manifests and must equal its components; a larger one is witnessed by its last
 sealed write, which must still be its observation's live head, so a graph that
 lost it or rolled back past it makes the read unavailable instead of wrong. Heads
 sealed before components existed have no recorded value (SQL cannot read the
-graph): they are counted as `unvalued` and remain unavailable until explicit
-reconstruction or their raters' next revisions record the values. Reads never
-repair inventory or take an exclusive observation gate.
+graph): they are counted as `unvalued`. A target of at most 100 raters stays
+readable, because the head-by-head check recomputes its figures; a larger one is
+unavailable until explicit reconstruction or its raters' next revisions record the
+values. `task rating:reconstruct -- --env <apps.env> --list` lists the targets that
+still need it (`--context` narrows it; `--after-context` with `--after-target`
+continue a page). Reads never repair inventory or take an exclusive observation gate.
 
 `task rating:reconstruct -- --env <apps.env> --context <IRI> --target <IRI>`
 runs one bounded batch, retains an atomic checkpoint under
@@ -70,14 +73,16 @@ scan the remaining heads from the beginning. Missing or contradictory evidence
 fails the batch without moving its checkpoint.
 
 Authority remains `rating:observe:<Context>` for grants, closure, relay and
-Discover. Observation seals hold that authority fence `FOR SHARE` and serialize
-only on `(Context, target)`; reconstruction acquires the same target gate after
-holding the recovery fence `FOR SHARE`. Independent targets can seal together,
+Discover. Observation registration, claim and seal hold that authority fence
+`FOR SHARE` and serialize only on `(Context, target)`; closing the scope and
+bumping its epoch keep the exclusive lock, and a write that waits out the 2 s
+lock answers 409 `rating_write_busy`, safe to retry with the same key.
+Reconstruction acquires the same target gate after holding the recovery fence `FOR SHARE`. Independent targets can seal together,
 while recovery closure waits for an in-flight reconstruction to commit. This
 uses PostgreSQL's [shared row lock semantics](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)
 and [indexed ordered pages](https://www.postgresql.org/docs/18/indexes-ordering.html);
 the selected database concurrency tests establish the composition, not launch
-capacity. Registration and claim still use the short Context authority gate.
+capacity.
 
 Aggregate evidence is the Context's `contextRevision` and the target components'
 `lastAdmissionId` (null for an unrated target). A roll-up returns the same Context

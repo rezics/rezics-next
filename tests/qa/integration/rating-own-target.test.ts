@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { scopedJudgmentsFixture, short, type Opinion } from './scoped-judgments-support.ts';
 
 let h: Awaited<ReturnType<typeof scopedJudgmentsFixture>>;
@@ -80,3 +82,21 @@ test('mine needs a Context of the target grain; without one it states no Context
     .toMatchObject({ status: 'no-context', count: 0 });
   expect((await mine(h.owner, subject, q.context)).status).toBe(422);
 }, 60_000);
+
+test('mine answers a Context the caller cannot see exactly as the public read does, before acceptance or grain', async () => {
+  const subject = await h.semantic('Eugeo');
+  // Not accepting this target: a visible Context says so, a protected one must not.
+  const refusing = await h.question({ targetGrain: 'resource', acceptedSubjectTypes: [`${RV}Place`] });
+  const publicRead = (context: string) => h.call(h.owner, 'GET', `/v1/resources/${short(subject)}/ratings?scope=realm&realm=${
+    encodeURIComponent(h.realm)}&context=${encodeURIComponent(context)}&actingSubject=${encodeURIComponent(h.owner.actor)}`);
+  expect((await mine(h.owner, subject, refusing.context)).status).toBe(422);
+  const bodies: unknown[] = [];
+  for (const [context, hide] of [[refusing.context, true], [`https://rezics.com/id/${randomUUID()}`, false]] as const) {
+    if (hide) await h.stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(context)} rv:protectionHead ${iri(`https://rezics.com/id/${randomUUID()}`)} } }`);
+    const own = await mine(h.owner, subject, context), open = await publicRead(context);
+    expect([own.status, open.status]).toEqual([404, 404]);
+    bodies.push(await own.json());
+    expect(bodies.at(-1)).toEqual(await open.json());
+  }
+}, 120_000);

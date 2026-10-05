@@ -137,6 +137,17 @@ test('Rating question write validation separates review authority and immutable 
   expect(questionPresentationDigest(undefined, null, state('fr'))).not.toBe(
     questionPresentationDigest(undefined, null, { ...state('fr'), reviewStatus: 'draft' }),
   );
+  // Retiring is a draft of an existing presentation with its own digest.
+  const draft = { ...state('fr'), reviewStatus: 'draft' as const },
+    [target, head] = [native(), native()];
+  expect(questionPresentationDigest(target, head, draft, true)).not.toBe(
+    questionPresentationDigest(target, head, draft),
+  );
+  expect(questionPresentationDigest(target, head, draft, false)).toBe(
+    questionPresentationDigest(target, head, draft),
+  );
+  expect(() => questionPresentationDigest(undefined, null, draft, true)).toThrow();
+  expect(() => questionPresentationDigest(target, head, state('fr'), true)).toThrow();
   for (const action of [
     'rating.context.create',
     'rating.context.policy.set',

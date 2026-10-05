@@ -6,7 +6,10 @@ import {
   releaseAccessRecoveryFence,
   type GraphTerminalProof,
 } from '../../../services/main/src/modules/access/admission.ts';
-import { reconstructLegacyTargetRatings } from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
+import {
+  listLegacyTargetsNeedingReconstruction,
+  reconstructLegacyTargetRatings,
+} from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
 import { scopedJudgmentsFixture } from './scoped-judgments-support.ts';
 import { startRatingStack } from './rating-components-support.ts';
 
@@ -73,6 +76,13 @@ async function blockedQuery(pool: Pool, pattern: string) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   return false;
+}
+
+/** The first registration creates the gate; a lock test needs the row before that. */
+async function ensureGate(pool: Pool, context: string) {
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [
+    `rating:observe:${context}`,
+  ]);
 }
 
 test('two raters on different targets of one Global Context seal concurrently, while one target stays serialized', async () => {
@@ -150,6 +160,88 @@ test('two raters on different targets of one Global Context seal concurrently, w
   }
 }, 300_000);
 
+test('raters of different targets of one Global Context register, claim and seal while a peer holds the Context gate shared', async () => {
+  const h = await scopedJudgmentsFixture();
+  const peer = await h.stack.accessPool.connect();
+  try {
+    const [a, b] = [await h.semantic('shared-gate-a'), await h.semantic('shared-gate-b')];
+    const q = await h.question({ realm: GLOBAL_RATING_POPULATION_OWNER, targetGrain: 'resource' });
+    const third = await h.person('shared-gate-rater');
+    await ensureGate(h.stack.accessPool, q.context);
+    await peer.query('BEGIN');
+    await peer.query('SELECT 1 FROM access.scope_gate WHERE id=$1 FOR SHARE', [
+      `rating:observe:${q.context}`,
+    ]);
+    // Register and claim would wait out their 2 s lock timeout if either took the gate exclusively.
+    const statuses = await Promise.all(
+      (
+        [
+          [h.owner, a],
+          [third, b],
+        ] as const
+      ).map(async ([person, target]) =>
+        (
+          await h.call(person, 'POST', '/v1/rating-observations', h.ratingBody(person, q.context, target))
+        ).status,
+      ),
+    );
+    expect(statuses).toEqual([201, 201]);
+    expect(
+      (
+        await h.stack.accessPool.query(
+          "SELECT count(*)::int AS sealed FROM access.admission WHERE scope_id=$1 AND state='sealed'",
+          [`rating:observe:${q.context}`],
+        )
+      ).rows[0],
+    ).toEqual({ sealed: 2 });
+  } finally {
+    await peer.query('ROLLBACK');
+    peer.release();
+    await h.stop();
+  }
+}, 300_000);
+
+test('a rating write that waits out the Context gate answers 409 and the same key later succeeds', async () => {
+  const h = await scopedJudgmentsFixture();
+  const claim = h.stack.access.claim.bind(h.stack.access);
+  const closer = await h.stack.accessPool.connect();
+  try {
+    const target = await h.semantic('busy-gate');
+    const q = await h.question({ realm: GLOBAL_RATING_POPULATION_OWNER, targetGrain: 'resource' });
+    const gate = `rating:observe:${q.context}`;
+    const body = h.ratingBody(h.owner, q.context, target);
+    await ensureGate(h.stack.accessPool, q.context);
+    // Register: a scope closure or epoch bump holds the gate exclusively.
+    await closer.query('BEGIN');
+    await closer.query('SELECT 1 FROM access.scope_gate WHERE id=$1 FOR UPDATE', [gate]);
+    const registerRefused = await h.call(h.owner, 'POST', '/v1/rating-observations', body, 'busy-register');
+    expect(registerRefused.status).toBe(409);
+    expect(await registerRefused.json()).toMatchObject({ code: 'rating_write_busy' });
+    await closer.query('ROLLBACK');
+    // Claim: the exclusive holder arrives after registration committed.
+    h.stack.access.claim = async (...args) => {
+      await closer.query('BEGIN');
+      await closer.query('SELECT 1 FROM access.scope_gate WHERE id=$1 FOR UPDATE', [gate]);
+      try {
+        return await claim(...args);
+      } finally {
+        await closer.query('ROLLBACK');
+      }
+    };
+    const claimRefused = await h.call(h.owner, 'POST', '/v1/rating-observations', body, 'busy-claim');
+    expect(claimRefused.status).toBe(409);
+    expect(await claimRefused.json()).toMatchObject({ code: 'rating_write_busy' });
+    h.stack.access.claim = claim;
+    // The registration survived the refused claim, so the retry replays it.
+    expect((await h.call(h.owner, 'POST', '/v1/rating-observations', body, 'busy-claim')).status).toBe(200);
+  } finally {
+    h.stack.access.claim = claim;
+    await closer.query('ROLLBACK').catch(() => undefined);
+    closer.release();
+    await h.stop();
+  }
+}, 300_000);
+
 test('reconstruction holds the recovery fence FOR SHARE until its values commit, and reads never take the Context write gate', async () => {
   const r = await startRatingStack('rating-reconstruction-fence');
   let pause: ReturnType<typeof pauseQuery> | undefined;
@@ -174,6 +266,16 @@ test('reconstruction holds the recovery fence FOR SHARE until its values commit,
       'UPDATE access.target_rating_component SET unvalued=1,rating_count=0,rating_sum=0,histogram=$2 WHERE context=$1',
       [context, Array(10).fill(0)],
     );
+    // A target of at most 100 raters is still read head by head, and listed for reconstruction.
+    expect(await r.aggregate(context, target)).toEqual(before);
+    expect((await r.components(context, target)).row.unvalued).toBe(1);
+    expect(
+      await listLegacyTargetsNeedingReconstruction(r.stack.accessPool, { context }),
+    ).toEqual({ targets: [{ context, target, slots: 1, unvalued: 1 }], next: null });
+    // Beyond 100 raters there are no heads to verify: unavailable until reconstructed.
+    await r.stack.accessPool.query('UPDATE access.target_rating_component SET slots=101 WHERE context=$1', [
+      context,
+    ]);
     expect(
       (
         await r.call(r.owner, 'POST', '/v1/rating-aggregates', {
@@ -184,7 +286,9 @@ test('reconstruction holds the recovery fence FOR SHARE until its values commit,
         })
       ).status,
     ).toBe(503);
-    expect((await r.components(context, target)).row.unvalued).toBe(1);
+    await r.stack.accessPool.query('UPDATE access.target_rating_component SET slots=1 WHERE context=$1', [
+      context,
+    ]);
     await authority.query('COMMIT');
     pause = pauseQuery(r.stack.accessPool, (sql) =>
       sql.includes('SELECT open, generation FROM access.recovery_fence'),
@@ -206,6 +310,9 @@ test('reconstruction holds the recovery fence FOR SHARE until its values commit,
     });
     await releaseAccessRecoveryFence(r.stack.accessPool, generation);
     expect(await r.aggregate(context, target)).toEqual(before);
+    expect(
+      (await listLegacyTargetsNeedingReconstruction(r.stack.accessPool, { context })).targets,
+    ).toEqual([]);
   } finally {
     pause?.restore();
     await Promise.allSettled([reconstruction, closing]);

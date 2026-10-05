@@ -7,7 +7,7 @@ import { readWorkRating, readWorkRatingContexts } from '../work/read-rating.ts';
 import { resolveTargets } from '../target/resolve.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { RATING_STANDING_CADENCE } from './context.ts';
-import { TARGET_GRAINS, targetContextOwnerPattern, targetRatingSlotIri, assertRatingContextTarget, type TargetGrain } from './target.ts';
+import { TARGET_GRAINS, targetContextOwnerPattern, targetContextPattern, targetRatingSlotIri, assertRatingContextTarget, type TargetGrain } from './target.ts';
 import { contextAcceptanceFilter, ratingAcceptanceTarget, assertRatingTargetAccepted, readContextAcceptance, type AcceptanceTarget } from './acceptance.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { queryTargetRatingAggregate } from './target-aggregate.ts';
@@ -97,10 +97,16 @@ export async function readResourceRatingContexts(session: WorkReadSession, targe
   return { scope, ...pageResult(session, items,
   rows.length > limit ? encodeReadCursor(binding, session.position, page.at(-1)!.context!.value) : null) };
 }
+/** A Context the caller cannot see answers like a missing one before its acceptance policy or grain is read. */
+async function assertRatingContextVisible(session: WorkReadSession, context: string) {
+  const rows = await session.query(`SELECT ?grain WHERE { ${targetContextPattern(context)} } LIMIT 2`, 2);
+  if (rows.length !== 1) throw new WorkReadMissing('Target Context unavailable');
+}
 export async function readResourceRating(session: WorkReadSession, target: string, selectedContext?: string) {
   const [resolved] = await resolveTargets(session, [target], 'rating');
   if (resolved!.base === 'work') return readWorkRating(session, target, selectedContext);
   const grain = resolved!.base as TargetGrain, scope = await session.scope();
+  if (selectedContext) await assertRatingContextVisible(session, selectedContext);
   if (scope.kind === 'mine' && selectedContext) {
     // Mine counts only the caller's own observation: private to the principal, so the figures are theirs alone.
     await assertRatingContextTarget(session, selectedContext, resolved!);

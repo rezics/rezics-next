@@ -51,8 +51,8 @@ export type TargetGrain = keyof typeof TARGET_GRAINS;
 export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, commandDeadlineMs: 10_000,
   questionLanguageBytes: 255 } as const;
 /** v4 adds one bounded acceptance read; projection declarations add a coordinate
- * read and one frame batch. No observation population or membership walk. The
- * Context authority gate serializes registration and claim; seals use a target gate. */
+ * read and one frame batch. No observation population or membership walk. Register, claim
+ * and seal share the Context authority gate; seals serialize on a target gate. */
 export const ACCEPTED_TARGET_RATING_WRITE_COST = { ...TARGET_RATING_WRITE_COST,
   graphCalls: 48, graphBytes: 1_048_576, projectionFrames: 8, acceptedTypes: 32 } as const;
 
@@ -209,6 +209,14 @@ function checked<T extends RatingContextReceipt | TargetRatingReceipt>(receipt: 
   return receipt;
 }
 
+/** The write waited on a PostgreSQL lock or timed out before any graph dispatch; a retry is safe. */
+export class RatingWriteBusy extends Error {}
+
+function lockFailure(error: unknown): boolean {
+  return !!error && typeof error === 'object' && 'code' in error
+    && ['40001', '40P01', '55P03', '57014'].includes(String(error.code));
+}
+
 async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
@@ -219,7 +227,9 @@ async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(en
   const principal = await account.verify(request, [context ? 'rating:configure' : 'rating:submit']);
   const registered = await access.register({ principal, actingSubject: intent.actingSubject, scope,
     action: context ? 'rating.context.create' : 'rating.observation.set', idempotencyKey: intent.idempotencyKey,
-    requestDigest: digest });
+    requestDigest: digest }).catch(error => {
+    throw lockFailure(error) ? new RatingWriteBusy('Rating write waited too long for its Context') : error;
+  });
   const kind = context ? 'rating-context' : 'rating-observation';
   try {
     const priorTerminal = await read(registered.id);
@@ -231,7 +241,10 @@ async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(en
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
       try { admission = await access.claim(registered.id, digest, principal); }
-      catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
+      catch (error) {
+        if (lockFailure(error)) throw new RatingWriteBusy('Rating write waited too long for its Context');
+        if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
+      }
     }
     let writeError: unknown;
     if (admission.state !== 'sealed') {
@@ -254,7 +267,8 @@ async function admitted<T extends RatingContextReceipt | TargetRatingReceipt>(en
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof CancelledActivation || error instanceof RatingRealmUnavailable
-      || error instanceof RatingObservationUnavailable || error instanceof RatingTargetNotAccepted || error instanceof CommandRejected) throw error;
+      || error instanceof RatingObservationUnavailable || error instanceof RatingTargetNotAccepted || error instanceof CommandRejected
+      || error instanceof RatingWriteBusy) throw error;
     throw new PendingAdmittedWork(registered.id, kind);
   }
 }

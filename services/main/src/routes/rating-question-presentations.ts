@@ -223,6 +223,8 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
             target: t.Optional(readId),
             expectedHead: t.Nullable(readId),
             state: questionPresentationStateSchema,
+            /** With a draft of an existing presentation: withdraw its public review, freeing the language. */
+            retire: t.Optional(t.Literal(true)),
             actingSubject: readId,
           },
           { additionalProperties: false },
