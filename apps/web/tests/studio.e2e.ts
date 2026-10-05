@@ -117,7 +117,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     await expect(page).toHaveURL(`${studio}/new`);
     const title = `雨夜书店 ${Date.now() % 1000}`;
     await page.getByRole('textbox', { name: 'Title' }).fill(title);
-    await page.getByText('A book', { exact: true }).click();
+    await page.getByRole('radio', { name: /^Book/ }).check();
     const writingLanguage = page.getByRole('combobox', { name: 'Language you’ll write in' });
     await expect(writingLanguage).toHaveText('Choose a language');
     await page.getByRole('button', { name: 'Create as Studio Writer 书生' }).click();

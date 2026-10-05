@@ -27,7 +27,7 @@ test('Studio requires a stated language and reads a chapter page', async ({ page
   const studio = `/en/studio/@agent-${uuid(writer)}`;
   await page.goto(`${studio}/new`);
   await page.getByRole('textbox', { name: 'Title' }).fill('Language chosen by author');
-  await page.getByText('A book', { exact: true }).click();
+  await page.getByRole('radio', { name: /^Book/ }).check();
   const language = page.getByRole('combobox', { name: 'Language you’ll write in' });
   await expect(language).toHaveText('Choose a language');
   await page.getByRole('button', { name: 'Create as Language Writer' }).click();
