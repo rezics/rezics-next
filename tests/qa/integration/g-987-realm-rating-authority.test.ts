@@ -464,8 +464,9 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
       name: 'Rating manager',
       permissions: [],
     });
+    // Since per-source authority fences, the generic source check may refuse first.
     await expect(s.access.claim(pending.id, pending.requestDigest)).rejects.toThrow(
-      'Realm rating authority changed',
+      /Realm rating authority changed|selected authority changed before dispatch/,
     );
     expect(
       (await call(manager, 'POST', '/v1/rating-contexts', question(realm, managerAgent))).status,
