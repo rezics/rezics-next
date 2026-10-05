@@ -17,6 +17,7 @@ interface Seeded {
 let data: Seeded;
 // A step that cannot proceed fails in a minute, not in the test's whole allowance.
 test.use({ actionTimeout: 45_000 });
+// scoped-subjects-journey.prepare.ts runs before Playwright and leaves seed.json for this run.
 test.beforeAll(() => {
   const retained = resolve('.temp/scoped-subjects-journey', process.env.REZICS_QA_RUN_ID!, 'seed.json');
   data = JSON.parse(readFileSync(retained, 'utf8'));

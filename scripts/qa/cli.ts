@@ -55,6 +55,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from './browser-budget.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
+import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
@@ -603,7 +604,8 @@ try {
         const args = e2eArgs(selection, chosen);
         const counts = browserFileCounts(root, args);
         const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
-        const preparation = !args.some(path => path.endsWith('.e2e.ts')) || args.some(path => path.endsWith('scoped-subjects-journey.e2e.ts')) ? 600_000 : 0;
+        const preparation = preparationBudgetMs(selectJourneyPreparations(
+          await discoverJourneyPreparations(root), args));
         const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
           preparation + budgets.setup + budgets.playwright + budgets.storybook + 30_000,
           { ...process.env, REZICS_WEB_E2E_BASE_URL: origin, REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) });

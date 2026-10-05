@@ -3,6 +3,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
 
@@ -305,6 +306,7 @@ async function runE2e(): Promise<void> {
     adoptWebPort(web.port, web.holderPid);
     ownedPort = web.port;
     console.log(`Web origin: ${web.origin}`);
+    const preparations = selectJourneyPreparations(await discoverJourneyPreparations(root), playwrightArgs);
     await measured('Application setup', budgets.setup, async () => {
       if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
         throw new Error('The e2e stack needs a Main relay checkpoint');
@@ -326,11 +328,12 @@ async function runE2e(): Promise<void> {
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
       await ready('Web Worker', `${web.origin}/search`, preview, 240_000);
     });
-    if (!playwrightArgs.some(path => path.endsWith('.e2e.ts')) || playwrightArgs.some(path => path.endsWith('scoped-subjects-journey.e2e.ts'))) {
-      await measured('Scoped subjects preparation', 600_000, async () => {
-        const seed = launch('scoped-subjects-seed', 'bun', ['apps/web/tests/scoped-subjects-journey-seed.ts']);
-        const code = await completed('Scoped subjects seed', seed, 600_000);
-        if (code !== 0) throw new Error(`Scoped subjects seed failed (${code}); see logs/e2e-scoped-subjects-seed.log`);
+    for (const preparation of preparations) {
+      await measured(preparation.step, preparation.budgetMs, async () => {
+        const [program, ...commandArgs] = preparation.command;
+        const child = launch(preparation.slug, program, commandArgs);
+        const code = await completed(preparation.step, child, preparation.budgetMs);
+        if (code !== 0) throw new Error(`${preparation.step} failed (${code}); see logs/e2e-${preparation.slug}.log`);
       });
     }
     await measured('Playwright', budgets.playwright, async () => {
