@@ -10,10 +10,12 @@ import { activateHead, authorizeManager, claimLease, digest, fenceLease, inAcces
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { automaticCoReaders, coReaderOperator, type CoReaderOperator } from './automation.ts';
 
-/** Each discovery tick advances one build batch; `foldMs` paces background
- * log folding, removing at most 100,000 rows per owner. */
+/** Each discovery tick advances one build batch and purges at most `purgeRows`
+ * per table. `minBuildIntervalMs` paces replacements independently of writes;
+ * `foldMs` paces log folding, removing at most 100,000 rows per owner. */
 export const ALSO_ENJOYED_COST = { ratingRows: 32, shelfRows: 64, pairWorks: 2,
-  pairsPerWork: 64, pageRows: 64, leaseMs: 30_000, foldMs: 10_000 } as const;
+  pairsPerWork: 64, pageRows: 64, leaseMs: 30_000, foldMs: 10_000,
+  purgeRows: 1000, minBuildIntervalMs: 5 * 60_000 } as const;
 const FAMILY = 'also-enjoyed';
 const SCOPE = digest(['also-enjoyed-public-v1']);
 type Phase = 'ratings' | 'shelves' | 'pairs' | 'complete';
@@ -65,7 +67,8 @@ export async function alsoEnjoyedAccessFence(client: PoolClient, fold = false): 
  * generation with a stale marker; privacy changes withhold it immediately.
  * Builds finish at their basis while subsequent changes await another build. */
 export class AlsoEnjoyedStore {
-  constructor(private readonly access: Pool, private readonly content: Pool) {}
+  constructor(private readonly access: Pool, private readonly content: Pool,
+    private readonly now: () => number = Date.now) {}
 
   async authorize(context: ManageContext) {
     await inAccess(this.access, client => authorizeManager(client, context));
@@ -78,6 +81,35 @@ export class AlsoEnjoyedStore {
     await inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
       await alsoEnjoyedAccessFence(client, true);
+    });
+  }
+
+  /** Drain one terminal generation after its family's retention window. Keep
+   * derived history and receipts; remove the owner descriptor once both tables
+   * are empty so later ticks can move on without rescanning drained generations. */
+  async purge(): Promise<number> {
+    return inAccess(this.access, async client => {
+      await requireRecoveryOpen(client);
+      const row = (await client.query<{ generation_id: string }>(`
+        SELECT a.generation_id FROM access.also_enjoyed_generation a
+        JOIN access.derived_generation g ON g.id=a.generation_id
+        JOIN access.derived_generation_family f ON f.family=g.family
+        WHERE g.family=$1 AND g.state IN ('expired','cancelled','failed')
+          AND g.finished_at <= $2::timestamptz-f.retain_for
+        ORDER BY g.finished_at,g.id LIMIT 1 FOR UPDATE OF g SKIP LOCKED`,
+      [FAMILY, new Date(this.now())])).rows[0];
+      if (!row) return 0;
+      let deleted = 0, pending = false;
+      for (const table of ['also_enjoyed_signal', 'also_enjoyed_pair']) {
+        const removed = await client.query(`DELETE FROM access.${table} WHERE ctid IN (
+          SELECT ctid FROM access.${table} WHERE generation_id=$1 LIMIT $2)`,
+        [row.generation_id, ALSO_ENJOYED_COST.purgeRows]);
+        deleted += removed.rowCount ?? 0;
+        pending ||= removed.rowCount === ALSO_ENJOYED_COST.purgeRows;
+      }
+      if (!pending) await client.query(
+        'DELETE FROM access.also_enjoyed_generation WHERE generation_id=$1', [row.generation_id]);
+      return deleted;
     });
   }
 
@@ -115,15 +147,16 @@ export class AlsoEnjoyedStore {
 
   /** Reuses the existing durable build and head, with no scheduler table.
    * One tick inspects the single population and advances at most one batch.
-   * Source revisions, not graph traffic, decide whether a replacement is due. */
+   * Source revisions decide whether a replacement is needed; head age decides
+   * when it is due. Privacy fences continue withholding unsafe reads meanwhile. */
   async refresh(work: MainWorkDependencies, request: Request) {
     const position = await workRead(work, new Request(request.url), {}, session =>
       Promise.resolve(session.position));
     const state = await inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
-      const head = (await client.query<{ generation: string; revision: string; graph_epoch: string;
+      const head = (await client.query<{ generation: string; revision: string; activated_at: Date; graph_epoch: string;
         access_revision: string; content_revision: string }>(`SELECT h.active_generation::text AS generation,
-        h.revision::text, a.graph_epoch, a.access_revision::text, a.content_revision::text
+        h.revision::text, h.activated_at, a.graph_epoch, a.access_revision::text, a.content_revision::text
         FROM access.derived_generation_head h JOIN access.also_enjoyed_generation a
           ON a.generation_id=h.active_generation WHERE h.family=$1 AND h.scope_key=$2`,
       [FAMILY, SCOPE])).rows[0];
@@ -156,6 +189,7 @@ export class AlsoEnjoyedStore {
     }
     let generation = state.pending?.id;
     if (!generation) {
+      if (state.head && this.now() - state.head.activated_at.getTime() < ALSO_ENJOYED_COST.minBuildIntervalMs) return;
       if (state.current && state.head
         && covers(await alsoEnjoyedContentFence(this.content), state.head.content_revision)) return;
       generation = (await this.register(automaticCoReaders, position,

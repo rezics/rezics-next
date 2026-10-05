@@ -122,6 +122,9 @@ export class DiscoveryRefreshWorker {
   async tick(): Promise<RefreshOutcome> {
     await this.store.purge();
     // Reuse this scheduler for co-reader maintenance and one durable build step.
+    await this.deps.alsoEnjoyed?.purge().catch((error: unknown) => {
+      console.error('co-reader purge deferred', recommendationFailureCause(error), error);
+    });
     if (this.deps.alsoEnjoyed && performance.now() >= this.coReaderFoldDue) {
       this.coReaderFoldDue = performance.now() + ALSO_ENJOYED_COST.foldMs;
       await this.deps.alsoEnjoyed.fold().catch((error: unknown) => {

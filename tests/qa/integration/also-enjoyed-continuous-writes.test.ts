@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { AlsoEnjoyedStore } from '../../../services/main/src/modules/also-enjoyed/store.ts';
+import { AlsoEnjoyedStore, ALSO_ENJOYED_COST } from '../../../services/main/src/modules/also-enjoyed/store.ts';
 import { automaticCoReaders } from '../../../services/main/src/modules/also-enjoyed/automation.ts';
 import { DiscoveryRefreshStore } from '../../../services/main/src/modules/discovery/refresh-store.ts';
 import { DiscoveryRefreshWorker } from '../../../services/main/src/modules/discovery/refresh.ts';
@@ -62,19 +62,27 @@ test('scheduled co-readers activate under continuous shelf writes, retain stale 
     const ratingReader = readers[3]!;
     await ratingReader.grant(`rating:observe:${global.context}`, 'rating.observation.set');
 
-    const store = new AlsoEnjoyedStore(stack.accessPool, stack.contentPool);
+    let now = Date.now();
+    const store = new AlsoEnjoyedStore(stack.accessPool, stack.contentPool, () => now);
     // These owner paths read no Account assertion.
     const owned: Partial<MainWorkDependencies> = { environment: stack.env, access: stack.access,
       media: stack.media, alsoEnjoyed: store };
     const deps = owned as MainWorkDependencies;
     const worker = new DiscoveryRefreshWorker(deps, new DiscoveryRefreshStore(stack.accessPool),
       new DiscoveryProjection(stack.accessPool));
+    const activatedAt = async () => (await stack.accessPool.query<{ activated_at: Date }>(`
+      SELECT activated_at FROM access.derived_generation_head WHERE family='also-enjoyed'`))
+      .rows[0]!.activated_at.getTime();
     const scheduled = async (prior: string | null, stream: () => Promise<unknown>) => {
+      if (prior) now = await activatedAt() + ALSO_ENJOYED_COST.minBuildIntervalMs;
       for (let ticks = 1; ticks <= 20; ticks++) {
         await stream();
         expect(await worker.tick()).toBe('idle');
         const current = await store.candidates(source.work);
-        if (current.generation && current.generation !== prior) return { ...current, ticks };
+        if (current.generation && current.generation !== prior) {
+          now = await activatedAt();
+          return { ...current, ticks };
+        }
       }
       throw new Error('Scheduled co-reader activation exceeded 20 ticks');
     };
@@ -87,6 +95,28 @@ test('scheduled co-readers activate under continuous shelf writes, retain stale 
     expect(await logs()).toEqual({ access: 0, content: 0 });
     expect(unrelated).toMatchObject({ stale: false, sourceReaders: 4 });
     expect(unrelated.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(4);
+
+    // A deterministic stream keeps changing the same shelf throughout the
+    // interval. A new store/worker must obey the durable head's activation time.
+    const paced = async (generation: string) => {
+      const started = await activatedAt();
+      const builds = await count('access.also_enjoyed_generation');
+      const restarted = new DiscoveryRefreshWorker({ ...deps,
+        alsoEnjoyed: new AlsoEnjoyedStore(stack.accessPool, stack.contentPool, () => now) },
+      new DiscoveryRefreshStore(stack.accessPool), new DiscoveryProjection(stack.accessPool));
+      for (const offset of [0, Math.floor(ALSO_ENJOYED_COST.minBuildIntervalMs / 2),
+        ALSO_ENJOYED_COST.minBuildIntervalMs - 1]) {
+        now = started + offset;
+        for (let tick = 0; tick < 4; tick++) {
+          await stack.contentPool.query(`UPDATE reader.library_status SET status=$3,version=version+1
+            WHERE agent=$1 AND work=$2`, [readers[3]!.actor, source.work, tick % 2 ? 'read' : 'reading']);
+          expect(await restarted.tick()).toBe('idle');
+          expect(await count('access.also_enjoyed_generation')).toBe(builds);
+          expect(await store.candidates(source.work)).toMatchObject({ generation, stale: true });
+        }
+      }
+    };
+    await paced(unrelated.generation!);
 
     // An admitted rating is also a signal, both while its row is pending and
     // after a fold. Neither state revokes the public overlaps already active.
@@ -106,6 +136,8 @@ test('scheduled co-readers activate under continuous shelf writes, retain stale 
     expect(related).toMatchObject({ stale: true, sourceReaders: 4 });
     expect(related.candidates.find(item => item.work === candidate.work)?.sharedReaders).toBe(4);
     expect((await logs()).content).toBeGreaterThan(0);
+    expect(await count('access.also_enjoyed_generation')).toBe(2);
+    await paced(related.generation!);
 
     // Changing an existing input also retains the active generation.
     await stack.contentPool.query(`UPDATE reader.library_status SET status = 'want-to-read', version = version + 1
@@ -126,6 +158,11 @@ test('scheduled co-readers activate under continuous shelf writes, retain stale 
     expect(await store.privacyCurrent(related.generation!)).toBe(false);
     await store.fold();
     expect(await logs()).toEqual({ access: 0, content: 0 });
+    expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true });
+    const buildsBeforePrivacy = await count('access.also_enjoyed_generation');
+    now = await activatedAt() + ALSO_ENJOYED_COST.minBuildIntervalMs - 1;
+    expect(await worker.tick()).toBe('idle');
+    expect(await count('access.also_enjoyed_generation')).toBe(buildsBeforePrivacy);
     expect(await store.candidates(source.work)).toMatchObject({ generation: null, stale: true });
     const covered = await scheduled(related.generation!, () => shelve('read'));
     expect(covered.sourceReaders).toBe(3);
@@ -173,6 +210,20 @@ test('scheduled co-readers activate under continuous shelf writes, retain stale 
     expect((await store.activate(automaticCoReaders, newer, head, receipt(), position)).outcome).toBe('succeeded');
     expect(await worker.tick()).toBe('idle');
     expect((await store.generation(older)).state).toBe('cancelled');
+    expect(await store.candidates(source.work)).toMatchObject({ generation: newer, stale: false });
+
+    // The same discovery tick drains superseded generations that left the
+    // retention count, without changing the active co-reader population.
+    const expired = (await stack.accessPool.query<{ id: string }>(`SELECT id::text
+      FROM access.derived_generation WHERE family='also-enjoyed' AND state='expired'
+      ORDER BY finished_at,id LIMIT 1`)).rows[0]!.id;
+    expect(await count(`access.also_enjoyed_signal WHERE generation_id='${expired}'`)).toBeGreaterThan(0);
+    await stack.accessPool.query(`UPDATE access.derived_generation g SET
+      finished_at=$2::timestamptz-f.retain_for-interval '1 second'
+      FROM access.derived_generation_family f WHERE g.id=$1 AND f.family=g.family`, [expired, new Date(now)]);
+    expect(await worker.tick()).toBe('idle');
+    expect(await count(`access.also_enjoyed_signal WHERE generation_id='${expired}'`)).toBe(0);
+    expect(await count(`access.also_enjoyed_pair WHERE generation_id='${expired}'`)).toBe(0);
     expect(await store.candidates(source.work)).toMatchObject({ generation: newer, stale: false });
   } finally { await stack.stop(); await owners.close(); }
 }, 240_000);

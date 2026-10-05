@@ -21,4 +21,6 @@ test('Also enjoyed read has a bounded Eden card and cursor contract', () => {
   expect(ALSO_ENJOYED_COST.shelfRows).toBeLessThanOrEqual(64);
   expect(ALSO_ENJOYED_COST.pairsPerWork).toBeLessThanOrEqual(64);
   expect(ALSO_ENJOYED_COST.pageRows).toBeLessThanOrEqual(64);
+  expect(ALSO_ENJOYED_COST.purgeRows).toBeLessThanOrEqual(1000);
+  expect(ALSO_ENJOYED_COST.minBuildIntervalMs).toBeGreaterThanOrEqual(60_000);
 });
