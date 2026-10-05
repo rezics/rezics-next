@@ -58,6 +58,7 @@ async function publish(page: Page) {
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 }
@@ -145,6 +146,9 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await expect(page.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveText(after);
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
+      await expect(page.getByRole('textbox', { name: 'Author’s note before the chapter' })).toHaveText(before);
+      await expect(page.getByRole('textbox', { name: 'Chapter text' })).toHaveText(text);
+      await expect(page.getByRole('textbox', { name: 'Author’s note after the chapter' })).toHaveText(after);
       await screenshot(page, info, `studio-en-${viewport.width}`);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
