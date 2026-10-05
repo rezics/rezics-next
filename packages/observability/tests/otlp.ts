@@ -15,8 +15,9 @@ message Traces { repeated ResourceSpans resourceSpans=1; }
 message Point { fixed64 count=4; double sum=5; repeated fixed64 bucketCounts=6; repeated double explicitBounds=7; repeated Attribute attributes=9; }
 message Histogram { repeated Point dataPoints=1; int32 aggregationTemporality=2; }
 message NumberPoint { double asDouble=4; sfixed64 asInt=6; repeated Attribute attributes=7; }
+message Gauge { repeated NumberPoint dataPoints=1; }
 message Sum { repeated NumberPoint dataPoints=1; int32 aggregationTemporality=2; bool isMonotonic=3; }
-message Metric { string name=1; string unit=3; Sum sum=7; Histogram histogram=9; bytes exponentialHistogram=10; }
+message Metric { string name=1; string unit=3; Gauge gauge=5; Sum sum=7; Histogram histogram=9; bytes exponentialHistogram=10; }
 message ScopeMetrics { repeated Metric metrics=2; }
 message ResourceMetrics { Resource resource=1; repeated ScopeMetrics scopeMetrics=2; }
 message Metrics { repeated ResourceMetrics resourceMetrics=1; }

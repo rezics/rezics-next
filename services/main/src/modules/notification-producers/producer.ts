@@ -15,6 +15,7 @@ import { resourceNotification } from './resources.ts';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import type { SavedViewNotifications } from './saved-views.ts';
 import { notificationProducerEventsSql } from './access-log.ts';
+import { observeHorizonLag } from '../horizon/lag.ts';
 
 /** One indexed commit-safe source page, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -71,6 +72,8 @@ export class NotificationProducer {
     private readonly relayConsumer: string | null,
     private readonly relayCheckpoint: Pool | null = relay,
     private readonly safetyAlerts?: { runOnce(): Promise<number> }) {}
+
+  async observeLag(): Promise<void> { await observeHorizonLag(this.access); }
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
@@ -602,6 +605,10 @@ export class NotificationProducerWorker {
     const poll = () => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.notification.producer', async () => {
+        await this.producer.observeLag().catch(() => {
+          console.warn('Horizon lag observation unavailable');
+          recordWorkerOutcome({ outcome: 'deferred' });
+        });
         await this.producer.runRelationshipRecoveryOnce().catch(error => { console.warn('Relationship recovery paused',error); });
         const access = await this.producer.runAccessOnce();
         const relay = await this.producer.runRelayOnce();

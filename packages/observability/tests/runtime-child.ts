@@ -54,7 +54,7 @@ const workerContexts = await Promise.all([
   withWorkerTelemetry('main.feed.refresh', async () => {
     const before = trace.getSpan(context.active())!.spanContext().traceId;
     await Bun.sleep(5);
-    recordWorkerOutcome({ outcome: 'deferred' });
+    recordWorkerOutcome({ outcome: 'deferred', oldestPendingRowAgeSeconds: 12.5, oldestWriterAgeSeconds: 4 });
     return { before, after: trace.getSpan(context.active())!.spanContext().traceId };
   }),
 ]);

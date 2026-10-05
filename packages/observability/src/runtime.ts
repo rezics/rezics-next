@@ -56,6 +56,8 @@ const spanAttributes = new Set([
   'rezics.worker.trigger',
   'rezics.worker.processed',
   'rezics.worker.unit',
+  'rezics.worker.oldest_pending_row_age_seconds',
+  'rezics.worker.oldest_writer_age_seconds',
 ]);
 const metricAttributes = [
   'http.request.method',
@@ -77,6 +79,9 @@ const metricAttributes = [
 
 /** Fixed operation names, never job, recipient, generation or resource IDs. */
 export type WorkerName =
+  | 'main.horizon.notification'
+  | 'main.horizon.reviewRank'
+  | 'main.horizon.editorial'
   | 'main.outbox.relay'
   | 'main.content.projection'
   | 'main.discovery.refresh'
@@ -97,6 +102,8 @@ export type WorkerName =
   | 'main.notification.delivery'
   | 'account.email.drain';
 export interface WorkerObservation {
+  oldestPendingRowAgeSeconds?: number | null;
+  oldestWriterAgeSeconds?: number | null;
   outcome:
     | 'completed'
     | 'idle'
@@ -124,6 +131,8 @@ let workerInstruments: ReturnType<typeof createWorkerInstruments> | undefined;
 function createWorkerInstruments() {
   const meter = metrics.getMeter('rezics-workers');
   return {
+    pendingAge: meter.createGauge('rezics.worker.oldest_pending_row_age', { unit: 's' }),
+    writerAge: meter.createGauge('rezics.worker.oldest_writer_age', { unit: 's' }),
     runs: meter.createCounter('rezics.worker.runs', {
       description: 'Completed worker invocations.',
     }),
@@ -156,7 +165,7 @@ export function withWorkerTelemetry<T>(
   trigger: 'poll' | 'startup' = 'poll',
 ): Promise<T> {
   if (!telemetryEnabled()) return work();
-  const { runs, processed, duration } = (workerInstruments ??= createWorkerInstruments());
+  const { runs, processed, duration, pendingAge, writerAge } = (workerInstruments ??= createWorkerInstruments());
   const attributes = { 'rezics.worker.name': name, 'rezics.worker.trigger': trigger };
   return trace
     .getTracer('rezics-workers')
@@ -205,6 +214,15 @@ export function withWorkerTelemetry<T>(
             span.setAttribute('rezics.worker.processed', run.processed!);
             span.setAttribute('rezics.worker.unit', run.unit);
             processed.add(run.processed!, { ...labels, 'rezics.worker.unit': run.unit });
+          }
+          for (const [value, instrument, attribute] of [
+            [run.oldestPendingRowAgeSeconds, pendingAge, 'rezics.worker.oldest_pending_row_age_seconds'],
+            [run.oldestWriterAgeSeconds, writerAge, 'rezics.worker.oldest_writer_age_seconds'],
+          ] as const) {
+            if (value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+              instrument.record(value ?? 0, attributes);
+              if (value !== null) span.setAttribute(attribute, value);
+            }
           }
           span.end();
         }

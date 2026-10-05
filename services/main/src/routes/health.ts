@@ -1,3 +1,4 @@
+import { horizonHealth, latestHorizonHealth } from '../modules/horizon/lag.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertCommandProfiles } from '../infrastructure/profile.ts';
@@ -19,7 +20,7 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
     }, () => ({ status: 'ok' as const }))
     .get('/health/ready', {
       response: {
-        200: t.Object({ status: t.Literal('ready') }),
+        200: t.Object({ status: t.Literal('ready'), horizons: t.Optional(horizonHealth) }),
         503: t.Object({ status: t.Literal('unavailable') }),
       },
     }, async ({ status }) => {
@@ -31,7 +32,7 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
           await assertCommandProfiles(fuseki);
           await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         }
-        return { status: 'ready' as const };
+        return { status: 'ready' as const, horizons: latestHorizonHealth() };
       } catch {
         return status(503, { status: 'unavailable' as const });
       }

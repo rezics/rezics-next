@@ -182,8 +182,8 @@ test('Bun exports correct HTTP spans, cumulative histograms and correlated logs,
     );
     for (const metric of workerMetrics) {
       expect(metric.exponentialHistogram).toBeUndefined();
-      expect((metric.sum ?? metric.histogram).aggregationTemporality).toBe(2);
-      for (const point of (metric.sum ?? metric.histogram).dataPoints) {
+      if (!metric.gauge) expect((metric.sum ?? metric.histogram).aggregationTemporality).toBe(2);
+      for (const point of (metric.sum ?? metric.histogram ?? metric.gauge).dataPoints) {
         expect(
           Object.keys(attributes(point.attributes)).every((key) =>
             [
@@ -199,6 +199,17 @@ test('Bun exports correct HTTP spans, cumulative histograms and correlated logs,
     expect(workerMetrics.some((m) => m.name === 'rezics.worker.duration' && m.unit === 's')).toBe(
       true,
     );
+    for (const [name, value] of [
+      ['rezics.worker.oldest_pending_row_age', 12.5], ['rezics.worker.oldest_writer_age', 4],
+    ] as const) {
+      const metric = workerMetrics.find((metric) => metric.name === name)!;
+      expect(metric.unit).toBe('s');
+      expect(Number(metric.gauge.dataPoints[0].asDouble)).toBe(value);
+    }
+    expect(attributes(worker('main.feed.refresh').attributes)).toMatchObject({
+      'rezics.worker.oldest_pending_row_age_seconds': 12.5,
+      'rezics.worker.oldest_writer_age_seconds': 4,
+    });
     const processed = workerMetrics
       .filter((m) => m.name === 'rezics.worker.processed')
       .flatMap((m) => m.sum.dataPoints);
