@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { assertCommandRace } from '../support/command-race.ts';
 import { startRatingStack, type Person } from './rating-components-support.ts';
 import { reconstructLegacyTargetRatings, LEGACY_RECONSTRUCTION_COST } from '../../../services/main/src/modules/rating/legacy-reconstruction.ts';
 
@@ -71,12 +73,14 @@ test('components equal a recomputation from sealed heads after writes, changes, 
   // Concurrent writes: new raters in parallel, and one rater racing two revisions of the same head.
   const crowd = await raters('seal-crowd', 12);
   const racing = opinions.get(d.actor)!.observationRevision;
-  const results = await Promise.all([...crowd.map((rater, index) => r.rate(rater, context, first, (index % 10) + 1)
-    .then(() => 201)), ...[2, 9].map(value => r.call(d, 'POST', '/v1/rating-observations', {
+  const raceCommands = [2, 9].map(value => r.call.bind(undefined, d, 'POST', '/v1/rating-observations', {
     profile: 'realm-target-rating-observation-v1', context, target: first, value, expectedRevisionHead: racing,
-    actingSubject: d.actor }).then(response => response.status))]);
-  expect(results.slice(0, 12).every(status => status === 201)).toBe(true);
-  expect(results.slice(12).sort()).toEqual([201, 409]);
+    actingSubject: d.actor }, randomUUID()));
+  const crowdStarted = Promise.all(crowd.map((rater, index) => r.rate(rater, context, first, (index % 10) + 1)
+    .then(() => 201)));
+  const raceStarted = Promise.all(raceCommands.map(send => send()));
+  expect((await crowdStarted).every(status => status === 201)).toBe(true);
+  await assertCommandRace(await raceStarted, 201, index => raceCommands[index]!());
   const settled = await check(first);
   expect(settled).toMatchObject({ population: 16, count: 16 });
   // Every rating in the histogram came from exactly one sealed head.

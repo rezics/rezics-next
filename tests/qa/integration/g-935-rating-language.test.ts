@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { assertCommandRace } from '../support/command-race.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
@@ -83,9 +84,10 @@ test('G-935: declared question languages survive writes, inventories, ratings an
     expect(await json(await call('GET', `/v1/rating-observations/${short(opinion.observation)}/revisions/${short(opinion.observationRevision)}`
       + `?profile=realm-target-rating-observation-v1&context=${encodeURIComponent(context.context)}`
       + `&target=${encodeURIComponent(target)}&actingSubject=${encodeURIComponent(member.actor)}`))).toMatchObject({ value: 8 });
-    const changes = await Promise.all([6, 7].map(value => call('POST', '/v1/rating-observations', {
-      ...rating, value, expectedRevisionHead: opinion.observationRevision })));
-    expect(changes.map(response => response.status).sort()).toEqual([201, 409]);
+    const raceCommands = [6, 7].map(value => call.bind(undefined, 'POST', '/v1/rating-observations', {
+      ...rating, value, expectedRevisionHead: opinion.observationRevision }, randomUUID()));
+    const changes = await assertCommandRace(await Promise.all(raceCommands.map(send => send())), 201,
+      index => raceCommands[index]!());
     const winner = await changes.find(response => response.status === 201)!.json() as Opinion;
     await json(await call('POST', '/v1/rating-observations', { ...rating, value: null,
       expectedRevisionHead: winner.observationRevision }), 201);

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { assertCommandRace } from '../support/command-race.ts';
 import { readFileSync } from 'node:fs';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -250,17 +251,21 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
         200,
       ),
     ).toMatchObject({ ...opinion, replayed: true });
-    const race = await Promise.all(
-      [6, 7].map((value) =>
-        call(
-          owner,
-          'POST',
-          '/v1/rating-observations',
-          observe(context.context, ownerAgent, value, opinion.observationRevision),
-        ),
+    const raceCommands = [6, 7].map((value) =>
+      call.bind(
+        undefined,
+        owner,
+        'POST',
+        '/v1/rating-observations',
+        observe(context.context, ownerAgent, value, opinion.observationRevision),
+        randomUUID(),
       ),
     );
-    expect(race.map((response) => response.status).sort()).toEqual([201, 409]);
+    const race = await assertCommandRace(
+      await Promise.all(raceCommands.map((send) => send())),
+      201,
+      (index) => raceCommands[index]!(),
+    );
     const winner = await json<Opinion>(race.find((response) => response.status === 201)!);
     const withdrawn = await json<Opinion>(
       await call(
