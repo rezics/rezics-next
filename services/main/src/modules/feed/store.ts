@@ -15,8 +15,9 @@ import { FeedReadFrame } from './frame.ts';
 import { FeedTargetIndex } from './target-index.ts';
 import { RealmThreadRankingProjection } from '../rankings/realm-threads.ts';
 
-/** `revision` changes with the projection's population (ingestion, reviews,
- * restore copies), never with a score: page frames and cursors pin it. */
+/** `revision` changes with the projection's population (ingested items and
+ * their groups, reviews, restore copies), never with a score or a position
+ * that ingested nothing: page frames and cursors pin it. */
 export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id: string; revision: string;
   rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
 export interface FeedRow { id: string; kind: FeedSource['kind']; occurred_at: Date;
@@ -28,6 +29,12 @@ function bestPosition(key: string): { rank: number; time: number } {
   const { rank, time } = (value ?? {}) as { rank?: unknown; time?: unknown };
   if (typeof rank !== 'number' || typeof time !== 'number') throw new WorkReadMoved('Feed ranking changed');
   return { rank, time };
+}
+/** Refresh's compare-and-swap. The revision alone no longer moves on every
+ * write, so the positions it advances are compared as well. */
+function unmoved(current: FeedCheckpoint | undefined, expected: FeedCheckpoint) {
+  return current?.revision === expected.revision && String(current.sequence) === String(expected.sequence)
+    && current.after_id === expected.after_id && String(current.review_sequence) === String(expected.review_sequence);
 }
 /** Activities that are posts of their own: each takes its own votes and appears on its own. */
 const soloKinds: ReadonlySet<string> = new Set(['discussion', 'reply']);
@@ -108,7 +115,7 @@ export class FeedStore {
   async copyRetained(expected: FeedCheckpoint) {
     return controlTransaction(this.pool, async client => {
       const current = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
-      if (current?.revision !== expected.revision || !current.rebuild_epoch) throw new WorkReadMoved('Feed rebuild changed');
+      if (!unmoved(current, expected) || !current?.rebuild_epoch) throw new WorkReadMoved('Feed rebuild changed');
       const rows = (await client.query<{ id: string }>(`SELECT id FROM access.feed_item
         WHERE data_epoch = $1 AND id > $2 ORDER BY id LIMIT $3 FOR SHARE`,
       [current.rebuild_epoch, current.rebuild_after, FEED_COST.refreshItems + 1])).rows;
@@ -127,7 +134,8 @@ export class FeedStore {
     }
     return controlTransaction(this.pool, async client => {
       const current = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
-      if (current?.revision !== expected.revision) throw new WorkReadMoved('Feed projection changed');
+      if (!unmoved(current, expected)) throw new WorkReadMoved('Feed projection changed');
+      let ingested = false;
       for (const source of sources.slice(0, FEED_COST.refreshItems)) {
         const fallbackTime = relayTimes.get(source.sequence);
         if (!fallbackTime) throw new WorkReadUnavailable('Relay event time is unavailable');
@@ -151,6 +159,7 @@ export class FeedStore {
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$5)`,
         [expected.data_epoch, source.id, source.sequence, source.kind, time, basis, bestKey(0, time.getTime()),
           source.realm ?? null, bucket, groupKey, !group, [source.id]]);
+        ingested = true;
         if (source.groupKind === 'chapter' && source.work && source.actor && source.occurrence
           && source.contentRevision) {
           const eventId = randomUUID();
@@ -168,8 +177,10 @@ export class FeedStore {
       const more = sources.length > FEED_COST.refreshItems;
       const sequence = more ? last!.sequence : through;
       const after = more ? last!.id : '\uffff';
+      // Most graph events are not feed activity. Moving only the position keeps
+      // open page frames and cursors valid; new items or groups replace it.
       await client.query(`UPDATE access.feed_checkpoint SET sequence = $1, after_id = $2, revision = $3 WHERE id`,
-        [sequence, after, randomUUID()]);
+        [sequence, after, ingested ? randomUUID() : current!.revision]);
       // Bounded cleanup of old epochs; restored graph identities are re-admitted.
       await client.query(`DELETE FROM access.feed_item WHERE (data_epoch, id) IN (
         SELECT data_epoch, id FROM access.feed_item WHERE data_epoch <> $1 LIMIT 100)`, [expected.data_epoch]);
@@ -183,7 +194,8 @@ export class FeedStore {
     if (events.length > FEED_COST.refreshItems + 1) throw new WorkReadUnavailable('Review refresh budget exceeded');
     return controlTransaction(this.pool, async client => {
       const current = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR UPDATE')).rows[0];
-      if (current?.revision !== expected.revision) throw new WorkReadMoved('Feed projection changed');
+      if (!unmoved(current, expected)) throw new WorkReadMoved('Feed projection changed');
+      let ingested = false;
       for (const event of events.slice(0, FEED_COST.refreshItems)) {
         const source = admitted.get(reviewActivityId(event.review));
         if (event.kind !== 'created') continue;
@@ -191,14 +203,14 @@ export class FeedStore {
         const bucket = source ? digest(['review', source.actor, source.realm, time.toISOString().slice(0, 13)])
           : digest(['review-hidden', event.review]);
         const groupKey = digest(['home-group-v1', reviewActivityId(event.review)]);
-        await client.query(`INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at,
+        if ((await client.query(`INSERT INTO access.feed_item (data_epoch, id, sequence, kind, occurred_at,
           time_basis, best_key, realm, group_bucket, group_key, group_leader, group_members, sort_time)
           VALUES ($1,$2,$3,'review',$4,'revision',$5,$6,$7,$8,true,$9,$4) ON CONFLICT DO NOTHING`,
         [expected.data_epoch, reviewActivityId(event.review), event.sequence, time, bestKey(0, time.getTime()),
-          source?.realm ?? event.realm, bucket, groupKey, [reviewActivityId(event.review)]]);
+          source?.realm ?? event.realm, bucket, groupKey, [reviewActivityId(event.review)]])).rowCount) ingested = true;
       }
       await client.query('UPDATE access.feed_checkpoint SET review_sequence = $1, revision = $2 WHERE id',
-        [events[Math.min(events.length, FEED_COST.refreshItems) - 1]!.sequence, randomUUID()]);
+        [events[Math.min(events.length, FEED_COST.refreshItems) - 1]!.sequence, ingested ? randomUUID() : current!.revision]);
     });
   }
 
@@ -210,7 +222,7 @@ export class FeedStore {
       throw new ControlInvalid('Invalid feed kinds');
     }
     const read = async (client: Pick<PoolClient, 'query'>) => {
-      const checkpoint = frame?.checkpoint ?? (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
+      const checkpoint = frame?.checkpoint ?? (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) throw new WorkReadMoved('Feed changed');
       const owner = frame ? frame.owner : reader ? await followPrincipal(client as PoolClient, reader.principal, reader.agent) : null;
       const cutoff = window === 'all' ? new Date(0) : new Date(asOf - (window === 'week' ? 7 : 30) * 86_400_000);
@@ -296,7 +308,16 @@ export class FeedStore {
         || row.rank === rank && (row.time < time || row.time === time && row.id < after.id));
       return start < 0 ? [] : ranked.slice(start, start + limit + 1);
     };
-    return frame ? read(this.pool) : controlRead(this.pool, read);
+    if (frame) return read(this.pool);
+    // Reads take no lock behind refresh. Every population change replaces the
+    // revision in the same commit, so an unchanged closing probe proves the
+    // rows came from the population the caller pinned (as a frame's close does).
+    return controlRead(this.pool, async client => {
+      const rows = await read(client);
+      const closing = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id')).rows[0];
+      if (closing?.data_epoch !== position.dataEpoch || closing.revision !== revision) throw new WorkReadMoved('Feed changed');
+      return rows;
+    });
   }
 
   async members(epoch: string, ids: string[], frame?: FeedReadFrame): Promise<FeedRow[]> {
@@ -306,7 +327,8 @@ export class FeedStore {
     return frame ? read(this.pool) : controlRead(this.pool, read);
   }
 
-  /** Indexed head probe only; disclosure and follows are checked by the reader. */
+  /** Indexed head probe only; disclosure and follows are checked by the reader,
+   * which also re-reads the revision afterwards, so this takes no lock. */
   async since(position: ReadPosition, revision: string, afterSequence: string,
     realm?: string, limit = 20, afterReview?: string): Promise<{ id: string; kind: string; realm: string | null; group_key: string }[]> {
     if (!/^\d{1,30}$/.test(afterSequence) || !Number.isInteger(limit) || limit < 1 || limit > 20) {
@@ -315,7 +337,7 @@ export class FeedStore {
     if (afterReview !== undefined && !/^\d{1,30}$/.test(afterReview)) throw new ControlInvalid('Invalid review head');
     return controlRead(this.pool, async client => {
       const checkpoint = (await client.query<FeedCheckpoint>(
-        'SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
+        'SELECT * FROM access.feed_checkpoint WHERE id')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) {
         throw new WorkReadMoved('Feed changed');
       }

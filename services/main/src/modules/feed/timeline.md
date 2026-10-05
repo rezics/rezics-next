@@ -98,14 +98,19 @@ the tests also retain live link invalidation and current principal denial.
 
 Decision, 2026-10-05. A vote locks only what it changes: its principal's vote
 key and the group leader row that carries the score. It reads the projection
-epoch without a lock. The Home checkpoint `revision` and a Realm's ranking
-revision change with their population: ingested activity, reviews, restore
-copies, placements entering or leaving an order, and changed placement or time
-keys. A score change moves neither. Previously each vote took the singleton
-checkpoint FOR UPDATE and replaced its revision, so the platform's votes ran
-one at a time, refresh blocked every voter, and one vote anywhere ended every
-open page with "Feed changed". Every vote in a popular Realm also met on that
-Realm's state row.
+epoch without a lock. The Home checkpoint `revision`, the Following target
+index revision and a Realm's ranking revision change with their population:
+ingested activity and groups, reviews, restore copies, written target keys,
+placements entering or leaving an order, and changed placement or time keys. A
+score change moves none of them, nor does a refresh that only advances its
+position past graph events that are not feed activity. Refresh compares that
+position as well as the revision before it writes. Reads take no lock on the
+checkpoint; they compare its revision again when they close. Previously each
+vote took the singleton checkpoint FOR UPDATE and replaced its revision, and
+so did every refresh tick. The platform's votes ran one at a time, refresh
+blocked every voter, and one vote anywhere, or the refresh of any later graph
+event, ended every open page with "Feed changed". Every vote in a popular Realm
+also met on that Realm's state row.
 
 Continuation therefore pins the population and a keyset position, never a
 score snapshot. New and Following New seek `(sort_time, id)`; Top seeks
@@ -115,7 +120,10 @@ their order keys. An item whose score changed after it was served may appear
 again, and one that rose past the position is passed over on that traversal.
 The web feed drops repeated ids. A fresh first page always reflects current
 scores. A restore's retained copy share-locks the rows it copies, so no score
-written under the prior epoch is lost.
+written under the prior epoch is lost. A cursor also pins the graph read
+position, as every continuation does until its family registers a retained read
+basis (`services/main/src/modules/read-basis/retention.ts`); the population
+revision is what still holds once the graph position is unchanged.
 
 ## Current relationships and invalidation
 

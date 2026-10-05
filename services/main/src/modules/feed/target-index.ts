@@ -56,8 +56,10 @@ export class FeedTargetIndex {
         SELECT $1,w FROM unnest($2::text[]) w WHERE EXISTS(SELECT 1 FROM access.feed_item
           WHERE data_epoch=$1 AND work=w) ON CONFLICT(data_epoch,work) DO UPDATE SET after_id=''`, [epoch,works]);
       const last = events.at(-1);
-      await client.query(`UPDATE access.feed_target_checkpoint SET sequence=$2,after_event=$3,revision=$4 WHERE data_epoch=$1`,
-        [epoch,events.length === BATCH ? last!.sequence : through,events.length === BATCH ? last!.event_id : '￿',randomUUID()]);
+      // Moving the position changes no indexed target. Only `project` writes
+      // keys, and it replaces the revision that Following New cursors pin.
+      await client.query(`UPDATE access.feed_target_checkpoint SET sequence=$2,after_event=$3 WHERE data_epoch=$1`,
+        [epoch,events.length === BATCH ? last!.sequence : through,events.length === BATCH ? last!.event_id : '￿']);
     });
     return true;
   }
