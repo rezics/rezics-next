@@ -8,8 +8,11 @@ import { signInAtAccounts } from './account-sign-in.ts';
 test.use({ actionTimeout: 30_000, navigationTimeout: 60_000 });
 test.afterEach(async ({ page }, info) => {
   if (info.status === 'passed') return;
+  const path = new URL(page.url()).pathname;
+  // Failure artifacts cover this capability's surfaces, never credential-entry pages.
+  if (!path.includes('/studio/') && !path.includes('/read/')) return;
   await page.evaluate(() => window.scrollTo(0, 0));
-  const surface = new URL(page.url()).pathname.includes('/studio/') ? 'studio' : 'reader';
+  const surface = path.includes('/studio/') ? 'studio' : 'reader';
   await page.screenshot({ path: info.outputPath(`${surface}-shared-failure.png`), fullPage: true });
 });
 
