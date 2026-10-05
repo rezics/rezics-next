@@ -49,6 +49,16 @@ Proposed placement, to confirm by measurement when deploying:
 | Web, Accounts and about | Cloudflare Workers | Web and Accounts make authenticated private calls through the Tunnel; about serves public pages and its notify form. |
 | Telemetry | Collector beside each application host; GreptimeDB on B, Perses on A or B | Shared OTLP instrumentation; [checked-in configuration](../../infra/observability/compose.yaml) and [operating procedure](observability.md#configuration-and-operation). Host integration remains a deployment task. |
 
+### PostgreSQL settings
+
+Every request-serving connection starts with `lock_timeout=5s`,
+`idle_in_transaction_session_timeout=60s` and `transaction_timeout=5min`
+([`pg-pool.ts`](../../services/main/src/infrastructure/pg-pool.ts) holds the
+values and the reasons); restore, rebuild and migration jobs open their own
+connections. The server runs with `max_prepared_transactions=0`, as in
+[the local stack](../../infra/dev/compose.yaml): nothing uses two-phase commit,
+and a prepared transaction would hold locks and the snapshot horizon across restarts.
+
 ## Open decision: NixOS and Nomad
 
 Settle this when the deployment phase starts. Planning view of 2026-09-29:

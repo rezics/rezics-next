@@ -1,4 +1,3 @@
-import { Pool } from 'pg';
 import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { telemetryLog } from '@rezics/observability/log';
 import { createAccountAuth } from './auth.ts';
@@ -7,6 +6,7 @@ import { accountConfig } from './config.ts';
 import { accountEmailQueue, smtpSender } from './email.ts';
 import { bootstrapOperators } from './operators.ts';
 import { reconcileResourceScopes } from './resource-scopes.ts';
+import { boundedPool } from '../../main/src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
 import { mirrorAccountDeletionIntent } from '../../main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../main/src/modules/outbox/account-subject-deletion.ts';
@@ -17,11 +17,11 @@ const { ACCOUNT_BASE_URL: baseURL, ACCOUNT_SECRET: secret, ACCOUNT_MAIN_RESOURCE
 
 // A remote or partitioned database fails a connection wait after five seconds
 // instead of holding the request; the caller sees Account as unavailable.
-const pool = new Pool({ connectionString: databaseURL, connectionTimeoutMillis: 5_000 });
+const pool = boundedPool({ connectionString: databaseURL, connectionTimeoutMillis: 5_000 });
 const accessDatabaseURL = config.ACCOUNT_ACCESS_DATABASE_URL;
 const relayDatabaseURL = config.ACCOUNT_RELAY_DATABASE_URL;
-const accessPool = accessDatabaseURL ? new Pool({ connectionString: accessDatabaseURL }) : null;
-const relayPool = relayDatabaseURL ? new Pool({ connectionString: relayDatabaseURL }) : null;
+const accessPool = accessDatabaseURL ? boundedPool({ connectionString: accessDatabaseURL }) : null;
+const relayPool = relayDatabaseURL ? boundedPool({ connectionString: relayDatabaseURL }) : null;
 const access = accessPool ? new AccessAdmissionRegistry(accessPool, config.FUSEKI_TITLE_ADMISSION_KEY) : null;
 const operatorUserIds = new Set(config.ACCOUNT_OPERATOR_USER_IDS.split(',').map(s => s.trim()).filter(Boolean));
 await bootstrapOperators(pool, operatorUserIds);

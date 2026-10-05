@@ -17,6 +17,8 @@ services:
       - -c
       - jit=off
       - -c
+      - max_prepared_transactions=0
+      - -c
       - archive_mode=on
       - -c
       - archive_command=mkdir -p /var/lib/postgresql/archive && test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f

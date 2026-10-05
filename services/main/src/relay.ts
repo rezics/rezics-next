@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { boundedPool } from './infrastructure/pg-pool.ts';
 import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { telemetryLog } from '@rezics/observability/log';
 import { FusekiClient } from './infrastructure/fuseki.ts';
@@ -14,7 +14,7 @@ if (!Number.isInteger(interval) || interval < 100 || interval > 60_000) {
 }
 
 const fuseki = new FusekiClient(config.FUSEKI_URL, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
-const pool = new Pool({ connectionString: config.MAIN_RELAY_DATABASE_URL });
+const pool = boundedPool({ connectionString: config.MAIN_RELAY_DATABASE_URL });
 const consumer = config.MAIN_RELAY_CONSUMER;
 let running = true;
 process.on('SIGINT', () => { running = false; });

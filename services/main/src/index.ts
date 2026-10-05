@@ -4,6 +4,7 @@ import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { MediaRenditionWorker } from './modules/media-rendition/worker.ts';
 import { LocalImageTransformer } from './modules/media-rendition/transform.ts';
 import { Pool } from 'pg';
+import { boundedPool } from './infrastructure/pg-pool.ts';
 import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { telemetryLog } from '@rezics/observability/log';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
@@ -196,7 +197,7 @@ const fusekiUrl = config.FUSEKI_URL;
 const port = config.MAIN_PORT;
 
 const fuseki = new FusekiClient(fusekiUrl, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
-const pool = new Pool({ connectionString: config.ACCESS_DATABASE_URL });
+const pool = boundedPool({ connectionString: config.ACCESS_DATABASE_URL });
 const types = new AdmittedTypeStore(pool);
 await types.refresh();
 // IAM35: every Main enforces the Access-active profile; this release requests its own.
@@ -208,19 +209,24 @@ if (bounds.status === 'restricted') {
 // OPS06: the broker lane observes the relay checkpoint through a read-only session.
 const relayUrl = config.MAIN_RELAY_DATABASE_URL;
 const relayConsumer = config.MAIN_RELAY_CONSUMER;
-const relayPool = relayUrl ? new Pool({ connectionString: relayUrl, max: 2,
+const relayPool = relayUrl ? boundedPool({ connectionString: relayUrl, max: 2,
   options: '-c default_transaction_read_only=on' }) : undefined;
 const erasureRelayUrl = relayUrl ?? config.ACCOUNT_RELAY_DATABASE_URL;
-const erasureRelayPool = erasureRelayUrl ? new Pool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
+const erasureRelayPool = erasureRelayUrl ? boundedPool({ connectionString: erasureRelayUrl, max: 2 }) : undefined;
 const ownerRelayUrl = config.OWNER_RELAY_DATABASE_URL ?? relayUrl;
 const ownerRelayPool = ownerRelayUrl
-  ? new Pool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
+  ? boundedPool({ connectionString: ownerRelayUrl, max: 4 }) : undefined;
 const recommendationRelayUrl = config.ACCOUNT_RELAY_DATABASE_URL ?? relayUrl;
-const recommendationRelayPool = recommendationRelayUrl ? new Pool({ connectionString: recommendationRelayUrl,
+const recommendationRelayPool = recommendationRelayUrl ? boundedPool({ connectionString: recommendationRelayUrl,
   max: 2, options: '-c default_transaction_read_only=on' }) : undefined;
-const contentPool = new Pool({ connectionString: config.CONTENT_DATABASE_URL });
+const contentPool = boundedPool({ connectionString: config.CONTENT_DATABASE_URL });
 // Production schemas are applied by the locked release job before writers start.
-if (process.env.NODE_ENV !== 'production') await migrateContent(contentPool);
+// A development start migrates on its own connection: DDL may wait on a peer
+// that is migrating, which the request bounds would cut short.
+if (process.env.NODE_ENV !== 'production') {
+  const migration = new Pool({ connectionString: config.CONTENT_DATABASE_URL, max: 1 });
+  try { await migrateContent(migration); } finally { await migration.end(); }
+}
 const content = new ContentCore(contentPool);
 const readRankings = new ReadRankingProjection(pool, content, contentPool, {
   fuseki, lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
