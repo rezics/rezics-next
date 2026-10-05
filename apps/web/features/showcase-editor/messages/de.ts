@@ -92,7 +92,7 @@ export default {
   refusalSignIn: 'Deine Sitzung ist abgelaufen. Melde dich erneut an, um zu speichern.',
   refusalDenied: 'Du kannst das Präsentations-Artwork dieses Werks nicht ändern: Dafür braucht es die Berechtigung, das Cover des Werks auszuwählen. Frag die Betreuer des Werks.',
   refusalGone: 'Dieses Werk ist mit deiner Identität nicht mehr lesbar, daher wurde nichts gespeichert.',
-  refusalConflict: 'Seit du angefangen hast, hat jemand das hier geändert. Nichts wurde überschrieben: Lade neu, um die andere Fassung zu sehen, und speichere deine erneut, wenn du sie weiterhin willst.',
+  refusalConflict: 'Seit du angefangen hast, hat jemand das hier geändert. Nichts wurde überschrieben: Lade die neueste Fassung, dann ersetzt Speichern sie durch deine Änderung – oder verwirf deine, um die andere zu behalten.',
   refusalCrop: 'Der Rahmen oder der Fokusbereich passt nicht in das Bild.',
   refusalRatio: 'Der Rahmen hat nicht genau das verlangte Format.',
   refusalResolution: 'Der gerahmte Bereich ist kleiner als die Mindestgröße.',

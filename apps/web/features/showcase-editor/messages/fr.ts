@@ -92,7 +92,7 @@ export default {
   refusalSignIn: 'Votre session a expiré. Reconnectez-vous pour enregistrer.',
   refusalDenied: 'Vous ne pouvez pas modifier les visuels de vitrine de cette œuvre : il faut l’autorisation de choisir sa couverture. Demandez à ses responsables.',
   refusalGone: 'Cette œuvre n’est plus lisible avec votre identité : rien n’a été enregistré.',
-  refusalConflict: 'Quelqu’un a modifié cet élément depuis que vous avez commencé. Rien n’a été écrasé : rechargez pour voir sa version, puis enregistrez la vôtre si vous le souhaitez toujours.',
+  refusalConflict: 'Quelqu’un a modifié cet élément depuis que vous avez commencé. Rien n’a été écrasé : rechargez la dernière version, puis enregistrez pour la remplacer par la vôtre, ou annulez votre modification pour garder la sienne.',
   refusalCrop: 'Le cadre ou la zone de mise au point dépasse de l’image.',
   refusalRatio: 'Le cadre n’a pas exactement la forme demandée.',
   refusalResolution: 'La zone cadrée est plus petite que la taille minimale.',

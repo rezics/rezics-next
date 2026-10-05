@@ -92,7 +92,7 @@ export default {
   refusalSignIn: 'Tu sesión ha terminado. Vuelve a iniciar sesión para guardar.',
   refusalDenied: 'No puedes cambiar las imágenes de escaparate de esta obra: hace falta el permiso para elegir su portada. Pregunta a quienes la mantienen.',
   refusalGone: 'Esta obra ya no se puede leer con tu identidad, así que no se guardó nada.',
-  refusalConflict: 'Alguien cambió esto desde que empezaste. No se sobrescribió nada: recarga para ver su versión y, si todavía la quieres, vuelve a guardar la tuya.',
+  refusalConflict: 'Alguien cambió esto desde que empezaste. No se sobrescribió nada: recarga lo más reciente y guarda para reemplazarlo con tu cambio, o descarta el tuyo para conservar el suyo.',
   refusalCrop: 'El marco o el área de enfoque no caben dentro de la imagen.',
   refusalRatio: 'El marco no tiene exactamente la forma requerida.',
   refusalResolution: 'El área enmarcada es más pequeña que el tamaño mínimo.',

@@ -102,7 +102,7 @@ const en = {
   refusalSignIn: 'Your session has ended. Sign in again to save.',
   refusalDenied: 'You can’t change this Work’s showcase art: it needs the authority that selects the Work’s cover. Ask the Work’s maintainers.',
   refusalGone: 'This Work can no longer be read as your identity, so nothing was saved.',
-  refusalConflict: 'Someone changed this since you started. Nothing was overwritten: reload to see their version, then save yours again if you still want it.',
+  refusalConflict: 'Someone changed this since you started. Nothing was overwritten: reload to get the latest, then save to replace it with your change, or discard yours to keep theirs.',
   refusalCrop: 'The frame or the focal area doesn’t fit inside the image.',
   refusalRatio: 'The frame isn’t exactly the required shape.',
   refusalResolution: 'The framed area is smaller than the minimum size.',
