@@ -1,5 +1,6 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { unerased } from '../work/public-patterns.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 
 /** The live Book placement is the only Post-to-Work relationship. A reused Post
  * can bind several Books; callers must retain that multiplicity. */
@@ -12,10 +13,11 @@ export function postBookPlacement(post: string, book: string, main: string,
 /** A live chapter occurrence supplies its Book without changing the target's identity. */
 export function bookChapterPlacement(resource: string, book: string, main: string,
   occurrence = '?postOccurrence') {
+  const composition = structureProfileFor('book-composition');
   return `GRAPH ${iri(GRAPHS.current)} {
-    ${book} a <https://schema.org/Book> ; rv:mainVersion ${main} .
+    ${book} a <${composition.ownerType}> ; rv:mainVersion ${main} .
     ${main} a rv:MainVersion ; rv:work ${book} .
-    ?postStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
+    ?postStructure a rv:Structure ; rv:structureProfile <${composition.graphProfile}> ;
       rv:structureOf ${main} ; rv:selectedGeneration ?postGeneration .
     ?postGeneration rv:generationState rv:Active .
     ?postPlacement a rv:OccurrencePlacement ; rv:generation ?postGeneration ;
