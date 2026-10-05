@@ -10,8 +10,6 @@ files:
   - apps/web/features/**/*.stories.tsx
 ignores:
   - apps/web/features/stories/**
-  # Owned by the showcase Goal; remove this line once its story uses chooseMenuItem.
-  - apps/web/features/zones/look-menu.stories.tsx
 rule:
   pattern: userEvent.$METHOD($TARGET)
 constraints:

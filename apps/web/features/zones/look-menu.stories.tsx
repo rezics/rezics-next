@@ -2,6 +2,7 @@ import { spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { chooseMenuItem } from '../stories/choose-option.ts';
 import { LookMenu } from './look-menu.tsx';
 import { messages } from './messages.ts';
 
@@ -25,9 +26,7 @@ export const SaveFailed: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Page style' }));
-    await userEvent.click(
-      await within(document.body).findByRole('menuitemradio', { name: 'Standard look' }),
-    );
+    await chooseMenuItem(within(document.body), 'menuitemradio', 'Standard look');
     await expect(await within(document.body).findByRole('alert')).toHaveTextContent(
       'Couldn’t save your page style. Try again.',
     );

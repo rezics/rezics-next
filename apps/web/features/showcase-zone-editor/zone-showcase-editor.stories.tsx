@@ -244,7 +244,7 @@ export const AddCampaignArt: Story = {
     await expect(await landscape.findByText(/Checking the image/)).toBeVisible();
     await expect(await landscape.findByText(/Added to this slide/, {}, { timeout: 4000 })).toBeVisible();
     await expect(landscape.getByText('On this slide')).toBeVisible();
-    await expect(slides(canvas).getAllByText('Art for this Zone')).toHaveLength(2);
+    await waitFor(() => expect(slides(canvas).getAllByText('Art for this Zone')).toHaveLength(2));
     await expect(canvas.getByText(/This slide uses art made for this Zone/)).toBeVisible();
     await waitFor(() => expect(saveButton(canvas)).toBeEnabled());
     await noOverflow();
