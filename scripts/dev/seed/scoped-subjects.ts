@@ -111,7 +111,8 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
       profile: 'semantic-change-v1', expectedHead: null, actingSubject: actor,
       state: { component: 'resource', types: [type], properties: [
         { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: name, language: 'en' } },
-        ...extra,
+        // The owner uses this pointer for Work-scoped admission and disclosure.
+        { predicate: `${RV}semanticWork`, value: resource(work) }, ...extra,
       ] },
     }, key(`resource:${id}`));
     result.subjects[id] = saved.component;
@@ -254,8 +255,8 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     result.relations[id] = saved;
   };
   const subject = (id: string) => result.subjects[id]!;
-  // Primary Work membership is a labelled relation, not an unlabelled model
-  // property rendered alongside facts. Appearances retain their separate roles.
+  // The public membership has labels; the owner pointer above retains its
+  // admission/disclosure meaning. Appearances retain their separate roles.
   for (const [id, work] of primaryWorks) await relation(`work:${id}`, 'subject-work',
     [{ role: 'subject', ref: subject(id) }, { role: 'work', ref: work }]);
   const appear = (id: string, on: string, work: string, role: string, frames: string[] = [], credit?: string) =>

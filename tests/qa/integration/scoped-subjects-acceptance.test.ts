@@ -170,7 +170,7 @@ test('Conan and Shinichi are names of one Character; the appearance retains its 
   const semantic = await h.api(h.owner).get<{ state: { properties: { predicate: string; value: { lexical?: string } }[] } }>(
     `/v1/semantic/resources/${short(subject('conan'))}?actingSubject=${encodeURIComponent(h.owner.actor)}`);
   expect(semantic.state.properties.find(item => item.predicate === 'https://schema.org/alternateName')!.value.lexical).toBe('Kudo Shinichi');
-  expect(semantic.state.properties.some(item => item.predicate === 'https://rezics.com/vocab/semanticWork')).toBe(false);
+  expect(semantic.state.properties.some(item => item.predicate === 'https://rezics.com/vocab/semanticWork')).toBe(true);
   expect((await relations(subject('conan'))).items.some(item =>
     item.rendering?.meaning.definition === data.definitions['subject-work']
       && item.rendering.projections.some(projection => projection.toRole === 'work' && projection.labels?.noun === 'Work'))).toBe(true);
