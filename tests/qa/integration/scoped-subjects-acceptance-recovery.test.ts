@@ -5,6 +5,7 @@ import { ensureReviewedQuestionPresentation, seedScopedSubjectQuestions, scopedS
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
 import { QUESTION_PRESENTATION_COST, type QuestionPresentationState } from '../../../services/main/src/modules/rating/question-presentation-schema.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { scopedSubjectsFixture } from './scoped-subjects-support.ts';
 
 const short = (ref: string) => ref.slice(-36);
@@ -38,6 +39,15 @@ test('concurrent question seeding recovers an expired, terminally cancelled revi
     }, `${namespace}:draft:${slot.spec.key}:${slot.language}`)));
     const french = slots.findIndex(slot => slot.spec.key === 'character' && slot.language === 'fr');
     const frenchSlot = slots[french]!, frenchDraft = drafts[french]!;
+    const reviewedLanguages = async (context: string) => {
+      const read = await h.stack.fuseki.query(`PREFIX rv: <${RV}>
+        SELECT DISTINCT ?language WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ?presentation rv:presentationContext ${iri(context)} ; rv:presentationLanguage ?language ;
+            rv:questionPresentationReviewedHead ?head }
+          GRAPH ${iri(GRAPHS.revisions)} { ?head rv:reviewStatus rv:Reviewed } }`);
+      return (read.results?.bindings ?? []).map(row => row.language!.value).sort();
+    };
+    expect(await reviewedLanguages(frenchSlot.context.context)).toEqual([]);
     const lookupPath = (context: string, language: string, authenticated = true) => `/v1/rating-question-presentations?${new URLSearchParams({
       context, language, ...(authenticated ? { actingSubject: actor } : {}),
     })}`;
@@ -74,6 +84,7 @@ test('concurrent question seeding recovers an expired, terminally cancelled revi
     expect(await cancelled.json()).toMatchObject({ code: 'operation_cancelled' });
     expect((await h.stack.accessPool.query(`SELECT state,graph_outcome FROM access.admission
       WHERE idempotency_key=$1`, [failedReview!.key])).rows).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+    expect(await reviewedLanguages(frenchSlot.context.context)).toEqual([]);
     let presentationWrites = 0;
     const transport: Pick<ScopedSubjectApi, 'get' | 'post'> = {
       get: path => api.get(path),
@@ -92,9 +103,13 @@ test('concurrent question seeding recovers an expired, terminally cancelled revi
       }
     }
     const writes = presentationWrites;
+    for (const question of questions.values()) expect(await reviewedLanguages(question.context))
+      .toEqual(scopedSubjectLocales.filter(language => language !== 'en').sort());
     await seedScopedSubjectQuestions(transport, actor, namespace);
     expect(presentationWrites).toBe(writes);
     expect((await h.call(h.owner, 'POST', '/v1/rating-question-presentations', failedReview!.body, failedReview!.key)).status).toBe(409);
+    expect(await reviewedLanguages(frenchSlot.context.context))
+      .toEqual(scopedSubjectLocales.filter(language => language !== 'en').sort());
     // Measure exact-head review work before and after unrelated stored data.
     const measure = async (operation: () => Promise<unknown>) => {
       const query = h.stack.fuseki.query.bind(h.stack.fuseki), command = h.stack.fuseki.commandWithReceipt.bind(h.stack.fuseki);
@@ -113,9 +128,12 @@ test('concurrent question seeding recovers an expired, terminally cancelled revi
     await createDraft('eo');
     const small = await measure(() => ensureReviewedQuestionPresentation(api, actor, namespace, frenchSlot.context.context,
       frenchSlot.context.contextRevision, 'eo', 'Ĉu vi ŝatas ĉi tiun rolulon?'));
+    // Grow unrelated stored data while keeping each Context below its reviewed
+    // language quota. The cost probe must not be a quota-overflow request.
+    const unrelatedContexts = [questions.get('unit')!.context, questions.get('performance')!.context];
     for (let start = 0; start < 96; start += 8) await Promise.all(Array.from({ length: 8 }, (_, offset) =>
       api.post('/v1/rating-question-presentations', { profile: 'rating-question-presentation-v1', expectedHead: null,
-        actingSubject: actor, state: { ...draftState(questions.get('unit')!.context, `x-cost-${start + offset}`, 'Another question presentation?'),
+        actingSubject: actor, state: { ...draftState(unrelatedContexts[(start + offset) % unrelatedContexts.length]!, `x-cost-${start + offset}`, 'Another question presentation?'),
           reviewStatus: 'reviewed' } }, randomUUID())));
     await createDraft('is');
     const large = await measure(() => ensureReviewedQuestionPresentation(api, actor, namespace, frenchSlot.context.context,

@@ -772,6 +772,17 @@ test('Rating question presentations preserve meaning across locales, permission 
     // The cap counts retained reviews even while editorial heads are drafts.
     // Two new languages compete for the final slot inside the native write.
     const bounded = new Map<string, Write>();
+    const reviewedLanguageCount = async () =>
+      Number(
+        (
+          await s.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT (COUNT(DISTINCT ?language) AS ?count) WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ?presentation rv:presentationContext ${iri(sparse.context)} ;
+          rv:presentationLanguage ?language ; rv:questionPresentationReviewedHead ?head }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head rv:reviewStatus rv:Reviewed }
+      }`)
+        ).results!.bindings[0]!.count!.value,
+      );
     for (let index = 0; index < 62; index++) {
       const language = `qaa-x-${index}`;
       bounded.set(
@@ -788,6 +799,7 @@ test('Rating question presentations preserve meaning across locales, permission 
       ),
     );
     expect(lastSlot.map((response) => response.status).sort()).toEqual([201, 422]);
+    expect(await reviewedLanguageCount()).toBe(64);
     expect(
       await json(
         lastSlot.find((response) => response.status === 422)!,
@@ -849,6 +861,10 @@ test('Rating question presentations preserve meaning across locales, permission 
         )
       ).rows,
     ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+
+    // Drafts, revised reviews and terminal refusal replays do not add languages:
+    // exactly the 65th distinct reviewed language remains refused.
+    expect(await reviewedLanguageCount()).toBe(64);
 
     const eventId = `urn:rezics:event:${hash(`${winner.receipt}\0semantic-write`)}`;
     const terminalRows = (

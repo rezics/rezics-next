@@ -21,10 +21,12 @@ export function reviewedQuestionPresentationPattern(context: string, includeProt
       FILTER NOT EXISTS { ?head a rv:ErasedRevision } }`;
 }
 
-/** Bounded overflow witness, also evaluated inside the atomic graph write. */
+/** Bounded distinct-language witness, also evaluated inside the atomic graph
+ * write. Only retained reviews count; admissions, cancelled attempts and drafts
+ * without a reviewed head never reserve a language. */
 export function questionPresentationLanguageLimit(context: string, component: string) {
   return `{ SELECT (COUNT(*) AS ?reviewedCount) WHERE {
-    { SELECT DISTINCT ?presentation WHERE {
+    { SELECT DISTINCT ?language WHERE {
       ${reviewedQuestionPresentationPattern(context, true)}
       FILTER(?presentation != ${iri(component)})
     } LIMIT ${QUESTION_PRESENTATION_COST.reviewedLanguagesPerContext} }

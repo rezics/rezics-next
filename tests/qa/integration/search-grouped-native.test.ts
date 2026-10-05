@@ -69,16 +69,19 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
     const semantic = async (state: object) => f.json<{ component: string; revision: string }>(
       await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',
         actingSubject: f.actorA, expectedHead: null, state }), 201);
-    const resource = async () => {
-      const result = await semantic({ component: 'resource', types: ['https://schema.org/Person'], properties: [] });
+    const resource = async (type = 'https://schema.org/Person') => {
+      const result = await semantic({ component: 'resource', types: [type], properties: [] });
       await f.grant(`semantic:read:${result.component}`, 'semantic.read');
       return result.component;
     };
     const lead = await resource(), red = await resource(), female = await resource(), blue = await resource();
     const green = await resource();
     const supporting = await resource();
-    const scope = [await resource(), await resource(), await resource()];
-    const alternatives = [await resource(), await resource(), await resource()];
+    // Keep the three-coordinate matching cases, using actual frame coordinates
+    // rather than Persons that Statement applicability cannot carry.
+    const coordinate = () => resource('https://rezics.com/vocab/NarrativeContinuity');
+    const scope = [await coordinate(), await coordinate(), await coordinate()];
+    const alternatives = [await coordinate(), await coordinate(), await coordinate()];
     const relation = await semantic({ component: 'definition', kind: 'relation', lifecycle: 'active',
       successor: null, roles: [
         { key: 'work', minParticipants: 1, maxParticipants: 1, ordered: false },
