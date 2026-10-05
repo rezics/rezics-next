@@ -450,15 +450,16 @@ export function ChapterReader({
             </a>
           ) : null}
         </header>
-        <AuthorNote value={notes?.before} side="before" label={t.authorNote} locale={locale} />
-        <ReaderText
-          ratingTarget={chapter.content.reference.resourceId}
-          lines={lines}
-          document={chapter.content.body.document}
-          formatNote={t.chapterFormat}
-          locale={locale}
-        />
-        <AuthorNote value={notes?.after} side="after" label={t.authorNote} locale={locale} />
+        <WebRatedContent target={chapter.content.reference.resourceId}>
+          <AuthorNote value={notes?.before} side="before" label={t.authorNote} locale={locale} />
+          <ReaderText
+            lines={lines}
+            document={chapter.content.body.document}
+            formatNote={t.chapterFormat}
+            locale={locale}
+          />
+          <AuthorNote value={notes?.after} side="after" label={t.authorNote} locale={locale} />
+        </WebRatedContent>
       </article>
       <div className="mx-auto grid w-full max-w-(--reader-width) gap-6 border-border/60 border-t pt-6">
         <nav aria-label={t.chapterNavigation} className="flex flex-wrap items-center gap-2">

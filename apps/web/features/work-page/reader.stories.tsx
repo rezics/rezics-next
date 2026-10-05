@@ -10,6 +10,7 @@ import { ChapterNotFound, ChapterReader, ChapterUnavailable, TextNotFound, TextR
 import { defaultReaderSettings } from './reader-settings.ts';
 import { ChapterSkeleton } from './work-states.tsx';
 import type { ChapterWorkLinksRead } from './reader-client.tsx';
+import { WebRatedContentProvider } from '../document-editor/rated-content.tsx';
 
 const chapterPath = chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000003');
 const noIdentifications: ChapterWorkLinksRead = async () => ({ items: [], nextCursor: null });
@@ -56,6 +57,27 @@ export const IdentifiedAsWork: Story = {
     await expect(identifiedRead).toHaveBeenCalledWith({ post: fixture.chapter.content.reference.resourceId,
       actingSubject: meta.args.actingSubject, language: fixture.chapter.language, cursor: undefined });
     await expect(canvasElement.querySelector('article header')).toContainElement(links);
+  },
+};
+
+export const AgeGateIncludesAuthorNotes: Story = {
+  render: args => <WebRatedContentProvider locale="en"
+    viewer={{ ready: true, signedIn: true, age: 'under-15', nsfwDisplay: 'mask',
+      optIns: { general: true, r15: false, sexual: false, grotesque: false } }}
+    resolve={async () => ({ [fixture.chapter.content.reference.resourceId]: { status: 'assessed', labels: ['r18'] } })}>
+    <ChapterReader {...args} chapter={{ ...fixture.chapter, content: { ...fixture.chapter.content,
+      body: { ...fixture.chapter.content.body, notes: {
+        before: { body: 'Restricted introductory note' }, after: { body: 'Restricted concluding note' },
+      } } } }} />
+  </WebRatedContentProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('This content is hidden by your age rating preferences.')).toBeVisible();
+    await expect(canvas.queryByRole('note')).toBeNull();
+    await expect(canvas.queryByText('Restricted introductory note')).toBeNull();
+    await expect(canvas.queryByText('Restricted concluding note')).toBeNull();
+    await expect(canvasElement.querySelector('[data-reader-text]')).toBeNull();
+    await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
   },
 };
 
