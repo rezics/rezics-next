@@ -9,6 +9,7 @@ test.use({ actionTimeout: 30_000, navigationTimeout: 60_000 });
 test.afterEach(async ({ page }, info) => {
   if (info.status === 'passed' || !new URL(page.url()).pathname.includes('/studio/')) return;
   if (await page.locator('[data-slot="autosave-status"]').count()) {
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: info.outputPath('studio-shared-failure.png'), fullPage: true });
   }
 });
@@ -57,6 +58,7 @@ async function publish(page: Page) {
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
   await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => window.scrollTo(0, 0));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 }
