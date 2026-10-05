@@ -13,6 +13,7 @@ import { EditorialReviewStore } from '../../../services/main/src/modules/editori
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
@@ -113,7 +114,7 @@ test('G-840 G-913: all twelve catalogue fixture queries through the public API',
       if (!definition) throw new Error(`missing lexicon seed ${key}`);
       return { ...definition, labels: definition.labels.filter(label => label[0] === 'en') };
     });
-    const found = await Promise.all(specs.map(item => readDefinitionByKey(stack.env, item.key)));
+    const found = await Promise.all(specs.map(item => readDefinitionByKey(stack.env, item.key, systemDisclosure)));
     for (const definition of found) {
       if (definition) await grant(`semantic:read:${definition.definition}`, 'semantic.read');
     }

@@ -8,6 +8,7 @@ import { ReadingPositionStore, RevelationConflict, propertyRevelationRecord, typ
 import { ReadingBoundary, readReadingComposition, READING_POSITION_COST }
   from '../../../services/main/src/modules/reading-position/boundary.ts';
 import { revelationReads } from '../../../services/main/src/modules/reading-position/read-registry.ts';
+import { semanticReaderOnly } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { readResourceRelations } from '../../../services/main/src/modules/relation/traversal.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
@@ -243,8 +244,9 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     }
     expect([...exercised].sort()).toEqual(revelationReads.map(item => item.id).sort());
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {
+      const canRead = async (reference: string) => reference !== meaning.component;
       const page = await readResourceRelations(stack.env, { resource: series.work, languages: ['en'], limit: 20,
-        canRead: async reference => reference !== meaning.component, canReadOccurrence: async () => false,
+        canRead, disclose: semanticReaderOnly(canRead), canReadOccurrence: async () => false,
         visibleRecords: async records => {
           // An inaccessible definition withholds its occurrences before their
           // revelation positions can affect this page (including errors).

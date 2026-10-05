@@ -15,6 +15,7 @@ import {
   selectRealmLocal,
 } from '../../../services/main/src/modules/work/select-realm.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import {
   relationLexiconSeedMapPath,
@@ -253,7 +254,7 @@ test('G-904: interactive derived inventories retain rated targets and enforce cu
     }
     releases.sort();
     await grant('semantic:create:root', 'semantic.change');
-    const existing = await readDefinitionByKey(home.stack.env, 'rewrite');
+    const existing = await readDefinitionByKey(home.stack.env, 'rewrite', systemDisclosure);
     let definition = existing && { component: existing.definition, revision: existing.revision };
     if (!definition) {
       const namespace = `g904-${randomUUID()}`;

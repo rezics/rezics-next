@@ -7,6 +7,7 @@ import { readWorkHeader } from '../work/read-header.ts';
 import { readPost } from './read.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
 import { identificationEvidence, POST_IDENTIFICATION_COST } from './identification-schema.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 function evidenceOf(value: string | undefined) {
   if (!value) return null;
@@ -22,7 +23,8 @@ export async function readPostIdentification(session: WorkReadSession, id: strin
   const relation = await readCurrentOccurrence(session.deps.environment, `https://rezics.com/id/${id}`);
   const evidence = evidenceOf(relation?.state.evidence);
   if (!relation || !evidence) throw new WorkReadMissing('Identification is unavailable');
-  const definition = await readExactDefinition(session.deps.environment, relation.state.definition);
+  // System reader: only the definition's notation and role keys are used; no member list reaches the response.
+  const definition = await readExactDefinition(session.deps.environment, relation.state.definition, systemDisclosure);
   if (definition?.notation !== 'composition-part') throw new WorkReadMissing('Identification is unavailable');
   const part = relation.state.participations.find(row => definition.roleKeys[row.role] === 'part')?.participant;
   if (part?.kind !== 'resource') throw new WorkReadMissing('Identification is unavailable');

@@ -11,6 +11,7 @@ import { ReadingPositionStore } from '../../../services/main/src/modules/reading
 import { GRAPHS, iri, activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
 import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
 
@@ -128,7 +129,7 @@ async function publishEdition(on: string) {
 /** The in-continuity relation definition; other files may already have installed the canonical vocabulary, and if this
  * file installs it first it uses the full seed so later readers also get labels. */
 async function membershipDefinition() {
-  const existing = await readDefinitionByKey(stack.env, 'in-continuity');
+  const existing = await readDefinitionByKey(stack.env, 'in-continuity', systemDisclosure);
   const definition = existing ? { component: existing.definition, revision: existing.revision }
     : (await seedRelationLexicon(seedClient, owner.actor, namespace,
       relationLexiconSeed.filter(item => item.key === 'in-continuity')))[0]!;

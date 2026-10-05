@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { systemDisclosure } from '../src/modules/target/disclosed-references.ts';
 import type { Pool } from 'pg';
 import {
   configureDisclosure,
@@ -469,6 +470,7 @@ test('G-904: a restricted relation occurrence is gated before retained payload r
     languages: ['en'],
     limit: 1,
     canRead: async () => true,
+    disclose: systemDisclosure,
     canReadOccurrence: async () => true,
     summarize: (resources) => f.session.summaries(resources),
   });

@@ -100,7 +100,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const disclose = referenceDisclosure(work.environment,
       { access: work.access, principal, ...(actor ? { actingSubject: actor } : {}) }, canRead);
     return { allowed: (await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false)
-      && await disclosed(target, revision), canRead, disclose, principal };
+      && await disclosed(target, revision), disclose, principal };
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
@@ -150,10 +150,10 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead, disclose, principal } = await readable(request, query.actingSubject, target);
+        const { allowed, disclose, principal } = await readable(request, query.actingSubject, target);
         if (!allowed) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
         const read = await readingPositionRead(work, request, principal, query.actingSubject,
-          boundary => readSemanticCurrent(work.environment, target, canRead, records => boundary.visible(records), disclose));
+          boundary => readSemanticCurrent(work.environment, target, disclose, records => boundary.visible(records)));
         if (!read) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
         if (!(await readable(request, query.actingSubject, target)).allowed) {
           return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
@@ -168,12 +168,12 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
-        const { allowed, canRead, disclose, principal } = await readable(request, query.actingSubject, target,
+        const { allowed, disclose, principal } = await readable(request, query.actingSubject, target,
           `https://rezics.com/id/${params.revision}`);
         if (!allowed) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         const read = await readingPositionRead(work, request, principal, query.actingSubject,
           boundary => readSemanticRevision(work.environment, target,
-            `https://rezics.com/id/${params.revision}`, canRead, records => boundary.visible(records), disclose));
+            `https://rezics.com/id/${params.revision}`, disclose, records => boundary.visible(records)));
         if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         if (!(await readable(request, query.actingSubject, target,
           `https://rezics.com/id/${params.revision}`)).allowed) {

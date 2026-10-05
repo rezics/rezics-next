@@ -9,6 +9,7 @@ import { ReaderLibraryRatings } from '../../../services/main/src/modules/library
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { applyLnVnZones } from '../../../scripts/dev/seed/ln-vn-zones-step.ts';
 import { SeedApi, type SeedEndpoints } from '../../../scripts/dev/seed/api.ts';
@@ -106,7 +107,7 @@ test('G905: franchise fixture search-first intake replays every Work into the Li
     ];
     await grant('semantic:create:root', 'semantic.change');
     for (const key of keys) {
-      const current = await readDefinitionByKey(stack.env, key);
+      const current = await readDefinitionByKey(stack.env, key, systemDisclosure);
       if (current) {
         await grant(`semantic:read:${current.definition}`, 'semantic.read');
         continue;

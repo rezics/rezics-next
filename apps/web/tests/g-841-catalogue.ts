@@ -15,6 +15,7 @@ import { ProfilesAccess } from '../../../services/main/src/modules/profiles/acce
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
@@ -131,7 +132,7 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
     if (!definition) throw new Error(`missing lexicon seed ${key}`);
     return definition;
   });
-  const found = await Promise.all(specs.map(item => readDefinitionByKey(stack.env, item.key)));
+  const found = await Promise.all(specs.map(item => readDefinitionByKey(stack.env, item.key, systemDisclosure)));
   for (const definition of found) if (definition) await grant(`semantic:read:${definition.definition}`, 'semantic.read');
   const missing = specs.filter((_, index) => found[index] === null);
   if (missing.length) {
@@ -239,7 +240,7 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   for (const key of creditKeys) credited[key] = await credits(key);
 
   // Query 6: the book and the web serial are recorded as equivalent counterparts; the web page offers the book.
-  const definition = await readDefinitionByKey(stack.env, 'correspondence-equivalent');
+  const definition = await readDefinitionByKey(stack.env, 'correspondence-equivalent', systemDisclosure);
   if (!definition) throw new Error('the correspondence-equivalent definition is missing');
   const head = await retried(`/v1/lexicon/definitions/correspondence-equivalent?actingSubject=${actor}`) as { revision: string };
   await ok(await call('POST', '/v1/relations/changes', {

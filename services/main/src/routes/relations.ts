@@ -10,6 +10,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
 import { admittedWorkRelationChange } from '../modules/relation/work-authority.ts';
+import { referenceDisclosure, systemDisclosure } from '../modules/target/disclosed-references.ts';
 import { groupUuid } from './shared.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
 import { readingPositionQuery } from './reading-positions.ts';
@@ -46,26 +47,30 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const read = await readExactOccurrence(work.environment, occurrence, head);
     if (!read) return null;
     // The occurrence pins its exact DefinitionRef; a later retirement never retargets it.
-    const canRead = referenceReader(work.access, principal, actingSubject);
-    const definition = await readExactDefinition(work.environment, read.state.definition,
-      async ref => await canRead(ref) && (await boundary.visible([ref])).has(ref));
+    const semanticReadable = referenceReader(work.access, principal, actingSubject);
+    const canRead = async (ref: string) => await semanticReadable(ref) && (await boundary.visible([ref])).has(ref);
+    // Participants and role members may be Concepts the semantic reader alone hides: one rule for both.
+    const disclose = referenceDisclosure(work.environment, { access: work.access, principal, actingSubject }, canRead);
+    const definition = await readExactDefinition(work.environment, read.state.definition, disclose, canRead);
     if (!definition) return null;
     const disclosed = await boundary.visible([occurrence, definition.definition, ...read.state.applicability]);
     if (!disclosed.has(occurrence) || !disclosed.has(definition.definition)) return null;
+    const participants = await disclose(read.state.participations.flatMap(item =>
+      item.participant.kind === 'resource' ? [item.participant.ref] : []));
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
       definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
         roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })),
         star: definition.star ?? null },
-      participations: await Promise.all(read.state.participations.map(async item => {
+      participations: read.state.participations.map(item => {
         const availability = item.participant.kind === 'external' ? 'external'
-          : await canRead(item.participant.ref) && (await boundary.visible([item.participant.ref])).has(item.participant.ref) ? 'available' : 'unavailable';
+          : participants.has(item.participant.ref) ? 'available' : 'unavailable';
         return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
           participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
           ...(item.position === undefined ? {} : { position: item.position }),
           // The credited name belongs to its participant: hidden with it.
           ...(item.creditedName && availability !== 'unavailable' ? { creditedName: item.creditedName } : {}), availability };
-      })),
+      }),
       applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
     });
   };
@@ -91,7 +96,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const principal = await work.account.verify(request, ['work:edit']);
         const readable = referenceReader(work.access, principal, body.actingSubject);
-        const definition = await readExactDefinition(work.environment, body.definition);
+        // Only the write path (`workSubjectRole`) is read here; no role member reaches a response.
+        const definition = await readExactDefinition(work.environment, body.definition, systemDisclosure);
         const change = definition?.workSubjectRole ? admittedWorkRelationChange : admittedRelationChange;
         const result = await change(work.environment, work.account, work.access, request, {
           ...(body.occurrence ? { occurrence: body.occurrence } : {}), expectedHead: body.expectedHead,

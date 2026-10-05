@@ -1,6 +1,7 @@
 import { readResourceRelations } from '../relation/traversal.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
+import { referenceDisclosure } from '../target/disclosed-references.ts';
 import { targetSummaryReader } from '../target/resolve.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 import { discloseInventory } from '../disclosure/read.ts';
@@ -22,11 +23,13 @@ export async function readPageRelations(session: WorkReadSession, resource: stri
   const summarize = async (resources: string[]) => (await readResourceSummaries(deps.environment,
     deps.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
       language: null, languages: session.displayLanguages, includeCollections: true })).summaries;
+  const canRead = async (ref: string) => (await canReadSemantic(ref) || (await summarize([ref]))[0]?.status === 'available')
+    && (await discloseInventory(deps.environment, [{ owner: 'graph', resource: ref, component: 'record' }],
+      session.viewer, 'read'))[0] === 'visible' && (await visible([ref])).has(ref);
   const result = await readResourceRelations(deps.environment, {
-    resource, frames, limit, after, languages: session.displayLanguages,
-    canRead: async ref => (await canReadSemantic(ref) || (await summarize([ref]))[0]?.status === 'available')
-      && (await discloseInventory(deps.environment, [{ owner: 'graph', resource: ref, component: 'record' }],
-        session.viewer, 'read'))[0] === 'visible' && (await visible([ref])).has(ref),
+    resource, frames, limit, after, languages: session.displayLanguages, canRead,
+    disclose: referenceDisclosure(deps.environment,
+      { access: deps.access, principal, ...(actor ? { actingSubject: actor } : {}) }, canRead),
     canReadOccurrence: canReadSemantic,
     publicOccurrences: async refs => new Map([...(await readWikiClaimEvidence(session, refs, 'relation', boundary))]
       .map(([claim, evidence]) => [claim, new Set(evidence.map(row => row.id))])),

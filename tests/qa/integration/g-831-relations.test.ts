@@ -8,6 +8,7 @@ import { authorCreditFixture, author, nativeId, shortId } from '../fixtures/auth
 import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { readNextMainOutboxBatch, readMainOutboxEnvelope, type MainCloudEvent } from '../../../services/main/src/modules/outbox/relay.ts';
 import type { OwnerCloudEvent } from '../../../services/main/src/modules/outbox/event-handlers.ts';
 import { parseRetainedWorkDerivation } from '../../../services/main/src/modules/work/reconcile-derivation.ts';
@@ -52,7 +53,7 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const namespace = `g831-${randomUUID()}`;
     // The QA shard shares its registry across files. Reuse canonical definitions
     // established by G-832, admitting this fixture actor separately to those IDs.
-    const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key)));
+    const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key, systemDisclosure)));
     const seed = shared.every(item => item !== null) ? shared.map((item, index) => ({
       key: relationLexiconSeed[index]!.key, component: item!.definition, revision: item!.revision,
     })) : await seedRelationLexicon({ post: async <T>(path: string, body: object, key: string) =>

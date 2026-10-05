@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { readCurrentOccurrence, readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { GLOBAL_CONTEXT_ID, GLOBAL_CONTEXT_SCOPE, GLOBAL_OBSERVATION_ID } from '../../../services/main/src/modules/rating/global.ts';
 import { startMediaStack } from './media-support.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
@@ -62,7 +63,7 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
         (id,issuer_subject,recipient_subject,scope_id,action,valid_until) VALUES ($1,$2,$2,$3,$4,'infinity')`,
       [randomUUID(), actor.actor, scope, action]);
     };
-    let definition = await readDefinitionByKey(stack.env, 'composition-part');
+    let definition = await readDefinitionByKey(stack.env, 'composition-part', systemDisclosure);
     if (!definition) {
       await grant(writer, 'semantic:create:root', 'semantic.change');
       await json(await send(writer, 'POST', '/v1/semantic/changes', {
@@ -70,7 +71,7 @@ test('A writer identifies one Post as a Work without moving text, custody, discu
         state: { component: 'definition', kind: 'relation', notation: 'composition-part', workSubjectRole: 'part',
           roles: ['whole', 'part'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) },
       }), 201);
-      definition = await readDefinitionByKey(stack.env, 'composition-part');
+      definition = await readDefinitionByKey(stack.env, 'composition-part', systemDisclosure);
     }
     if (!definition) throw new Error('Missing composition-part definition');
     for (const actor of actors) await grant(actor, `semantic:read:${definition.definition}`, 'semantic.read');

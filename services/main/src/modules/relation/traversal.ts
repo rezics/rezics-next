@@ -15,6 +15,7 @@ import {
 } from '../semantic/command.ts';
 import { checkedNativeIri } from '../semantic/schema.ts';
 import type { ReferenceCheck } from '../semantic/read.ts';
+import type { ReferenceDisclosure } from '../target/disclosed-references.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
 import type { ResourceSummary } from '../media/summary.ts';
@@ -168,6 +169,7 @@ async function resolveCandidate(
   candidate: Candidate,
   resource: string,
   canRead: ReferenceCheck,
+  disclose: ReferenceDisclosure,
   canReadOccurrence: ReferenceCheck,
   definition: (key: string, legacy: boolean) => Promise<ExactDefinition | null>,
   publicOccurrences?: ReadonlyMap<string,ReadonlySet<string>>,
@@ -225,7 +227,8 @@ async function resolveCandidate(
       item.participant.kind === 'resource' ? [item.participant.ref] : [],
     );
     // Withhold the entire occurrence: no hidden counterpart ID, placeholder, count, label, or cursor.
-    for (const ref of refs) if (!(await canRead(ref))) return null;
+    const readable = await disclose(refs);
+    if (refs.some((ref) => !readable.has(ref))) return null;
     const own = current.state.participations.find(
       (item) => item.participant.kind === 'resource' && item.participant.ref === resource,
     );
@@ -298,6 +301,8 @@ export async function readResourceRelations(
     limit: number;
     after?: string;
     canRead: ReferenceCheck;
+    /** The caller's reference rule: a participant or role member may be a Concept the semantic reader alone hides. */
+    disclose: ReferenceDisclosure;
     canReadOccurrence: ReferenceCheck;
     publicOccurrences?: (occurrences: readonly string[]) => Promise<ReadonlyMap<string,ReadonlySet<string>>>;
     canReadDraftPresentations?: ReferenceCheck;
@@ -354,6 +359,18 @@ export async function readResourceRelations(
     if (cursor.epoch !== snapshot.epoch || cursor.sequence !== snapshot.sequence)
       throw new StaleSemanticHead('relation page changed');
   }
+  // Every occurrence names the page's own resource and often the same Concepts: decide each reference once per page.
+  // The closing availability check below asks the caller again, since a read revoked meanwhile must fail the page.
+  const decided = new Map<string, boolean>();
+  const disclose: ReferenceDisclosure = async (references) => {
+    const distinct = [...new Set(references)];
+    const unknown = distinct.filter((ref) => !decided.has(ref));
+    if (unknown.length) {
+      const readable = await input.disclose(unknown);
+      for (const ref of unknown) decided.set(ref, readable.has(ref));
+    }
+    return new Set(distinct.filter((ref) => decided.get(ref)));
+  };
   const cache = new Map<string, Promise<ExactDefinition | null>>();
   const definition = (key: string, legacy: boolean) => {
     const id = `${legacy}:${key}`;
@@ -361,8 +378,8 @@ export async function readResourceRelations(
       cache.set(
         id,
         legacy
-          ? readDefinitionByKey(env, key, input.canRead)
-          : readExactDefinition(env, key, input.canRead),
+          ? readDefinitionByKey(env, key, disclose, input.canRead)
+          : readExactDefinition(env, key, disclose, input.canRead),
       );
     return cache.get(id)!;
   };
@@ -399,6 +416,7 @@ export async function readResourceRelations(
           candidate,
           input.resource,
           input.canRead,
+          disclose,
           input.canReadOccurrence,
           definition,
           publicOccurrences,
@@ -461,6 +479,7 @@ export async function readResourceRelations(
             input.languages,
             input.canRead,
             (await input.canReadDraftPresentations?.(resolved.meaning.definition)) ?? false,
+            disclose,
           ),
         );
       const template = renderings.get(key)!;
@@ -494,12 +513,12 @@ export async function readResourceRelations(
       ),
     });
   }
-  for (const ref of new Set([
-    input.resource,
-    ...references,
-    ...selected.flatMap(({ resolved }) => (resolved.meaning ? [resolved.meaning.definition] : [])),
-  ])) {
-    if (!(await input.canRead(ref))) throw new StaleSemanticHead('relation availability changed');
+  const stillReadable = await input.disclose([input.resource, ...references]);
+  for (const ref of [input.resource, ...references]) {
+    if (!stillReadable.has(ref)) throw new StaleSemanticHead('relation availability changed');
+  }
+  for (const definition of new Set(selected.flatMap(({ resolved }) => (resolved.meaning ? [resolved.meaning.definition] : [])))) {
+    if (!(await input.canRead(definition))) throw new StaleSemanticHead('relation availability changed');
   }
   if (input.publicOccurrences) {
     const occurrences = selected.filter(item => publiclyDisclosed.has(item.candidate.relation)).map(item => item.candidate.relation);

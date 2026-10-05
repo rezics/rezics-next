@@ -17,6 +17,7 @@ import { workRead, WorkReadMissing } from '../work/read-session.ts';
 import { checkedIdentification, identificationEvidenceLink, PostIdentificationConflict,
   PostIdentificationUnavailable } from './identification-schema.ts';
 import { readPost } from './read.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 /** Each admitted command owns its replay receipt. The same caller key resumes
  * the same subcommands; a failed later command never deletes an earlier effect. */
@@ -40,7 +41,8 @@ export async function identifyPost(deps: MainWorkDependencies, request: Request,
     throw new AdmissionDenied('Post custody or Book maintenance is required');
   }
   const source = await workRead(deps, request, { actingSubject: input.actingSubject }, session => readPost(session, post));
-  const definition = await readDefinitionByKey(deps.environment, 'composition-part');
+  // System reader: the writer checks the seeded definition's shape; no member list is shown to a viewer.
+  const definition = await readDefinitionByKey(deps.environment, 'composition-part', systemDisclosure);
   if (!definition || definition.lifecycle !== 'active' || definition.workSubjectRole !== 'part') {
     throw new PostIdentificationUnavailable('Composition-part definition is unavailable');
   }

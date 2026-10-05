@@ -1,4 +1,5 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { admitted, type AdmittedRelationChangeInput, type SemanticAccess } from '../semantic/admitted.ts';
 import { SemanticChangeRejected } from '../semantic/command.ts';
@@ -19,7 +20,8 @@ export function relationSubjectWork(definition: ExactDefinition, state: Occurren
 export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
   input: AdmittedRelationChangeInput) {
-  const definition = await readExactDefinition(env, input.input.definition);
+  // System reader: the writer validates participants against the full member list; the disclosure rule decides what the caller may name.
+  const definition = await readExactDefinition(env, input.input.definition, systemDisclosure);
   if (!definition?.workSubjectRole) throw new SemanticChangeRejected('invalid', 'definition has no Work subject role');
   const state = canonicalRelation(definition, input.input);
   const subject = relationSubjectWork(definition, state);
@@ -32,7 +34,7 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
   }
   if (input.occurrence) {
     const current = await readCurrentOccurrence(env, input.occurrence);
-    const previous = current ? await readExactDefinition(env, current.state.definition) : null;
+    const previous = current ? await readExactDefinition(env, current.state.definition, systemDisclosure) : null;
     // Editing a different Work cannot move an existing occurrence into this scope.
     if (!current || !previous?.workSubjectRole || relationSubjectWork(previous, current.state) !== subject) {
       throw new SemanticChangeRejected('unavailable-reference', 'relation occurrence is unavailable');

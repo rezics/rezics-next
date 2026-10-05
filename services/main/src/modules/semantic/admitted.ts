@@ -5,7 +5,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { CancelledActivation, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { undisclosedReferences } from '../target/disclosed-references.ts';
+import { systemDisclosure, undisclosedReferences } from '../target/disclosed-references.ts';
 import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generation-guard.ts';
 import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
   relationChangeDigest, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
@@ -177,7 +177,8 @@ export interface AdmittedRelationChangeInput {
 export async function admittedRelationChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
   input: AdmittedRelationChangeInput): Promise<RelationChangeResult> {
-  const definition = await readExactDefinition(env, input.input.definition);
+  // System reader: the writer validates participants against the full member list; the disclosure rule below decides what the caller may name.
+  const definition = await readExactDefinition(env, input.input.definition, systemDisclosure);
   if (!definition) throw new SemanticChangeRejected('unavailable-reference', 'relation definition is unavailable');
   const { state, digest } = relationIntent(definition, input);
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,

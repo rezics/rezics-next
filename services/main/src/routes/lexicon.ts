@@ -239,16 +239,16 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         // Discovery always lists the public catalog, including for authenticated editors.
         const publicRead = (definition: string, revision?: string) => readable(null, undefined, definition, revision);
         const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
+        const disclose = disclosure(null, undefined, publicRead);
         const page = await listDefinitions(work.environment, {
           limit: query.limit ?? DEFINITION_LIST_LIMIT,
           ...(query.recordable === undefined ? {} : { recordable: query.recordable === 'true' }),
           cursor: query.cursor, languages,
-        }, publicRead);
+        }, publicRead, disclose);
         const items = [];
         for (const meaning of page.items) {
           const rendering = await renderRelation(work.environment, { meaning, bindings: [] },
-            meaning.workSubjectRole ?? Object.values(meaning.roleKeys)[0]!, languages, publicRead, false,
-            disclosure(null, undefined, publicRead));
+            meaning.workSubjectRole ?? Object.values(meaning.roleKeys)[0]!, languages, publicRead, false, disclose);
           if (!await publicRead(meaning.definition, meaning.revision)) continue;
           items.push({ key: meaning.notation!, definition: meaning.definition, revision: meaning.revision,
             lifecycle: 'active' as const, ...editorRecording(meaning),
@@ -269,8 +269,8 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       try {
         const principal = await authenticate(request, query.actingSubject);
         const meaning = await readDefinitionByKey(work.environment, params.key,
-          definition => readable(principal, query.actingSubject, definition), disclosure(principal, query.actingSubject,
-            ref => readable(principal, query.actingSubject, ref)));
+          disclosure(principal, query.actingSubject, ref => readable(principal, query.actingSubject, ref)),
+          definition => readable(principal, query.actingSubject, definition));
         if (!meaning || !await readable(principal, query.actingSubject, meaning.definition, meaning.revision)) {
           return problem(404, 'definition_unavailable', 'Definition is unavailable');
         }
@@ -417,7 +417,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;
             }
-            const meaning = await readExactDefinition(work.environment, revision);
+            const meaning = await readExactDefinition(work.environment, revision, disclose);
             if (!meaning || meaning.definition !== definition) {
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;

@@ -11,6 +11,9 @@ const scopes = 'openid work:create work:edit work:read classification:define';
 type Changed = { component: string; revision: string };
 type Batch = { items: { status: string; renderings: RelationRendering[] }[] };
 type SemanticRead = { state: { roles: { key: string; members?: string[] }[] } };
+type Participation = { role: string; participant: { kind: string; ref?: string }; availability: string };
+type RelationRead = { definition: { roles: { key: string; members?: string[] }[] }; participations: Participation[] };
+type ResourceRelations = { items: { relation: string; rendering: RelationRendering | null; counterparts: { reference: string }[] }[] };
 
 test('reference disclosure: a public Concept role member is visible to every reader, a hidden one is not, and a relation naming Concepts is admitted', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -53,7 +56,7 @@ test('reference disclosure: a public Concept role member is visible to every rea
     const hidden = (await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null,
       state: { component: 'resource', types: ['https://schema.org/Person'], properties: [] } }), 201)).component;
-    await f.grant(`semantic:read:${hidden}`, 'semantic.read');
+    const hiddenGrant = await f.grant(`semantic:read:${hidden}`, 'semantic.read');
     const mixed = await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null,
       state: { component: 'definition', kind: 'relation', roles: [
@@ -84,6 +87,45 @@ test('reference disclosure: a public Concept role member is visible to every rea
       expectedHead: null, definition: variantOf.revision, participations: [
         { role: 'variant', participant: resource(variant) }, { role: 'hub', participant: resource(hub) },
         { role: 'kind', participant: resource(kinds.persona) }] });
-    expect(written.status).toBe(201);
+    const occurrence = (await f.json<{ occurrence: string }>(written, 201)).occurrence;
+
+    // The relation read and the resource relations read carry the same rule: the public Concept participant and role
+    // member are visible to the grant holder, who holds no grant on the Concept.
+    const kindMembers = (roles: { key: string; members?: string[] }[]) => roles.find(role => role.key === 'kind')!.members!.toSorted();
+    await f.grant(`semantic:read:${occurrence}`, 'semantic.read');
+    const acting = encodeURIComponent(f.actor);
+    const relation = await f.json<RelationRead>(await f.call('GET',
+      `/v1/relations/${shortId(occurrence)}?actingSubject=${acting}`), 200);
+    expect(relation.participations.find(item => item.role === 'kind')).toMatchObject({
+      participant: { kind: 'resource', ref: kinds.persona }, availability: 'available' });
+    expect(kindMembers(relation.definition.roles)).toEqual(expectedKinds);
+    const related = await f.json<ResourceRelations>(await f.call('GET',
+      `/v1/resources/${shortId(hub)}/relations?actingSubject=${acting}&languages=en`), 200);
+    expect(related.items.map(item => item.relation)).toEqual([occurrence]);
+    expect(related.items[0]!.counterparts.map(item => item.reference).toSorted()).toEqual([kinds.persona, variant].toSorted());
+    expect(kindMembers(related.items[0]!.rendering!.meaning.roles)).toEqual(expectedKinds);
+
+    // A member the grant holder loses sight of is absent from both reads, and the occurrence naming it is withheld.
+    await f.grant(`semantic:read:${mixed.component}`, 'semantic.read');
+    const publicKind = await f.json<{ occurrence: string }>(await f.call('POST', '/v1/relations/changes', {
+      profile: 'relation-change-v1', actingSubject: f.actor, expectedHead: null, definition: mixed.revision,
+      participations: [{ role: 'subject', participant: resource(hub) }, { role: 'kind', participant: resource(kinds.persona) }] }), 201);
+    const hiddenKind = await f.json<{ occurrence: string }>(await f.call('POST', '/v1/relations/changes', {
+      profile: 'relation-change-v1', actingSubject: f.actor, expectedHead: null, definition: mixed.revision,
+      participations: [{ role: 'subject', participant: resource(hub) }, { role: 'kind', participant: resource(hidden) }] }), 201);
+    for (const written of [publicKind, hiddenKind]) await f.grant(`semantic:read:${written.occurrence}`, 'semantic.read');
+    await f.accessPool.query('DELETE FROM access.permission_grant WHERE id = $1', [hiddenGrant]);
+    const withPublic = await f.json<RelationRead>(await f.call('GET',
+      `/v1/relations/${shortId(publicKind.occurrence)}?actingSubject=${acting}`), 200);
+    expect(kindMembers(withPublic.definition.roles)).toEqual([kinds.persona]);
+    expect(withPublic.participations.find(item => item.role === 'kind')!.availability).toBe('available');
+    const withHidden = await f.json<RelationRead>(await f.call('GET',
+      `/v1/relations/${shortId(hiddenKind.occurrence)}?actingSubject=${acting}`), 200);
+    expect(withHidden.participations.find(item => item.role === 'kind')!.participant).toEqual({ kind: 'unavailable-reference' });
+    expect(JSON.stringify(withHidden)).not.toContain(hidden);
+    const page = await f.json<ResourceRelations>(await f.call('GET',
+      `/v1/resources/${shortId(hub)}/relations?actingSubject=${acting}&languages=en`), 200);
+    expect(page.items.map(item => item.relation).toSorted()).toEqual([occurrence, publicKind.occurrence].toSorted());
+    expect(JSON.stringify(page)).not.toContain(hidden);
   } finally { await f.close(); }
 }, 600_000);

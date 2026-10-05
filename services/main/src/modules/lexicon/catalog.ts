@@ -3,6 +3,7 @@ import { readExactDefinition, type ExactDefinition } from '../relation/change.ts
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import type { ReferenceDisclosure } from '../target/disclosed-references.ts';
 import { checkedDefinitionKey, KEY_NOTATION } from './definition-key.ts';
 
 export const DEFINITION_LIST_LIMIT = 64;
@@ -24,6 +25,7 @@ export async function listDefinitions(
   env: WorkActivationEnvironment,
   options: DefinitionListOptions,
   publicRead: (definition: string, revision: string) => Promise<boolean>,
+  disclose: ReferenceDisclosure,
 ): Promise<{ items: ExactDefinition[]; next: string | null }> {
   if (
     !Number.isInteger(options.limit) ||
@@ -73,7 +75,7 @@ export async function listDefinitions(
     if (!definition || !revision)
       throw new RevisionCorrupt('definition catalog entry is incomplete');
     if (!(await publicRead(definition, revision))) continue;
-    const meaning = await readExactDefinition(env, revision);
+    const meaning = await readExactDefinition(env, revision, disclose); // `publicRead` above already gated the definition
     if (!meaning || meaning.definition !== definition || meaning.notation !== keys[index]) {
       throw new RevisionCorrupt('definition catalog differs from its retained meaning');
     }

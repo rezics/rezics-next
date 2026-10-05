@@ -8,6 +8,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -87,7 +88,7 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   // The one correspondence kind the panel offers "also mark as read" for.
   await editor.grant('semantic:create:root', 'semantic.change');
   mkdirSync(scratch, { recursive: true });
-  const current = await readDefinitionByKey(stack.env,'correspondence-equivalent');
+  const current = await readDefinitionByKey(stack.env,'correspondence-equivalent',systemDisclosure);
   // Other launch fixtures may already have admitted this stable meaning.
   if (current) {
     await editor.grant(`semantic:read:${current.definition}`,'semantic.read');

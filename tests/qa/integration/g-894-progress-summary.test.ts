@@ -16,6 +16,7 @@ import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import { cataloguePlan } from '../../fixtures/catalogue/load.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { startMediaStack } from './media-support.ts';
@@ -87,7 +88,7 @@ test('G-894: Spider Works without composition have private own-Work summaries, i
     }
     const web = works.get('D03.web')!, book = works.get('D03.books')!;
     const rewrite = plan.relations.find(item => item.derivative === 'D03.books')!;
-    const definition = await readDefinitionByKey(stack.env, 'rewrite');
+    const definition = await readDefinitionByKey(stack.env, 'rewrite', systemDisclosure);
     if (definition) await grant(`semantic:read:${definition.definition}`, 'semantic.read');
     else {
       await grant('semantic:create:root', 'semantic.change');

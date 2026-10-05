@@ -51,16 +51,20 @@ export function referenceDisclosure(env: WorkActivationEnvironment, authority: R
   return async references => {
     const distinct = [...new Set(references)];
     const disclosed = new Set(await targetDisclosed(env, authority, distinct));
-    for (const ref of await readableReferences(distinct.filter(ref => !disclosed.has(ref)), canRead)) disclosed.add(ref);
+    for (const ref of await semanticReaderOnly(canRead)(distinct.filter(ref => !disclosed.has(ref)))) disclosed.add(ref);
     return disclosed;
   };
 }
 
-/** The references `canRead` admits, or the caller's shared disclosure when it supplies one. A reader without
- * target authority keeps the semantic reader's own decision. */
-export async function readableReferences(references: readonly string[], canRead: (ref: string) => Promise<boolean>,
-  disclose?: ReferenceDisclosure): Promise<ReadonlySet<string>> {
-  if (disclose) return disclose(references);
-  const checked = await Promise.all([...new Set(references)].map(async ref => await canRead(ref) ? ref : null));
-  return new Set(checked.filter((ref): ref is string => ref !== null));
+/** The semantic reader's decision alone, for a caller that has no target authority to disclose Concepts, Works or
+ * Structure through. Naming it keeps that choice visible at the call site; a caller with authority uses
+ * `referenceDisclosure`. */
+export function semanticReaderOnly(canRead: (ref: string) => Promise<boolean>): ReferenceDisclosure {
+  return async references => {
+    const checked = await Promise.all([...new Set(references)].map(async ref => await canRead(ref) ? ref : null));
+    return new Set(checked.filter((ref): ref is string => ref !== null));
+  };
 }
+
+/** Every reference, for a platform-internal reader acting for no viewer: there is nobody to hide a member from. */
+export const systemDisclosure: ReferenceDisclosure = async references => new Set(references);

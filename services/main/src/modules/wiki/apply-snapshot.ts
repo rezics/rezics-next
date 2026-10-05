@@ -11,6 +11,7 @@ import { checkWikiExtraction, validateWikiExtraction } from './validate.ts';
 import type { WikiExtraction } from './protocol.ts';
 import { WikiRejected } from './errors.ts';
 import { admittedTypes } from '../types/registry.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 export interface WikiSnapshot {
   submitter: string;
@@ -65,7 +66,8 @@ export async function wikiSnapshot(runtime: EditorialRuntime & { actingSubject: 
       if (!current || current.state.component !== 'definition' || !['property','relation'].includes(current.state.kind)) {
         throw new WikiRejected('wiki_predicate');
       }
-      const definition = current.state.kind === 'relation' ? await readExactDefinition(runtime.work.environment,current.head) : null;
+      // System reader: only the role keys are checked here.
+      const definition = current.state.kind === 'relation' ? await readExactDefinition(runtime.work.environment,current.head,systemDisclosure) : null;
       if (current.state.kind === 'relation' && (!definition || !definition.roles.some(role => definition.roleKeys[role.role] === 'subject')
         || !definition.roles.some(role => definition.roleKeys[role.role] === 'object'))) {
         throw new WikiRejected('wiki_predicate');

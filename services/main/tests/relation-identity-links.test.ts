@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { relationLexiconSeed, variantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { canonicalRelation, relationChangeDigest, type ExactDefinition } from '../src/modules/relation/change.ts';
 import { PARTICIPATION_FORMAT_V2, checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
-import { readableReferences } from '../src/modules/target/disclosed-references.ts';
+import { semanticReaderOnly } from '../src/modules/target/disclosed-references.ts';
 import { semanticWriteReferences } from '../src/modules/semantic/admitted.ts';
 import { checkedComponentState, referencedResources } from '../src/modules/semantic/change.ts';
 import { SemanticChangeRejected } from '../src/modules/semantic/command.ts';
@@ -180,18 +180,13 @@ test('seed: kind members reach the definition state, and an older revision witho
   expect(posted.at(-1)!.state.roles.find(item => item.key === 'kind')!.members).toBeUndefined();
 });
 
-test('reference disclosure: a supplied disclosure decides in one call; without one canRead decides each distinct reference once', async () => {
+test('reference disclosure: the semantic reader alone decides each distinct reference once', async () => {
   const concept = 'https://rezics.com/id/01990000-0000-7000-8000-0000000000e1';
   const hidden = 'https://rezics.com/id/01990000-0000-7000-8000-0000000000e2';
   const asked: string[] = [];
   const canRead = async (ref: string) => { asked.push(ref); return ref === concept; };
-  expect([...await readableReferences([concept, hidden, concept], canRead)]).toEqual([concept]);
+  expect([...await semanticReaderOnly(canRead)([concept, hidden, concept])]).toEqual([concept]);
   expect(asked).toEqual([concept, hidden]);
-  const calls: (readonly string[])[] = [];
-  const disclose = async (refs: readonly string[]) => { calls.push(refs); return new Set(refs.filter(ref => ref === hidden)); };
-  expect([...await readableReferences([concept, hidden], canRead, disclose)]).toEqual([hidden]);
-  expect(calls).toEqual([[concept, hidden]]);
-  expect(asked).toHaveLength(2);
 });
 
 test('definition write: role members the target reader discloses need no semantic read grant; the rest and the successor keep it', () => {

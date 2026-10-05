@@ -18,6 +18,7 @@ import {
 } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { semanticReaderOnly, systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
@@ -414,14 +415,16 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
     expect((await change(compatible, randomUUID(), de.component, updated.revision)).status).toBe(
       400,
     );
+    const canReadPinned = async (ref: string) => ref === occurrence.occurrence || ref === definition.component;
     const pinned = await renderRelation(
       f.env,
       { occurrence: occurrence.occurrence },
       'source',
       ['de'],
       // The reader sees the occurrence and its definition, not the source participant.
-      async (ref) => ref === occurrence.occurrence || ref === definition.component,
+      canReadPinned,
       true, // This pinned editor read has explicit draft authority.
+      semanticReaderOnly(canReadPinned),
     );
     expect(pinned.meaning.revision).toBe(definition.revision);
     expect(pinned.projections[0]!.labels?.noun).toMatch(/^Fassung [AB]$/);
@@ -529,7 +532,7 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
   );
   try {
     await f.grant('semantic:create:root', 'semantic.change');
-    const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key)));
+    const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key, systemDisclosure)));
     const data = shared.every(item => item !== null) ? shared.map((item, index) => ({
       key: relationLexiconSeed[index]!.key, component: item!.definition, revision: item!.revision,
     })) : await seedRelationLexicon(
@@ -599,6 +602,8 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
       'target',
       ['de'],
       async () => true,
+      false,
+      systemDisclosure,
     );
     expect(absent.projections[0]).toMatchObject({
       labels: null,

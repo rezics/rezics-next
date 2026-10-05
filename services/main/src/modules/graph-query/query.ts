@@ -7,6 +7,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded } from '../../infrastructure/fuseki.ts';
 import { InvalidGraphQuery, checkedRelationGraphQuery, GRAPH_QUERY_LIMITS, GRAPH_QUERY_READ_LIMITS,
   type RelationGraphContinuation, type RelationGraphQuery } from './schema.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 const PROBE = GRAPH_QUERY_LIMITS.candidates;
 const CONTINUATION_TTL_MS = 5 * 60_000;
@@ -199,7 +200,8 @@ export async function queryRelationGraph(env: WorkActivationEnvironment, authori
       throw new GraphQueryNotFound('graph participant is unavailable');
     }
   }
-  const definition = await readExactDefinition(env, input.definition);
+  // System reader: a role member list only resolves role keys here; no member is returned.
+  const definition = await readExactDefinition(env, input.definition, systemDisclosure);
   if (!definition) throw new GraphQueryNotFound('relation definition is unavailable');
   const roles = new Map(definition.roles.map(role => [definition.roleKeys[role.role]!, role.role]));
   if (!roles.has(input.fromRole) || !roles.has(input.toRole)

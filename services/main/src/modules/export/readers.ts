@@ -23,6 +23,7 @@ import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts'
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { aggregateMeasurement, rollupMeasurement, readProjectionResource } from './scoped.ts';
 import { targetRead } from '../target/resolve.ts';
+import { referenceDisclosure, semanticReaderOnly } from '../target/disclosed-references.ts';
 import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import { queryRatingRollup } from '../rating/rollup-read.ts';
 import { resolveRatingTarget } from '../rating/target.ts';
@@ -425,8 +426,12 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     // or hydrating bytes. Denied and absent sources share the same 404 even if
     // a later disclosure/verification owner is unavailable.
     if ((await unverifiedWorks(deps.env, [selection.resource])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
-    const exact = await readSemanticRevision(deps.env, selection.resource, selection.reference,
-      resource => deps.canReadSemantic!(principal, actingSubject, resource));
+    const canRead = (resource: string) => deps.canReadSemantic!(principal, actingSubject, resource);
+    // A property value may be a public Concept: the target reader discloses it. A reader wired without the Main
+    // dependencies has no Access registry to ask, so only the semantic reader decides.
+    const disclose = deps.wiki ? referenceDisclosure(deps.env, { access: deps.wiki.access, principal, actingSubject }, canRead)
+      : semanticReaderOnly(canRead);
+    const exact = await readSemanticRevision(deps.env, selection.resource, selection.reference, disclose);
     if (!exact || exact.state.component !== 'resource') {
       throw new ExportSourceNotFound('semantic revision is unavailable');
     }

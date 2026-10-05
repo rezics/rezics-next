@@ -5,6 +5,7 @@ import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalog
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { SeedApiError } from '../../../scripts/dev/seed/api.ts';
 import type { ScopedSubjectApi } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
@@ -18,7 +19,7 @@ export async function sharedDefinition(env: WorkActivationEnvironment, key: stri
   const retained = env.workObjects;
   delete env.workObjects;
   try {
-    const found = await readDefinitionByKey(env, key);
+    const found = await readDefinitionByKey(env, key, systemDisclosure);
     return found ? { component: found.definition, revision: found.revision } : null;
   } finally { if (retained) env.workObjects = retained; }
 }

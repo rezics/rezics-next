@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { systemDisclosure } from '../src/modules/target/disclosed-references.ts';
 import { checkedComponentState, ownedTriples } from '../src/modules/semantic/change.ts';
 import { baselineTarget } from '../src/modules/access/baseline.ts';
 import { canonicalRelation, readDefinitionByKey, readExactDefinition, relationChangeDigest, roleIri, type ExactDefinition } from '../src/modules/relation/change.ts';
@@ -61,8 +62,8 @@ test('G-831: unreadable definition anchors do not load or disclose retained byte
     return { results: { bindings: [{ definition: { value: definition }, head: { value: revision },
       manifest: { value: 'urn:rezics:sha256:missing' } }] } };
   } } } as unknown as WorkActivationEnvironment;
-  expect(await readDefinitionByKey(env, 'private', async () => false)).toBeNull();
-  expect(await readExactDefinition(env, revision, async () => false)).toBeNull();
+  expect(await readDefinitionByKey(env, 'private', systemDisclosure, async () => false)).toBeNull();
+  expect(await readExactDefinition(env, revision, systemDisclosure, async () => false)).toBeNull();
   expect(queries).toBe(2);
 });
 

@@ -14,6 +14,7 @@ import { MAX_GROUPED_ROWS, queryPublicGroupedRatedCore,
 import { InvalidPublicQuery, queryPublicRealmPhrase } from './search-public.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 export const GROUPED_SEARCH_COST = {
   maxRelationRows: MAX_GROUPED_ROWS, maxStatements: 20, maxConditions: 2,
@@ -266,7 +267,8 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     Promise<Awaited<ReturnType<typeof queryPublicRealmPhrase>>>) {
   checkedGroupedInput(input);
   const facetMode = input.facetMode ?? 'fully-filtered';
-  const relation = await readExactDefinition(env, input.relation.definition);
+  // System reader: only the role keys are used; no member list reaches a result.
+  const relation = await readExactDefinition(env, input.relation.definition, systemDisclosure);
   if (!relation || relation.lifecycle !== 'active'
     || !relation.roleKeys || !Object.values(relation.roleKeys).includes(input.relation.workRole)
     || !Object.values(relation.roleKeys).includes(input.relation.participantRole)) {

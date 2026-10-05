@@ -4,6 +4,7 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 import { seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { FRAME_READ_COST } from '../../../services/main/src/modules/projection/frame-read.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -52,7 +53,7 @@ beforeAll(async () => {
     [`work:read:${work}`, 'work.read'], [`work:read:${empty}`, 'work.read'],
     [`work:edit:${work}`, 'work.edit'], [`work:edit:${empty}`, 'work.edit']] as const) await owner.grant(scope, action);
   subject = await semantic('Continuity subject', work, `${RV}Character`);
-  const existing = await readDefinitionByKey(stack.env, 'in-continuity');
+  const existing = await readDefinitionByKey(stack.env, 'in-continuity', systemDisclosure);
   const client: SeedLexiconClient = {
     post: async <T>(route: string, body: object, key: string) => json<T>(await owner.send('POST', route, body, key), 201),
     authorizeDefinition: async value => {

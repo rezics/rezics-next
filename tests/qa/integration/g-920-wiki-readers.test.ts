@@ -20,6 +20,7 @@ import {
   readCurrentOccurrence,
   readExactDefinition,
 } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { startMediaStack } from './media-support.ts';
 
 test('G-920: published franchise entities, contradictory claims and relations disclose evidence and names at the reader position', async () => {
@@ -901,7 +902,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
     // the page nor the evidence endpoint can disclose the changed occurrence
     // under a citation retained for its earlier state.
     const current = (await readCurrentOccurrence(f.env, earlyRelation))!;
-    const meaning = (await readExactDefinition(f.env, current.state.definition))!;
+    const meaning = (await readExactDefinition(f.env, current.state.definition, systemDisclosure))!;
     const participations = current.state.participations.map(({ role, participant, position }) => ({
       role: meaning.roleKeys[role]!,
       participant,

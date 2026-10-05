@@ -39,6 +39,7 @@ import {
   presentationAction,
   type PresentationState,
 } from './schema.ts';
+import { systemDisclosure } from '../target/disclosed-references.ts';
 
 export interface PresentationIntent {
   admission: SemanticAdmission;
@@ -200,7 +201,8 @@ export async function changePresentation(
   const receipt = familyReceiptIri(intent.admission.id, PRESENTATION_FAMILY);
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
   if (existing) return result(existing, intent, true);
-  const definition = await readExactDefinition(env, state.meaningRevision);
+  // System reader: the writer validates the exact meaning, so no member list is shown to a viewer.
+  const definition = await readExactDefinition(env, state.meaningRevision, systemDisclosure);
   if (!definition || definition.definition !== state.definition) {
     throw new SemanticChangeRejected(
       'unavailable-reference',

@@ -8,9 +8,11 @@ import { listDefinitions, DEFINITION_LIST_LIMIT } from '../src/modules/lexicon/c
 import { editorRecording } from '../src/modules/lexicon/editor-recording.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { rateLimitFamily } from '../src/modules/rate-limit/budgets.ts';
+import { semanticReaderOnly } from '../src/modules/target/disclosed-references.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 
+const noMember = semanticReaderOnly(async () => false);
 const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 const state = {
   component: 'definition',
@@ -219,14 +221,14 @@ test('G-901: bounded keyset pages hide denied entries before object reads and bi
     },
   } as unknown as WorkActivationEnvironment;
   const options = { limit: 2, recordable: true, languages: ['de'] };
-  const page = await listDefinitions(env, options, async () => false);
+  const page = await listDefinitions(env, options, async () => false, noMember);
   expect(page.items).toEqual([]);
   expect(page.next).toBeTruthy();
   expect(Buffer.from(page.next!, 'base64url').toString()).not.toContain('hidden');
   expect(queries).toHaveLength(1);
   expect(queries[0]!.bytes).toBe(32_768);
   expect(queries[0]!.sparql).toContain('LIMIT 3');
-  const last = await listDefinitions(env, { ...options, cursor: page.next! }, async () => false);
+  const last = await listDefinitions(env, { ...options, cursor: page.next! }, async () => false, noMember);
   expect(last).toEqual({ items: [], next: null });
   expect(queries[1]!.sparql).toContain('FILTER(STR(?key) > "b-hidden")');
   expect(queries[1]!.sparql).not.toContain('OFFSET');
@@ -236,14 +238,14 @@ test('G-901: bounded keyset pages hide denied entries before object reads and bi
     { ...options, languages: ['ar'] },
   ]) {
     await expect(
-      listDefinitions(env, { ...changed, cursor: page.next! }, async () => false),
+      listDefinitions(env, { ...changed, cursor: page.next! }, async () => false, noMember),
     ).rejects.toThrow();
   }
   await expect(
-    listDefinitions(env, { ...options, cursor: 'invalid' }, async () => false),
+    listDefinitions(env, { ...options, cursor: 'invalid' }, async () => false, noMember),
   ).rejects.toThrow();
   await expect(
-    listDefinitions(env, { ...options, limit: DEFINITION_LIST_LIMIT + 1 }, async () => false),
+    listDefinitions(env, { ...options, limit: DEFINITION_LIST_LIMIT + 1 }, async () => false, noMember),
   ).rejects.toThrow();
   expect(queries).toHaveLength(2);
 });

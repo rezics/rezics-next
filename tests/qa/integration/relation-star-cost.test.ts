@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId } from '../fixtures/author-credit.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { readExactDefinition, starConflict, type OccurrenceState } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 
 const scales = [1_000, 10_000, 40_000];
 const BATCH = 2_000;
@@ -24,7 +25,7 @@ test('star guard: constant graph work per write at 1k, 10k and 40k occurrences o
     const created = await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', actingSubject: f.actor, expectedHead: null,
       state: { component: 'definition', kind: 'relation', notation, roles, star: { leaf: 'variant', hub: 'hub' } } }), 201);
-    const definition = (await readExactDefinition(f.env, created.revision))!;
+    const definition = (await readExactDefinition(f.env, created.revision, systemDisclosure))!;
     const role = (key: string) => `${definition.definition}/role/${key}`;
     const rdfType = '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>';
     const loadOccurrences = async (count: number) => {

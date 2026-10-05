@@ -21,6 +21,7 @@ import { resourceRelationEntry as entry } from '../modules/entity-page/contract.
 import { readingPositionQuery } from './reading-positions.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
 import { readName } from '../modules/work/read-contract.ts';
+import { referenceDisclosure } from '../modules/target/disclosed-references.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import { readWikiClaimEvidence, projectWikiEvidence } from '../modules/wiki/evidence-read.ts';
@@ -80,8 +81,10 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
           || !await work.access.canReadWork(principal, body.actingSubject, body.sourceWork)) {
           throw new SemanticTargetUnavailable('Work is unavailable');
         }
-        const meaning = body.kind.startsWith('https://') ? await readExactDefinition(work.environment, body.kind, canRead)
-          : await readDefinitionByKey(work.environment, body.kind, canRead);
+        const disclose = referenceDisclosure(work.environment,
+          { access: work.access, principal, actingSubject: body.actingSubject }, canRead);
+        const meaning = body.kind.startsWith('https://') ? await readExactDefinition(work.environment, body.kind, disclose, canRead)
+          : await readDefinitionByKey(work.environment, body.kind, disclose, canRead);
         if (!meaning || !await canRead(meaning.definition)) throw new SemanticTargetUnavailable('derivation kind is unavailable');
         if (!meaning.workSubjectRole || meaning.workSubjectRole === 'source'
           || meaning.roles.length !== 2 || !Object.values(meaning.roleKeys).includes('source')) {
@@ -127,16 +130,19 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
           const summarize = async (resources: string[]) => (await readResourceSummaries(work.environment,
             work.media?.store, reader, { resources, context: DEFAULT_MEDIA_CONTEXT,
               language: null, languages, includeCollections: true })).summaries;
+          const canRead = async (ref: string) => (await canReadSemantic(ref)
+            || (await summarize([ref]))[0]?.status === 'available')
+            && (await discloseInventory(work.environment, [{ owner: 'graph', resource: ref,
+              component: 'record' }], reader.viewer, 'read'))[0] === 'visible'
+            && (await visibility([ref])).has(ref);
           const result = await fusekiReadBudget.run({ signal: AbortSignal.any([request.signal,
             AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
             bytesLeft: RELATION_PAGE_COST.graphBytes }, async () => readResourceRelations(work.environment, {
             resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
             frames,
-            canRead: async ref => (await canReadSemantic(ref)
-              || (await summarize([ref]))[0]?.status === 'available')
-              && (await discloseInventory(work.environment, [{ owner: 'graph', resource: ref,
-                component: 'record' }], reader.viewer, 'read'))[0] === 'visible'
-              && (await visibility([ref])).has(ref),
+            canRead,
+            disclose: referenceDisclosure(work.environment,
+              { access: work.access, principal, ...(actor ? { actingSubject: actor } : {}) }, canRead),
             canReadOccurrence: canReadSemantic,
             publicOccurrences: async refs => new Map([...(await readWikiClaimEvidence(boundary.session,refs,'relation',boundary))]
               .map(([claim,evidence]) => [claim,new Set(evidence.map(row => row.id))])),
