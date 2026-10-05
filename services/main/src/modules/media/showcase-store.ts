@@ -12,6 +12,8 @@ import type { CommandOutcome, MediaAdmission } from './store.ts';
 import {
   admitShowcaseImage,
   normalizeTrailer,
+  ShowcaseRefused,
+  SHOWCASE_LOGO_LANGUAGES,
   showcaseSlot,
   type LogoAnchor,
   type LogoTone,
@@ -194,6 +196,8 @@ export class MediaShowcaseStore {
           replayed: true,
         };
       } else {
+        if (!trailer && input.role === 'logo' && input.asset !== null)
+          await this.admitLogoLanguage(client, input.target, input.context, role);
         await client.query(
           `INSERT INTO media.selection_slot(target,context,role,policy)
           VALUES ($1,$2,$3,'showcase-selection-v1') ON CONFLICT DO NOTHING`,
@@ -292,6 +296,29 @@ export class MediaShowcaseStore {
     } finally {
       client.release();
     }
+  }
+
+  /** A new language needs room among the Work's logo slots. Removed slots keep
+   * their language, so the count bounds every read, not only the visible logos.
+   * One lock per target serializes concurrent additions; the count probes the
+   * (target, context) slot range, O(L) for L<=2*SHOWCASE_LOGO_LANGUAGES. */
+  private async admitLogoLanguage(
+    client: PoolClient,
+    target: string,
+    context: string,
+    role: string,
+  ): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+      `showcase-logo:${target}`,
+    ]);
+    const { rows } = await client.query(
+      `SELECT array_agg(DISTINCT split_part(role,':',2)) AS languages FROM media.selection_slot
+      WHERE target=$1 AND context=$2 AND role LIKE 'showcase-logo:%'`,
+      [target, context],
+    );
+    const languages: string[] = rows[0].languages ?? [];
+    if (!languages.includes(role.split(':')[1]!) && languages.length >= SHOWCASE_LOGO_LANGUAGES)
+      throw new ShowcaseRefused('showcase_logo_limit');
   }
 
   private receipt(

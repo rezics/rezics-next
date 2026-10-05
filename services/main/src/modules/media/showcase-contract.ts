@@ -16,6 +16,11 @@ export const LOGO_ANCHORS = [
   'center-bottom',
 ] as const;
 
+/** A Work keeps logos in at most this many languages, each in both tones, so a
+ * batch of 64 Works reads a bounded number of images. */
+export const SHOWCASE_LOGO_LANGUAGES = 8;
+const SHOWCASE_IMAGES_PER_WORK = SHOWCASE_LOGO_LANGUAGES * 2 + 3;
+
 // Literal tuples, not a mapped array, so typed clients see the exact values
 // instead of `never`.
 const showcaseRole = t.Union([t.Literal('background-landscape'), t.Literal('background-portrait'),
@@ -37,6 +42,7 @@ export class ShowcaseRefused extends MediaInvalid {
       | 'showcase_ratio_mismatch'
       | 'showcase_resolution_too_small'
       | 'showcase_alpha_required'
+      | 'showcase_logo_limit'
       | 'showcase_trailer_invalid',
   ) {
     super(code);
@@ -294,7 +300,7 @@ export const showcaseBatchResult = t.Object({
       t.Object({
         reference: native,
         status: t.Literal('available'),
-        images: t.Array(showcaseImage),
+        images: t.Array(showcaseImage, { maxItems: SHOWCASE_IMAGES_PER_WORK }),
         trailer: t.Nullable(
           t.Object({
             selection: uuid,
