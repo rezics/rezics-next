@@ -31,7 +31,10 @@ verified historical bytes and private uncached responses.
   disclosure domain with deterministic tie breakers. A reusable snapshot across
   Fuseki HTTP requests is not assumed. A page and its generation check must
   share a read snapshot, or use a bounded materialized result; otherwise return
-  restart-required. Counts and facets state their own exactness and population.
+  restart-required. A generation covers a ranked population, not live scores:
+  a vote leaves cursors valid and keyset continuation tolerates the re-rank
+  ([feed timeline](../../services/main/src/modules/feed/timeline.md#votes-and-paging)).
+  Counts and facets state their own exactness and population.
 - Streaming and asynchronous operations require explicit deadline, cancellation,
   reconnect and per-item versus whole-batch atomicity contracts. HTTP acceptance
   alone does not establish successful publication or installation.
