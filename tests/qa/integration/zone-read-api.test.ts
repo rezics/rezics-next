@@ -44,7 +44,7 @@ test('public Realm resolves its community Zone and presentation with explicit re
       zone, realm: space.realm, routeSegment: null, presentation });
     const publicRead = await app.handle(new Request(`http://main.local/v1/zones/${shortId(zone)}/presentation`));
     expect(publicRead.status).toBe(200);
-    expect(await publicRead.json()).toMatchObject({ bannerMedia: [],
+    expect(await publicRead.json()).toMatchObject({ slideMedia: [],
       moduleData: [{ id: 'latest', sources: [{ state: 'public-read' }] }] });
     const missing = await app.handle(new Request(`http://main.local/v1/realms/${randomUUID()}/zone`));
     expect(missing.status).toBe(404);

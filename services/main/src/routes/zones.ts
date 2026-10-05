@@ -21,10 +21,10 @@ import { languageTag } from '../modules/display-language/schema.ts';
 import { changeZoneConfiguration, readZoneConfiguration,
   ZoneOfficialDenied, ZoneStale, ZoneUnavailable } from '../modules/zone/configuration.ts';
 import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
-import { DEFAULT_ZONE_PRESENTATION, ZonePresentation, zoneRenderTokens }
+import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
-  readZoneBannerMedia }
+  readZoneCampaignArt }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
@@ -137,14 +137,24 @@ const execution = t.Union([
   t.Object({ state: t.Literal('package'), packageDigest: t.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
     revision: ref, activation: ref }),
 ]);
-const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v1'),
+const campaignImage = t.Object({ ...ZoneCampaignArt.properties.landscape.properties,
+  url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }), mediaType: t.String(),
+  srcset: t.Array(t.Object({ url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
+    type: t.Union([t.Literal('image/avif'), t.Literal('image/webp')]),
+  }), { maxItems: 12 }),
+});
+const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v2'),
   listing: resourceListing, discovery: pageDiscovery,
   ...ZoneName.properties,
   zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref, address: canonicalAddress,
   presentation: ZonePresentation,
-  bannerMedia: t.Array(t.Object({ id: t.String(), image: t.Nullable(t.Object({
-    url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
-    mediaType: t.String() })) }), { maxItems: 6 }),
+  slideMedia: t.Array(t.Object({ id: t.String(), art: t.Object({
+    landscape: t.Nullable(campaignImage), portrait: t.Nullable(campaignImage), cutout: t.Nullable(campaignImage),
+    logos: t.Array(t.Object({ ...campaignImage.properties,
+      language: t.String(), tone: ZoneCampaignArt.properties.logos.items.properties.tone,
+      anchor: ZoneCampaignArt.properties.logos.items.properties.anchor,
+    }), { maxItems: 32 }),
+  }) }), { maxItems: 6 }),
   moduleData: t.Array(t.Any()),
   navigation: t.Array(t.Object({ occurrence: ref, segment: t.String(), target: ref,
     kind: t.Union([t.Literal('document'), t.Literal('index')]), name: readName }), { maxItems: 50 }),
@@ -152,8 +162,8 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     textOnAccent: t.String({ pattern: '^#[0-9a-f]{6}$' }) }),
   execution,
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer(),
-    officialPageSize: t.Integer(), maxModules: t.Integer(), maxBanners: t.Integer(),
-    maxBannerMediaReads: t.Integer(),
+    officialPageSize: t.Integer(), maxModules: t.Integer(), maxSlides: t.Integer(),
+    maxCampaignUses: t.Integer(), maxCampaignMediaReads: t.Integer(),
     maxResolvedBlocks: t.Integer(), maxResolvedCollections: t.Integer(),
     maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer(),
     maxNavigation: t.Integer(), maxNavigationGraphReads: t.Integer() }),
@@ -245,8 +255,8 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const zone = `https://rezics.com/id/${params.id}`;
         return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer) => {
           const moduleData = await readZoneModuleData(work.environment, state.configuration);
-          const bannerMedia = await readZoneBannerMedia(work.media?.store, state.realm,
-            state.presentation.banners);
+          const slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
+            state.presentation.slides);
           const theme = state.presentation.official?.theme;
           const forced = query.safeTheme || query['safe-theme']
             ? { state: 'fallback' as const, reason: 'safe_mode' as const }
@@ -256,18 +266,18 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
             : { state: 'fallback' as const, reason: 'none_approved' as const });
           const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address,
-            listing: state.listing, discovery: state.discovery, navigation, moduleData, bannerMedia, execution }))}"`;
+            listing: state.listing, discovery: state.discovery, navigation, moduleData, slideMedia, execution }))}"`;
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
             ...pageDiscoveryHeaders(state.discovery),
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
               && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
           if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
-          return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
+          return Response.json({ profile: 'zone-presentation-response-v2', zone, realm: state.realm,
             listing: state.listing, discovery: state.discovery,
             address: state.address,
             name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation: state.presentation,
-            navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
+            navigation, moduleData, slideMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
               || execution.state === 'package'
               || execution.reason === 'none_approved'
               ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
@@ -465,7 +475,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               ...(body.budget ? { budget: body.budget } : {}),
               ...(body.queryBlocks ? { queryBlocks: body.queryBlocks } : {}),
               ...(body.advancedBase64 !== undefined ? { advancedBase64: body.advancedBase64 } : {}),
-            } });
+            } }, work.media);
         return Response.json({ zone: result.zone, revision: result.revision,
           receipt: result.receipt, replayed: result.replayed,
           sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,

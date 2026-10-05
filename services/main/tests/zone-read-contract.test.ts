@@ -4,7 +4,7 @@ import { checkZoneConfiguration, ZONE_CONFIG_FORMAT, ZONE_PROFILE }
   from '../src/modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation }
   from '../src/modules/zone/presentation-format.ts';
-import { readZoneBannerMedia } from '../src/modules/zone/publication.ts';
+import { readZoneCampaignArt } from '../src/modules/zone/publication.ts';
 import { zonePackageExecution, type FirstPartyView }
   from '../src/modules/theme/first-party-lifecycle.ts';
 import { discoveryCredit } from '../src/modules/discovery/contract.ts';
@@ -34,16 +34,17 @@ test('Zone public read names are explicit and ranking metrics match the ranking 
     definition: zone, maxRows: 10 }]))).toThrow('public Zone read source is reserved');
 });
 
-test('Zone banner metadata exposes only deliverable Realm media with actual dimensions', async () => {
-  const banners = [{ id: 'hero', image: use }];
-  const store = { itemDelivery: async () => ({ target: realm, availability: 'available',
-    disclosure: 'public', moderation: 'none', lifecycle: 'active',
-    width: 1440, height: 540, mediaType: 'image/webp' }) };
-  expect(await readZoneBannerMedia(store as never, realm, banners)).toEqual([{ id: 'hero',
-    image: { url: '/v1/media/uses/00000000-0000-4000-8000-000000000003',
-      width: 1440, height: 540, mediaType: 'image/webp' } }]);
-  expect((await readZoneBannerMedia({ itemDelivery: async () => ({ ...await store.itemDelivery(),
-    disclosure: 'private' }) } as never, realm, banners))[0]!.image).toBeNull();
+test('Zone campaign art exposes only deliverable Realm media with actual dimensions', async () => {
+  const slides = [{ id: 'hero', href: '/', art: { landscape: { use } } }];
+  const item = { target: realm, availability: 'available', disclosure: 'public',
+    moderation: 'none', lifecycle: 'active', width: 1440, height: 540, mediaType: 'image/webp' };
+  const store = { itemDeliveryBatch: async () => new Map([[use.slice(-36), item]]),
+    renditions: { candidatesBatch: async () => new Map() } };
+  expect((await readZoneCampaignArt(store as never, realm, slides))[0]?.art.landscape).toEqual({ use,
+    url: '/v1/media/uses/00000000-0000-4000-8000-000000000003',
+    width: 1440, height: 540, mediaType: 'image/webp', srcset: [] });
+  expect((await readZoneCampaignArt({ ...store, itemDeliveryBatch: async () =>
+    new Map([[use.slice(-36), { ...item, disclosure: 'private' }]]) } as never, realm, slides))[0]!.art.landscape).toBeNull();
 });
 
 test('reviewed source digest is reported only by an effective package activation', () => {

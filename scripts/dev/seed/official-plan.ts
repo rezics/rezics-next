@@ -461,8 +461,8 @@ export function officialPresentation(realm: OfficialRealmId, preset: ZonePresent
     ...titled({ en: 'Recent decisions', 'zh-Hant': '近期決策', 'zh-Hans': '最近的决定', ja: '最近の決定', ko: '최근 결정',
       de: 'Aktuelle Entscheidungen', fr: 'Décisions récentes', es: 'Decisiones recientes' }),
     source: feed('recent-decisions'), options: { rail: true, limit: 6 } };
-  const base = { profile: 'zone-presentation-v1' as const, preset, tokens: ZONE_PRESETS[preset],
-    navigation: [], banners: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
+  const base = { profile: 'zone-presentation-v2' as const, preset, tokens: ZONE_PRESETS[preset],
+    navigation: [], slides: [], ...(packagedZone(realm) ? { official: { theme: officialTheme(realm) } } : {}) };
   if (realm === 'games') {
     const source = (index: number) => lists[index]!.source;
     return { ...base, modules: [

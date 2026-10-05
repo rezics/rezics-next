@@ -15,7 +15,7 @@ function configuration(presentation: unknown, queryBlocks: unknown[] = []) {
     budget: { timeMs: 2000, rows: 1000 }, queryBlocks, model: ZONE_PROFILE }));
 }
 
-describe('zone-presentation-v1', () => {
+describe('zone-presentation-v2', () => {
   test('accepts a bounded, typed layout and a matching query source', () => {
     const presentation: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
       modules: [{ id: 'new-books', type: 'shelf', title: 'New books',
@@ -27,7 +27,7 @@ describe('zone-presentation-v1', () => {
     ])).presentation).toEqual(presentation);
   });
 
-  test('rejects missing sources, duplicate modules and empty banner schedules', () => {
+  test('rejects missing sources, duplicate modules and empty slide schedules', () => {
     const module = { id: 'new-books', type: 'shelf', title: 'New books',
       source: { kind: 'query-block', block: 'missing' } };
     expect(() => checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION,
@@ -36,9 +36,9 @@ describe('zone-presentation-v1', () => {
     expect(() => checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION,
       modules: [fixed, fixed] }))).toThrow('duplicate Zone module');
     expect(() => checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION,
-      banners: [{ id: 'launch', title: 'Launch', alt: '', image: one, href: '/r/books',
+      slides: [{ id: 'launch', title: 'Launch', art: { landscape: { use: one, alt: '' } }, href: '/r/books',
         startsAt: '2026-09-29T00:00:00.000Z', endsAt: '2026-09-28T00:00:00.000Z' }] })))
-      .toThrow('Zone banner schedule is empty');
+      .toThrow('Zone slide schedule is empty');
   });
 
   test('presets derive a readable accent foreground', () => {
@@ -54,4 +54,71 @@ describe('zone-presentation-v1', () => {
       official: {},
     })))).toThrow('Official Zone needs a public default Realm');
   });
+});
+
+test('stored v1 banners become v2 slides without mutating the retained document', async () => {
+  const { checkStoredZoneConfiguration } = await import('../src/modules/zone/config-format.ts');
+  const { titleEffect: _effect, ...tokens } = DEFAULT_ZONE_PRESENTATION.tokens;
+  const legacy = { ...DEFAULT_ZONE_PRESENTATION, profile: 'zone-presentation-v1', tokens,
+    slides: undefined, banners: [{ id: 'launch', title: 'Launch', alt: 'Campaign art',
+      image: one, href: '/r/books', startsAt: '2026-10-05T00:00:00.000Z' }] };
+  const bytes = configuration(legacy);
+  expect(checkStoredZoneConfiguration(bytes).presentation).toEqual({
+    ...DEFAULT_ZONE_PRESENTATION, slides: [{ id: 'launch', title: 'Launch', href: '/r/books',
+      startsAt: '2026-10-05T00:00:00.000Z', art: { landscape: { use: one, alt: 'Campaign art' } } }],
+  });
+  expect(JSON.parse(bytes.toString()).presentation.profile).toBe('zone-presentation-v1');
+  expect(() => checkZoneConfiguration(bytes)).toThrow('Zone configuration format differs');
+  expect(() => checkStoredZoneConfiguration(configuration({ ...legacy, unexpected: true })))
+    .toThrow('Zone configuration format differs');
+});
+
+test('slides strictly validate targets, schedules, localized copy, logo slots and focal areas', () => {
+  const slide = { id: 'launch', work: one, title: 'Launch', titles: { ja: '発売' },
+    kicker: 'New', kickers: { fr: 'Nouveau' }, art: {
+      landscape: { use: two, focalArea: 'xywh=percent:25,10,50,80' },
+      logos: [{ use: three, language: 'zxx', tone: 'light' as const, anchor: 'center-middle' as const }],
+    } };
+  const document = { ...DEFAULT_ZONE_PRESENTATION, slides: [slide] };
+  expect(checkZoneConfiguration(configuration(document)).presentation).toEqual(document);
+  for (const invalid of [
+    { ...slide, work: undefined }, { ...slide, href: '/r/books' },
+    { ...slide, work: 'https://example.com/work' }, { ...slide, href: '//example.com', work: undefined },
+    { ...slide, startsAt: '2026-10-05T00:00:00Z' },
+    { ...slide, startsAt: '2026-10-05T00:00:00.000Z', endsAt: '2026-10-05T00:00:00.000Z' },
+    { ...slide, titles: { ru: 'Unsupported title locale' } },
+    { ...slide, art: { background: { use: two } } },
+    { ...slide, art: { landscape: { use: two, focalArea: 'xywh=percent:80,0,30,100' } } },
+    { ...slide, art: { cutout: { use: 'https://rezics.com/id/not-a-use' } } },
+    { ...slide, art: { logos: [{ ...slide.art.logos[0], language: 'bad_language' }] } },
+    { ...slide, art: { logos: [{ ...slide.art.logos[0], anchor: 'left' }] } },
+    { ...slide, art: { logos: [{ ...slide.art.logos[0], tone: 'sepia' }] } },
+  ]) {
+    expect(() => checkZoneConfiguration(configuration({ ...document, slides: [invalid] })))
+      .toThrow(InvalidZoneConfiguration);
+  }
+  expect(() => checkZoneConfiguration(configuration({ ...document, slides: [slide, slide] })))
+    .toThrow('duplicate Zone slide');
+  expect(() => checkZoneConfiguration(configuration({ ...document, slides: [{ ...slide,
+    art: { logos: [{ use: two, language: 'en-US', tone: 'dark', anchor: 'center-top' },
+      { use: three, language: 'EN-us', tone: 'dark', anchor: 'center-top' }] },
+  }] }))).toThrow('duplicate Zone logo language and tone');
+  expect(() => checkZoneConfiguration(configuration({ ...document, slides: Array(7).fill(slide) })))
+    .toThrow(InvalidZoneConfiguration);
+  expect(() => checkZoneConfiguration(configuration({ ...document,
+    tokens: { ...document.tokens, titleEffect: 'animation' } }))).toThrow(InvalidZoneConfiguration);
+});
+
+test('campaign art across slides fits one 64-Use rendition batch', () => {
+  const slides = Array.from({ length: 6 }, (_, index) => ({ id: `slide-${index}`, href: '/',
+    art: { logos: Array.from({ length: 11 }, (_, logo) => ({
+      use: id(`00000000-0000-4000-8000-${String(index * 11 + logo).padStart(12, '0')}`),
+      language: `en-x-logo${logo}`, tone: 'dark' as const, anchor: 'center-top' as const,
+    })) },
+  }));
+  expect(() => checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION, slides })))
+    .toThrow('Zone campaign art exceeds its Use batch bound');
+  slides[5]!.art.logos.splice(9);
+  expect(checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION, slides })).presentation)
+    .toEqual({ ...DEFAULT_ZONE_PRESENTATION, slides });
 });

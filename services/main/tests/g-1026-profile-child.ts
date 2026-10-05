@@ -347,11 +347,11 @@ async function measure(dimension: string, scale: string, operation: string, path
   for (const size of [1,3,6]) {
     const changed = await authorApi.command<{ revision: string }>(`g1026:banners:${size}`, {
       method: 'PUT', path: `${zoneRoot}/configuration`, body: { expectedHead: zoneHead, actingSubject: actor,
-        presentation: { ...DEFAULT_ZONE_PRESENTATION, banners: Array.from({ length: size }, (_, index) => ({
-          id: `banner-${index}`, title: `Banner ${index}`, alt: '', image: `https://rezics.com/id/${randomUUID()}`, href: '/'})) } } });
+        presentation: { ...DEFAULT_ZONE_PRESENTATION, slides: Array.from({ length: size }, (_, index) => ({
+          id: `slide-${index}`, title: `Slide ${index}`, href: '/', art: { landscape: { use: `https://rezics.com/id/${randomUUID()}` } }})) } } });
     zoneHead = changed.revision;
     await measure('banners', String(size), 'zone-banners', `${zoneRoot}/presentation`, body => {
-      assert.equal(body.bannerMedia.length, size); assert(body.bannerMedia.every((banner: any) => banner.image === null));
+      assert.equal(body.slideMedia.length, size); assert(body.slideMedia.every((slide: any) => slide.art.landscape === null));
     });
   }
   }

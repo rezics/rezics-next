@@ -326,11 +326,11 @@ export async function applyOfficialWiki(port: WikiPort) {
     candidates: [{
       variant: '',
       presentation: {
-        profile: 'zone-presentation-v1',
+        profile: 'zone-presentation-v2',
         preset: spec.preset,
         tokens: ZONE_PRESETS[spec.preset],
         navigation: spec.navigation,
-        banners: [],
+        slides: [],
         official: { theme: officialTheme(slug) },
         modules: spec.mounts.map((mount) => ({
           id: mount.id,

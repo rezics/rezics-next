@@ -1,6 +1,6 @@
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
-import { checkZonePresentation, ZonePresentation, ZONE_PUBLIC_READ_SOURCES }
+import { checkZonePresentation, ZonePresentation, ZonePresentationV1, readStoredZonePresentation, ZONE_PUBLIC_READ_SOURCES }
   from './presentation-format.ts';
 
 // Immutable Zone configuration payload referenced by a zone-capability-v1
@@ -58,6 +58,7 @@ export class InvalidZoneConfiguration extends Error {}
 // Keep the former closed shape here; arbitrary properties would hide corruption.
 // Request schemas and new writes continue to use ZoneConfiguration.
 const StoredZoneConfiguration = Type.Object({ ...ZoneConfiguration.properties,
+  presentation: Type.Optional(Type.Union([reference, ZonePresentationV1, ZonePresentation])),
   official: Type.Optional(Type.Object({ routeSegment: Type.Optional(Type.String({
     pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })) }, { additionalProperties: false })),
 }, { additionalProperties: false });
@@ -78,7 +79,13 @@ export function checkStoredZoneConfiguration(bytes: Uint8Array): ZoneConfigurati
   if (!Value.Check(StoredZoneConfiguration, config)) {
     throw new InvalidZoneConfiguration('Zone configuration format differs');
   }
-  return validateZoneConfiguration({ ...config, ...(config.official ? { official: {} } : {}) });
+  let presentation = config.presentation;
+  try {
+    if (typeof presentation === 'object') presentation = readStoredZonePresentation(presentation, config.queryBlocks);
+  } catch (error) {
+    throw new InvalidZoneConfiguration(error instanceof Error ? error.message : 'Invalid Zone presentation');
+  }
+  return validateZoneConfiguration({ ...config, presentation, ...(config.official ? { official: {} } : {}) });
 }
 
 /** Checks new writes; nested blocks name an earlier block within the depth bound. */

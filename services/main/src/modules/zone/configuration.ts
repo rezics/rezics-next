@@ -12,7 +12,10 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
 import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_LIMITS, ZONE_PROFILE, type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
-import { ZONE_PRESENTATION_PROFILE, type ZonePresentation } from './presentation-format.ts';
+import { ZONE_PRESENTATION_PROFILE, ZONE_PRESENTATION_V1_PROFILE, zoneCampaignUses, type ZonePresentation } from './presentation-format.ts';
+import { readZoneCampaignItems } from './campaign-art.ts';
+import type { MediaDependencies } from '../media/commands.ts';
+import { requestUseRenditions } from '../media-rendition/request.ts';
 import { readZoneName } from './read-name.ts';
 import type { ResourceListing } from '../space/policy.ts';
 
@@ -78,6 +81,7 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   const stored = await readWorkComponentState(env, head.manifest, zone, ZONE_PROFILE);
   const name = readZoneName(stored.name, stored.language);
   const configuration = stored.configuration;
+  const storedPresentation = (configuration as { presentation?: { profile?: string } | string } | undefined)?.presentation;
   const config = configuration && typeof configuration === 'object' && !Array.isArray(configuration)
     ? checkStoredZoneConfiguration(Buffer.from(JSON.stringify(configuration)))
     : checkZoneConfiguration(Buffer.from(JSON.stringify({ format: ZONE_CONFIG_FORMAT,
@@ -89,7 +93,9 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
     || JSON.stringify(config.defaultContext ?? null) !== JSON.stringify(head.defaultContext ?? null)
     || JSON.stringify(config.official ?? null) !== JSON.stringify(head.official ?? null)
     || (typeof config.presentation === 'string' ? config.presentation
-      : config.presentation ? ZONE_PRESENTATION_PROFILE : undefined) !== head.presentation) {
+      : config.presentation ? (typeof storedPresentation === 'object'
+        && storedPresentation?.profile === 'zone-presentation-v1'
+        ? ZONE_PRESENTATION_V1_PROFILE : ZONE_PRESENTATION_PROFILE) : undefined) !== head.presentation) {
     throw new ZoneUnavailable('Zone configuration differs from graph head');
   }
   const advancedBase64 = typeof stored.advancedBase64 === 'string' ? stored.advancedBase64 : undefined;
@@ -115,7 +121,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
     & Partial<Pick<AccessAdmissionRegistry, 'canMarkOfficialZone'>>,
-  request: Request, input: ZoneRevisionInput) {
+  request: Request, input: ZoneRevisionInput, media?: Pick<MediaDependencies, 'store' | 'objects'>) {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   if (input.patch?.official !== undefined || input.patch?.defaultRealm !== undefined
     || input.patch?.presentation !== undefined) {
@@ -230,6 +236,18 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           a rv:ContextSemanticRevision ; rv:component ${iri(selected.context)} . }
         ${activeDefinitionDependenciesGuard(selected.semanticRevision)} }`);
       if (available.boolean !== true) return invalid(new InvalidZoneConfiguration('selected Context is unavailable'));
+    }
+    if (typeof config.presentation === 'object' && media) {
+      const previous = new Set(config.defaultRealm === prior.defaultRealm && typeof prior.presentation === 'object'
+        ? zoneCampaignUses(prior.presentation.slides) : []);
+      const added = new Set(zoneCampaignUses(config.presentation.slides).filter(use => !previous.has(use)));
+      if (added.size) {
+        // The same public Realm eligibility gates apply to reads and requests.
+        const campaign = await readZoneCampaignItems(media.store, config.defaultRealm ?? null, config.presentation.slides);
+        for (const use of campaign.keys()) {
+          if (added.has(use)) await requestUseRenditions(media.store.renditions, media.objects, use);
+        }
+      }
     }
     const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;

@@ -1,7 +1,11 @@
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
+import { languageTagSchema } from '../display-language/schema.ts';
+import { canonicalLanguage } from '../display-language/tag.ts';
+import { pixelCrop, RENDITION_LIMITS } from '../media-rendition/policy.ts';
 
-export const ZONE_PRESENTATION_PROFILE = 'https://rezics.com/definition/zone-presentation-v1';
+export const ZONE_PRESENTATION_V1_PROFILE = 'https://rezics.com/definition/zone-presentation-v1';
+export const ZONE_PRESENTATION_PROFILE = 'https://rezics.com/definition/zone-presentation-v2';
 const id = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const slug = Type.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 });
 const label = Type.String({ minLength: 1, maxLength: 120 });
@@ -14,7 +18,7 @@ export const ZONE_PUBLIC_READ_SOURCES = [
 const publicReadSources = new Set<string>(ZONE_PUBLIC_READ_SOURCES);
 const localizedTitles = Type.Partial(Type.Object({ en: label, 'zh-Hant': label,
   'zh-Hans': label, ja: label, ko: label, de: label, fr: label, es: label },
-{ additionalProperties: false }));
+{ additionalProperties: false }), { additionalProperties: false });
 
 const moduleSource = Type.Union([
   Type.Object({ kind: Type.Literal('query-block'), block: slug }, { additionalProperties: false }),
@@ -25,7 +29,7 @@ const moduleSource = Type.Union([
 const moduleTab = Type.Object({ id: slug, label, labels: Type.Optional(localizedTitles), source: moduleSource },
   { additionalProperties: false });
 
-export const ZonePresentation = Type.Object({
+export const ZonePresentationV1 = Type.Object({
   profile: Type.Literal('zone-presentation-v1'),
   preset: Type.Union([Type.Literal('clean'), Type.Literal('editorial'),
     Type.Literal('vibrant'), Type.Literal('serial')]),
@@ -69,6 +73,69 @@ export const ZonePresentation = Type.Object({
   official: Type.Optional(Type.Object({ theme: Type.Optional(id) }, { additionalProperties: false })),
 }, { additionalProperties: false });
 
+const slideTarget = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const campaignImage = Type.Object({ use: slideTarget,
+  alt: Type.Optional(Type.String({ maxLength: 180 })),
+  focalArea: Type.Optional(Type.String({ maxLength: 80,
+    pattern: '^xywh=percent:([0-9]{1,3}(\\.[0-9]{1,3})?,){3}[0-9]{1,3}(\\.[0-9]{1,3})?$' })),
+}, { additionalProperties: false });
+export const ZoneCampaignArt = Type.Object({
+  landscape: Type.Optional(campaignImage), portrait: Type.Optional(campaignImage),
+  cutout: Type.Optional(campaignImage),
+  logos: Type.Optional(Type.Array(Type.Object({ ...campaignImage.properties,
+    language: languageTagSchema(64),
+    tone: Type.Union([Type.Literal('dark'), Type.Literal('light')]),
+    anchor: Type.Union([Type.Literal('start-bottom'), Type.Literal('center-top'),
+      Type.Literal('center-middle'), Type.Literal('center-bottom')]),
+  }, { additionalProperties: false }), { maxItems: 32 })),
+}, { additionalProperties: false });
+
+const slideFields = {
+  id: slug, kicker: Type.Optional(label), kickers: Type.Optional(localizedTitles),
+  title: Type.Optional(label), titles: Type.Optional(localizedTitles),
+  startsAt: Type.Optional(Type.String({ format: 'date-time' })),
+  endsAt: Type.Optional(Type.String({ format: 'date-time' })),
+  art: Type.Optional(ZoneCampaignArt),
+};
+export const ZonePresentation = Type.Object({
+  ...Type.Omit(ZonePresentationV1, ['banners']).properties,
+  profile: Type.Literal('zone-presentation-v2'),
+  tokens: Type.Object({ ...ZonePresentationV1.properties.tokens.properties,
+    titleEffect: Type.Union([Type.Literal('plain'), Type.Literal('outline'),
+      Type.Literal('gradient'), Type.Literal('glow')]),
+  }, { additionalProperties: false }),
+  slides: Type.Array(Type.Union([
+    Type.Object({ ...slideFields, work: slideTarget }, { additionalProperties: false }),
+    Type.Object({ ...slideFields, href: link }, { additionalProperties: false }),
+  ]), { maxItems: 6 }),
+}, { additionalProperties: false });
+
+export type ZoneCampaignArt = Static<typeof ZoneCampaignArt>;
+export type ZoneSlide = Static<typeof ZonePresentation>['slides'][number];
+
+/** One bounded list feeds both publication delivery and rendition candidates. */
+export function zoneCampaignImages(art: ZoneCampaignArt | undefined) {
+  return art ? [art.landscape, art.portrait, art.cutout, ...(art.logos ?? [])]
+    .filter((image): image is NonNullable<typeof image> => !!image) : [];
+}
+
+export function zoneCampaignUses(slides: readonly ZoneSlide[]) {
+  return [...new Set(slides.flatMap(slide => zoneCampaignImages(slide.art).map(image => image.use.slice(-36))))];
+}
+
+/** Historical JSON stays authoritative; adapters return a new v2 value. */
+export function readStoredZonePresentation(value: unknown, queryBlocks: readonly { block: string }[]) {
+  if (Value.Check(ZonePresentationV1, value)) {
+    const { banners, profile: _profile, ...rest } = value;
+    return checkZonePresentation({ ...rest, profile: 'zone-presentation-v2',
+      tokens: { ...rest.tokens, titleEffect: ZONE_PRESETS[rest.preset].titleEffect },
+      slides: banners.map(({ image, alt, ...banner }) => ({ ...banner,
+        art: { landscape: { use: image, alt } } })),
+    }, queryBlocks);
+  }
+  return checkZonePresentation(value, queryBlocks);
+}
+
 export type ZonePresentation = Static<typeof ZonePresentation>;
 
 export function checkZonePresentation(value: unknown, queryBlocks: readonly { block: string }[])
@@ -95,19 +162,31 @@ export function checkZonePresentation(value: unknown, queryBlocks: readonly { bl
       throw new Error('Zone ranking needs a metric and interval');
     }
   }
-  const banners = new Set<string>();
-  for (const banner of value.banners) {
-    if (banners.has(banner.id)) throw new Error('duplicate Zone banner');
-    banners.add(banner.id);
-    for (const timestamp of [banner.startsAt, banner.endsAt]) {
+  const slides = new Set<string>();
+  for (const slide of value.slides) {
+    if (slides.has(slide.id)) throw new Error('duplicate Zone slide');
+    slides.add(slide.id);
+    const logos = new Set<string>();
+    for (const logo of slide.art?.logos ?? []) {
+      const key = `${canonicalLanguage(logo.language)}\0${logo.tone}`;
+      if (logos.has(key)) throw new Error('duplicate Zone logo language and tone');
+      logos.add(key);
+    }
+    for (const image of zoneCampaignImages(slide.art)) {
+      if (image.focalArea) pixelCrop(image.focalArea, { width: 1000, height: 1000 });
+    }
+    for (const timestamp of [slide.startsAt, slide.endsAt]) {
       if (timestamp && (!Number.isFinite(Date.parse(timestamp))
         || new Date(timestamp).toISOString() !== timestamp)) {
-        throw new Error('Zone banner schedule needs exact UTC timestamps');
+        throw new Error('Zone slide schedule needs exact UTC timestamps');
       }
     }
-    if (banner.startsAt && banner.endsAt && Date.parse(banner.startsAt) >= Date.parse(banner.endsAt)) {
-      throw new Error('Zone banner schedule is empty');
+    if (slide.startsAt && slide.endsAt && Date.parse(slide.startsAt) >= Date.parse(slide.endsAt)) {
+      throw new Error('Zone slide schedule is empty');
     }
+  }
+  if (zoneCampaignUses(value.slides).length > RENDITION_LIMITS.batch) {
+    throw new Error('Zone campaign art exceeds its Use batch bound');
   }
   return value;
 }
@@ -115,16 +194,16 @@ export function checkZonePresentation(value: unknown, queryBlocks: readonly { bl
 export const ZONE_PRESETS: Record<ZonePresentation['preset'], ZonePresentation['tokens']> = {
   clean: { colorScheme: 'system', accent: '#2563eb', density: 'comfortable',
     cardRadius: 'md', headingFontScale: 'md', surfaceTint: 'none',
-    fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait' },
+    fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait', titleEffect: 'plain' },
   editorial: { colorScheme: 'light', accent: '#a16207', density: 'comfortable',
     cardRadius: 'sm', headingFontScale: 'lg', surfaceTint: 'subtle',
-    fontPairing: 'serif', pageSurface: 'cards', coverStyle: 'portrait' },
+    fontPairing: 'serif', pageSurface: 'cards', coverStyle: 'portrait', titleEffect: 'outline' },
   vibrant: { colorScheme: 'dark', accent: '#7c3aed', density: 'comfortable',
     cardRadius: 'lg', headingFontScale: 'lg', surfaceTint: 'accent',
-    fontPairing: 'rounded', pageSurface: 'cards', coverStyle: 'square' },
+    fontPairing: 'rounded', pageSurface: 'cards', coverStyle: 'square', titleEffect: 'glow' },
   serial: { colorScheme: 'light', accent: '#ff8674', density: 'compact',
     cardRadius: 'sm', headingFontScale: 'lg', surfaceTint: 'subtle',
-    fontPairing: 'sans', pageSurface: 'cards', coverStyle: 'portrait' },
+    fontPairing: 'sans', pageSurface: 'cards', coverStyle: 'portrait', titleEffect: 'gradient' },
 };
 
 /** Accent text is derived so an editor cannot accidentally select low contrast. */
@@ -137,6 +216,6 @@ export function zoneRenderTokens(tokens: ZonePresentation['tokens']) {
 }
 
 export const DEFAULT_ZONE_PRESENTATION: ZonePresentation = {
-  profile: 'zone-presentation-v1', preset: 'clean', tokens: ZONE_PRESETS.clean,
-  navigation: [], banners: [], modules: [],
+  profile: 'zone-presentation-v2', preset: 'clean', tokens: ZONE_PRESETS.clean,
+  navigation: [], slides: [], modules: [],
 };

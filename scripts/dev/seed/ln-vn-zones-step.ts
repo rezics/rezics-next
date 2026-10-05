@@ -208,8 +208,8 @@ async function replayCatalogue(port: SeedPort): Promise<string[]> {
 
 function presentation(spec: ZoneSpec, collection: string): ZonePresentation {
   return {
-    profile: 'zone-presentation-v1', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
-    navigation: spec.navigation, banners: [],
+    profile: 'zone-presentation-v2', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
+    navigation: spec.navigation, slides: [],
     modules: [
       { id: 'announcement', type: 'announcement', title: spec.announcement,
         source: { kind: 'query-block', block: 'new-adoptions' } },

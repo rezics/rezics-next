@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { GovernanceRules } from '../src/modules/governance/rules.ts';
 import { MediaInvalid, MediaStore } from '../src/modules/media/store.ts';
-import { readZoneBannerMedia } from '../src/modules/zone/publication.ts';
+import { readZoneCampaignArt } from '../src/modules/zone/publication.ts';
 import { S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { instrumentFetch } from '@rezics/observability/runtime';
 
@@ -26,7 +26,7 @@ test('G1026: live Realm rule references use one scoped batch, including duplicat
   await expect(owner.currentRealmHeads('not-a-realm', ['urn:rule:a'])).rejects.toThrow();
 });
 
-test('G1026: Zone banners share exact item lookups and preserve every eligibility gate and output position', async () => {
+test('Zone campaign art shares exact item lookups and preserves eligibility gates and output position', async () => {
   const uses = Array.from({ length: 6 }, () => randomUUID());
   const valid = { target: realm, sha256: 'a'.repeat(64), mediaType: 'image/png', byteLength: 100,
     width: 320, height: 200, availability: 'available', clearance: 'cleared' as const,
@@ -34,7 +34,7 @@ test('G1026: Zone banners share exact item lookups and preserve every eligibilit
   let calls = 0;
   const store = { itemDeliveryBatch: async (ids: readonly string[]) => {
     calls++;
-    expect(ids).toEqual([...uses,uses[0]!]);
+    expect(ids).toEqual(uses);
     return new Map([
       [uses[0]!,valid],
       [uses[1]!,{ ...valid,target: `https://rezics.com/id/${randomUUID()}` }],
@@ -43,17 +43,18 @@ test('G1026: Zone banners share exact item lookups and preserve every eligibilit
       [uses[4]!,{ ...valid,lifecycle: 'retired' }],
       [uses[5]!,{ ...valid,width: 0 }],
     ]);
-  } };
-  // The helper also accepts reuse of a Use by several placements.
-  const banners = [...uses,uses[0]!].map((use,index) => ({ id: String(index),image: `https://rezics.com/id/${use}` }));
-  const result = await readZoneBannerMedia(store, realm, banners);
+  }, renditions: { candidatesBatch: async (ids: readonly string[]) => {
+    expect(ids).toEqual([uses[0]!]); return new Map();
+  } } };
+  const slides = uses.map((use,index) => ({ id: String(index), href: '/',
+    art: { landscape: { use: `https://rezics.com/id/${use}` } } }));
+  const result = await readZoneCampaignArt(store, realm, slides);
   expect(calls).toBe(1);
-  expect(result.map(item => item.id)).toEqual(banners.map(item => item.id));
-  expect(result[0]!.image).toEqual({ url: `/v1/media/uses/${uses[0]}`,width: 320,height: 200,mediaType: 'image/png' });
-  expect(result.slice(1,6).map(item => item.image)).toEqual(Array(5).fill(null));
-  expect(result[6]!.image).toEqual(result[0]!.image);
-  expect(await readZoneBannerMedia(store, null, banners)).toEqual(banners.map(banner => ({ id: banner.id,image: null })));
-  expect(await readZoneBannerMedia(store, realm, [{ id: 'invalid',image: 'https://rezics.com/id/bad' }])).toEqual([{ id: 'invalid',image: null }]);
+  expect(result.map(item => item.id)).toEqual(slides.map(item => item.id));
+  expect(result[0]!.art.landscape).toEqual({ use: `https://rezics.com/id/${uses[0]}`,
+    url: `/v1/media/uses/${uses[0]}`,width: 320,height: 200,mediaType: 'image/png',srcset: [] });
+  expect(result.slice(1).map(item => item.art.landscape)).toEqual(Array(5).fill(null));
+  expect((await readZoneCampaignArt(store, null, slides)).every(slide => slide.art.landscape === null)).toBe(true);
   expect(calls).toBe(1);
 });
 
