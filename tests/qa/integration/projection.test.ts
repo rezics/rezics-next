@@ -139,7 +139,9 @@ test('a lookup finds the projection without creating one, and a subject lists it
   const third = await create(owner, subject, [resources.battle!]);
   const first = await json<Page>(await query(null, subject, [], '&limit=2'));
   expect(first.items.map(item => item.id)).toEqual([known[0]!.id, second.id]);
-  expect(first.nextCursor).toBe(local(second.id));
+  // The continuation is sealed and opaque (G-1130): it names no projection.
+  expect(first.nextCursor).toBeString();
+  expect(first.nextCursor).not.toContain(local(second.id));
   const rest = await json<Page>(await query(null, subject, [], `&limit=2&cursor=${first.nextCursor}`));
   expect(rest).toMatchObject({ items: [{ id: third.id }], nextCursor: null });
   expect(rest.sourcePosition.sequence).toMatch(/^[0-9]+$/);
