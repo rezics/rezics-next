@@ -6,6 +6,7 @@ import { setWorkMetadata } from '../work/metadata-command.ts';
 import { createAdmittedComposition, changeAdmittedComposition } from '../structure/change-admitted.ts';
 import { derivedId } from '../structure/graph.ts';
 import { existingIdentificationStructure } from '../structure/identification-bootstrap.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 import { readDefinitionByKey } from '../relation/change.ts';
 import { admittedWorkRelationChange } from '../relation/work-authority.ts';
 import { createAdmittedTextContribution } from '../contribution/create-admitted.ts';
@@ -22,13 +23,14 @@ import { readPost } from './read.ts';
 export async function identifyPost(deps: MainWorkDependencies, request: Request,
   post: string, unchecked: unknown, key: string) {
   const input = checkedIdentification(unchecked);
+  const composition = structureProfileFor('book-composition');
   const principal = await deps.account.verify(request, ['work:edit', 'work:read']);
   const operation = hash(JSON.stringify([post, input.actingSubject, key]));
   const subkey = (step: string) => `post-identification-${step}:${operation}`;
   const evidence = identificationEvidenceLink(post, operation, input.evidence);
   const placed = await deps.environment.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(post)} a rv:Post . ${iri(input.placement.book)} a <https://schema.org/Book> ; rv:mainVersion ?main .
-    ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
+    ${iri(post)} a rv:Post . ${iri(input.placement.book)} a <${composition.ownerType}> ; rv:mainVersion ?main .
+    ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile <${composition.graphProfile}> ; rv:selectedGeneration ?generation .
     ?generation rv:generationState rv:Active . ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
       rv:occurrence ${iri(input.placement.occurrence)} ; rv:occurrenceRole rv:ChapterRole ; <https://schema.org/item> ${iri(post)} .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removal } } }`);
@@ -47,11 +49,11 @@ export async function identifyPost(deps: MainWorkDependencies, request: Request,
   const work = input.work.kind === 'new'
     ? await createAdmittedMetadataWork(deps.environment, deps.account, deps.access, request, {
       title: title!.value, language: title!.language, localizedTitle: titles[1],
-      semanticTypes: ['https://schema.org/Book'], actingSubject: input.actingSubject, idempotencyKey: subkey('work'),
+      semanticTypes: [composition.ownerType], actingSubject: input.actingSubject, idempotencyKey: subkey('work'),
     }) : await workRead(deps, request, { actingSubject: input.actingSubject }, async session => {
       const id = input.work.kind === 'existing' ? input.work.id : '';
       const basis = await readWorkBasis(session, id);
-      if (id === input.placement.book || !basis.card.types.includes('https://schema.org/Book')
+      if (id === input.placement.book || !basis.card.types.includes(composition.ownerType)
         || !await deps.access.canEditWork(principal, input.actingSubject, id)) {
         throw new PostIdentificationConflict('Identification requires another Book that this identity may edit');
       }

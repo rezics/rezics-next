@@ -3,6 +3,7 @@ import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import { readId, readLanguage } from '../work/read-contract.ts';
 import { hash } from '../work/activate.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 
 const closed = { additionalProperties: false } as const;
 const text = (maximum: number) => t.String({ minLength: 1, maxLength: maximum,
@@ -21,7 +22,7 @@ export const identificationInput = t.Object({ profile: t.Literal('post-identific
   evidence: identificationEvidence,
   work: t.Union([
     t.Object({ kind: t.Literal('existing'), id: readId }, closed),
-    t.Object({ kind: t.Literal('new'), type: t.Literal('https://schema.org/Book'),
+    t.Object({ kind: t.Literal('new'), type: t.Literal(structureProfileFor('book-composition').ownerType),
       titles: t.Array(t.Object({ language: readLanguage, value: text(200) }, closed),
         { minItems: 1, maxItems: 20 }) }, closed),
   ]), actingSubject: readId }, closed);

@@ -28,6 +28,10 @@ test('Identification refuses missing evidence, duplicate language slots and unsu
   ]) expect(() => checkedIdentification(invalid)).toThrow(InvalidPostIdentification);
 });
 test('Identification composes the existing Book profile and publication commands', () => {
-  expect(structureProfileFor('book-composition').ownerType).toBe('https://schema.org/Book');
+  const ownerType = structureProfileFor('book-composition').ownerType;
+  expect(ownerType).toBe('https://schema.org/Book');
+  expect(checkedIdentification({ ...input, work: { ...input.work, type: ownerType } })).toEqual(checkedIdentification(input));
+  expect(() => checkedIdentification({ ...input,
+    work: { ...input.work, type: 'https://schema.org/DigitalDocument' } })).toThrow(InvalidPostIdentification);
   expect(POST_IDENTIFICATION_COST).toMatchObject({ ownerCommands: 8, placements: 1, relationParticipants: 2, titles: 20 });
 });

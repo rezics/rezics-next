@@ -5,6 +5,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkRe
   type WorkReadSession } from '../work/read-session.ts';
 import { readWorkHeader } from '../work/read-header.ts';
 import { readPost } from './read.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 import { identificationEvidence, POST_IDENTIFICATION_COST } from './identification-schema.ts';
 
 function evidenceOf(value: string | undefined) {
@@ -39,10 +40,11 @@ export async function readPostIdentifications(session: WorkReadSession, post: st
   const binding = ['post-identifications', post, session.options.actingSubject ?? null,
     session.options.language ?? null, operation ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const composition = structureProfileFor('book-composition');
   const rows = await session.query(`SELECT ?work ?main ?structure (MIN(STR(?placedOccurrence)) AS ?occurrence) WHERE {
     GRAPH ${iri(GRAPHS.current)} {
-      ${iri(post)} a rv:Post . ?work a schema:Book ; rv:mainVersion ?main .
-      ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
+      ${iri(post)} a rv:Post . ?work a <${composition.ownerType}> ; rv:mainVersion ?main .
+      ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile <${composition.graphProfile}> ; rv:selectedGeneration ?generation .
       ?generation rv:generationState rv:Active . ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
         rv:occurrence ?placedOccurrence ; rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(post)} .
       FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
