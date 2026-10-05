@@ -157,7 +157,8 @@ test('G-897: ratings leave Access-authorized composition and reader counts avail
 test('G-897: concurrent Content/media readers and exports preserve rated payload for client rendering', async () => {
   const f = fixture();
   f.labels.set(id(1), ['r18']);
-  const asset = { asset: id(5).slice(-36), target: id(2), sha256: 'a'.repeat(64), mediaType: 'image/png',
+  const asset = { asset: id(5).slice(-36), target: id(2), role: 'publication-item', crop: null, focalArea: null, anchor: null,
+    sha256: 'a'.repeat(64), mediaType: 'image/png',
     byteLength: 20, width: 1, height: 1, availability: 'available', clearance: 'cleared' as const,
     disclosure: 'public', moderation: 'none', lifecycle: 'active', objectNamespace: 'native' };
   const media = disclosureMedia({ itemDelivery: async () => asset } as unknown as MediaStore, f.environment);

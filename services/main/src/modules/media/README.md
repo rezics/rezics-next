@@ -108,6 +108,7 @@ check at request time. Valid replacements become deliverable immediately; NSFW a
 | Asset state CAS | `POST /v1/media/assets/{asset}/state` | `media.asset.state` | 1 PG transaction; erasure updates the asset's representations |
 | Avatar selection CAS | `PUT /v1/resources/{resource}/avatar` | `media.selection.change` | 1 summary read, 1 Access admission, 1 PG transaction |
 | Showcase art/trailer CAS | `PUT /v1/resources/{work}/showcase/{art\|trailer}` | `media.selection.change` | 1 target summary read, 1 avatar Access admission, 1 PG transaction; an image adds one bounded object inspection and the rendition request |
+| Zone campaign art | `POST /v1/zones/{id}/campaign-art` | `media.use.create` | 1 Zone/Realm graph probe, 1 Zone editor Access admission, 1 PG transaction, 1 bounded object inspection and ≤12 rendition requests |
 | Showcase batch | `POST /v1/resources/showcase` | none | ≤ 64 targets, existing graph/Access summary batch without avatars, 1 media query; ≤ 12 candidates per selected image |
 | Image-only body | `POST /v1/media/publications` | `media.use.create`, then `draft.save` | ≤ 16 items; 1 basis query, 2 PG transactions, 1 Access seal |
 | Summaries | `GET /v1/resources/{id}`, `POST /v1/resources/summaries`, `GET /v1/public-previews/{id}` | none | 2 graph queries (lineage and batch), 1 media query, ≤ 1 Access batch query for ≤ 64 Works |

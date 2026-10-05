@@ -1169,7 +1169,8 @@ export class AccessAdmissionRegistry {
       } else {
         // Recommendation edits have their own durable action and receipt, while
         // inheriting the exact Work editor mandate and grant boundary.
-        const authorityAction = request.action === 'package.recommendation.set'
+        const authorityAction = request.action === 'media.campaign' && request.scope.startsWith('zone:edit:')
+          ? 'zone.edit' : request.action === 'package.recommendation.set'
           || ['relation.change', 'work.derive'].includes(request.action) && request.scope.startsWith('work:edit:')
           ? 'work.edit' : request.action;
         if (request.action === 'work.create' && request.scope === 'work:create:root'

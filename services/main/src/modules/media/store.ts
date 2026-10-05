@@ -617,7 +617,7 @@ export class MediaStore {
     });
   }
 
-  /** Delivery basis for one publication item Use. */
+  /** Delivery basis for a publication item or immutable campaign art Use. */
   async itemDelivery(use: string) {
     if (!uuid.test(use)) return null;
     return (await this.itemDeliveryBatch([use])).get(use) ?? null;
@@ -630,13 +630,19 @@ export class MediaStore {
     if (uses.length > MAX_SUMMARY_TARGETS || uses.some(use => !uuid.test(use))) {
       throw new MediaInvalid('Invalid publication item batch');
     }
-    const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, p.byte_digest, p.media_type, p.byte_length,
-      p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
+    const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, u.asset_id, u.role, u.crop, u.focal_area, u.logo_anchor,
+      p.byte_digest, p.media_type, p.byte_length,
+      COALESCE(u.oriented_width,p.pixel_width) AS pixel_width, COALESCE(u.oriented_height,p.pixel_height) AS pixel_height,
+      p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
       FROM media.use u JOIN media.asset a ON a.id = u.asset_id JOIN media.asset_state s ON s.id = a.state_head
       JOIN media.representation p ON p.id = u.representation_id
-      WHERE u.id = ANY($1::uuid[]) AND u.role = 'publication-item' AND media.delivery_clearance(p) = 'cleared'`,
+      JOIN content.revision revision ON revision.id = u.asset_revision_id AND revision.availability = 'available'
+      WHERE u.id = ANY($1::uuid[]) AND (u.role = 'publication-item' OR u.role LIKE 'campaign-%')
+        AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
-    return new Map(rows.map(row => [row.use as string, { target: row.target as string, sha256: row.byte_digest as string,
+    return new Map(rows.map(row => [row.use as string, { target: row.target as string, asset: row.asset_id as string,
+      role: row.role as string, crop: row.crop as string | null, focalArea: row.focal_area as string | null,
+      anchor: row.logo_anchor as string | null, sha256: row.byte_digest as string,
       mediaType: row.media_type as string, byteLength: row.byte_length as number,
       width: row.pixel_width as number, height: row.pixel_height as number,
       availability: row.availability as string, clearance: row.clearance as Clearance, disclosure: row.disclosure as string,

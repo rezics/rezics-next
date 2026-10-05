@@ -15,7 +15,7 @@ import { receiptFamilies } from './receipt-family.ts';
 import { LocalImageTransformer } from '../media-rendition/transform.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
 import { RENDITION_LIMITS } from '../media-rendition/policy.ts';
-import { normalizeTrailer, showcaseSlot, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from './showcase-contract.ts';
+import { normalizeTrailer, showcaseSlot, type CampaignArtInput, type ShowcaseSelectionInput, type ShowcaseTrailerInput } from './showcase-contract.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
   MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
   MediaUnavailable,
@@ -283,6 +283,47 @@ export function createAdmittedDocumentImageUse(env: WorkActivationEnvironment, m
   media.store,admission=>media.store.presentation.createDocumentUse(admission,binding));
 }
 
+/** One Zone/Realm graph probe, one immutable Use transaction and <=12 rendition
+ * requests; no Work, selection inventory or history traversal is involved. */
+export const CAMPAIGN_ART_CREATE_COST = { sourceAssets: 1, ownerGraphQueries: 2,
+  ownerTransactions: 1, maxRenditionRequests: RENDITION_LIMITS.candidates } as const;
+
+export function createAdmittedCampaignArt(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: CampaignArtInput & { actingSubject: string; idempotencyKey: string }) {
+  const { actingSubject, idempotencyKey, ...raw } = input;
+  const slot = showcaseSlot(raw);
+  const binding = { ...raw, ...(raw.role === 'logo' ? { language: slot.split(':')[1] } : {}) };
+  return admitted(env, account, access, request, { scope: `zone:edit:${binding.zone}`,
+    action: 'media.campaign', actingSubject, idempotencyKey,
+    digest: sha256(stable({ family: 'zone-campaign-art-v1', ...binding })),
+    operation: id => `media-campaign:${id}`, accountScope: 'zone:edit' }, media.store, async admission => {
+    // Durable retries can finish queueing even after the Zone is retired.
+    if (!await media.store.readOutcome(`media-campaign:${admission.admissionId}`)) {
+      const available = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+        GRAPH ${iri(GRAPHS.current)} {
+          ${iri(binding.zone)} a rv:Zone ; rv:zoneState rv:Active ; rv:space ?space .
+          ${iri(binding.target)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+        } }`, 1024);
+      if (available.boolean !== true) throw new MediaMissing('Zone campaign Realm is unavailable');
+    }
+    const result = await media.store.showcase.createCampaign(admission, binding, async basis => {
+      const bytes = await media.objects(basis.namespace).get(basis.digest);
+      if (bytes.length > RENDITION_LIMITS.bytes || sha256(bytes) !== basis.digest)
+        throw new MediaUnavailable('campaign source integrity differs');
+      try { return await new LocalImageTransformer().inspect(bytes, basis.mediaType); }
+      catch { throw new MediaInvalid('campaign requires a decodable still image'); }
+    });
+    if (result.outcome === 'succeeded' && result.id) {
+      try { await requestUseRenditions(media.store.renditions, media.objects, result.id); }
+      catch (error) {
+        if (!(error instanceof MediaMissing)) throw new MediaUnavailable('campaign rendition request is awaiting retry');
+      }
+    }
+    return result;
+  });
+}
+
 /** Access dispatch fence for an unsealed media admission (see README: Access registration). */
 export async function sealMediaAdmission(store: MediaStore, admission: RegisteredAdmission) {
   const family = admission.action === 'media.upload' ? ['media-upload', 'media.upload.reserve']
@@ -290,6 +331,7 @@ export async function sealMediaAdmission(store: MediaStore, admission: Registere
       : admission.action === 'media.avatar' ? ['media-avatar', 'media.selection.change']
         : admission.action === 'media.inference' ? ['media-inference','media.inference.record']
           : admission.action === 'media.use' ? ['media-document-use','media.use.create']
+            : admission.action === 'media.campaign' ? ['media-campaign','media.use.create']
             : Object.hasOwn(receiptFamilies,admission.action) ? ['media-field','media.field.change'] : null;
   if (!family) throw new MediaInvalid('not a media admission');
   const result = await store.cancel(`${family[0]}:${admission.id}`, family[1]!, admission.requestDigest);

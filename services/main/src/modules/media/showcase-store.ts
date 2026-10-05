@@ -14,6 +14,7 @@ import {
   type ShowcaseImage,
   type ShowcaseSelectionInput,
   type ShowcaseTrailerInput,
+  type CampaignArtInput,
 } from './showcase-contract.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -68,6 +69,70 @@ export const SHOWCASE_BATCH_SQL = `WITH owner AS (
 /** Showcase is an extension of media selections, not a second document owner. */
 export class MediaShowcaseStore {
   constructor(private readonly pool: Pool) {}
+
+  /** A campaign keeps its exact Use when another slide creates art of the same
+   * role. One operation lock and exact source probes, O(log M) owner work. */
+  async createCampaign(admission: MediaAdmission, input: CampaignArtInput,
+    inspect: Inspector): Promise<CommandOutcome> {
+    const role = showcaseSlot(input).replace(/^showcase-/, 'campaign-');
+    if (!NATIVE.test(input.zone) || !NATIVE.test(input.target) || !UUID.test(input.asset)
+      || !this.validContext(input.context) || !UUID.test(admission.admissionId)
+      || !UUID.test(admission.principalId) || !NATIVE.test(admission.actingSubject)
+      || !/^[0-9a-f]{64}$/.test(admission.requestDigest)
+      || !/^(0|[1-9][0-9]{0,19})$/.test(admission.authorityEpoch))
+      throw new MediaInvalid('invalid campaign art');
+    const operation = `media-campaign:${admission.admissionId}`;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [operation]);
+      const prior = (await client.query(`SELECT r.*,u.id FROM content.receipt r
+        LEFT JOIN media.use u ON u.operation_id=r.operation_id WHERE r.operation_id=$1`, [operation])).rows[0];
+      let result: CommandOutcome;
+      if (prior) {
+        if (prior.request_digest !== admission.requestDigest || prior.action !== 'media.use.create')
+          throw new MediaConflict('campaign key binds another intent');
+        result = { outcome: prior.outcome, id: prior.id ?? null, predecessor: null,
+          position: { owner: 'content', dataEpoch: prior.data_epoch, sequence: String(prior.sequence) }, replayed: true };
+      } else {
+        const source = await this.source(client, input.asset, admission.actingSubject, true);
+        const inspected = await inspect(source);
+        admitShowcaseImage(input, inspected);
+        const id = randomUUID();
+        const position = await advanceContentSequence(client, { operationId: operation,
+          requestDigest: admission.requestDigest, action: 'media.use.create', outcome: 'succeeded',
+          eventType: 'media.use.created', recipe: 'media-v1', payload: { target: input.target, zone: input.zone, use: id } });
+        await client.query(`INSERT INTO media.use
+          (id,asset_id,asset_variant_id,asset_revision_id,representation_id,target,context,role,crop,
+            focal_area,logo_anchor,oriented_width,oriented_height,has_alpha,actor,operation_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [id, input.asset, `urn:rezics:variant:${input.asset}`, source.revision, source.representation,
+          input.target, input.context, role, input.crop, input.focalArea, input.anchor ?? null,
+          inspected.width, inspected.height, inspected.hasAlpha, admission.actingSubject, operation]);
+        result = { outcome: 'succeeded', id, predecessor: null, position, replayed: false };
+      }
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
+
+  private async source(client: PoolClient, asset: string, actor: string, publicOnly = false): Promise<SourceBasis> {
+    const row = (await client.query(`SELECT v.draft_head AS revision,p.id AS representation,
+      a.object_namespace AS namespace,p.byte_digest AS digest,p.media_type AS "mediaType"
+      FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head
+      JOIN content.variant v ON v.id=a.variant_id
+      JOIN content.revision revision ON revision.id=v.draft_head AND revision.availability='available'
+      JOIN media.representation p ON p.id::text=revision.body->'representations'->0->>'id'
+        AND p.asset_id=a.id AND p.kind='original' AND p.availability='available'
+      WHERE a.id=$1 AND a.owner=$2 AND s.lifecycle='active' AND s.moderation='none'
+        AND (NOT $3::boolean OR s.disclosure='public')
+        AND media.delivery_clearance(p)='cleared' FOR SHARE OF a,p,v`, [asset, actor, publicOnly])).rows[0];
+    if (!row) throw new MediaMissing('showcase source is unavailable');
+    return row as SourceBasis;
+  }
 
   async select(
     admission: MediaAdmission,
@@ -153,22 +218,7 @@ export class MediaShowcaseStore {
           let source: SourceBasis | null = null;
           let inspected: (ImageSize & { hasAlpha?: boolean }) | null = null;
           if (!trailer && input.asset !== null) {
-            const row = (
-              await client.query(
-                `SELECT v.draft_head AS revision,p.id AS representation,
-              a.object_namespace AS namespace,p.byte_digest AS digest,p.media_type AS "mediaType"
-              FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head
-              JOIN content.variant v ON v.id=a.variant_id
-              JOIN content.revision revision ON revision.id=v.draft_head AND revision.availability='available'
-              JOIN media.representation p ON p.id::text=revision.body->'representations'->0->>'id'
-                AND p.asset_id=a.id AND p.kind='original' AND p.availability='available'
-              WHERE a.id=$1 AND a.owner=$2 AND s.lifecycle='active' AND s.moderation='none'
-                AND media.delivery_clearance(p)='cleared' FOR SHARE OF a,p,v`,
-                [input.asset, admission.actingSubject],
-              )
-            ).rows[0];
-            if (!row) throw new MediaMissing('showcase source is unavailable');
-            source = row as SourceBasis;
+            source = await this.source(client, input.asset, admission.actingSubject);
             inspected = await inspect(source);
             admitShowcaseImage(input, inspected);
           }

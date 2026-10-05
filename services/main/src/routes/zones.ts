@@ -138,6 +138,7 @@ const execution = t.Union([
     revision: ref, activation: ref }),
 ]);
 const campaignImage = t.Object({ ...ZoneCampaignArt.properties.landscape.properties,
+  crop: t.Nullable(t.String()), cropWidth: t.Integer({ minimum: 1 }), cropHeight: t.Integer({ minimum: 1 }),
   url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }), mediaType: t.String(),
   srcset: t.Array(t.Object({ url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
     type: t.Union([t.Literal('image/avif'), t.Literal('image/webp')]),

@@ -28,7 +28,8 @@ test('G1026: live Realm rule references use one scoped batch, including duplicat
 
 test('Zone campaign art shares exact item lookups and preserves eligibility gates and output position', async () => {
   const uses = Array.from({ length: 6 }, () => randomUUID());
-  const valid = { target: realm, sha256: 'a'.repeat(64), mediaType: 'image/png', byteLength: 100,
+  const valid = { target: realm, asset: randomUUID(), role: 'publication-item', crop: null, focalArea: null, anchor: null,
+    sha256: 'a'.repeat(64), mediaType: 'image/png', byteLength: 100,
     width: 320, height: 200, availability: 'available', clearance: 'cleared' as const,
     disclosure: 'public', moderation: 'none', lifecycle: 'active', objectNamespace: 'media/' };
   let calls = 0;
@@ -52,6 +53,7 @@ test('Zone campaign art shares exact item lookups and preserves eligibility gate
   expect(calls).toBe(1);
   expect(result.map(item => item.id)).toEqual(slides.map(item => item.id));
   expect(result[0]!.art.landscape).toEqual({ use: `https://rezics.com/id/${uses[0]}`,
+    crop: null, cropWidth: 320, cropHeight: 200,
     url: `/v1/media/uses/${uses[0]}`,width: 320,height: 200,mediaType: 'image/png',srcset: [] });
   expect(result.slice(1).map(item => item.art.landscape)).toEqual(Array(5).fill(null));
   expect((await readZoneCampaignArt(store, null, slides)).every(slide => slide.art.landscape === null)).toBe(true);

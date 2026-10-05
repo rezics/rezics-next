@@ -60,6 +60,11 @@ export interface ShowcaseTrailerInput {
   expectedSelection: string | null;
   url: string | null;
 }
+/** Campaign Uses are immutable slide-local bindings, independent of Work slots. */
+export type CampaignArtInput = Omit<ShowcaseSelectionInput, 'expectedSelection' | 'asset'> & {
+  zone: string;
+  asset: string;
+};
 export interface ShowcaseImage {
   role: ShowcaseRole;
   selection: string;
@@ -204,6 +209,18 @@ const uuid = t.String({
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const context = t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), native]);
 const area = t.Nullable(t.String({ maxLength: 64 }));
+export const campaignArtCommand = t.Object({
+  profile: t.Literal('zone-campaign-art-v1'),
+  realm: native,
+  asset: uuid,
+  role: showcaseRole,
+  language: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
+  tone: t.Optional(t.Union([t.Literal('dark'), t.Literal('light')])),
+  anchor: t.Optional(logoAnchor),
+  crop: t.Optional(area),
+  focalArea: t.Optional(area),
+  actingSubject: native,
+}, { additionalProperties: false });
 export const showcaseSelectionCommand = t.Object(
   {
     profile: t.Literal('work-showcase-selection-v1'),

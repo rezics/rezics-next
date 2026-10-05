@@ -785,6 +785,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['PUT', '/v1/works/{id}/type', 'write'],
   ['POST', '/v1/works/{id}/web-publications/{release}/snapshots', 'write'],
   ['POST', '/v1/zones', 'write'],
+  ['POST', '/v1/zones/{id}/campaign-art', 'write'],
   ['PUT', '/v1/zones/{id}/configuration', 'write'],
   ['POST', '/v1/zones/{id}/mounts', 'write'],
   ['DELETE', '/v1/zones/{id}/mounts/{occurrence}', 'write'],

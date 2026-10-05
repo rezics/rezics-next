@@ -188,6 +188,7 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
     representation: id(13).slice(-36), sha256: 'b'.repeat(64), mediaType: 'image/png', byteLength: 100,
     width: 1, height: 1, availability: 'available', disclosure: 'public', moderation: 'none',
     lifecycle: 'active', clearance: 'cleared' as const, owner: id(2), uploader: id(2),
+    role: 'publication-item', focalArea: null, anchor: null,
     statePosition: null, objectNamespace: 'native' };
   const store = disclosureMedia({ avatarDelivery: async () => asset,
     assetDelivery: async () => asset, itemDelivery: async () => asset } as unknown as MediaStore, env);

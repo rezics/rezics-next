@@ -8,11 +8,12 @@ import type { AccessDownloadLeases, DownloadReadLease } from '../modules/access/
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAdmittedUpload,
   saveAdmittedMediaSet, changeAdmittedMediaField, recordAdmittedImageInference, createAdmittedDocumentImageUse,
+  createAdmittedCampaignArt,
   type MediaDependencies } from '../modules/media/commands.ts';
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
   mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
 import type { MetadataRef } from '../modules/media/presentation.ts';
-import { ShowcaseRefused } from '../modules/media/showcase-contract.ts';
+import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
@@ -76,6 +77,7 @@ function idempotencyKey(request: Request): string | null {
 const unavailable = () => problem(404, 'media_unavailable', 'Media is unavailable');
 
 export const openApiOperations = {
+  '/v1/zones/{id}/campaign-art': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/uploads': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/uploads/{upload}': { get: { bearer: true } },
   '/v1/media/uploads/{upload}/bytes': { put: { bearer: true } },
@@ -218,6 +220,20 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const fieldResult=t.Object({revision:t.Nullable(nativeId),position,replayed:t.Boolean(),admission:t.String()});
   const fieldResponses={200:fieldResult,201:fieldResult,...writeProblems,404:problemResult(404)};
   return new Elysia()
+    .post('/v1/zones/:id/campaign-art', { params: t.Object({ id: uuid }), body: campaignArtCommand,
+      response: { 200: commandResult, 201: commandResult, ...writeProblems, 404: problemResult(404), 422: problemResult(422) } },
+    async ({ request, params, body }) => {
+      if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
+      const key = idempotencyKey(request);
+      if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
+      try {
+        const { realm, profile: _profile, ...art } = body;
+        const result = await createAdmittedCampaignArt(work.environment, work.media, work.account, work.access,
+          request, { ...art, zone: `https://rezics.com/id/${params.id}`, target: realm,
+            context: DEFAULT_MEDIA_CONTEXT, crop: body.crop ?? null, focalArea: body.focalArea ?? null, idempotencyKey: key });
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return mediaError(error); }
+    })
     .post('/v1/media/metadata',{body:metadataRead,detail:{security:[{}, {bearerAuth:[]}]},response:{200:metadataResult,...authorizedReadProblems}},
       async ({request,body})=>{
         try {

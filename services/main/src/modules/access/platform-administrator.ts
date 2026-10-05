@@ -21,6 +21,7 @@ const resourceActions: Record<string, string[]> = {
   'media.labels.protect': ['media:protect'],
   'media.conceal.protect': ['media:protect'],
   'zone.edit': ['zone:edit'],
+  'media.campaign': ['zone:edit'],
   'zone.official': ['zone:official'],
   'semantic.read': ['semantic:read'],
   'semantic.change': ['semantic:edit'],

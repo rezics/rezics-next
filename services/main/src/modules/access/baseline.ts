@@ -68,6 +68,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     || (action === 'projection.create' && scope === 'projection:create:root')) return { kind: 'root' };
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
     'zone.edit': { prefix: 'zone:edit:', kind: 'zone' },
+    'media.campaign': { prefix: 'zone:edit:', kind: 'zone' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
     'content.publish': { prefix: 'content:publish:', kind: 'author-work' },
     'content.search-eligibility': { prefix: 'content:search-eligibility:', kind: 'author-work' },
