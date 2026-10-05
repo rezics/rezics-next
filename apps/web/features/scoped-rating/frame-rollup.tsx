@@ -12,7 +12,7 @@ import { frameChips } from './frames.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import { FrameChips } from './projection-header.tsx';
 import { questionText } from './question-rating.tsx';
-import { figuresOfMember } from './score.ts';
+import { figuresOfMember, ratingsCounted } from './score.ts';
 import type { Outcome, Question, Rollup, RollupFormula } from './types.ts';
 import { useLoad } from './use-load.ts';
 
@@ -81,7 +81,7 @@ function RollupBody({ rollup, byTarget, noun, locale, messages }: {
 }) {
   const t = translate(messages, locale);
   const available = rollup.members.flatMap(member => member.status === 'available' ? [member] : []);
-  const ratings = available.reduce((sum, member) => sum + member.components.count, 0);
+  const ratings = ratingsCounted(rollup);
   const notAccepted = rollup.members.filter(member => member.status === 'not-accepted').length;
   const unreadable = rollup.members.filter(member => member.status === 'unavailable').length;
   const max = rollup.scale.max;
@@ -131,6 +131,11 @@ export function FrameRollup({ subject, question, unit, api, members, include, de
   if (all.state === 'failed') return <FailureNote failure={all.failure} locale={locale} messages={messages} retry={reload} className={className} />;
   // A place the reader has not reached is not a member they can see: its name and number could spoil the story.
   const visible = all.data.filter(read => read.summary?.status === 'available' && (include?.(read) ?? true));
+  // A summary that could not be read leaves the members unknown, which is a failure and not "nothing to combine". Members
+  // the host read cannot be read again here, so only the host's own reads offer a retry.
+  if (all.data.some(read => read.summary === null)) {
+    return <FailureNote failure="unavailable" locale={locale} messages={messages} retry={members ? undefined : reload} className={className} />;
+  }
   if (!visible.length) return <p className={cn('rounded-2xl bg-muted/60 px-4 py-3 text-sm', className)}>{t.noParts}</p>;
   return <div className={className}>
     <RollupView members={visible} question={question} unit={unit} api={api} defaultFormula={defaultFormula} locale={locale} messages={messages} />

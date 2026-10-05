@@ -66,11 +66,13 @@ export const SpoilerHidden: Story = {
 };
 export const SpoilerHiddenPhone: Story = { ...SpoilerHidden, globals: phone };
 
-/** Nothing read yet: no summary at all is the same placeholder, never a blank header. */
-export const NoSummary: Story = {
+/** The summary could not be read: a retry note, never the hidden placeholder, which would claim the place is ahead of the reader. */
+export const SummaryFailed: Story = {
   args: { summary: null },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByText('Hidden until you reach it')).toBeVisible();
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('This could not be loaded right now. Try again in a moment.')).toBeVisible();
+    await expect(canvas.queryByText('Hidden until you reach it')).toBeNull();
   },
 };
 

@@ -47,7 +47,7 @@ export function readingPositionSource({ work, actingSubject, position, locale, l
       items: page.items.map(item => {
         const text = pickPositionLabel(item.labels, locale);
         const value = text?.value ?? item.displayLabel ?? (item.ordinal ? String(item.ordinal) : item.occurrence.slice(-8));
-        return option({ iri: item.occurrence,
+        return option({ iri: item.occurrence, work,
           dimension: 'position', name: { value, language: text?.lang ?? '', direction: text?.dir ?? direction('', value) } });
       }) };
   } };
@@ -63,7 +63,7 @@ export function releaseSource({ work, actingSubject, label, main = () => browser
     const { data } = await main().v1.works({ id }).releases.get({ query: { limit: 20, ...cursor ? { cursor } : {}, ...actingSubject ? { actingSubject } : {} } });
     const needle = q.trim().toLocaleLowerCase();
     const items = (data?.items ?? []).filter(release => !needle || release.title.value.toLocaleLowerCase().includes(needle)).map(release =>
-      option({ iri: release.id, dimension: 'release', name: { value: release.title.value, language: release.title.language,
+      option({ iri: release.id, dimension: 'release', work, name: { value: release.title.value, language: release.title.language,
         direction: direction(release.title.language, release.title.value) } }));
     return { items, nextCursor: data?.nextCursor ?? null, complete: !data?.nextCursor };
   } };

@@ -25,6 +25,7 @@ export default {
   failSignIn: '请登录后评分。',
   failDenied: '你无法在这里评分。',
   failInvalid: '这些选择无法组合。每种类型请只选一处。',
+  failWorkMismatch: '这些属于不同的作品。请只在同一部作品中选择。',
   failUnavailable: '暂时无法加载，请稍后再试。',
   failConflict: '此内容已在别处更改。请刷新以查看最新状态。',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: '按加权评分排名。在评分的人足够多之前，分数会被拉向总体平均分，'
     + '因此少数几个高分无法超过经过充分检验的记录。',
   rankingEligibility: insert('至少需要 {{min}} 个评分才能入榜。', { min: String }),
-  rankingPrior: insert('总体平均分 {{mean}}，基于{{ratings}}。', { mean: String, ratings: String }),
+  rankingPrior: insert('总体平均分 {{mean}}，权重为 {{weight}}。评分数达到该值时，得分处于自身平均分与此平均分的中间。', { mean: String, weight: String }),
   rankingPlace: insert('第 {{position}} 名', { position: String }),
   rankingWeighted: insert('加权 {{score}}', { score: String }),
   rankingNone: '还没有人获得足够的评分以进入排名。',

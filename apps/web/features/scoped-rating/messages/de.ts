@@ -25,6 +25,7 @@ export default {
   failSignIn: 'Melde dich an, um zu bewerten.',
   failDenied: 'Du kannst das hier nicht bewerten.',
   failInvalid: 'Das lässt sich nicht kombinieren. Wähle von jeder Art einen Ort.',
+  failWorkMismatch: 'Diese gehören zu verschiedenen Werken. Wähle Orte aus einem einzigen Werk.',
   failUnavailable: 'Das konnte gerade nicht geladen werden. Bitte versuche es gleich noch einmal.',
   failConflict: 'Das wurde anderswo geändert. Lade neu, um den aktuellen Stand zu sehen.',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: 'Gereiht nach gewichteter Bewertung. Eine Punktzahl wird zum Gesamtdurchschnitt hingezogen, bis viele '
     + 'Menschen bewertet haben, damit wenige hohe Bewertungen keinen gut belegten Eintrag überholen.',
   rankingEligibility: insert('Für einen Rang sind mindestens {{min}} Bewertungen nötig.', { min: String }),
-  rankingPrior: insert('Gesamtdurchschnitt {{mean}} aus {{ratings}}.', { mean: String, ratings: String }),
+  rankingPrior: insert('Gesamtdurchschnitt {{mean}} mit einem Gewicht von {{weight}}. Wer so viele Bewertungen hat, liegt auf halbem Weg zu diesem Wert.', { mean: String, weight: String }),
   rankingPlace: insert('Rang {{position}}', { position: String }),
   rankingWeighted: insert('Gewichtet {{score}}', { score: String }),
   rankingNone: 'Noch niemand hat genug Bewertungen für einen Rang.',

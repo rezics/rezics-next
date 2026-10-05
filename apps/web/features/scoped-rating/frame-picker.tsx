@@ -27,7 +27,7 @@ function kindName(dimension: FrameDimension, t: Translation): string {
 
 /**
  * Chooses where a rating applies. Only kinds of place that Main accepts as frames are offered: a source for anything
- * else cannot be listed, and choosing a second place of one kind replaces the first, as Main allows one of each.
+ * else cannot be listed, and `withFrame` keeps the chosen set to what Main allows: one place per slot, all in one Work.
  */
 export function FramePicker({ sources, value, onChange, onContinue, busy = false, canContinue = true, locale, messages }: {
   sources: readonly FrameSource[]; value: readonly FrameCandidate[]; onChange: (next: FrameCandidate[]) => void;

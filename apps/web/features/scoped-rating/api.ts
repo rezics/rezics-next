@@ -8,12 +8,17 @@ import { failureOf, type Failure, type Outcome, type ProjectionView, type Questi
 
 // What the scoped rating components ask of Main, through the BFF (which carries the session). Stories supply an
 // in-memory one (`fixtures.ts`). Every write carries an `Idempotency-Key`, and a rating carries the revision head it
-// replaces so two devices cannot silently overwrite each other: Main answers one's own value and head with the
-// figures (`scope=mine`), and a stale write with the head to retry on, so no device needs to remember either.
+// replaces: Main answers one's own value and head with the figures (`scope=mine`), and a stale write with the head
+// that is current. A write refused as stale is applied once more on that head, so the latest press wins over another
+// device's rating; the rating input allows one save at a time so a person's own presses cannot overtake each other.
 
 /** Whose ratings a question collects. Global questions are everyone's; a Realm's are its own population's. */
 export type QuestionScope = { kind: 'global' } | { kind: 'realm'; realm: string };
 
+/**
+ * A place and its summary. A summary the reader may not see is `status: 'unavailable'` (the place is hidden until they
+ * reach it); `null` means the lookup of the summary failed, which a view says with a retry note and never as hidden.
+ */
 export interface ProjectionRead { projection: ProjectionView; summary: ResourceSummary | null }
 export interface ProjectionList { items: ProjectionRead[]; nextCursor: string | null }
 
@@ -26,6 +31,8 @@ export interface OwnRating { value: number | null }
 export interface ScopedRatingApi {
   /** The one projection of a subject within frames, created on first use. */
   projection: (subject: string, frames: readonly string[]) => Promise<Outcome<ProjectionRead & { created: boolean }>>;
+  /** The one projection of a subject within frames if it exists and the reader may see it; nothing is created. */
+  lookup: (subject: string, frames: readonly string[]) => Promise<Outcome<ProjectionRead | null>>;
   /** A subject's projections, newest identity first, a page at a time. */
   projections: (subject: string, cursor?: string | null) => Promise<Outcome<ProjectionList>>;
   /** The questions that accept this target, in the scope's population. */
@@ -50,7 +57,7 @@ async function answered<T>(call: () => Promise<Answer<T>>): Promise<Answer<T>> {
 
 async function settle<T>(call: () => Promise<Answer<T>>): Promise<Outcome<T>> {
   const answer = await answered(call);
-  return answer.data ? { ok: true, data: answer.data } : { ok: false, failure: failureOf(answer.error?.status ?? 503) };
+  return answer.data ? { ok: true, data: answer.data } : { ok: false, failure: failureOf(answer.error?.status ?? 503, answer.error?.value) };
 }
 
 /** The head a refused write names as the current one (`stale_head`), or null where the problem names none. */
@@ -146,6 +153,13 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
       return { ok: false, failure: 'unavailable' };
     },
 
+    async lookup(subject, frames) {
+      const answer = await settle(() => main().v1.projections.get({ query: { subject, frames: [...frames], ...reader } }));
+      if (!answer.ok) return answer;
+      const found = answer.data.items[0];
+      return { ok: true, data: found ? { projection: found, summary: await summaryOf(found.id) } : null };
+    },
+
     async projections(subject, cursor) {
       const page = await settle(() => main().v1.projections.get({ query: { subject, limit: 20, ...cursor ? { cursor } : {}, ...reader } }));
       if (!page.ok) return page;
@@ -190,7 +204,8 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
           return { ok: true, data: { value, pending: revision === null } };
         }
         const current = currentHeadOf(answer.error);
-        // Another device or press wrote first: apply this choice once on the head Main names, never over an unknown one.
+        // Another device wrote first: apply this choice once on the head Main names, never over an unknown one. The
+        // later choice wins, as it would had the other device written before it.
         if (current === null || current === head) return { ok: false, failure: failureOf(answer.error?.status ?? 503) };
         head = current;
       }

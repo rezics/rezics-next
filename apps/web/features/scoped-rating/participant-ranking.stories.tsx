@@ -46,7 +46,7 @@ export const Populated: Story = {
     await expect(within(second).getByRole('link', { name: 'Vesper' })).toBeVisible();
     await expect(canvasElement.querySelector('[data-rank="3"]')).toBeNull();
     // Why: the minimum, the pull toward the overall average, and the way to a rank for those who are not there yet.
-    await expect(canvasElement.querySelector('[data-ranking-eligibility]')?.textContent).toMatch(/Needs at least 50 ratings to be ranked\. Overall average [\d.]+ from [\d,]+ ratings\./);
+    await expect(canvasElement.querySelector('[data-ranking-eligibility]')?.textContent).toMatch(/Needs at least 50 ratings to be ranked\. Overall average [\d.]+, with a weight of [\d,]+\. A participant with that many ratings is pulled halfway toward it\./);
     await expect(canvas.getByRole('heading', { name: 'Not ranked yet' })).toBeVisible();
     await expect(canvas.getByText('12 of 50 ratings')).toBeVisible();
     await expect(canvas.getByText('0 of 50 ratings')).toBeVisible();
@@ -71,6 +71,16 @@ export const BelowThreshold: Story = {
   },
 };
 export const BelowThresholdPhone: Story = { ...BelowThreshold, globals: phone };
+
+/** The participants' names could not be read: a retry note, never "no one has enough ratings" or an empty ranking. */
+export const SummariesFailed: Story = {
+  args: { who: fixture.participants.map(read => ({ ...read, summary: null })) },
+  async play({ canvasElement }) {
+    await see(canvasElement, 'This could not be loaded right now. Try again in a moment.');
+    await expect(within(canvasElement).queryByText('No one has enough ratings to be ranked yet.')).toBeNull();
+    await expect(canvasElement.querySelector('[data-rank]')).toBeNull();
+  },
+};
 
 /** An event with no participants yet. */
 export const Empty: Story = {

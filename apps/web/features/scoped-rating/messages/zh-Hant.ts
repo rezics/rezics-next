@@ -25,6 +25,7 @@ export default {
   failSignIn: '請登入後評分。',
   failDenied: '你無法在這裡評分。',
   failInvalid: '這些選擇無法組合。每種類型請只選一處。',
+  failWorkMismatch: '這些屬於不同的作品。請只在同一部作品中選擇。',
   failUnavailable: '暫時無法載入，請稍後再試。',
   failConflict: '此內容已在別處變更。請重新整理以查看最新狀態。',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: '依加權評分排名。在評分的人夠多之前，分數會被拉向整體平均，'
     + '因此少數幾個高分無法超越經過充分檢驗的紀錄。',
   rankingEligibility: insert('至少需要 {{min}} 則評分才能上榜。', { min: String }),
-  rankingPrior: insert('整體平均 {{mean}}，依據{{ratings}}。', { mean: String, ratings: String }),
+  rankingPrior: insert('整體平均 {{mean}}，權重為 {{weight}}。評分數達到該值時，得分位於自身平均與此平均的中間。', { mean: String, weight: String }),
   rankingPlace: insert('第 {{position}} 名', { position: String }),
   rankingWeighted: insert('加權 {{score}}', { score: String }),
   rankingNone: '還沒有人獲得足夠的評分以進入排名。',

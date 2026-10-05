@@ -9,6 +9,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
 import Link from '../shell/localized-link.tsx';
+import { FailureNote } from './failure.tsx';
 import { type FrameChip, type FrameKind, frameChips, subjectOf } from './frames.ts';
 import { translate } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
@@ -47,15 +48,18 @@ export function FrameChips({ chips, label, size = 'md' }: { chips: readonly Fram
 /**
  * Who is rated and where: the subject's picture, name and link, then the places as chips, each in its own language and
  * linked to its page. The chips come from the summary's structured parts, so no label is joined from translated words.
- * A place the reader has not reached yet stays hidden whole: its name could give the story away.
+ * A place the reader has not reached yet stays hidden whole: its name could give the story away. No summary at all is a
+ * failed lookup, which says so and offers `retry`; it is never drawn as a hidden place.
  */
-export function ProjectionHeader({ summary, locale, messages, level = 3, page = false, className }: {
-  summary: ResourceSummary | null | undefined; locale: UiLocale; messages: ScopedRatingMessages; level?: 1 | 2 | 3 | 4;
+export function ProjectionHeader({ summary, retry, locale, messages, level = 3, page = false, className }: {
+  summary: ResourceSummary | null | undefined; retry?: () => void; locale: UiLocale; messages: ScopedRatingMessages;
+  level?: 1 | 2 | 3 | 4;
   /** The heading of a page of its own: larger, with the rule a resource page's header has. */
   page?: boolean; className?: string;
 }) {
   const t = translate(messages, locale);
-  const subject = subjectOf(summary ?? undefined, locale);
+  if (!summary) return <FailureNote failure="unavailable" retry={retry} locale={locale} messages={messages} className={className} />;
+  const subject = subjectOf(summary, locale);
   if (!subject) {
     return <div data-projection-hidden className={cn('flex items-start gap-3 rounded-2xl bg-muted/60 px-4 py-3', className)}>
       <LockIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />

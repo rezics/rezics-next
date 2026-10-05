@@ -1,5 +1,5 @@
 import type { RatingSummary } from '../work-page/types.ts';
-import type { RollupMember } from './types.ts';
+import type { Rollup, RollupMember } from './types.ts';
 
 // What a figure may claim, for every surface that shows a score (the Work page, entity pages, the scoped places).
 // Main withholds a mean below the question's display threshold but always returns the count and the histogram, so a
@@ -63,4 +63,13 @@ export function figuresOfMember(member: RollupMember, threshold: number, max: nu
   if (member.status !== 'available') return null;
   return { count: member.components.count, mean: member.meanDisplay === 'shown' ? member.mean : null,
     displayThreshold: threshold, min: 1, max, histogram: member.components.histogram.slice(0, max) };
+}
+
+/**
+ * The ratings behind a roll-up's value: every available member's under `pooled`, only the members that meet the display
+ * threshold under `mean-of-means`, as the server averages. Never more than the value stands on.
+ */
+export function ratingsCounted(rollup: Pick<Rollup, 'formula' | 'members'>): number {
+  return rollup.members.reduce((sum, member) => member.status !== 'available'
+    || (rollup.formula === 'mean-of-means' && !member.meetsThreshold) ? sum : sum + member.components.count, 0);
 }

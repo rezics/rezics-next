@@ -10,6 +10,7 @@ import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { RateInFrame } from './rate-in-frame.tsx';
 import type { Viewer } from './question-rating.tsx';
+import type { FrameSource } from './sources.ts';
 
 // Rating a character "in" an episode: choose the place, then the questions that accept it, with their own figures.
 // The sheet opens at once so each state can be reviewed; a phone gets it as a panel from the edge.
@@ -17,12 +18,12 @@ import type { Viewer } from './question-rating.tsx';
 const phone = { viewport: { value: 'phone' } } as const;
 const [, , e3, e4, e5] = fixture.episodes as [FrameCandidate, FrameCandidate, FrameCandidate, FrameCandidate, FrameCandidate];
 
-function Rate({ locale, scenario, viewer, frames }: {
-  locale: UiLocale; scenario: fixture.Scenario; viewer: Viewer; frames: FrameCandidate[];
+function Rate({ locale, scenario, viewer, frames, sources = fixture.sources }: {
+  locale: UiLocale; scenario: fixture.Scenario; viewer: Viewer; frames: FrameCandidate[]; sources?: readonly FrameSource[];
 }) {
   const api = useMemo(() => fixture.memoryScopedRatingApi(scenario), [scenario]);
   return <div className="mx-auto max-w-2xl p-4 sm:p-6">
-    <RateInFrame subject={fixture.subject} api={api} sources={fixture.sources} viewer={viewer} initialFrames={frames}
+    <RateInFrame subject={fixture.subject} api={api} sources={sources} viewer={viewer} initialFrames={frames}
       defaultOpen locale={locale} messages={messages[locale]} />
   </div>;
 }
@@ -45,10 +46,10 @@ const seeRole = (container: HTMLElement, role: string, name: string | RegExp) =>
   waitFor(() => expect(within(container).getByRole(role, { name })).toBeVisible(), { timeout: 4000 });
 const fits = async () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
-/** Opens the sheet's second step: gets or creates the place and shows its questions. */
+/** Opens the sheet's second step: looks the place up and shows its questions. */
 async function openPlace(locale: UiLocale = 'en') {
   const dialog = await screen.findByRole('dialog');
-  const next = within(dialog).getByRole('button', { name: copy(locale).continue });
+  const next = await within(dialog).findByRole('button', { name: copy(locale).continue }, { timeout: 4000 });
   await waitFor(() => expect(next).toBeEnabled());
   await userEvent.click(next);
   return dialog;
@@ -173,38 +174,165 @@ export const NoQuestionAcceptsTheCombination: Story = {
   },
 };
 
-/** A place later in the story than the reader has read is refused as an absent one: nothing of it is named. */
+/** A place later in the story than the reader has read is not found, as one that does not exist is not; rating it is refused as an absent one. */
 export const SpoilerHidden: Story = {
   args: { frames: [fixture.episodes[5]!] },
   async play() {
     const dialog = await openPlace();
+    await see(dialog, 'No ratings yet');
+    await userEvent.click(stars(dialog)[6]!);
     await see(dialog, 'This isn’t visible here, or it no longer exists.');
-    await expect(within(dialog).queryByText(/Episode 6/)).toBeNull();
     await seeRole(dialog, 'button', 'Choose differently');
   },
 };
 export const SpoilerHiddenPhone: Story = { ...SpoilerHidden, globals: phone };
 
-/** Signed out, a place can be browsed but not created or rated: the sheet leads to sign-in. */
+/** Signed out, a place can be browsed with its figures but not rated: the sheet leads to sign-in. */
 export const SignedOut: Story = {
   args: { frames: [e3], viewer: fixture.signedOutViewer, scenario: { ...fixture.populated, signedIn: false } },
   async play() {
     const dialog = await openPlace();
-    await see(dialog, 'Sign in to rate.');
+    await see(dialog, '214 ratings');
     await expect(within(dialog).getByRole('link', { name: 'Sign in to rate' })).toHaveAttribute('href', fixture.signedOutViewer.signInHref);
   },
 };
 
-/** Main refuses a frame set it cannot combine: the reason shows, and the choice stays to be changed. */
-export const RefusedCombination: Story = {
-  args: { frames: [e3], scenario: { ...fixture.populated, projectionFails: 'invalid' } },
+const stars = (dialog: HTMLElement) => dialog.querySelectorAll<HTMLElement>('[data-slot="rating-item"]');
+/** A continuity nobody has rated this subject in: no place exists for it yet. */
+const fresh = fixture.continuities[1]!;
+const writes: string[] = [];
+
+/** Opening a place nobody has rated looks it up and makes nothing; the first rating creates it, once, and then writes. */
+export const NewPlaceCreatedOnFirstRating: Story = {
+  args: { frames: [fresh], scenario: { ...fixture.populated, log: writes } },
   async play() {
+    writes.length = 0;
     const dialog = await openPlace();
-    await see(dialog, 'These can’t be combined. Choose one place of each kind.');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Choose differently' }));
-    await seeRole(dialog, 'button', 'Remove Episode 3 · Hunsford');
+    await seeRole(dialog, 'heading', 'How well written is this character here?');
+    await see(dialog, 'No ratings yet');
+    await seeRole(dialog, 'list', 'In');
+    await expect(within(dialog).getByText(fresh.name.value)).toBeVisible();
+    // Looking has made nothing, and review and discussion wait for a place the same way.
+    await expect(writes).toEqual(['lookup']);
+    await expect(within(dialog).getByRole('button', { name: 'Write a review' })).toBeEnabled();
+    await expect(within(dialog).getByRole('button', { name: 'Discuss' })).toBeEnabled();
+    await userEvent.click(stars(dialog)[6]!);
+    await see(dialog, 'Your rating: 7/10');
+    await see(dialog, '1 rating');
+    await expect(writes).toEqual(['lookup', 'projection', 'rate']);
+    // A second rating reuses the place.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove my rating' }));
+    await waitFor(() => expect(writes).toEqual(['lookup', 'projection', 'rate', 'rate']));
   },
 };
+export const NewPlaceCreatedOnFirstRatingPhone: Story = { ...NewPlaceCreatedOnFirstRating, globals: phone };
+
+/** A place that already exists is found by the lookup and never created again. */
+export const ExistingPlaceIsNotCreated: Story = {
+  args: { frames: [e3], scenario: { ...fixture.populated, log: writes } },
+  async play() {
+    writes.length = 0;
+    const dialog = await openPlace();
+    await within(dialog).findByText('214 ratings');
+    await userEvent.click(stars(dialog)[6]!);
+    await see(dialog, 'Your rating: 7/10');
+    await expect(writes).toEqual(['lookup', 'rate']);
+  },
+};
+
+/** The lookup itself failed: it says so and offers to try again, instead of showing an empty place to rate. */
+export const LookupFailed: Story = {
+  args: { frames: [e3], scenario: { ...fixture.populated, lookupFails: 'unavailable' } },
+  async play() {
+    const dialog = await openPlace();
+    await see(dialog, 'This could not be loaded right now. Try again in a moment.');
+    await seeRole(dialog, 'button', 'Try again');
+    await expect(within(dialog).queryByText('No ratings yet')).toBeNull();
+  },
+};
+
+/** The place exists but its name could not be read: a retry note in the header, never "hidden until you reach it". */
+export const SummaryFailed: Story = {
+  args: { frames: [e3], scenario: { ...fixture.populated, summaryFails: true } },
+  async play() {
+    const dialog = await openPlace();
+    await see(dialog, 'This could not be loaded right now. Try again in a moment.');
+    await expect(within(dialog).queryByText('Hidden until you reach it')).toBeNull();
+  },
+};
+
+/** Main refuses a frame set it cannot combine when the place is first made: the reason shows beside the rating, and the choice stays to be changed. */
+export const RefusedCombination: Story = {
+  args: { frames: [fresh], scenario: { ...fixture.populated, projectionFails: 'invalid' } },
+  async play() {
+    const dialog = await openPlace();
+    await see(dialog, 'No ratings yet');
+    await userEvent.click(stars(dialog)[6]!);
+    await see(dialog, 'These can’t be combined. Choose one place of each kind.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Choose differently' }));
+    await seeRole(dialog, 'button', `Remove ${fresh.name.value}`);
+  },
+};
+
+/** Two Works in one place is its own refusal, with its own words. */
+export const RefusedAcrossWorks: Story = {
+  args: { frames: [fresh], scenario: { ...fixture.populated, projectionFails: 'work-mismatch' } },
+  async play() {
+    const dialog = await openPlace();
+    await see(dialog, 'No ratings yet');
+    await userEvent.click(stars(dialog)[6]!);
+    await see(dialog, 'These belong to different works. Choose places from one work.');
+  },
+};
+
+/** One save at a time: the stars are read-only until Main has answered, so presses cannot overtake each other. */
+export const RatingWaitsForTheSave: Story = {
+  args: { frames: [e3], scenario: { ...fixture.populated, delay: 250, log: writes } },
+  async play() {
+    writes.length = 0;
+    const dialog = await openPlace();
+    await within(dialog).findByText('214 ratings', undefined, { timeout: 4000 });
+    const root = dialog.querySelector<HTMLElement>('[data-slot="rating-control"]')!;
+    await expect(root).not.toHaveAttribute('data-readonly');
+    await userEvent.click(stars(dialog)[6]!);
+    await waitFor(() => expect(root).toHaveAttribute('data-readonly'));
+    // A press while saving is ignored.
+    await userEvent.click(stars(dialog)[8]!, { pointerEventsCheck: 0 });
+    await see(dialog, 'Your rating: 7/10');
+    await waitFor(() => expect(root).not.toHaveAttribute('data-readonly'));
+    await expect(writes.filter(entry => entry === 'rate')).toHaveLength(1);
+  },
+};
+
+/** Choosing across Works keeps what Main allows: an edition of the same Work beside an episode, and the first Work's places given up for another's. */
+export const ChooseAcrossWorks: Story = {
+  args: { sources: fixture.crossWorkSources },
+  async play() {
+    const dialog = await screen.findByRole('dialog');
+    const choose = async (kind: string, query: string, option: RegExp) => {
+      const tab = within(dialog).queryByRole('tab', { name: kind });
+      if (tab) await userEvent.click(tab);
+      const search = await within(dialog).findByRole('combobox', { name: kind }, { timeout: 4000 });
+      await waitFor(() => expect(search).toBeEnabled());
+      await waitFor(async () => {
+        if (search.getAttribute('aria-expanded') !== 'true') await userEvent.click(search);
+        await expect(search).toHaveAttribute('aria-expanded', 'true');
+      }, { timeout: 5000 });
+      await userEvent.clear(search);
+      await userEvent.type(search, query);
+      await userEvent.click(await screen.findByRole('option', { name: option, hidden: true }, { timeout: 4000 }));
+    };
+    await choose('Episodes', 'Hunsford', /Episode 3/);
+    await choose('Releases', 'Blu-ray', /Blu-ray/);
+    await seeRole(dialog, 'button', 'Remove Episode 3 · Hunsford');
+    await seeRole(dialog, 'button', 'Remove Blu-ray box (2005)');
+    await choose('Releases', 'Manga', /Manga/);
+    await seeRole(dialog, 'button', 'Remove Manga box set');
+    await expect(within(dialog).queryByRole('button', { name: 'Remove Episode 3 · Hunsford' })).toBeNull();
+    await expect(within(dialog).queryByRole('button', { name: 'Remove Blu-ray box (2005)' })).toBeNull();
+  },
+};
+export const ChooseAcrossWorksPhone: Story = { ...ChooseAcrossWorks, globals: phone };
 
 /** The person's rating changed on another device: this one is not saved, and the stars return to what Main holds. */
 export const RatingConflict: Story = {

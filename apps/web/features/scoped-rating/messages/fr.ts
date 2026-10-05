@@ -25,6 +25,7 @@ export default {
   failSignIn: 'Connectez-vous pour noter.',
   failDenied: 'Vous ne pouvez pas noter cela ici.',
   failInvalid: 'Ces choix ne peuvent pas être combinés. Choisissez un endroit de chaque sorte.',
+  failWorkMismatch: 'Ces choix relèvent d’œuvres différentes. Choisissez des endroits d’une seule œuvre.',
   failUnavailable: 'Le chargement a échoué pour le moment. Réessayez dans un instant.',
   failConflict: 'Cela a changé ailleurs. Rechargez pour voir la dernière version.',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: 'Classé par note pondérée. Une note est tirée vers la moyenne générale tant que peu de personnes ont noté, '
     + 'pour que quelques notes élevées ne devancent pas une fiche bien éprouvée.',
   rankingEligibility: insert('Il faut au moins {{min}} notes pour être classé.', { min: String }),
-  rankingPrior: insert('Moyenne générale {{mean}} sur {{ratings}}.', { mean: String, ratings: String }),
+  rankingPrior: insert('Moyenne générale {{mean}}, avec un poids de {{weight}}. Avec autant de notes, un score se place à mi-chemin entre sa propre moyenne et celle-ci.', { mean: String, weight: String }),
   rankingPlace: insert('Rang {{position}}', { position: String }),
   rankingWeighted: insert('Pondéré {{score}}', { score: String }),
   rankingNone: 'Personne n’a encore assez de notes pour être classé.',

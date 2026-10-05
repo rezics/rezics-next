@@ -26,9 +26,11 @@ export type RollupFormula = Rollup['formula'];
 export type Outcome<T> = { ok: true; data: T } | { ok: false; failure: Failure };
 
 /** Why a read or write has no data; each region says its own and the rest of the sheet stays. */
-export type Failure = 'missing' | 'sign-in' | 'denied' | 'moved' | 'conflict' | 'invalid' | 'unavailable';
+export type Failure = 'missing' | 'sign-in' | 'denied' | 'moved' | 'conflict' | 'invalid' | 'work-mismatch' | 'unavailable';
 
-export function failureOf(status: number): Failure {
+/** `value` is the problem body Main answered with; its `code` tells a frame set from two Works from any other refusal. */
+export function failureOf(status: number, value?: unknown): Failure {
+  if (status === 422 && value && typeof value === 'object' && 'code' in value && value.code === 'projection_frame_work_mismatch') return 'work-mismatch';
   if (status === 404) return 'missing';
   if (status === 401) return 'sign-in';
   if (status === 403) return 'denied';

@@ -7,10 +7,38 @@ import { resourceHref } from '../features/address/path.ts';
 const [e1, e2] = fixture.episodes as [FrameCandidate, FrameCandidate];
 const canon = fixture.continuities[0]!;
 
-test('choosing another place of the same kind replaces it, since Main allows one coordinate per dimension', () => {
+test('choosing another place of the same kind replaces it, since Main allows one coordinate per slot', () => {
   expect(withFrame([e1, canon], e2).map(frame => frame.iri)).toEqual([canon.iri, e2.iri]);
   expect(withFrame([e1], e1)).toEqual([e1]);
   expect(withoutFrame([e1, canon], e1.iri)).toEqual([canon]);
+});
+
+const work = fixture.workIri;
+const otherWork = fixture.iri('c0df');
+const inWork = (frame: FrameCandidate, of: string): FrameCandidate => ({ ...frame, work: of });
+const release: FrameCandidate = { iri: fixture.iri('f1'), dimension: 'release', work, name: e1.name };
+const edition: FrameCandidate = { iri: fixture.iri('f2'), dimension: 'realization', work, name: e1.name };
+const theWork: FrameCandidate = { iri: work, dimension: 'work', name: e1.name };
+const iris = (frames: readonly FrameCandidate[]) => frames.map(frame => frame.iri);
+
+test('a release and an edition share a slot, so choosing one replaces the other', () => {
+  expect(iris(withFrame([release], edition))).toEqual([edition.iri]);
+  expect(iris(withFrame([inWork(e1, work), release], edition))).toEqual([e1.iri, edition.iri]);
+});
+
+test('a Work may stay beside one of its own episodes, but no slot holds two of anything else', () => {
+  expect(iris(withFrame([theWork], inWork(e1, work)))).toEqual([work, e1.iri]);
+  expect(iris(withFrame([inWork(e1, work)], theWork))).toEqual([e1.iri, work]);
+  // Another episode replaces the episode, and the Work stays.
+  expect(iris(withFrame([theWork, inWork(e1, work)], inWork(e2, work)))).toEqual([work, e2.iri]);
+});
+
+test('a coordinate in another Work replaces those in the first, and a continuity is kept, so Main never sees two Works', () => {
+  expect(iris(withFrame([inWork(e1, work), release, canon], inWork(e2, otherWork)))).toEqual([canon.iri, e2.iri]);
+  expect(iris(withFrame([theWork, canon], inWork(e2, otherWork)))).toEqual([canon.iri, e2.iri]);
+  // A coordinate whose Work is unknown is never taken for another Work's.
+  const unplaced: FrameCandidate = { iri: fixture.iri('f3'), dimension: 'release', name: e1.name };
+  expect(iris(withFrame([unplaced], inWork(e2, otherWork)))).toEqual([unplaced.iri, e2.iri]);
 });
 
 test('the same subject within the same frames is one place, whatever order they were chosen in', () => {

@@ -25,6 +25,7 @@ export default {
   failSignIn: '평가하려면 로그인하세요.',
   failDenied: '여기서는 평가할 수 없어요.',
   failInvalid: '이 조합은 사용할 수 없어요. 종류마다 한 곳씩 고르세요.',
+  failWorkMismatch: '서로 다른 작품에 속해요. 한 작품 안에서 장소를 고르세요.',
   failUnavailable: '지금은 불러올 수 없어요. 잠시 후 다시 시도하세요.',
   failConflict: '다른 곳에서 바뀌었어요. 새로고침해서 최신 내용을 확인하세요.',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: '가중 평점 순서예요. 많은 사람이 평가하기 전까지는 점수를 전체 평균 쪽으로 끌어당겨 계산하므로, '
     + '높은 평가 몇 개만으로 충분히 검증된 기록을 앞지를 수 없어요.',
   rankingEligibility: insert('순위에 오르려면 평가가 {{min}}개 이상 필요해요.', { min: String }),
-  rankingPrior: insert('전체 평균 {{mean}} ({{ratings}} 기준).', { mean: String, ratings: String }),
+  rankingPrior: insert('전체 평균 {{mean}}, 가중치 {{weight}}. 평가가 그만큼 쌓이면 점수는 자신의 평균과 이 값의 중간에 놓여요.', { mean: String, weight: String }),
   rankingPlace: insert('{{position}}위', { position: String }),
   rankingWeighted: insert('가중 {{score}}', { score: String }),
   rankingNone: '순위에 오를 만큼 평가를 받은 대상이 아직 없어요.',

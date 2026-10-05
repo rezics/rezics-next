@@ -56,6 +56,18 @@ export const Populated: Story = {
 export const PopulatedPhone: Story = { ...Populated, globals: phone };
 export const PopulatedDarkPhone: Story = { ...Populated, globals: { ...phone, theme: 'dark' } };
 
+/** The names of the places could not be read: a retry note, never "hidden until you reach it" or "nobody has rated". */
+export const SummariesFailed: Story = {
+  args: { scenario: { ...fixture.populated, summaryFails: true } },
+  async play({ canvasElement }) {
+    await see(canvasElement, 'This could not be loaded right now. Try again in a moment.');
+    await expect(canvasElement.querySelector('[data-hidden-parts]')).toBeNull();
+    await expect(within(canvasElement).queryByText(/hidden until you reach/)).toBeNull();
+    await expect(within(canvasElement).queryByText('Nobody has rated this in a specific part yet.')).toBeNull();
+    await expect(within(canvasElement).getByRole('button', { name: 'Try again' })).toBeVisible();
+  },
+};
+
 /** Nobody has rated the subject in any place yet. */
 export const Empty: Story = {
   args: { scenario: fixture.empty },

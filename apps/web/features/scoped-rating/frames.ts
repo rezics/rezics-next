@@ -10,22 +10,47 @@ import type { AvailableSummary, ProjectionView, ResourceSummary } from './types.
 export const frameDimensions = ['position', 'event', 'continuity', 'work', 'release', 'realization'] as const;
 export type FrameDimension = (typeof frameDimensions)[number];
 
-/** Main takes at most eight frames, one per dimension (`MAX_FRAMES`). */
+/** Main takes at most eight frames (`MAX_FRAMES`), one per slot and all in one Work. */
 export const MAX_FRAMES = 8;
 
 /** A resource a person can choose as a frame, with the dimension it occupies. */
 export interface FrameCandidate {
   iri: string;
   dimension: FrameDimension;
+  /** The Work an episode, chapter, release or edition lies in (a Work's own is itself); absent for a continuity or an event. */
+  work?: string;
   name: { value: string; language: string; direction: 'ltr' | 'rtl' };
 }
 
 /**
- * The chosen frames with `candidate` set in: one coordinate per dimension, so choosing another episode replaces the
- * episode instead of asking Main for a frame set it refuses (`projection_frame_dimension_repeated`).
+ * What one coordinate of a place holds, as Main counts them (`projection/dimension.ts`): a Work and an episode or chapter
+ * share a slot, a release and an edition share another, and every other dimension has its own.
+ */
+export type FrameSlot = 'structure' | 'edition' | Exclude<FrameDimension, 'work' | 'position' | 'release' | 'realization'>;
+
+export const slotOf = (dimension: FrameDimension): FrameSlot =>
+  dimension === 'work' || dimension === 'position' ? 'structure' : dimension === 'release' || dimension === 'realization' ? 'edition' : dimension;
+
+/** The Work a coordinate lies in, where it is known: a Work is its own. */
+const workOf = (frame: FrameCandidate) => frame.dimension === 'work' ? frame.iri : frame.work;
+
+/**
+ * The chosen frames with `candidate` set in, as Main will accept them: choosing another coordinate of the same slot
+ * replaces it, a Work may stay beside one of its own episodes or chapters, and a coordinate in another Work replaces
+ * those in the first, so the picker never builds a place Main refuses (`projection_frame_slot_repeated`,
+ * `projection_frame_work_mismatch`).
  */
 export function withFrame(frames: readonly FrameCandidate[], candidate: FrameCandidate): FrameCandidate[] {
-  const kept = frames.filter(frame => frame.dimension !== candidate.dimension && frame.iri !== candidate.iri);
+  const work = workOf(candidate);
+  const slot = slotOf(candidate.dimension);
+  const kept = frames.filter(frame => {
+    if (frame.iri === candidate.iri) return false;
+    const there = workOf(frame);
+    if (work && there && work !== there) return false;
+    if (slotOf(frame.dimension) !== slot) return true;
+    // A Work and a position of it are the one pair a slot holds.
+    return frame.dimension !== candidate.dimension && (frame.dimension === 'work' || candidate.dimension === 'work');
+  });
   return [...kept, candidate].slice(-MAX_FRAMES);
 }
 

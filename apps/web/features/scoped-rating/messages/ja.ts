@@ -25,6 +25,7 @@ export default {
   failSignIn: '評価するにはサインインしてください。',
   failDenied: 'ここでは評価できません。',
   failInvalid: 'この組み合わせはできません。種類ごとに場所を1つ選んでください。',
+  failWorkMismatch: 'これらは別の作品のものです。1つの作品の中から場所を選んでください。',
   failUnavailable: '今は読み込めません。しばらくしてからもう一度お試しください。',
   failConflict: '別の場所で変更されました。再読み込みして最新の状態を確認してください。',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: '加重評価の順に並べています。多くの人が評価するまでは全体の平均に近づけて計算するため、'
     + '少数の高評価だけで、十分に評価された記録を上回ることはありません。',
   rankingEligibility: insert('ランキングに入るには、{{min}} 件以上の評価が必要です。', { min: String }),
-  rankingPrior: insert('全体の平均は {{mean}}（{{ratings}}）です。', { mean: String, ratings: String }),
+  rankingPrior: insert('全体の平均は {{mean}}、重みは {{weight}} です。評価がその件数あるものは、自身の平均とこの値のちょうど中間になります。', { mean: String, weight: String }),
   rankingPlace: insert('{{position}} 位', { position: String }),
   rankingWeighted: insert('加重 {{score}}', { score: String }),
   rankingNone: 'ランキングに入るのに十分な評価を集めた人はまだいません。',

@@ -25,6 +25,7 @@ export default {
   failSignIn: 'Inicia sesión para valorar.',
   failDenied: 'No puedes valorar esto aquí.',
   failInvalid: 'Esto no se puede combinar. Elige un lugar de cada tipo.',
+  failWorkMismatch: 'Estos lugares son de obras distintas. Elige lugares de una sola obra.',
   failUnavailable: 'No se pudo cargar ahora mismo. Inténtalo de nuevo en un momento.',
   failConflict: 'Esto cambió en otro sitio. Recarga para ver lo más reciente.',
 
@@ -88,7 +89,7 @@ export default {
   rankingBasis: 'Ordenado por valoración ponderada. Una puntuación se acerca al promedio general hasta que han valorado muchas '
     + 'personas, para que unas pocas valoraciones altas no superen a un registro bien contrastado.',
   rankingEligibility: insert('Se necesitan al menos {{min}} valoraciones para entrar en la clasificación.', { min: String }),
-  rankingPrior: insert('Promedio general {{mean}} con {{ratings}}.', { mean: String, ratings: String }),
+  rankingPrior: insert('Promedio general {{mean}} con un peso de {{weight}}. Quien tiene tantas valoraciones queda a medio camino de ese promedio.', { mean: String, weight: String }),
   rankingPlace: insert('Puesto {{position}}', { position: String }),
   rankingWeighted: insert('Ponderado {{score}}', { score: String }),
   rankingNone: 'Nadie tiene aún valoraciones suficientes para entrar en la clasificación.',

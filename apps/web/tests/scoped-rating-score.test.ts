@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { bars, figuresOfMember, figuresOfRating, scoreView } from '../features/scoped-rating/score.ts';
+import { bars, figuresOfMember, figuresOfRating, ratingsCounted, scoreView } from '../features/scoped-rating/score.ts';
 import * as fixture from '../features/scoped-rating/fixtures.ts';
 import * as workFixture from '../features/work-page/fixtures.ts';
 
@@ -56,4 +56,24 @@ test('a Work’s read, which has no display state, follows the same rules as a t
   const none = figuresOfRating(workFixture.noGlobalRatings.data.summary)!;
   expect(scoreView(none)).toEqual({ kind: 'none' });
   expect(bars(none)).toBeNull();
+});
+
+test('under mean-of-means the count is only the members the value was averaged over; pooled counts every readable one', async () => {
+  const api = fixture.memoryScopedRatingApi(fixture.populated);
+  // Episodes 1, 2, 3 and 5 meet the threshold (190, 41, 214 and 76 ratings); episode 4 has 3 and does not.
+  const targets = [fixture.placeEpisode1, fixture.placeEpisode2, fixture.placeEpisode3, fixture.placeEpisode4, fixture.placeEpisode5]
+    .map(read => read.projection.id);
+  const pooled = await api.rollup(fixture.writing.context, targets, 'pooled');
+  const means = await api.rollup(fixture.writing.context, targets, 'mean-of-means');
+  if (!pooled.ok || !means.ok) throw new Error('unreadable');
+  expect(ratingsCounted(pooled.data)).toBe(190 + 41 + 214 + 3 + 76);
+  expect(ratingsCounted(means.data)).toBe(190 + 41 + 214 + 76);
+});
+
+test('a member the question does not accept or that cannot be read adds no ratings to either count', async () => {
+  const api = fixture.memoryScopedRatingApi({ ...fixture.populated, unreadable: [fixture.placeEpisode2.projection.id] });
+  const targets = [fixture.placeEpisode1, fixture.placeEpisode2, fixture.placeNovel].map(read => read.projection.id);
+  const answer = await api.rollup(fixture.writing.context, targets, 'pooled');
+  if (!answer.ok) throw new Error('unreadable');
+  expect(ratingsCounted(answer.data)).toBe(190);
 });

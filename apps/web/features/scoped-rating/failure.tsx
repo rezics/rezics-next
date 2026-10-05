@@ -13,6 +13,7 @@ export function failureText(failure: Failure, t: Translation): string {
     case 'sign-in': return t.failSignIn;
     case 'denied': return t.failDenied;
     case 'invalid': return t.failInvalid;
+    case 'work-mismatch': return t.failWorkMismatch;
     case 'conflict': return t.failConflict;
     case 'moved':
     case 'unavailable': return t.failUnavailable;
@@ -29,7 +30,7 @@ export function FailureNote({ failure, locale, messages, retry, signInHref, clas
     className={cn('grid justify-items-start gap-2 rounded-2xl bg-muted/60 px-4 py-3 text-sm', className)}>
     <p>{failureText(failure, t)}</p>
     {failure === 'sign-in' && signInHref ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>{t.signInToRate}</Link> : null}
-    {retry && failure !== 'sign-in' && failure !== 'denied' && failure !== 'missing'
+    {retry && failure !== 'sign-in' && failure !== 'denied' && failure !== 'missing' && failure !== 'work-mismatch'
       ? <Button size="sm" variant="outline" onClick={retry}>{t.retry}</Button> : null}
     {children}
   </div>;

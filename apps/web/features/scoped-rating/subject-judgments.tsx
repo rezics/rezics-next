@@ -60,6 +60,8 @@ function Rollups({ subject, plans, api, scope, locale, messages }: {
   const [groups, reload] = useLoad<{ work: string; members: ProjectionRead[]; question: Question }[]>(async () => {
     const all = await readAllProjections(api, subject);
     if (!all.ok) return all;
+    // A place whose summary could not be read has an unknown Work: leaving it out would drop it from a combined view unseen.
+    if (all.data.some(read => read.summary === null)) return { ok: false, failure: 'unavailable' };
     const byWork = new Map<string, ProjectionRead[]>();
     for (const read of all.data) {
       const work = workOf(read);

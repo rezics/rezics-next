@@ -64,6 +64,44 @@ test('a conflict while creating is asked again once as a new command; a refusal 
     .projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).toEqual({ ok: false, failure: 'invalid' });
 });
 
+test('opening a place looks it up by its exact frames and creates nothing', async () => {
+  const frames = [fixture.episodes[2]!.iri, fixture.continuities[0]!.iri];
+  const found = fakeMain({ projections: [{ data: { items: [place.projection], nextCursor: null } }], summaries: [summaries] });
+  const answer = await mainScopedRatingApi({ actingSubject: player, main: found.main }).lookup(fixture.subject.iri, frames);
+  expect(answer).toMatchObject({ ok: true, data: { projection: { id: place.projection.id }, summary: { status: 'available' } } });
+  expect(found.calls[0]).toMatchObject({ name: 'projections', query: { subject: fixture.subject.iri, frames, actingSubject: player } });
+  expect(found.calls.map(call => call.name)).not.toContain('projection');
+  // A place nobody has rated, or one the reader may not see, is simply not there; nothing is made for it.
+  const none = fakeMain({ projections: [{ data: { items: [], nextCursor: null } }] });
+  expect(await mainScopedRatingApi({ actingSubject: null, main: none.main }).lookup(fixture.subject.iri, frames))
+    .toEqual({ ok: true, data: null });
+  expect(none.calls.map(call => call.name)).toEqual(['projections']);
+  expect(none.calls[0]?.query).not.toHaveProperty('actingSubject');
+});
+
+test('a lookup that fails is a failure to retry, never "no such place"', async () => {
+  const down = fakeMain({ projections: [{ error: { status: 503 } }] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: down.main }).lookup(fixture.subject.iri, [fixture.episodes[2]!.iri]))
+    .toEqual({ ok: false, failure: 'unavailable' });
+});
+
+test('a place whose summary cannot be read comes back without one, so no view calls it hidden', async () => {
+  const lost = fakeMain({ projections: [{ data: { items: [place.projection], nextCursor: null } }], summaries: [{ error: { status: 503 } }] });
+  const api = mainScopedRatingApi({ actingSubject: player, main: lost.main });
+  expect(await api.lookup(fixture.subject.iri, [fixture.episodes[2]!.iri])).toMatchObject({ ok: true, data: { summary: null } });
+  expect(await api.projections(fixture.subject.iri)).toMatchObject({ ok: true, data: { items: [{ summary: null }] } });
+});
+
+test('a frame set across two Works is its own refusal, and the other 422s stay invalid', async () => {
+  const body = (code: string) => ({ error: { status: 422, value: { code } } });
+  const mixed = fakeMain({ projection: [body('projection_frame_work_mismatch')] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: mixed.main })
+    .projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).toEqual({ ok: false, failure: 'work-mismatch' });
+  const repeated = fakeMain({ projection: [body('projection_frame_slot_repeated')] });
+  expect(await mainScopedRatingApi({ actingSubject: player, main: repeated.main })
+    .projection(fixture.subject.iri, [fixture.episodes[2]!.iri])).toEqual({ ok: false, failure: 'invalid' });
+});
+
 test('signed out, nothing is written and the answer says to sign in', async () => {
   const { main, calls } = fakeMain({});
   const api = mainScopedRatingApi({ actingSubject: null, main });

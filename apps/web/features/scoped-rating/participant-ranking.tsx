@@ -30,16 +30,20 @@ function Participant({ read, locale }: { read: ProjectionRead | undefined; local
  * unranked participant has come. A participant the reader cannot see is not listed, and the ranking never shows an
  * order Main did not publish.
  */
-export function ParticipantRanking({ question, participants, api, level = 2, locale, messages, className }: {
+export function ParticipantRanking({ question, participants, api, retry, level = 2, locale, messages, className }: {
   question: Question;
-  /** Each participant's place within the event, such as a player's projection for the match. */
-  participants: readonly ProjectionRead[]; api: ScopedRatingApi; level?: 2 | 3; locale: UiLocale;
+  /** Each participant's place within the event, such as a player's projection for the match. A null summary is a failed lookup. */
+  participants: readonly ProjectionRead[]; api: ScopedRatingApi;
+  /** Reads the participants again; the host read them, so only it can. */
+  retry?: () => void; level?: 2 | 3; locale: UiLocale;
   messages: ScopedRatingMessages; className?: string;
 }) {
   const t = translate(messages, locale);
   const Heading = `h${level}` as const;
   const SubHeading = `h${level + 1}` as 'h3' | 'h4';
   const visible = participants.filter(read => read.summary?.status === 'available');
+  // A participant whose summary could not be read is not one the reader has not reached: never "nobody has rated".
+  const unread = participants.filter(read => read.summary === null).length;
   const targets = visible.map(read => read.projection.id);
   const [result, reload] = useLoad<Rollup | null>(async () => targets.length ? api.rollup(question.context, targets, 'pooled', true)
     : { ok: true, data: null }, `${question.context}\n${targets.join()}`);
@@ -63,10 +67,11 @@ export function ParticipantRanking({ question, participants, api, level = 2, loc
             <p>{t.rankingBasis}</p>
             <p data-ranking-eligibility>
               {t.rankingEligibility({ min: formatNumber(rank?.minimumRatings ?? 50, locale) })}
-              {rank?.prior ? ` ${t.rankingPrior({ mean: formatMean(rank.prior.mean, locale), ratings: t.ratingCount(rank.prior.weight) })}` : ''}
+              {rank?.prior ? ` ${t.rankingPrior({ mean: formatMean(rank.prior.mean, locale), weight: formatNumber(rank.prior.weight, locale) })}` : ''}
             </p>
           </div>
-          {rank?.status === 'unavailable' || !rank?.items.length
+          {unread > 0 ? <FailureNote failure="unavailable" locale={locale} messages={messages} retry={retry} /> : null}
+          {unread > 0 && !rank?.items.length ? null : rank?.status === 'unavailable' || !rank?.items.length
             ? <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">{rank?.status === 'unavailable' && !waiting.length ? t.rankingUnavailable : t.rankingNone}</p>
             : <ol className="grid gap-2">
               {rank.items.map(item => <li key={item.target} data-rank={item.position}

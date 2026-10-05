@@ -94,7 +94,9 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
   const items = first.state === 'ready' ? [...first.data.items, ...later?.items ?? []] : [];
   const next = later ? later.next : first.state === 'ready' ? first.data.nextCursor : null;
   const visible = items.filter(item => isVisible(item.read));
-  const hidden = items.length - visible.length;
+  // A place whose summary could not be read is not one the reader has not reached: it says so, with a way to read it again.
+  const unread = items.filter(item => item.read.summary === null).length;
+  const hidden = items.length - visible.length - unread;
 
   async function more() {
     if (!next) return;
@@ -114,6 +116,7 @@ export function SubjectProjections({ subject, api, scope = { kind: 'global' }, q
               {visible.map(({ read, row }) => <ProjectionRow key={read.projection.id} read={read} row={row!} retry={restart}
                 position={position} locale={locale} messages={messages} />)}
             </ul> : null}
+            {unread > 0 ? <FailureNote failure="unavailable" retry={restart} locale={locale} messages={messages} /> : null}
             {hidden > 0 ? <p data-hidden-parts className="flex items-start gap-2 text-muted-foreground text-sm">
               <LockIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{t.hiddenParts(hidden)}</p> : null}
             {next ? <div className="grid justify-items-start gap-2">

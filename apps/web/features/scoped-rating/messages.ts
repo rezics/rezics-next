@@ -37,6 +37,7 @@ const en = {
   failSignIn: 'Sign in to rate.',
   failDenied: 'You can’t rate this here.',
   failInvalid: 'These can’t be combined. Choose one place of each kind.',
+  failWorkMismatch: 'These belong to different works. Choose places from one work.',
   failUnavailable: 'This could not be loaded right now. Try again in a moment.',
   failConflict: 'This changed somewhere else. Reload to see the latest.',
 
@@ -106,7 +107,8 @@ const en = {
   rankingBasis: 'Ranked by weighted rating. A score is pulled toward the overall average until many people have rated, '
     + 'so a few high ratings can’t outrank a well-tested record.',
   rankingEligibility: insert('Needs at least {{min}} ratings to be ranked.', { min: String }),
-  rankingPrior: insert('Overall average {{mean}} from {{ratings}}.', { mean: String, ratings: String }),
+  rankingPrior: insert('Overall average {{mean}}, with a weight of {{weight}}. A participant with that many ratings is pulled halfway toward it.',
+    { mean: String, weight: String }),
   rankingPlace: insert('Rank {{position}}', { position: String }),
   rankingWeighted: insert('Weighted {{score}}', { score: String }),
   rankingNone: 'No one has enough ratings to be ranked yet.',

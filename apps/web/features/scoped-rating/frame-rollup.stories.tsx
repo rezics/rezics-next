@@ -65,6 +65,30 @@ export const AverageOfEpisodes: Story = {
   },
 };
 
+/** Averaging counts only the episodes the average is taken over: the thin one adds no ratings to the number shown. */
+export const AverageOfEpisodesCountsWhatItAveraged: Story = {
+  args: { scenario: { ...fixture.populated, places: [fixture.placeEpisode1, fixture.placeEpisode2, fixture.placeEpisode3, fixture.placeEpisode4, fixture.placeEpisode5],
+    notAccepted: [] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const value = () => canvasElement.querySelector('[data-rollup-value]') as HTMLElement;
+    await waitFor(() => expect(value().textContent).toContain('524 ratings'), { timeout: 4000 });
+    await userEvent.click(canvas.getByRole('radio', { name: 'Average of episodes' }));
+    await waitFor(() => expect(value().textContent).toContain('521 ratings'), { timeout: 4000 });
+    await expect(value().textContent).not.toContain('524');
+  },
+};
+
+/** The names of the episodes could not be read: a retry note, never "nobody has rated this". */
+export const SummariesFailed: Story = {
+  args: { scenario: { ...fixture.populated, summaryFails: true } },
+  async play({ canvasElement }) {
+    await see(canvasElement, 'This could not be loaded right now. Try again in a moment.');
+    await expect(within(canvasElement).queryByText('Nobody has rated this in a specific part yet.')).toBeNull();
+    await expect(canvasElement.querySelector('[data-rollup]')).toBeNull();
+  },
+};
+
 /** Fewer than half of the episodes have enough ratings: the combined score is withheld, and the reason is the coverage. */
 export const BelowThreshold: Story = {
   args: { scenario: fixture.belowThreshold },

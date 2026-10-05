@@ -24,13 +24,15 @@ export const workIri = iri('c0de');
 
 export const subject: Subject = { iri: iri('c001'), name: { value: 'Elizabeth Bennet', language: 'en', direction: direction('en', 'Elizabeth Bennet') } };
 
-const frame = (tail: string, value: string, dimension: FrameDimension): FrameCandidate =>
-  ({ iri: iri(tail), dimension, name: { value, language: 'en', direction: direction('en', value) } });
+const frame = (tail: string, value: string, dimension: FrameDimension, work?: string): FrameCandidate =>
+  ({ iri: iri(tail), dimension, ...work ? { work } : {}, name: { value, language: 'en', direction: direction('en', value) } });
 export const episodes = [
-  frame('e001', 'Episode 1 · Netherfield', 'position'), frame('e002', 'Episode 2 · The ball', 'position'),
-  frame('e003', 'Episode 3 · Hunsford', 'position'), frame('e004', 'Episode 4 · Pemberley', 'position'),
-  frame('e005', 'Episode 5 · Lydia', 'position'), frame('e006', 'Episode 6 · The proposal', 'position'),
+  frame('e001', 'Episode 1 · Netherfield', 'position', workIri), frame('e002', 'Episode 2 · The ball', 'position', workIri),
+  frame('e003', 'Episode 3 · Hunsford', 'position', workIri), frame('e004', 'Episode 4 · Pemberley', 'position', workIri),
+  frame('e005', 'Episode 5 · Lydia', 'position', workIri), frame('e006', 'Episode 6 · The proposal', 'position', workIri),
 ];
+/** Releases of this Work and of another one, for a picker whose choices must stay in one Work. */
+export const releases = [frame('f001', 'Blu-ray box (2005)', 'release', workIri), frame('f002', 'Manga box set', 'release', iri('c0df'))];
 export const continuities = [
   frame('a001', 'Austen’s novel', 'continuity'), frame('a002', 'The 1995 serial', 'continuity'),
 ];
@@ -41,6 +43,11 @@ const frameByIri = new Map([...episodes, ...continuities, ...matches].map(item =
 export const sources = [
   staticFrameSource('position', episodes, 'Episodes'),
   staticFrameSource('continuity', continuities, 'Continuities'),
+];
+/** Episodes, and releases of two Works: choosing across them has to give up one side. */
+export const crossWorkSources = [
+  staticFrameSource('position', episodes, 'Episodes'),
+  staticFrameSource('release', releases, 'Releases'),
 ];
 
 /** Summary parts are plain summaries of the subject and each frame. */
@@ -125,8 +132,14 @@ export interface Scenario {
   rateFails?: Failure;
   /** Every get-or-create answers with this failure. */
   projectionFails?: Failure;
+  /** Every lookup of a subject's place within frames answers with this failure. */
+  lookupFails?: Failure;
+  /** Every read of a place's summary fails, as a lost batch does: the places come back without one. */
+  summaryFails?: boolean;
   /** Every read of a subject's places answers with this failure. */
   listFails?: Failure;
+  /** Collects the name of every lookup, creation and rating write, in order, so a story can see what was written and when. */
+  log?: string[];
   /** Milliseconds each call takes, so loading states can be seen. */
   delay?: number;
   /** Projections per page of a subject's list. */
@@ -144,6 +157,8 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
   const ownOf = (target: string, context: string) => given.has(key(target, context)) ? given.get(key(target, context))! : scenario.own?.[key(target, context)] ?? null;
   const pageSize = scenario.pageSize ?? 20;
   let minted = 0;
+  /** A place as a reader gets it: without a summary where reading summaries fails. */
+  const readOf = (read: ProjectionRead): ProjectionRead => scenario.summaryFails ? { ...read, summary: null } : read;
 
   const questionsOf = (target: string) => scenario.questions?.[target] ?? scenario.questions?.['*'] ?? [];
   const bucketsOf = (target: string, context: string) => histograms[key(target, context)] ?? histogram(0, 0);
@@ -187,6 +202,7 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
 
   return {
     async projection(subjectIri, frames) {
+      scenario.log?.push('projection');
       await wait(scenario.delay ?? 0);
       if (!scenario.signedIn) return fail('sign-in');
       if (scenario.projectionFails) return fail(scenario.projectionFails);
@@ -199,10 +215,19 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       places.push(created);
       return ok({ ...created, created: true });
     },
+    async lookup(subjectIri, frames) {
+      scenario.log?.push('lookup');
+      await wait(scenario.delay ?? 0);
+      if (scenario.lookupFails) return fail(scenario.lookupFails);
+      const wanted = { subject: subjectIri, frames: [...frames] };
+      const existing = places.find(place => sameProjection(place.projection, wanted));
+      // A place the reader has not reached is not found, as one that does not exist is not: Main tells them apart to no one.
+      return ok(existing && existing.summary?.status === 'available' ? readOf(existing) : null);
+    },
     async projections(subjectIri, cursor) {
       await wait(scenario.delay ?? 0);
       if (scenario.listFails) return fail(scenario.listFails);
-      const mine = places.filter(place => place.projection.subject === subjectIri);
+      const mine = places.filter(place => place.projection.subject === subjectIri).map(readOf);
       const from = cursor ? Number(cursor) : 0;
       const page: ProjectionList = { items: mine.slice(from, from + pageSize),
         nextCursor: from + pageSize < mine.length ? String(from + pageSize) : null };
@@ -222,6 +247,7 @@ export function memoryScopedRatingApi(scenario: Scenario = {}): ScopedRatingApi 
       return ok(ratingOf(target, context, bucketsOf(target, context), scope));
     },
     async rate(target, context, value) {
+      scenario.log?.push('rate');
       await wait(scenario.delay ?? 0);
       if (!scenario.signedIn) return fail('sign-in');
       if (scenario.rateFails) return fail(scenario.rateFails);
