@@ -28,7 +28,7 @@ test('a relation definition is readable to a writer holding no grant on it once 
   expect(await readable(HIDDEN)).toBe(false);
 });
 
-test('without the graph no semantic Resource is public, so composition must configure it', async () => {
+test('missing graph composition fails loudly when a writer checks relation vocabulary', async () => {
   const readable = referenceReader(new AccessAdmissionRegistry(accessPool(), 'key'), PRINCIPAL, ACTOR);
-  expect(await readable(DEFINITION)).toBe(false);
+  await expect(readable(DEFINITION)).rejects.toThrow('configureBaseline(fuseki)');
 });
