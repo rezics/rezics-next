@@ -1,8 +1,8 @@
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable } from '../modules/access/topology-control.ts';
-import { batchFollowCommand, batchFollowResult, followCommand, followKind, followTargetId, followedAuthorsPage, followedAuthorsQuery,
-  followResult, followsPage, followsQuery, followState, type FollowKind } from '../modules/follows/contract.ts';
+import { batchFollowCommand, batchFollowResult, followCommand, followKind, followedAuthorsPage, followedAuthorsQuery,
+  followResult, followsPage, followsQuery, followState, followStateQuery, type FollowKind } from '../modules/follows/contract.ts';
 import { readFollowedAuthors, readFollows, readFollowTarget } from '../modules/follows/read.ts';
 import { resolveFollowIdentity } from '../modules/follows/targets.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
@@ -43,7 +43,7 @@ export function followsRoutes(work: MainWorkDependencies) {
       return identity;
     });
   /** Followers of a target, and with a bearer whether the reader follows it. Only the count is public. */
-  const state = async (request: Request, target: string, kind: FollowKind,
+  const state = async (request: Request, target: string, kind: FollowKind | undefined,
     query: { language?: string; actingSubject?: string }) => {
     try {
       if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
@@ -54,7 +54,7 @@ export function followsRoutes(work: MainWorkDependencies) {
         const canonical = identity.kind === 'work' ? (await resolveTargets(session,[identity.target],'discussion'))[0]!.resource : identity.target;
         const reader = principal ? { principal,agent: query.actingSubject! } : undefined;
         const described = await readFollowTarget(session, canonical, identity.kind,undefined,reader);
-        if (kind!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(kind))) throw new ControlInvalid('Follow kind does not match target');
+        if (kind && kind!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(kind))) throw new ControlInvalid('Follow kind does not match target');
         const current = await work.follows!.state(described.id, principal ? { principal, agent: query.actingSubject! } : undefined);
         await readFollowTarget(session, described.id, identity.kind,undefined,reader);
         return { profile: 'follow-state-v1' as const, target: described, ...current };
@@ -83,12 +83,11 @@ export function followsRoutes(work: MainWorkDependencies) {
       } catch (error) { return homeError(error); }
     })
     .get('/v1/follows/:id', { params: t.Object({ id: readUuid }),
-      query: t.Object({ kind: followKind,
+      query: t.Object({ kind: t.Optional(followKind),
         ...stateQuery }, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
       response: { 200: followState, ...workReadProblems },
     }, ({ request, params, query }) => state(request, `https://rezics.com/id/${params.id}`, query.kind, query))
-    .get('/v1/me/follow-state', { query: t.Object({ target: followTargetId, kind: followKind,
-      language: t.Optional(readLanguage), actingSubject: readId }, { additionalProperties: false }),
+    .get('/v1/me/follow-state', { query: followStateQuery,
     response: { 200: followState, ...workReadProblems } }, ({ request,query }) => state(request,query.target,query.kind,query))
     .get('/v1/authors/open-library/:author/follow', {
       params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),

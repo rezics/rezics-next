@@ -91,7 +91,7 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
     realm: kind === 'zone' || kind === 'realm' ? summaryId : owner,
     href: kind === 'work' ? `/w/${target.slice(-36)}` : kind === 'concept' ? `/concepts/${target.slice(-36)}`
       : kind === 'realm' || kind === 'zone' ? `/r/${summaryId.slice(-36)}`
-        : kind === 'release' ? `/releases/${target.slice(-36)}` : target };
+        : kind === 'release' ? `/releases/${target.slice(-36)}` : summary.address.prefix + summary.address.key };
 }
 
 type FollowTarget = Static<typeof followTarget>;

@@ -40,7 +40,7 @@ export interface RelationshipsApi {
   canLeave: boolean;
   follows(query?: ListQuery): Promise<EntityPickerPage<Follow>>;
   memberships(query?: Omit<ListQuery, 'kind' | 'include'>): Promise<EntityPickerPage<Membership>>;
-  state(target: string, kind: string): Promise<FollowState>;
+  state(target: string, kind?: string): Promise<FollowState>;
   set(edit: FollowEdit & { following: boolean; expectedRevision: string | null }, key?: string): Promise<FollowReceipt>;
   batch(edits: FollowEdit[], key?: string): Promise<{ items: FollowReceipt[] }>;
   joining(realm: string): Promise<JoinPolicy>;

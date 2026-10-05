@@ -75,7 +75,8 @@ export async function resolveFollowIdentity(
   );
   const types = rows.flatMap((row) => (row.type ? [row.type.value] : []));
   const registered = admittedTypes
-    .filter((entry) => types.includes(entry.type))
+    // The structural Resource anchor must not outrank its descriptive type.
+    .filter((entry) => !entry.default && types.includes(entry.type))
     .sort((a, b) => a.priority - b.priority || a.type.localeCompare(b.type));
   let kind = types.includes(`${RV}Agent`)
     ? 'agent'

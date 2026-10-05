@@ -153,7 +153,7 @@ function RelationshipControlState({
     const refresh = () => {
       const generation = ++readGeneration.current;
       void apiRef
-        .current!.state(target, kind)
+        .current!.state(target)
         .then((fresh) => {
           if (active && generation === readGeneration.current) {
             setState(fresh);
@@ -185,7 +185,7 @@ function RelationshipControlState({
         : {
             intent,
             key: crypto.randomUUID(),
-            edit: { target, kind, expectedRevision: state.revision, ...edit },
+            edit: { target, expectedRevision: state.revision, ...edit },
           };
     retry.current = pending;
     setBusy(true);
@@ -217,7 +217,7 @@ function RelationshipControlState({
       if (error instanceof RelationshipError && error.status === 409) {
         retry.current = null;
         try {
-          setState(await writer.state(target, kind));
+          setState(await writer.state(target));
         } catch {
           /* Preserve the last known state. */
         }
@@ -411,7 +411,7 @@ function RelationshipControlState({
           variant="ghost"
           onClick={() => {
             void api
-              .state(target, kind)
+              .state(target)
               .then((fresh) => {
                 setState(fresh);
                 setNotice(null);

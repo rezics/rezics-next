@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { shelfWork } from '../profiles/read-contract.ts';
-import { pageFields, pageQuery, readAvatar, readId, readName, readUuid } from '../work/read-contract.ts';
+import { pageFields, pageQuery, readAvatar, readId, readLanguage, readName, readUuid } from '../work/read-contract.ts';
 import { targetRef } from '../target/contract.ts';
 
 /**
@@ -94,6 +94,10 @@ export const followState = t.Object({ profile: t.Literal('follow-state-v1'), tar
   following: t.Nullable(t.Boolean()), revision: t.Nullable(readUuid),
   level: t.Nullable(followLevel), source: t.Nullable(followSource), pinPosition: followFields.pinPosition,
   followers: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }) });
+
+/** State and commands derive identity from the admitted target; kind is only an optional assertion. */
+export const followStateQuery = t.Object({ target: followTargetId, kind: t.Optional(followKind),
+  language: t.Optional(readLanguage), actingSubject: readId }, { additionalProperties: false });
 
 /** Identity seek: P+1 rows, at most P public hydrations; count reads at
  * most 1001 rows. Writes lock one principal inventory, one relationship and
