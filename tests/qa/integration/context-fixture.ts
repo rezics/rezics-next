@@ -82,6 +82,7 @@ export async function contextFixture(apps: Record<string, string>) {
   const env: WorkActivationEnvironment = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
     routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: resolve('.temp', `context-${randomUUID()}`) };
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
+  access.configureBaseline(fuseki);
   const selections = new PrivateContextSelections(accessPool);
   const dependencies: MainWorkDependencies & ContextRouteDependencies = { environment: env,
     account: account.verifier, access, accessPolicy: new AccessPolicyOwner(accessPool),

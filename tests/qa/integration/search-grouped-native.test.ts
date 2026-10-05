@@ -146,8 +146,10 @@ test('SEARCH01/SEARCH04/SEARCH10: public grouped route binds one lead and counts
       await statement(other, gender, genderRelation, female);
       await statement(other, hair, hairRelation, red);
     }
+    const access = new AccessAdmissionRegistry(f.accessPool);
+    access.configureBaseline(f.env.fuseki);
     const app = searchRoutes(f.env.fuseki, { environment: f.env,
-      access: new AccessAdmissionRegistry(f.accessPool),
+      access,
       account: f.account.verifier, judgments: new AccessJudgments(f.accessPool),
       accessPolicy: new AccessPolicyOwner(f.accessPool) } as Parameters<typeof searchRoutes>[1]);
     const body = { profile: 'public-grouped-statement-phrase-v1', actingSubject: f.actorA,
@@ -481,8 +483,10 @@ test('SEARCH01/SEARCH04: one Chinese text-rating-Statement join keeps overlappin
       actingSubject: actor, principalId: principal };
       expect((await setStandingRating(f.env, admission, input)).outcome).toBe('succeeded');
     }
+    const access = new AccessAdmissionRegistry(f.accessPool);
+    access.configureBaseline(f.env.fuseki);
     const app = searchRoutes(f.env.fuseki, { environment: f.env,
-      access: new AccessAdmissionRegistry(f.accessPool), account: f.account.verifier,
+      access, account: f.account.verifier,
       judgments: new AccessJudgments(f.accessPool), accessPolicy: new AccessPolicyOwner(f.accessPool),
     } as Parameters<typeof searchRoutes>[1]);
     const body = { profile: 'public-grouped-statement-phrase-v1', actingSubject: f.actorA,

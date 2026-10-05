@@ -40,6 +40,12 @@ export async function semanticPolicyAuthority(client: PoolClient, principalId: s
     grant: { id: row.grant, generation: row.grant_generation } } : null;
 }
 
+/** Without a baseline graph "not public" would be a guess that hides every public resource. */
+export function requireDisclosureGraph(graph: Pick<FusekiClient, 'query'> | undefined) {
+  if (!graph) throw new Error('public disclosure needs a baseline graph: call configureBaseline(fuseki) at composition');
+  return graph;
+}
+
 function checkedRefs(refs: readonly string[]) {
   if (refs.length > SEMANTIC_DISCLOSURE_LIMIT || refs.some(ref => !nativeId.test(ref))) {
     throw new RangeError('semantic disclosure batch exceeds its profile');
@@ -54,10 +60,12 @@ function checkedRefs(refs: readonly string[]) {
 export async function publicSemantics(client: SemanticDisclosureClient, refs: readonly string[],
   revision?: string): Promise<ReadonlySet<string>> {
   const unique = checkedRefs(refs);
-  if (!unique.length || !client.graph || (revision !== undefined && !nativeId.test(revision))) return new Set();
+  if (!unique.length) return new Set();
+  const graph = requireDisclosureGraph(client.graph);
+  if (revision !== undefined && !nativeId.test(revision)) return new Set();
   return inAccessTransaction(client.pool, 'read committed', async access => {
     await requireRecoveryOpen(access, true);
-    return publicInTransaction(access, client.graph!, unique, revision);
+    return publicInTransaction(access, graph, unique, revision);
   });
 }
 
@@ -112,9 +120,10 @@ export async function readSemanticDisclosure(client: SemanticDisclosureClient,
   principal: VerifiedPrincipal | null, actor: string | null, refs: readonly string[]): Promise<SemanticDisclosure> {
   const unique = checkedRefs(refs);
   if (!unique.length) return { public: new Set(), granted: new Set() };
+  const graph = requireDisclosureGraph(client.graph);
   return inAccessTransaction(client.pool, 'read committed', async access => {
     await requireRecoveryOpen(access, true);
-    const publicRefs = client.graph ? await publicInTransaction(access, client.graph, unique) : new Set<string>();
+    const publicRefs = await publicInTransaction(access, graph, unique);
     if (!principal || !actor || !nativeId.test(actor)) return { public: publicRefs, granted: new Set() };
     const rows = await access.query<{ resource: string }>(`SELECT wanted.resource
       FROM unnest($3::text[]) AS wanted(resource)
