@@ -22,6 +22,7 @@ const backendSources = [
   'tests/qa',
 ];
 const commands: string[][] = [
+  ['bun', 'scripts/qa/serialization-points.ts'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/observability/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/observability/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/main/tsconfig.json'],
@@ -92,6 +93,8 @@ const commands: string[][] = [
     'knip.jsonc',
     'scripts/static/knip.ts',
     'scripts/research/storage_architecture/check.ts',
+    'scripts/qa/serialization-points.ts',
+    'tests/qa/unit/serialization-points.test.ts',
     'tests/qa/unit/static-gates.test.ts',
   ],
   ...(!backend ? [['bun', 'scripts/i18n/check.ts']] : []),
