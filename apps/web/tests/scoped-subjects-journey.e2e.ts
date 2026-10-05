@@ -55,6 +55,9 @@ async function capture(page: Page, name: string) {
   mkdirSync(pictures, { recursive: true });
   // Pictures are of what people read, not of a read still under way.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 30_000 });
+  await page.evaluate(async () => { await document.fonts.ready; });
+  const fullPage = (await page.getByRole('dialog').count()) === 0;
+  if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
   for (const [label, size] of [['desktop', desktop], ['phone', phone]] as const) {
     await page.setViewportSize(size);
     // The layout follows the viewport a moment later: measure until it has, and fail with what overflows.
@@ -64,7 +67,7 @@ async function capture(page: Page, name: string) {
       .sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right).slice(0, 8)
       .map(element => `${element.tagName.toLowerCase()}.${String(element.className).slice(0, 40)} ${Math.round(element.getBoundingClientRect().right)} ${element.textContent?.slice(0, 40)}`)), { message: `${name} fits a ${label}`, timeout: 5_000 }).toEqual([]);
     // A sheet is fixed to the viewport, so a page with one open is kept as it is seen.
-    await page.screenshot({ path: resolve(pictures, `${name}-${label}.png`), fullPage: (await page.getByRole('dialog').count()) === 0 });
+    await page.screenshot({ path: resolve(pictures, `${name}-${label}.png`), fullPage });
   }
   await page.setViewportSize(desktop);
 }
