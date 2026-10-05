@@ -245,6 +245,7 @@ count from growing.
 
 ## Lessons from earlier Goals
 
+- scoped-subjects (2026-10-05) held the main-wide regression while it closed. A new route trips several inventory guards at once (rate limit, public reads, suitability), and a worker's fix that widens a check (subject readability, reference disclosure) breaks neighbouring suites; the manager therefore runs at least the unit part of `test --affected` after every backend merge, not only the type-checkers. A guard that is already red hides every new omission, so the holder makes red guards green first. Heavy passes run at one shard in chunks of about 15 files while workers are live: the host has 62 GB and Docker Desktop was OOM-killed twice in one day.
 - post-layers (2026-10-05) changed a kernel type on live data. A migration's
   fixture must come from the old command itself, since a hand-written one
   missed a field the real data had; a startup migration must never keep Main
