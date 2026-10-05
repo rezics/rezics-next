@@ -35,7 +35,7 @@ export const showcaseWorks: readonly ShowcaseWork[] = [
     trailer: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' },
   { id: 'app-krita', kind: 'software', hue: 280, names: { en: 'Krita', ja: 'クリタ' },
     // No portrait: a phone falls back to the landscape art around its focal area.
-    slots: [{ role: 'background-landscape' }, ...logos(['en', 'dark'])] },
+    slots: [{ role: 'background-landscape' }, ...logos(['en', 'light'])] },
 ];
 
 /** Works with slides in the Zone but no art: their slides compose from the cover. */
