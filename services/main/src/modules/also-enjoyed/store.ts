@@ -58,6 +58,10 @@ export async function alsoEnjoyedAccessFence(client: PoolClient, fold = false): 
 export class AlsoEnjoyedStore {
   constructor(private readonly access: Pool, private readonly content: Pool) {}
 
+  async authorize(context: ManageContext) {
+    await inAccess(this.access, client => authorizeManager(client, context));
+  }
+
   /** Folds both change logs without a build. Any basis older than the new
    * revisions was already outdated by the rows folded into them. */
   async fold() {
@@ -66,10 +70,6 @@ export class AlsoEnjoyedStore {
       await requireRecoveryOpen(client);
       await alsoEnjoyedAccessFence(client, true);
     });
-  }
-
-  async authorize(context: ManageContext) {
-    await inAccess(this.access, client => authorizeManager(client, context));
   }
 
   async register(context: ManageContext, position: ReadPosition, key: ReceiptKey) {
