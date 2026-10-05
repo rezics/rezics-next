@@ -5,6 +5,47 @@ import { createAccountApp } from '../src/app.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 import { exportAccountData } from '../src/data-export.ts';
 
+test('first-party OAuth readers receive live derived content preferences without an Account session', async () => {
+  const f = await accountFixture();
+  try {
+    const user = await f.signup('content-reader@example.test');
+    const oauth = await oauthFixture(f), app = await oauth.createClient();
+    f.displayPreferenceClientIds.add(app.client_id);
+    const { access_token: token } = await oauth.issue(app.client_id, user.cookie);
+    const read = (bearer?: string, cookie?: string) => fetch(`${f.baseURL}/api/account/content-preferences/viewer`, {
+      headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...(cookie ? { cookie } : {}) },
+    });
+    expect((await read()).status).toBe(401);
+    expect((await read('invalid', user.cookie)).status).toBe(401);
+    // A bearer never opens the full private settings read or a settings write.
+    expect((await f.request('/api/account/content-preferences', undefined, undefined,
+      { authorization: `Bearer ${token}` })).status).toBe(401);
+    expect((await f.request('/api/account/content-preferences', { expectedRevision: 0, nsfwDisplay: 'show' }, undefined,
+      { authorization: `Bearer ${token}` })).status).toBe(401);
+    const initial = await read(token);
+    expect(initial.status).toBe(200);
+    expect(initial.headers.get('cache-control')).toBe('no-store');
+    expect(await initial.json()).toEqual({ age: 'unknown', accountEligible: true, adultAvailable: false,
+      categories: { general: true, r15: false, r18: false, r18g: false }, nsfwDisplay: 'mask' });
+    await writeContentPreferences(f.pool, user.id, { expectedRevision: 0, birthDate: '1990-01-01', country: 'US',
+      birthdayPublic: true, categories: { r18: true }, nsfwDisplay: 'show' }, null);
+    const current = await (await read(token)).json();
+    expect(current).toEqual({ age: 'adult', accountEligible: true, adultAvailable: true,
+      categories: { general: true, r15: true, r18: true, r18g: false }, nsfwDisplay: 'show' });
+    expect(await (await read(undefined, user.cookie)).json()).toEqual(current);
+    const otherApp = await oauth.createClient();
+    const otherToken = (await oauth.issue(otherApp.client_id, user.cookie)).access_token;
+    expect((await read(otherToken)).status).toBe(403);
+    // An altered signed claim cannot impersonate the admitted client or another account.
+    const pieces = token.split('.');
+    const claims = JSON.parse(Buffer.from(pieces[1]!, 'base64url').toString());
+    pieces[1] = Buffer.from(JSON.stringify({ ...claims, sub: oauth.owner.id })).toString('base64url');
+    expect((await read(pieces.join('.'))).status).toBe(401);
+    await f.pool.query('UPDATE rezics_account_security SET generation = generation + 1 WHERE user_id = $1', [user.id]);
+    expect((await read(token)).status).toBe(401);
+  } finally { await f.close(); }
+}, 90_000);
+
 test('civil birthdays use exact days, UTC thresholds and March 1 for non-leap anniversaries', () => {
   expect(ageAt('2008-10-02', new Date('2026-10-01T23:59:59Z'))).toBe(17);
   expect(ageAt('2008-10-02', new Date('2026-10-02T00:00:00Z'))).toBe(18);

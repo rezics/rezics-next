@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Elysia, t } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
-import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { accountFailure, accountJson, AccountProblem, accountSession, preferenceUser, type AccountAuth } from './http.ts';
 import { accountResponses, contentPreferencesView } from './views.ts';
 import { marketRule } from './market-policy.ts';
 
@@ -124,8 +124,18 @@ export async function writeContentPreferences(pool: Pool, userId: string, input:
 
 const categoriesSchema = t.Object({ general: t.Boolean(), r15: t.Boolean(), r18: t.Boolean(), r18g: t.Boolean() });
 const view = contentPreferencesView;
-export function contentPreferencesApi(auth: AccountAuth, pool: Pool) {
+const viewerView = t.Pick(view, ['age', 'accountEligible', 'adultAvailable', 'categories', 'nsfwDisplay']);
+export function contentPreferencesApi(auth: AccountAuth, pool: Pool, allowedClientIds: ReadonlySet<string> = new Set()) {
   return new Elysia()
+    // Fixed-size live evidence for first-party readers; private dates and region stay at Account.
+    // Authentication and preference lookup use bounded primary-key reads, independent of account history.
+    .get('/api/account/content-preferences/viewer', { response: accountResponses(viewerView) }, async ({ request }) => {
+      try {
+        const userId = await preferenceUser(auth, pool, request, allowedClientIds);
+        const { age, accountEligible, adultAvailable, categories, nsfwDisplay } = await readContentPreferences(pool, userId);
+        return accountJson({ age, accountEligible, adultAvailable, categories, nsfwDisplay });
+      } catch (error) { return accountFailure(error); }
+    })
     .get('/api/account/content-preferences', { response: accountResponses(view) }, async ({ request }) => {
       try { return accountJson(await readContentPreferences(pool, (await accountSession(auth, request)).user.id)); }
       catch (error) { return accountFailure(error); }

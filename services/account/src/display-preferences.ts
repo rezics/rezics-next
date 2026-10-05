@@ -1,8 +1,6 @@
 import { Elysia, t } from 'elysia';
-import { decodeJwt } from 'jose';
 import type { Pool } from 'pg';
-import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
-import { currentIntrospection } from './introspection.ts';
+import { accountFailure, accountJson, AccountProblem, preferenceUser, type AccountAuth } from './http.ts';
 import { accountResponses } from './views.ts';
 
 export const displayModes = ['system', 'light', 'dark'] as const;
@@ -34,30 +32,6 @@ export async function writeDisplayPreferences(pool: Pool, userId: string, expect
     RETURNING revision, display_mode, show_zone_themes`, [userId, expectedRevision, displayMode, showZoneThemes]);
   const row = result.rows[0];
   return row ? { revision: Number(row.revision), displayMode: row.display_mode, showZoneThemes: row.show_zone_themes } : null;
-}
-
-async function preferenceUser(auth: AccountAuth, pool: Pool, request: Request,
-  allowedClientIds: ReadonlySet<string>): Promise<string> {
-  if (request.method !== 'GET' && request.headers.get('origin') !== new URL(String(auth.options.baseURL)).origin) {
-    throw new AccountProblem('invalid_origin', 403);
-  }
-  if (!request.headers.has('authorization')) return (await accountSession(auth, request)).user.id;
-  const token = /^Bearer (\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
-  let claims: ReturnType<typeof decodeJwt> | undefined;
-  try { if (token) claims = decodeJwt(token); } catch { /* invalid bearer */ }
-  const clientId = claims?.client_id;
-  if (typeof clientId !== 'string') throw new AccountProblem('unauthenticated', 401);
-  if (!allowedClientIds.has(clientId)) throw new AccountProblem('forbidden', 403);
-  const profile = await auth.api.oauth2UserInfo({ headers: request.headers }).catch(() => null);
-  if (!profile || typeof profile.sub !== 'string' || !profile.sub) throw new AccountProblem('unauthenticated', 401);
-  // UserInfo verifies the bearer signature; Account's current introspection
-  // also checks revocation, suspension and the grant's present generation.
-  const current = await currentIntrospection(pool, token!, Response.json({ ...claims, active: true }));
-  if (!current.ok) throw new AccountProblem('temporarily_unavailable', 503);
-  if ((await current.json() as { active?: boolean }).active !== true || claims?.sub !== profile.sub) {
-    throw new AccountProblem('unauthenticated', 401);
-  }
-  return profile.sub;
 }
 
 export function displayPreferencesApi(auth: AccountAuth, pool: Pool, allowedClientIds: ReadonlySet<string>) {

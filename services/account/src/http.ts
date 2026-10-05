@@ -1,4 +1,7 @@
 import { t } from 'elysia';
+import { decodeJwt } from 'jose';
+import type { Pool } from 'pg';
+import { currentIntrospection } from './introspection.ts';
 import type { TLiteral, TUnion } from 'typebox';
 import type { createAccountAuth } from './auth.ts';
 
@@ -32,4 +35,29 @@ export async function accountSession(auth: AccountAuth, request: Request, write 
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) throw new AccountProblem('unauthenticated', 401);
   return session;
+}
+
+/** First-party preference reads verify the bearer and its current Account grant. */
+export async function preferenceUser(auth: AccountAuth, pool: Pool, request: Request,
+  allowedClientIds: ReadonlySet<string>): Promise<string> {
+  if (request.method !== 'GET' && request.headers.get('origin') !== new URL(String(auth.options.baseURL)).origin) {
+    throw new AccountProblem('invalid_origin', 403);
+  }
+  if (!request.headers.has('authorization')) return (await accountSession(auth, request)).user.id;
+  const token = /^Bearer (\S+)$/i.exec(request.headers.get('authorization') ?? '')?.[1];
+  let claims: ReturnType<typeof decodeJwt> | undefined;
+  try { if (token) claims = decodeJwt(token); } catch { /* invalid bearer */ }
+  const clientId = claims?.client_id;
+  if (typeof clientId !== 'string') throw new AccountProblem('unauthenticated', 401);
+  if (!allowedClientIds.has(clientId)) throw new AccountProblem('forbidden', 403);
+  const profile = await auth.api.oauth2UserInfo({ headers: request.headers }).catch(() => null);
+  if (!profile || typeof profile.sub !== 'string' || !profile.sub) throw new AccountProblem('unauthenticated', 401);
+  // UserInfo verifies the bearer signature; Account's current introspection
+  // also checks revocation, suspension and the grant's present generation.
+  const current = await currentIntrospection(pool, token!, Response.json({ ...claims, active: true }));
+  if (!current.ok) throw new AccountProblem('temporarily_unavailable', 503);
+  if ((await current.json() as { active?: boolean }).active !== true || claims?.sub !== profile.sub) {
+    throw new AccountProblem('unauthenticated', 401);
+  }
+  return profile.sub;
 }

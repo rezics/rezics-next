@@ -46,7 +46,7 @@ export async function readMediaViewer(input: {
   if (!input.accessToken) return anonymousMediaViewer;
   try {
     const response = await serverFetch(
-      new URL('/api/account/content-preferences', input.accountOrigin),
+      new URL('/api/account/content-preferences/viewer', input.accountOrigin),
       {
         headers: { authorization: `Bearer ${input.accessToken}` },
         cache: 'no-store',

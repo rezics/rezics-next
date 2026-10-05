@@ -40,7 +40,7 @@ export interface AccountAppOptions {
   operatorUserIds?: ReadonlySet<string>;
   /** Connections the authorization-code guard may hold across exchanges. */
   codeGuardConnections?: number;
-  /** First-party web OAuth client IDs admitted to account display preferences. */
+  /** First-party web OAuth client IDs admitted to display preferences and derived content preferences. */
   displayPreferenceClientIds?: ReadonlySet<string>;
   /** Main's confidential credential, already authenticated by the OAuth provider. */
   contentEvidenceSecret?: string;
@@ -276,7 +276,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(options.notificationDigest ? safetyCorrespondenceApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
     .use(policyAcceptanceApi(auth, pool, auth.options.policyVersions))
-    .use(contentPreferencesApi(auth, pool))
+    .use(contentPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .use(mailSuppressionApi(pool, String(auth.options.secret), options.mailEventsSecret))
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))
