@@ -122,7 +122,7 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
       '/v1/resources/:resource/parts', '/v1/resources/:resource/wholes',
       '/v1/resources/:resource/relations', '/v1/resources/:resource/rating-contexts',
       '/v1/resources/:resource/ratings', '/v1/resources/:resource/reviews',
-      '/v1/public-previews/:resource',
+      '/v1/resources/:resource/continuities', '/v1/public-previews/:resource',
     ];
     // A future resource GET cannot escape this adverse boundary test by merely
     // adding a new route file or a different reader implementation.
