@@ -43,7 +43,7 @@ test('Discovery refresh expires already purged superseded generations and resume
     };
     const active = async () => (await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
       WHERE family='discovery' AND scope_key=$1`, [key])).rows[0].active_generation as string;
-    const invalidate = () => f.accessPool.query('UPDATE access.discovery_source_fence SET revision=revision+1 WHERE id');
+    const invalidate = () => f.accessPool.query('INSERT INTO access.discovery_source_change DEFAULT VALUES');
     expect(await tick()).toBe('activated');
     const first = await active();
     // A safety-fence change requires independent storage instead of a delta.

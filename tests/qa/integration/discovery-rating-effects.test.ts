@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { startMediaStack } from './media-support.ts';
 import { cloneOwners, requireQa } from './recommendation-support.ts';
 import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
@@ -114,14 +114,18 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
       expect(cost).toEqual(kind === 'irrelevant' ? { graph: 4, sql: 46 } : { graph: 8, sql: 126 });
       evidence.push({ kind, scale, cost });
     };
-    const fence = async () =>
-      BigInt(
-        (
-          await f.accessPool.query<{ revision: string }>(
-            'SELECT revision::text FROM access.discovery_source_fence WHERE id',
-          )
-        ).rows[0]!.revision,
-      );
+    // Repair writes append unfolded changes; only a refresh registration folds them.
+    const fenceSql = `SELECT revision::text,
+      (SELECT count(*) FROM access.discovery_source_change)::text AS changes
+      FROM access.discovery_source_fence WHERE id`;
+    const fence = async (client: Pool | PoolClient = f.accessPool) => {
+      const row = (await client.query<{ revision: string; changes: string }>(fenceSql)).rows[0]!;
+      return { revision: BigInt(row.revision), changes: BigInt(row.changes) };
+    };
+    const changed = (base: { revision: bigint; changes: bigint }, changes: bigint) => ({
+      revision: base.revision,
+      changes: base.changes + changes,
+    });
     const event = async (action: string, ratedTarget?: string, owned = false) => {
       const next = (BigInt(sequence) + 1n).toString(),
         batch = `urn:rezics:qa:rating-batch:${randomUUID()}`;
@@ -214,7 +218,7 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
       );
       head = opinion.observationRevision;
       observation = opinion.observation;
-      expect(await fence()).toBe(beforeSeal);
+      expect(await fence()).toEqual(beforeSeal);
       await refreshPosition();
       // Preserve the real receipt that certifies the aggregate, but expose the
       // same change through a target-only receipt to the delta classifier.
@@ -247,16 +251,19 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
             [observation],
           )
         ).rows[0]!;
-        expect(await fence()).toBe(beforeRepair + 1n);
+        expect(await fence()).toEqual(changed(beforeRepair, 1n));
         expect((await health()).status).toBe(503);
         await f.accessPool.query(
           'INSERT INTO access.rating_aggregate_head SELECT (jsonb_populate_record(NULL::access.rating_aggregate_head,$1::jsonb)).*',
           [JSON.stringify(removed)],
         );
-        expect(await fence()).toBe(beforeRepair + 2n);
+        expect(await fence()).toEqual(changed(beforeRepair, 2n));
         const started = performance.now();
         const restored = await settle(scale);
         expect(performance.now() - started).toBeLessThan(DISCOVERY_REFRESH_COST.recoveryMs);
+        const beforePolicy = await fence();
+        expect(beforePolicy.revision).toBeGreaterThan(beforeRepair.revision);
+        expect(beforePolicy.changes).toBe(0n);
         expect(restored.generation_id).not.toBe(current.generation_id);
         expect(restored.changed_works).toBeNull();
         expect((await health()).status).toBe(200);
@@ -273,35 +280,27 @@ test('Target ratings advance only relevant Work aggregates at 1k/10k, and invent
           'UPDATE access.rating_aggregate_context SET policy_revision=$2 WHERE context=$1',
           [context, native()],
         );
-        expect(await fence()).toBe(beforeRepair + 3n);
+        expect(await fence()).toEqual(changed(beforePolicy, 1n));
         await f.accessPool.query(
           'UPDATE access.rating_aggregate_context SET policy_revision=$2 WHERE context=$1',
           [context, contextRow.policy_revision],
         );
-        expect(await fence()).toBe(beforeRepair + 4n);
+        expect(await fence()).toEqual(changed(beforePolicy, 2n));
         await f.accessPool.query(
           'UPDATE access.rating_aggregate_head SET revision=revision WHERE observation=$1',
           [observation],
         );
-        expect(await fence()).toBe(beforeRepair + 4n);
+        expect(await fence()).toEqual(changed(beforePolicy, 2n));
         const client = await f.accessPool.connect();
         try {
           await client.query('BEGIN');
           await client.query('TRUNCATE access.rating_aggregate_head');
-          expect(
-            BigInt(
-              (
-                await client.query(
-                  'SELECT revision::text FROM access.discovery_source_fence WHERE id',
-                )
-              ).rows[0]!.revision,
-            ),
-          ).toBe(beforeRepair + 5n);
+          expect(await fence(client)).toEqual(changed(beforePolicy, 3n));
         } finally {
           await client.query('ROLLBACK');
           client.release();
         }
-        expect(await fence()).toBe(beforeRepair + 4n);
+        expect(await fence()).toEqual(changed(beforePolicy, 2n));
         await settle(scale);
         await event('future.rating');
         expect((await settle(scale)).changed_works).toBeNull();

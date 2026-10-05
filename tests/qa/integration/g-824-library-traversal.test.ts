@@ -13,8 +13,10 @@ import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-10
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const statuses: ReadingStatus[] = ['want-to-read', 'reading', 'read'];
 const sorts: ShelfSort[] = ['added', 'title', 'rating', 'last-read', 'finished'];
-const alsoEnjoyedFence = async (pool: Pool) => (await pool.query<{ revision: string }>(
-  'SELECT revision::text FROM reader.also_enjoyed_source_fence WHERE id')).rows[0]!.revision;
+// Shelf membership changes append rows that only a co-reader build folds.
+const alsoEnjoyedFence = async (pool: Pool) => (await pool.query<{ fence: string }>(`SELECT revision::text
+  || ':' || (SELECT count(*) FROM reader.also_enjoyed_source_change)::text AS fence
+  FROM reader.also_enjoyed_source_fence WHERE id`)).rows[0]!.fence;
 const keys = { added: 'changed_at', title: 'title_key COLLATE "C"', rating: 'own_rating',
   'last-read': 'last_read_at', finished: 'finished_on' };
 type Page = { items: { work: string; card: { id: string } | null }[]; nextCursor: string | null };

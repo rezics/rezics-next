@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { workRead, type ReadPosition } from '../work/read-session.ts';
@@ -22,6 +22,32 @@ interface RatingRow { context: string; main_version: string; slot: string; obser
 interface ShelfRow { agent: string; work: string; status: 'read' | 'reading' }
 export interface CoReaderCandidate { work: string; sharedReaders: number; score: number }
 
+/** A folded source revision and whether a source change committed after that
+ * fold. Writers append change rows and never lock the fence row. */
+export interface AlsoEnjoyedSourceFence { revision: string; changed: boolean }
+const covers = (fence: AlsoEnjoyedSourceFence, basis: string) => !fence.changed && fence.revision === basis;
+
+/** Content shelf fence. Folding records the basis of a new generation; a shelf
+ * change that has not committed yet keeps its row and outdates that basis. */
+export async function alsoEnjoyedContentFence(content: Pool, fold = false): Promise<AlsoEnjoyedSourceFence> {
+  const row = (await content.query<AlsoEnjoyedSourceFence>(fold
+    ? 'SELECT basis::text AS revision, changed FROM reader.fold_also_enjoyed_source_changes()'
+    : `SELECT revision::text, EXISTS (SELECT 1 FROM reader.also_enjoyed_source_change) AS changed
+      FROM reader.also_enjoyed_source_fence WHERE id`)).rows[0];
+  if (!row) throw new RecommendationUnavailable('Content shelf fence is unavailable');
+  return row;
+}
+
+/** Access signal fence, read or folded inside the caller's transaction. */
+export async function alsoEnjoyedAccessFence(client: PoolClient, fold = false): Promise<AlsoEnjoyedSourceFence> {
+  const row = (await client.query<AlsoEnjoyedSourceFence>(fold
+    ? 'SELECT basis::text AS revision, changed FROM access.fold_also_enjoyed_source_changes()'
+    : `SELECT revision::text, EXISTS (SELECT 1 FROM access.also_enjoyed_source_change) AS changed
+      FROM access.also_enjoyed_source_fence WHERE id`)).rows[0];
+  if (!row) throw new RecommendationUnavailable('Access signal fence is unavailable');
+  return row;
+}
+
 /** One snapshot spans three owners. The source fences make an old active
  * generation ineligible immediately, even before a replacement is built. */
 export class AlsoEnjoyedStore {
@@ -31,25 +57,15 @@ export class AlsoEnjoyedStore {
     await inAccess(this.access, client => authorizeManager(client, context));
   }
 
-  private async contentRevision() {
-    const row = (await this.content.query<{ revision: string }>(
-      'SELECT revision::text FROM reader.also_enjoyed_source_fence WHERE id')).rows[0];
-    if (!row) throw new RecommendationUnavailable('Content shelf fence is unavailable');
-    return row.revision;
-  }
-
-  private async accessRevision() {
+  private async accessFence() {
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
-      const row = (await client.query<{ revision: string }>(
-        'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0];
-      if (!row) throw new RecommendationUnavailable('Access signal fence is unavailable');
-      return row.revision;
+      return alsoEnjoyedAccessFence(client);
     });
   }
 
   async register(context: ManageContext, position: ReadPosition, key: ReceiptKey) {
-    const contentRevision = await this.contentRevision();
+    const contentRevision = (await alsoEnjoyedContentFence(this.content, true)).revision;
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
       const principal = await authorizeManager(client, context);
@@ -57,9 +73,7 @@ export class AlsoEnjoyedStore {
         [`also-enjoyed-receipt:${principal}:${key.idempotencyKey}`]);
       const replay = await replayReceipt(client, principal, key, 'build');
       if (replay) return { generation: replay.generation_id, replayed: true };
-      const accessRevision = (await client.query<{ revision: string }>(
-        'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]?.revision;
-      if (!accessRevision) throw new RecommendationUnavailable('Access signal fence is unavailable');
+      const accessRevision = (await alsoEnjoyedAccessFence(client, true)).revision;
       const generation = randomUUID();
       const manifest = { profile: 'also-enjoyed-public-v1', position,
         accessRevision, contentRevision };
@@ -181,9 +195,8 @@ export class AlsoEnjoyedStore {
         throw new RecommendationRestart('Co-reader graph changed during build');
       }
     });
-    const contentRevision = await this.contentRevision();
-    const accessRevision = await this.accessRevision();
-    if (contentRevision !== generation.content_revision || accessRevision !== generation.access_revision) {
+    if (!covers(await alsoEnjoyedContentFence(this.content), generation.content_revision)
+      || !covers(await this.accessFence(), generation.access_revision)) {
       throw new RecommendationRestart('Co-reader source changed during build');
     }
     const ratings = generation.phase === 'ratings' ? await this.ratingBatch(generation.after_key) : [];
@@ -197,15 +210,17 @@ export class AlsoEnjoyedStore {
         WHERE generation_id = $1 AND source_eligible AND work > $2
         ORDER BY work LIMIT $3`, [id, generation.after_key, ALSO_ENJOYED_COST.pairWorks])).rows
         .map(row => row.work)) : [];
-    if (await this.contentRevision() !== generation.content_revision) {
+    if (!covers(await alsoEnjoyedContentFence(this.content), generation.content_revision)) {
       throw new RecommendationRestart('Content shelves changed during build');
     }
+    // The batch was read before this check. A change committing after it leaves
+    // these rows at the basis and outdates the generation for the next check.
     return inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, id, epoch, ALSO_ENJOYED_COST.leaseMs);
-      const revision = (await client.query<{ revision: string }>(
-        'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id FOR SHARE')).rows[0]?.revision;
-      if (revision !== generation.access_revision) throw new RecommendationRestart('Access signals changed during build');
+      if (!covers(await alsoEnjoyedAccessFence(client), generation.access_revision)) {
+        throw new RecommendationRestart('Access signals changed during build');
+      }
       if (generation.phase === 'ratings') {
         for (const row of ratings) if (row.agent && rated.has(row.observation)) {
           await client.query(`INSERT INTO access.also_enjoyed_signal
@@ -290,15 +305,15 @@ export class AlsoEnjoyedStore {
     const row = await this.generation(generation);
     if (row.phase !== 'complete' || row.graph_epoch !== position.dataEpoch
       || row.graph_sequence !== position.sequence
-      || await this.contentRevision() !== row.content_revision
-      || await this.accessRevision() !== row.access_revision) {
+      || !covers(await alsoEnjoyedContentFence(this.content), row.content_revision)
+      || !covers(await this.accessFence(), row.access_revision)) {
       throw new RecommendationRestart('Co-reader generation source changed');
     }
     return inAccess(this.access, async client => {
       const principal = await authorizeManager(client, context);
-      const revision = (await client.query<{ revision: string }>(
-        'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id FOR SHARE')).rows[0]?.revision;
-      if (revision !== row.access_revision) throw new RecommendationRestart('Access signals changed');
+      if (!covers(await alsoEnjoyedAccessFence(client), row.access_revision)) {
+        throw new RecommendationRestart('Access signals changed');
+      }
       return activateHead(client, principal, key, generation, expectedRevision);
     });
   }
@@ -307,7 +322,7 @@ export class AlsoEnjoyedStore {
    * leave Access. Private reader identities never cross this boundary. */
   async candidates(source: string, limit: number = ALSO_ENJOYED_COST.pageRows) {
     if (limit > ALSO_ENJOYED_COST.pageRows) throw new RecommendationUnavailable('Candidate page is out of bounds');
-    const contentRevision = await this.contentRevision();
+    const contentFence = await alsoEnjoyedContentFence(this.content);
     const result = await inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
       const head = (await client.query<{ generation: string; graph_epoch: string; graph_sequence: string;
@@ -319,9 +334,8 @@ export class AlsoEnjoyedStore {
           WHERE h.family = $1 AND h.scope_key = $2`, [FAMILY, SCOPE])).rows[0];
       if (!head) return { generation: null, graphEpoch: null, graphSequence: null,
         stale: false, sourceReaders: 0, rows: [] };
-      if (head.access_revision !== (await client.query<{ revision: string }>(
-        'SELECT revision::text FROM access.also_enjoyed_source_fence WHERE id')).rows[0]?.revision
-        || head.content_revision !== contentRevision) return { generation: null,
+      if (!covers(await alsoEnjoyedAccessFence(client), head.access_revision)
+        || !covers(contentFence, head.content_revision)) return { generation: null,
           graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0, rows: [] };
       const sourceReaders = Number((await client.query<{ readers: string }>(`
         SELECT count(*)::text AS readers FROM access.also_enjoyed_signal
@@ -335,7 +349,8 @@ export class AlsoEnjoyedStore {
       return { generation: head.generation, graphEpoch: head.graph_epoch,
         graphSequence: head.graph_sequence, stale: false, sourceReaders, rows };
     });
-    if (await this.contentRevision() !== contentRevision) {
+    const contentAfter = await alsoEnjoyedContentFence(this.content);
+    if (contentAfter.changed !== contentFence.changed || contentAfter.revision !== contentFence.revision) {
       return { generation: null, graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0,
         candidates: [] as CoReaderCandidate[] };
     }

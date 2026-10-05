@@ -307,14 +307,18 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
       { after: '', complete: true, item: null }, { dataEpoch: stack.env.lineage.dataEpoch,
         sequence: oldLease.row.source_sequence })).rejects.toBeInstanceOf(RecommendationStale);
     await owner.cancel(manager, leaseBuild.generation);
-    const fenceBefore = (await stack.accessPool.query('SELECT revision FROM access.discovery_source_fence')).rows[0].revision;
+    const fence = () => stack.accessPool.query(`SELECT revision,
+      (SELECT count(*) FROM access.discovery_source_change) AS changes FROM access.discovery_source_fence`);
+    const fenceBefore = (await fence()).rows[0];
     const rollback = await stack.accessPool.connect();
     try {
       await rollback.query('BEGIN');
       await rollback.query('UPDATE access.principal SET active = false WHERE id = $1', [outsider.principalId]);
+      expect((await rollback.query('SELECT count(*) AS changes FROM access.discovery_source_change')).rows[0].changes)
+        .toBe(String(BigInt(fenceBefore.changes) + 1n));
       await rollback.query('ROLLBACK');
     } finally { rollback.release(); }
-    expect((await stack.accessPool.query('SELECT revision FROM access.discovery_source_fence')).rows[0].revision).toBe(fenceBefore);
+    expect((await fence()).rows[0]).toEqual(fenceBefore);
     // Unrelated Access invalidation retains the population but withholds fields
     // whose classification/credit protection proof belongs to the older cut.
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);

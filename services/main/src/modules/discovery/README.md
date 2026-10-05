@@ -57,6 +57,16 @@ terminal receipt as well as the event, and rejects conflicting fields.
   even a harmless label/move inside `composition.change` uses that conservative
   fallback. This is a remaining owner-event precision limitation.
 
+Access source writes (judgment votes and spoiler hints, moderation enforcement,
+principal deactivation and rating inventory repairs) append one row per
+transaction to `access.discovery_source_change` and never lock
+`discovery_source_fence`. Registration folds the committed rows into the
+revision its basis records; the basis stays current while that revision is
+unchanged and no row remains. Batches and reads take no fence lock, so a vote
+never waits for a build or a build for a vote. A change that commits during a
+batch, including one from an older transaction, outdates the generation at the
+next check (`tests/qa/integration/source-fence-concurrency.test.ts`).
+
 [`versions.ts`](versions.ts) replaces only changed Work posting lists and affected
 term/Concept counters. Logical generations share a storage root with validity
 intervals; reads bind the storage root and immutable version already loaded with

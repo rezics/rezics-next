@@ -296,42 +296,36 @@ export async function exerciseRatingAggregates(f: Fixture) {
   // Reverse faults: graph is current, while the independent private owner loses
   // or rolls back one head. Neither direction may silently shrink the population.
   const inventoryTablesBefore = await accessStateTables(accessPool);
-  const sourceFences = ['access.discovery_source_fence', 'access.also_enjoyed_source_fence'] as const;
-  const fenceRevisions = new Map<string, bigint>();
-  for (const table of sourceFences) {
-    fenceRevisions.set(table, BigInt((await accessPool.query<{ revision: string }>(
-      `SELECT revision::text FROM ${table} WHERE id`)).rows[0]!.revision));
-  }
+  // Each out-of-band head write appends one unfolded row to both source change logs.
+  const sourceChanges: readonly string[] = ['access.discovery_source_change', 'access.also_enjoyed_source_change'];
+  const logged = (writes: number) => BigInt(sourceChanges.length * writes);
   const inventoryCoverage = { before: inventoryTablesBefore.state,
     missing: { count: '', digest: '' }, rolledBack: { count: '', digest: '' }, restored: { count: '', digest: '' } };
   const removed = (await accessPool.query('DELETE FROM access.rating_aggregate_head WHERE observation = $1 RETURNING *', [tied.observation])).rows[0]!;
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
   inventoryCoverage.missing = await accessStateCoverage(accessPool);
   expect(inventoryCoverage.missing.digest).not.toBe(inventoryCoverage.before.digest);
-  expect(BigInt(inventoryCoverage.missing.count)).toBe(BigInt(inventoryCoverage.before.count) - 1n);
+  expect(BigInt(inventoryCoverage.missing.count)).toBe(BigInt(inventoryCoverage.before.count) - 1n + logged(1));
   await accessPool.query('INSERT INTO access.rating_aggregate_head SELECT (jsonb_populate_record(NULL::access.rating_aggregate_head, $1::jsonb)).*', [JSON.stringify(removed)]);
   await accessPool.query('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
     [tied.observation, priorInventoryHead.revision, priorInventoryHead.admission_id]);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
   inventoryCoverage.rolledBack = await accessStateCoverage(accessPool);
-  expect(inventoryCoverage.rolledBack.count).toBe(inventoryCoverage.before.count);
+  expect(BigInt(inventoryCoverage.rolledBack.count)).toBe(BigInt(inventoryCoverage.before.count) + logged(3));
   expect(inventoryCoverage.rolledBack.digest).not.toBe(inventoryCoverage.before.digest);
   await accessPool.query('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
     [tied.observation, removed.revision, removed.admission_id]);
   const inventoryTablesRestored = await accessStateTables(accessPool);
   inventoryCoverage.restored = inventoryTablesRestored.state;
-  expect(inventoryCoverage.restored.count).toBe(inventoryCoverage.before.count);
+  expect(BigInt(inventoryCoverage.restored.count)).toBe(BigInt(inventoryCoverage.before.count) + logged(4));
   expect(inventoryTablesRestored.catalogDigest).toBe(inventoryTablesBefore.catalogDigest);
   // These out-of-band writes have no classified rating outbox event. Their
-  // source fences must survive restoration of the authoritative head.
+  // source changes must survive restoration of the authoritative head.
   expect((await accessPool.query("SELECT current_setting('rezics.discovery_rating_outbox',true) AS marker"))
     .rows[0]!.marker).not.toBe('on');
   for (const [table, coverage] of Object.entries(inventoryTablesBefore.tables)) {
-    if (fenceRevisions.has(table)) {
-      expect(BigInt((await accessPool.query<{ revision: string }>(
-        `SELECT revision::text FROM ${table} WHERE id`)).rows[0]!.revision))
-        .toBe(fenceRevisions.get(table)! + 4n);
-      expect(inventoryTablesRestored.tables[table]?.count).toBe(coverage.count);
+    if (sourceChanges.includes(table)) {
+      expect(BigInt(inventoryTablesRestored.tables[table]!.count)).toBe(BigInt(coverage.count) + 4n);
       expect(inventoryTablesRestored.tables[table]?.digest).not.toBe(coverage.digest);
     } else expect(inventoryTablesRestored.tables[table]).toEqual(coverage);
   }

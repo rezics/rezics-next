@@ -244,16 +244,46 @@ interface ResourceSeekRow {
   order_key: string;
 }
 
-export async function sourceFence(client: PoolClient) {
+/** Folded Access source revision, whether a source change has committed since
+ * the last fold, and the recovery generation, all read in one snapshot. */
+export interface DiscoverySourceFence {
+  revision: string;
+  changed: boolean;
+  generation: string;
+}
+
+/** Source writers append change rows and never touch the fence row, so this
+ * read takes no lock: a vote neither waits for it nor makes it wait. */
+export async function sourceFence(client: PoolClient): Promise<DiscoverySourceFence> {
   await requireRecoveryOpen(client);
   const row = (
-    await client.query<{ revision: string; generation: string }>(`SELECT
-    d.revision::text, f.generation::text FROM access.discovery_source_fence d
-    CROSS JOIN access.recovery_fence f WHERE d.id AND f.id FOR SHARE OF d`)
+    await client.query<DiscoverySourceFence>(`SELECT d.revision::text,
+    EXISTS (SELECT 1 FROM access.discovery_source_change) AS changed, f.generation::text
+    FROM access.discovery_source_fence d CROSS JOIN access.recovery_fence f WHERE d.id AND f.id`)
   ).rows[0];
   if (!row) throw new RecommendationUnavailable('Discovery source fence is unavailable');
   return row;
 }
+
+/** Registration folds every committed change into the revision its basis
+ * records. A change still uncommitted keeps its row and outdates that basis. */
+export async function foldSourceFence(client: PoolClient): Promise<DiscoverySourceFence> {
+  await requireRecoveryOpen(client);
+  const row = (
+    await client.query<DiscoverySourceFence>(`SELECT d.basis::text AS revision, d.changed,
+    f.generation::text FROM access.fold_discovery_source_changes() d
+    CROSS JOIN access.recovery_fence f WHERE f.id`)
+  ).rows[0];
+  if (!row) throw new RecommendationUnavailable('Discovery source fence is unavailable');
+  return row;
+}
+
+/** The Access sources are unchanged since the generation's basis fold. */
+export const discoveryAccessCurrent = (
+  row: Pick<DiscoveryGeneration, 'access_revision'>,
+  fence: DiscoverySourceFence,
+) => !fence.changed && row.access_revision === fence.revision;
+
 function assertPosition(row: DiscoveryGeneration, position: ReadPosition) {
   if (row.source_epoch !== position.dataEpoch || row.source_sequence !== position.sequence) {
     throw new RecommendationRestart('Discovery graph changed');
@@ -261,7 +291,7 @@ function assertPosition(row: DiscoveryGeneration, position: ReadPosition) {
 }
 async function assertFence(client: PoolClient, row: DiscoveryGeneration) {
   const fence = await sourceFence(client);
-  if (fence.revision !== row.access_revision || fence.generation !== row.recovery_generation) {
+  if (!discoveryAccessCurrent(row, fence) || fence.generation !== row.recovery_generation) {
     throw new RecommendationRestart('Discovery Access basis changed');
   }
 }
@@ -350,7 +380,7 @@ export class DiscoveryProjection {
       ]);
       const replay = await replayReceipt(client, principal, key, 'build');
       if (replay) return { ...(await generation(client, replay.generation_id)), replayed: true };
-      const fence = await sourceFence(client);
+      const fence = await foldSourceFence(client);
       const owned: OwnedDiscoveryBasis = {
         ...basis,
         owner: basis.scope === 'mine' ? principal : null,
@@ -386,7 +416,7 @@ export class DiscoveryProjection {
         if (
           prior.state !== 'ready' ||
           prior.source_epoch !== position.dataEpoch ||
-          prior.access_revision !== fence.revision ||
+          !discoveryAccessCurrent(prior, fence) ||
           prior.recovery_generation !== fence.generation ||
           prior.source_profile !== DISCOVERY_SOURCE_PROFILE ||
           digest(basisOf(prior)) !== digest(owned) ||
@@ -776,7 +806,7 @@ export class DiscoveryProjection {
         stale:
           row.source_profile !== DISCOVERY_SOURCE_PROFILE ||
           (row.covered_sequence ?? row.source_sequence) !== position.sequence ||
-          row.access_revision !== fence.revision ||
+          !discoveryAccessCurrent(row, fence) ||
           row.state !== 'ready' ||
           head.active_generation !== row.generation_id,
       };

@@ -8,7 +8,14 @@ import {
 import type { ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { DISCOVERY_COST, type OwnedDiscoveryBasis } from './contract.ts';
-import { discoveryScopeKey, generation, sourceFence, type DiscoveryGeneration } from './store.ts';
+import {
+  discoveryAccessCurrent,
+  discoveryScopeKey,
+  generation,
+  sourceFence,
+  type DiscoveryGeneration,
+  type DiscoverySourceFence,
+} from './store.ts';
 import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 import type { DiscoveryChanges } from './changes.ts';
 import {
@@ -61,11 +68,11 @@ export const discoveryGenerationCurrent = (
     | 'covered_sequence'
   >,
   position: ReadPosition,
-  fence: { revision: string; generation: string },
+  fence: DiscoverySourceFence,
 ) =>
   row.source_epoch === position.dataEpoch &&
   (row.covered_sequence ?? row.source_sequence) === position.sequence &&
-  row.access_revision === fence.revision &&
+  discoveryAccessCurrent(row, fence) &&
   row.recovery_generation === fence.generation &&
   row.source_profile === DISCOVERY_SOURCE_PROFILE;
 
@@ -270,7 +277,7 @@ export class DiscoveryRefreshStore {
       let reuse =
         prior?.state === 'ready' &&
         prior.source_epoch === position.dataEpoch &&
-        prior.access_revision === fence.revision &&
+        discoveryAccessCurrent(prior, fence) &&
         prior.recovery_generation === fence.generation &&
         prior.source_profile === DISCOVERY_SOURCE_PROFILE
           ? prior
@@ -290,7 +297,7 @@ export class DiscoveryRefreshStore {
         row.source_epoch === position.dataEpoch &&
         row.recovery_generation === fence.generation &&
         row.source_profile === DISCOVERY_SOURCE_PROFILE &&
-        (row.complete || row.access_revision === fence.revision)
+        (row.complete || discoveryAccessCurrent(row, fence))
       )
         return { fresh: false, row, principal, reuse };
       // Obsolete work can never activate. Closing it releases the one-building
@@ -330,7 +337,7 @@ export class DiscoveryRefreshStore {
   ): Promise<void> {
     await inAccess(this.pool, async (client) => {
       const fence = await sourceFence(client);
-      if (row.access_revision !== fence.revision || row.recovery_generation !== fence.generation) {
+      if (!discoveryAccessCurrent(row, fence) || row.recovery_generation !== fence.generation) {
         throw new RecommendationStale('Discovery validation source changed');
       }
       const held = await client.query(
@@ -377,7 +384,7 @@ export class DiscoveryRefreshStore {
     await inAccess(this.pool, async (client) => {
       const fence = await sourceFence(client);
       if (
-        row.access_revision !== fence.revision ||
+        !discoveryAccessCurrent(row, fence) ||
         row.recovery_generation !== fence.generation ||
         row.source_epoch !== position.dataEpoch
       )
