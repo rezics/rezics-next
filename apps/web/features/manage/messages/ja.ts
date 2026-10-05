@@ -10,7 +10,7 @@ export default {
   agentFallback: insert('エージェント {{id}}', { id: String }),
   realmFallback: insert('コミュニティ {{id}}', { id: String }),
   realmNav: 'コミュニティ管理',
-  tabQueue: 'キュー', tabLog: 'ログ', tabMembers: 'メンバー', tabRoles: '役割', tabSettings: '設定とルール',
+  tabQueue: 'キュー', tabLog: 'ログ', tabMembers: 'メンバー', tabRoles: '役割', tabShowcase: 'ショーケース', tabSettings: '設定とルール',
   retry: 'もう一度試す', cancel: 'キャンセル',
   loadMore: 'さらに読み込む', loadingMore: '読み込み中…', startOver: '最初から見る',
   deniedTitle: 'このコミュニティのこの部分は管理できません',

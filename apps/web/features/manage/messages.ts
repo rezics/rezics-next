@@ -10,7 +10,7 @@ export const messages = {
   agentFallback: insert('Agent {{id}}', { id: String }),
   realmFallback: insert('Realm {{id}}', { id: String }),
   realmNav: 'Realm management',
-  tabQueue: 'Queue', tabLog: 'Log', tabMembers: 'Members', tabRoles: 'Roles', tabSettings: 'Settings & rules',
+  tabQueue: 'Queue', tabLog: 'Log', tabMembers: 'Members', tabRoles: 'Roles', tabShowcase: 'Showcase', tabSettings: 'Settings & rules',
   retry: 'Try again', cancel: 'Cancel',
   loadMore: 'Load more', loadingMore: 'Loading more…', startOver: 'Start over',
   deniedTitle: 'You can’t manage this part of the Realm',

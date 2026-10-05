@@ -11,7 +11,7 @@ export default {
   agentFallback: insert('에이전트 {{id}}', { id: String }),
   realmFallback: insert('커뮤니티 {{id}}', { id: String }),
   realmNav: '커뮤니티 관리',
-  tabQueue: '대기열', tabLog: '기록', tabMembers: '회원', tabRoles: '역할', tabSettings: '설정 및 규칙',
+  tabQueue: '대기열', tabLog: '기록', tabMembers: '회원', tabRoles: '역할', tabShowcase: '쇼케이스', tabSettings: '설정 및 규칙',
   retry: '다시 시도', cancel: '취소',
   loadMore: '더 불러오기', loadingMore: '더 불러오는 중…', startOver: '처음부터 보기',
   deniedTitle: '이 커뮤니티를 관리할 수 없어요',

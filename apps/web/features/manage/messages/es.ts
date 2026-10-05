@@ -11,7 +11,7 @@ export default {
   agentFallback: insert('Agente {{id}}', { id: String }),
   realmFallback: insert('Comunidad {{id}}', { id: String }),
   realmNav: 'Administración de la comunidad',
-  tabQueue: 'Cola', tabLog: 'Registro', tabMembers: 'Miembros', tabRoles: 'Roles', tabSettings: 'Configuración y reglas',
+  tabQueue: 'Cola', tabLog: 'Registro', tabMembers: 'Miembros', tabRoles: 'Roles', tabShowcase: 'Escaparate', tabSettings: 'Configuración y reglas',
   retry: 'Intentar de nuevo', cancel: 'Cancelar',
   loadMore: 'Cargar más', loadingMore: 'Cargando…', startOver: 'Empezar de nuevo',
   deniedTitle: 'No puedes administrar esta parte de la comunidad',

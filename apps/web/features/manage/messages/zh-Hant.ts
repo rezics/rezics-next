@@ -10,7 +10,7 @@ export default {
   agentFallback: insert('身分 {{id}}', { id: String }),
   realmFallback: insert('社群 {{id}}', { id: String }),
   realmNav: '社群管理',
-  tabQueue: '審核佇列', tabLog: '紀錄', tabMembers: '成員', tabRoles: '角色', tabSettings: '設定與規範',
+  tabQueue: '審核佇列', tabLog: '紀錄', tabMembers: '成員', tabRoles: '角色', tabShowcase: '展示', tabSettings: '設定與規範',
   retry: '再試一次', cancel: '取消',
   loadMore: '載入更多', loadingMore: '載入中…', startOver: '從頭開始',
   deniedTitle: '你無法管理此社群的這個部分',

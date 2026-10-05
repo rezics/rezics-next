@@ -11,7 +11,7 @@ export default {
   agentFallback: insert('Agent {{id}}', { id: String }),
   realmFallback: insert('Communauté {{id}}', { id: String }),
   realmNav: 'Gestion de la communauté',
-  tabQueue: 'File d’attente', tabLog: 'Journal', tabMembers: 'Membres', tabRoles: 'Rôles', tabSettings: 'Paramètres et règles',
+  tabQueue: 'File d’attente', tabLog: 'Journal', tabMembers: 'Membres', tabRoles: 'Rôles', tabShowcase: 'Vitrine', tabSettings: 'Paramètres et règles',
   retry: 'Réessayer', cancel: 'Annuler',
   loadMore: 'Charger plus', loadingMore: 'Chargement…', startOver: 'Recommencer',
   deniedTitle: 'Vous ne pouvez pas gérer cette partie de la communauté',

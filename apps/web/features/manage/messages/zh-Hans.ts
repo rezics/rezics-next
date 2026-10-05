@@ -10,7 +10,7 @@ export default {
   agentFallback: insert('身份 {{id}}', { id: String }),
   realmFallback: insert('领域 {{id}}', { id: String }),
   realmNav: '领域管理',
-  tabQueue: '待办', tabLog: '日志', tabMembers: '成员', tabRoles: '角色', tabSettings: '设置与规则',
+  tabQueue: '待办', tabLog: '日志', tabMembers: '成员', tabRoles: '角色', tabShowcase: '展示', tabSettings: '设置与规则',
   retry: '重试', cancel: '取消',
   loadMore: '加载更多', loadingMore: '正在加载更多…', startOver: '从头开始',
   deniedTitle: '你无法管理领域的这一部分',

@@ -9,7 +9,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { type RealmSection, realmHref } from './routes.ts';
 import { readManagementAccess } from './settings-api.ts';
 
-const sections: readonly RealmSection[] = ['queue', 'log', 'members', 'roles', 'settings'];
+const sections: readonly RealmSection[] = ['queue', 'log', 'members', 'roles', 'showcase', 'settings'];
 
 /** Settings authority is independent of membership management. Main checks the
  * settings read; the inbox remains discoverable without a settings grant. */

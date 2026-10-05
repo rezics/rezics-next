@@ -11,7 +11,7 @@ export default {
   agentFallback: insert('Agent {{id}}', { id: String }),
   realmFallback: insert('Community {{id}}', { id: String }),
   realmNav: 'Community-Verwaltung',
-  tabQueue: 'Warteschlange', tabLog: 'Protokoll', tabMembers: 'Mitglieder', tabRoles: 'Rollen', tabSettings: 'Einstellungen und Regeln',
+  tabQueue: 'Warteschlange', tabLog: 'Protokoll', tabMembers: 'Mitglieder', tabRoles: 'Rollen', tabShowcase: 'Präsentation', tabSettings: 'Einstellungen und Regeln',
   retry: 'Noch einmal versuchen', cancel: 'Abbrechen',
   loadMore: 'Mehr laden', loadingMore: 'Wird nachgeladen…', startOver: 'Von vorn beginnen',
   deniedTitle: 'Du kannst diesen Teil der Community nicht verwalten',
