@@ -1,7 +1,7 @@
 import { chapterHref, textHref, workHref } from './route.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { ContentsRegion } from './contents.tsx';
@@ -41,6 +41,37 @@ export const Reading: Story = {
     await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef), 'en'));
     await expect(canvas.getByRole('button', { name: 'Mark chapter as read' })).toBeEnabled();
     await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
+  },
+};
+
+let identificationReadFinished: Promise<void>;
+export const UnidentifiedChapterReadLeavesNoTrace: Story = {
+  args: { identificationsRead: undefined },
+  beforeEach() {
+    let finish!: () => void;
+    identificationReadFinished = new Promise(resolve => { finish = resolve; });
+    const original = window.fetch.bind(window);
+    const mocked = spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = new URL(String(input instanceof Request ? input.url : input), window.location.origin);
+      if (!url.pathname.endsWith(`/posts/${fixture.chapter.content.reference.resourceId.slice(-36)}/identifications`))
+        return original(input, init);
+      await expect(init?.method ?? 'GET').toBe('GET');
+      await expect(url.searchParams.get('actingSubject')).toBe(meta.args.actingSubject);
+      await expect(url.searchParams.get('language')).toBe(fixture.chapter.language);
+      finish();
+      return Response.json({ profile: 'post-identifications-v1', post: fixture.chapter.content.reference.resourceId,
+        items: [], nextCursor: null, count: { kind: 'exact', value: 0 }, complete: true });
+    });
+    return () => mocked.mockRestore();
+  },
+  async play({ canvasElement }) {
+    await identificationReadFinished;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
+    await expect(canvas.queryByText(messages.en.regionUnavailable)).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /^Retry$/ })).toBeNull();
+    await expect(canvasElement.querySelector('[data-reader-text]')).toBeVisible();
   },
 };
 

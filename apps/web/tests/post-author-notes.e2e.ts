@@ -197,6 +197,13 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await info.attach('chapter-suitability', { contentType: 'application/json', path: suitabilityPath });
     expect(suitabilityInput.actingSubject).toBe(sessionState.sessionAgent.actingSubject);
     expect(suitability.status(), suitabilityEvidence).toBe(200);
+    const identifications = await page.request.get(`/api/main/v1/posts/${post}/identifications?language=en&actingSubject=${encodeURIComponent(sessionState.sessionAgent.actingSubject)}`);
+    const identificationEvidence = JSON.stringify({ status: identifications.status(), body: await identifications.json() }, null, 2);
+    const identificationPath = info.outputPath('chapter-identifications.json');
+    writeFileSync(identificationPath, identificationEvidence);
+    await info.attach('chapter-identifications', { contentType: 'application/json', path: identificationPath });
+    expect(identifications.status(), identificationEvidence).toBe(200);
+    expect(JSON.parse(identificationEvidence).body).toMatchObject({ items: [], nextCursor: null });
     const viewer = await page.request.get('/api/media-viewer');
     const viewerEvidence = JSON.stringify({ status: viewer.status(), body: await viewer.json() }, null, 2);
     const viewerPath = info.outputPath('reader-viewer.json');
