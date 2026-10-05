@@ -254,9 +254,10 @@ test('GRAPH01/GRAPH02/GRAPH03/GRAPH04/GRAPH05: occurrence roles, explicit canons
     const claims = await f.json<{ claims: Array<{ statement: string; speaker: string; evidence: string[];
       meaningBasis: { state: string; context?: string; interpretationDefinitions?: string[] };
       decisions: Array<{ acceptanceContext: string; outcome: string }> }> }>(measuredClaims.response, 200);
-    // Two graph-position fences, lineage and candidate reads, one projection
-    // expansion and one revelation batch, independent of the three claims.
-    expect(measuredClaims.graphQueries).toBe(6);
+    // Two graph-position fences, lineage and candidate reads and one projection
+    // expansion, independent of the three claims. The revelation batch reads SQL
+    // only since pending relation revelations moved out of the graph (G-1134).
+    expect(measuredClaims.graphQueries).toBe(5);
     const personalResult = claims.claims.find(claim => claim.statement === personalClaim.statement)!;
     const realmResult = claims.claims.find(claim => claim.statement === realmClaim.statement)!;
     expect(personalResult).toMatchObject({ speaker: personalClaim.speaker, evidence: [personalClaim.evidence],
