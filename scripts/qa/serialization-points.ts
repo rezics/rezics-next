@@ -166,14 +166,18 @@ export const serializationAllowlist: SerializationAllowance[] = [
       access + migration,
       main + writer,
       ...(relation === 'access.realm_directory_position'
-        ? [access + '1161_realm_directory_refresh.sql', access + '1241_realm_directory_incremental_copy.sql']
+        ? [
+            access + '1161_realm_directory_refresh.sql',
+            access + '1241_realm_directory_incremental_copy.sql',
+          ]
         : []),
     ],
   })),
   {
     relation: 'source.author_name_epoch',
     class: 'recovery fence',
-    reason: 'Only a restore advances the author-name fence epoch; author writes append change rows.',
+    reason:
+      'Only a restore advances the author-name fence epoch; author writes append change rows.',
     writers: [content + '850_source_author_name_fence.sql'],
   },
   {
