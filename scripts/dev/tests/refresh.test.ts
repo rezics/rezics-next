@@ -249,8 +249,10 @@ describe('pending SQL migration rehearsal', () => {
     const first = 'services/main/migrations/access/001_backfill.sql';
     const second = 'services/main/migrations/access/002_constraint.sql';
     const content = 'services/content/migrations/001_content.sql';
+    // sql-relations-allow: access.event -- synthetic migration text for the rehearsal test, never applied to an owner
     writeFileSync(join(dir, first), 'UPDATE access.event SET epoch = 1;');
     writeFileSync(join(dir, second), 'ALTER TABLE access.event ADD CHECK (epoch > 0);');
+    // sql-relations-allow: content.event -- synthetic migration text for the rehearsal test, never applied to an owner
     writeFileSync(join(dir, content), 'ALTER TABLE content.event ADD COLUMN epoch bigint;');
     return { dir, first, second, content };
   }
