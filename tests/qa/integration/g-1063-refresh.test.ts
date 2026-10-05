@@ -195,14 +195,16 @@ test('G1063: rating/follow readiness, retained cursors, concurrent edits during 
         .rows[0].n,
     ).toBe(generations);
 
-    // Build one candidate per checkpoint, then edit an existing Work and append
-    // another. The generation survives process-object restart and reconciles.
+    // Finish the population and pin its catch-up pass, then edit an existing
+    // Work and append another. Restarted workers activate at the catch-up cut;
+    // later writes remain stale until the following refresh covers them.
     const pending = await projection.register(automaticDiscovery(null), base, position, {
       idempotencyKey: randomUUID(),
       requestDigest: 'b'.repeat(64),
     });
     const beforeScan = await f.publicWork(a.actor, ['en'], 'Append before resumed scan');
     await drain();
+    const catchupPosition = (await deps.relayPosition.read())!;
     const commit = projection.commitBatch.bind(projection);
     projection.commitBatch = (operator, id, lease, checkpoint, result, pin) => {
       const first = result.items[0];
@@ -248,20 +250,48 @@ test('G1063: rating/follow readiness, retained cursors, concurrent edits during 
     );
     const appended = await f.publicWork(a.actor, ['en'], 'Appended during pinned build');
     await drain();
+    const latestPosition = (await deps.relayPosition.read())!;
     projection.commitBatch = commit;
-    expect(await baseTick()).toBe('advanced');
+    expect(await baseTick()).toBe('activated');
     expect(
       (
         await f.accessPool.query('SELECT state FROM access.derived_generation WHERE id=$1', [
           pending.generation_id,
         ])
       ).rows[0].state,
-    ).toBe('building');
-    for (let i = 0; i < 5; i++) if ((await baseTick()) === 'activated') break;
-    const built = await projection.active(base, (await deps.relayPosition.read())!);
-    expect(built.generation_id).toBe(pending.generation_id);
+    ).toBe('ready');
+    const cut = await projection.active(base, latestPosition);
+    expect(cut.generation_id).toBe(pending.generation_id);
+    expect(cut.stale).toBe(true);
+    expect(cut.source_sequence).toBe(catchupPosition.sequence);
+    expect(cut.covered_sequence).toBe(catchupPosition.sequence);
+    expect(BigInt(cut.covered_sequence!)).toBeLessThan(BigInt(latestPosition.sequence));
+    expect(cut.work_count).toBe('4');
+    const cutWorks = (await projection.page(cut, 'recent', '', '', 20)).map((row) => row.work);
+    expect(cutWorks).toContain(beforeScan.work);
+    expect(cutWorks).not.toContain(appended.work);
+    expect(
+      (
+        await f.accessPool.query<{ checkpoint: string }>(
+          `SELECT checkpoint_sequence::text AS checkpoint FROM access.derived_generation_input
+          WHERE generation_id=$1 AND source='main-graph'`,
+          [cut.generation_id],
+        )
+      ).rows[0]!.checkpoint,
+    ).toBe(catchupPosition.sequence);
+
+    expect(await baseTick()).toBe('activated');
+    const built = await projection.active(base, latestPosition);
+    expect(built.generation_id).not.toBe(cut.generation_id);
+    expect(built.storage_generation).toBe(cut.generation_id);
+    expect(built.stale).toBe(false);
+    expect(built.covered_sequence).toBe(latestPosition.sequence);
+    expect(built.changed_works).toEqual([originals[0]!.work, appended.work].sort());
     expect(built.work_count).toBe('5');
     expect((await projection.page(built, 'recent', '', '', 20)).map((row) => row.work)).toContain(
+      appended.work,
+    );
+    expect((await projection.page(cut, 'recent', '', '', 20)).map((row) => row.work)).not.toContain(
       appended.work,
     );
     expect(
