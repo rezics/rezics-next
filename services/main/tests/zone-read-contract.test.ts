@@ -36,13 +36,13 @@ test('Zone public read names are explicit and ranking metrics match the ranking 
 
 test('Zone campaign art exposes only deliverable Realm media with actual dimensions', async () => {
   const slides = [{ id: 'hero', href: '/', art: { landscape: { use } } }];
-  const item = { target: realm, availability: 'available', disclosure: 'public',
+  const item = { target: realm, representation: '00000000-0000-4000-8000-000000000004', availability: 'available', disclosure: 'public',
     moderation: 'none', lifecycle: 'active', width: 1440, height: 540, mediaType: 'image/webp' };
   const store = { itemDeliveryBatch: async () => new Map([[use.slice(-36), item]]),
     renditions: { candidatesBatch: async () => new Map() } };
   expect((await readZoneCampaignArt(store as never, realm, slides))[0]?.art.landscape).toEqual({ use,
     crop: null, cropWidth: 1440, cropHeight: 540,
-    url: '/v1/media/uses/00000000-0000-4000-8000-000000000003',
+    url: '/v1/media/representations/00000000-0000-4000-8000-000000000004/bytes?use=00000000-0000-4000-8000-000000000003',
     width: 1440, height: 540, mediaType: 'image/webp', srcset: [] });
   expect((await readZoneCampaignArt({ ...store, itemDeliveryBatch: async () =>
     new Map([[use.slice(-36), { ...item, disclosure: 'private' }]]) } as never, realm, slides))[0]!.art.landscape).toBeNull();

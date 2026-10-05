@@ -66,6 +66,14 @@ export function slideArt(slide: ZoneShowcaseSlide): ZoneShowcaseArt | null {
         : (campaign ?? own);
   return selected ?? null;
 }
+/** Every image URL a slide draws, as the stage and its thumbnail choose them: backgrounds or the cover standing in, cutout and logo. */
+export function slideImageUrls(slide: ZoneShowcaseSlide, locale: string): string[] {
+  const art = slideArt(slide);
+  return [art?.landscape?.url, art?.portrait?.url, art?.landscape ? undefined : slide.work?.cover?.url,
+    art?.cutout?.url, logoFor(art, slide.title.lang || locale)?.url]
+    .filter((url): url is string => Boolean(url));
+}
+
 export const imageSet = (image: ZoneShowcaseImage) =>
   image.candidates?.length
     ? image.candidates.map((candidate) => `${candidate.url} ${candidate.width}w`).join(', ')

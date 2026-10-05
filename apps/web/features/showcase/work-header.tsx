@@ -1,3 +1,4 @@
+import { type MediaImageMetadata, ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneShowcaseArt, ZoneShowcaseLogo } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
 import type { WorkShowcase } from '../api/showcase.ts';
@@ -14,7 +15,11 @@ export interface WorkShowcaseHeader {
   art: ZoneShowcaseArt;
   trailer: { href: string } | null;
   messages: ShowcaseMessages;
+  /** Its images' metadata, read with the page so the art is drawn (or masked) in the server's HTML. */
+  images?: Readonly<Record<string, MediaImageMetadata>>;
 }
+
+const unresolved = {};
 
 /**
  * The header's art from one batch read, or null when the Work has no
@@ -23,12 +28,12 @@ export interface WorkShowcaseHeader {
 export function workShowcaseHeader(
   item: WorkShowcase | undefined,
   messages: ShowcaseMessages,
-  avatarQuery = '',
+  images: WorkShowcaseHeader['images'] = unresolved,
 ): WorkShowcaseHeader | null {
   if (!item) return null;
-  const art = workShowcaseArt(item, avatarQuery);
+  const art = workShowcaseArt(item);
   if (!art.landscape && !art.portrait) return null;
-  return { art, trailer: item.trailer ? { href: item.trailer.url } : null, messages };
+  return { art, trailer: item.trailer ? { href: item.trailer.url } : null, messages, images };
 }
 
 /** The logo in the title's language, or a language-neutral one; a logo in another language never replaces the title. */
@@ -53,9 +58,11 @@ export function WorkArtHero({ header, children }: { header: WorkShowcaseHeader; 
   return (
     <div className="work-hero">
       <style>{heroCss}</style>
-      <Background art={header.art} first />
-      <span aria-hidden="true" className="showcase-scrim" />
-      <div className="work-hero-copy">{children}</div>
+      <ResolvedMediaImages images={header.images ?? unresolved}>
+        <Background art={header.art} first />
+        <span aria-hidden="true" className="showcase-scrim" />
+        <div className="work-hero-copy">{children}</div>
+      </ResolvedMediaImages>
     </div>
   );
 }

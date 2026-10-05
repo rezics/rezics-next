@@ -1,4 +1,4 @@
-import type { ZoneShowcaseArt, ZoneShowcaseImage, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { readWorkShowcase } from '../api/showcase.ts';
 import { mainApi, mainApiWithToken } from '../api/main.ts';
@@ -11,21 +11,6 @@ import { MAX_SLIDES, readStoredPresentation, type StoredPresentation } from './s
 // answers with data instead of throwing, so a Work or the Zone being unavailable shows in words.
 
 const iri = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-
-/** Main's media path through the BFF, which sends the session's token; Main then needs the Agent the editor acts as. */
-function asAgent(url: string, actingSubject: string) {
-  const path = new URL(url, 'https://rezics.invalid');
-  path.searchParams.set('actingSubject', actingSubject);
-  return `${path.pathname}${path.search}`;
-}
-
-/** Art whose every image is fetched as the acting Agent, as the editor's own previews are. */
-export function artAsAgent(art: ZoneShowcaseArt, actingSubject: string): ZoneShowcaseArt {
-  const image = <Image extends ZoneShowcaseImage>(item: Image): Image => ({ ...item, url: asAgent(item.url, actingSubject),
-    ...item.candidates ? { candidates: item.candidates.map(candidate => ({ ...candidate, url: asAgent(candidate.url, actingSubject) })) } : {} });
-  return { ...art, landscape: art.landscape && image(art.landscape), portrait: art.portrait && image(art.portrait),
-    cutout: art.cutout && image(art.cutout), logos: art.logos?.map(image) };
-}
 
 /**
  * The Works the slides name, as the stage draws them: the card with the Work's own showcase art,
@@ -53,7 +38,8 @@ export async function loadSlideWorks(input: { realm: string; locale: UiLocale; w
     const header = headers[index];
     if (!header) return [target, null];
     const own = art.get(target);
-    return [target, { ...zoneWork(header, context, null), ...own ? { showcaseArt: input.actingSubject ? artAsAgent(workShowcaseArt(own), input.actingSubject) : workShowcaseArt(own) } : {} }];
+    // The art batch is anonymous, so its public URLs name no reader, as on the Zone's home.
+    return [target, { ...zoneWork(header, context, null), ...own ? { showcaseArt: workShowcaseArt(own) } : {} }];
   }));
 }
 

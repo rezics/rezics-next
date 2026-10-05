@@ -1,4 +1,5 @@
 import { buttonVariants } from '@rezics/ui/button';
+import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import { LibraryBigIcon } from 'lucide-react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -27,7 +28,7 @@ import {
   releaseFilterActive,
 } from '../release-filter/state.ts';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
-import { loadModules } from './modules.ts';
+import { loadHomeModules } from './modules.ts';
 import {
   readAgent,
   readFacets,
@@ -187,8 +188,8 @@ export function SiteHomeRoute(props: RealmRouteProps) {
       if (view.pkg?.slots.home) return <ZoneSiteHome view={view} search={search} />;
       const { locale, realm } = view.context;
       // The home leads with search and the values a browse page filters by; its counts come from one browse read.
-      const [modules, window] = await Promise.all([
-        loadModules(view.presentation, view.context, view.slideMedia),
+      const [{ modules, images }, window] = await Promise.all([
+        loadHomeModules(view.presentation, view.context, view.slideMedia),
         readZoneBrowse(realm, locale, { limit: 1 }),
       ]);
       const browse = browseEntry({
@@ -211,29 +212,32 @@ export function SiteHomeRoute(props: RealmRouteProps) {
               banner={view.realm.header.banner?.kind === 'image'}
             />
           ) : null}
-          <ZoneHome
-            modules={modules}
-            zone={view.zone}
-            pkg={view.pkg}
-            locale={view.context.locale}
-            browse={browse}
-            messages={view.zoneMessages}
-            avatarQuery={view.reader.avatarQuery}
-            empty={
-              <EmptyState
-                icon={LibraryBigIcon}
-                title={view.messages.emptyHomeTitle}
-                description={view.messages.emptyHomeBody}
-              >
-                <LocalizedLink
-                  href={view.zone.links.about}
-                  className={buttonVariants({ variant: 'outline' })}
+          {/* Hero image metadata is read with the page, so the first slide is drawn or masked in this HTML. */}
+          <ResolvedMediaImages images={images}>
+            <ZoneHome
+              modules={modules}
+              zone={view.zone}
+              pkg={view.pkg}
+              locale={view.context.locale}
+              browse={browse}
+              messages={view.zoneMessages}
+              avatarQuery={view.reader.avatarQuery}
+              empty={
+                <EmptyState
+                  icon={LibraryBigIcon}
+                  title={view.messages.emptyHomeTitle}
+                  description={view.messages.emptyHomeBody}
                 >
-                  {view.messages.seeAbout}
-                </LocalizedLink>
-              </EmptyState>
-            }
-          />
+                  <LocalizedLink
+                    href={view.zone.links.about}
+                    className={buttonVariants({ variant: 'outline' })}
+                  >
+                    {view.messages.seeAbout}
+                  </LocalizedLink>
+                </EmptyState>
+              }
+            />
+          </ResolvedMediaImages>
         </div>
       );
     },

@@ -119,14 +119,36 @@ function downloadBody(bytes: Uint8Array, lease: DownloadReadLease, leases: Acces
   });
 }
 
-/** Serve one exact representation after the caller-independent disclosure checks. */
-async function deliver(media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
+/** RFC 9110 If-None-Match: a list compared weakly, or `*`. */
+const notModified = (header: string | null, etag: string) => !!header && (header.trim() === '*'
+  || header.split(',').some(tag => tag.trim().replace(/^W\//, '') === etag));
+
+/** Serve one exact representation after the disclosure checks. Bytes are named by their digest, so a
+ * matching validator answers 304 without reading the object. Public means no reader identity decided
+ * the answer (see `publicFirst`); what a bearer's identity unlocked stays private to that reader. */
+async function deliver(request: Request, media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
   mediaType: string }, publicTarget: boolean): Promise<Response> {
-  const bytes = await media.objects(basis.objectNamespace).get(basis.sha256);
-  return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType,
-    etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
+  const headers = { etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
     // Revalidation keeps shared caches from outliving a revoked selection or disclosure.
-    'cache-control': publicTarget ? 'public, no-cache' : 'private, no-store' } });
+    'cache-control': publicTarget && !request.headers.get('authorization') ? 'public, no-cache' : 'private, no-store' };
+  if (notModified(request.headers.get('if-none-match'), headers.etag)) return new Response(null, { status: 304, headers });
+  const bytes = await media.objects(basis.objectNamespace).get(basis.sha256);
+  return new Response(new Uint8Array(bytes), { headers: { 'content-type': basis.mediaType, ...headers } });
+}
+
+/**
+ * A byte read naming no Agent can only be given public media; its bearer adds just the reader's
+ * preferences (a signed-in reader's page sends one with every image). The anonymous reader decides
+ * first: what it sees is the same for everyone, so it is cacheable and costs no Account introspection.
+ * Only what it cannot see is decided again with the bearer, privately for that reader.
+ */
+async function publicFirst(request: Request, actingSubject: string | undefined,
+  read: (request: Request) => Promise<Response>): Promise<Response> {
+  if (actingSubject || !request.headers.get('authorization')) return read(request);
+  const headers = new Headers(request.headers);
+  headers.delete('authorization');
+  const shared = await read(new Request(request.url, { headers }));
+  return shared.status === 404 ? read(request) : shared;
 }
 
 export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -258,7 +280,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/media/representations/:representation/bytes',{params:t.Object({representation:uuid}),
       query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid)},{additionalProperties:false}),
       response:{200:t.Any(),...authorizedReadProblems}},async ({request,params,query}: {request:Request;
-        params:{representation:string};query:{actingSubject?:string;use?:string}})=>{
+        params:{representation:string};query:{actingSubject?:string;use?:string}})=>publicFirst(request,query.actingSubject,async request=>{
       let lease: DownloadReadLease|undefined;
       try {
         const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
@@ -266,7 +288,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (basis.campaign && (!basis.metadata.use || !basis.target || !(await currentZoneCampaignUses(
           work.environment, basis.campaignZone, await readerFor(request, query.actingSubject), basis.target
         )).has(basis.metadata.use))) return unavailable();
-        if (basis.disclosure==='public') return deliver(work.media,{objectNamespace:basis.objectNamespace,
+        if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
           sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},true);
         if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
         const principal=await work.account.verify(request,['work:read']);
@@ -280,7 +302,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (lease) await work.downloadLeases?.finish(lease.id,'aborted').catch(()=>undefined);
         return mediaError(error);
       }
-    })
+    }))
     .post('/v1/media/representations/:representation/labels',{params:t.Object({representation:uuid}),body:imageLabelCommand,response:fieldResponses},
       async ({request,params,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
@@ -427,7 +449,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ selection: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId) }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
-    }, async ({ request, params, query }) => {
+    }, async ({ request, params, query }) => publicFirst(request, query.actingSubject, async request => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -448,21 +470,21 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           // cannot regain delivery through the generic resource-summary path.
           if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
             || agents[0]?.avatar?.value !== params.selection) return unavailable();
-          return await deliver(work.media, { objectNamespace: basis.objectNamespace,
+          return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
             sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
         }
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();
-        return await deliver(work.media, { objectNamespace: basis.objectNamespace,
+        return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
           sha256: basis.sha256!, mediaType: basis.mediaType! }, target.disclosure === 'public');
       } catch (error) { return mediaError(error); }
-    })
+    }))
     .get('/v1/media/uses/:use', {
       params: t.Object({ use: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId) }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
-    }, async ({ request, params, query }) => {
+    }, async ({ request, params, query }) => publicFirst(request, query.actingSubject, async request => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -476,9 +498,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [item.target], context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();
-        return await deliver(work.media, item, target.disclosure === 'public');
+        return await deliver(request, work.media, item, target.disclosure === 'public');
       } catch (error) { return mediaError(error); }
-    })
+    }))
     .get('/v1/media/assets/:asset/bytes', {
       params: t.Object({ asset: uuid }),
       query: t.Object({ target: nativeId, actingSubject: nativeId,

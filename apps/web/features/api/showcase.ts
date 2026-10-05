@@ -1,5 +1,7 @@
+import { mediaImageKey, type MediaImageMetadata } from '@rezics/ui/media-image';
 import type { MainClient } from '../discover/types.ts';
 import { mainApiWithToken } from './main.ts';
+import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';
 
 type Result<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
   ? NonNullable<Data>
@@ -107,5 +109,37 @@ export async function readShowcaseWorks(
     );
   } catch {
     return new Map();
+  }
+}
+
+/**
+ * Metadata for the showcase images a page draws, read with the page so its HTML already holds each
+ * image or its mask and the first slide's preload is used. Read anonymously: showcase art is public,
+ * its labels do not depend on the reader, and the reader's preferences apply where it renders. An
+ * image Main does not show anonymously is left to the reader's own client read. One batch of the
+ * first 64 references, in the order given.
+ */
+export async function readShowcaseImages(
+  urls: readonly string[],
+): Promise<Record<string, MediaImageMetadata>> {
+  const references = [
+    ...new Map(
+      urls.flatMap((url) => {
+        const reference = imageReferenceFromUrl(url);
+        return reference ? [[mediaImageKey(reference), reference] as const] : [];
+      }),
+    ).values(),
+  ].slice(0, 64);
+  if (!references.length) return {};
+  try {
+    const { data, error } = await mainApiWithToken(undefined).v1.media.metadata.post({
+      items: mediaMetadataItems(references),
+    });
+    if (error || !data) return {};
+    return Object.fromEntries(
+      mediaMetadataOf(data.items, references).map((item) => [item.requestKey!, item]),
+    );
+  } catch {
+    return {};
   }
 }

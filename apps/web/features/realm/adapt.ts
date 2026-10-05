@@ -72,9 +72,8 @@ export function showcaseFocal(value: string | null | undefined, crop?: string | 
     width: focal.width / selected.width, height: focal.height / selected.height };
 }
 
-/** A signed-in reader's BFF sends their token, so Main also needs the Agent they read as (`query`, as `zoneImage` takes it). */
-const showcaseUrl = (url: string, query: string) => url.startsWith('/v1/')
-  ? `${BFF_PREFIX}${url}${url.includes('?') ? query.replace('?', '&') : query}` : url;
+/** Showcase art is public and its batch reads are anonymous, so its URLs name no reader and every reader shares one cached copy. */
+const showcaseUrl = (url: string) => (url.startsWith('/v1/') ? `${BFF_PREFIX}${url}` : url);
 
 /**
  * Delivery candidates name their codec; a srcset cannot contain duplicate widths for two codecs.
@@ -93,7 +92,6 @@ export function deliveredShowcaseImage(
     cropHeight?: number;
     srcset: readonly { url: string; width: number; type: string }[];
   },
-  query = '',
 ): ZoneShowcaseImage {
   const codec = image.srcset.some((candidate) => candidate.type === 'image/webp')
     ? 'image/webp'
@@ -111,7 +109,7 @@ export function deliveredShowcaseImage(
     ? Math.min(image.height - top, Math.ceil(pixels(crop.height, image.height)))
     : image.height;
   return {
-    url: showcaseUrl(image.url, query),
+    url: showcaseUrl(image.url),
     width: image.cropWidth ?? image.width,
     height: image.cropHeight ?? image.height,
     framed: true,
@@ -128,20 +126,20 @@ export function deliveredShowcaseImage(
       : {}),
     avifCandidates: image.srcset
       .filter((candidate) => candidate.type === 'image/avif')
-      .map((candidate) => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })),
+      .map((candidate) => ({ url: showcaseUrl(candidate.url), width: candidate.width })),
     candidates: image.srcset
       .filter((candidate) => candidate.type === codec)
-      .map((candidate) => ({ url: showcaseUrl(candidate.url, query), width: candidate.width })),
+      .map((candidate) => ({ url: showcaseUrl(candidate.url), width: candidate.width })),
   };
 }
 
 /** A logo keyed `zxx` (no linguistic content, as Main keys language-neutral logos) or `und` serves every title language. */
 const logoLanguage = (language: string | undefined) => !language || language === 'zxx' || language === 'und' ? '' : language;
 
-export function workShowcaseArt(item: WorkShowcase, query = ''): ZoneShowcaseArt {
+export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
   const role = (name: ShowcaseImage['role']) => {
     const image = item.images.find(image => image.role === name);
-    return image ? deliveredShowcaseImage(image, query) : null;
+    return image ? deliveredShowcaseImage(image) : null;
   };
   return { landscape: role('background-landscape'), portrait: role('background-portrait'), cutout: role('cutout'),
     logos: item.images.flatMap(image => image.role === 'logo' && image.tone && image.anchor
@@ -149,18 +147,18 @@ export function workShowcaseArt(item: WorkShowcase, query = ''): ZoneShowcaseArt
         language: logoLanguage(image.language) }] : []) };
 }
 
-export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia'], query = ''): ZoneShowcaseArt | null {
+export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia']): ZoneShowcaseArt | null {
   const art = media.find(item => item.id === slideId)?.art;
   if (!art) return null;
   // Art is framed for the stage when its selected crop, not its original, has the stage's ratio.
   const background = (image: NonNullable<typeof art.landscape> | null, ratio: number) => {
-    const delivered = image ? deliveredShowcaseImage(image, query) : null;
+    const delivered = image ? deliveredShowcaseImage(image) : null;
     return delivered ? { ...delivered, framed: Math.abs(delivered.width / delivered.height - ratio) < .001 } : null;
   };
   return { landscape: background(art.landscape, 16 / 9),
     portrait: background(art.portrait, 3 / 4),
-    cutout: art.cutout ? deliveredShowcaseImage(art.cutout, query) : null,
-    logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image, query), tone: image.tone,
+    cutout: art.cutout ? deliveredShowcaseImage(art.cutout) : null,
+    logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image), tone: image.tone,
       anchor: image.anchor, language: logoLanguage(image.language) })) };
 }
 
@@ -175,7 +173,7 @@ export function presentationSlide(slide: PresentationSlide, work: ZoneWork | nul
       : slide.title ? zoneContentText(slide.title) : work?.title ?? zoneContentText(''),
     kicker: kicker !== undefined ? zoneContentText(kicker, context.locale)
       : slide.kicker ? zoneContentText(slide.kicker) : null,
-    tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media, context.avatarQuery) };
+    tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media) };
 }
 
 /** Legacy uploads were not authored for a showcase frame, so the renderer must preserve the whole image. */
@@ -195,7 +193,7 @@ export interface AdaptContext {
   unrouted?: boolean;
   /** The Zone's mounted Collections by their IRI, to the route segment their members open under. */
   mounts?: ReadonlyMap<string, string>;
-  /** `?actingSubject=` for a signed-in reader's media reads, or empty. */
+  /** `?actingSubject=` for a signed-in reader's cover reads, or empty; showcase art names no reader. */
   avatarQuery?: string;
 }
 

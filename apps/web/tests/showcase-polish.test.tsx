@@ -49,12 +49,3 @@ test('the shelf words follow the Work kind and stay the reading words for a book
   expect(kind('prompt', 'copy', 'prompt')?.wantToRead).toBe('Want to use');
   expect(kind('recipe', 'read', 'recipe')).toEqual({ wantToRead: 'Want to cook', reading: 'Cooking', read: 'Cooked' });
 });
-
-test('a signed-in reader fetches art as their Agent, after any query the URL already has', () => {
-  const query = '?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fagent';
-  const image = deliveredShowcaseImage({ ...original, url: '/v1/media/representations/r/bytes?use=u',
-    srcset: [{ url: '/v1/media/representations/s/bytes', width: 800, type: 'image/webp' }] }, query);
-  expect(image.url).toBe(`/api/main/v1/media/representations/r/bytes?use=u&${query.slice(1)}`);
-  expect(image.candidates?.[0]?.url).toBe(`/api/main/v1/media/representations/s/bytes${query}`);
-  expect(deliveredShowcaseImage({ ...original, srcset: [] }).url).toBe('/api/main/v1/media/original.png');
-});

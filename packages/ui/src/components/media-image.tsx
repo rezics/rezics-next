@@ -141,6 +141,14 @@ export function ImageAuthoringScope({ resolve, scope, children }: { resolve: Ima
     refreshKey={`${parent.refreshKey ?? ''}:${scope ?? ''}`} referenceFromUrl={parent.referenceFromUrl}>{children}</MediaImageProvider>;
 }
 
+/** Metadata a server already resolved for the images below, so its HTML holds each image (or its mask)
+ * instead of waiting for the client batch; the surrounding provider keeps the viewer, refresh and every other image. */
+export function ResolvedMediaImages({ images, children }: { images: Readonly<Record<string, MediaImageMetadata | null>>; children: ReactNode }) {
+  const parent = useContext(ImageContext);
+  const context = useMemo(() => ({ ...parent, images: { ...parent.images, ...images } }), [parent, images]);
+  return <ImageContext.Provider value={context}>{children}</ImageContext.Provider>;
+}
+
 export function useMediaImageMetadata(reference?: MediaImageReference) {
   const context = useContext(ImageContext);
   const representationId = reference?.representationId;
@@ -178,18 +186,32 @@ export interface MediaImageProps extends ComponentProps<'img'> {
   revealable?: boolean;
   compact?: boolean;
 }
-/** A mask never mounts the original image; revealing is local and resets with labels or preference changes. */
-export function MediaImage({ metadata: supplied, representationId, mediaUseId, conceal = false, viewer: suppliedViewer, labels: overrides, revealable = true, compact = false, className, src: fallbackSrc, alt = '', ...props }: MediaImageProps) {
+type ImageDecisionInput = Pick<MediaImageProps, 'metadata' | 'representationId' | 'mediaUseId' | 'conceal' | 'viewer' | 'src'>;
+function useImageDecision({ metadata: supplied, representationId, mediaUseId, conceal = false, viewer: suppliedViewer, src }: ImageDecisionInput) {
   const context = useContext(ImageContext);
-  const reference = representationId ? { representationId, mediaUseId } : typeof fallbackSrc === 'string' ? context.referenceFromUrl?.(fallbackSrc) : undefined;
+  const reference = representationId ? { representationId, mediaUseId } : typeof src === 'string' ? context.referenceFromUrl?.(src) : undefined;
   const { metadata: resolved } = useMediaImageMetadata(supplied ? undefined : reference);
   const metadata = supplied ?? resolved;
   const viewer = suppliedViewer ?? context.viewer;
-  const labels = { ...context.labels, ...overrides };
   const managed = Boolean(reference || supplied);
   const effectiveConceal = metadata?.mediaUseId ? Boolean(metadata.conceal) : conceal || Boolean(metadata?.conceal);
   const presentation = managed && metadata === undefined ? 'loading' : managed && metadata === null ? 'unavailable'
     : imagePresentation(metadata ?? { nsfw: 'sfw', ageRating: { status: 'unassessed' } }, viewer, effectiveConceal);
+  return { context, metadata, viewer, effectiveConceal, presentation };
+}
+
+/** What a MediaImage with this `src` shows here and the URL it loads, so a consumer can leave out what it
+ * would not show (a picture source, a preload). Requests metadata the same way. */
+export function useMediaImagePresentation(src: string | undefined) {
+  const { metadata, presentation } = useImageDecision({ src });
+  return { presentation, src: metadata?.src ?? src };
+}
+
+/** A mask never mounts the original image; revealing is local and resets with labels or preference changes. */
+export function MediaImage({ metadata: supplied, representationId, mediaUseId, conceal = false, viewer: suppliedViewer, labels: overrides, revealable = true, compact = false, className, src: fallbackSrc, alt = '', ...props }: MediaImageProps) {
+  const { context, metadata, viewer, effectiveConceal, presentation } = useImageDecision({ metadata: supplied,
+    representationId, mediaUseId, conceal, viewer: suppliedViewer, src: fallbackSrc });
+  const labels = { ...context.labels, ...overrides };
   const identity = `${mediaImageKey(metadata ?? { representationId: representationId ?? String(fallbackSrc ?? ''), mediaUseId })}:${metadata?.revision ?? ''}:${metadata?.nsfw ?? ''}:${metadata?.ageRating.status}:${metadata?.ageRating.status === 'assessed' ? metadata.ageRating.labels.join(',') : ''}:${effectiveConceal}:${presentation}:${viewer.nsfwDisplay}`;
   const [reveal, setReveal] = useState({ identity, open: false });
   if (reveal.identity !== identity) setReveal({ identity, open: false });

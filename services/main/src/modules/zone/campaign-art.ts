@@ -75,7 +75,9 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
     if (!item || (item.role?.startsWith('campaign-') && item.role !== `campaign-${role}`)) return null;
     const region = pixelCrop(item.crop ?? null, item);
     return { ...image, ...(item.focalArea && !image.focalArea ? { focalArea: item.focalArea } : {}),
-      crop: item.crop ?? null, cropWidth: region.width, cropHeight: region.height, url: `/v1/media/uses/${use}`,
+      crop: item.crop ?? null, cropWidth: region.width, cropHeight: region.height,
+      // The exact representation and Use, as Work art and candidates are named, so readers' image policy applies.
+      url: `/v1/media/representations/${item.representation}/bytes?use=${use}`,
       width: item.width, height: item.height, mediaType: item.mediaType,
       srcset: candidates.get(use) ?? [] };
   };

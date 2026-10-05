@@ -42,7 +42,7 @@ import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
-import { readOwnWorkShowcase } from '../api/showcase.ts';
+import { readOwnWorkShowcase, readShowcaseImages } from '../api/showcase.ts';
 import { workShowcaseHeader } from '../showcase/work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
 import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status } from './hub-sections.tsx';
@@ -158,14 +158,19 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience, plan, art, showcaseMessages] = await Promise.all([
     readingAgent(), browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
     readHubPlan(id),
-    // One batch for the page, so the art costs one round trip however many layers it has.
-    readOwnWorkShowcase(work.id), getMessages('showcase', locale)]);
+    // One batch for the page, so the art costs one round trip however many layers it has, and one for
+    // the header's images, so they are drawn (or masked) in the server's HTML.
+    readOwnWorkShowcase(work.id).then(async (art) => {
+      const item = art.get(work.id);
+      return { item, images: item ? await readShowcaseImages(item.images.flatMap(image =>
+        image.role === 'cutout' ? [] : [image.url])) : {} };
+    }), getMessages('showcase', locale)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
   const context = ratings.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
-    showcase={workShowcaseHeader(art.get(work.id), showcaseMessages, avatarQuery)}
+    showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>

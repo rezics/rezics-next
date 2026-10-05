@@ -78,7 +78,14 @@ export function mainRequestHeaders(
   return headers;
 }
 
-export function browserResponseHeaders(upstream: Headers, mainOrigin: string): Headers {
+/**
+ * Media bytes are the same in every language. Main labels them public only when it decided without
+ * any reader identity (`services/main/src/routes/media.ts`), so those keep its revalidating policy.
+ */
+export const mediaRead = (method: string, segments: readonly string[]) =>
+  method === 'GET' && segments[1] === 'media';
+
+export function browserResponseHeaders(upstream: Headers, mainOrigin: string, media = false): Headers {
   const headers = new Headers();
   for (const name of FORWARDED_RESPONSE_HEADERS) {
     const value = upstream.get(name);
@@ -92,8 +99,10 @@ export function browserResponseHeaders(upstream: Headers, mainOrigin: string): H
     }
   }
   // Responses depend on the session cookie and Main's ETags do not, so a
-  // browser must never reuse one across sign-out or Agent switches.
-  headers.set('cache-control', 'no-store');
+  // browser must never reuse one across sign-out or Agent switches. Public
+  // media is the exception: no reader decided it, and each reuse revalidates.
+  const cacheControl = upstream.get('cache-control');
+  headers.set('cache-control', media && /^public\b/.test(cacheControl ?? '') ? cacheControl! : 'no-store');
   return headers;
 }
 
@@ -244,13 +253,16 @@ export async function forwardToMain(
   const fetchImpl = input.fetch ?? fetch;
   const deadlineAt = deadlineFromHeaders(request.headers) ?? Date.now() + SERVER_READ_LIMITS.page;
   const headers = mainRequestHeaders(request.headers, input.accessToken, input.clientIpHeader);
-  await applyDisplayLanguages(request, headers, {
-    ...input,
-    fetch: fetchImpl,
-    segments,
-    writing: writesLanguages,
-    deadlineAt,
-  });
+  const media = mediaRead(request.method, segments);
+  // A signed-in reader's languages cost Main two session reads; no media read uses them.
+  if (!media)
+    await applyDisplayLanguages(request, headers, {
+      ...input,
+      fetch: fetchImpl,
+      segments,
+      writing: writesLanguages,
+      deadlineAt,
+    });
   let response: Response;
   try {
     // Body-bearing reads use a replayable JSON string. Writes retain streaming
@@ -286,8 +298,8 @@ export async function forwardToMain(
     );
   }
   if (writesLanguages && response.ok) forgetReadingLanguages(input.accessToken);
-  return new Response(response.body, {
+  return new Response(response.status === 304 ? null : response.body, {
     status: response.status,
-    headers: browserResponseHeaders(response.headers, input.mainOrigin),
+    headers: browserResponseHeaders(response.headers, input.mainOrigin, media),
   });
 }

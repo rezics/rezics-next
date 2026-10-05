@@ -1,4 +1,4 @@
-import type { MediaImageMetadata, MediaImageReference } from '@rezics/ui/media-image';
+import type { MediaImageControl, MediaImageMetadata, MediaImageReference } from '@rezics/ui/media-image';
 import { mediaImageKey } from '@rezics/ui/media-image';
 import { BFF_PREFIX } from './browser.ts';
 
@@ -24,39 +24,53 @@ export function imageReferenceFromUrl(src: string): MediaImageReference | undefi
 type Descriptor = {
   representation: string; use?: string | null; url: string;
   nsfw: MediaImageMetadata['nsfw']; ageRating: MediaImageMetadata['ageRating'];
-  conceal: boolean; controls: MediaImageMetadata['controls']; canEdit?: boolean; canProtect?: boolean;
+  conceal: boolean; canEdit?: boolean; canProtect?: boolean;
+  /** Main sends `null` for a control the image does not have, such as concealment without a Use. */
+  controls?: { [Field in keyof NonNullable<MediaImageMetadata['controls']>]?: MediaImageControl | null };
 };
 
 function normalize(value: Descriptor, reference: MediaImageReference, actor?: string | null): MediaImageMetadata {
   const url = new URL(`${BFF_PREFIX}${value.url}`, 'http://web.local');
   if (actor) url.searchParams.set('actingSubject', actor);
-  const controls = value.controls && Object.fromEntries(Object.entries(value.controls).filter(([, control]) => control != null).map(([field, control]) =>
+  const present = (entry: [string, MediaImageControl | null | undefined]): entry is [string, MediaImageControl] => entry[1] != null;
+  const controls = value.controls && Object.fromEntries(Object.entries(value.controls).filter(present).map(([field, control]) =>
     [field, { ...control, canEdit: control.canEdit ?? value.canEdit,
       canProtect: control.canProtect ?? value.canProtect }])) as MediaImageMetadata['controls'];
   return {
     representationId: value.representation, ...(value.use ? { mediaUseId: value.use } : {}),
     requestKey: mediaImageKey(reference), src: `${url.pathname}${url.search}`, nsfw: value.nsfw,
     ageRating: value.ageRating, conceal: value.conceal, controls,
-    revision: Object.values(value.controls ?? {}).filter(control => control != null)
+    revision: Object.entries(value.controls ?? {}).filter(present).map(([, control]) => control)
       .map(control => `${control.valueHead}:${control.basis.head}`).join('|'),
   };
 }
 
-export async function resolveMediaMetadata(references: MediaImageReference[], actingSubject?: string | null,
-  fetcher: typeof fetch = fetch): Promise<MediaImageMetadata[]> {
+/** Main's metadata request items for a batch of at most 64 references. */
+export function mediaMetadataItems(references: readonly MediaImageReference[]) {
   if (references.length > 64) throw new Error('Image metadata batch exceeds 64 references');
-  const items = references.map(ref => {
+  return references.map(ref => {
     const selected = selection.exec(ref.representationId);
-    return selected ? { selection: selected[1] }
+    return selected ? { selection: selected[1]! }
       : { representation: ref.representationId, ...(ref.mediaUseId ? { use: ref.mediaUseId } : {}) };
   });
+}
+
+/** Main's metadata answer in request order, as MediaImage looks it up; unavailable images are left out. */
+export function mediaMetadataOf(items: readonly ({ status: 'available' } & Descriptor | { status: 'unavailable' })[],
+  references: readonly MediaImageReference[], actingSubject?: string | null): MediaImageMetadata[] {
+  if (!Array.isArray(items) || items.length !== references.length) throw new Error('Incomplete image metadata');
+  return items.flatMap((item, index) => item.status === 'available'
+    ? [normalize(item, references[index]!, actingSubject)] : []);
+}
+
+export async function resolveMediaMetadata(references: MediaImageReference[], actingSubject?: string | null,
+  fetcher: typeof fetch = fetch): Promise<MediaImageMetadata[]> {
+  const items = mediaMetadataItems(references);
   const response = await fetcher(`${BFF_PREFIX}/v1/media/metadata`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ items, ...(actingSubject ? { actingSubject } : {}) }), cache: 'no-store',
   });
   if (!response.ok) throw new Error('Image metadata unavailable');
   const result = await response.json() as { items: ({ status: 'available' } & Descriptor | { status: 'unavailable' })[] };
-  if (!Array.isArray(result.items) || result.items.length !== references.length) throw new Error('Incomplete image metadata');
-  return result.items.flatMap((item, index) => item.status === 'available'
-    ? [normalize(item, references[index]!, actingSubject)] : []);
+  return mediaMetadataOf(result.items, references, actingSubject);
 }

@@ -1,3 +1,6 @@
+'use client';
+
+import { useMediaImagePresentation } from '@rezics/ui/media-image';
 import type { ZoneShowcaseArt, ZoneShowcaseSlide, ZoneTitleEffect } from '@rezics/zone-sdk';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -11,15 +14,43 @@ import type { ZoneMessages } from '../zones/messages.ts';
 import { cropGeometry, logoFor, pictureSources, slideArt } from './stage.ts';
 import { Trailer } from './trailer.tsx';
 
+/**
+ * A picture draws a different image per window, but MediaImage decides from its fallback alone. So each
+ * background passes the media policy itself and only a shown one becomes a source. While either is
+ * undecided there is no source at all, so nothing is fetched that may then be masked.
+ */
+function useShownBackgrounds(art: ZoneShowcaseArt) {
+  const landscape = useMediaImagePresentation(art.landscape?.url);
+  const portrait = useMediaImagePresentation(art.portrait?.url);
+  const pending =
+    art.landscape && landscape.presentation === 'loading'
+      ? art.landscape
+      : art.portrait && portrait.presentation === 'loading'
+        ? art.portrait
+        : null;
+  const shown: ZoneShowcaseArt = {
+    ...art,
+    landscape: landscape.presentation === 'visible' ? art.landscape : null,
+    portrait: portrait.presentation === 'visible' ? art.portrait : null,
+  };
+  return { pending, shown, landscapeSrc: landscape.src };
+}
+
+/** Preloads the first slide's background only once the media policy shows it, so a mask never downloads its image. */
 export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
   const ownArt = slideArt(slide);
-  const art =
-    ownArt?.landscape || ownArt?.portrait
-      ? ownArt
-      : slide.work?.cover
-        ? { landscape: { ...slide.work.cover, framed: false } }
-        : null;
-  if (!art) return null;
+  const own = Boolean(ownArt?.landscape || ownArt?.portrait);
+  const cover = slide.work?.cover;
+  const { pending, shown, landscapeSrc } = useShownBackgrounds(
+    own ? ownArt! : { landscape: cover ? { ...cover, framed: false } : null },
+  );
+  // A cover loads from the URL its metadata resolves to; art keeps its own candidates.
+  const art = own
+    ? shown
+    : shown.landscape && landscapeSrc
+      ? { landscape: { ...shown.landscape, url: landscapeSrc } }
+      : null;
+  if (pending || !art) return null;
   return pictureSources(art)
     .filter((source, index, sources) => index === 0 || source.shape !== sources[index - 1]?.shape)
     .map((source) => (
@@ -37,12 +68,14 @@ export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
 }
 
 export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
-  const sources = pictureSources(art);
-  const fallback = art.landscape ?? art.portrait;
+  const { pending, shown } = useShownBackgrounds(art);
+  // A pending or hidden fallback renders MediaImage's own placeholder or mask.
+  const fallback = pending ?? shown.landscape ?? shown.portrait ?? art.landscape ?? art.portrait;
   if (!fallback) return null;
+  const sources = pending ? [] : pictureSources(shown);
   const geometry = Object.fromEntries(
     ['landscape', 'portrait'].flatMap((shape) => {
-      const image = (shape === 'portrait' ? art.portrait : art.landscape) ?? fallback;
+      const image = (shape === 'portrait' ? shown.portrait : shown.landscape) ?? fallback;
       const crop = cropGeometry(image, shape === 'portrait' ? 3 / 4 : 16 / 9);
       return Object.entries({
         'crop-ratio': crop.ratio,

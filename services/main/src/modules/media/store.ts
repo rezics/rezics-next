@@ -631,7 +631,7 @@ export class MediaStore {
       throw new MediaInvalid('Invalid publication item batch');
     }
     const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, u.context, u.asset_id, u.role, u.crop, u.focal_area, u.logo_anchor,
-      p.byte_digest, p.media_type, p.byte_length, campaign_event.payload->>'zone' AS campaign_zone,
+      p.id AS representation, p.byte_digest, p.media_type, p.byte_length, campaign_event.payload->>'zone' AS campaign_zone,
       COALESCE(u.oriented_width,p.pixel_width) AS pixel_width, COALESCE(u.oriented_height,p.pixel_height) AS pixel_height,
       p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
       FROM media.use u JOIN media.asset a ON a.id = u.asset_id JOIN media.asset_state s ON s.id = a.state_head
@@ -645,6 +645,7 @@ export class MediaStore {
         AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
     return new Map(rows.map(row => [row.use as string, { target: row.target as string, asset: row.asset_id as string,
+      representation: row.representation as string,
       role: row.role as string, crop: row.crop as string | null, focalArea: row.focal_area as string | null,
       anchor: row.logo_anchor as string | null, sha256: row.byte_digest as string,
       mediaType: row.media_type as string, byteLength: row.byte_length as number,

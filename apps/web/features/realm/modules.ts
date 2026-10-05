@@ -1,4 +1,5 @@
-import { readShowcaseHeaders, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
+import { readShowcaseHeaders, readShowcaseImages, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
+import { slideImageUrls } from '../showcase/stage.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type {
@@ -236,7 +237,7 @@ export async function enrichShowcaseModules(modules: PlacedModule[], context: Ad
     if (hero.state.state !== 'ready') continue;
     const slides = hero.state.data.slides.map(slide => {
       const own = slide.work && art.get(slide.work.id);
-      return own ? { ...slide, work: { ...slide.work!, showcaseArt: workShowcaseArt(own, context.avatarQuery) },
+      return own ? { ...slide, work: { ...slide.work!, showcaseArt: workShowcaseArt(own) },
         trailer: own.trailer ? { href: own.trailer.url } : slide.trailer } : slide;
     });
     replacements.set(hero, { ...hero, state: { state: 'ready', data: { slides } } });
@@ -539,6 +540,24 @@ function moreOf(module: PresentationModule, context: AdaptContext): string | nul
   if (module.type === 'decision-log') return realmHref(locale, ref, 'decisions');
   if (module.type === 'shelf') return realmHref(locale, ref, 'browse');
   return null;
+}
+
+/** The metadata of the images the heroes draw, first slide first, read before the page renders (see `readShowcaseImages`). */
+export function readHeroImages(modules: readonly PlacedModule[], locale: string, read = readShowcaseImages) {
+  const heroes = modules.filter((placed): placed is Extract<PlacedModule, { module: { type: 'hero-carousel' } }> =>
+    placed.module.type === 'hero-carousel');
+  return read(heroes.flatMap(hero => hero.state.state === 'ready'
+    ? hero.state.data.slides.slice(0, 5).flatMap(slide => slideImageUrls(slide, locale)) : []));
+}
+
+/** A Zone home's modules and their hero images' metadata, so its first slide is in the server's HTML. */
+export async function loadHomeModules(
+  presentation: ZonePresentation,
+  context: AdaptContext,
+  slideMedia: ZonePresentationRead['slideMedia'] = [],
+) {
+  const modules = await loadModules(presentation, context, slideMedia);
+  return { modules, images: await readHeroImages(modules, context.locale) };
 }
 
 export async function loadModules(
