@@ -188,7 +188,7 @@ export function SiteHomeRoute(props: RealmRouteProps) {
       const { locale, realm } = view.context;
       // The home leads with search and the values a browse page filters by; its counts come from one browse read.
       const [modules, window] = await Promise.all([
-        loadModules(view.presentation, view.context, view.bannerMedia),
+        loadModules(view.presentation, view.context, view.slideMedia),
         readZoneBrowse(realm, locale, { limit: 1 }),
       ]);
       const browse = browseEntry({

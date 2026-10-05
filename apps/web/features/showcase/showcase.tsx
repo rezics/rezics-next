@@ -14,11 +14,39 @@ import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from 'lucide-r
 import { materializeData } from 'native-i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { WorkCover } from '@rezics/ui/work-cover';
+import { workCoverProps } from '@rezics/zone-sdk';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { ShowcasePreload, ShowcaseSlide } from './slide.tsx';
-import { rotationDelay, rotationWindow, slideArt, stageWindowCss } from './stage.ts';
+import { imageSet, rotationDelay, rotationWindow, slideArt, stageWindowCss } from './stage.ts';
 import './showcase.css';
+
+function SlideThumbnail({ slide }: { slide: ZoneShowcaseSlide }) {
+  const landscape = slideArt(slide)?.landscape;
+  const image = landscape ?? slide.work?.cover;
+  return (
+    <span
+      className="showcase-thumbnail"
+      data-cover={!landscape ? '' : undefined}
+      aria-hidden="true"
+    >
+      {image ? (
+        <WebMediaImage
+          revealable={false}
+          src={image.url}
+          alt=""
+          loading="lazy"
+          fetchPriority="low"
+          srcSet={imageSet(image)}
+          sizes="80px"
+        />
+      ) : slide.work ? (
+        <WorkCover {...workCoverProps(slide.work)} size="fill" />
+      ) : null}
+    </span>
+  );
+}
 
 function StageContents({
   slides,
@@ -47,50 +75,94 @@ function StageContents({
   const position = (index: number) =>
     t.slide({ index: String(index + 1), count: String(slides.length) });
   function move(index: number) {
+    // The grid and late artwork can change Ark's cached snap points after its initial layout.
+    api.refresh();
     api.scrollTo(index, matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
   return (
     <>
-      {slides.length > 1 ? (
-        <div className="showcase-controls">
-          {rotate ? (
-            <CarouselAutoplayTrigger
-              className="showcase-rotation"
-              aria-label={api.isRotationRequested ? messages.pauseRotation : messages.startRotation}
-            >
-              {api.isRotationRequested ? (
-                <PauseIcon aria-hidden="true" />
-              ) : (
-                <PlayIcon aria-hidden="true" />
-              )}
-              <span>
-                {api.isRotationRequested ? messages.pauseRotation : messages.startRotation}
-              </span>
-            </CarouselAutoplayTrigger>
-          ) : null}
-          <div className="showcase-arrows">
-            <button
-              type="button"
-              aria-label={messages.previous}
-              disabled={!api.canScrollPrev}
-              onClick={() => api.scrollPrev(matchMedia('(prefers-reduced-motion: reduce)').matches)}
-              className="showcase-arrow"
-            >
-              <ChevronLeftIcon aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-label={messages.next}
-              disabled={!api.canScrollNext}
-              onClick={() => api.scrollNext(matchMedia('(prefers-reduced-motion: reduce)').matches)}
-              className="showcase-arrow"
-            >
-              <ChevronRightIcon aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      ) : null}
       <div className="showcase-layout">
+        {slides.length > 1 ? (
+          <div className="showcase-controls">
+            {rotate ? (
+              <CarouselAutoplayTrigger
+                className="showcase-rotation"
+                aria-label={
+                  api.isRotationRequested ? messages.pauseRotation : messages.startRotation
+                }
+              >
+                {api.isRotationRequested ? (
+                  <PauseIcon aria-hidden="true" />
+                ) : (
+                  <PlayIcon aria-hidden="true" />
+                )}
+                <span>
+                  {api.isRotationRequested ? messages.pauseRotation : messages.startRotation}
+                </span>
+              </CarouselAutoplayTrigger>
+            ) : null}
+            {slides.length > 1 ? (
+              <CarouselIndicatorGroup
+                className="showcase-progress"
+                aria-label={messages.chooseSlide}
+              >
+                {slides.map((slide, index) => (
+                  <CarouselIndicator
+                    key={slide.id}
+                    index={index}
+                    aria-label={`${slide.title.value} · ${position(index)}`}
+                    aria-disabled={api.page === index}
+                    className="showcase-progress-button"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="showcase-progress-fill"
+                      key={`${api.page}-${index}-${rotationRun}`}
+                      style={{
+                        animationPlayState: api.isPlaying ? 'running' : 'paused',
+                        animationDuration: `${rotationDelay}ms`,
+                        transform: !rotate ? `scaleX(${api.page === index ? 1 : 0})` : undefined,
+                      }}
+                    />
+                  </CarouselIndicator>
+                ))}
+              </CarouselIndicatorGroup>
+            ) : null}
+            <div className="showcase-arrows">
+              <button
+                type="button"
+                aria-label={messages.previous}
+                disabled={!api.canScrollPrev}
+                onClick={() => {
+                  api.refresh();
+                  api.scrollToIndex(
+                    (api.page + slides.length - 1) % slides.length,
+                    matchMedia('(prefers-reduced-motion: reduce)').matches,
+                  );
+                }}
+                className="showcase-arrow"
+              >
+                <ChevronLeftIcon aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label={messages.next}
+                disabled={!api.canScrollNext}
+                onClick={() => {
+                  api.refresh();
+                  api.scrollToIndex(
+                    (api.page + 1) % slides.length,
+                    matchMedia('(prefers-reduced-motion: reduce)').matches,
+                  );
+                }}
+                className="showcase-arrow"
+              >
+                <ChevronRightIcon aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div
           ref={stage}
           className="showcase-stage"
@@ -171,6 +243,7 @@ function StageContents({
                 aria-disabled={api.page === index}
                 className="showcase-coming-slide"
               >
+                <SlideThumbnail slide={slide} />
                 <span className="showcase-coming-number">{String(index + 1).padStart(2, '0')}</span>
                 <span lang={slide.title.lang} dir={slide.title.dir}>
                   {slide.title.value || messages.untitled}
@@ -180,30 +253,6 @@ function StageContents({
           </aside>
         ) : null}
       </div>
-      {slides.length > 1 ? (
-        <CarouselIndicatorGroup className="showcase-progress" aria-label={messages.chooseSlide}>
-          {slides.map((slide, index) => (
-            <CarouselIndicator
-              key={slide.id}
-              index={index}
-              aria-label={`${slide.title.value} · ${position(index)}`}
-              aria-disabled={api.page === index}
-              className="showcase-progress-button"
-            >
-              <span
-                aria-hidden="true"
-                className="showcase-progress-fill"
-                key={`${api.page}-${index}-${rotationRun}`}
-                style={{
-                  animationPlayState: api.isPlaying ? 'running' : 'paused',
-                  animationDuration: `${rotationDelay}ms`,
-                  transform: !rotate ? `scaleX(${api.page === index ? 1 : 0})` : undefined,
-                }}
-              />
-            </CarouselIndicator>
-          ))}
-        </CarouselIndicatorGroup>
-      ) : null}
     </>
   );
 }

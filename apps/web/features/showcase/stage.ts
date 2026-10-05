@@ -36,6 +36,8 @@ export const stageWindowCss = stageWindows
     window.shape === 'portrait'
       ? `
   .showcase-stage { width: 100%; }
+  .showcase .showcase-controls { width: var(--showcase-width); margin-inline: 0; }
+  .showcase .showcase-arrows, .showcase .showcase-rotation { display: none; }
   .showcase .showcase-item { width: var(--showcase-width); }
   .showcase-art { object-fit: var(--fit-portrait); object-position: var(--focal-portrait); }
   .showcase-copy { width: 100%; padding: 1.25rem; gap: .5rem; }
@@ -54,7 +56,15 @@ export const stageWindowCss = stageWindows
   .join('\n');
 
 export function slideArt(slide: ZoneShowcaseSlide): ZoneShowcaseArt | null {
-  return slide.art ?? slide.work?.showcaseArt ?? null;
+  const campaign = slide.art;
+  const own = slide.work?.showcaseArt;
+  const selected =
+    campaign?.landscape || campaign?.portrait
+      ? campaign
+      : own?.landscape || own?.portrait
+        ? own
+        : (campaign ?? own);
+  return selected ?? null;
 }
 export const imageSet = (image: ZoneShowcaseImage) =>
   image.candidates?.length
@@ -89,6 +99,35 @@ export function focalPosition(image: ZoneShowcaseImage) {
   return focal
     ? `${Math.max(0, Math.min(1, focal.x + focal.width / 2)) * 100}% ${Math.max(0, Math.min(1, focal.y + focal.height / 2)) * 100}%`
     : '50% 50%';
+}
+
+/** A cover crop is safe only if every point in the authored focal rectangle survives. */
+export function focalFrame(image: ZoneShowcaseImage, ratio: number) {
+  if (!image.framed) return { fit: 'contain', position: '50% 50%' };
+  const originalRatio = image.width / image.height;
+  if (Math.abs(originalRatio - ratio) < 0.001)
+    return { fit: 'cover', position: focalPosition(image) };
+  const focal = image.focal;
+  if (!focal) return { fit: 'contain', position: '50% 50%' };
+  const width = Math.min(1, ratio / originalRatio),
+    height = Math.min(1, originalRatio / ratio);
+  if (
+    focal.width > width ||
+    focal.height > height ||
+    focal.x < 0 ||
+    focal.y < 0 ||
+    focal.x + focal.width > 1 ||
+    focal.y + focal.height > 1
+  )
+    return { fit: 'contain', position: '50% 50%' };
+  const position = (origin: number, extent: number, window: number) =>
+    window === 1
+      ? 50
+      : (Math.max(0, Math.min(1 - window, origin + extent / 2 - window / 2)) / (1 - window)) * 100;
+  return {
+    fit: 'cover',
+    position: `${position(focal.x, focal.width, width)}% ${position(focal.y, focal.height, height)}%`,
+  };
 }
 
 /** Strict provider parsing prevents a supplied URL becoming an arbitrary iframe. No autoplay parameter. */

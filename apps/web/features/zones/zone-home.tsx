@@ -83,7 +83,8 @@ function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage 
   }
   if (placed.state.state !== 'ready') return null;
   const Platform = moduleRegistry[placed.module.type] as ComponentType<ModuleProps<ZoneModuleType>>;
-  const props = { module: placed.module, data: placed.state.data, card, locale, messages, avatarQuery };
+  const props = { module: placed.module, data: placed.state.data, card, locale, messages, avatarQuery,
+    titleEffect: zone.tokens.titleEffect };
   const fallback = <Platform {...props} />;
   const Slot = pkg?.slots.modules?.[placed.module.type] as ComponentType<ModuleSlotProps<ZoneModuleType>> | undefined;
   if (!Slot) return <div key={placed.module.id} className="contents">{fallback}</div>;

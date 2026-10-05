@@ -1,8 +1,9 @@
+import { readShowcaseHeaders, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type {
   RankingMetric as ChartMetric,
-  ZoneBanner,
+  ZoneShowcaseSlide,
   ZoneModuleData,
   ZoneShelfTab,
   ZoneWork,
@@ -21,9 +22,9 @@ import { isoMoment } from '../zones/adapt-cards.ts';
 import { chipHref } from '../zones/browse-state.ts';
 import {
   type AdaptContext,
-  bannerImage,
-  bannerSlide,
-  liveBanners,
+  presentationSlide,
+  liveSlides,
+  workShowcaseArt,
   type ModuleCredit,
   workLink,
   zoneDecision,
@@ -181,41 +182,66 @@ async function feedWorks(feed: RealmFeed, context: AdaptContext): Promise<Loaded
   return { ok: false, failure: 'invalid' };
 }
 
+export const showcaseContext = (context: AdaptContext) =>
+  context.realm.startsWith('https://rezics.com/id/') ? context.realm : 'https://rezics.com/id/' + context.realm;
+
 async function hero(
-  module: PresentationModule,
-  presentation: ZonePresentation,
-  context: AdaptContext,
-  bannerMedia: ZonePresentationRead['bannerMedia'],
+  module: PresentationModule, presentation: ZonePresentation, context: AdaptContext,
+  slideMedia: ZonePresentationRead['slideMedia'],
 ): Promise<ModuleState<'hero-carousel'>> {
-  const banners: ZoneBanner[] = liveBanners(presentation.banners, Date.now()).map((banner) => ({
-    id: banner.id,
-    title: zoneContentText(banner.title),
-    href: banner.href,
-    image: bannerImage(banner, bannerMedia),
-  }));
-  if (banners.length) return { state: 'ready', data: { slides: banners.slice(0, 5).map(bannerSlide) } };
-  // Without art-directed banners the hero shows the newest picks, covers first.
+  const scheduled = liveSlides(presentation.slides, Date.now()).slice(0, 5);
+  if (scheduled.length) {
+    const targets = scheduled.flatMap(slide => 'work' in slide ? [slide.work] : []);
+    const [summaries, known] = await Promise.all([
+      readShowcaseWorks(targets, showcaseContext(context)),
+      targets.length ? realmCards(context) : Promise.resolve(new Map<string, ZoneWork>()),
+    ]);
+    const headers = await readShowcaseHeaders(targets.filter(target => summaries.has(target) && !known.has(target)));
+    const slides: ZoneShowcaseSlide[] = scheduled.flatMap(slide => {
+      const summary = 'work' in slide ? summaries.get(slide.work) : null;
+      if ('work' in slide && !summary) return [];
+      const header = summary && headers.get(summary.reference);
+      const named = summary ? (header ? zoneWork(header, context, null) : summaryWork({ id: summary.reference,
+        title: summary.name, cover: summary.avatar, address: summary.address as CanonicalAddress }, context)) : null;
+      const work = named && summary ? withRealmCard({ ...named,
+        href: known.get(summary.reference)?.href ?? resourceHref('/w/', summary.address as CanonicalAddress) }, known.get(summary.reference)) : null;
+      const adapted = presentationSlide(slide, work, context, slideMedia);
+      return adapted ? [adapted] : [];
+    });
+    return slides.length ? { state: 'ready', data: { slides } } : empty;
+  }
+  // Without a scheduled campaign the newest picks still have their own art and trailer.
   const feed = feedOf(module.source) ?? 'new-adoptions';
   if (feed === 'recent-decisions') return unsupported;
   const works = await feedWorks(feed, context);
   if (!works.ok) return failed;
-  const picks = [...works.data]
-    .sort((a, b) => Number(Boolean(b.cover)) - Number(Boolean(a.cover)))
+  const picks = [...works.data].sort((a, b) => Number(Boolean(b.cover)) - Number(Boolean(a.cover)))
     .slice(0, Math.min(5, module.options?.limit ?? 5));
-  return picks.length
-    ? {
-        state: 'ready',
-        data: {
-          slides: picks.map((work) => ({
-            id: work.id,
-            title: work.title ?? zoneContentText(''),
-            href: work.href,
-            tagline: work.tagline,
-            work,
-          })),
-        },
-      }
-    : empty;
+  return picks.length ? { state: 'ready', data: { slides: picks.map(work => ({ id: work.id,
+    title: work.title ?? zoneContentText(''), href: work.href, tagline: work.tagline, work })) } } : empty;
+}
+
+/** The whole home makes one art batch, rather than one round trip for each slide or module. */
+export async function enrichShowcaseModules(modules: PlacedModule[], context: AdaptContext,
+  read = readWorkShowcase): Promise<PlacedModule[]> {
+  const heroes = modules.filter((placed): placed is Extract<PlacedModule, { module: { type: 'hero-carousel' } }> =>
+    placed.module.type === 'hero-carousel');
+  const targets = [...new Set(heroes.flatMap(hero => hero.state.state === 'ready'
+    ? hero.state.data.slides.flatMap(slide => slide.work ? [slide.work.id] : []) : []))];
+  if (!targets.length) return modules;
+  const art = await read(targets, showcaseContext(context));
+  if (!art.size) return modules;
+  const replacements = new Map<PlacedModule, PlacedModule>();
+  for (const hero of heroes) {
+    if (hero.state.state !== 'ready') continue;
+    const slides = hero.state.data.slides.map(slide => {
+      const own = slide.work && art.get(slide.work.id);
+      return own ? { ...slide, work: { ...slide.work!, showcaseArt: workShowcaseArt(own) },
+        trailer: own.trailer ? { href: own.trailer.url } : slide.trailer } : slide;
+    });
+    replacements.set(hero, { ...hero, state: { state: 'ready', data: { slides } } });
+  }
+  return modules.map(module => replacements.get(module) ?? module);
 }
 
 /** A mounted Collection shelf uses the same public, visibility-filtered index read as its full catalogue. */
@@ -467,11 +493,11 @@ async function load(
   module: PresentationModule,
   presentation: ZonePresentation,
   context: AdaptContext,
-  bannerMedia: ZonePresentationRead['bannerMedia'],
+  slideMedia: ZonePresentationRead['slideMedia'],
 ): Promise<ModuleState> {
   switch (module.type) {
     case 'hero-carousel':
-      return hero(module, presentation, context, bannerMedia);
+      return hero(module, presentation, context, slideMedia);
     case 'shelf':
       return shelf(module, context);
     case 'decision-log':
@@ -518,15 +544,16 @@ function moreOf(module: PresentationModule, context: AdaptContext): string | nul
 export async function loadModules(
   presentation: ZonePresentation,
   context: AdaptContext,
-  bannerMedia: ZonePresentationRead['bannerMedia'] = [],
+  slideMedia: ZonePresentationRead['slideMedia'] = [],
 ): Promise<PlacedModule[]> {
-  return Promise.all(
+  const loaded = await Promise.all(
     presentation.modules.map(
       async (module) =>
         ({
           module: placedModule(module, moreOf(module, context)),
-          state: await load(module, presentation, context, bannerMedia),
+          state: await load(module, presentation, context, slideMedia),
         }) as PlacedModule,
     ),
   );
+  return enrichShowcaseModules(loaded, context);
 }

@@ -1,22 +1,23 @@
-import type { RankingInterval, RankingMetric, ZoneModule, ZoneModuleType, ZonePreset, ZoneTokens }
+import type { RankingInterval, RankingMetric, ZoneModule, ZoneModuleType, ZonePreset, ZoneTokens, ZoneTitleEffect }
   from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
+import type { ZonePresentationRead } from '../realm/types.ts';
 
 // A Zone's presentation as the web renders it: the shape of Main's
-// `zone-presentation-v1` document (services/main/src/modules/zone/presentation-format.ts).
+// `zone-presentation-v2` document (services/main/src/modules/zone/presentation-format.ts).
 // The Realm adapter assigns Main's typed read to these types, so a contract
 // change breaks the build there.
 
 /** Main's presets (`ZONE_PRESETS`); a test keeps them identical. Choosing a preset copies its tokens. */
-export const presetTokens: Record<ZonePreset, ZoneTokens> = {
+export const presetTokens: Record<ZonePreset, ZoneTokens & { titleEffect: ZoneTitleEffect }> = {
   clean: { colorScheme: 'system', accent: '#2563eb', density: 'comfortable', cardRadius: 'md',
-    headingFontScale: 'md', surfaceTint: 'none', fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait' },
+    headingFontScale: 'md', surfaceTint: 'none', fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait', titleEffect: 'plain' },
   editorial: { colorScheme: 'light', accent: '#a16207', density: 'comfortable', cardRadius: 'sm',
-    headingFontScale: 'lg', surfaceTint: 'subtle', fontPairing: 'serif', pageSurface: 'cards', coverStyle: 'portrait' },
+    headingFontScale: 'lg', surfaceTint: 'subtle', fontPairing: 'serif', pageSurface: 'cards', coverStyle: 'portrait', titleEffect: 'outline' },
   vibrant: { colorScheme: 'dark', accent: '#7c3aed', density: 'comfortable', cardRadius: 'lg',
-    headingFontScale: 'lg', surfaceTint: 'accent', fontPairing: 'rounded', pageSurface: 'cards', coverStyle: 'square' },
+    headingFontScale: 'lg', surfaceTint: 'accent', fontPairing: 'rounded', pageSurface: 'cards', coverStyle: 'square', titleEffect: 'glow' },
   serial: { colorScheme: 'light', accent: '#ff8674', density: 'compact', cardRadius: 'sm',
-    headingFontScale: 'lg', surfaceTint: 'subtle', fontPairing: 'sans', pageSurface: 'cards', coverStyle: 'portrait' },
+    headingFontScale: 'lg', surfaceTint: 'subtle', fontPairing: 'sans', pageSurface: 'cards', coverStyle: 'portrait', titleEffect: 'gradient' },
 };
 
 /** Where a module's items come from. */
@@ -49,13 +50,15 @@ export interface PresentationBanner {
 }
 
 export interface ZonePresentation {
-  profile: 'zone-presentation-v1';
+  profile: 'zone-presentation-v2';
   preset: ZonePreset;
-  tokens: ZoneTokens;
+  tokens: ZoneTokens & { titleEffect: ZoneTitleEffect };
   navigation: { label: string; href: string }[];
-  banners: PresentationBanner[];
+  slides: PresentationSlide[];
   modules: PresentationModule[];
 }
+
+export type PresentationSlide = ZonePresentationRead['presentation']['slides'][number];
 
 /**
  * Why an official package does not run for this view. Main reports the
@@ -106,7 +109,7 @@ export interface DefaultTitles {
  */
 export function defaultPresentation(titles: DefaultTitles, preset: ZonePreset = 'clean'): ZonePresentation {
   return {
-    profile: 'zone-presentation-v1', preset, tokens: presetTokens[preset], navigation: [], banners: [],
+    profile: 'zone-presentation-v2', preset, tokens: presetTokens[preset], navigation: [], slides: [],
     modules: [
       { id: 'picks', type: 'hero-carousel', title: titles.picks, source: feed('new-adoptions') },
       { id: 'latest', type: 'shelf', title: titles.latest, source: feed('latest-chapters'),

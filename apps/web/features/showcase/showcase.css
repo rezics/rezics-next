@@ -11,10 +11,13 @@
 }
 .showcase-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  gap: 1.5rem;
+  gap: 0.75rem 1.5rem;
 }
 .showcase-stage {
+  grid-column: 1;
+  grid-row: 1;
   isolation: isolate;
   container-type: inline-size;
   position: relative;
@@ -189,6 +192,12 @@
 .showcase-actions > button {
   min-height: 2.5rem;
 }
+.showcase-actions > .showcase-why {
+  width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  border-radius: 50%;
+}
 .showcase-action {
   display: inline-flex;
   align-items: center;
@@ -272,20 +281,25 @@
   transition: transform 0.12s ease-out;
 }
 .showcase-controls {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   justify-content: space-between;
   align-items: center;
   min-height: 2.5rem;
   gap: 0.75rem;
   color: var(--foreground);
+  width: var(--showcase-width);
+  max-width: 100%;
+  margin-inline: auto;
 }
 .showcase-arrows {
-  display: flex;
-  margin-inline-start: auto;
+  display: none;
   gap: 0.5rem;
 }
 .showcase-arrow,
 .showcase-rotation {
+  display: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -330,6 +344,68 @@
   gap: 0.5rem;
   color: var(--foreground);
 }
+.showcase-thumbnail {
+  width: 4.5rem;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  overflow: hidden;
+  border-radius: 0.4rem;
+  background: var(--muted);
+}
+.showcase-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.showcase-thumbnail [data-slot='work-cover'] {
+  width: 100%;
+  box-shadow: none;
+}
+.showcase-thumbnail[data-cover] img {
+  object-fit: contain;
+}
+.showcase-thumbnail[data-cover] [data-slot='work-cover'] {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  margin-inline: auto;
+}
+.showcase-coming-slide > span:last-child {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.showcase-coming-number {
+  display: none;
+}
+.showcase-logo-start-bottom {
+  bottom: 43%;
+  inset-inline-start: 6%;
+}
+.showcase-logo-center-top {
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.showcase-logo-center-middle {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.showcase-logo-center-bottom {
+  bottom: 43%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .showcase-arrows,
+  .showcase-rotation {
+    display: flex;
+  }
+}
 .showcase .showcase-progress-button {
   width: 3rem;
   height: 1.5rem;
@@ -372,6 +448,8 @@
     grid-template-columns: minmax(0, 1fr) 15rem;
   }
   .showcase-coming {
+    grid-column: 2;
+    grid-row: 1 / span 2;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;

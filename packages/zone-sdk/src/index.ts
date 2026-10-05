@@ -40,6 +40,8 @@ export interface ZoneTokens {
   /** `cards` sets modules as panels on a tinted page, `flat` on the page itself. */
   pageSurface: 'flat' | 'cards';
   coverStyle: 'portrait' | 'square' | 'landscape';
+  /** The platform title treatment selected by the Zone presentation. */
+  titleEffect?: ZoneTitleEffect;
 }
 
 /** Editorial modules, in Main's vocabulary. */
@@ -141,7 +143,8 @@ export interface ZoneShowcaseImage extends ZoneImage {
   framed?: boolean;
 }
 
-export type ZoneLogoAnchor = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end';
+export type ZoneLogoAnchor = 'top-start' | 'top-end' | 'bottom-start' | 'bottom-end'
+  | 'start-bottom' | 'center-top' | 'center-middle' | 'center-bottom';
 export interface ZoneShowcaseLogo extends ZoneShowcaseImage {
   tone: 'light' | 'dark';
   anchor: ZoneLogoAnchor;

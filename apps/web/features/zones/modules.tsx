@@ -1,6 +1,6 @@
 import { initials } from '@rezics/ui/avatar-initials';
 import { cn } from '@rezics/ui/utils';
-import type { ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork }
+import type { ZoneCardOptions, ZoneDecision, ZoneModule, ZoneModuleData, ZoneModuleType, ZoneWork, ZoneTitleEffect }
   from '@rezics/zone-sdk';
 import { MessageCircleIcon, PlusIcon, ScaleIcon,
   TagIcon, XIcon }
@@ -29,10 +29,11 @@ export interface ModuleProps<Type extends ZoneModuleType> {
   messages: ZoneMessages;
   /** The reader's Agent on Main media reads, when signed in. */
   avatarQuery?: string;
+  titleEffect?: ZoneTitleEffect;
 }
 
-export function HeroModule({ module, data, locale, messages, avatarQuery }: ModuleProps<'hero-carousel'>) {
-  return <Showcase label={module.title} slides={data.slides} locale={locale} messages={messages} avatarQuery={avatarQuery} />;
+export function HeroModule({ module, data, locale, messages, avatarQuery, titleEffect }: ModuleProps<'hero-carousel'>) {
+  return <Showcase label={module.title} slides={data.slides} locale={locale} messages={messages} avatarQuery={avatarQuery} effect={titleEffect} />;
 }
 
 export function ChipModule({ module, data }: ModuleProps<'chip-nav'>) {

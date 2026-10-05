@@ -20,7 +20,15 @@ function Preview({
   effect,
 }: {
   language: ShowcaseLanguage;
-  variant: 'art' | 'cover' | 'landscape' | 'foreign-logo' | 'trailer' | 'poster' | 'failed-logo';
+  variant:
+    | 'art'
+    | 'cover'
+    | 'landscape'
+    | 'foreign-logo'
+    | 'trailer'
+    | 'poster'
+    | 'failed-logo'
+    | 'wide-focal';
   effect: 'plain' | 'outline' | 'gradient' | 'glow';
 }) {
   const theme = zoneTheme(presetTokens.vibrant, { reader: 'dark', enabled: true });
@@ -28,6 +36,15 @@ function Preview({
   if (variant === 'cover') slides[0] = { ...slides[1]!, id: 'lead-cover' };
   if (variant === 'landscape')
     slides[0] = { ...slides[0]!, art: { ...fixtureArt, portrait: null } };
+  if (variant === 'wide-focal')
+    slides[0] = {
+      ...slides[0]!,
+      art: {
+        ...fixtureArt,
+        portrait: null,
+        landscape: { ...fixtureArt.landscape!, focal: { x: 0.1, y: 0.2, width: 0.8, height: 0.5 } },
+      },
+    };
   if (variant === 'foreign-logo')
     slides[0] = {
       ...slides[0]!,
@@ -63,9 +80,6 @@ function Preview({
         effect={effect}
         direction={language === 'ar' ? 'rtl' : 'ltr'}
       />
-      <p className="mx-auto mt-6 max-w-3xl px-6 text-sm text-muted-foreground">
-        {slides[1]?.tagline?.value}
-      </p>
     </main>
   );
 }
@@ -74,6 +88,20 @@ const meta = {
   component: Preview,
   args: { language: 'en', variant: 'art', effect: 'outline' },
   parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'site'), 'en') } },
+  async play({ canvasElement }) {
+    const stage = canvasElement.querySelector('.showcase-stage')!.getBoundingClientRect();
+    const controls = canvasElement.querySelector('.showcase-controls')!.getBoundingClientRect();
+    await expect(controls.top).toBeGreaterThanOrEqual(stage.bottom - 1);
+    for (const stamp of canvasElement.querySelectorAll('.showcase-why')) {
+      const box = stamp.getBoundingClientRect();
+      await expect(Math.abs(box.width - box.height)).toBeLessThan(1);
+    }
+    const region = within(canvasElement).getByRole('region', { name: 'Featured' });
+    const links = canvasElement.querySelectorAll('.showcase-tagline');
+    await expect([...links].every((element) => element.closest('.showcase-slide'))).toBe(true);
+    if (matchMedia('(pointer: coarse)').matches || (innerWidth < 768 && innerHeight > innerWidth))
+      await expect(within(region).queryByRole('button', { name: 'Next' })).toBeNull();
+  },
   async afterEach({ id }) {
     if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
     const { page } = await import('vitest/browser');
@@ -148,6 +176,10 @@ export const NoPortrait: Story = {
   args: { variant: 'landscape' },
   globals: { viewport: { value: 'phone' } },
 };
+export const NoPortraitWideFocal: Story = {
+  args: { variant: 'wide-focal' },
+  globals: { viewport: { value: 'phone' } },
+};
 export const ForeignLanguageLogo: Story = {
   args: { variant: 'foreign-logo' },
   async play({ canvasElement }) {
@@ -186,6 +218,7 @@ export const TrailerFacade: Story = {
     await waitFor(() =>
       expect(document.querySelector('iframe[src*="youtube-nocookie"]')).toBeNull(),
     );
+    await waitFor(() => expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull());
   },
 };
 export const ManualNavigation: Story = {
@@ -193,7 +226,10 @@ export const ManualNavigation: Story = {
     const canvas = within(canvasElement);
     const first = canvas.getByRole('group', { name: 'Astral Tide · 1 of 3' });
     await expect(first).not.toHaveAttribute('inert');
-    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    if (import.meta.env.MODE === 'test') {
+      const { page } = await import('vitest/browser');
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+    } else await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
     await waitFor(
       () =>
         expect(
@@ -202,5 +238,10 @@ export const ManualNavigation: Story = {
       { timeout: 4000 },
     );
     await waitFor(() => expect(first).toHaveAttribute('inert'));
+    await waitFor(async () => {
+      const selected = canvas.getByRole('group', { name: 'The Cartographer’s Library · 2 of 3' });
+      const stage = canvasElement.querySelector('.showcase-stage')!.getBoundingClientRect();
+      await expect(Math.abs(selected.getBoundingClientRect().left - stage.left)).toBeLessThan(1);
+    });
   },
 };

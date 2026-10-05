@@ -8,7 +8,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { catalogueWork, WhyHere } from '../zones/card.tsx';
 import { PrimaryAction } from './work-action.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
-import { focalPosition, logoFor, pictureSources, slideArt } from './stage.ts';
+import { focalFrame, focalPosition, logoFor, pictureSources, slideArt } from './stage.ts';
 import { Trailer } from './trailer.tsx';
 
 export function ShowcasePreload({ slide }: { slide: ZoneShowcaseSlide }) {
@@ -37,6 +37,7 @@ function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
   const sources = pictureSources(art);
   const fallback = art.landscape ?? art.portrait;
   if (!fallback) return null;
+  const portrait = focalFrame(art.portrait ?? fallback, 3 / 4);
   // Both copies pass through the media policy, so a mask also removes the ambient backdrop.
   return (
     <div aria-hidden="true" className="showcase-background">
@@ -78,9 +79,9 @@ function Background({ art, first }: { art: ZoneShowcaseArt; first: boolean }) {
           style={
             {
               '--fit-landscape': art.landscape?.framed ? 'cover' : 'contain',
-              '--fit-portrait': art.portrait?.framed ? 'cover' : 'contain',
+              '--fit-portrait': portrait.fit,
               '--focal-landscape': focalPosition(art.landscape ?? fallback),
-              '--focal-portrait': focalPosition(art.portrait ?? fallback),
+              '--focal-portrait': portrait.position,
             } as CSSProperties
           }
         />

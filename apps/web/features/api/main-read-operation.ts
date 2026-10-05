@@ -6,6 +6,7 @@ export function mainBodyRead(path: string, method?: string): boolean {
     [
       '/v1/query',
       '/v1/resources/summaries',
+      '/v1/resources/showcase',
       '/v1/governance/rule-queries',
       '/v1/media/metadata',
       '/v1/suitability/reads',

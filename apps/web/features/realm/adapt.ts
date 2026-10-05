@@ -1,4 +1,5 @@
-import type { ZoneBanner, ZoneDecision, ZoneImage, ZonePerson, ZoneShowcaseSlide, ZoneText, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneBanner, ZoneDecision, ZoneImage, ZonePerson, ZoneShowcaseArt, ZoneShowcaseImage, ZoneShowcaseSlide, ZoneText, ZoneWork } from '@rezics/zone-sdk';
+import type { ShowcaseImage, WorkShowcase } from '../api/showcase.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { resourceHref, siteMemberTarget } from '../address/path.ts';
@@ -8,7 +9,7 @@ import { authorHref } from '../author/route.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
-import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
+import type { FallbackReason, MainExecution, PresentationBanner, PresentationSlide } from '../zones/presentation.ts';
 import { decisionHref, realmWorkHref, scopedWorkHref } from './route.ts';
 import type {
   MainAvatar,
@@ -45,12 +46,81 @@ export function zoneImage(avatar: MainAvatar | null, avatarQuery = ''): ZoneImag
 /** Main verifies the exact public media Use and supplies its real dimensions. */
 export function bannerImage(
   banner: PresentationBanner,
-  media: ZonePresentationRead['bannerMedia'],
+  media: readonly { id: string; image: ZoneImage & { mediaType?: string } }[],
 ): ZoneImage | null {
   const image = media.find((item) => item.id === banner.id)?.image;
   return image
     ? { url: `${BFF_PREFIX}${image.url}`, width: image.width, height: image.height }
     : null;
+}
+
+/** Main's percent rectangle is normalized relative to the selected crop's image. */
+export function showcaseFocal(value: string | null | undefined, crop?: string | null) {
+  const parse = (area: string | null | undefined) => {
+    if (!area?.startsWith('xywh=percent:')) return null;
+    const values = area.slice(13).split(',').map(Number);
+    if (values.length !== 4 || values.some(number => !Number.isFinite(number))) return null;
+    const [x, y, width, height] = values as [number, number, number, number];
+    return { x: x / 100, y: y / 100, width: width / 100, height: height / 100 };
+  };
+  const focal = parse(value);
+  if (!focal) return undefined;
+  const selected = parse(crop) ?? { x: 0, y: 0, width: 1, height: 1 };
+  return { x: (focal.x - selected.x) / selected.width, y: (focal.y - selected.y) / selected.height,
+    width: focal.width / selected.width, height: focal.height / selected.height };
+}
+
+const showcaseUrl = (url: string) => url.startsWith('/v1/') ? `${BFF_PREFIX}${url}` : url;
+
+/** Delivery candidates name their codec; a srcset cannot contain duplicate widths for two codecs. */
+export function deliveredShowcaseImage(image: {
+  url: string; width: number; height: number; focalArea?: string | null; crop?: string | null;
+  cropWidth?: number; cropHeight?: number;
+  srcset: readonly { url: string; width: number; type: string }[];
+}): ZoneShowcaseImage {
+  const codec = image.srcset.some(candidate => candidate.type === 'image/webp') ? 'image/webp' : 'image/avif';
+  return { url: showcaseUrl(image.url), width: image.cropWidth ?? image.width,
+    height: image.cropHeight ?? image.height, framed: true,
+    focal: showcaseFocal(image.focalArea, image.crop),
+    candidates: image.srcset.filter(candidate => candidate.type === codec)
+      .map(candidate => ({ url: showcaseUrl(candidate.url), width: candidate.width })) };
+}
+
+export function workShowcaseArt(item: WorkShowcase): ZoneShowcaseArt {
+  const role = (name: ShowcaseImage['role']) => {
+    const image = item.images.find(image => image.role === name);
+    return image ? deliveredShowcaseImage(image) : null;
+  };
+  return { landscape: role('background-landscape'), portrait: role('background-portrait'), cutout: role('cutout'),
+    logos: item.images.flatMap(image => image.role === 'logo' && image.tone && image.anchor
+      ? [{ ...deliveredShowcaseImage(image), tone: image.tone, anchor: image.anchor,
+        language: image.language === 'und' ? '' : image.language ?? '' }] : []) };
+}
+
+export function campaignShowcaseArt(slideId: string, media: ZonePresentationRead['slideMedia']): ZoneShowcaseArt | null {
+  const art = media.find(item => item.id === slideId)?.art;
+  if (!art) return null;
+  const background = (image: NonNullable<typeof art.landscape> | null, ratio: number) => image
+    ? { ...deliveredShowcaseImage(image), framed: Math.abs(image.width / image.height - ratio) < .001 } : null;
+  return { landscape: background(art.landscape, 16 / 9),
+    portrait: background(art.portrait, 3 / 4),
+    cutout: art.cutout ? deliveredShowcaseImage(art.cutout) : null,
+    logos: art.logos.map(image => ({ ...deliveredShowcaseImage(image), tone: image.tone,
+      anchor: image.anchor, language: image.language === 'und' ? '' : image.language })) };
+}
+
+/** The configured target and localized copy survive media fallback; unavailable Works stay absent. */
+export function presentationSlide(slide: PresentationSlide, work: ZoneWork | null,
+  context: AdaptContext, media: ZonePresentationRead['slideMedia']): ZoneShowcaseSlide | null {
+  if ('work' in slide && !work) return null;
+  const title = slide.titles?.[context.locale];
+  const kicker = slide.kickers?.[context.locale];
+  return { id: slide.id, href: 'href' in slide ? slide.href : work!.href, work,
+    title: title !== undefined ? zoneContentText(title, context.locale)
+      : slide.title ? zoneContentText(slide.title) : work?.title ?? zoneContentText(''),
+    kicker: kicker !== undefined ? zoneContentText(kicker, context.locale)
+      : slide.kicker ? zoneContentText(slide.kicker) : null,
+    tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media) };
 }
 
 /** Legacy uploads were not authored for a showcase frame, so the renderer must preserve the whole image. */
@@ -242,7 +312,11 @@ export function liveBanners(
   banners: readonly PresentationBanner[],
   now: number,
 ): PresentationBanner[] {
-  return banners.filter(
+  return liveSlides(banners, now);
+}
+
+export function liveSlides<Slide extends { startsAt?: string; endsAt?: string }>(slides: readonly Slide[], now: number): Slide[] {
+  return slides.filter(
     (banner) =>
       (!banner.startsAt || Date.parse(banner.startsAt) <= now) &&
       (!banner.endsAt || now < Date.parse(banner.endsAt)),

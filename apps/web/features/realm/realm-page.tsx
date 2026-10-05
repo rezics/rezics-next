@@ -68,7 +68,7 @@ export interface RealmView {
   kind: 'view';
   realm: Resolved;
   presentation: ZonePresentation;
-  bannerMedia: ZonePresentationRead['bannerMedia'];
+  slideMedia: ZonePresentationRead['slideMedia'];
   execution: Execution;
   pkg: ZonePackage | null;
   zone: ZoneContext;
@@ -178,7 +178,7 @@ export async function loadRealmView(
         })),
       }
     : defaultPresentation(zoneMessages);
-  const bannerMedia = read?.ok ? read.data.bannerMedia : [];
+  const slideMedia = read?.ok ? read.data.slideMedia : [];
   const lookEnabled = zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value);
   const main = read?.ok ? mainExecution(read.data) : null;
   const slug = read?.ok ? read.data.official : null;
@@ -216,7 +216,7 @@ export async function loadRealmView(
     kind: 'view',
     realm,
     presentation,
-    bannerMedia,
+    slideMedia,
     execution,
     pkg,
     zone,
