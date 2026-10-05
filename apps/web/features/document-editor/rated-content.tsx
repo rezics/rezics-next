@@ -4,7 +4,7 @@ import { imagePresentation, type ImageAgeRating, type MediaImageViewer } from '@
 import { Button } from '@rezics/ui/button';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { contentRatingTarget, resolveContentRatings, type ContentRatings } from '../api/content-rating.ts';
+import { contentRatingTarget, readContentRatings, type ContentRatingRead, type ContentRatings } from '../api/content-rating.ts';
 import { mediaMessages } from './media-messages.ts';
 
 type Resolver = (targets: string[]) => Promise<ContentRatings>;
@@ -24,7 +24,8 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
   resolve?: Resolver;
   refreshKey?: string | number;
 }) {
-  const [loaded, setLoaded] = useState<{ generation: number; ratings: Record<string, ImageAgeRating | null> }>({ generation: 0, ratings: {} });
+  const [loaded, setLoaded] = useState<{ generation: number; ratings: Record<string, ImageAgeRating | null>;
+    viewer: MediaImageViewer | null }>({ generation: 0, ratings: {}, viewer: null });
   const mounted = useRef(new Map<string, number>());
   const requested = useRef(new Set<string>());
   const scheduled = useRef(false);
@@ -36,8 +37,9 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
   }
   const currentGeneration = generation.current.number;
   const ratings = loaded.generation === currentGeneration ? loaded.ratings : emptyRatings;
-  const resolver = useRef<Resolver>(resolve ?? (targets => resolveContentRatings(targets, actingSubject)));
-  resolver.current = resolve ?? (targets => resolveContentRatings(targets, actingSubject));
+  const resolver = useRef<(targets: string[]) => Promise<ContentRatingRead>>(targets => readContentRatings(targets, actingSubject));
+  resolver.current = resolve ? async targets => ({ ratings: await resolve(targets), viewer: null })
+    : targets => readContentRatings(targets, actingSubject);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const schedule = useCallback(() => {
     if (!scheduled.current) {
@@ -49,12 +51,14 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
         for (let offset = 0; offset < targets.length; offset += 64) {
           const batch = targets.slice(offset, offset + 64);
           batch.forEach(item => requested.current.add(item));
-          void resolver.current(batch).then(items => {
+          void resolver.current(batch).then(result => {
             if (live.current && generation.current.number === currentGeneration) setLoaded(prior => ({ generation: currentGeneration,
+              viewer: result.viewer ?? (prior.generation === currentGeneration ? prior.viewer : null),
               ratings: { ...(prior.generation === currentGeneration ? prior.ratings : {}),
-                ...Object.fromEntries(batch.map(item => [item, items[item] ?? null])) } }));
+                ...Object.fromEntries(batch.map(item => [item, result.ratings[item] ?? null])) } }));
           }).catch(() => {
             if (live.current && generation.current.number === currentGeneration) setLoaded(prior => ({ generation: currentGeneration,
+              viewer: prior.generation === currentGeneration ? prior.viewer : null,
               ratings: { ...(prior.generation === currentGeneration ? prior.ratings : {}),
                 ...Object.fromEntries(batch.map(item => [item, null])) } }));
           });
@@ -77,11 +81,15 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
     setLoaded(prior => {
       const next = prior.generation === currentGeneration ? { ...prior.ratings } : {};
       delete next[target];
-      return { generation: currentGeneration, ratings: next };
+      return { generation: currentGeneration, ratings: next,
+        viewer: prior.generation === currentGeneration ? prior.viewer : null };
     });
     schedule();
   }, [currentGeneration, schedule]);
-  const context = useMemo(() => ({ viewer, locale, ratings, mount, retry }), [viewer, locale, ratings, mount, retry]);
+  // Main supplies current Account-derived viewing evidence in the same suitability read.
+  // It can recover the text gate when the separate Account session-cookie read is unavailable.
+  const viewing = loaded.generation === currentGeneration && loaded.viewer ? loaded.viewer : viewer;
+  const context = useMemo(() => ({ viewer: viewing, locale, ratings, mount, retry }), [viewing, locale, ratings, mount, retry]);
   return <RatingContext.Provider value={context}>{children}</RatingContext.Provider>;
 }
 
@@ -98,7 +106,7 @@ export function WebRatedContent({ target, children, className }: {
   const rating = context?.ratings[target];
   // Missing/malformed assessments and transport failures are failed lookups, not unavailable text.
   // Keep the body gated until a valid assessment arrives; retry never overrides age/preferences.
-  const state = !valid ? 'unavailable' : rating === null ? 'failed'
+  const state = !valid ? 'unavailable' : rating === null || rating !== undefined && !context.viewer.ready ? 'failed'
     : rating === undefined ? 'loading' : imagePresentation({ nsfw: 'sfw', ageRating: rating }, context.viewer);
   if (state === 'visible') return <>{children}</>;
   if (state === 'failed') return <div role="status"

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, within, waitFor } from 'storybook/test';
+import { expect, fn, spyOn, userEvent, within, waitFor } from 'storybook/test';
 import { useState } from 'react';
 import { Button } from '@rezics/ui/button';
 import type { MediaImageViewer } from '@rezics/ui/media-image';
@@ -110,6 +110,42 @@ export const StandalonePreview: Story = {
   render: () => <div className="max-w-lg p-6"><WebRatedContent target={target}><p>Standalone body preview</p></WebRatedContent></div>,
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByText('Standalone body preview')).toBeVisible();
+  },
+};
+
+const snapshot = (age: MediaImageViewer['age'], labels: readonly string[]) => ({
+  viewer: { signedIn: true, age, country: null,
+    optIns: { general: true, r15: true, sexual: true, grotesque: false } },
+  items: [{ target: { resource: target }, assessment: labels.length ? { status: 'assessed', labels }
+    : { status: 'unassessed' }, eligible: true }],
+});
+function serveSnapshot(value: ReturnType<typeof snapshot>) {
+  const original = window.fetch.bind(window);
+  const mocked = spyOn(window, 'fetch').mockImplementation((input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    return url.endsWith('/suitability/reads') ? Promise.resolve(Response.json(value)) : original(input, init);
+  });
+  return () => mocked.mockRestore();
+}
+export const SuitabilityEvidenceRecoversPublicText: Story = {
+  beforeEach: () => serveSnapshot(snapshot('unknown', [])),
+  render: () => <WebRatedContentProvider viewer={{ ...viewer, ready: false }} actingSubject={target} locale="en">
+    <div className="max-w-lg p-6"><WebRatedContent target={target}><p>Public text with authoritative viewing evidence</p></WebRatedContent></div>
+  </WebRatedContentProvider>,
+  async play({ canvasElement }) {
+    await expect(await within(canvasElement).findByText('Public text with authoritative viewing evidence')).toBeVisible();
+  },
+};
+export const SuitabilityEvidenceStillEnforcesAge: Story = {
+  beforeEach: () => serveSnapshot(snapshot('under-15', ['r18'])),
+  // The initial Account snapshot was adult; the fresh suitability read must win.
+  render: () => <WebRatedContentProvider viewer={viewer} actingSubject={target} locale="en">
+    <div className="max-w-lg p-6"><WebRatedContent target={target}><p>Adult text with refreshed viewing evidence</p></WebRatedContent></div>
+  </WebRatedContentProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('This content is hidden by your age rating preferences.')).toBeVisible();
+    await expect(canvas.queryByText('Adult text with refreshed viewing evidence')).toBeNull();
   },
 };
 

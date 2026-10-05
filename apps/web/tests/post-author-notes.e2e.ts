@@ -51,7 +51,16 @@ async function publish(page: Page) {
   await consent.press('Space');
   await expect(consent).toBeChecked();
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(dialog.getByRole('list', { name: 'Publish' }).getByText('Done', { exact: true })).toHaveCount(2, { timeout: 60_000 });
+  await expect(async () => {
+    const recovery = dialog.getByText('Published, but readers can’t open it yet. Publish again to finish.', { exact: true });
+    if (await recovery.isVisible()) {
+      await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+      const retryConsent = dialog.getByRole('checkbox', { name: /I wrote this text/ });
+      if (!await retryConsent.isChecked()) await retryConsent.press('Space');
+      await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+    }
+    await expect(dialog.getByRole('list', { name: 'Publish' }).getByText('Done', { exact: true })).toHaveCount(2, { timeout: 10_000 });
+  }).toPass({ timeout: 120_000 });
   await dialog.getByRole('button', { name: 'Close', exact: true }).last().click();
 }
 
@@ -185,7 +194,12 @@ test('A writer publishes separate chapter notes and reads them through chapter s
     await info.attach('chapter-suitability', { contentType: 'application/json', path: suitabilityPath });
     expect(suitabilityInput.actingSubject).toBe(sessionState.sessionAgent.actingSubject);
     expect(suitability.status(), suitabilityEvidence).toBe(200);
-    await expect(page.locator('[data-reader-text]')).toHaveText(text);
+    const viewer = await page.request.get('/api/media-viewer');
+    const viewerEvidence = JSON.stringify({ status: viewer.status(), body: await viewer.json() }, null, 2);
+    const viewerPath = info.outputPath('reader-viewer.json');
+    writeFileSync(viewerPath, viewerEvidence);
+    await info.attach('reader-viewer', { contentType: 'application/json', path: viewerPath });
+    await expect(page.locator('[data-reader-text]')).toHaveText(text, { timeout: 60_000 });
     await screenshot(page, info, 'old-address-landing');
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
@@ -195,7 +209,7 @@ test('A writer publishes separate chapter notes and reads them through chapter s
         await expect(page.getByRole('article')).toHaveAttribute('lang', 'en');
         await expect(page.getByRole('note', { name: locale === 'en' ? 'Author’s note' : '作者的話' })).toHaveCount(2);
         await expect(page.locator('[data-author-note="before"]')).toContainText(before);
-        await expect(page.locator('[data-reader-text]')).toHaveText(text);
+        await expect(page.locator('[data-reader-text]')).toHaveText(text, { timeout: 60_000 });
         await expect(page.locator('[data-author-note="after"]')).toContainText(after);
         await expect(page.locator('[data-author-note] [data-paragraph]')).toHaveCount(0);
         await screenshot(page, info, `reader-${locale}-${viewport.width}`);

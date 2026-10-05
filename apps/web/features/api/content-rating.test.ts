@@ -1,8 +1,29 @@
 import { expect, test } from 'bun:test';
-import { resolveContentRatings } from './content-rating.ts';
+import { readContentRatings, resolveContentRatings } from './content-rating.ts';
 
 const target = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const response = (items: unknown[]) => Response.json({ items });
+
+test('suitability viewing evidence can recover the text gate without trusting server eligibility or private Account fields', async () => {
+  const result = await readContentRatings([target(1)], target(9), (async (_url, _init) => Response.json({
+    viewer: { signedIn: true, age: 'under-15', country: 'US', birthDate: '2020-01-01',
+      optIns: { general: true, r15: false, sexual: false, grotesque: false } },
+    items: [{ target: { resource: target(1) }, assessment: { status: 'assessed', labels: ['r18'] }, eligible: true }],
+  })) as typeof fetch);
+  expect(result.viewer).toEqual({ ready: true, signedIn: true, age: 'under-15', nsfwDisplay: 'mask',
+    optIns: { general: true, r15: false, sexual: false, grotesque: false } });
+  expect(result.ratings[target(1)]).toEqual({ status: 'assessed', labels: ['r18'] });
+});
+
+test('incomplete viewing evidence never invents readiness or age eligibility', async () => {
+  for (const viewer of [undefined, { signedIn: true, age: 'adult', optIns: {} },
+    { signedIn: true, age: 'adult', optIns: { general: true, r15: true, sexual: 'yes', grotesque: true } }]) {
+    const result = await readContentRatings([target(1)], null, (async (_url, _init) => Response.json({ viewer,
+      items: [{ target: { resource: target(1) }, assessment: { status: 'unassessed' } }],
+    })) as typeof fetch);
+    expect(result.viewer).toBeNull();
+  }
+});
 
 test('body ratings resolve by actual target and do not trust server eligibility or follow references', async () => {
   const calls: { path: string; body: unknown; credentials?: RequestCredentials }[] = [];
