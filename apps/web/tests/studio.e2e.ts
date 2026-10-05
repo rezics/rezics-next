@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { type BrowserContext, expect, type Page, test, type TestInfo } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
+import { studioHref } from '../features/studio/agent.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 // Studio in a real browser against the isolated QA stack: a writer acting as
@@ -20,7 +21,10 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-const uuid = (iri: string) => iri.slice(-36);
+/** Ark paints the label over the native control, so the click has to land on the label. */
+const choose = (control: Locator) => control.locator('xpath=ancestor::label[1]').click();
+/** An Agent with no chosen handle is addressed by its sid, the same way Studio builds the route. */
+const studioOf = (iri: string, path = '') => `/en${studioHref({ iri, handle: null }, path)}`;
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 const saveState = (page: Page) => page.locator('[data-slot="autosave-status"] [role="status"]');
 const pathOf = (page: Page) => { const url = new URL(page.url()); return `${url.pathname}${url.search}`; };
@@ -71,7 +75,7 @@ async function publish(page: Page, button: string, heading: string, steps: RegEx
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: heading })).toBeVisible();
   if (where) await expect(dialog).toContainText(where);
-  await dialog.getByRole('checkbox', { name: /I wrote this text/ }).check();
+  await choose(dialog.getByRole('checkbox', { name: /I wrote this text/ }));
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
   const list = dialog.getByRole('list', { name: 'Publish' });
   for (const [index, step] of steps.entries()) {
@@ -87,7 +91,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     page.on('pageerror', error => errors.push(error.message));
     const session = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
     const member = fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH').member;
-    const sessionStudio = `/en/studio/@agent-${uuid(session.actingSubject)}`;
+    const sessionStudio = studioOf(session.actingSubject);
     await signInAtAccounts(page, sessionStudio, member);
     // Studio opens as the session Agent and names it before anything is created.
     await page.goto('/en/studio');
@@ -103,7 +107,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
       expect([200, 201]).toContain(response.status());
       writer = (await response.json() as { agent: string }).agent;
     }).toPass({ timeout: 60_000 });
-    const studio = `/en/studio/@agent-${uuid(writer)}`;
+    const studio = studioOf(writer);
     await expect(async () => {
       await page.goto(studio);
       await expect(page.getByRole('region', { name: 'Writing as' })).toContainText('Studio Writer 书生', { timeout: 2_000 });
@@ -189,7 +193,7 @@ test('STUDIO01: a writer builds a chaptered book, writes through offline and a s
     // A second tab saves first; Main names the head that won, and this tab compares and keeps its own text on top.
     const other = await context.newPage();
     await other.goto(page.url());
-    await expect(other.getByRole('textbox', { name: 'Chapter text' })).toHaveValue(/没有地址的信/);
+    await expect(other.getByRole('textbox', { name: 'Chapter text' })).toContainText('没有地址的信');
     // Typing before the editor hydrates would land in the server-rendered field and never save.
     await other.waitForLoadState('networkidle');
     await append(other, '\n另一个标签页写下的一段。');

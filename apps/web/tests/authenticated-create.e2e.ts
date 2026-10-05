@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page, test } from '@playwright/test';
+import { studioHref } from '../features/studio/agent.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 interface PublicFixture { actingSubject: string }
@@ -12,9 +13,13 @@ function fixture<T>(name: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
-/** Studio opens as the session Agent, at that Agent's own address. */
-function sessionStudio(): string {
-  return `/en/studio/@agent-${fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH').actingSubject.slice(-36)}`;
+/** Ark paints the label over the native control, so the click has to land on the label. */
+const choose = (control: Locator) => control.locator('xpath=ancestor::label[1]').click();
+
+/** Studio opens as the session Agent. With no chosen handle, the address is that Agent's sid. */
+function sessionStudio(path = ''): string {
+  const iri = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH').actingSubject;
+  return `/en${studioHref({ iri, handle: null }, path)}`;
 }
 
 async function signIn(page: Page, next = sessionStudio()): Promise<void> {
@@ -24,10 +29,13 @@ async function signIn(page: Page, next = sessionStudio()): Promise<void> {
 
 /** Creates a Work from Studio's new-work form and returns its ID from the editor it opens. */
 async function createWork(page: Page, title: string): Promise<string> {
-  await page.goto(`${sessionStudio()}/new`);
+  await page.goto(sessionStudio('/new'));
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
-  // A story opens its editor; a book opens its chapters.
-  await page.getByText('A story', { exact: true }).click();
+  // A guide is one piece and opens its editor; a book opens its chapters. The radio's name is the registry label.
+  await choose(page.getByRole('radio', { name: /^Guide/ }));
+  // The form requires a language. This journey writes in English, which the editor address records.
+  await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();
+  await page.getByRole('option', { name: 'English', exact: true }).click();
   await page.getByRole('button', { name: /^Create as / }).click();
   await page.waitForURL(new RegExp(`^[^?]*${sessionStudio()}/works/[0-9a-f-]{36}/write\\?language=en$`));
   return /\/works\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
@@ -114,7 +122,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('session-agent-picker-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole('checkbox', { name: /Make this my default/ }).check();
+  await choose(page.getByRole('checkbox', { name: /Make this my default/ }));
   await page.getByRole('button', { name: 'Use this Agent' }).click();
   await expect(page).toHaveURL(sessionStudio());
   const mainAgent = await page.request.get('/api/main/v1/me/main-agent-preference');
@@ -135,7 +143,7 @@ test('IAM01: a web session outlives its access token, keeps its Agent and signs 
   await expect(page).toHaveURL('/en/identity?next=%2Fen%2Fstudio');
   await expect(account).toContainText('Choose an Agent');
   await expect(page.getByRole('radio', { checked: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: new RegExp(publicFixture.actingSubject) }).check();
+  await choose(page.getByRole('radio', { name: new RegExp(publicFixture.actingSubject) }));
   await page.getByRole('button', { name: 'Use this Agent' }).click();
   await expect(page).toHaveURL(sessionStudio());
 
