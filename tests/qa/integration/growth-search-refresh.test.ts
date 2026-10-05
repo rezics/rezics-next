@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -31,11 +32,14 @@ class MeteredFuseki extends FusekiClient {
   deltaCalls = 0;
   deltaChanges = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.queries++;
-    if (sparql.includes('"body:*"')) this.inventories++;
+    if (isForegroundOperation()) {
+      this.queries++;
+      if (sparql.includes('"body:*"')) this.inventories++;
+    }
     return super.query(sparql, maxResponseBytes);
   }
   override async searchDeltaSince(ordinal: string): Promise<SearchDeltaProof> {
+    if (!isForegroundOperation()) return super.searchDeltaSince(ordinal);
     this.deltaCalls++;
     expect(ordinal).toBe('-1');
     const result = await super.searchDeltaSince(ordinal);

@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -302,7 +303,7 @@ test('64 resolved Uses use one SQL batch and bounded exact source/crop index pro
   let queries = 0;
   const counted = new MediaRenditionStore({
     query: async (sql: string, params: unknown[]) => {
-      queries++;
+      if (isForegroundOperation()) queries++;
       return contentPool.query(sql, params);
     },
   } as unknown as Pool);

@@ -1,3 +1,4 @@
+import { ObservedFuseki } from './support/observed-fuseki.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -7,8 +8,6 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
-import { FusekiClient, type CommandEnvelope, type SparqlResult }
-  from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable,
   engageAccessRecoveryFence, releaseAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -27,24 +26,6 @@ import { activateMetadataWork, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-
-class ObservedFuseki extends FusekiClient {
-  readonly queries: string[] = [];
-  healthReads = 0;
-  commands = 0;
-  override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.queries.push(sparql);
-    return super.query(sparql, maxResponseBytes);
-  }
-  override async commandHealth() {
-    this.healthReads++;
-    return super.commandHealth();
-  }
-  override async commandWithReceipt(envelope: CommandEnvelope) {
-    this.commands++;
-    return super.commandWithReceipt(envelope);
-  }
-}
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {

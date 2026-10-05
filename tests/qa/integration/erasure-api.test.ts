@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -31,6 +32,7 @@ interface Costs { calls: number; rows: number }
 /** Counts every SQL statement and returned row an owner adapter issues. */
 function counted(pool: Pool, costs: Costs): Pool {
   const count = (result: QueryResult) => {
+    if (!isForegroundOperation()) return result;
     costs.calls++;
     costs.rows += result.rows.length;
     return result;

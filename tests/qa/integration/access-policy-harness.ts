@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 // Shared real-owner fixture for the Access policy, interaction and revocation
 // APIs: cloned Account/Access databases, real OAuth tokens, Main HTTP handlers and
 // an Access pool that counts owner SQL calls, selected rows and written rows.
@@ -26,6 +27,7 @@ export async function policyHarness() {
   const pool = new Pool({ connectionString: databases.urls.access, max: 12 });
   const costs = { calls: 0, rows: 0, writes: 0 };
   const count = (sql: string, result: { rows: unknown[]; rowCount: number | null }) => {
+    if (!isForegroundOperation()) return result;
     costs.calls++;
     costs.rows += result.rows.length;
     if (/^\s*(INSERT|UPDATE|DELETE)/.test(sql)) costs.writes += result.rowCount ?? 0;

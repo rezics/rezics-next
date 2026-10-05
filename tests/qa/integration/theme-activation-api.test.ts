@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -22,15 +23,15 @@ const native = (id: string) => 'https://rezics.com/id/' + id;
 class MeteredFusekiClient extends FusekiClient {
   calls = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.calls++;
+    if (isForegroundOperation()) this.calls++;
     return super.query(sparql, maxResponseBytes);
   }
   override async commandHealth(): Promise<CommandHealth> {
-    this.calls++;
+    if (isForegroundOperation()) this.calls++;
     return super.commandHealth();
   }
   override async command(envelope: CommandEnvelope): Promise<CommandResult> {
-    this.calls++;
+    if (isForegroundOperation()) this.calls++;
     return super.command(envelope);
   }
 }

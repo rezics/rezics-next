@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { CountingPool, isForegroundOperation } from './support/operation-cost.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -59,7 +59,7 @@ export function png(width: number, height: number, payload = 64): Uint8Array {
 class CountingMediaAccess extends MediaAccessBatchReader {
   batches = 0;
   override async canReadWorks(principal: VerifiedPrincipal, actingSubject: string, works: readonly string[]) {
-    this.batches++;
+    if (isForegroundOperation()) this.batches++;
     return super.canReadWorks(principal, actingSubject, works);
   }
 }
@@ -84,10 +84,10 @@ export async function startMediaStack(label: string, options: { contentProjectio
   // fixture too. The runner removes both owners when it resets the QA stack.
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
-  const accessPool = new Pool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
+  const accessPool = new CountingPool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
   env.addresses = new AliasRegistry(accessPool);
-  const contentPool = new Pool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
-  const relayPool = new Pool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const contentPool = new CountingPool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
+  const relayPool = new CountingPool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const contentCursor = new ContentProjectionCursor(contentPool);

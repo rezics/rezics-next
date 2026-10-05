@@ -24,7 +24,7 @@ import {
   spaceCreationDigest,
 } from '../../../services/main/src/modules/space/create.ts';
 import { startMediaStack } from './media-support.ts';
-import { measurePostLayerRead } from './post-composition-fixture.ts';
+import { measureGraphResponses as measurePostLayerRead } from './support/graph-responses.ts';
 
 const short = (value: string) => value.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {

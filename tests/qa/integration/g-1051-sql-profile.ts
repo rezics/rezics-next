@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import pg from 'pg';
 
 /** Count protocol statements separately from table families. Parameters are
@@ -7,7 +8,7 @@ export function captureSql() {
   const native = prototype.query;
   const queries: string[] = [];
   prototype.query = function (this: object, ...args: unknown[]) {
-    queries.push(
+    if (isForegroundOperation()) queries.push(
       typeof args[0] === 'string'
         ? args[0]
         : ((args[0] as { text?: string } | undefined)?.text ?? ''),

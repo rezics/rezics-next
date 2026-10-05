@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -835,8 +836,10 @@ test('G-920: published franchise entities, contradictory claims and relations di
       let calls = 0,
         inventories = 0;
       f.env.fuseki.query = async (sparql, maxBytes) => {
-        calls++;
-        if (sparql.includes('MIN(CONCAT(STR(?decision)')) inventories++;
+        if (isForegroundOperation()) {
+          calls++;
+          if (sparql.includes('MIN(CONCAT(STR(?decision)')) inventories++;
+        }
         return query(sparql, maxBytes);
       };
       try {

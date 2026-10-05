@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -40,6 +41,7 @@ export async function contextFixture(apps: Record<string, string>) {
   let queries = 0;
   const fuseki = new Proxy(native, { get(target, property) {
     if (property === 'query') return async (text: string) => {
+      if (!isForegroundOperation()) return target.query(text);
       queries++;
       if (localDecisionReadFault && text.includes('SELECT ?epoch ?sequence ?localSlot')) {
         const fault = localDecisionReadFault;

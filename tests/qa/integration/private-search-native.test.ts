@@ -8,7 +8,6 @@ import { join, resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   engageAccessRecoveryFence, releaseAccessRecoveryFence, type RegisteredAdmission,
   type StrongScopeClosure, type VerifiedPrincipal }
@@ -40,6 +39,8 @@ import { searchRoutes, type SearchRouteDependencies }
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
+import { ObservedFuseki } from './support/observed-fuseki.ts';
+
 const root = resolve(import.meta.dir, '../../..');
 
 function rootCommand(args: string[], timeout: number): void {
@@ -61,20 +62,6 @@ async function freePort(): Promise<number> {
       server.close(() => resolvePort(address.port));
     });
   });
-}
-
-/** Counts every Main-to-Fuseki read, including the command-health fence. */
-class ObservedFuseki extends FusekiClient {
-  readonly queries: string[] = [];
-  health = 0;
-  override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
-    this.queries.push(sparql);
-    return super.query(sparql, maxResponseBytes);
-  }
-  override async commandHealth() {
-    this.health++;
-    return super.commandHealth();
-  }
 }
 
 const runId = `${Bun.env.REZICS_QA_RUN_ID}-pn`;
@@ -579,7 +566,7 @@ test('SEARCH11: a hidden-match-heavy private corpus keeps one concrete-subject p
     expect(capped).toHaveLength(Math.min(2, size + 1));
     if (size >= 2) expect(capped).not.toContain(unit);
     const queries = fuseki.queries.length;
-    const health = fuseki.health;
+    const health = fuseki.healthReads;
     const session = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
       principal, actor, { contribution: target.contribution, phrase: term });
     let frame = '';
@@ -592,7 +579,7 @@ test('SEARCH11: a hidden-match-heavy private corpus keeps one concrete-subject p
     for (const query of observed.filter(value => value.includes('text:query'))) {
       expect(query).toContain(`(<${unit}> ?score ?literal ?graph ?predicate)`);
     }
-    costs.push({ decoys: size, queries: observed.length, health: fuseki.health - health });
+    costs.push({ decoys: size, queries: observed.length, health: fuseki.healthReads - health });
   }
   // Hidden matching units change neither the result nor the per-request work.
   expect(new Set(costs.map(cost => `${cost.queries}/${cost.health}`)).size).toBe(1);

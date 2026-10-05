@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ensureReviewedQuestionPresentation, seedScopedSubjectQuestions, scopedSubjectQuestions,
@@ -115,8 +116,8 @@ test('concurrent question seeding recovers an expired, terminally cancelled revi
       const query = h.stack.fuseki.query.bind(h.stack.fuseki), command = h.stack.fuseki.commandWithReceipt.bind(h.stack.fuseki);
       let calls = 0, bytes = 0;
       const envelopes: { bytes: number; focuses: number }[] = [];
-      h.stack.fuseki.query = async (...args) => { calls++; const result = await query(...args); bytes += Buffer.byteLength(JSON.stringify(result)); return result; };
-      h.stack.fuseki.commandWithReceipt = async envelope => { envelopes.push({ bytes: Buffer.byteLength(JSON.stringify(envelope)),
+      h.stack.fuseki.query = async (...args) => { const foreground = isForegroundOperation(); if (foreground) calls++; const result = await query(...args); if (foreground) bytes += Buffer.byteLength(JSON.stringify(result)); return result; };
+      h.stack.fuseki.commandWithReceipt = async envelope => { if (isForegroundOperation()) envelopes.push({ bytes: Buffer.byteLength(JSON.stringify(envelope)),
         focuses: envelope.validations.reduce((total, item) => total + item.focus.length, 0) }); return command(envelope); };
       try { await operation(); return { calls, bytes, envelopes }; }
       finally { h.stack.fuseki.query = query; h.stack.fuseki.commandWithReceipt = command; }

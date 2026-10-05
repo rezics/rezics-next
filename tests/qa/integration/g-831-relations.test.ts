@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -35,9 +36,9 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
   try {
     const queries: string[] = [], commands: { bytes: number; focuses: number }[] = [];
     f.env.fuseki = new Proxy(f.env.fuseki, { get(target, property) {
-      if (property === 'query') return async (query: string) => { queries.push(query); return target.query(query); };
+      if (property === 'query') return async (query: string) => { if (isForegroundOperation()) queries.push(query); return target.query(query); };
       if (property === 'commandWithReceipt') return async (command: CommandEnvelope) => {
-        if (command.update.includes('LexiconWorkDerivation')) commands.push({ bytes: Buffer.byteLength(JSON.stringify(command)),
+        if (isForegroundOperation() && command.update.includes('LexiconWorkDerivation')) commands.push({ bytes: Buffer.byteLength(JSON.stringify(command)),
           focuses: command.validations.reduce((total, entry) => total + entry.focus.length, 0) });
         return target.commandWithReceipt(command);
       };

@@ -1,5 +1,4 @@
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { spyOn } from 'bun:test';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -14,25 +13,7 @@ import type {
   WorkActivationReceipt,
 } from '../../../services/main/src/modules/work/activate.ts';
 
-/** Observe the real graph responses, including fences and hydration, without replacing a read. */
-export async function measurePostLayerRead<T>(fuseki: FusekiClient, read: () => Promise<T>) {
-  const query = fuseki.query.bind(fuseki);
-  let graphCalls = 0,
-    graphRows = 0;
-  const meter = spyOn(fuseki, 'query').mockImplementation(async (sparql, maxBytes) => {
-    graphCalls++;
-    const result = await query(sparql, maxBytes);
-    graphRows += result.results?.bindings.length ?? (result.boolean === undefined ? 0 : 1);
-    return result;
-  });
-  const started = performance.now();
-  try {
-    const value = await read();
-    return { value, cost: { graphCalls, graphRows }, ms: Math.round(performance.now() - started) };
-  } finally {
-    meter.mockRestore();
-  }
-}
+export { measureGraphResponses as measurePostLayerRead } from './support/graph-responses.ts';
 
 /** Placement reads need Access, graph and composition objects, without media or Content fixtures. */
 export async function startPostCompositionStack() {

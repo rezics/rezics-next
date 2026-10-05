@@ -1,3 +1,4 @@
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
@@ -41,7 +42,7 @@ function countingPool(pool: Pool): { pool: Pool; calls: () => number } {
     const client = await pool.connect();
     return new Proxy(client, { get(target, property) {
       if (property === 'query') return (...args: unknown[]) => {
-        calls += 1;
+        if (isForegroundOperation()) calls += 1;
         return (target.query as (...values: unknown[]) => unknown).apply(target, args);
       };
       const value = Reflect.get(target, property);

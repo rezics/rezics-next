@@ -28,15 +28,11 @@ export async function startRatingStack(label: string) {
   } };
   stack.access.configureBaseline(stack.fuseki);
   // Cost is counted where the owners are reached: graph queries and Access checkouts.
-  const cost = { graph: 0, access: 0 };
-  const query = stack.fuseki.query.bind(stack.fuseki), connect = stack.accessPool.connect.bind(stack.accessPool);
-  stack.fuseki.query = ((...args: Parameters<typeof query>) => { cost.graph++; return query(...args); }) as typeof query;
-  stack.accessPool.connect = ((...args: unknown[]) => { cost.access++; return (connect as (...a: unknown[]) => unknown)(...args); }) as typeof connect;
   /** What `operation` costs the owners, independent of what it returns. */
   const measure = async <T>(operation: () => Promise<T>) => {
-    const before = { ...cost };
+    const graph = stack.fuseki.queries, access = stack.accessPool.checkouts;
     const result = await operation();
-    return { result, graph: cost.graph - before.graph, access: cost.access - before.access };
+    return { result, graph: stack.fuseki.queries - graph, access: stack.accessPool.checkouts - access };
   };
   const app = createMainApp(stack.fuseki, { environment: stack.env, account, access: stack.access,
     targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool) });
