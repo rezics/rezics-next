@@ -124,6 +124,14 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
   const invalid = slides.some(slide => slideProblems(slide).length > 0);
   const saving = status?.kind === 'busy';
   const canSave = dirty && !invalid && art.pending === 0 && !art.busy && !saving;
+  // Leaving with changes nobody saved asks first: nothing the person did reaches readers until it is saved.
+  const unsaved = dirty || art.pending > 0;
+  useEffect(() => {
+    if (!unsaved) return;
+    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', ask);
+    return () => window.removeEventListener('beforeunload', ask);
+  }, [unsaved]);
   const selectedSlide = slides.find(slide => slide.key === selected) ?? null;
   const worksOf = (slide: SlideDraft) => slide.target.kind === 'work' ? works[slide.target.work] : null;
 
@@ -267,7 +275,7 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
       </div>
     </div>
 
-    <div className="sticky bottom-3 z-20 grid gap-3 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-(--aura-shadow-card) backdrop-blur sm:p-4">
+    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 grid gap-3 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-(--aura-shadow-card) backdrop-blur sm:p-4 md:bottom-3">
       {status?.kind === 'saved' ? <Alert variant="success" role="status" className="py-2.5"><CircleCheckIcon aria-hidden="true" />
         <AlertDescription>{status.replayed ? t.savedReplayed : t.savedNotice}</AlertDescription></Alert> : null}
       {status?.kind === 'reloaded' ? <Alert variant="info" role="status" className="py-2.5"><RefreshCwIcon aria-hidden="true" />

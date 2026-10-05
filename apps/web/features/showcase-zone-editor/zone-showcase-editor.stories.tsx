@@ -52,6 +52,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const phone = { viewport: { value: 'phone' } };
+const tablet = { viewport: { value: 'tabletPortrait' } };
 const desktop = { viewport: { value: 'desktop' } };
 /** Nothing makes the page wider than its window; a failure names what sticks out. */
 const noOverflow = () => {
@@ -125,6 +126,7 @@ export const Full: Story = {
   },
 };
 export const FullPhone: Story = { ...Full, globals: phone };
+export const FullTablet: Story = { ...Full, globals: tablet };
 export const FullTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { ...desktop, locale: 'zh-Hant' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -132,6 +134,8 @@ export const FullTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, glob
     await expect(slides(canvas, 'zh-Hant').getAllByText('多數讀者會點這一張')).toHaveLength(1);
     await noOverflow();
   } };
+export const FullTraditionalChinesePhone: Story = { ...FullTraditionalChinese, globals: { ...phone, locale: 'zh-Hant' } };
+export const FullTraditionalChineseTablet: Story = { ...FullTraditionalChinese, globals: { ...tablet, locale: 'zh-Hant' } };
 export const FullJapanesePhone: Story = { args: { locale: 'ja' }, globals: { ...phone, locale: 'ja' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -199,6 +203,7 @@ export const Scheduled: Story = {
   },
 };
 export const ScheduledPhone: Story = { ...Scheduled, globals: phone };
+export const ScheduledTablet: Story = { ...Scheduled, globals: tablet };
 
 /** A link slide needs an address on this site and a title; the words are checked as they are typed. */
 export const LinkSlide: Story = {
@@ -246,6 +251,18 @@ export const AddCampaignArt: Story = {
   },
 };
 export const AddCampaignArtPhone: Story = { ...AddCampaignArt, globals: phone };
+export const AddCampaignArtTablet: Story = { ...AddCampaignArt, globals: tablet };
+export const AddCampaignArtTraditionalChinese: Story = { ...AddCampaignArt, args: { locale: 'zh-Hant' }, globals: { ...desktop, locale: 'zh-Hant' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: '編輯「Krita」' }));
+    const landscape = within(canvas.getByRole('heading', { name: '橫向 · 16:9' }).closest('section')!);
+    const input = landscape.getByRole('button', { name: '選擇圖片' }).parentElement!.querySelector('input[type=file]')!;
+    await userEvent.upload(input as HTMLInputElement, await drawnFile(1920, 1080, 'image/jpeg', 'sea.jpg'));
+    await userEvent.click(await landscape.findByRole('button', { name: '用於這張投影片' }));
+    await expect(await landscape.findByText(/已加入這張投影片/, {}, { timeout: 4000 })).toBeVisible();
+    await noOverflow();
+  } };
 
 /** An image smaller than the role's minimum is refused before upload, with its size and the minimum. */
 export const ArtTooSmall: Story = {
