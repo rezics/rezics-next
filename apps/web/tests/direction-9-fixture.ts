@@ -82,6 +82,18 @@ export class PublicCommands {
     return (await response.json()) as T;
   }
 
+  /** A probe that keeps denied and missing outcomes, unlike read and find. */
+  async inspect(path: string): Promise<{ status: number; body: unknown }> {
+    const response = await this.response(path);
+    const status = response.status();
+    if (status === 204 || status === 304) return { status, body: null };
+    try {
+      return { status, body: await response.json() };
+    } catch {
+      return { status, body: null };
+    }
+  }
+
   /** Probe the exact served projection; no sleep after an already-ready receipt. */
   async until<T>(path: string, ready: (value: T) => boolean, data?: unknown): Promise<T> {
     const deadline = Date.now() + 30_000;
@@ -301,6 +313,213 @@ export async function parallel<T, R>(
   return results;
 }
 
+const asciiHandle = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
+
+interface AddressView {
+  status?: string;
+  holder?: string;
+  state?: string;
+  capabilities?: { realm?: string; zone?: string };
+}
+
+interface ControlledAgent {
+  actingSubject?: string;
+  displayName?: { value?: string } | null;
+}
+
+interface StudioWorkItem {
+  id?: string;
+  mainVersion?: string;
+  title?: { value?: string };
+  texts?: { contribution?: string; publicationHead?: string | null }[];
+}
+
+/** A persistent stack keeps an address after the idempotency record that created
+ * its holder expires. Resolve before claiming: reuse a holder this principal
+ * controls, and otherwise derive a handle from the holder that already has it. */
+async function allocateAddress(
+  commands: PublicCommands,
+  scope: 'agent' | 'space',
+  requested: string,
+  actingSubject: string,
+): Promise<{ key: string; holder: string | null; capabilities?: AddressView['capabilities'] }> {
+  let fact = '';
+  for (let step = 0; step < 4; step++) {
+    const key = fact ? distinctHandle(requested, fact) : requested;
+    const resolved = await readAddress(commands, scope, key, actingSubject);
+    if (resolved?.holder && resolved.state !== 'retired' && resolved.status !== 'unavailable') {
+      if (await controlsHolder(commands, scope, resolved.holder, actingSubject)) {
+        console.log(`[direction-9 setup] reuse ${scope} ${key}`);
+        return { key, holder: resolved.holder, capabilities: resolved.capabilities };
+      }
+      fact = `${resolved.holder}:${step}`;
+      continue;
+    }
+    const available = await addressAvailable(commands, scope, key, actingSubject);
+    if (available !== false) return { key, holder: null };
+    fact = `taken:${key}:${step}`;
+  }
+  throw new Error(`Fixture ${scope} address ${requested} stayed held by another principal`);
+}
+
+function distinctHandle(requested: string, fact: string): string {
+  const mark = createHash('sha256').update(`${requested}\0${fact}`).digest('hex').slice(0, 8);
+  const stem = requested.slice(0, 21).replace(/[_-]+$/g, '');
+  const key = `${stem}-${mark}`;
+  if (!asciiHandle.test(key))
+    throw new Error(`Fixture address ${requested} cannot yield a distinct handle`);
+  return key;
+}
+
+function zoneIri(seed: string): string {
+  const zoneHash = createHash('sha256').update(seed).digest('hex');
+  return `https://rezics.com/id/${zoneHash.slice(0, 8)}-${zoneHash.slice(8, 12)}-4${zoneHash.slice(13, 16)}-a${zoneHash.slice(17, 20)}-${zoneHash.slice(20, 32)}`;
+}
+
+async function readAddress(
+  commands: PublicCommands,
+  scope: string,
+  key: string,
+  actingSubject: string,
+): Promise<AddressView | null> {
+  const page = await commands.inspect(
+    `/addresses/resolve?${new URLSearchParams({ scope, key, actingSubject })}`,
+  );
+  if (page.status === 404 || page.status === 410) return null;
+  if (page.status !== 200)
+    throw new Error(`Fixture GET /addresses/resolve: HTTP ${page.status}`);
+  const body = page.body;
+  if (!body || typeof body !== 'object' || typeof (body as AddressView).holder !== 'string')
+    return null;
+  return body as AddressView;
+}
+
+async function addressAvailable(
+  commands: PublicCommands,
+  scope: string,
+  key: string,
+  actingSubject: string,
+): Promise<boolean | null> {
+  const page = await commands.inspect(
+    `/addresses/availability?${new URLSearchParams({ scope, alias: key, actingSubject })}`,
+  );
+  if (page.status !== 200 || !page.body || typeof page.body !== 'object' || !('available' in page.body))
+    return null;
+  const available = (page.body as { available: unknown }).available;
+  return typeof available === 'boolean' ? available : null;
+}
+
+async function controlsHolder(
+  commands: PublicCommands,
+  scope: 'agent' | 'space',
+  holder: string,
+  actingSubject: string,
+): Promise<boolean> {
+  const subject = scope === 'agent' ? holder : actingSubject;
+  const page = await commands.inspect(
+    `/addresses/current?${new URLSearchParams({ scope, holder, actingSubject: subject })}`,
+  );
+  if (page.status === 200) return true;
+  if (page.status === 403 || page.status === 404) return false;
+  throw new Error(`Fixture ${scope} control: HTTP ${page.status}`);
+}
+
+async function controlledAgent(
+  commands: PublicCommands,
+  displayName: string,
+): Promise<string | null> {
+  const page = await commands.inspect('/me/agents');
+  if (page.status !== 200 || !page.body || typeof page.body !== 'object') return null;
+  const items = (page.body as { items?: ControlledAgent[] }).items;
+  if (!Array.isArray(items)) return null;
+  return (
+    items.find((item) => item.displayName?.value === displayName && item.actingSubject)
+      ?.actingSubject ?? null
+  );
+}
+
+async function publishedWorks(
+  api: PublicCommands,
+  actor: string,
+): Promise<Map<string, WorkRecord>> {
+  const found = new Map<string, WorkRecord>();
+  let cursor: string | null = null;
+  for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
+    const query = new URLSearchParams({ limit: '20' });
+    if (cursor) query.set('cursor', cursor);
+    const body = await api.find<{ items?: StudioWorkItem[]; nextCursor?: string | null }>(
+      `/me/agents/${short(actor)}/works?${query}`,
+    );
+    if (!Array.isArray(body?.items)) return found;
+    for (const item of body.items) {
+      const text = item.texts?.find((entry) => entry.publicationHead && entry.contribution);
+      if (!item.title?.value || !item.id || !item.mainVersion || !text?.contribution || !text.publicationHead)
+        continue;
+      if (!found.has(item.title.value))
+        found.set(item.title.value, {
+          work: item.id,
+          mainVersion: item.mainVersion,
+          contribution: text.contribution,
+          publicationDecision: text.publicationHead,
+        });
+    }
+    cursor = body.nextCursor ?? null;
+    if (!cursor) break;
+  }
+  return found;
+}
+
+async function existingChapter(
+  api: PublicCommands,
+  actor: string,
+  work: string,
+  name: string,
+): Promise<DirectionFixture['laterChapter'] | null> {
+  let cursor: string | null = null;
+  for (let pageNumber = 0; pageNumber < 6; pageNumber++) {
+    const query = new URLSearchParams();
+    if (cursor) query.set('cursor', cursor);
+    const body = await api.find<{
+      page?: { nextCursor?: string | null };
+      facts?: { occurrence?: string; label?: { value?: string } | null }[];
+    }>(`/me/agents/${short(actor)}/works/${short(work)}/chapters?${query}`);
+    const match = body?.facts?.find((fact) => fact.label?.value === name && fact.occurrence);
+    if (match?.occurrence) return { occurrence: match.occurrence, name };
+    cursor = body?.page?.nextCursor ?? null;
+    if (!body || !cursor) return null;
+  }
+  return null;
+}
+
+async function reuseNamedSpace(
+  commands: PublicCommands,
+  owner: string,
+  name: string,
+): Promise<SpaceRecord | null> {
+  const listed = await commands.write<{
+    result?: { items?: { id?: string; kind?: string; name?: { value?: string } }[] };
+  }>('/query', {
+    profile: 'resource-list-v1',
+    context: 'global',
+    scope: { kind: 'all' },
+    sort: 'newest',
+    limit: 20,
+    q: name,
+    filter: { all: [{ facet: 'type', any: ['https://rezics.com/vocab/Realm'] }] },
+  });
+  for (const item of listed.result?.items ?? []) {
+    if (item.kind !== 'realm' || item.name?.value !== name || !item.id) continue;
+    const header = await commands.find<{ profile?: string; space?: string; id?: string }>(
+      `/realms/${short(item.id)}?${new URLSearchParams({ actingSubject: owner })}`,
+    );
+    if (header?.profile !== 'realm-read-v1' || !header.space || !header.id) continue;
+    if (!(await controlsHolder(commands, 'space', header.space, owner))) continue;
+    console.log(`[direction-9 setup] reuse space name ${name}`);
+    return { space: header.space, realm: header.id, name };
+  }
+  return null;
+}
+
 export async function seedDirection(
   api: PublicCommands,
   actor: string,
@@ -311,34 +530,38 @@ export async function seedDirection(
   const suffix = createHash('sha256').update(`${name}:${actor}`).digest('hex').slice(0, 10);
   api = api.reusable(`${name}:${actor}:member`);
   managerApi = managerApi.reusable(`${name}:${actor}:operator`);
-  const person = async (name: string, commands = api) =>
+  const person = async (displayName: string, commands = api) =>
     (
       await commands.write<{ agent: string }>('/agents', {
         profile: 'agent-provision-v1',
         kind: 'person',
-        displayName: name,
+        displayName,
       })
     ).agent;
-  const [manager, namedPerson, unnamedPerson] = await phase('people', () =>
+  const readerHandle = `d9-reader-${suffix}`;
+  const [managerName, readerAddress, unnamedName] = await phase('people', () =>
     Promise.all([
-      person(`Direction 9 manager ${suffix}`, managerApi),
-      person(`Direction 9 reader ${suffix}`),
-      person(`Direction 9 unnamed reader ${suffix}`),
+      controlledAgent(managerApi, `Direction 9 manager ${suffix}`),
+      allocateAddress(api, 'agent', readerHandle, actor),
+      controlledAgent(api, `Direction 9 unnamed reader ${suffix}`),
     ]),
   );
+  const manager = managerName ?? (await person(`Direction 9 manager ${suffix}`, managerApi));
+  const unnamedPerson = unnamedName ?? (await person(`Direction 9 unnamed reader ${suffix}`));
+  const namedPerson = readerAddress.holder ?? (await person(`Direction 9 reader ${suffix}`));
+  const personHandle = readerAddress.key;
   const owner = setup?.actor ?? manager;
   const ownerApi = setup?.api.reusable(`${name}:${actor}:administrator`) ?? managerApi;
-  const personHandle = `d9-reader-${suffix}`;
-  const claim = (scope: string, holder: string, name: string, actingSubject = manager) =>
+  const claim = (scope: string, holder: string, alias: string, actingSubject = manager) =>
     (actingSubject === manager ? managerApi : api).write('/addresses/claims', {
       profile: 'alias-write-v1',
       scope,
       holder,
       actingSubject,
-      operation: 'claim', alias: name,
+      operation: 'claim', alias,
       expectedRevision: null,
     });
-  await claim('agent', namedPerson, personHandle, namedPerson);
+  if (!readerAddress.holder) await claim('agent', namedPerson, personHandle, namedPerson);
 
   // These journeys choose a published Concept; creating global vocabulary would
   // need an unrelated curator grant that a newly provisioned Person does not own.
@@ -362,30 +585,72 @@ export async function seedDirection(
       names: { en: names[0]!.name.value, 'zh-Hant': names[1]!.name.value },
     };
   });
+  const reusedZones = new Map<string, string>();
   const [spaceResult, workResult] = await Promise.allSettled([
     phase('spaces', () =>
       parallel(Array.from({ length: spaceCount }), async (_, index): Promise<SpaceRecord> => {
-        const name = `Direction 9 ${suffix} community ${String(index + 1).padStart(2, '0')}`;
-        const handle = index === 1 ? undefined : `d9-${suffix}-${index + 1}`;
+        const baseName = `Direction 9 ${suffix} community ${String(index + 1).padStart(2, '0')}`;
+        const requested = index === 1 ? undefined : `d9-${suffix}-${index + 1}`;
+        if (!requested) {
+          const reused = await reuseNamedSpace(ownerApi, owner, baseName);
+          if (reused) return reused;
+          const record = await ownerApi.write<{ space: string; realm: string }>('/spaces', {
+            profile: 'space-realm-v2',
+            name: baseName,
+            language: 'en',
+            capabilities: ['realm'],
+            topics: [topic.concept],
+            actingSubject: owner,
+          });
+          return { ...record, name: baseName };
+        }
+        const allocated = await allocateAddress(ownerApi, 'space', requested, owner);
+        if (allocated.holder) {
+          const realm =
+            allocated.capabilities?.realm ??
+            (
+              await ownerApi.read<{ realm: string }>(`/spaces/${short(allocated.holder)}`)
+            ).realm;
+          if (allocated.capabilities?.zone)
+            reusedZones.set(allocated.holder, allocated.capabilities.zone);
+          return {
+            space: allocated.holder,
+            realm,
+            name: baseName,
+            handle: allocated.key,
+          };
+        }
+        const name =
+          allocated.key === requested ? baseName : `${baseName} ${allocated.key.slice(-8)}`;
         const record = await ownerApi.write<{ space: string; realm: string }>('/spaces', {
           profile: 'space-realm-v2',
           name,
           language: 'en',
           capabilities: ['realm'],
-          ...(handle ? { handle } : {}),
+          handle: allocated.key,
           topics: [topic.concept],
           actingSubject: owner,
         });
-        return { ...record, name, ...(handle ? { handle } : {}) };
+        return { ...record, name, handle: allocated.key };
       }),
     ),
     phase('published Works', async () => {
+      const titles = [
+        `Direction 9 rating Work ${suffix}`,
+        `Direction 9 submitted story ${suffix}`,
+        `Direction 9 chapter publication ${suffix}`,
+      ];
+      const known = await publishedWorks(api, actor);
       const works: WorkRecord[] = [];
       // Provisioning establishes the writer's grants. Finish one publication
       // before the next Work changes that writer's authority basis.
-      for (const title of [`Direction 9 rating Work ${suffix}`, `Direction 9 submitted story ${suffix}`,
-        `Direction 9 chapter publication ${suffix}`])
-        works.push(await createWork(title, 'https://schema.org/Book'));
+      for (const title of titles) {
+        const existing = known.get(title);
+        if (existing) {
+          console.log(`[direction-9 setup] reuse work ${title}`);
+          works.push(existing);
+        } else works.push(await createWork(title, 'https://schema.org/Book'));
+      }
       return works;
     }),
   ] as const);
@@ -530,62 +795,86 @@ export async function seedDirection(
       publicationDecision: published.publicationDecision,
     };
   }
-  const later = await phase('chapters', async () => {
-    const composition = await api.write<{ structure: string; revision: string }>('/compositions', {
-      profile: 'book-composition',
-      work: story.work,
-      mainVersion: story.mainVersion,
-      actingSubject: actor,
+  const laterName = `Direction 9 遠方 chapter ${chapterCount} ${suffix}`;
+  const reusedChapter = await existingChapter(api, actor, story.work, laterName);
+  if (reusedChapter) console.log(`[direction-9 setup] reuse chapter ${reusedChapter.name}`);
+  const later =
+    reusedChapter ??
+    (await phase('chapters', async () => {
+      const composition = await api.write<{ structure: string; revision: string }>('/compositions', {
+        profile: 'book-composition',
+        work: story.work,
+        mainVersion: story.mainVersion,
+        actingSubject: actor,
+      });
+      let head = composition.revision;
+      let laterChapter!: DirectionFixture['laterChapter'];
+      for (let offset = 0; offset < chapterCount; offset += 16) {
+        const changed = await api.write<{ revision: string; occurrences: string[] }>(
+          `/compositions/${short(composition.structure)}/changes`,
+          {
+            profile: 'book-composition',
+            expectedHead: head,
+            actingSubject: actor,
+            operations: Array.from({ length: Math.min(16, chapterCount - offset) }, (_, index) => ({
+              op: 'insert',
+              parent: composition.structure,
+              role: 'chapter',
+              position: 'last',
+              // A chapter Work opens at its containing story. Keep the Work whose
+              // Overview supplies the rating picker independent of composition.
+              target: chapterText.work,
+              label: {
+                value: offset + index + 1 === chapterCount ? laterName : `Chapter ${offset + index + 1}`,
+                language: 'en',
+              },
+            })),
+          },
+        );
+        head = changed.revision;
+        if (offset + 16 >= chapterCount)
+          laterChapter = { occurrence: changed.occurrences.at(-1)!, name: laterName };
+      }
+      return laterChapter;
+    }));
+  const mountStory = (zone: string, expectedHead: string) =>
+    ownerApi.write(`/zones/${short(zone)}/mounts`, {
+      expectedHead,
+      target: story.work,
+      routeSegment: 'story',
+      disclosure: 'public',
+      actingSubject: owner,
     });
-    let head = composition.revision;
-    let laterChapter!: DirectionFixture['laterChapter'];
-    for (let offset = 0; offset < chapterCount; offset += 16) {
-      const name = `Direction 9 遠方 chapter ${chapterCount} ${suffix}`;
-      const changed = await api.write<{ revision: string; occurrences: string[] }>(
-        `/compositions/${short(composition.structure)}/changes`,
-        {
-          profile: 'book-composition',
-          expectedHead: head,
-          actingSubject: actor,
-          operations: Array.from({ length: Math.min(16, chapterCount - offset) }, (_, index) => ({
-            op: 'insert',
-            parent: composition.structure,
-            role: 'chapter',
-            position: 'last',
-            // A chapter Work opens at its containing story. Keep the Work whose
-            // Overview supplies the rating picker independent of composition.
-            target: chapterText.work,
-            label: {
-              value: offset + index + 1 === chapterCount ? name : `Chapter ${offset + index + 1}`,
-              language: 'en',
-            },
-          })),
-        },
+  const zone = await phase('site mount', async () => {
+    const onSpace = reusedZones.get(named.space);
+    if (onSpace) {
+      console.log(`[direction-9 setup] reuse zone ${short(onSpace)}`);
+      const route = await ownerApi.find<{ kind?: string }>(
+        `/zones/${short(onSpace)}/routes?${new URLSearchParams({ path: '/story', actingSubject: owner })}`,
       );
-      head = changed.revision;
-      if (offset + 16 >= chapterCount)
-        laterChapter = { occurrence: changed.occurrences.at(-1)!, name };
+      if (route?.kind !== 'document' && route?.kind !== 'index') {
+        const page = await ownerApi.read<{ revision: string }>(
+          `/zones/${short(onSpace)}?${new URLSearchParams({ actingSubject: owner })}`,
+        );
+        await mountStory(onSpace, page.revision);
+      }
+      return onSpace;
     }
-    return laterChapter;
-  });
-  const zoneHash = createHash('sha256').update(`${name}:${actor}:zone`).digest('hex');
-  const zone = `https://rezics.com/id/${zoneHash.slice(0, 8)}-${zoneHash.slice(8, 12)}-4${zoneHash.slice(13, 16)}-a${zoneHash.slice(17, 20)}-${zoneHash.slice(20, 32)}`;
-  await phase('site mount', async () => {
+    const requested = zoneIri(`${name}:${actor}:zone`);
+    const existing = await ownerApi.find<{ zone?: string }>(
+      `/zones/${short(requested)}?${new URLSearchParams({ actingSubject: owner })}`,
+    );
+    const created = existing?.zone === requested ? zoneIri(`${name}:${actor}:zone:${requested}`) : requested;
     const site = await ownerApi.write<{ revision: string }>('/zones', {
-      zone,
+      zone: created,
       space: named.space,
       name: named.name,
       language: 'en',
       disclosure: 'public',
       actingSubject: owner,
     });
-    await ownerApi.write(`/zones/${short(zone)}/mounts`, {
-      expectedHead: site.revision,
-      target: story.work,
-      routeSegment: 'story',
-      disclosure: 'public',
-      actingSubject: owner,
-    });
+    await mountStory(created, site.revision);
+    return created;
   });
   return {
     actor,

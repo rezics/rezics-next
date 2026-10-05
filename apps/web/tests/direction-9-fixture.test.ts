@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   directionFixture,
+  fixtureName,
   parallel,
   PublicCommands,
   resetAdmission,
@@ -523,4 +524,146 @@ describe('Direction 9 public fixture commands', () => {
         ).toBe(true);
       }
     });
+
+  test('a persistent stack reuses an agent and the spaces this principal already controls', async () => {
+    const iri = () => `https://rezics.com/id/${randomUUID()}`;
+    const actor = iri();
+    const suffix = createHash('sha256').update(`${fixtureName}:${actor}`).digest('hex').slice(0, 10);
+    const reader = iri();
+    const zone = iri();
+    const spaces = new Map(
+      Array.from({ length: 26 }, (_, index) => {
+        const handle = `d9-${suffix}-${index + 1}`;
+        return [handle, { holder: iri(), realm: iri(), zone: index === 0 ? zone : undefined }] as const;
+      }),
+    );
+    const commands: { path: string; data: Record<string, unknown> }[] = [];
+    const api = persistentApi(commands, {
+      agents: new Map([[`d9-reader-${suffix}`, { holder: reader, controlled: true }]]),
+      spaces,
+    });
+    const fixture = await seedDirection(api, actor, api);
+    expect(fixture.namedPerson).toBe(reader);
+    expect(fixture.personHandle).toBe(`d9-reader-${suffix}`);
+    expect(fixture.named).toMatchObject({
+      space: spaces.get(`d9-${suffix}-1`)!.holder,
+      handle: `d9-${suffix}-1`,
+    });
+    expect(fixture.zone).toBe(zone);
+    expect(commands.some((command) => command.path.endsWith('/addresses/claims'))).toBe(false);
+    expect(commands.filter((command) => command.path.endsWith('/spaces'))).toHaveLength(1);
+    expect(commands.some((command) => command.path.endsWith('/zones'))).toBe(false);
+    expect(commands.some((command) => 'handle' in command.data)).toBe(false);
+  });
+
+  test('a handle held by someone else becomes a distinct claim instead of a conflict', async () => {
+    const iri = () => `https://rezics.com/id/${randomUUID()}`;
+    const actor = iri();
+    const suffix = createHash('sha256').update(`${fixtureName}:${actor}`).digest('hex').slice(0, 10);
+    const foreign = iri();
+    const readerHandle = `d9-reader-${suffix}`;
+    const spaceHandle = `d9-${suffix}-1`;
+    const commands: { path: string; data: Record<string, unknown> }[] = [];
+    const api = persistentApi(commands, {
+      agents: new Map([[readerHandle, { holder: foreign, controlled: false }]]),
+      spaces: new Map([[spaceHandle, { holder: iri(), realm: iri(), controlled: false }]]),
+    });
+    const fixture = await seedDirection(api, actor, api);
+    const claims = commands.filter((command) => command.path.endsWith('/addresses/claims'));
+    expect(claims).toHaveLength(1);
+    const alias = claims[0]?.data.alias;
+    const holder = claims[0]?.data.holder;
+    if (typeof alias !== 'string' || typeof holder !== 'string')
+      throw new Error('the distinct claim needs a string alias and holder');
+    expect(alias).not.toBe(readerHandle);
+    expect(holder).toBe(fixture.namedPerson);
+    expect(fixture.personHandle).toBe(alias);
+    expect(fixture.personHandle).toMatch(/^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/);
+    const namedSpace = commands.find(
+      (command) =>
+        command.path.endsWith('/spaces') && String(command.data.name).includes('community 01'),
+    );
+    const handle = namedSpace?.data.handle;
+    if (typeof handle !== 'string') throw new Error('the distinct space needs a string handle');
+    expect(handle).not.toBe(spaceHandle);
+    expect(fixture.named.handle).toBe(handle);
+    expect(fixture.named.name).toContain(handle.slice(-8));
+  });
 });
+
+function persistentApi(
+  commands: { path: string; data: Record<string, unknown> }[],
+  held: {
+    agents: Map<string, { holder: string; controlled: boolean }>;
+    spaces: Map<string, { holder: string; realm: string; zone?: string; controlled?: boolean }>;
+  },
+): PublicCommands {
+  const iri = () => `https://rezics.com/id/${randomUUID()}`;
+  const controlled = (scope: string | null, holder: string | null) => {
+    const table = scope === 'space' ? held.spaces : held.agents;
+    for (const entry of table.values())
+      if (entry.holder === holder) return entry.controlled !== false;
+    return false;
+  };
+  return new PublicCommands({
+    get: async (path) => {
+      const url = new URL(path, 'http://fixture.test');
+      const scope = url.searchParams.get('scope');
+      if (url.pathname.endsWith('/concepts') && url.searchParams.has('q'))
+        return { status: () => 200, json: async () => ({ items: [{ concept: iri(), label: 'Published topic' }] }) };
+      if (url.pathname.includes('/api/main/v1/concepts/'))
+        return { status: () => 200, json: async () => ({ name: { value: 'Published topic' } }) };
+      if (url.pathname.endsWith('/addresses/resolve')) {
+        const key = url.searchParams.get('key');
+        const entry = (scope === 'space' ? held.spaces : held.agents).get(key ?? '');
+        if (!entry) return { status: () => 404, json: async () => ({ code: 'address_not_found' }) };
+        return {
+          status: () => 200,
+          json: async () => ({
+            status: 'resolved',
+            state: 'current',
+            holder: entry.holder,
+            ...('realm' in entry ? { capabilities: { realm: entry.realm, ...(entry.zone ? { zone: entry.zone } : {}) } } : {}),
+          }),
+        };
+      }
+      if (url.pathname.endsWith('/addresses/availability')) {
+        const alias = url.searchParams.get('alias');
+        const taken = (scope === 'space' ? held.spaces : held.agents).has(alias ?? '');
+        return { status: () => 200, json: async () => ({ available: !taken, reason: taken ? 'claimed' : 'available' }) };
+      }
+      if (url.pathname.endsWith('/addresses/current')) {
+        const allowed = controlled(scope, url.searchParams.get('holder'));
+        return { status: () => (allowed ? 200 : 403), json: async () => (allowed ? {} : { code: 'alias_denied' }) };
+      }
+      if (url.pathname.endsWith('/me/agents') || url.pathname.includes('/works'))
+        return { status: () => 404, json: async () => ({ code: 'not_found' }) };
+      if (url.pathname.includes('/routes'))
+        return { status: () => 200, json: async () => ({ kind: 'document' }) };
+      return { status: () => 200, json: async () => ({ generation: '0', roles: [] }) };
+    },
+    fetch: async (path, options) => {
+      const data = options.data as Record<string, unknown>;
+      commands.push({ path, data });
+      return {
+        status: () => 201,
+        json: async () => ({
+          agent: iri(),
+          space: iri(),
+          realm: iri(),
+          work: iri(),
+          mainVersion: iri(),
+          contribution: iri(),
+          draftRevision: iri(),
+          publicationDecision: iri(),
+          structure: iri(),
+          revision: iri(),
+          occurrences: Array.from({ length: 16 }, iri),
+          digest: 'a'.repeat(64),
+          generation: '1',
+          result: { items: [] },
+        }),
+      };
+    },
+  });
+}
