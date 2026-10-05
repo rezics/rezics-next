@@ -207,7 +207,7 @@ describe('dev seed plan', () => {
     expect(state.created.size).toBe(works.length - demoClassics.length);
   });
 
-  test('adopts Realms an earlier seed created under another body through their Zones, without a write', async () => {
+  test('keeps the Space each official Zone names, whatever key or body created Realms since, without a write', async () => {
     const native = (id: string) => `https://rezics.com/id/${id}`;
     const spaceOf = (id: string) => native(stableId(`space:${id}`));
     const realmOf = (id: string) => native(stableId(`realm:${id}`));
@@ -215,7 +215,7 @@ describe('dev seed plan', () => {
     const api = {
       post: async (path: string) => {
         posts.push(path);
-        throw new SeedApiError('Main /v1/spaces', 409, '{"code":"idempotency_conflict"}');
+        throw new Error('A Space was made beside the one the Zone names');
       },
       get: async (path: string) => {
         const [route] = path.split('?');
@@ -235,7 +235,7 @@ describe('dev seed plan', () => {
       operatorInput: null, operatorSession: null,
       optional: async (_label: string, operation: () => Promise<unknown>) => operation() } as unknown as SeedState;
     await seedRealms(state);
-    expect(posts).toEqual(realms.map(() => '/v1/spaces'));
+    expect(posts).toEqual([]);
     expect(state.createdRealms.map(realm => [realm.id, realm.receipt.space, realm.receipt.realm]))
       .toEqual(realms.map(realm => [realm.id, spaceOf(realm.id), realmOf(realm.id)]));
     expect(writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: realms.length });
