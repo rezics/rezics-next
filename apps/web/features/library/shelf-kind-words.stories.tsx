@@ -26,43 +26,53 @@ const rows: LibraryRow[] = kinds.flatMap(([title, type], kind) => statuses.map((
     title: { ...basis.work.title!, value: `${title} ${index + 1}` } },
   types: [type], startedOn: null, finishedOn: null, rating: null, customShelves: [] })));
 
-const args = (locale: 'en' | 'ja') => {
-  const state = libraryState();
-  return { state, overview: { ok: true as const, data: storyOverview(rows) }, view: { ok: true as const, data: storyView(state, rows) },
+const shelfArgs = (shelf: ShelfStatus, locale: 'en' | 'ja') => {
+  const state = libraryState({ shelf });
+  const items = rows.filter(row => row.status === shelf);
+  return { state, overview: { ok: true as const, data: storyOverview(rows) }, view: { ok: true as const, data: storyView(state, items) },
     reading: [], now: storyNow, locale, messages: locale === 'ja' ? { ...messages, ...ja } : messages };
 };
 const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+const said = (words: readonly string[], canvas: ReturnType<typeof within>) =>
+  Promise.all(words.map(word => expect(canvas.getByText(word, { selector: 'p' })).toBeVisible()));
 
-/** Games say play, recipes cook and software use on every row; books keep reading words, which the shelf names already say. */
-export const PerKind: Story = {
-  args: args('en'),
-  parameters: { route: { pathname: '/en/library' } },
+/** Games say want to play, recipes want to cook and software want to use; books keep their reading words, which the shelf already names. */
+export const WantShelf: Story = {
+  args: shelfArgs('want-to-read', 'en'),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=want-to-read' } },
   async play({ canvasElement }) {
-    const list = within(canvasElement);
-    await expect(list.getByText('Want to play')).toBeVisible();
-    await expect(list.getByText('Playing')).toBeVisible();
-    await expect(list.getByText('Played')).toBeVisible();
-    await expect(list.getByText('Want to cook')).toBeVisible();
-    await expect(list.getByText('Cooking')).toBeVisible();
-    await expect(list.getByText('Cooked')).toBeVisible();
-    await expect(list.getByText('Want to use')).toBeVisible();
-    await expect(list.getByText('Using')).toBeVisible();
-    await expect(list.getByText('Used', { exact: true })).toBeVisible();
+    const canvas = within(canvasElement);
+    await said(['Want to play', 'Want to cook', 'Want to use'], canvas);
+    await expect(canvas.queryByText('Want to read', { selector: 'p' })).toBeNull();
     await noOverflow();
   },
 };
-export const PerKindPhone: Story = { ...PerKind, globals: { viewport: { value: 'phone' } } };
+export const WantShelfPhone: Story = { ...WantShelf, globals: { viewport: { value: 'phone' } } };
 
-export const PerKindJapanese: Story = {
-  args: args('ja'),
-  parameters: { route: { pathname: '/ja/library' } },
+export const ReadingShelf: Story = {
+  args: shelfArgs('reading', 'en'),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=reading' } },
+  async play({ canvasElement }) {
+    await said(['Playing', 'Cooking', 'Using'], within(canvasElement));
+    await noOverflow();
+  },
+};
+
+export const FinishedShelf: Story = {
+  args: shelfArgs('read', 'en'),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
+  async play({ canvasElement }) {
+    await said(['Played', 'Cooked', 'Used'], within(canvasElement));
+    await noOverflow();
+  },
+};
+
+export const WantShelfJapanesePhone: Story = {
+  args: shelfArgs('want-to-read', 'ja'),
+  parameters: { route: { pathname: '/ja/library', search: '?shelf=want-to-read' } },
   globals: { viewport: { value: 'phone' }, locale: 'ja' },
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByText('遊びたい')).toBeVisible();
-    await expect(canvas.getByText('プレイ中')).toBeVisible();
-    await expect(canvas.getByText('調理中')).toBeVisible();
-    await expect(canvas.getByText('使用中')).toBeVisible();
+    await said(['遊びたい', '作りたい', '使いたい'], within(canvasElement));
     await noOverflow();
   },
 };

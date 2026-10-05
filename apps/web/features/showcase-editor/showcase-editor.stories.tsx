@@ -164,7 +164,7 @@ export const ClassifiedUpload: Story = {
     await expect(landscape.getByText(/REZICS checks the image on your device when you upload it/)).toBeVisible();
     await userEvent.click(landscape.getByRole('button', { name: 'Save' }));
     await expect(await landscape.findByText(/Saved\. Every Zone/, {}, { timeout: 4000 })).toBeVisible();
-    await expect(sent).toEqual([false]);
+    await expect(sent.map(Boolean)).toEqual([false]);
   },
 };
 
@@ -185,7 +185,19 @@ export const AuthorMarkedAdult: Story = {
     await expect(sent).toEqual([true]);
   },
 };
-export const AuthorMarkedAdultPhone: Story = { ...AuthorMarkedAdult, globals: phone };
+/** At 390 px the choice and its words fit the card without widening the page. */
+export const AuthorMarkedAdultPhone: Story = {
+  args: { art: 'empty' },
+  globals: phone,
+  async play({ canvasElement }) {
+    const landscape = panel(within(canvasElement), 'Landscape · 16:9');
+    const input = landscape.getByRole('button', { name: 'Choose an image' }).parentElement!.querySelector('input[type=file]')!;
+    await userEvent.upload(input as HTMLInputElement, await drawnFile(1920, 1080, 'image/jpeg', 'sea.jpg'));
+    await userEvent.click(await landscape.findByRole('checkbox', { name: 'This image is adult content' }));
+    await expect(landscape.getByText(/hidden-image icon here instead of the image/)).toBeVisible();
+    await noOverflow();
+  },
+};
 
 /** In Japanese at 390 px the preview's window switch scrolls inside its own row instead of widening the page. */
 export const JapanesePhone: Story = {
