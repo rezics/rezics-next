@@ -39,6 +39,7 @@ import {
   RANKING_PROFILE,
 } from '../../../services/main/src/modules/recommendation/ranking.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { waitForRealmDirectory } from './support/realm-directory.ts';
 
 interface Page<Item = { id: string }> {
   items: Item[];
@@ -387,6 +388,8 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       return row.generation;
     };
     const discoveryGeneration = await refresh();
+    await waitForRealmDirectory(stack.env, () => call(`/v1/realms?q=${token}`),
+      page => page.items.some(item => item.id === community.realm));
     // Real Access ranking drives its zero-score tail from the topic projection.
     // A global candidate source is forbidden, so sparse topics cannot disappear
     // behind a large global window. Concepts themselves were created by the API.
@@ -664,6 +667,8 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       ),
     );
     await refresh();
+    await waitForRealmDirectory(stack.env, () => call(`/v1/realms?q=${token}`),
+      page => page.items.some(item => item.id === japanese.realm));
     const languageSections = await home.json<
       Page<{ id: string; page: Page; reason: { kind: string } }>
     >(await call(`/v1/discovery/sections?${acting}`, undefined, reader.token));

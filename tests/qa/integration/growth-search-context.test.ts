@@ -5,7 +5,7 @@ import type {
   FusekiClient,
   SparqlResult,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { CONTEXT_LIMITS } from '../../../services/main/src/modules/context/schema.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
@@ -173,7 +173,7 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
     const search = searchRoutes(f.env.fuseki, {
       environment: f.env,
       account: f.account.verifier,
-      access: new AccessAdmissionRegistry(f.accessPool),
+      access: accessWithBaseline(f.accessPool, f.env.fuseki),
       judgments: new AccessJudgments(f.accessPool),
       accessPolicy: new AccessPolicyOwner(f.accessPool),
     } as Parameters<typeof searchRoutes>[1]);

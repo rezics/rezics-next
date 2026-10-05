@@ -7,7 +7,8 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import type { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
@@ -164,7 +165,7 @@ beforeAll(async () => {
   } };
   const packageInstallations = new PackageInstallationStore(contentPool, locks,
     { rootDirectory: scratch, hookExecutor });
-  const accessRegistry = new AccessAdmissionRegistry(accessPool);
+  const accessRegistry = accessWithBaseline(accessPool, fuseki);
   const access = new Proxy(accessRegistry, { get(target, property) {
     if (property === 'activePrincipalId') {
       return async (...args: Parameters<typeof accessRegistry.activePrincipalId>) => {
