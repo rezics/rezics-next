@@ -125,6 +125,31 @@ Found while that Goal verified its work, outside its outcome (2026-10-05):
   still rebuild Discover scopes conservatively (about 140 s at 10,000 Works).
   Bounded composition membership effects would make them Work-local.
 
+## Inherited from showcase
+
+The showcase Goal delivered [decision 54](../../product/decisions.md#decision-54)
+and closed on 2026-10-05 at the maintainer's request before its own
+acceptance pass; these remain:
+
+- **Showcase acceptance.** Reseed the shared stack once the full seed
+  converges (its showcase step runs last), then review the Games Zone hero and
+  a game's Work page at 390 and 1280 px, signed in and out, with labelled art;
+  run `task goal -- test --affected 932ada68c` for the showcase merges.
+- **Slide accessibility leftovers.** A slide migrated from a v1 banner should
+  render the banner's alternative text; the slide title is announced twice;
+  the legacy banner helpers in `apps/web/features/realm/adapt.ts` can go.
+- **Batched author proofs.** The showcase art batch read
+  (`POST /v1/resources/showcase`) still checks private Works' author proofs one
+  Work at a time (`access/author-baseline.ts`).
+- **Correcting a saved image's NSFW label** from the showcase editors; today
+  only new uploads carry the author's adult mark.
+- **Logo slots.** A removed logo language still counts toward the eight
+  languages a Work may hold.
+- **Locale review.** The Realm showcase editor rendered in English from `/ja/`;
+  the editors' and kind words' non-English strings need native review.
+- **goalctl.** Merging a shared worktree's branch should mark every task on it
+  merged (G-1111 and G-1143 had to be closed as cancelled).
+
 ## Completion
 
 The Goal ends when the maintainer stops it, or when M8 passes its exit and the
