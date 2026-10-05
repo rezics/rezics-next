@@ -293,9 +293,22 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
     ${iri(ACTIVE_GENERATION)} a rv:ModelGeneration }
     GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(ACTIVE_GENERATION)} } }`);
   if (present.boolean === true) return ACTIVE_GENERATION;
+  const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
+  const bootstrapGuard = `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(ACTIVE_GENERATION)} ?p ?o } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?headP ?headO } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`;
+  const assertBootstrapAvailable = async () => {
+    const blocked = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      FILTER NOT EXISTS { ${bootstrapGuard} } }`);
+    if (blocked.boolean === true) {
+      // Only an empty model can bootstrap. A populated or partially recorded
+      // generation needs explicit model maintenance, not another initial write.
+      throw new ModelGenerationChanged('model generation cannot bootstrap over retained state');
+    }
+  };
+  await assertBootstrapAvailable();
   const manifest = await sealComponentState(env, ACTIVE_GENERATION, PROFILES.generation, {
     modelManifestSha256: MODEL_MANIFEST_SHA256, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' });
-  const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0model-generation`)}`;
   const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
   const digest = hash(JSON.stringify({ family: 'model-generation-v1', manifest: MODEL_MANIFEST_SHA256 }));
@@ -324,9 +337,7 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
       ${controlGuard(env)}
       { SELECT (COUNT(?g) AS ?count) WHERE { GRAPH ${iri(GRAPHS.revisions)} { ?g a rv:ModelGeneration } } }
       BIND(?count + 1 AS ?number)
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(ACTIVE_GENERATION)} ?p ?o } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?headP ?headO } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      ${bootstrapGuard}
       BIND(?n + 1 AS ?next)
     }`;
   const validations = await validationsFor(env, 'semantic-model-generation-v1',
@@ -338,6 +349,9 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
   const committed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
     ${iri(ACTIVE_GENERATION)} a rv:ModelGeneration }
     GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(ACTIVE_GENERATION)} } }`);
-  if (committed.boolean !== true) throw new PendingActivation('model generation is not recorded');
+  if (committed.boolean !== true) {
+    await assertBootstrapAvailable();
+    throw new PendingActivation('model generation is not recorded');
+  }
   return ACTIVE_GENERATION;
 }

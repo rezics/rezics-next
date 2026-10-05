@@ -15,7 +15,21 @@ import {
   type QuestionPresentationState,
 } from '../../../services/main/src/modules/rating/question-presentation-schema.ts';
 import { outboxEventHandlers } from '../../../services/main/src/modules/rating/outbox-event.ts';
-import { GRAPHS, RV, iri, hash } from '../../../services/main/src/modules/work/activate.ts';
+import {
+  GRAPHS,
+  RV,
+  iri,
+  lit,
+  hash,
+  prepareComponent,
+} from '../../../services/main/src/modules/work/activate.ts';
+import {
+  ACTIVE_GENERATION,
+  ensureModelGeneration,
+} from '../../../services/main/src/modules/semantic/command.ts';
+import { MODEL_COMPONENT, PROFILES } from '../../../services/main/src/modules/semantic/schema.ts';
+import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
+import { term } from '../../../services/main/src/modules/semantic/change.ts';
 import { uiLocales } from '../../../apps/web/i18n/define.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
@@ -237,6 +251,166 @@ test('Rating question presentations preserve meaning across locales, permission 
       ratingContext: globalTarget.context,
       ratingContextRevision: globalTarget.contextRevision,
     });
+    // A populated fixture can retain a different approved generation from this
+    // Main build. Initialization must refuse that head, never retry the guard
+    // requiring an empty ModelComponent until the presentation admission expires.
+    await ensureModelGeneration(s.env);
+    const generationReceipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
+    const savedGeneration = (
+      await s.fuseki.query(`SELECT ?graph ?subject ?p ?o WHERE {
+        VALUES ?graph { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} ${iri(GRAPHS.receipts)} }
+        VALUES ?subject { ${iri(MODEL_COMPONENT)} ${iri(ACTIVE_GENERATION)} ${iri(generationReceipt)} }
+        GRAPH ?graph { ?subject ?p ?o }
+      }`)
+    ).results!.bindings;
+    const olderHash = hash(`Earlier reviewed model ${randomUUID()}`);
+    const olderGeneration = `urn:rezics:model-generation:${olderHash}`;
+    const olderReceipt = `urn:rezics:receipt:${hash(`${olderGeneration}\0model-generation`)}`;
+    const olderOperation = `https://rezics.com/id/${randomUUID()}`;
+    const olderManifest = `urn:rezics:sha256:${prepareComponent(
+      s.env.objectDirectory,
+      olderGeneration,
+      { modelManifestSha256: olderHash, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' },
+      PROFILES.generation,
+    )}`;
+    const removeGeneration = (generation: string, receipt: string) => `
+      DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} ?p ?o } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} ?p ?o } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`;
+    const reviewBody = {
+      profile: 'rating-question-presentation-v1',
+      expectedHead: null,
+      actingSubject: owner.actor,
+      state: {
+        context: globalTarget.context,
+        language: 'zh-Hant',
+        question: '你有多喜歡這個角色？',
+        reviewStatus: 'reviewed',
+        source: 'https://rezics.com/definition/scoped-subject-questions-v1',
+        licence: 'https://creativecommons.org/publicdomain/zero/1.0/',
+      },
+    };
+    const generationKey = randomUUID();
+    const nativeGenerationCommand = s.fuseki.commandWithReceipt.bind(s.fuseki);
+    const olderFixture = `PREFIX rv: <${RV}>
+        ${removeGeneration(ACTIVE_GENERATION, generationReceipt)};
+        INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} a rv:ModelComponent ;
+          rv:generationHead ${iri(olderGeneration)} }
+          GRAPH ${iri(GRAPHS.revisions)} { ${iri(olderGeneration)} a rv:ModelGeneration, rv:RevisionAnchor ;
+            rv:component ${iri(MODEL_COMPONENT)} ; rv:generationNumber 3 ; rv:manifest ${iri(olderManifest)} ;
+            rv:commandModuleVersion ${lit(COMMAND_MODULE_VERSION)} ; rv:entailmentProfile rv:NoEntailment ;
+            rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;
+            rv:operation ${iri(olderOperation)} ; rv:modelRevision ${iri(PROFILES.generation)} ;
+            rv:shapeRevision ${iri(PROFILES.generation)} ; rv:dataEpoch ${lit(s.env.lineage.dataEpoch)} ; rv:sequence ?n }
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(olderReceipt)} a rv:OperationReceipt ;
+            rv:requestDigest ${lit(hash(JSON.stringify({ family: 'model-generation-v1', manifest: olderHash })))} ;
+            rv:operation ${iri(olderOperation)} ; rv:outcome rv:Succeeded ;
+            rv:dataEpoch ${lit(s.env.lineage.dataEpoch)} ; rv:sequence ?n } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ?dataset rv:sequence ?n } }`;
+    let bootstrapCommands = 0;
+    let raceBootstrap = false;
+    s.fuseki.commandWithReceipt = async (envelope) => {
+      if (envelope.update.includes('ModelGenerationRecordedEvent')) {
+        bootstrapCommands++;
+        if (raceBootstrap) {
+          raceBootstrap = false;
+          await s.fuseki.update(olderFixture);
+        }
+      }
+      return nativeGenerationCommand(envelope);
+    };
+    try {
+      await s.fuseki.update(olderFixture);
+      expect(
+        await json(
+          await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody, generationKey),
+          409,
+        ),
+      ).toMatchObject({ code: 'generation_changed' });
+      expect(bootstrapCommands).toBe(0);
+      expect(
+        (
+          await s.accessPool.query(
+            `SELECT state, graph_outcome FROM access.admission
+        WHERE principal_id=$1 AND idempotency_key=$2`,
+            [owner.principalId, generationKey],
+          )
+        ).rows,
+      ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+      expect(
+        await json(
+          await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody, generationKey),
+          409,
+        ),
+      ).toMatchObject({ code: 'generation_changed' });
+      // The initializer also reserves immutable generation and receipt slots.
+      // An orphan in either slot is a refusal, not a transport-pending review.
+      await s.fuseki.update(removeGeneration(olderGeneration, olderReceipt));
+      for (const [graph, subject] of [
+        [GRAPHS.revisions, ACTIVE_GENERATION],
+        [GRAPHS.receipts, generationReceipt],
+      ]) {
+        await s.fuseki.update(`INSERT DATA { GRAPH ${iri(graph!)} {
+          ${iri(subject!)} <${RV}reservedGeneration> true } }`);
+        const occupiedKey = randomUUID();
+        expect(
+          await json(
+            await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody, occupiedKey),
+            409,
+          ),
+        ).toMatchObject({ code: 'generation_changed' });
+        expect(
+          (
+            await s.accessPool.query(
+              `SELECT state, graph_outcome FROM access.admission
+          WHERE principal_id=$1 AND idempotency_key=$2`,
+              [owner.principalId, occupiedKey],
+            )
+          ).rows,
+        ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+        await s.fuseki.update(`DELETE WHERE { GRAPH ${iri(graph!)} { ${iri(subject!)} ?p ?o } }`);
+      }
+      expect(bootstrapCommands).toBe(0);
+      // Another generation can occupy the model after the empty-slot read.
+      // Reconciliation must refuse that winner too, using this review's receipt.
+      raceBootstrap = true;
+      const racedKey = randomUUID();
+      expect(
+        await json(
+          await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody, racedKey),
+          409,
+        ),
+      ).toMatchObject({ code: 'generation_changed' });
+      expect(bootstrapCommands).toBe(1);
+      expect(
+        (
+          await s.accessPool.query(
+            `SELECT state, graph_outcome FROM access.admission
+        WHERE principal_id=$1 AND idempotency_key=$2`,
+            [owner.principalId, racedKey],
+          )
+        ).rows,
+      ).toEqual([{ state: 'sealed', graph_outcome: 'cancelled' }]);
+    } finally {
+      s.fuseki.commandWithReceipt = nativeGenerationCommand;
+      await s.fuseki.update(`${removeGeneration(olderGeneration, olderReceipt)};
+        ${removeGeneration(ACTIVE_GENERATION, generationReceipt)};
+        INSERT DATA { ${savedGeneration
+          .map(
+            (row) => `GRAPH ${iri(row.graph!.value)} {
+          ${iri(row.subject!.value)} <${row.p!.value}> ${term(row.o!)} . }`,
+          )
+          .join('\n')} }`);
+    }
+    // A maintenance-aligned head admits a fresh key; the earlier terminal
+    // refusal stays stable even after its unavailable generation is repaired.
+    expect(
+      await json(
+        await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody, generationKey),
+        409,
+      ),
+    ).toMatchObject({ code: 'generation_changed' });
+    await json(await call(owner, 'POST', '/v1/rating-question-presentations', reviewBody), 201);
     await json(
       await call(owner, 'POST', '/v1/rating-question-presentations', {
         profile: 'rating-question-presentation-v1',
@@ -484,10 +658,12 @@ test('Rating question presentations preserve meaning across locales, permission 
     ).toMatchObject({ displayQuestion: { language: 'eo', fallback: null } });
     const french = writes.get('fr')!;
     // Each revision keeps its own key. A reconciling loser is retried until it is terminally stale.
-    const frenchRace = ['Aimez-vous cette œuvre ?', 'Cette œuvre vous a-t-elle plu ?'].map((text) => {
-      const key = randomUUID();
-      return () => post(state('fr', text), owner, french, key);
-    });
+    const frenchRace = ['Aimez-vous cette œuvre ?', 'Cette œuvre vous a-t-elle plu ?'].map(
+      (text) => {
+        const key = randomUUID();
+        return () => post(state('fr', text), owner, french, key);
+      },
+    );
     const race = await assertCommandRace(
       await Promise.all(frenchRace.map((send) => send())),
       200,
@@ -565,10 +741,8 @@ test('Rating question presentations preserve meaning across locales, permission 
       const key = randomUUID();
       return () => post(state('sr-Cyrl', text), owner, undefined, key);
     });
-    await assertCommandRace(
-      await Promise.all(creationRace.map((send) => send())),
-      201,
-      (index) => creationRace[index]!(),
+    await assertCommandRace(await Promise.all(creationRace.map((send) => send())), 201, (index) =>
+      creationRace[index]!(),
     );
     const sparse = await json<Context>(
       await call(owner, 'POST', '/v1/global-rating-contexts', {

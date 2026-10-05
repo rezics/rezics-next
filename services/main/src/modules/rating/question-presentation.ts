@@ -1,6 +1,7 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { term } from '../semantic/change.ts';
 import {
+  ACTIVE_GENERATION,
   assertSemanticDispatchable,
   checkedSemanticTerminal,
   ensureModelGeneration,
@@ -15,7 +16,7 @@ import {
   type SemanticAdmission,
   type SemanticTerminal,
 } from '../semantic/command.ts';
-import { modelGenerationHeadGuard } from '../semantic/generation-guard.ts';
+import { ModelGenerationChanged, modelGenerationHeadGuard } from '../semantic/generation-guard.ts';
 import { checkedNativeIri } from '../semantic/schema.ts';
 import {
   DATASET,
@@ -328,7 +329,18 @@ export async function changeQuestionPresentation(
   const stale = `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
     ${iri(intent.target ?? state.context)} rv:questionPresentationHead ${iri(intent.expectedHead ?? authored.revision)} } }`;
   if (current && current.revision !== intent.expectedHead) return reject('stale-head', stale);
-  const generation = await ensureModelGeneration(env);
+  let generation: string;
+  try {
+    generation = await ensureModelGeneration(env);
+  } catch (error) {
+    if (!(error instanceof ModelGenerationChanged)) throw error;
+    // A failed bootstrap precedes the presentation write, so its generation
+    // refusal must still terminate this presentation's own admission receipt.
+    return reject(
+      'generation-changed',
+      `FILTER NOT EXISTS { ${modelGenerationHeadGuard(ACTIVE_GENERATION)} }`,
+    );
+  }
   const component = intent.target ?? `${ID}${Bun.randomUUIDv7()}`,
     revision = `${ID}${Bun.randomUUIDv7()}`,
     operation = `${ID}${Bun.randomUUIDv7()}`;
