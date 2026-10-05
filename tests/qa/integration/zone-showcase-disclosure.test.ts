@@ -102,8 +102,13 @@ test('public presentation omits future, ended and unreadable Work slides while t
   expect(await json(await f.editor.read(`${f.path}/configuration`))).toMatchObject({
     configuration: { presentation: { slides } },
   });
-  await json(await reader.read(`${f.path}/showcase-editor`), 403);
-  await json(await reader.read(`${f.path}/configuration`), 403);
+  await reader.grant(`semantic:read:${f.zone}`, 'semantic.read');
+  for (const endpoint of ['showcase-editor', 'configuration']) {
+    const hidden = await json(await reader.read(`${f.path}/${endpoint}`), 404);
+    const missingPath = `/v1/zones/${randomUUID()}/${endpoint}`;
+    expect(await json(await reader.read(missingPath), 404)).toEqual(hidden);
+    expect(await json(await f.editor.read(missingPath), 404)).toEqual(hidden);
+  }
   await reader.grant(`work:read:${privateWork.work}`, 'work.read');
   const memberBody = await json<{ presentation: { slides: ZoneSlide[] } }>(await reader.read(`${f.path}/presentation`));
   expect(memberBody.presentation.slides.map(slide => slide.id)).toEqual(['private', 'public', 'link']);

@@ -48,6 +48,7 @@ import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
 import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
 import { AdmissionDenied } from '../modules/access/admission.ts';
+import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
 
@@ -208,10 +209,18 @@ async function navigation(fuseki: FusekiClient, zone: string): Promise<string | 
 
 /** Raw configuration includes unreleased slides and unreadable Work references. */
 async function requireZoneEditor(work: MainWorkDependencies, request: Request, zone: string, actingSubject: string) {
-  const principal = await work.account.verify(request, ['zone:edit']);
-  if (!work.access.assertAuthority) throw new AdmissionDenied('Zone edit authority is unavailable');
-  await work.access.assertAuthority({ principal, actingSubject, scope: `zone:edit:${zone}`, action: 'zone.edit' });
-  return principal;
+  try {
+    const principal = await work.account.verify(request, ['zone:edit']);
+    if (!work.access.assertAuthority) throw new AdmissionDenied('Zone edit authority is unavailable');
+    await work.access.assertAuthority({ principal, actingSubject, scope: `zone:edit:${zone}`, action: 'zone.edit' });
+    return principal;
+  } catch (error) {
+    // Editor reads must not distinguish hidden configuration from a missing Zone.
+    if (error instanceof AdmissionDenied || error instanceof AccountAssertionInsufficientScope) {
+      throw new ZoneUnavailable('Zone is unavailable');
+    }
+    throw error;
+  }
 }
 
 async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, request: Request,

@@ -170,10 +170,17 @@ test('G823: HTTP Zone names retain writer language through rename, retry, fencin
         configuration: { budget: { timeMs: 500, rows: 20 }, advanced: expect.any(String) },
         advancedBase64: Buffer.from('{"retained":true}').toString('base64'),
       });
-      expect(
-        (await f.call('GET', `${config}?${actorQuery}`, undefined, randomUUID(), f.account.tokenB))
-          .status,
-      ).toBe(404);
+      for (const endpoint of ['configuration', 'showcase-editor']) {
+        const hidden = await f.json(
+          await f.call('GET', `${root}/${endpoint}?${actorQuery}`, undefined, randomUUID(), f.account.tokenB),
+          404,
+        );
+        const missingRoot = `/v1/zones/${shortId(nativeId())}`;
+        expect(await f.json(await f.call('GET', `${missingRoot}/${endpoint}?${actorQuery}`), 404))
+          .toEqual(hidden);
+        expect(await f.json(await f.call('GET', `${missingRoot}/${endpoint}?${actorQuery}`,
+          undefined, randomUUID(), f.account.tokenB), 404)).toEqual(hidden);
+      }
       expect(
         (
           await f.call(
