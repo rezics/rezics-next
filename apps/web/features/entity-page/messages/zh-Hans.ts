@@ -32,6 +32,11 @@ export default {
   notFoundBody: '没有资源使用这个地址，或你无法查看。',
   restricted: '私有', restrictedHelp: '只有获得授权的人可以查看。',
 
+  holdsIn: '适用于',
+  projectionFacts: '此处成立的内容',
+  factsHere: '专门针对此处的陈述',
+  factsWider: '针对包含此处的更大范围的陈述',
+  factsEverywhere: '处处成立',
   statements: '陈述', statementsUnavailable: '无法加载陈述。',
   noStatements: '暂无陈述', noStatementsBody: '目前还没有被接受的陈述。',
   statementsList: '陈述',

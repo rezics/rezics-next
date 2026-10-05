@@ -32,6 +32,11 @@ export default {
   notFoundBody: 'このアドレスのリソースがないか、あなたには表示されません。',
   restricted: '非公開', restrictedHelp: 'アクセスを許可された人だけが見られます。',
 
+  holdsIn: '成り立つ範囲:',
+  projectionFacts: 'ここで成り立つこと',
+  factsHere: 'この場所そのものについての記述',
+  factsWider: 'これを含むより広い範囲についての記述',
+  factsEverywhere: 'どこでも成り立つ',
   statements: 'ステートメント', statementsUnavailable: 'ステートメントを読み込めませんでした。',
   noStatements: 'ステートメントはまだありません', noStatementsBody: '承認された内容はまだありません。',
   statementsList: 'ステートメント',

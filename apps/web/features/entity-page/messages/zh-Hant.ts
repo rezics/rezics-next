@@ -32,6 +32,11 @@ export default {
   notFoundBody: '沒有資源使用這個網址，或你無法查看。',
   restricted: '私人', restrictedHelp: '只有獲授權的人可以查看。',
 
+  holdsIn: '適用於',
+  projectionFacts: '此處成立的內容',
+  factsHere: '專門針對此處的陳述',
+  factsWider: '針對包含此處的更大範圍的陳述',
+  factsEverywhere: '處處成立',
   statements: '陳述', statementsUnavailable: '無法載入陳述。',
   noStatements: '尚無陳述', noStatementsBody: '目前還沒有被接受的陳述。',
   statementsList: '陳述',

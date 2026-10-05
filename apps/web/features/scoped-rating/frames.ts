@@ -52,8 +52,9 @@ function kindOf(type: AvailableSummary['type']): FrameKind {
  */
 export function frameChips(summary: ResourceSummary | undefined, locale: UiLocale): FrameChip[] {
   if (summary?.status !== 'available' || !summary.parts) return [];
+  // An episode is named by its label but addressed as Main addresses it, after its Work, so the link needs no redirect.
   return summary.parts.frames.map(part => ({ iri: part.reference, kind: kindOf(part.type), name: part.name,
-    href: canonicalHref(part.address as CanonicalAddress, locale, part.name.value) }));
+    href: canonicalHref(part.address as CanonicalAddress, locale, part.type === 'occurrence' ? undefined : part.name.value) }));
 }
 
 /** The subject of a projection summary, or null where the summary says nothing (unavailable, or not a projection). */

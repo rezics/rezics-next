@@ -21,21 +21,26 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
   return page.sections.find(section => section.id === id);
 }
 
-/** A page of accepted statements about the resource, in the reader's Context. */
-export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string):
-  Promise<Loaded<StatementPage>> {
+/**
+ * A page of accepted statements about the resource, in the reader's Context. `frame` restricts it to what holds within those
+ * coordinates (a continuity the reader chose): Main decides what is covered, the browser never filters.
+ */
+export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string,
+  frame?: readonly string[]): Promise<Loaded<StatementPage>> {
   const { main, actingSubject } = await reader();
-  return settle(followHref<StatementPage>(main, section.href, { actingSubject, cursor, position }), cursor);
+  return settle(followHref<StatementPage>(main, section.href,
+    { actingSubject, cursor, position, ...frame?.length ? { frame: [...frame] } : {} }), cursor);
 }
 
 /**
  * A page of relation occurrences where the resource takes any role. Relations are public data: an anonymous
  * reader, or one signed in without an acting Agent, reads them as anyone does.
  */
-export async function readRelations(section: EntitySection, cursor: string | undefined, position?: string):
-  Promise<Loaded<RelationsPage>> {
+export async function readRelations(section: EntitySection, cursor: string | undefined, position?: string,
+  frame?: readonly string[]): Promise<Loaded<RelationsPage>> {
   const { main, actingSubject } = await reader();
-  return settle(followHref<RelationsPage>(main, section.href, { actingSubject, after: cursor, limit: 20, position }), cursor);
+  return settle(followHref<RelationsPage>(main, section.href,
+    { actingSubject, after: cursor, limit: 20, position, ...frame?.length ? { frame: [...frame] } : {} }), cursor);
 }
 
 /** Reviewed replies placed in public Realms about the resource, newest first. */

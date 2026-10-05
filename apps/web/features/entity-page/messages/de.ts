@@ -32,6 +32,11 @@ export default {
   notFoundBody: 'Keine Ressource hat diese Adresse, oder sie ist für dich nicht sichtbar.',
   restricted: 'Privat', restrictedHelp: 'Nur Personen mit Zugriff können das sehen.',
 
+  holdsIn: 'Gilt in',
+  projectionFacts: 'Was hier gilt',
+  factsHere: 'Für genau diesen Ort festgehalten',
+  factsWider: 'Für einen weiteren Rahmen festgehalten, der ihn einschließt',
+  factsEverywhere: 'Gilt überall',
   statements: 'Aussagen', statementsUnavailable: 'Aussagen konnten nicht geladen werden.',
   noStatements: 'Noch keine Aussagen', noStatementsBody: 'Dazu wurde noch nichts angenommen.',
   statementsList: 'Aussagen',

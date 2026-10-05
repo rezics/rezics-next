@@ -1,3 +1,5 @@
+'use client';
+
 import { initials } from '@rezics/ui/avatar-initials';
 import { badgeVariants } from '@rezics/ui/badge';
 import { LocalizedText } from '@rezics/ui/localized-text';
@@ -31,7 +33,7 @@ const icons: Record<FrameKind, typeof BookOpenIcon> = {
 
 /** The places a rating is in, as chips in each place's own language, linked to its page. */
 export function FrameChips({ chips, label, size = 'md' }: { chips: readonly FrameChip[]; label: string; size?: 'md' | 'lg' }) {
-  return <ul aria-label={label} className="flex flex-wrap gap-1.5">
+  return <ul aria-label={label} className="flex min-w-0 flex-wrap gap-1.5">
     {chips.map(chip => {
       const Icon = icons[chip.kind];
       return <li key={chip.iri} className="min-w-0 max-w-full">
@@ -47,9 +49,10 @@ export function FrameChips({ chips, label, size = 'md' }: { chips: readonly Fram
  * linked to its page. The chips come from the summary's structured parts, so no label is joined from translated words.
  * A place the reader has not reached yet stays hidden whole: its name could give the story away.
  */
-export function ProjectionHeader({ summary, locale, messages, level = 3, className }: {
-  summary: ResourceSummary | null | undefined; locale: UiLocale; messages: ScopedRatingMessages; level?: 2 | 3 | 4;
-  className?: string;
+export function ProjectionHeader({ summary, locale, messages, level = 3, page = false, className }: {
+  summary: ResourceSummary | null | undefined; locale: UiLocale; messages: ScopedRatingMessages; level?: 1 | 2 | 3 | 4;
+  /** The heading of a page of its own: larger, with the rule a resource page's header has. */
+  page?: boolean; className?: string;
 }) {
   const t = translate(messages, locale);
   const subject = subjectOf(summary ?? undefined, locale);
@@ -64,13 +67,15 @@ export function ProjectionHeader({ summary, locale, messages, level = 3, classNa
   }
   const Heading = `h${level}` as const;
   const chips = frameChips(summary ?? undefined, locale);
-  return <header data-projection-header className={cn('flex min-w-0 items-start gap-3', className)}>
-    <SubjectAvatar avatar={subject.avatar} name={subject.name.value} />
+  return <header data-projection-header className={cn('flex min-w-0 items-start gap-3',
+    page && 'items-center gap-4 border-border/60 border-b pb-6', className)}>
+    <SubjectAvatar avatar={subject.avatar} name={subject.name.value} className={page ? 'size-16 sm:size-20' : undefined} />
     <div className="grid min-w-0 gap-1.5">
-      <Heading className="break-words font-semibold font-work-title text-lg leading-tight tracking-tight">
+      <Heading className={cn('break-words font-semibold font-work-title leading-tight tracking-tight',
+        page ? 'text-balance text-3xl sm:text-4xl' : 'text-lg')}>
         <Link href={subject.href} className="rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
           <LocalizedText text={subject.name} as="span" /></Link></Heading>
-      <FrameChips chips={chips} label={t.within} />
+      <FrameChips chips={chips} label={t.within} size={page ? 'lg' : 'md'} />
     </div>
   </header>;
 }

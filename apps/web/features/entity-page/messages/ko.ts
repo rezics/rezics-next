@@ -32,6 +32,11 @@ export default {
   notFoundBody: '이 주소의 자원이 없거나 볼 수 없습니다.',
   restricted: '비공개', restrictedHelp: '접근 권한을 받은 사람만 볼 수 있습니다.',
 
+  holdsIn: '적용 범위:',
+  projectionFacts: '여기서 성립하는 것',
+  factsHere: '이 장소에 대해 직접 기록된 내용',
+  factsWider: '이곳을 포함하는 더 넓은 범위에 대한 내용',
+  factsEverywhere: '어디에서나 성립',
   statements: '진술', statementsUnavailable: '진술을 불러오지 못했습니다.',
   noStatements: '아직 진술이 없습니다', noStatementsBody: '아직 승인된 내용이 없습니다.',
   statementsList: '진술',

@@ -42,6 +42,11 @@ const en = {
   notFoundBody: 'No resource has this address, or it is not visible to you.',
   restricted: 'Private', restrictedHelp: 'Only people granted access can see this.',
 
+  holdsIn: 'Holds in',
+  projectionFacts: 'What holds here',
+  factsHere: 'Stated for this exact place',
+  factsWider: 'Stated for a wider setting that includes it',
+  factsEverywhere: 'Holds everywhere',
   statements: 'Statements', statementsUnavailable: 'Statements could not be loaded.',
   noStatements: 'No statements yet', noStatementsBody: 'Nothing has been accepted about this yet.',
   statementsList: 'Statements',

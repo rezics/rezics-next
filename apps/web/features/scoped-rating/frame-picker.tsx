@@ -12,6 +12,8 @@ import { translate, type Translation } from './format.ts';
 import type { ScopedRatingMessages } from './messages.ts';
 import type { FrameOption, FrameSource } from './sources.ts';
 
+const sourceKey = (source: FrameSource) => source.id ?? source.dimension;
+
 function kindName(dimension: FrameDimension, t: Translation): string {
   switch (dimension) {
     case 'position': return t.dimensionPosition;
@@ -43,12 +45,12 @@ export function FramePicker({ sources, value, onChange, onContinue, busy = false
       className="truncate">{item.label}</bdi>} />;
   return <div data-frame-picker className="grid gap-4">
     {offered.length === 1 ? picker(offered[0]!)
-      : <Tabs defaultValue={offered[0]?.dimension} className="gap-3">
+      : <Tabs defaultValue={offered[0] ? sourceKey(offered[0]) : undefined} className="gap-3">
         <TabsList variant="underline" aria-label={t.places} className="-mt-1 max-w-full justify-start overflow-x-auto [scrollbar-width:none]">
-          {offered.map(source => <TabsTrigger key={source.dimension} value={source.dimension} className="grow-0 px-3">
+          {offered.map(source => <TabsTrigger key={sourceKey(source)} value={sourceKey(source)} className="grow-0 px-3">
             {source.label ?? kindName(source.dimension, t)}</TabsTrigger>)}
         </TabsList>
-        {offered.map(source => <TabsContent key={source.dimension} value={source.dimension}>{picker(source)}</TabsContent>)}
+        {offered.map(source => <TabsContent key={sourceKey(source)} value={sourceKey(source)}>{picker(source)}</TabsContent>)}
       </Tabs>}
 
     <div className="grid gap-2">

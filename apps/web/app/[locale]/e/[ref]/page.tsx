@@ -8,6 +8,7 @@ import { entityMetadata } from '../../../../features/entity-page/metadata.ts';
 import { readEntityProjection } from '../../../../features/entity-page/read.ts';
 import { parseEntityCursors, parseEntityRef } from '../../../../features/entity-page/route.ts';
 import { pageUrl, representationPath } from '../../../../features/seo/address.ts';
+import { parseContinuity } from '../../../../features/wiki/continuity.ts';
 import { mainPosition, parsePosition } from '../../../../features/wiki/position.ts';
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
@@ -38,5 +39,7 @@ export default async function EntityRoute({ params, searchParams }: Props) {
     const address = 'address' in summary ? summary.address as AddressTarget : id;
     permanentRedirect(localizedPath(resourceHref('/w/', address), locale));
   }
-  return <EntityPage resource={id} locale={locale} cursors={cursors} position={position} ratingScope={ratingScope} />;
+  // The continuity is off unless the address carries one: nothing is hidden until someone asks.
+  return <EntityPage resource={id} locale={locale} cursors={cursors} position={position} ratingScope={ratingScope}
+    continuity={parseContinuity(query)} continuitySwitch />;
 }

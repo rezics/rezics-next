@@ -1,5 +1,6 @@
 import type { CanonicalAddress } from '@rezics/model/address';
 import { buttonVariants } from '@rezics/ui/button';
+import { LocalizedText } from '@rezics/ui/localized-text';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -49,7 +50,15 @@ export interface SectionProps {
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
 /** A section with nothing to list says so quietly; the heading already names what is missing. */
-function Quiet({ title, body, children }: { title: string; body?: string; children?: ReactNode }) {
+export function Quiet({
+  title,
+  body,
+  children,
+}: {
+  title: string;
+  body?: string;
+  children?: ReactNode;
+}) {
   return (
     <div className="grid justify-items-start gap-2 rounded-2xl bg-muted/60 px-5 py-4">
       <p className="font-medium">{title}</p>
@@ -77,9 +86,9 @@ export const summaryHref =
   };
 
 /** The last word of a predicate's IRI: what Main recorded, since the relation lexicon's labels are another owner's. */
-const localName = (iri: string) => iri.split(/[#/]/).filter(Boolean).at(-1) ?? iri;
+export const localName = (iri: string) => iri.split(/[#/]/).filter(Boolean).at(-1) ?? iri;
 
-function Pages({
+export function Pages({
   cursor,
   next,
   section,
@@ -111,7 +120,7 @@ function Pages({
   );
 }
 
-function Value({
+export function Value({
   item,
   names,
   hrefFor,
@@ -123,12 +132,25 @@ function Value({
   t: Copy;
 }) {
   if (item.kind === 'component-property') {
-    // An owner's typed value: text keeps its own language and direction; anything else is shown as Main recorded it.
-    const { lexical, language, direction } = item.value as {
+    // An owner's typed value: text keeps its own language and direction, a resource is named and linked like any other
+    // value; anything else is shown as Main recorded it.
+    const { lexical, language, direction, kind, ref } = item.value as {
       lexical?: unknown;
       language?: unknown;
       direction?: unknown;
+      kind?: unknown;
+      ref?: unknown;
     };
+    if (kind === 'resource' && typeof ref === 'string' && names.has(ref)) {
+      return (
+        <SummaryLink
+          summary={names.get(ref)}
+          unavailable={t.unavailable}
+          unnamed={t.unnamed}
+          hrefFor={summaryHref(hrefFor)}
+        />
+      );
+    }
     if (typeof lexical === 'string') {
       return (
         <span
@@ -161,6 +183,29 @@ function Value({
       unnamed={t.unnamed}
       hrefFor={summaryHref(hrefFor)}
     />
+  );
+}
+
+/**
+ * Where a statement holds, when it says: the continuities and Works it is recorded for, each by name, so a page read with
+ * every continuity shows which one each claim belongs to. A place the reader has not reached is never named.
+ */
+export function HoldsIn({ item, names, t }: { item: StatementItem; names: Names; t: Copy }) {
+  const where = item.qualifiers.applicability.flatMap((iri) => {
+    const summary = names.get(iri);
+    return summary?.status === 'available' ? [summary] : [];
+  });
+  if (!where.length) return null;
+  return (
+    <span data-holds-in className="ms-2 text-muted-foreground text-sm">
+      {t.holdsIn}{' '}
+      {where.map((summary, index) => (
+        <span key={summary.reference}>
+          {index ? ', ' : ''}
+          <LocalizedText text={summary.name} as="span" />
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -213,6 +258,7 @@ export function StatementsView({
                 {group.items.map((item, index) => (
                   <li key={`${item.revision}-${index}`} className="min-w-0">
                     <Value item={item} names={names} hrefFor={hrefFor} t={t} />
+                    <HoldsIn item={item} names={names} t={t} />
                   </li>
                 ))}
               </ul>

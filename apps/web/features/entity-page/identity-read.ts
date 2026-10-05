@@ -23,7 +23,12 @@ export type IdentityRatingScope = { scope: 'global' } | { scope: 'realm'; realm:
 
 /** Bounded to one incidence page per resource; every remaining page has a continuation. */
 export const readIdentityRelations = cache(
-  async (resource: string, cursor?: string, position?: string): Promise<Loaded<RelationsPage>> => {
+  async (
+    resource: string,
+    cursor?: string,
+    position?: string,
+    frame?: string,
+  ): Promise<Loaded<RelationsPage>> => {
     const { main, actingSubject } = await reader();
     const id = idOf(resource);
     if (!id) return { ok: false, failure: 'invalid' };
@@ -35,6 +40,7 @@ export const readIdentityRelations = cache(
             after: cursor,
             limit: 20,
             position,
+            ...(frame ? { frame: [frame] } : {}),
           },
         }),
       cursor,
@@ -102,10 +108,11 @@ export async function readIdentitySections(
   cursors: EntityCursors,
   scope: IdentityRatingScope,
   position?: string,
+  frame?: string,
 ): Promise<Loaded<IdentityData>> {
   if (page.summary.status !== 'available') return { ok: false, failure: 'missing' };
   const self = page.summary;
-  const own = await readIdentityRelations(self.reference, cursors.relations, position);
+  const own = await readIdentityRelations(self.reference, cursors.relations, position, frame);
   if (!own.ok) return own;
   const definitions = await readIdentityDefinitions();
   if (!definitions.ok) return definitions;
@@ -150,7 +157,7 @@ export async function readIdentitySections(
       // Require the hub's own position-aware projection before following its incidence list.
       const hubPage = await readEntityProjection(idOf(hubSummary.reference)!, position);
       family = hubPage.ok
-        ? await readIdentityRelations(hubSummary.reference, cursors.family, position)
+        ? await readIdentityRelations(hubSummary.reference, cursors.family, position, frame)
         : hubPage;
     }
     if (!family.ok) return family;

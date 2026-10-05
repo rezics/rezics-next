@@ -32,6 +32,11 @@ export default {
   notFoundBody: 'Ningún recurso tiene esta dirección, o no es visible para ti.',
   restricted: 'Privado', restrictedHelp: 'Solo pueden verlo las personas con acceso.',
 
+  holdsIn: 'Vale en',
+  projectionFacts: 'Lo que vale aquí',
+  factsHere: 'Afirmado para este lugar exacto',
+  factsWider: 'Afirmado para un contexto más amplio que lo incluye',
+  factsEverywhere: 'Vale en todas partes',
   statements: 'Afirmaciones', statementsUnavailable: 'No se pudieron cargar las afirmaciones.',
   noStatements: 'Aún no hay afirmaciones', noStatementsBody: 'Todavía no se ha aceptado nada sobre esto.',
   statementsList: 'Afirmaciones',

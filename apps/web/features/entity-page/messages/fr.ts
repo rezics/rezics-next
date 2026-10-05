@@ -32,6 +32,11 @@ export default {
   notFoundBody: 'Aucune ressource n’a cette adresse, ou elle ne vous est pas visible.',
   restricted: 'Privé', restrictedHelp: 'Seules les personnes autorisées peuvent le voir.',
 
+  holdsIn: 'Valable dans',
+  projectionFacts: 'Ce qui vaut ici',
+  factsHere: 'Établi pour cet endroit précis',
+  factsWider: 'Établi pour un cadre plus large qui l’inclut',
+  factsEverywhere: 'Vaut partout',
   statements: 'Déclarations', statementsUnavailable: 'Les déclarations n’ont pas pu être chargées.',
   noStatements: 'Aucune déclaration', noStatementsBody: 'Rien n’a encore été accepté à ce sujet.',
   statementsList: 'Déclarations',
