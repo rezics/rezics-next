@@ -33,8 +33,9 @@ const assetState = media.table('asset_state', {
   actor: text('actor').notNull(),
   authorityEpoch: text('authority_epoch').notNull(),
   operationId: text('operation_id').notNull(),
-  dataEpoch: uuid('data_epoch').notNull(),
-  sequence: bigint('sequence', { mode: 'bigint' }).notNull(),
+  // Content migration 791: positions are read through the receipt by operation; these copies stay null.
+  dataEpoch: uuid('data_epoch'),
+  sequence: bigint('sequence', { mode: 'bigint' }),
   createdAt: createdAt(),
 });
 
@@ -139,8 +140,9 @@ const selectionRevision = media.table('selection_revision', {
   actor: text('actor').notNull(),
   authorityEpoch: text('authority_epoch').notNull(),
   operationId: text('operation_id').notNull(),
-  dataEpoch: uuid('data_epoch').notNull(),
-  sequence: bigint('sequence', { mode: 'bigint' }).notNull(),
+  // Content migration 791: positions are read through the receipt by operation; these copies stay null.
+  dataEpoch: uuid('data_epoch'),
+  sequence: bigint('sequence', { mode: 'bigint' }),
   createdAt: createdAt(),
 });
 
