@@ -30,7 +30,7 @@ interface Work { work: string; mainVersion: string; mainRevision: string; workRe
 interface Written { component: string; revision: string }
 interface Occurrence { occurrence: string; revision: string }
 export interface ScopedSubjectManifest {
-  profile: 'scoped-subjects-seed-v1';
+  profile: 'scoped-subjects-seed-v2';
   questions: GlobalQuestions;
   works: Record<string, Work>;
   subjects: Record<string, string>;
@@ -46,7 +46,7 @@ export interface ScopedSubjectManifest {
 }
 
 export function scopedSubjectId(namespace: string, name: string): string {
-  const hex = createHash('sha256').update(`scoped-subjects-v1:${namespace}:${name}`).digest('hex').slice(0, 32);
+  const hex = createHash('sha256').update(`scoped-subjects-v2:${namespace}:${name}`).digest('hex').slice(0, 32);
   return `https://rezics.com/id/${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
 }
 
@@ -58,7 +58,9 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   if (new Set(port.raters.map(rater => rater.actor)).size !== port.raters.length)
     throw new Error('Scoped subject raters must use distinct Agents and principals');
   const { api, actor, namespace } = port;
-  const key = (name: string) => `${namespace}:scoped:v1:${name}`;
+  // Earlier seeds pinned different predicate meanings and group coordinates.
+  // Keep their receipts immutable; this version is independently replayable.
+  const key = (name: string) => `${namespace}:scoped:v2:${name}`;
   const authorize = (scope: string, action: string, on = actor) => port.authorize(scope, action, on);
   for (const [scope, action] of [
     ['semantic:create:root', 'semantic.change'], ['work:create:root', 'work.create'],
@@ -74,7 +76,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     }
     return api.post<T>(path, body, requestKey);
   } }, actor, namespace);
-  const result: ScopedSubjectManifest = { profile: 'scoped-subjects-seed-v1', questions,
+  const result: ScopedSubjectManifest = { profile: 'scoped-subjects-seed-v2', questions,
     works: {}, subjects: {}, positions: {}, projections: {}, relations: {}, statements: {}, definitions: {},
     release: '', authority: '', variantKind: '', itemQuestion: '' };
   const primaryWorks = new Map<string, string>();
@@ -211,7 +213,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
       await api.post('/v1/lexicon/presentations', { profile: 'definition-presentation-v1', expectedHead: null, actingSubject: actor,
         state: { definition: definition.component, meaningRevision: definition.revision, fromRole, toRole, language,
           noun, heading: noun, plurals: { other: noun }, grammaticalForms: [],
-          source: 'https://rezics.com/definition/scoped-subjects-seed-v1',
+          source: 'https://rezics.com/definition/scoped-subjects-seed-v2',
           licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'reviewed' } }, key(`label:${name}:${language}`));
     }
   };
