@@ -51,8 +51,7 @@
       "@type": "@id"
     },
     "rv:metadataKind": {
-      "@id": "https://rezics.com/vocab/metadataKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/metadataKind"
     },
     "rv:metadataState": {
       "@id": "https://rezics.com/vocab/metadataState"

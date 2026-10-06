@@ -59,15 +59,13 @@
       "@type": "@id"
     },
     "rv:realizationKind": {
-      "@id": "https://rezics.com/vocab/realizationKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/realizationKind"
     },
     "rv:realizationState": {
       "@id": "https://rezics.com/vocab/realizationState"
     },
     "rv:realizationStatus": {
-      "@id": "https://rezics.com/vocab/realizationStatus",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/realizationStatus"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",
@@ -81,8 +79,7 @@
       "@id": "https://rezics.com/vocab/sourceRevision"
     },
     "rv:sourceStatus": {
-      "@id": "https://rezics.com/vocab/sourceStatus",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/sourceStatus"
     },
     "rv:sourceWork": {
       "@id": "https://rezics.com/vocab/sourceWork",
@@ -93,8 +90,7 @@
       "@type": "@id"
     },
     "rv:verification": {
-      "@id": "https://rezics.com/vocab/verification",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/verification"
     },
     "rv:work": {
       "@id": "https://rezics.com/vocab/work",

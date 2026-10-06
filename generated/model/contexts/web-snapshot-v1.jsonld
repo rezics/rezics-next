@@ -21,8 +21,7 @@
       "@type": "@id"
     },
     "rv:acquisition": {
-      "@id": "https://rezics.com/vocab/acquisition",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/acquisition"
     },
     "rv:byteDigest": {
       "@id": "https://rezics.com/vocab/byteDigest"
@@ -32,8 +31,7 @@
       "@type": "xsd:integer"
     },
     "rv:coverageComplete": {
-      "@id": "https://rezics.com/vocab/coverageComplete",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/coverageComplete"
     },
     "rv:coverageScope": {
       "@id": "https://rezics.com/vocab/coverageScope"

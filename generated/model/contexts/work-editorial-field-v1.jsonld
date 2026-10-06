@@ -33,8 +33,7 @@
       "@type": "xsd:integer"
     },
     "rv:controlField": {
-      "@id": "https://rezics.com/vocab/controlField",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/controlField"
     },
     "rv:controlIntent": {
       "@id": "https://rezics.com/vocab/controlIntent"

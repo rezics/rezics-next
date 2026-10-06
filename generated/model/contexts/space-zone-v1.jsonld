@@ -36,8 +36,7 @@
       "@type": "@id"
     },
     "rv:listing": {
-      "@id": "https://rezics.com/vocab/listing",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/listing"
     },
     "rv:owner": {
       "@id": "https://rezics.com/vocab/owner",

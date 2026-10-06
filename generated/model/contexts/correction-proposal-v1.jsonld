@@ -121,8 +121,7 @@
       "@type": "xsd:integer"
     },
     "rv:protectedSlot": {
-      "@id": "https://rezics.com/vocab/protectedSlot",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/protectedSlot"
     },
     "rv:ruleRevision": {
       "@id": "https://rezics.com/vocab/ruleRevision",

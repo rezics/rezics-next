@@ -32,8 +32,7 @@
       "@id": "https://rezics.com/vocab/normalizedSlug"
     },
     "rv:routeNamespace": {
-      "@id": "https://rezics.com/vocab/routeNamespace",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/routeNamespace"
     },
     "rv:routeRevision": {
       "@id": "https://rezics.com/vocab/routeRevision",

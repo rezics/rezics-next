@@ -48,8 +48,7 @@
       "@type": "@id"
     },
     "schema:roleName": {
-      "@id": "https://schema.org/roleName",
-      "@type": "@id"
+      "@id": "https://schema.org/roleName"
     }
   }
 }

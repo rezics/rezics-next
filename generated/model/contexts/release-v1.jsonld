@@ -36,8 +36,7 @@
       "@type": "@id"
     },
     "rv:coverageComplete": {
-      "@id": "https://rezics.com/vocab/coverageComplete",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/coverageComplete"
     },
     "rv:coverageScope": {
       "@id": "https://rezics.com/vocab/coverageScope"
@@ -50,8 +49,7 @@
       "@type": "@id"
     },
     "rv:isTranslation": {
-      "@id": "https://rezics.com/vocab/isTranslation",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/isTranslation"
     },
     "rv:manifest": {
       "@id": "https://rezics.com/vocab/manifest",
@@ -76,15 +74,13 @@
       "@type": "@id"
     },
     "rv:releaseKind": {
-      "@id": "https://rezics.com/vocab/releaseKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/releaseKind"
     },
     "rv:releaseState": {
       "@id": "https://rezics.com/vocab/releaseState"
     },
     "rv:releaseStatus": {
-      "@id": "https://rezics.com/vocab/releaseStatus",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/releaseStatus"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

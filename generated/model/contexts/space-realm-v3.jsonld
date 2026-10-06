@@ -59,8 +59,7 @@
       "@type": "@id"
     },
     "rv:reviewMode": {
-      "@id": "https://rezics.com/vocab/reviewMode",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/reviewMode"
     },
     "rv:reviewPolicy": {
       "@id": "https://rezics.com/vocab/reviewPolicy",
@@ -79,8 +78,7 @@
       "@type": "@id"
     },
     "rv:visibility": {
-      "@id": "https://rezics.com/vocab/visibility",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/visibility"
     }
   }
 }

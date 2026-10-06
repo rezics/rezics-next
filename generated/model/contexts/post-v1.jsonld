@@ -42,6 +42,10 @@
       "@id": "https://rezics.com/vocab/publisher",
       "@type": "@id"
     },
+    "rv:spoiler": {
+      "@id": "https://rezics.com/vocab/spoiler",
+      "@type": "http://www.w3.org/2001/XMLSchema#boolean"
+    },
     "schema:isPartOf": {
       "@id": "https://schema.org/isPartOf"
     }

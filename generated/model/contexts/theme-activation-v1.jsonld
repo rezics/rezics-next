@@ -76,8 +76,7 @@
       "@type": "@id"
     },
     "rv:runtime": {
-      "@id": "https://rezics.com/vocab/runtime",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/runtime"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

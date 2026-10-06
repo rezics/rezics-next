@@ -25,8 +25,7 @@
       "@type": "@id"
     },
     "rv:completeness": {
-      "@id": "https://rezics.com/vocab/completeness",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/completeness"
     },
     "rv:component": {
       "@id": "https://rezics.com/vocab/component",
@@ -43,8 +42,7 @@
       "@type": "@id"
     },
     "rv:coverageComplete": {
-      "@id": "https://rezics.com/vocab/coverageComplete",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/coverageComplete"
     },
     "rv:coverageRealization": {
       "@id": "https://rezics.com/vocab/coverageRealization",
@@ -76,8 +74,7 @@
       "@id": "https://rezics.com/vocab/identifier"
     },
     "rv:isTranslation": {
-      "@id": "https://rezics.com/vocab/isTranslation",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/isTranslation"
     },
     "rv:isbn13": {
       "@id": "https://rezics.com/vocab/isbn13"
@@ -108,15 +105,13 @@
       "@type": "@id"
     },
     "rv:releaseKind": {
-      "@id": "https://rezics.com/vocab/releaseKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/releaseKind"
     },
     "rv:releaseState": {
       "@id": "https://rezics.com/vocab/releaseState"
     },
     "rv:releaseStatus": {
-      "@id": "https://rezics.com/vocab/releaseStatus",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/releaseStatus"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

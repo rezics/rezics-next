@@ -64,8 +64,7 @@
       "@type": "@id"
     },
     "rv:protectedSlot": {
-      "@id": "https://rezics.com/vocab/protectedSlot",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/protectedSlot"
     },
     "rv:protectionAction": {
       "@id": "https://rezics.com/vocab/protectionAction",

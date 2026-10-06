@@ -13,4 +13,5 @@
     sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:protectionHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:mainVersion ; sh:maxCount 0 ] ;
-    sh:property [ sh:path schema:isPartOf ; sh:maxCount 0 ] .
+    sh:property [ sh:path schema:isPartOf ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:spoiler ; sh:maxCount 1 ; sh:datatype <http://www.w3.org/2001/XMLSchema#boolean> ] .

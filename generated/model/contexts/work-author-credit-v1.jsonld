@@ -50,12 +50,10 @@
       "@id": "https://rezics.com/vocab/externalKey"
     },
     "rv:externalNamespace": {
-      "@id": "https://rezics.com/vocab/externalNamespace",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/externalNamespace"
     },
     "rv:externalProvider": {
-      "@id": "https://rezics.com/vocab/externalProvider",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/externalProvider"
     },
     "rv:modelRevision": {
       "@id": "https://rezics.com/vocab/modelRevision",
@@ -95,8 +93,7 @@
       "@type": "xsd:integer"
     },
     "schema:roleName": {
-      "@id": "https://schema.org/roleName",
-      "@type": "@id"
+      "@id": "https://schema.org/roleName"
     }
   }
 }

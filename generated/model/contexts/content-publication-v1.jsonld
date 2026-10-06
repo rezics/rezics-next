@@ -32,8 +32,7 @@
       "@type": "@id"
     },
     "rv:contentDirection": {
-      "@id": "https://rezics.com/vocab/contentDirection",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/contentDirection"
     },
     "rv:contentFormat": {
       "@id": "https://rezics.com/vocab/contentFormat"
@@ -42,8 +41,7 @@
       "@id": "https://rezics.com/vocab/contentLanguage"
     },
     "rv:contentLanguageKind": {
-      "@id": "https://rezics.com/vocab/contentLanguageKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/contentLanguageKind"
     },
     "rv:contentModel": {
       "@id": "https://rezics.com/vocab/contentModel"

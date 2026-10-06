@@ -24,8 +24,7 @@
       "@id": "https://rezics.com/vocab/originalUrl"
     },
     "rv:releaseKind": {
-      "@id": "https://rezics.com/vocab/releaseKind",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/releaseKind"
     }
   }
 }
