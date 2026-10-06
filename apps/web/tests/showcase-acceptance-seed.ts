@@ -39,7 +39,8 @@ async function json<T = Record<string, unknown>>(response: Response, status: num
 
 /** An image of the given size, as a stage background or a logo; a logo is transparent but for its words. */
 async function art(width: number, height: number, hue: number, words: string, logo = false) {
-  const font = Math.round(Math.min(width / 8, height / 3));
+  // A logo's words span its width; a background's headline is large but not the whole frame.
+  const font = logo ? Math.floor(width / Math.max(words.length * 0.62, 1)) : Math.round(Math.min(width / 8, height / 3));
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     ${logo ? '' : `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 55% 22%)"/>
       <stop offset="1" stop-color="hsl(${(hue + 50) % 360} 60% 42%)"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>

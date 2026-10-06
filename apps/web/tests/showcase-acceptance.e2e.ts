@@ -80,6 +80,9 @@ for (const identity of ['signed out', 'signed in'] as const) {
       await stage.getByRole('button', { name: new RegExp(`^${escape(campaignTitle)} · 2 of 2$`) }).click();
       await expect(stage.getByRole('heading', { name: campaignTitle })).toBeVisible();
       await expect(stage.getByRole('img', { name: campaignAlt })).toHaveCount(1);
+      // The screenshot shows the art itself, not the frame before it loads.
+      await expect.poll(() => stage.getByRole('img', { name: campaignAlt }).evaluate(
+        image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
       const second = await stage.ariaSnapshot();
       expect(headings(second, campaignTitle), second).toBe(1);
       expect(second).toMatch(/group "2 of 2"/);
