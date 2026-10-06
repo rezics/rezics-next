@@ -257,7 +257,10 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
       old.batches.find(batch => batch.tier === 'integration')!.attempts[0]!.evidence = 'pg_ctl -k checkout/.temp/pg-sock failed';
       writeFileSync(join(r.options.stateDir, 'regress/old-layout/manifest.json'), JSON.stringify(old));
       r.calls.length = 0;
-      const result = await r.run({ resume: 'old-layout' });
+      const result = await r.run({ resume: 'old-layout', runner: async (...args) => {
+        expect(r.manifest('old-layout').batches.filter(batch => batch.state === 'running')).toHaveLength(1);
+        return r.runner(...args);
+      } });
       expect(result.status).toBe('passed');
       expect(result.batches.find(batch => batch.tier === 'integration')!.attempts[0]!.classification).toBe('infrastructure');
       expect(r.calls.some(call => call.batch.tier === 'unit' || call.batch.tier === 'model')).toBe(false);

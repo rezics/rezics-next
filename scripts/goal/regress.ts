@@ -347,6 +347,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     let manifest: Manifest;
     if (options.resume) {
       manifest = json<Manifest>(path);
+      for (const batch of manifest.batches) if (batch.state === 'running') batch.state = 'pending';
       // Older runs nested the full run ID and SHA, which prevented owner gates from binding PostgreSQL sockets.
       // Preserve verified passes and void only batches that actually failed to start pg_ctl under that long path.
       if (manifest.checkout !== checkout && Buffer.byteLength(manifest.checkout + postgresSocketSuffix) > 107) {
