@@ -99,7 +99,8 @@ export function SubjectJudgments({ subject, scope = { kind: 'global' }, actingSu
   /** Main through the browser, unless a story or test supplies its own. */
   api?: ScopedRatingApi; sources?: readonly FrameSource[]; locale: UiLocale; messages: ScopedRatingMessages; className?: string;
 }) {
-  const api = useMemo(() => provided ?? mainScopedRatingApi({ actingSubject, locale }), [provided, actingSubject, locale]);
+  const api = useMemo(() => provided ?? mainScopedRatingApi({ actingSubject, position, locale }),
+    [provided, actingSubject, position, locale]);
   const viewer: Viewer = actingSubject ? { kind: 'reader' } : { kind: 'signed-out', signInHref };
   const sources = useMemo(() => given ?? sourcesOf(plans, subject.iri, actingSubject, locale, messages, position),
     [given, plans, subject.iri, actingSubject, locale, messages, position]);

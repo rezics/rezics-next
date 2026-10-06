@@ -1,7 +1,7 @@
 'use client';
 
 import { materializeData } from 'native-i18n';
-import { createContext, use, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useMemo, useRef, useState, type ReactNode } from 'react';
 import { saveDisplayPreference } from '../api/preferences.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { ShellMessages } from './messages.ts';
@@ -48,6 +48,7 @@ export function ShellProvider({ locale, messages, initialTheme, initialCollapsed
   const [collapsed, setCollapsedState] = useState(initialCollapsed);
   const [theme, setThemeState] = useState(initialTheme);
   const [themeNotSaved, setThemeNotSaved] = useState(false);
+  const latestChoice = useRef(0);
   function apply(next: Theme) {
     setThemeState(next);
     writeCookie(THEME_COOKIE, next);
@@ -67,7 +68,11 @@ export function ShellProvider({ locale, messages, initialTheme, initialCollapsed
       apply(next);
       if (!signedIn) return;
       setThemeNotSaved(false);
-      void saveDisplayPreference({ displayMode: next }).then(result => setThemeNotSaved(result === 'failed'));
+      const choice = ++latestChoice.current;
+      // Only the newest choice's outcome is shown; an older one settling late must not say otherwise.
+      void saveDisplayPreference({ displayMode: next }).then(result => {
+        if (choice === latestChoice.current) setThemeNotSaved(result === 'failed');
+      });
     },
     adoptTheme: apply,
     themeNotSaved,

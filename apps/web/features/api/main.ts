@@ -50,7 +50,11 @@ const profileContentLanguages = cache(
   },
 );
 
-/** Eden client for Main acting with an explicit bearer token, or anonymously. */
+/**
+ * Eden client for Main acting with an explicit bearer token, or anonymously. Without a token the request's
+ * session is not consulted: no private language preference is read, so a render meant for anonymous readers
+ * and crawlers is the anonymous representation.
+ */
 export function mainApiWithToken(accessToken: string | undefined) {
   return treaty<MainApp>(serviceOrigin('MAIN_ORIGIN'), {
     headers: async (_path: string) => {
@@ -59,10 +63,9 @@ export function mainApiWithToken(accessToken: string | undefined) {
       try {
         const [jar, incoming] = await Promise.all([cookies(), headers()]);
         Object.assign(result, Object.fromEntries(await mainReadHeaders(undefined, incoming)));
-        const token = accessToken ?? jar.get(ACCESS_COOKIE)?.value;
-        const signedIn = Boolean(token);
-        const profile = signedIn
-          ? await profileContentLanguages(token!, jar.get(SESSION_KEY_COOKIE)?.value ?? '')
+        const signedIn = Boolean(accessToken);
+        const profile = accessToken
+          ? await profileContentLanguages(accessToken, jar.get(SESSION_KEY_COOKIE)?.value ?? '')
           : null;
         Object.assign(
           result,

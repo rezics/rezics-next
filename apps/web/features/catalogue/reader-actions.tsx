@@ -7,7 +7,7 @@ import { Rating, RatingLabel } from '@rezics/ui/rating';
 import { cn } from '@rezics/ui/utils';
 import { BookmarkCheckIcon, BookmarkPlusIcon, CheckIcon, ChevronDownIcon, StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { createContext, lazy, type ReactNode, Suspense, useContext, useState, useSyncExternalStore } from 'react';
+import { createContext, lazy, type ReactNode, Suspense, useContext, useRef, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from '../tracking/api.ts';
@@ -20,7 +20,15 @@ export const readingStatuses = ['want-to-read', 'reading', 'read'] as const;
 export type ReadingStatus = (typeof readingStatuses)[number];
 
 /** The reader's own state for one Work. */
-export interface ReaderWorkState { status: ReadingStatus | null; rating: number | null }
+export interface ReaderWorkState {
+  status: ReadingStatus | null;
+  rating: number | null;
+  /**
+   * Set while the rating shown is a write Main admitted but has not applied yet: `pending` while it is read back,
+   * `unsettled` once the bounded read-backs ended without it (the control then says so and offers a refresh).
+   */
+  ratingWrite?: 'pending' | 'unsettled';
+}
 
 /**
  * What a page can do for its reader, the seam between catalogue controls and
@@ -39,6 +47,8 @@ export type ReaderActions =
     setStatus: (work: string, status: ReadingStatus | null) => Promise<boolean>;
     /** Null while the rating write is not wired; the stars are then not drawn. */
     rate: ((work: string, value: number | null) => Promise<boolean>) | null;
+    /** Reads the Work's reader state again, for a rating that is still being processed. */
+    refresh?: (work: string) => Promise<void>;
     ratingMax: number;
     /** Tells controls when state read later (a "Show more" page) arrives. */
     subscribe?: (listener: () => void) => () => void;
@@ -84,18 +94,22 @@ export function useReaderActions(): ReaderActions {
 
 const withdrawn: ReaderActions = { kind: 'unavailable' };
 
-/** The reader's status with an optimistic update: shown at once, reverted with a note when Main refuses. */
+/** The reader's status with an optimistic update: shown at once, reverted with a note when Main refuses. Choices made while one is saving are coalesced by the store, newest wins. */
 function useStatus(work: string) {
   const actions = useReaderActions();
   const known = actions.kind === 'ready' ? actions.stateOf(work).status : null;
   const [pending, setPending] = useState<{ status: ReadingStatus | null } | null>(null);
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
+  const newest = useRef(0);
   const status = pending ? pending.status : known;
   async function choose(next: ReadingStatus | null) {
     if (actions.kind !== 'ready' || next === status) return;
+    const mine = ++newest.current;
     setPending({ status: next });
     setState('saving');
     const saved = await actions.setStatus(work, next).catch(() => false);
+    // Only the newest choice settles the control: an older one resolving late must not undo it.
+    if (mine !== newest.current) return;
     // Saved, the store now holds the new status; refused, the known one shows again.
     setPending(null);
     setState(saved ? 'idle' : 'failed');
@@ -226,7 +240,9 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
 export function RateWork({ work, locale, className }: { work: string; locale: UiLocale; className?: string }) {
   const t = materializeData(messages[locale], { locale });
   const actions = useReaderActions();
-  const known = actions.kind === 'ready' ? actions.stateOf(work).rating : null;
+  const own = actions.kind === 'ready' ? actions.stateOf(work) : null;
+  const known = own?.rating ?? null;
+  const newest = useRef(0);
   const [pending, setPending] = useState<{ value: number | null } | null>(null);
   const [failed, setFailed] = useState(false);
   const value = pending ? pending.value : known;
@@ -241,11 +257,14 @@ export function RateWork({ work, locale, className }: { work: string; locale: Ui
   }
   const rate = actions.rate!;
   async function save(next: number) {
+    const mine = ++newest.current;
     setPending({ value: next });
     setFailed(false);
     const saved = await rate(work, next).catch(() => false);
-    // A 202 carries no revision, so keep showing the value Access admitted until Main applies it.
-    if (!saved) { setPending(null); setFailed(true); }
+    if (mine !== newest.current) return;
+    // Admitted but not yet applied, the store keeps the choice as pending and says when it settles; refused, the known value shows again.
+    setPending(null);
+    setFailed(!saved);
   }
   return <div className={cn('grid justify-items-center gap-1', className)}>
     <Rating size="lg" count={actions.ratingMax === 10 ? 10 : 5} value={value ?? 0} className="items-center"
@@ -253,6 +272,12 @@ export function RateWork({ work, locale, className }: { work: string; locale: Ui
       <RatingLabel className="order-last font-normal text-muted-foreground text-sm">
         {value ? t.yourRating : t.rateThis}</RatingLabel>
     </Rating>
-    {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
+    {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p>
+      : own?.ratingWrite === 'pending' ? <p role="status" className="text-muted-foreground text-xs">{t.saving}</p>
+        : own?.ratingWrite === 'unsettled'
+          ? <p role="status" className="flex flex-wrap items-center justify-center gap-x-2 text-muted-foreground text-xs">
+            {t.ratingProcessing}
+            {actions.refresh ? <Button size="sm" variant="link" onClick={() => void actions.refresh?.(work)}>{t.refresh}</Button> : null}
+          </p> : null}
   </div>;
 }

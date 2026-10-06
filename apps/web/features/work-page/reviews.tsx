@@ -247,6 +247,8 @@ function ReviewsPanel({ target, href, subject, context, scale, initial, reviewer
   const [linked, setLinked] = useState<Review | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const first = useRef(true);
+  // The newest read this panel asked for: an answer to an earlier filter or page arriving late is dropped.
+  const asked = useRef(0);
   const own = viewer.kind === 'reader' ? items.find(item => item.author === viewer.actingSubject) ?? null : null;
 
   async function name(reviews: readonly Review[]) {
@@ -257,26 +259,30 @@ function ReviewsPanel({ target, href, subject, context, scale, initial, reviewer
     }
   }
   async function load(next: ReviewFilter) {
+    const ticket = ++asked.current;
     setLoading('first');
     const read = await api.page(next);
+    if (ticket !== asked.current) return;
     setPage(read);
     if (read.ok) {
       setItems(read.data.items);
       await name(read.data.items);
     }
-    setLoading(null);
+    if (ticket === asked.current) setLoading(null);
   }
   async function more() {
     if (!page.ok || !page.data.nextCursor) return;
+    const ticket = ++asked.current;
     setLoading('more');
     const read = await api.page(filter, page.data.nextCursor);
+    if (ticket !== asked.current) return;
     setPage(read.ok ? read : page);
     if (read.ok) {
       // A review can move between pages while votes change; keep one copy.
       setItems(current => [...current, ...read.data.items.filter(item => !current.some(seen => seen.id === item.id))]);
       await name(read.data.items);
     }
-    setLoading(null);
+    if (ticket === asked.current) setLoading(null);
   }
   useEffect(() => {
     if (first.current) { first.current = false; return; }

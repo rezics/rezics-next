@@ -257,3 +257,44 @@ test('the chapters or episodes Main lists become position frames, in the languag
   expect(loaded.items[0]).toMatchObject({ value: occurrence, label: '第三章',
     candidate: { iri: occurrence, dimension: 'position', name: { value: '第三章', language: 'zh-Hans', direction: 'ltr' } } });
 });
+
+test('reads follow the reading position the page is read at, whether or not a Zone package runs', async () => {
+  const frames = [fixture.episodes[2]!.iri];
+  const chapter = fixture.episodes[1]!.iri;
+  const listed = fakeMain({ projections: [{ data: { items: [place.projection], nextCursor: null } }], summaries: [summaries] });
+  const api = mainScopedRatingApi({ actingSubject: player, position: chapter, main: listed.main });
+  await api.lookup(fixture.subject.iri, frames);
+  await api.projections(fixture.subject.iri);
+  expect(listed.calls.filter(call => call.name === 'projections').map(call => call.query))
+    .toEqual([expect.objectContaining({ position: chapter }), expect.objectContaining({ position: chapter })]);
+  expect(listed.calls.filter(call => call.name === 'summaries').map(call => call.body))
+    .toEqual([expect.objectContaining({ position: chapter }), expect.objectContaining({ position: chapter })]);
+  // Without one, Main's own default applies and none is invented.
+  const plain = fakeMain({ projections: [{ data: { items: [place.projection], nextCursor: null } }], summaries: [summaries] });
+  await mainScopedRatingApi({ actingSubject: player, main: plain.main }).projections(fixture.subject.iri);
+  expect(plain.calls[0]?.query).not.toHaveProperty('position');
+  expect(plain.calls[1]?.body).not.toHaveProperty('position');
+});
+
+test('a public read with no Agent to act as is sent without the session, never as an authenticated read without a subject', async () => {
+  const seen: { url: string; credentials?: RequestCredentials }[] = [];
+  const window = { location: { origin: 'https://web.test', href: 'https://web.test/en' } };
+  Object.assign(globalThis, { window });
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    seen.push({ url: input instanceof Request ? input.url : String(input), credentials: init?.credentials });
+    return Response.json({ items: [], nextCursor: null });
+  }) as typeof fetch;
+  try {
+    await mainScopedRatingApi({ actingSubject: null }).projections(fixture.subject.iri);
+    await mainScopedRatingApi({ actingSubject: player }).projections(fixture.subject.iri);
+  } finally {
+    globalThis.fetch = original;
+    Reflect.deleteProperty(globalThis, 'window');
+  }
+  expect(seen).toHaveLength(2);
+  expect(seen[0]).toMatchObject({ credentials: 'omit' });
+  expect(seen[0]!.url).not.toContain('actingSubject');
+  expect(seen[1]).toMatchObject({ credentials: 'same-origin' });
+  expect(seen[1]!.url).toContain('actingSubject=');
+});

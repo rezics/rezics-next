@@ -199,10 +199,11 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   if (!zone) notFound();
   const { ref } = view.context;
   const cursor = routeCursor(path, search);
-  // A Zone whose package reads at the reader's position sends it with every read, as the signed-in reader.
+  // A Zone whose package reads at the reader's position sends it with every read, as the signed-in reader, whether or
+  // not the package's presentation runs (safe mode and the standard look keep the reader's position).
   const choice: PositionChoice = parsePosition(search);
-  const state = await positionOf(view.pkg, zone.id, choice);
-  const reading = await zoneContinuity(view.pkg, state, search);
+  const state = await positionOf(view.dataPackage, zone.id, choice);
+  const reading = await zoneContinuity(view.dataPackage, state, search);
   const site: ZoneSite = {
     zone: zone.id,
     ref,

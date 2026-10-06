@@ -31,12 +31,32 @@ export async function loadDisplayPreferences(
   }
 }
 
-/** A changed control writes the entire account value and retries once after a competing update. */
-export async function saveDisplayPreference(
-  change: Partial<Pick<DisplayPreferences, 'displayMode' | 'showZoneThemes'>>,
-  fetcher: typeof fetch = fetch,
-): Promise<'saved' | 'signed-out' | 'failed'> {
+type Change = Partial<Pick<DisplayPreferences, 'displayMode' | 'showZoneThemes'>>;
+type Saved = 'saved' | 'signed-out' | 'failed';
+
+/** The choices made while one write was in flight: later ones replace earlier ones per field, and share one outcome. */
+interface Round { change: Change; fetcher: typeof fetch; waiting: ((saved: Saved) => void)[] }
+
+let running = false;
+let queued: Round | null = null;
+
+const differs = (value: DisplayPreferences, change: Change) =>
+  (change.displayMode !== undefined && change.displayMode !== value.displayMode)
+  || (change.showZoneThemes !== undefined && change.showZoneThemes !== value.showZoneThemes);
+
+/**
+ * Writes the account value for a round's choices. After a competing update (409) the account is read again and only
+ * the newest choice per field is applied, and only where it still differs from the account.
+ */
+async function settleRound(round: Round): Promise<Saved> {
+  const { fetcher } = round;
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (queued) {
+      // Choices made while this one was being written supersede it, and take this round's outcome.
+      Object.assign(round.change, queued.change);
+      round.waiting.push(...queued.waiting);
+      queued = null;
+    }
     let current: Response;
     try {
       current = await fetcher('/api/preferences', { cache: 'no-store' });
@@ -48,6 +68,7 @@ export async function saveDisplayPreference(
       ? parseDisplayPreferences(await current.json().catch(() => null))
       : null;
     if (!value) return 'failed';
+    if (!differs(value, round.change)) return 'saved';
     let result: Response;
     try {
       result = await fetcher('/api/preferences', {
@@ -55,8 +76,8 @@ export async function saveDisplayPreference(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           expectedRevision: value.revision,
-          displayMode: change.displayMode ?? value.displayMode,
-          showZoneThemes: change.showZoneThemes ?? value.showZoneThemes,
+          displayMode: round.change.displayMode ?? value.displayMode,
+          showZoneThemes: round.change.showZoneThemes ?? value.showZoneThemes,
         }),
       });
     } catch {
@@ -66,6 +87,35 @@ export async function saveDisplayPreference(
     if (result.status !== 409) return 'failed';
   }
   return 'failed';
+}
+
+/**
+ * A changed control writes the entire account value. One write is in flight at a time: a choice made meanwhile
+ * waits for it and is written next, newest per field, so an older response never overwrites a newer choice.
+ */
+export function saveDisplayPreference(change: Change, fetcher: typeof fetch = fetch): Promise<Saved> {
+  return new Promise<Saved>(resolve => {
+    queued ??= { change: {}, fetcher, waiting: [] };
+    for (const key of ['displayMode', 'showZoneThemes'] as const) {
+      if (change[key] !== undefined) Object.assign(queued.change, { [key]: change[key] });
+    }
+    queued.waiting.push(resolve);
+    if (!running) void drain();
+  });
+}
+
+async function drain(): Promise<void> {
+  running = true;
+  try {
+    while (queued) {
+      const round = queued;
+      queued = null;
+      const saved = await settleRound(round).catch((): Saved => 'failed');
+      for (const resolve of round.waiting) resolve(saved);
+    }
+  } finally {
+    running = false;
+  }
 }
 
 /** Only this fixed Account resource crosses the web session's BFF boundary. */

@@ -71,16 +71,59 @@ export function shelfFollowing(tracking: TrackingApi, changed: (work: string) =>
 }
 
 /**
+ * One write at a time for one Work and field. A choice made while a write is in flight replaces any choice waiting
+ * behind it (the newest wins), and every caller waiting on a replaced choice gets the outcome of the one that stood.
+ * `apply` writes one choice and is told, through `superseded`, when a newer one is waiting so it can stop retrying.
+ */
+function lane<T>(apply: (choice: T, superseded: () => boolean) => Promise<boolean>) {
+  let running = false;
+  let latest: { choice: T } | null = null;
+  let waiting: ((saved: boolean) => void)[] = [];
+  async function run() {
+    running = true;
+    while (latest) {
+      const { choice } = latest;
+      const batch = waiting;
+      latest = null;
+      waiting = [];
+      const saved = await apply(choice, () => latest !== null).catch(() => false);
+      // A newer choice arrived meanwhile: these callers wait for it instead.
+      if (latest) waiting = [...batch, ...waiting];
+      else for (const resolve of batch) resolve(saved);
+    }
+    running = false;
+  }
+  return (choice: T) => new Promise<boolean>(resolve => {
+    latest = { choice };
+    waiting.push(resolve);
+    if (!running) void run();
+  });
+}
+
+/** A rating write Access admitted but Main has not applied: the choice shown until its revision is read back. */
+interface Unapplied { value: number | null; baseRevision: string | null; state: 'pending' | 'unsettled' }
+
+/** Reads back an admitted rating this many times, waiting longer each time, before saying it is still processing. */
+export const READ_BACK_DELAYS_MS = [400, 800, 1600, 3200] as const;
+
+/**
  * Reader actions over Main, for a signed-in reader acting as `actingSubject`.
  * State starts from the server's seed; Works drawn later ("Show more") are
- * read in batches as they appear. Writes compare and set: when another tab or
- * device changed a status first, the store reads it again and applies the
- * reader's choice once more on the new version, as reading progress does.
+ * read in batches as they appear. Writes compare and set, one at a time per
+ * Work and field: a choice made while one is being written replaces any
+ * waiting behind it, and when another tab or device changed the value first
+ * (409) the store reads it again and applies only the newest choice, only if it
+ * still differs from what Main now holds. A rating Access has admitted but not
+ * applied is shown as pending and read back a bounded number of times.
  */
-export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main = browserMainApi }: {
+export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main = browserMainApi,
+  wait = milliseconds => new Promise<void>(resolve => setTimeout(resolve, milliseconds)) }: {
   actingSubject: string; seed?: ReaderSeed; ratingTarget?: RatingTarget | null; main?: () => MainClient;
+  /** Waits between read-backs of a pending rating; tests pass one that returns at once. */
+  wait?: (milliseconds: number) => Promise<void>;
 }): Extract<ReaderActions, { kind: 'ready' }> {
   const entries = new Map(Object.entries(seed));
+  const unapplied = new Map<string, Unapplied>();
   const listeners = new Set<() => void>();
   let version = 0;
   const notify = () => { version += 1; for (const listener of listeners) listener(); };
@@ -119,13 +162,91 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     return entry;
   }
 
+  async function writeStatus(work: string, status: ReadingStatus | null, superseded: () => boolean) {
+    const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
+    const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
+      { headers: { 'idempotency-key': crypto.randomUUID() } });
+    const base = entries.get(work) ?? await refresh(work);
+    if (!base) return false;
+    let response = await put(base);
+    if (response.error?.status === 409) {
+      const fresh = await refresh(work);
+      if (!fresh) return false;
+      // A newer choice is waiting, or Main already holds this one: there is nothing of this choice left to write.
+      if (superseded() || fresh.status === status) return !superseded();
+      response = await put(fresh);
+    }
+    if (!response.data) return false;
+    entries.set(work, { ...(entries.get(work) ?? base), status: response.data.status, version: response.data.version });
+    notify();
+    relationshipsChanged();
+    return true;
+  }
+
+  /** Reads the Work's state again until the rating's head moves past `baseRevision`; false if it never does. */
+  async function readBack(work: string, baseRevision: string | null, superseded: () => boolean) {
+    for (const delay of READ_BACK_DELAYS_MS) {
+      await wait(delay);
+      const entry = await refresh(work);
+      if (entry && (entry.rating?.revision ?? null) !== baseRevision) return true;
+      if (superseded()) return false;
+    }
+    return false;
+  }
+
+  async function writeRating(target: RatingTarget, value: number | null, superseded: () => boolean) {
+    const { work } = target;
+    const post = (entry: ReaderEntry) => main().v1['global-rating-observations'].post({
+      profile: 'global-rating-standing-observation-v1', context: target.context, work,
+      mainVersion: target.mainVersion, expectedRevisionHead: entry.rating?.revision ?? null, value,
+      actingSubject }, { headers: { 'idempotency-key': crypto.randomUUID() } });
+    const base = entries.get(work) ?? await refresh(work);
+    if (!base) return false;
+    let from = base;
+    let response = await post(from);
+    if (response.error?.status === 409) {
+      const fresh = await refresh(work);
+      if (!fresh) return false;
+      if (superseded() || (fresh.rating?.value ?? null) === value) return !superseded();
+      from = fresh;
+      response = await post(from);
+    }
+    if (response.error || !response.data) return false;
+    const revision = 'observationRevision' in response.data ? response.data.observationRevision : null;
+    if (revision) {
+      entries.set(work, { ...(entries.get(work) ?? from), rating: { value, revision } });
+      notify();
+      return true;
+    }
+    // Admitted but not applied (202): pending until the head moves, never settled by assumption.
+    const baseRevision = from.rating?.revision ?? null;
+    unapplied.set(work, { value, baseRevision, state: 'pending' });
+    notify();
+    const applied = await readBack(work, baseRevision, superseded);
+    if (applied || superseded()) unapplied.delete(work);
+    else unapplied.set(work, { value, baseRevision, state: 'unsettled' });
+    notify();
+    return true;
+  }
+
+  const statusLanes = new Map<string, (status: ReadingStatus | null) => Promise<boolean>>();
+  const ratingLanes = new Map<string, (value: number | null) => Promise<boolean>>();
+  const laneOf = <T>(lanes: Map<string, (choice: T) => Promise<boolean>>, work: string,
+    apply: (choice: T, superseded: () => boolean) => Promise<boolean>) => {
+    let existing = lanes.get(work);
+    if (!existing) lanes.set(work, existing = lane(apply));
+    return existing;
+  };
+
   return {
     kind: 'ready',
     ratingMax: ratingTarget?.max ?? 5,
     stateOf(work: string): ReaderWorkState {
       const entry = entries.get(work);
       if (!entry) load(work);
-      return { status: entry?.status ?? null, rating: entry?.rating?.value ?? null };
+      const waiting = unapplied.get(work);
+      return { status: entry?.status ?? null, rating: waiting ? waiting.value : entry?.rating?.value ?? null,
+        ...waiting ? { ratingWrite: waiting.state } : {} };
     },
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -134,41 +255,15 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     snapshot: () => version,
     available: () => !denied,
     tracking: shelfFollowing(mainTrackingApi(actingSubject, main), work => void refresh(work)),
-    async setStatus(work: string, status: ReadingStatus | null) {
-      const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
-      const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
-        { headers: { 'idempotency-key': crypto.randomUUID() } });
-      const base = entries.get(work) ?? await refresh(work);
-      if (!base) return false;
-      let response = await put(base);
-      if (response.error?.status === 409) {
-        const fresh = await refresh(work);
-        if (fresh) response = await put(fresh);
-      }
-      if (!response.data) return false;
-      entries.set(work, { ...(entries.get(work) ?? base), status: response.data.status, version: response.data.version });
+    setStatus: (work: string, status: ReadingStatus | null) =>
+      laneOf(statusLanes, work, (choice, superseded) => writeStatus(work, choice, superseded))(status),
+    rate: ratingTarget ? (work: string, value: number | null) => work !== ratingTarget.work ? Promise.resolve(false)
+      : laneOf(ratingLanes, work, (choice, superseded) => writeRating(ratingTarget, choice, superseded))(value) : null,
+    async refresh(work: string) {
+      const entry = await refresh(work);
+      const waiting = unapplied.get(work);
+      if (waiting && entry && (entry.rating?.revision ?? null) !== waiting.baseRevision) unapplied.delete(work);
       notify();
-      relationshipsChanged();
-      return true;
     },
-    rate: ratingTarget ? async (work: string, value: number | null) => {
-      if (work !== ratingTarget.work) return false;
-      const post = (entry: ReaderEntry | null) => main().v1['global-rating-observations'].post({
-        profile: 'global-rating-standing-observation-v1', context: ratingTarget.context, work,
-        mainVersion: ratingTarget.mainVersion, expectedRevisionHead: entry?.rating?.revision ?? null, value,
-        actingSubject }, { headers: { 'idempotency-key': crypto.randomUUID() } });
-      const base = entries.get(work) ?? await refresh(work);
-      let response = await post(base);
-      if (response.error?.status === 409) response = await post(await refresh(work));
-      if (response.error || !response.data) return false;
-      // A write Access has admitted but not yet applied answers 202 without a revision; read it back later.
-      const revision = 'observationRevision' in response.data ? response.data.observationRevision : null;
-      const current = entries.get(work) ?? base;
-      if (current) {
-        entries.set(work, { ...current, rating: revision ? { value, revision } : current.rating });
-        notify();
-      }
-      return true;
-    } : null,
   };
 }

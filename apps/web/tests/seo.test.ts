@@ -1,8 +1,11 @@
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external.js';
+import { workUnitAsyncStorage, type RequestStore } from 'next/dist/server/app-render/work-unit-async-storage.external.js';
+import { SERVER_DEADLINE_HEADER } from '../features/api/server-fetch.ts';
 import { localeAlternates } from '../features/seo/address.ts';
-import { type WorkView, workMetadata, workViewAddress } from '../features/seo/work.ts';
+import { type WorkView, workMetadata, workPageMetadata, workViewAddress } from '../features/seo/work.ts';
 import { metadataOnlyWork, work as header, workRef as id } from '../features/work-page/fixtures.ts';
 import type { WorkResolution } from '../features/work-page/read.ts';
 import { uiLocales } from '../i18n/define.ts';
@@ -166,5 +169,61 @@ describe('Work metadata', () => {
     expect(metadata).not.toHaveProperty('alternates');
     expect(metadata.robots).toEqual({ index: false });
     expect(metadata.openGraph).not.toHaveProperty('url');
+  });
+});
+
+describe('Anonymous Work metadata', () => {
+  const nativeFetch = globalThis.fetch;
+  const mainOrigin = process.env.MAIN_ORIGIN;
+  afterEach(() => {
+    globalThis.fetch = nativeFetch;
+    if (mainOrigin === undefined) delete process.env.MAIN_ORIGIN;
+    else process.env.MAIN_ORIGIN = mainOrigin;
+  });
+
+  /** Renders a page's metadata for a request that carries a signed-in session, and records what Main was asked. */
+  async function render(personal: WorkResolution, answer: (url: URL) => unknown) {
+    process.env.MAIN_ORIGIN = 'http://main.test';
+    const asked: { url: URL; authorization: string | null }[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      asked.push({ url, authorization: headers.get('authorization') });
+      const body = answer(url);
+      return body === undefined ? Response.json({ error: 'not_found' }, { status: 404 }) : Response.json(body);
+    }) as unknown as typeof fetch;
+    const headers = new Headers({ [SERVER_DEADLINE_HEADER]: String(Date.now() + 5000),
+      'x-rezics-page-url': `https://rezics.test/en${resourceHref('/w/', id)}` });
+    const cookies = { get: (name: string) => name === 'rezics_access' ? { value: 'reader-token' }
+      : name === 'rezics_session_key' ? { value: '10280000-0000-4000-8000-000000000001' } : undefined };
+    const store = spyOn(workAsyncStorage, 'getStore').mockReturnValue({ route: '/en/w' } as WorkStore);
+    const request = spyOn(workUnitAsyncStorage, 'getStore').mockReturnValue(
+      { type: 'request', phase: 'render', headers, cookies } as RequestStore);
+    try { return { metadata: await workPageMetadata(personal, { tab: 'overview' }, {}, 'en'), asked }; }
+    finally { store.mockRestore(); request.mockRestore(); }
+  }
+
+  const personalised: WorkResolution = { kind: 'work', id,
+    header: { ...header, title: { ...header.title, value: 'Private edition for the signed-in reader' } } };
+  const anonymous = { ...header, title: { ...header.title, value: 'The public title' } };
+  const publicAnswers = (url: URL) => url.pathname === `/v1/public-previews/${id}` ? { profile: 'public-preview-v1', status: 'available' }
+    : url.pathname === `/v1/works/${id}` ? anonymous : undefined;
+
+  test('crawlers get the anonymous representation even while the request carries a session', async () => {
+    const { metadata, asked } = await render(personalised, publicAnswers);
+    expect(metadata.openGraph).toMatchObject({ title: 'The public title' });
+    expect(JSON.stringify(metadata)).not.toContain('Private edition');
+    expect(asked.map(call => call.url.pathname).sort()).toEqual([`/v1/public-previews/${id}`, `/v1/works/${id}`].sort());
+  });
+
+  test('no token and no private language preference are sent for an anonymous render', async () => {
+    const { asked } = await render(personalised, publicAnswers);
+    expect(asked.every(call => call.authorization === null)).toBe(true);
+    expect(asked.some(call => call.url.pathname.startsWith('/v1/me/'))).toBe(false);
+  });
+
+  test('a Work that is not public to anyone is left undisclosed', async () => {
+    const { metadata } = await render(personalised, url => url.pathname === `/v1/works/${id}` ? anonymous : undefined);
+    expect(metadata).toMatchObject({ title: { absolute: 'REZICS' }, robots: { index: false } });
   });
 });

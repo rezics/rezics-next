@@ -81,12 +81,18 @@ const RECONCILE_ATTEMPTS = 5;
  * The adapter over Main for a signed-in person acting as `actingSubject`, or for a reader with none (`null`): reads
  * are public, writes then report `sign-in`.
  */
-export function mainScopedRatingApi({ actingSubject, main = browserMainApi, locale = 'en' }: {
-  actingSubject: string | null; main?: () => MainClient;
+export function mainScopedRatingApi({ actingSubject, position, main = () => browserMainApi(undefined, { anonymous: !actingSubject }),
+  locale = 'en' }: {
+  actingSubject: string | null;
+  /** The reading position the reads are made at (`all` or a chapter's id); Main's own default for the person where absent. */
+  position?: string;
+  /** Main through the browser: with the session when there is an Agent to act as, anonymous for a public reader. */
+  main?: () => MainClient;
   /** The language episodes and chapters are named in, when their reading order has a label for it. */
   locale?: UiLocale;
 }): ScopedRatingApi {
   const reader = actingSubject ? { actingSubject } : {};
+  const at = position ? { position } : {};
   // The head each of this person's ratings stands at, as Main last said: from the own read or the last write.
   const heads = new Map<string, string | null>();
   const slot = (target: string, question: string) => `${question}\n${target}`;
@@ -126,7 +132,7 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
 
   async function summaryOf(projection: string): Promise<ResourceSummary | null> {
     const batch = await settle(() => main().v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: [projection], ...reader }));
+      resources: [projection], ...reader, ...at }));
     return batch.ok ? (await named([batch.data.summaries[0] ?? null]))[0] ?? null : null;
   }
 
@@ -154,19 +160,19 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
     },
 
     async lookup(subject, frames) {
-      const answer = await settle(() => main().v1.projections.get({ query: { subject, frames: [...frames], ...reader } }));
+      const answer = await settle(() => main().v1.projections.get({ query: { subject, frames: [...frames], ...reader, ...at } }));
       if (!answer.ok) return answer;
       const found = answer.data.items[0];
       return { ok: true, data: found ? { projection: found, summary: await summaryOf(found.id) } : null };
     },
 
     async projections(subject, cursor) {
-      const page = await settle(() => main().v1.projections.get({ query: { subject, limit: 20, ...cursor ? { cursor } : {}, ...reader } }));
+      const page = await settle(() => main().v1.projections.get({ query: { subject, limit: 20, ...cursor ? { cursor } : {}, ...reader, ...at } }));
       if (!page.ok) return page;
       const summaries = new Map<string, ResourceSummary>();
       if (page.data.items.length) {
         const batch = await settle(() => main().v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-          resources: page.data.items.map(item => item.id), ...reader }));
+          resources: page.data.items.map(item => item.id), ...reader, ...at }));
         if (batch.ok) for (const summary of await named(batch.data.summaries)) if (summary) summaries.set(summary.reference, summary);
       }
       return { ok: true, data: { nextCursor: page.data.nextCursor,
@@ -185,13 +191,13 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
 
     async rate(target, question, value) {
       if (!actingSubject) return { ok: false, failure: 'sign-in' };
-      const at = slot(target, question);
+      const slotKey = slot(target, question);
       // A device that has not read the rating learns its head first, so a first write on a new device does not conflict.
-      if (!heads.has(at)) {
+      if (!heads.has(slotKey)) {
         const known = await readOwn(target, question);
         if (!known.ok) return known;
       }
-      let head = heads.get(at) ?? null;
+      let head = heads.get(slotKey) ?? null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const answer = await answered(() => main().v1['rating-observations'].post({
           profile: 'realm-target-rating-observation-v1', context: question, target, expectedRevisionHead: head, value,
@@ -200,7 +206,7 @@ export function mainScopedRatingApi({ actingSubject, main = browserMainApi, loca
           // A write Access admitted but has not applied answers 202 without a revision: the next write then reads the
           // head again, and Main says so if this one has landed meanwhile.
           const revision = 'observationRevision' in answer.data ? answer.data.observationRevision : null;
-          if (revision) heads.set(at, revision); else heads.delete(at);
+          if (revision) heads.set(slotKey, revision); else heads.delete(slotKey);
           return { ok: true, data: { value, pending: revision === null } };
         }
         const current = currentHeadOf(answer.error);

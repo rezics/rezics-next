@@ -31,6 +31,9 @@ const en = {
   signInToRate: 'Sign in to rate this work',
   saving: 'Saving…',
   saveFailed: 'Couldn’t save. Try again.',
+  // A rating Main accepted but has not applied yet, after the page has read it back a few times.
+  ratingProcessing: 'Your rating is still being processed.',
+  refresh: 'Refresh',
   ongoing: 'Ongoing', hiatus: 'On hiatus',
   // Beside a pick's stamp, which opens the public Decision that placed it.
   whyItsHere: 'Why it’s here',

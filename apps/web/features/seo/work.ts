@@ -95,20 +95,29 @@ export function workMetadata(work: WorkResolution, view: WorkView, query: Search
       ...(alternates ? { url: alternates.canonical } : {}), ...(cover ? { images: [cover] } : {}) } };
 }
 
-/** `workMetadata` at the current request's origin, for a page's `generateMetadata`. */
+/**
+ * `workMetadata` at the current request's origin, for a page's `generateMetadata`. Metadata is an anonymous
+ * delivery even when the page has a signed-in reader: it describes the Work as Main shows it to anyone, never
+ * the personalized read the page itself renders.
+ */
 export async function workPageMetadata(work: WorkResolution, view: WorkView, query: SearchParams,
   locale: UiLocale): Promise<Metadata> {
   const undisclosed: Metadata = { title: { absolute: 'REZICS' }, description: null,
     openGraph: null, twitter: null, robots: { index: false } };
+  let shown = work;
   if (work.kind === 'work') {
     try {
-      // Metadata is an anonymous delivery even when the page has a signed-in reader.
-      const preview = await mainApiWithToken(undefined).v1['public-previews']({ resource: work.id }).get();
-      if (preview.error || !preview.data) return undisclosed;
+      const anonymous = mainApiWithToken(undefined);
+      const [preview, header] = await Promise.all([
+        anonymous.v1['public-previews']({ resource: work.id }).get(),
+        anonymous.v1.works({ id: work.id }).get({ query: {} }),
+      ]);
+      if (preview.error || !preview.data || header.error || !header.data) return undisclosed;
+      shown = { kind: 'work', id: work.id, header: header.data };
     } catch { return undisclosed; }
   }
   const page = await pageUrl();
-  const metadata = workMetadata(work, view, query, locale, page?.origin ?? null);
+  const metadata = workMetadata(shown, view, query, locale, page?.origin ?? null);
   const path = page && addressPath(page.pathname);
   if (page && path?.lookup.scope === 'work') {
     const address = workViewAddress(path.lookup.key, view, query);
