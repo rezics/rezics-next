@@ -5,7 +5,13 @@ areas: []
 
 # Production readiness
 
-Status: no manager since 2026-10-04, when several Goals began to run at once
+Status: **retiring** (2026-10-07). Its milestones and inherited items were
+re-derived from the target architecture and the new first public scope and
+moved to [kernel](../kernel/GOAL.md), [trust-ops](../trust-ops/GOAL.md),
+[launch](../launch/GOAL.md) and [program](../program/GOAL.md); the program
+closes this Goal once each item is in a brief. Below is the history as it stood.
+
+Earlier status: no manager since 2026-10-04, when several Goals began to run at once
 and the addresses, relationships and discovery workstream (standing direction 9
 until then) became the addresses-discovery Goal, closed on 2026-10-05 and archived on
 `archive/goals`.

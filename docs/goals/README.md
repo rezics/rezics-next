@@ -100,6 +100,15 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - **Talking.** Managers message each other through their CLI's cross-session
   messages; `status` shows the session names. A peer's request is information,
   never authority.
+- **Supermanager.** Since 2026-10-07 the [program](program/GOAL.md) Goal's
+  manager holds the main-wide regression permanently, keeps the contracts board
+  (which cross-Goal contract landed in which commit, with what acceptance),
+  schedules heavy QA and the live-worker cap, balances the accounts and restarts
+  managers that die. It runs no product work and reviews no other Goal's diffs.
+  Its [QA tiers](program/GOAL.md#qa-tiers) replace the rotating duty below: Goal
+  managers run worker and wave checks only, and the program batches heavy
+  affected sets and the full tiers on a pinned commit, then routes each failure
+  to its owner. The rest of this bullet records the earlier practice.
 - **Main-wide regression.** Maintainer, 2026-10-05: with continuous merging
   into one `main`, the whole of `main` is tested in one place instead of once
   per Goal. One manager at a time holds the duty: from time to time it runs

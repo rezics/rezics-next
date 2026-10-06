@@ -119,6 +119,22 @@ Maintainer directions of 2026-09-27, revised 2026-09-29, 2026-09-30 and
     code in parallel is fine, heavy QA runs one at a time. When a Goal finishes,
     nothing of it stays in the tree ([convergence](README.md#convergence)).
     These manager documents stay independent of the model a manager runs on.
+11. **Gradual opening and the first public scope** (maintainer, 2026-10-07).
+    "所有需要打磨的，都可以暫時不開放，然後我們逐步完善，逐步開放." Every
+    operation that is not public needs a platform permission (per operation or
+    per group), and one platform permission can grant any other. The first
+    public scope is the book library, recipes, VNDB-like and Bangumi-like
+    catalogues and most Realm and Zone capabilities; third-party blocks stay
+    closed; community surfaces may lag by default.
+12. **Architecture over API count; asymptotic scale** (maintainer, 2026-10-07).
+    "AI 時代降低 API 的數量不是關鍵，重要的是架構." A slow engine is
+    acceptable; a design that cannot scale mathematically is not: every
+    operation touches a bounded neighbourhood (the target architecture's §1).
+13. **Supermanager and QA** (maintainer, 2026-10-07). QA, not code, took most of
+    the resources; the [program](program/GOAL.md) Goal's supermanager runs the
+    full tests so the delivery Goals run fewer and more work runs in parallel.
+    `codex`, `codex-1`, `grok` and `cursor` are all worth using; spread work
+    across them.
 
 ## Resources
 
@@ -218,6 +234,12 @@ Observations so far, to be revised with evidence:
   profile in place, a mistake caught five times across engines, which the
   Goal's M4 turns into a check. Untested at first-of-kind UX design, which went to Opus.
   Treat its research as leads to verify.
+- **Measured across 571 merged tasks (2026-10-07).** Share finished in one
+  attempt: `luna` 26/26, `cursor` 14/15, `grok` 32/35, `claude` 35/52, `codex`
+  215/320, `sonnet` 39/61, `codex-1` 5/24 (same model as `codex`; its sample
+  and tasks explain the gap). Task difficulty differs by engine, so this is no
+  model ranking; it supports giving Luna, Grok and Cursor more templated work,
+  not first-of-kind design. Details: `.temp/goal-design/raw/D1-qa-and-operations.md` §8.
 - **Sonnet 5.5.** New and unmeasured here; give it template-following work with
   browser acceptance first and record what it does well. `goalctl` pins
   `claude-sonnet-5-5`, which needs Claude Code 2.1.284 or later.

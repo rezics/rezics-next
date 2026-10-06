@@ -8,11 +8,13 @@ The numbered product [decisions](docs/product/decisions.md) and the
 
 | Goal | Outcome | Manager |
 | --- | --- | --- |
-| [Production readiness](docs/goals/production-readiness/GOAL.md) | Make REZICS complete and ready for production: milestones M4–M8. | Waiting for the maintainer to start one |
+| [Program](docs/goals/program/GOAL.md) | Supermanager: contracts board, main-wide regression, shared resources, manager survival | tmux `goal-program` |
+| [Kernel](docs/goals/kernel/GOAL.md) | Core contracts of the target architecture: one model source, local consistency, bounded template reads, one representation per meaning | tmux `goal-kernel` |
+| [Trust and operations](docs/goals/trust-ops/GOAL.md) | Common admission, platform gates for gradual opening, accounts, safety, erasure, deployment preparation | tmux `goal-trust-ops` |
+| [Launch](docs/goals/launch/GOAL.md) | The first public scope: book library, recipes, VNDB-like and Bangumi-like catalogues, most Realm and Zone capabilities | tmux `goal-launch` |
+| [Production readiness](docs/goals/production-readiness/GOAL.md) | Retiring: its items moved to the four Goals above on 2026-10-07; the program closes it | — |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
 
-Main-wide regression ([practice](docs/goals/README.md#several-goals)): no Goal
-is running, so nobody holds it; the next manager to start one takes it. The last
-holder, write-concurrency, closed on 2026-10-06 after three full passes; open
-items are listed in production readiness under "Inherited from write-concurrency".
+Main-wide regression ([practice](docs/goals/README.md#several-goals)): held by
+the program Goal since 2026-10-07; it no longer rotates between managers.
