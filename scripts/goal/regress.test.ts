@@ -70,6 +70,28 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
+  test('preflight never falls back to an ancestor Taskfile and executes only the committed Taskfile', async () => {
+    const r = repo();
+    const taskfile = (label: string) => `version: '3'\ntasks:\n  install:\n    cmds: ['echo ${label}']\n  gen:check:\n    cmds: ['echo ${label}']\n`;
+    try {
+      r.write('Taskfile.yml', taskfile('ancestor-task-used'));
+      const unsupported = await r.run({ runId: 'no-taskfile', prepare: undefined });
+      expect(unsupported.preflight.ok).toBe(false);
+      expect(unsupported.preflight.artifactPaths).toHaveLength(0);
+      expect(unsupported.status).toBe('failed');
+      r.write('Taskfile.yml', taskfile('pinned-task-used')); r.commit();
+      r.write('Taskfile.yml', taskfile('ancestor-task-used'));
+      const supported = await r.run({ runId: 'pinned-taskfile', prepare: undefined });
+      expect(supported.status).toBe('passed');
+      expect(supported.preflight.artifactPaths).toHaveLength(2);
+      for (const path of supported.preflight.artifactPaths) {
+        const log = readFileSync(path, 'utf8');
+        expect(log).toContain('pinned-task-used');
+        expect(log).not.toContain('ancestor-task-used');
+      }
+    } finally { r.cleanup(); }
+  });
+
   test('the harness manifest includes gate and subdirectory files, browser stories and explicit exclusions', async () => {
     const r = repo(1);
     try {

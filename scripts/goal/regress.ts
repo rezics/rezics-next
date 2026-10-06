@@ -166,12 +166,15 @@ async function command(checkout: string, args: string[], logPath: string, timeou
 }
 
 async function prepareCheckout(checkout: string) {
+  const taskfile = ['Taskfile.yml', 'Taskfile.yaml'].map(file => join(checkout, file)).find(file => existsSync(file));
+  // Task searches ancestors by default; an unsupported old snapshot must not run another checkout's tasks.
+  if (!taskfile) return { ok: false, artifactPaths: [], reason: 'Pinned checkout has no Taskfile' };
   const directory = join(checkout, '.temp/regress-preflight');
   const installLog = join(directory, 'install.log');
   const generatedLog = join(directory, 'generated.log');
   const started = Date.now();
-  const installed = await command(checkout, ['task', 'install'], installLog, 600_000) === 0;
-  const checked = installed && await command(checkout, ['task', 'gen:check'], generatedLog, Math.max(1, 600_000 - (Date.now() - started))) === 0;
+  const installed = await command(checkout, ['task', '--taskfile', taskfile, 'install'], installLog, 600_000) === 0;
+  const checked = installed && await command(checkout, ['task', '--taskfile', taskfile, 'gen:check'], generatedLog, Math.max(1, 600_000 - (Date.now() - started))) === 0;
   return { ok: installed && checked, artifactPaths: [installLog, ...(installed ? [generatedLog] : [])],
     ...(!checked ? { reason: installed ? 'Generated artifacts are stale or the pinned build is unavailable' : 'Pinned dependency installation failed' } : {}) };
 }
