@@ -1,0 +1,39 @@
+{
+  "file_scan_exclusions": [
+    "**/.temp",
+    "**/.cache",
+    "**/node_modules",
+    "**/.vinext",
+    "**/.wrangler",
+    "**/dist",
+    "**/coverage",
+    "..."
+  ],
+  "lsp": {
+    "tailwindcss-language-server": {
+      "settings": {
+        "files": {
+          "exclude": [
+            "**/.git/**",
+            "**/.hg/**",
+            "**/.svn/**",
+            "**/node_modules/**",
+            "**/.temp/**",
+            "**/.cache/**",
+            "**/.vinext/**",
+            "**/.wrangler/**",
+            "**/dist/**",
+            "**/coverage/**"
+          ]
+        },
+        "experimental": {
+          "configFile": {
+            "apps/web/app/styles.css": ["apps/web/**", "packages/ui/src/**"],
+            "apps/accounts/app/styles.css": "apps/accounts/**",
+            "apps/about/src/styles/global.css": "apps/about/**"
+          }
+        }
+      }
+    }
+  }
+}
