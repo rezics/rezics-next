@@ -477,9 +477,14 @@ tasks:
       - bun scripts/ops/migrate.ts {{.CLI_ARGS}}
 
   ops:env-check:
-    desc: Validate a production environment file and refuse payment provider rows.
+    desc: Validate production configuration, refuse payment provider rows and state the governance opening gate.
     cmds:
       - bun scripts/ops/production-env.ts {{.CLI_ARGS}}
+
+  ops:platform-governance:
+    desc: Refuse production opening without an active permanent platform grant holder; warn until two hold it.
+    cmds:
+      - bun scripts/ops/platform-governance.ts {{.CLI_ARGS}}
 
   ops:bootstrap:
     desc: Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs.

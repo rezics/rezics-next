@@ -11,23 +11,36 @@ import {
 
 const actor = 'https://rezics.com/id/00000000-0000-4000-a000-000000000001';
 const principal = '00000000-0000-4000-a000-000000000002';
-test('G-724 platform role has closed actions and exact controller/principal fences', async () => {
+test('platform action candidates are syntactic; grant proofs retain exact controller/principal fences', async () => {
   expect(platformAdministratorAction('semantic.change', 'semantic:create:root')).toBe(true);
   expect(platformAdministratorAction('lexicon.presentation.review', `semantic:edit:${actor}`)).toBe(
     true,
   );
   expect(platformAdministratorAction('catalogue.verify', 'catalogue:verify:root')).toBe(true);
-  expect(platformAdministratorAction('classification.proposition.define', 'classification:define:global')).toBe(true);
-  expect(platformAdministratorAction('classification.proposition.define', `classification:define:${actor}`)).toBe(false);
-  expect(platformAdministratorAction('statement.decide', 'classification:decide:global')).toBe(false);
+  expect(
+    platformAdministratorAction(
+      'classification.proposition.define',
+      'classification:define:global',
+    ),
+  ).toBe(true);
+  expect(
+    platformAdministratorAction(
+      'classification.proposition.define',
+      `classification:define:${actor}`,
+    ),
+  ).toBe(true);
+  expect(platformAdministratorAction('statement.decide', 'classification:decide:global')).toBe(
+    true,
+  );
   expect(platformAdministratorAction('zone.edit', `zone:edit:${actor}`)).toBe(true);
-  expect(platformAdministratorAction('content.draft', `content:draft:${actor}`)).toBe(false);
+  expect(platformAdministratorAction('content.draft', `content:draft:${actor}`)).toBe(true);
   for (const action of ['work.read', 'work.edit', 'collection.edit']) {
-    expect(platformAdministratorAction(action, `${action.replace('.', ':')}:${actor}`)).toBe(false);
+    expect(platformAdministratorAction(action, `${action.replace('.', ':')}:${actor}`)).toBe(true);
   }
-  expect(platformAdministratorAction('work.create', `work:edit:${actor}`)).toBe(false);
-  expect(platformAdministratorAction('semantic.change', 'semantic:edit:anything')).toBe(false);
+  expect(platformAdministratorAction('work.create', `work:edit:${actor}`)).toBe(true);
+  expect(platformAdministratorAction('semantic.change', 'semantic:edit:anything')).toBe(true);
   expect(platformAdministratorAction('toString', 'work:create:root')).toBe(false);
+  expect(platformAdministratorAction('work.create', 'invalid scope')).toBe(false);
   const saved: PlatformAdministratorProof = {
     receipt: `urn:rezics:access-receipt:${'a'.repeat(64)}`,
     representation_id: principal,
@@ -38,13 +51,27 @@ test('G-724 platform role has closed actions and exact controller/principal fenc
   let current: PlatformAdministratorProof | null = saved;
   let statements = 0;
   const client = {
-    query: async () => {
+    query: async (sql: string) => {
       statements++;
+      if (sql.includes('FROM access.scope_gate')) return { rows: [] };
+      if (sql.includes('access.read_platform_permissions'))
+        return {
+          rows: [
+            {
+              id: principal,
+              action: 'platform:use:platform-admin',
+              scope_id: 'platform:access',
+              generation: '0',
+              valid_until: null,
+              witness: 'live-grant',
+            },
+          ],
+        };
       return { rows: current ? [current] : [] };
     },
   } as unknown as PoolClient;
   expect(await platformAdministratorProofCurrent(client, saved, principal, actor)).toBe(true);
-  expect(statements).toBe(1);
+  expect(statements).toBe(3);
   for (const key of [
     'receipt',
     'representation_id',
@@ -59,7 +86,7 @@ test('G-724 platform role has closed actions and exact controller/principal fenc
   expect(await platformAdministratorProofCurrent(client, saved, principal, actor)).toBe(false);
 });
 
-test('G-724 first designation refuses missing or inactive principals without creating one', async () => {
+test('first designation refuses missing or inactive principals without creating one', async () => {
   for (const principal of [undefined, { id: actor, active: false }]) {
     const statements: string[] = [];
     const client = {
@@ -87,7 +114,7 @@ test('G-724 first designation refuses missing or inactive principals without cre
   }
 });
 
-test('G-724 administrator resource authority is restricted to owned Zones and created definitions', async () => {
+test('administrator resource authority requires grants before checking owned targets', async () => {
   const client = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as PoolClient;
   let calls = 0;
   const graph = {
@@ -105,7 +132,7 @@ test('G-724 administrator resource authority is restricted to owned Zones and cr
       await platformAdministratorTargetAllowed(client, graph, principal, actor, action!, scope!),
     ).toBe(false);
   }
-  expect(calls).toBe(4);
+  expect(calls).toBe(0);
   expect(
     await platformAdministratorTargetAllowed(
       client,
@@ -125,5 +152,5 @@ test('G-724 administrator resource authority is restricted to owned Zones and cr
       'semantic.change',
       'semantic:create:root',
     ),
-  ).toBe(true);
+  ).toBe(false);
 });

@@ -260,4 +260,7 @@ if (import.meta.main) {
   checkProductionEnv(env);
   await assertNoPaymentProvider(env.ACCESS_DATABASE_URL!, true);
   console.log('Production configuration accepted; payments disabled');
+  console.log(
+    'Production opening requires an active permanent platform:grant holder; run task ops:platform-governance after first designation (two holders recommended)',
+  );
 }

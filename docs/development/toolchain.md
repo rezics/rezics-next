@@ -431,7 +431,8 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task release:build` | Package a content-addressed local release artifact. |
 | `task release:images` | Build local pinned OCI runtime images and record their release manifest; never push. |
 | `task ops:migrate` | Apply the release's locked, idempotent owner migrations. |
-| `task ops:env-check` | Validate a production environment file and refuse payment provider rows. |
+| `task ops:env-check` | Validate production configuration, refuse payment provider rows and state the governance opening gate. |
+| `task ops:platform-governance` | Refuse production opening without an active permanent platform grant holder; warn until two hold it. |
 | `task ops:bootstrap` | Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs. |
 | `task release:install` | Verify a release artifact and provision a project from it. |
 | `task search:rebuild` | Rebuild the public search index on a stopped-writer stack. |

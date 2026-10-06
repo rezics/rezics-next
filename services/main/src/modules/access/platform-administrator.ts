@@ -202,7 +202,7 @@ export type FirstAdministratorResult =
   | { status: 'unconfigured' }
   | { status: 'granted' | 'ignored'; receipt: string };
 
-/** Access owner startup command. The recovery singleton serializes simultaneous
+/** Access owner startup command. The recovery fence serializes simultaneous
  * first boots. Grants and audit receipts commit together; configuration is never
  * authority again once a designation exists, even for the same subject. */
 export class AccessPlatformAdministrators {
@@ -224,23 +224,28 @@ export class AccessPlatformAdministrators {
         )
       ).rows[0];
       const existing = (
-        await client.query<{ principal_id: string; receipt: string }>(
-          `SELECT g.principal_id,e.receipt FROM access.platform_grant_episode e
+        await client.query<{ principal_id: string; receipt: string; permanent_holder: boolean }>(
+          `SELECT g.principal_id,e.receipt,
+            (g.active AND g.valid_until = 'infinity' AND p.active) AS permanent_holder
+          FROM access.platform_grant_episode e
           JOIN access.principal_permission_grant g ON g.id = e.principal_grant_id
+          JOIN access.principal p ON p.id = g.principal_id
           WHERE e.permission = 'platform:grant' AND e.principal_grant_id IS NOT NULL
           ORDER BY e.created_at,e.id LIMIT 1`,
         )
       ).rows[0];
       if (existing) {
-        // Complete assignment ceilings if the holder provisioned its Agent
-        // after bootstrap. The seed never reactivates a terminal grant.
-        if (fence?.open)
+        // Immutable history also prevents configuration from becoming a recovery
+        // or second-assignment path after a former holder loses its authority.
+        // A live first holder may have provisioned its Agent after designation.
+        // Complete its assignment ceilings without reviving terminal grants.
+        if (fence?.open && existing.permanent_holder)
           await client.query('SELECT access.seed_platform_grants($1,$2)', [
             existing.principal_id,
             existing.receipt,
           ]);
         await client.query('COMMIT');
-        log('PLATFORM_FIRST_ADMIN_ACCOUNT ignored: a platform administrator already exists');
+        log('PLATFORM_FIRST_ADMIN_ACCOUNT ignored: platform:grant designation already exists');
         return { status: 'ignored', receipt: existing.receipt };
       }
       if (!fence?.open) throw new Error('First platform administrator: Access recovery is held');
@@ -260,7 +265,9 @@ export class AccessPlatformAdministrators {
       const receipt = `urn:rezics:access-receipt:${digest}`;
       await client.query('SELECT access.seed_platform_grants($1,$2)', [principal.id, receipt]);
       await client.query('COMMIT');
-      log(`Access designated the first platform administrator; audit receipt ${receipt}`);
+      log(
+        `Access granted first platform governance and administrator permissions; audit receipt ${receipt}`,
+      );
       return { status: 'granted', receipt };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);

@@ -34,21 +34,53 @@ After signing in and provisioning the Agent, set `PLATFORM_FIRST_ADMIN_ACCOUNT`
 to that Account subject in Main's operator environment and restart Main.
 Access requires the existing active principal; a missing, mistyped or inactive
 subject fails startup without consuming the designation. Its startup owner
-command designates the first platform administrator and commits an immutable
-audit receipt atomically. Verify the designation receipt in Main's startup log
-and run bootstrap verification, then remove the setting. Once any designation exists, Access
-logs that the setting is ignored, including a replay with the same subject or
-a different candidate. Deactivating the principal never lets the configuration
-restore it. There is no additional administrator assignment path.
+command grants permanent `platform:grant`, `platform:use:platform-admin` and
+the administrator resource permissions, committing their shared immutable audit
+receipt atomically. Verify that receipt in Main's startup log, then remove the
+setting. Once a designation exists, Access logs that a supplied setting is
+ignored, including a replay with the same subject or a different candidate.
+Configuration never restores revoked grants or a deactivated principal.
 
-Account ownership and the Main role are separate. The platform administrator's
+Appoint at least two distinct active permanent `platform:grant` holders. The
+first holder assigns the second through the ordinary Access grant API:
+`POST /v1/access/grant-changes` with profile `platform-grant-change-v1`, action
+`create`, permission `platform:grant`, `scopeId: platform:access`, the second
+principal as recipient, and `validUntil: null`. Supply the issuer's Agent IRI,
+a new grant UUID, the current authority epoch and an idempotency key; the Main
+token needs the `access:grant` OAuth scope.
+The issuer needs a live Agent controller and the permanent
+`access.grant.assign.platform` assignment ceiling supplied at first designation.
+Every later holder that assigns or revokes grants also needs its own controller
+and assignment ceiling; issuing `platform:grant` does not create that ceiling.
+Later assignments and revocations use this same grant path within its ceilings;
+the last active permanent holder cannot be removed or deactivated. Assign
+`platform:use:platform-admin` and resource permissions separately when the
+backup also needs administrator operations. A governance grant alone supplies
+assignment authority, not resource authority.
+
+Before opening production, run:
+
+```sh
+task ops:platform-governance -- .temp/production.env
+```
+
+This checks Access directly and fails unless an active principal holds a
+permanent direct `platform:grant`; it warns until two distinct principals hold
+it. Finite grants do not satisfy the gate. Main starts without governance so the
+first operator can sign in, but production `/health/ready` returns `503` until
+that permanent holder exists. `ops:env-check` validates configuration and states
+this opening rule; it does not establish governance readiness. Run catalogue
+bootstrap verification separately after designation.
+
+Account ownership and Main grants are separate. The platform administrator's
 live Agent controller can create/configure its own official Zones, change its
 created semantic definitions and reviewed labels, create/verify catalogue Works,
 admit sources, and operate platform moderation. Work and Collection reads and
-edits use ordinary creator/curator authority; the role never grants access to a
-member's private shelves, lists, Works or exports. OAuth scopes remain ceilings. Scope closure,
+edits use ordinary creator/curator authority; administrator permissions never
+grant access to a member's private shelves, lists, Works or exports. OAuth scopes remain ceilings. Scope closure,
 recovery holds, explicit policies, principal and controller revocation still
-fence operations. The role receives the existing `trusted` rate-limit class;
+fence operations. A holder of `platform:use:platform-admin` receives the existing
+`trusted` rate-limit class;
 bootstrap uses its ordinary budget without installing a service client or
 overriding limits. It refuses denied operations and retains commands for replay.
 It never inserts grants into a database.

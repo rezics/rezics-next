@@ -7,11 +7,20 @@ Boot Main with `PLATFORM_FIRST_ADMIN_ACCOUNT` unset. Have the first real
 operator sign in through Account and provision its Agent through Main. Then set
 the variable to that existing active Account subject and restart Main.
 Access consumes this configuration through its own
-startup command only when no platform administrator exists, committing the role
-and an audit receipt together. Verify the startup receipt and bootstrap, then
+startup command only before governance has been designated, committing
+permanent `platform:grant`, `platform:use:platform-admin` and administrator
+resource grants with one shared audit receipt. Verify the startup receipt, then
 remove the setting. An unknown or inactive principal fails without designation.
-Later boots log that a supplied setting is ignored once a designation exists;
-it cannot restore a deactivated administrator or designate a second one.
+Later boots log that a supplied setting is ignored once governance has been
+designated; it cannot restore revoked authority or designate a second holder.
+Assign a second permanent `platform:grant` holder through the ordinary Access
+grant API within the issuer's assignment ceiling. The last permanent holder
+cannot be removed. Before opening production, run
+`task ops:platform-governance -- .temp/production.env`: zero active permanent
+holders fails, and one warns that a backup is needed. Main still starts without
+a holder for first sign-in; production readiness stays unavailable until one
+exists. Configuration checks and catalogue bootstrap verification are separate
+checks and do not replace this governance gate.
 Follow [first installation and launch intake](production-install.md#operator-and-authority)
 for Account ownership, Agent provisioning, scoped credentials and bootstrap.
 
@@ -96,6 +105,8 @@ With these in place, deployment is operations work:
   reflect storage, schema, graph epoch and index generation.
 - A production bootstrap that creates operators, official Realms, Zones and the
   shared vocabulary without demo data, then runs imports as resumable batch jobs.
+- Active permanent platform governance verified before opening, with at least
+  two holders appointed through Access grants for continuity.
 - Backup and restore commands per owner, encrypted complete recovery sets and
   pinned release artifacts held under separate custody, and a timed restore
   drill at launch data scale on an isolated copy.
