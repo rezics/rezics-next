@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
-import { appendInbox, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionRegistry,
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionRegistry,
   runRegression, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 function repo(extraIntegration = 0) {
@@ -103,7 +103,7 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
       expect(result.diagnoses[0]).toMatchObject({ status: 'attributed', before: r.base, after, goal: 'owner', taskIds: ['G-001', 'G-002'] });
       expect(result.diagnoses[0]!.probes.slice(-2)).toEqual([{ commit: r.base, outcome: 'passed' }, { commit: after, outcome: 'failed' }]);
       const probes = r.calls.filter(call => call.directory.includes('/probes/'));
-      expect(probes.every(call => call.checkout.includes('/probes/'))).toBe(true);
+      expect(probes.every(call => call.checkout !== result.checkout)).toBe(true);
       expect(new Set(probes.map(call => call.checkout)).size).toBe(probes.length);
       expect(inboxEntries(r.options.stateDir, 'owner')).toHaveLength(1);
     } finally { r.cleanup(); }
@@ -156,7 +156,8 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
         const base = r.git('rev-parse', 'HEAD');
         const after = r.commit({ [r.unit]: 'fail\n' }); r.event(base, after);
         const result = await r.run({ runId: 'unavailable', prepare: async checkout => ({
-          ok: missing || !checkout.endsWith(base), artifactPaths: [], reason: 'build unavailable' }) });
+          ok: missing || spawnSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).stdout.trim() !== base,
+          artifactPaths: [], reason: 'build unavailable' }) });
         expect(result.diagnoses[0]!.status).toBe('unavailable');
         expect(result.status).not.toBe('passed');
       } finally { r.cleanup(); }
@@ -171,7 +172,7 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
       let probes = 0;
       const result = await r.run({ runId: 'flip', runner: async (...args) => {
         const result = await r.runner(...args);
-        if (args[2].includes('/probes/') && args[0].endsWith(r.base) && ++probes > 1) {
+        if (args[2].includes('/probes/') && r.calls.at(-1)!.commit === r.base && ++probes > 1) {
           result.outcomes[r.unit] = 'failed'; result.code = 1;
         }
         return result;
@@ -239,6 +240,28 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
       r.calls.length = 0;
       expect((await r.run({ resume: 'interrupted' })).status).toBe('passed');
       expect(r.calls.some(call => call.batch.tier === 'unit')).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
+  test('resume voids PostgreSQL failures from an old long checkout path and retains verified passes', async () => {
+    const r = repo();
+    try {
+      await expect(r.run({ runId: 'old-layout', runner: async (...args) => {
+        if (args[1].tier === 'fault/recovery') throw new Error('interrupted');
+        const result = await r.runner(...args);
+        if (args[1].tier === 'integration') return { ...result, code: 1, evidence: 'pg_ctl -k checkout/.temp/pg-sock failed',
+          outcomes: Object.fromEntries(args[1].files.map(file => [file, 'failed'])) as Execution['outcomes'] };
+        return result;
+      } })).rejects.toThrow('interrupted');
+      const old = r.manifest('old-layout'); old.checkout = `/tmp/${'long'.repeat(40)}`;
+      old.batches.find(batch => batch.tier === 'integration')!.attempts[0]!.evidence = 'pg_ctl -k checkout/.temp/pg-sock failed';
+      writeFileSync(join(r.options.stateDir, 'regress/old-layout/manifest.json'), JSON.stringify(old));
+      r.calls.length = 0;
+      const result = await r.run({ resume: 'old-layout' });
+      expect(result.status).toBe('passed');
+      expect(result.batches.find(batch => batch.tier === 'integration')!.attempts[0]!.classification).toBe('infrastructure');
+      expect(r.calls.some(call => call.batch.tier === 'unit' || call.batch.tier === 'model')).toBe(false);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(0);
     } finally { r.cleanup(); }
   });
 
@@ -320,6 +343,8 @@ test('classification uses engine evidence without treating application ECONNREFU
   for (const log of ['docker engine ECONNREFUSED', 'dial unix /var/run/docker.sock: connect: no such file or directory',
     'failed to connect to the Docker API', 'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
   expect(classify('spawnSync bun ETIMEDOUT')).toBe('deadline');
+  expect(classify('No QA slot became free within one hour')).toBe('deadline');
+  expect(classify('The heavy QA lock stayed held for six hours')).toBe('deadline');
   expect(classify('model failed or exceeded 180s')).toBe('deterministic');
   expect(classify('', 137)).toBe('resource');
 });
@@ -349,6 +374,13 @@ test('bounded CLI selections preserve the resume configuration', () => {
     .toEqual({ at: 'main', only: ['unit', 'model'], integrationBatches: 2 });
   expect(() => parseRegressArgs(['--resume', 'run', '--only', 'unit'])).toThrow('original selection');
   expect(() => parseRegressArgs(['--integration-batches', '-1'])).toThrow('Invalid');
+});
+
+test('detached worktree names leave room for owner PostgreSQL Unix sockets', () => {
+  const repo = '/home/edge/projects/rezics/rezics-next/.temp/worktrees/sample';
+  const length = checkoutNameLength(repo);
+  expect(Buffer.byteLength(join(repo, '.temp/regress', 'a'.repeat(length), '.temp/pg-sock/.s.PGSQL.65535'))).toBeLessThanOrEqual(107);
+  expect(() => checkoutNameLength(`/tmp/${'a'.repeat(100)}`)).toThrow('too deep');
 });
 
 test('shared UI stories can be selected alone through the web Storybook command', () => {

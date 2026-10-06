@@ -60,6 +60,14 @@ function git(repo: string, args: string[]): string {
 const ancestor = (repo: string, before: string, after: string): boolean =>
   spawnSync('git', ['merge-base', '--is-ancestor', before, after], { cwd: repo }).status === 0;
 const validId = (id: string): boolean => /^[a-z0-9][a-z0-9-]{0,60}$/.test(id);
+// Owner gates start local PostgreSQL under the checkout. Linux sun_path is 108 bytes including NUL.
+// https://man7.org/linux/man-pages/man7/unix.7.html
+const postgresSocketSuffix = '/.temp/pg-sock/.s.PGSQL.65535';
+export function checkoutNameLength(repo: string): number {
+  const length = Math.min(16, 107 - Buffer.byteLength(join(repo, '.temp/regress')) - Buffer.byteLength(postgresSocketSuffix) - 1);
+  if (length < 2) throw new Error('Regression checkout root is too deep for PostgreSQL sockets; use a shorter repository path');
+  return length;
+}
 
 export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches'> {
   const options: ReturnType<typeof parseRegressArgs> = {};
@@ -133,7 +141,7 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
 export function classify(evidence: string, code = 1): Classification {
   if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(evidence)) return 'resource';
-  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded/i.test(evidence)) return 'deadline';
+  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|heavy QA lock stayed held|No QA slot became free/i.test(evidence)) return 'deadline';
   return 'deterministic';
 }
 
@@ -306,10 +314,27 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const path = join(directory, 'manifest.json');
     const pinned = options.resume ? json<Manifest>(path).atCommit : git(repo, ['rev-parse', '--verify', `${options.at ?? 'main'}^{commit}`]);
     if (options.resume && options.at && git(repo, ['rev-parse', `${options.at}^{commit}`]) !== pinned) throw new Error('Resume revision differs from the pinned commit');
-    const worktrees = join(repo, '.temp/regress', runId);
+    const worktrees = join(repo, '.temp/regress');
+    const treeMapPath = join(directory, 'checkouts.json');
+    const treeMap = existsSync(treeMapPath) ? json<Record<string, string>>(treeMapPath) : {};
+    const nameLength = checkoutNameLength(repo);
     const prepared = new Map<string, Manifest['preflight']>();
     const checkoutAt = async (commit: string, probe?: string, install = true) => {
-      const checkout = probe ? join(worktrees, 'probes', probe, commit) : join(worktrees, commit);
+      const key = `${commit}:${probe ?? 'pinned'}`;
+      let checkout = treeMap[key];
+      if (!checkout) {
+        const space = 16n ** BigInt(nameLength);
+        const seed = BigInt(`0x${createHash('sha256').update(`${runId}:${key}`).digest('hex')}`);
+        for (let offset = 0n; offset < space; offset++) {
+          const candidate = join(worktrees, ((seed + offset) % space).toString(16).padStart(nameLength, '0'));
+          if (existsSync(candidate)) continue;
+          git(repo, ['worktree', 'add', '--detach', candidate, commit]);
+          checkout = candidate; treeMap[key] = checkout; atomic(treeMapPath, treeMap);
+          break;
+        }
+        if (!checkout) throw new Error('No short regression worktree path is free; remove completed regression checkouts');
+      }
+      if (relative(worktrees, checkout).startsWith('..')) throw new Error('Regression checkout map points outside its repository');
       if (!existsSync(checkout)) git(repo, ['worktree', 'add', '--detach', checkout, commit]);
       if (git(checkout, ['rev-parse', 'HEAD']) !== commit || git(checkout, ['status', '--porcelain'])) {
         throw new Error(`Pinned checkout changed: ${checkout}`);
@@ -322,6 +347,18 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     let manifest: Manifest;
     if (options.resume) {
       manifest = json<Manifest>(path);
+      // Older runs nested the full run ID and SHA, which prevented owner gates from binding PostgreSQL sockets.
+      // Preserve verified passes and void only batches that actually failed to start pg_ctl under that long path.
+      if (manifest.checkout !== checkout && Buffer.byteLength(manifest.checkout + postgresSocketSuffix) > 107) {
+        for (const batch of manifest.batches) {
+          const result = batch.attempts.at(-1);
+          if (batch.state !== 'done' || !result?.code || !/pg_ctl[\s\S]*pg-sock/.test(result.evidence ?? '')) continue;
+          result.classification = 'infrastructure'; batch.state = 'pending';
+          for (const file of manifest.files.filter(file => file.tier === batch.tier && batch.files.includes(file.file))) file.outcome = 'void';
+          manifest.diagnoses = manifest.diagnoses.filter(diagnosis => !batch.files.includes(diagnosis.file));
+        }
+      }
+      manifest.checkout = checkout;
       // Validate the persisted plan against the same pinned registry; a deleted row cannot turn an incomplete run green.
       const expected = await (options.registry ?? regressionRegistry)(checkout);
       const identities = (files: ExpectedFile[]) => files.map(file => `${file.tier}:${file.file}`).sort().join('\n');

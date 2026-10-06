@@ -1937,8 +1937,9 @@ async function withSlot(command: string[], heavy = false, resultFile?: string): 
   const dir = join(stateDir, 'qa-slots');
   mkdirSync(dir, { recursive: true });
   // Take the heavy lock before a slot, so a waiting heavy run never holds a slot that light runs need.
-  const releaseHeavy = heavy ? await acquireHeavy(command) : undefined;
+  let releaseHeavy: (() => void) | undefined;
   try {
+    releaseHeavy = heavy ? await acquireHeavy(command) : undefined;
     let held: string | undefined;
     const deadline = Date.now() + 3_600_000;
     while (!held) {
