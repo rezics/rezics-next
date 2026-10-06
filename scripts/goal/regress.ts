@@ -364,6 +364,11 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const expected = await (options.registry ?? regressionRegistry)(checkout);
       const identities = (files: ExpectedFile[]) => files.map(file => `${file.tier}:${file.file}`).sort().join('\n');
       if (identities(expected) !== identities(manifest.files)) throw new Error('Incomplete or changed regression manifest');
+      const exclusions = new Map(expected.filter(file => file.outcome === 'excluded').map(file => [`${file.tier}:${file.file}`, file.reason]));
+      if (manifest.files.some(file => (file.outcome === 'excluded') !== exclusions.has(`${file.tier}:${file.file}`)
+        || (file.outcome === 'excluded' && file.reason !== exclusions.get(`${file.tier}:${file.file}`)))) {
+        throw new Error('Incomplete or changed regression exclusions');
+      }
       const planned = manifest.batches.flatMap(batch => batch.files.map(file => `${batch.tier}:${file}`)).sort();
       const required = manifest.files.filter(file => file.outcome !== 'excluded' && file.outcome !== 'deferred')
         .map(file => `${file.tier}:${file.file}`).sort();

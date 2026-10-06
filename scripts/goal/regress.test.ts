@@ -298,6 +298,28 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
     } finally { r.cleanup(); }
   });
 
+  test('resume accepts registry exclusions but cannot hide a removed batch or lose an exclusion reason', async () => {
+    const r = repo();
+    try {
+      r.files.push({ tier: 'live', file: 'tests/qa/live/engine.test.ts', outcome: 'excluded', reason: 'Opt-in live engine gate' });
+      expect((await r.run({ runId: 'exclusions' })).status).toBe('passed');
+      r.calls.length = 0;
+      expect((await r.run({ resume: 'exclusions' })).status).toBe('passed');
+      const path = join(r.options.stateDir, 'regress/exclusions/manifest.json');
+      const recorded = readFileSync(path, 'utf8');
+      const hidden = JSON.parse(recorded) as Manifest;
+      hidden.files.find(file => file.file === r.unit)!.outcome = 'excluded';
+      hidden.batches = hidden.batches.filter(batch => batch.tier !== 'unit');
+      writeFileSync(path, JSON.stringify(hidden));
+      await expect(r.run({ resume: 'exclusions' })).rejects.toThrow('exclusions');
+      const missingReason = JSON.parse(recorded) as Manifest;
+      missingReason.files.find(file => file.tier === 'live')!.reason = undefined;
+      writeFileSync(path, JSON.stringify(missingReason));
+      await expect(r.run({ resume: 'exclusions' })).rejects.toThrow('exclusions');
+      expect(r.calls).toHaveLength(0);
+    } finally { r.cleanup(); }
+  });
+
   test('flaky, order-dependent, deadline and resource outcomes stay distinct', async () => {
     for (const classification of ['flaky', 'order-dependent', 'deadline', 'resource'] as const) {
       const r = repo();
