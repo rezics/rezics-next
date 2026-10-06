@@ -108,7 +108,7 @@ export function rateLimitHook(
     .cleanup(async () => {
       await limit?.store.stopExpirySweep?.();
     })
-    .beforeHandle('global', async ({ request, server }) => {
+    .beforeHandle('global', async function enforceRateLimit({ request, server }) {
       // Embedded route fixtures may omit deployment dependencies. The HTTP
       // composition root always supplies the store; no runtime fail-open switch.
       if (!limit) return;
