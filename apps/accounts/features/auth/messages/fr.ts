@@ -1,6 +1,42 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "Activez JavaScript dans votre navigateur pour utiliser un code de récupération.",
+  recoveryExpiredBody: "Commencez une nouvelle demande avec votre code. Votre personne de confiance doit l’approuver et un nouveau délai d’attente s’applique.",
+  recoveryStartOver: "Nouvelle demande de récupération",
+  recoveryExpired: "Cette demande a expiré",
+  recoverWithCode: 'Méthodes de connexion perdues ? Utiliser un code de récupération',
+  recoveryCodeTitle: 'Récupérer votre compte',
+  recoveryCodeBody:
+    'Utilisez le code sauvegardé et l’approbation de votre personne de confiance. La récupération fonctionne même sans ancien mot de passe.',
+  recoveryCodeLabel: 'Code de récupération',
+  recoveryResume: 'Reprendre une demande existante',
+  recoveryRequestLabel: 'Identifiant de la demande',
+  recoveryRebindTitle: 'Ajouter une méthode de connexion',
+  recoveryRebindBody:
+    'Choisissez un nouveau mot de passe. Après connexion, ajoutez une nouvelle clé d’accès ou configurez à nouveau la validation en deux étapes.',
+  recoveryWaiting: 'En attente de l’approbation de votre personne de confiance.',
+  recoveryApproved: 'Demande approuvée',
+  recoveryAvailableAt: 'Récupération possible à partir du',
+  recoveryExpiresAt: 'Expiration de la demande',
+  recoveryShare:
+    'Gardez cet identifiant pour revenir plus tard. Partagez le lien d’approbation avec votre personne de confiance par un canal sûr. Gardez votre code secret.',
+  recoveryCheckStatus: 'Vérifier le statut',
+  recoveryRemovedBody:
+    'La récupération supprime les clés d’accès, secrets d’authentification et codes de secours, liens de connexion et de réinitialisation en attente, appareils connectés et accès des applications. Seul le nouveau mot de passe fonctionnera.',
+  recoverySubmit: 'Récupérer le compte',
+  recoveryRetry: 'Réessayez avec le même mot de passe pour vérifier si la récupération a abouti.',
+  recoveryProofFailed:
+    'Cette demande est indisponible, expirée ou pas encore prête. Vérifiez le code et l’identifiant, puis vérifiez à nouveau le statut.',
+  recoveryDoneTitle: 'Votre compte est récupéré',
+  recoveryDoneBody:
+    'Les anciennes méthodes de connexion et les accès des applications sont supprimés. Connectez-vous avec le nouveau mot de passe, puis ajoutez une clé d’accès ou une application d’authentification dans Sécurité et connexion. Les applications devront redemander l’accès. Sauvegardez un nouveau code de récupération.',
+  recoveryApprovalTitle: 'Approuver la récupération',
+  recoveryApprovalBody:
+    'Approuvez seulement si le propriétaire vous l’a demandé par un canal sûr et si l’identifiant correspond. Votre accord lui permet de remplacer toutes les méthodes de connexion après le délai d’attente.',
+  recoveryApprove: 'Approuver',
+  recoveryApprovalDone:
+    'Le propriétaire peut terminer après le délai d’attente. Votre accord ne l’a pas connecté.',
   signInTitle: 'Se connecter',
   signInSubtitle: 'Utilisez votre compte REZICS',
   signInForApp: 'Une application vous demande de vous connecter avec votre compte REZICS',

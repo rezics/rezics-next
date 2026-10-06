@@ -96,6 +96,14 @@ export function RecoveryForm({
   return (
     <>
       <AuthHeading title={t.recoveryTitle} subtitle={t.recoveryBody} />
+      <p className="mb-6 text-sm text-muted-foreground">
+        <a
+          className="font-medium text-primary underline underline-offset-4"
+          href={`/recover-account${carry ? `?${carry}` : ''}`}
+        >
+          {t.recoverWithCode}
+        </a>
+      </p>
       {outcome || captchaFailed ? (
         <Alert role="alert" variant="destructive" className="mb-6">
           <AlertDescription>

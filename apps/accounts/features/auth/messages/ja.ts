@@ -1,6 +1,41 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "復元コードを使うには、ブラウザーで JavaScript を有効にしてください。",
+  recoveryExpiredBody: "復元コードで新しいリクエストを開始してください。協力者の承認と新たな待機期間が必要です。",
+  recoveryStartOver: "新しい復元リクエストを開始",
+  recoveryExpired: "この復元リクエストは期限切れです",
+  recoverWithCode: 'ログイン方法を失った場合は復元コードを使用',
+  recoveryCodeTitle: 'アカウントを復元',
+  recoveryCodeBody:
+    '保存した復元コードと復元の協力者の承認が必要です。パスワードを設定したことがなくても復元できます。',
+  recoveryCodeLabel: '復元コード',
+  recoveryResume: '既存の復元リクエストを再開',
+  recoveryRequestLabel: '復元リクエスト ID',
+  recoveryRebindTitle: '新しいログイン方法を追加',
+  recoveryRebindBody:
+    '新しいパスワードでアクセスを取り戻します。ログイン後、新しいパスキーや2段階認証を設定できます。',
+  recoveryWaiting: '復元の協力者の承認を待っています。',
+  recoveryApproved: '復元リクエストが承認されました',
+  recoveryAvailableAt: '復元開始日時',
+  recoveryExpiresAt: 'リクエストの有効期限',
+  recoveryShare:
+    '後で再開できるように ID を保存してください。信頼できる連絡手段で承認リンクを協力者に共有してください。復元コードは共有しないでください。',
+  recoveryCheckStatus: '復元状況を確認',
+  recoveryRemovedBody:
+    '既存のパスキー、認証アプリの秘密鍵とバックアップコード、未使用のログイン・リセットリンク、ログイン中の端末、アプリのアクセス権をすべて解除します。新しいパスワードのみが使えます。',
+  recoverySubmit: 'アカウントを復元',
+  recoveryRetry: '同じパスワードで再試行して復元結果を確認してください。',
+  recoveryProofFailed:
+    'このリクエストは利用できないか、期限切れか、まだ準備ができていません。コードと ID を確認し、状況を再確認してください。',
+  recoveryDoneTitle: 'アカウントを復元しました',
+  recoveryDoneBody:
+    '以前のログイン方法とアプリのアクセス権を解除しました。新しいパスワードでログインし、「セキュリティとログイン」でパスキーや認証アプリを追加してください。アプリの再承認と新しい復元コードの保存が必要です。',
+  recoveryApprovalTitle: 'アカウントの復元を承認',
+  recoveryApprovalBody:
+    '本人から信頼できる連絡手段で依頼され、リクエスト ID が一致する場合のみ承認してください。承認すると、待機期間後にすべてのログイン方法を置き換えられます。',
+  recoveryApprove: '復元を承認',
+  recoveryApprovalDone: '本人は待機期間後に復元を完了できます。承認だけではログインされません。',
   signInTitle: 'ログイン',
   signInSubtitle: 'REZICS アカウントを使用',
   signInForApp: 'アプリが REZICS アカウントでのログインを求めています',

@@ -1,6 +1,42 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "복구 코드를 사용하려면 브라우저에서 JavaScript를 활성화하세요.",
+  recoveryExpiredBody: "복구 코드로 새 요청을 시작하세요. 보호자의 승인이 필요하며 새 대기 기간이 적용됩니다.",
+  recoveryStartOver: "새 복구 요청 시작",
+  recoveryExpired: "이 복구 요청은 만료되었습니다",
+  recoverWithCode: '로그인 방법을 잃었나요? 복구 코드 사용',
+  recoveryCodeTitle: '계정 복구',
+  recoveryCodeBody:
+    '저장한 복구 코드와 복구 보호자의 승인을 사용하세요. 비밀번호를 설정한 적이 없어도 복구할 수 있습니다.',
+  recoveryCodeLabel: '복구 코드',
+  recoveryResume: '기존 복구 요청 계속하기',
+  recoveryRequestLabel: '복구 요청 ID',
+  recoveryRebindTitle: '새 로그인 방법 추가',
+  recoveryRebindBody:
+    '새 비밀번호로 접근 권한을 되찾으세요. 로그인 후 새 패스키를 추가하거나 2단계 인증을 다시 설정할 수 있습니다.',
+  recoveryWaiting: '복구 보호자의 승인을 기다리는 중입니다.',
+  recoveryApproved: '복구 요청 승인됨',
+  recoveryAvailableAt: '복구 가능 시각',
+  recoveryExpiresAt: '요청 만료 시각',
+  recoveryShare:
+    '나중에 돌아올 수 있도록 요청 ID를 저장하세요. 신뢰할 수 있는 경로로 승인 링크를 복구 보호자에게 공유하세요. 복구 코드는 비공개로 유지하세요.',
+  recoveryCheckStatus: '복구 상태 확인',
+  recoveryRemovedBody:
+    '복구하면 기존 패스키, 인증기 비밀 키와 백업 코드, 대기 중인 로그인 및 재설정 링크, 로그인된 기기와 앱 접근 권한이 모두 제거됩니다. 새 비밀번호만 사용할 수 있습니다.',
+  recoverySubmit: '계정 복구',
+  recoveryRetry: '같은 비밀번호로 다시 시도하여 복구 완료 여부를 확인하세요.',
+  recoveryProofFailed:
+    '이 복구 요청은 사용할 수 없거나 만료되었거나 아직 준비되지 않았습니다. 코드와 요청 ID를 확인한 후 상태를 다시 확인하세요.',
+  recoveryDoneTitle: '계정이 복구되었습니다',
+  recoveryDoneBody:
+    '이전 로그인 방법과 앱 접근 권한이 제거되었습니다. 새 비밀번호로 로그인한 뒤 보안 및 로그인에서 새 패스키나 인증기를 추가하세요. 앱은 접근 권한을 다시 요청해야 합니다. 새 복구 코드를 미리 저장하세요.',
+  recoveryApprovalTitle: '계정 복구 승인',
+  recoveryApprovalBody:
+    '소유자가 신뢰할 수 있는 경로로 요청했고 요청 ID가 일치할 때만 승인하세요. 승인하면 대기 기간 후 모든 로그인 방법을 교체할 수 있습니다.',
+  recoveryApprove: '복구 승인',
+  recoveryApprovalDone:
+    '소유자는 대기 기간 후 복구를 완료할 수 있습니다. 승인만으로 로그인되지는 않습니다.',
   signInTitle: '로그인',
   signInSubtitle: 'REZICS Account 사용',
   signInForApp: '앱에서 REZICS Account로 로그인하라고 요청했습니다',

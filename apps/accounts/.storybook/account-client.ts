@@ -23,6 +23,10 @@ export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
   const api: AccountApi = {
     signIn: () => ok({}), verifyTwoFactor: () => ok({}), signInWithPasskey: ({ conditional, signal }) => conditional ? pendingAutofill(signal) : ok({}), signUp: () => ok({}), acceptPolicies: () => ok(undefined), unsubscribe: () => ok(undefined),
     requestPasswordReset: () => ok(undefined), resetPassword: () => ok(undefined),
+    requestRecovery: () => Promise.resolve({ ok: false, kind: 'unavailable', status: 503 }),
+    readRecovery: () => Promise.resolve({ ok: false, kind: 'unavailable', status: 503 }),
+    approveRecovery: () => Promise.resolve({ ok: false, kind: 'unavailable', status: 503 }),
+    activateRecovery: (claimId) => ok({ claimId, recoveryGeneration: '1', replayed: false }),
     sendVerificationEmail: () => ok(undefined), signOut: () => ok(undefined),
     consent: () => ok({ redirect: 'https://app.example/callback?code=c' }),
     reauthenticate: () => ok(undefined), reauthenticateWithPasskey: () => ok(undefined),

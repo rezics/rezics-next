@@ -15,6 +15,16 @@ interface Continuation { redirect?: string }
 /** A new authenticator app: the `otpauth:` URI for its QR code, and backup codes. */
 export interface TotpEnrollment { totpURI: string; backupCodes: string[] }
 
+export interface RecoveryClaim {
+  claimId: string;
+  targetUserId: string;
+  notBefore: string;
+  expiresAt: string;
+  approved: boolean;
+  activated: boolean;
+  replayed: boolean;
+}
+
 export interface AccountApi {
   /** `twoFactor` means the password was right and a second step is needed. */
   signIn(input: { email: string; password: string; oauthQuery?: string }):
@@ -34,6 +44,17 @@ export interface AccountApi {
   unsubscribe(token: string): Promise<Result<void>>;
   requestPasswordReset(email: string, captchaToken?: string): Promise<Result<void>>;
   resetPassword(token: string, newPassword: string): Promise<Result<void>>;
+  requestRecovery(input: {
+    claimId: string;
+    targetEmail: string;
+    recoveryCode: string;
+  }): Promise<Result<RecoveryClaim>>;
+  readRecovery(claimId: string, recoveryCode: string): Promise<Result<RecoveryClaim>>;
+  approveRecovery(claimId: string): Promise<Result<RecoveryClaim>>;
+  activateRecovery(
+    claimId: string,
+    input: { recoveryCode: string; newPassword: string },
+  ): Promise<Result<{ claimId: string; recoveryGeneration: string; replayed: boolean }>>;
   sendVerificationEmail(email: string, captchaToken?: string): Promise<Result<void>>;
   signOut(): Promise<Result<void>>;
   consent(accept: boolean, oauthQuery: string): Promise<Result<{ redirect: string }>>;
@@ -192,6 +213,13 @@ export const browserAccountApi: AccountApi = {
   async resetPassword(token, newPassword) {
     return done(await auth('/reset-password', { token, newPassword }));
   },
+  requestRecovery: (input) => account('/recovery-claims', input),
+  readRecovery: (claimId, recoveryCode) =>
+    account(`/recovery-claims/${encodeURIComponent(claimId)}/read`, { recoveryCode }),
+  approveRecovery: (claimId) =>
+    account(`/recovery-claims/${encodeURIComponent(claimId)}/approval`, {}),
+  activateRecovery: (claimId, input) =>
+    account(`/recovery-claims/${encodeURIComponent(claimId)}/activation`, input),
   async sendVerificationEmail(email, captchaToken) {
     return done(await auth('/send-verification-email', { email, callbackURL: callbackPaths.verifyEmail }, captchaToken));
   },

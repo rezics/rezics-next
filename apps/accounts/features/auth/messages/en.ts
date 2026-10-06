@@ -1,6 +1,42 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "Enable JavaScript in your browser to recover with a recovery code.",
+  recoveryExpiredBody: "Start a new request with your recovery code. Your guardian must approve it, and a new waiting period applies.",
+  recoveryStartOver: "Start a new recovery request",
+  recoveryExpired: "This recovery request expired",
+  recoverWithCode: 'Lost your sign-in methods? Use a recovery code',
+  recoveryCodeTitle: 'Recover your account',
+  recoveryCodeBody:
+    'Use the recovery code you saved and approval from your recovery guardian. You can recover even if you never had a password.',
+  recoveryCodeLabel: 'Recovery code',
+  recoveryResume: 'Resume an existing recovery request',
+  recoveryRequestLabel: 'Recovery request ID',
+  recoveryRebindTitle: 'Add a new sign-in method',
+  recoveryRebindBody:
+    'Choose a new password to regain access. After signing in, you can add a new passkey or set up 2-Step Verification again.',
+  recoveryWaiting: 'Waiting for your recovery guardian’s approval.',
+  recoveryApproved: 'Recovery request approved',
+  recoveryAvailableAt: 'Recovery opens',
+  recoveryExpiresAt: 'Request expires',
+  recoveryShare:
+    'Save this request ID to return later. Share this approval link with your recovery guardian through a channel you trust. Keep your recovery code private.',
+  recoveryCheckStatus: 'Check recovery status',
+  recoveryRemovedBody:
+    'Recovery removes all existing passkeys, authenticator secrets and backup codes, pending sign-in and reset links, signed-in devices, and app access. Only your new password will work.',
+  recoverySubmit: 'Recover account',
+  recoveryRetry: 'Retry with the same password to check whether recovery completed.',
+  recoveryProofFailed:
+    'This recovery request is unavailable, has expired, or is not ready. Check your recovery code and request ID, then check the status again.',
+  recoveryDoneTitle: 'Your account is recovered',
+  recoveryDoneBody:
+    'Your old sign-in methods and app access were removed. Sign in with your new password, then add a new passkey or authenticator app in Security & sign-in. Apps must ask for access again. Save a new recovery code before you need it.',
+  recoveryApprovalTitle: 'Approve account recovery',
+  recoveryApprovalBody:
+    'Approve only if the owner asked you through a channel you trust and this request ID matches theirs. Your approval lets them replace all sign-in methods after the waiting period.',
+  recoveryApprove: 'Approve recovery',
+  recoveryApprovalDone:
+    'The owner can finish recovery after the waiting period. Your approval did not sign them in.',
   signInTitle: 'Sign in',
   signInSubtitle: 'Use your REZICS Account',
   signInForApp: 'An app is asking you to sign in with your REZICS Account',

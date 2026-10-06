@@ -1,6 +1,42 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "Activa JavaScript en tu navegador para usar un código de recuperación.",
+  recoveryExpiredBody: "Inicia otra solicitud con tu código. Tu persona de confianza debe aprobarla y se aplica un nuevo plazo de espera.",
+  recoveryStartOver: "Iniciar otra solicitud de recuperación",
+  recoveryExpired: "Esta solicitud ha vencido",
+  recoverWithCode: '¿Perdiste tus métodos de acceso? Usa un código de recuperación',
+  recoveryCodeTitle: 'Recupera tu cuenta',
+  recoveryCodeBody:
+    'Usa el código guardado y la aprobación de tu persona de confianza. Puedes recuperar la cuenta aunque nunca hayas tenido una contraseña.',
+  recoveryCodeLabel: 'Código de recuperación',
+  recoveryResume: 'Continuar una solicitud existente',
+  recoveryRequestLabel: 'ID de la solicitud',
+  recoveryRebindTitle: 'Añade un método de acceso',
+  recoveryRebindBody:
+    'Elige una nueva contraseña. Después de acceder, puedes añadir una clave de acceso o volver a configurar la verificación en dos pasos.',
+  recoveryWaiting: 'Esperando la aprobación de tu persona de confianza.',
+  recoveryApproved: 'Solicitud aprobada',
+  recoveryAvailableAt: 'Recuperación disponible desde',
+  recoveryExpiresAt: 'La solicitud vence',
+  recoveryShare:
+    'Guarda este ID para volver más tarde. Comparte el enlace de aprobación con tu persona de confianza por un canal seguro. Mantén privado tu código.',
+  recoveryCheckStatus: 'Comprobar el estado',
+  recoveryRemovedBody:
+    'La recuperación elimina las claves de acceso, secretos del autenticador y códigos de respaldo, enlaces pendientes de acceso y restablecimiento, dispositivos conectados y acceso de aplicaciones. Solo funcionará la nueva contraseña.',
+  recoverySubmit: 'Recuperar cuenta',
+  recoveryRetry: 'Reintenta con la misma contraseña para comprobar si se completó la recuperación.',
+  recoveryProofFailed:
+    'Esta solicitud no está disponible, venció o aún no está lista. Revisa el código y el ID y comprueba de nuevo el estado.',
+  recoveryDoneTitle: 'Tu cuenta se ha recuperado',
+  recoveryDoneBody:
+    'Se eliminaron los métodos anteriores y el acceso de aplicaciones. Accede con la nueva contraseña y añade una clave de acceso o un autenticador en Seguridad e inicio de sesión. Las aplicaciones deberán pedir acceso de nuevo. Guarda un nuevo código de recuperación.',
+  recoveryApprovalTitle: 'Aprobar la recuperación',
+  recoveryApprovalBody:
+    'Aprueba solo si el propietario te lo pidió por un canal seguro y el ID coincide. Tu aprobación permite sustituir todos los métodos de acceso tras el plazo de espera.',
+  recoveryApprove: 'Aprobar recuperación',
+  recoveryApprovalDone:
+    'El propietario puede terminar tras el plazo de espera. Tu aprobación no inició su sesión.',
   signInTitle: 'Iniciar sesión',
   signInSubtitle: 'Usa tu cuenta de REZICS',
   signInForApp: 'Una aplicación te pide que inicies sesión con tu cuenta de REZICS',

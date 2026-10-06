@@ -1,6 +1,42 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "Aktivieren Sie JavaScript im Browser, um Ihren Wiederherstellungscode zu verwenden.",
+  recoveryExpiredBody: "Starten Sie mit Ihrem Code eine neue Anfrage. Ihre Wiederherstellungsperson muss sie genehmigen; eine neue Wartezeit gilt.",
+  recoveryStartOver: "Neue Wiederherstellungsanfrage starten",
+  recoveryExpired: "Diese Wiederherstellungsanfrage ist abgelaufen",
+  recoverWithCode: 'Anmeldemethoden verloren? Wiederherstellungscode verwenden',
+  recoveryCodeTitle: 'Konto wiederherstellen',
+  recoveryCodeBody:
+    'Verwenden Sie Ihren gespeicherten Wiederherstellungscode und die Zustimmung Ihrer Wiederherstellungsperson. Auch ohne bisheriges Passwort ist eine Wiederherstellung möglich.',
+  recoveryCodeLabel: 'Wiederherstellungscode',
+  recoveryResume: 'Bestehende Anfrage fortsetzen',
+  recoveryRequestLabel: 'Wiederherstellungsanfrage-ID',
+  recoveryRebindTitle: 'Neue Anmeldemethode hinzufügen',
+  recoveryRebindBody:
+    'Wählen Sie ein neues Passwort. Danach können Sie einen neuen Passkey hinzufügen oder die Bestätigung in zwei Schritten erneut einrichten.',
+  recoveryWaiting: 'Die Zustimmung Ihrer Wiederherstellungsperson steht aus.',
+  recoveryApproved: 'Wiederherstellungsanfrage genehmigt',
+  recoveryAvailableAt: 'Wiederherstellung möglich ab',
+  recoveryExpiresAt: 'Anfrage gültig bis',
+  recoveryShare:
+    'Speichern Sie diese ID. Teilen Sie den Genehmigungslink über einen vertrauenswürdigen Kanal mit Ihrer Wiederherstellungsperson. Halten Sie Ihren Code geheim.',
+  recoveryCheckStatus: 'Status prüfen',
+  recoveryRemovedBody:
+    'Die Wiederherstellung entfernt alle bisherigen Passkeys, Authentifikator-Schlüssel und Ersatzcodes, ausstehenden Anmelde- und Rücksetzlinks, angemeldeten Geräte und App-Zugriffe. Nur das neue Passwort funktioniert.',
+  recoverySubmit: 'Konto wiederherstellen',
+  recoveryRetry: 'Versuchen Sie es mit demselben Passwort erneut, um das Ergebnis zu prüfen.',
+  recoveryProofFailed:
+    'Diese Anfrage ist nicht verfügbar, abgelaufen oder noch nicht bereit. Prüfen Sie Code und ID und fragen Sie den Status erneut ab.',
+  recoveryDoneTitle: 'Ihr Konto ist wiederhergestellt',
+  recoveryDoneBody:
+    'Die alten Anmeldemethoden und App-Zugriffe wurden entfernt. Melden Sie sich mit dem neuen Passwort an und richten Sie unter Sicherheit und Anmeldung einen Passkey oder Authentifikator ein. Apps müssen erneut um Zugriff bitten. Speichern Sie einen neuen Wiederherstellungscode.',
+  recoveryApprovalTitle: 'Kontowiederherstellung genehmigen',
+  recoveryApprovalBody:
+    'Genehmigen Sie nur, wenn der Kontoinhaber Sie über einen vertrauenswürdigen Kanal darum bat und die ID übereinstimmt. Danach kann er nach der Wartezeit alle Anmeldemethoden ersetzen.',
+  recoveryApprove: 'Wiederherstellung genehmigen',
+  recoveryApprovalDone:
+    'Der Kontoinhaber kann nach der Wartezeit fortfahren. Die Genehmigung meldet ihn nicht an.',
   signInTitle: 'Anmelden',
   signInSubtitle: 'Verwenden Sie Ihren REZICS Account',
   signInForApp: 'Eine App möchte, dass Sie sich mit Ihrem REZICS Account anmelden',

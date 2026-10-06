@@ -1,6 +1,40 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "請在瀏覽器中啟用 JavaScript，以使用復原碼復原帳戶。",
+  recoveryExpiredBody: "請使用復原碼發起新請求。復原監護人需要核准，且需重新等待。",
+  recoveryStartOver: "發起新的復原請求",
+  recoveryExpired: "此復原請求已過期",
+  recoverWithCode: '遺失登入方式？使用復原碼',
+  recoveryCodeTitle: '復原你的帳戶',
+  recoveryCodeBody: '使用你保存的復原碼，並取得復原監護人的核准。即使從未設定密碼，也能復原帳戶。',
+  recoveryCodeLabel: '復原碼',
+  recoveryResume: '繼續現有的復原請求',
+  recoveryRequestLabel: '復原請求 ID',
+  recoveryRebindTitle: '新增登入方式',
+  recoveryRebindBody:
+    '選擇新密碼以重新取得存取權。登入後，你可以新增通行密鑰或重新設定兩步驟驗證。',
+  recoveryWaiting: '正在等待復原監護人的核准。',
+  recoveryApproved: '復原請求已核准',
+  recoveryAvailableAt: '復原開放時間',
+  recoveryExpiresAt: '請求到期時間',
+  recoveryShare:
+    '保存此請求 ID，以便稍後繼續。透過可信管道將核准連結分享給復原監護人。請勿分享復原碼。',
+  recoveryCheckStatus: '檢查復原狀態',
+  recoveryRemovedBody:
+    '復原會移除所有現有通行密鑰、驗證器金鑰和備用碼、待使用的登入和重設連結、已登入裝置及應用程式存取權。只有你的新密碼可用。',
+  recoverySubmit: '復原帳戶',
+  recoveryRetry: '請使用相同密碼重試，以確認復原是否完成。',
+  recoveryProofFailed:
+    '此復原請求無法使用、已過期或尚未就緒。請檢查復原碼和請求 ID，再次檢查狀態。',
+  recoveryDoneTitle: '你的帳戶已復原',
+  recoveryDoneBody:
+    '舊登入方式和應用程式存取權已移除。請使用新密碼登入，再於「安全性與登入」新增通行密鑰或驗證器。應用程式需要重新請求授權。請預先保存新的復原碼。',
+  recoveryApprovalTitle: '核准帳戶復原',
+  recoveryApprovalBody:
+    '只有帳戶擁有人透過可信管道向你請求，且此請求 ID 與其提供的一致時才核准。核准後，他們可在等待期結束後替換所有登入方式。',
+  recoveryApprove: '核准復原',
+  recoveryApprovalDone: '擁有人可在等待期結束後完成復原。你的核准不會使其登入。',
   signInTitle: '登入',
   signInSubtitle: '使用你的 REZICS 帳戶',
   signInForApp: '有應用程式要求你使用 REZICS 帳戶登入',

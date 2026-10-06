@@ -1,6 +1,41 @@
 import { insert } from 'native-i18n';
 
 export default {
+  recoveryBrowserRequired: "请在浏览器中启用 JavaScript，以使用恢复代码找回账号。",
+  recoveryExpiredBody: "请使用恢复代码发起新请求。恢复监护人需要批准，且需重新等待。",
+  recoveryStartOver: "发起新的恢复请求",
+  recoveryExpired: "此恢复请求已过期",
+  recoverWithCode: '登录方式丢失？使用恢复代码',
+  recoveryCodeTitle: '找回您的账号',
+  recoveryCodeBody:
+    '使用您保存的恢复代码，并获得恢复监护人的批准。即使从未设置密码，也能找回账号。',
+  recoveryCodeLabel: '恢复代码',
+  recoveryResume: '继续已有的恢复请求',
+  recoveryRequestLabel: '恢复请求 ID',
+  recoveryRebindTitle: '添加新的登录方式',
+  recoveryRebindBody:
+    '选择新密码以重新获得访问权限。登录后，您可以添加新通行密钥或重新设置两步验证。',
+  recoveryWaiting: '正在等待恢复监护人的批准。',
+  recoveryApproved: '恢复请求已获批准',
+  recoveryAvailableAt: '恢复开放时间',
+  recoveryExpiresAt: '请求到期时间',
+  recoveryShare:
+    '保存此请求 ID，以便稍后继续。通过可信渠道将批准链接分享给恢复监护人。请勿分享恢复代码。',
+  recoveryCheckStatus: '检查恢复状态',
+  recoveryRemovedBody:
+    '恢复会移除所有现有通行密钥、身份验证器密钥和备用码、待使用的登录和重置链接、已登录设备及应用访问权限。只有您的新密码可用。',
+  recoverySubmit: '恢复账号',
+  recoveryRetry: '请使用同一密码重试，以确认恢复是否完成。',
+  recoveryProofFailed:
+    '此恢复请求不可用、已过期或尚未就绪。请检查恢复代码和请求 ID，然后再次检查状态。',
+  recoveryDoneTitle: '您的账号已恢复',
+  recoveryDoneBody:
+    '旧登录方式和应用访问权限已移除。请使用新密码登录，然后在“安全与登录”中添加新通行密钥或身份验证器。应用需要重新请求授权。请提前保存新的恢复代码。',
+  recoveryApprovalTitle: '批准账号恢复',
+  recoveryApprovalBody:
+    '仅当账号所有者通过可信渠道向您请求，且此请求 ID 与其提供的一致时才批准。您的批准允许其在等待期结束后替换所有登录方式。',
+  recoveryApprove: '批准恢复',
+  recoveryApprovalDone: '所有者可在等待期结束后完成恢复。您的批准不会使其登录。',
   signInTitle: '登录',
   signInSubtitle: '使用您的 REZICS 账号',
   signInForApp: '有应用请求您使用 REZICS 账号登录',
