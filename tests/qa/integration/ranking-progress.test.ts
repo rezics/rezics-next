@@ -166,7 +166,7 @@ test('A ranking checkpoint ahead of the restored Content owner rebuilds scores f
     for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
     const before = await projection.current(), owner = await stack.content.ownerPosition();
     const bucket = rankingBuckets(new Date(), 'day').current;
-    await stack.accessPool.query(`UPDATE access.read_ranking_checkpoint SET content_sequence = $1`,
+    await stack.accessPool.query(`UPDATE access.read_ranking_checkpoint SET content_sequence = $1, content_scan_sequence = $1`,
       [(BigInt(owner.sequence) + 100n).toString()]);
     // Scores from the later source history must disappear, not survive a lowered frontier.
     await stack.accessPool.query(`UPDATE access.read_ranking_score SET score = 99, growth = 99

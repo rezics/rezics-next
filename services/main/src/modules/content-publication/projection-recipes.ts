@@ -1,15 +1,13 @@
 import { join, resolve } from 'node:path';
-import type { ExactContentReference } from '../../../../content/src/core.ts';
+import { canonicalContentLanguage, type ExactContentReference } from '../../../../content/src/core.ts';
 import { summarizeJudgments, type JudgmentCounts } from '../judgment/policy.ts';
 import type { ConceptHint } from '../judgment/schema.ts';
 import { publicTitleProjectionRecipe } from './title-projection.ts';
-import { POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
+import { POST_CONTENT_MODEL, checkedContentText } from '../../../../content/src/document-body.ts';
 
 /** Work metadata uses its own public title field on selected body MatchUnits. */
 export const titleProjectionRecipes = [publicTitleProjectionRecipe] as const;
 export const publicTitleProjection = titleProjectionRecipes[0].project;
-
-const MAX_BODY_BYTES = 65_536;
 
 export class ContentProjectionUnavailable extends Error {}
 
@@ -20,22 +18,17 @@ export type ProjectionRecipe =
     reference: ExactContentReference) => { text: string; language: string } };
 
 function extractContentBody(body: Record<string, unknown>, reference: ExactContentReference) {
-  const language = reference.language;
-  if (language.kind !== 'tag' || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language.tag)) {
+  if (reference.language.kind !== 'tag') {
     throw new ContentProjectionUnavailable('Content language has no admitted search tag');
   }
-  const text = body.body;
-  if (typeof text !== 'string' || text.length === 0 || Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(text)) {
-    throw new ContentProjectionUnavailable('Content body exceeds admitted single-unit recipe');
-  }
-  return { text, language: language.tag };
+  return { text: body.body as string, language: reference.language.tag };
 }
 
 const builtIn: readonly ProjectionRecipe[] = [
   { model: 'content-shape-v1', kind: 'text', extract: extractContentBody },
   { model: POST_CONTENT_MODEL, kind: 'text', extract: extractContentBody },
   { model: 'media-set-v1', kind: 'skip' },
+  { model: 'catalog-description-v1', kind: 'skip' },
 ];
 
 /** New owners register exact model recipes in modules/<owner>/projection-recipe.ts. */
@@ -70,14 +63,13 @@ export function projectionRecipeFor(model: string): ProjectionRecipe {
 export function extractProjectionText(recipe: Extract<ProjectionRecipe, { kind: 'text' }>,
   body: Record<string, unknown>, reference: ExactContentReference) {
   const extracted = recipe.extract(body, reference);
-  if (typeof extracted.text !== 'string' || !extracted.text
-    || Buffer.byteLength(extracted.text, 'utf8') > MAX_BODY_BYTES
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(extracted.text)
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(extracted.language)
-    || reference.language.kind !== 'tag'
-    || extracted.language !== reference.language.tag) {
-    throw new ContentProjectionUnavailable('Projection recipe returned invalid search text');
-  }
+  try {
+    checkedContentText(extracted.text);
+    if (!extracted.text || canonicalContentLanguage(extracted.language) !== extracted.language
+      || reference.language.kind !== 'tag' || extracted.language !== reference.language.tag) {
+      throw new Error('invalid search language or empty body');
+    }
+  } catch { throw new ContentProjectionUnavailable('Projection recipe returned invalid search text'); }
   return extracted;
 }
 

@@ -51,7 +51,7 @@ export const contentMatchUnitProfile = {
         oneIri('rv:publicationDecision'),
         oneIri('rv:eligibility'),
         oneIri('rv:projection'),
-        { ...oneString('rv:language'), pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' },
+        { ...oneString('rv:language'), pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
         { path: 'rv:field', hasValue: 'rv:Body', maxCount: 1 },
         { path: 'rv:disclosure', hasValue: 'rv:Public', maxCount: 1 },
         { path: 'rv:searchBody', minCount: 1, maxCount: 1, datatype: 'rdf:langString',

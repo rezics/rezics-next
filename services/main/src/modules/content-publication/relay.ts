@@ -1,5 +1,5 @@
 import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../../../content/src/core.ts';
-import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
+import { ContentProjectionCursor, CONTENT_PROJECTION_COST } from '../../../../content/src/projection-cursor.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
@@ -14,7 +14,6 @@ const UNIT_SHAPE = `${PROFILE}/unit-shape`;
 const ELIGIBILITY_PROFILE_ID = 'content-search-eligibility-v1';
 const ELIGIBILITY_SHAPE = 'https://rezics.com/definition/content-search-eligibility-v1/decision-shape';
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
-const MAX_EVENTS_PER_POLL = 1;
 const decimal = /^(0|[1-9][0-9]*)$/;
 
 export class ContentProjectionGap extends Error {}
@@ -23,7 +22,7 @@ export class ContentProjectionProfileUnavailable extends Error {}
 export interface ContentProjectionResult {
   sourceEpoch: string;
   sourceSequence: string;
-  disposition: 'ignored' | 'superseded' | 'projected';
+  disposition: 'ignored' | 'superseded' | 'projected' | 'deferred';
 }
 
 function projectionIdentity(event: ContentOutboxEvent, rebuildId?: string): { receipt: string; anchor: string; unit: string } {
@@ -200,32 +199,22 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
   }`;
 }
 
-/** Process one contiguous Content position; stop on unresolved publication or profile drift. */
-export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
-  content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
-  rebuildId?: string): Promise<ContentProjectionResult | null> {
-  if (rebuildId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rebuildId)) {
-    throw new ContentProjectionUnavailable('invalid rebuild identity');
+/** Validate the owner proof before retention: malformed events never advance. */
+async function terminalPublication(content: ContentCore, event: ContentOutboxEvent) {
+  if (!event.recipe) throw new ContentProjectionGap('Content outbox event is incomplete');
+  if (event.recipe !== 'content-body-v1') return undefined;
+  if (['content.publication.active', 'content.publication.rejected'].includes(event.eventType)) {
+    return content.readProjectionPublication(event, true);
   }
-  const checkpoint = await cursor.read(consumer);
-  const highWater = await content.ownerPosition();
-  if (checkpoint.dataEpoch !== highWater.dataEpoch || BigInt(checkpoint.sequence) > BigInt(highWater.sequence)) {
-    throw new ContentProjectionGap('Content checkpoint is outside current owner epoch');
+  if (!['content.revision.saved', 'content.draft.stale', 'content.publication.prepared',
+    'content.comment.created', 'content.comment.cancelled'].includes(event.eventType)) {
+    throw new ContentProjectionGap('unrecognized Content event');
   }
-  let events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, MAX_EVENTS_PER_POLL);
-  // Writers number their own events after commit; a caught-up relay numbers any
-  // whose writer stopped between commit and numbering.
-  if (!events.length && await content.sequencePending()) {
-    events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, MAX_EVENTS_PER_POLL);
-  }
-  const event = events[0];
-  if (!event) {
-    if (checkpoint.sequence !== highWater.sequence) throw new ContentProjectionGap('Content outbox has a source gap');
-    return null;
-  }
-  if (event.position.dataEpoch !== checkpoint.dataEpoch
-    || BigInt(event.position.sequence) !== BigInt(checkpoint.sequence) + 1n
-    || !event.recipe) throw new ContentProjectionGap('Content outbox event is incomplete');
+  return undefined;
+}
+
+async function projectEvent(env: WorkActivationEnvironment, content: ContentCore,
+  event: ContentOutboxEvent, publication: ProjectionPublication | undefined, rebuildId?: string) {
   let disposition: ContentProjectionResult['disposition'] = 'ignored';
   // Other owners in the Content database (media, replies, protection) write their own recipes to the shared
   // outbox; search projects only content-body-v1 events and acknowledges the rest in order.
@@ -234,7 +223,7 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
   } else if (event.eventType === 'content.publication.active' || event.eventType === 'content.publication.rejected') {
     // Resolve the published revision's model from Content's settled pin first.
     // Non-text revisions need no body-byte read or text-profile check.
-    const publication = await content.readProjectionPublication(event, true);
+    if (!publication) throw new ContentProjectionGap('terminal publication source missing');
     if (publication.status === 'active') {
       const erased = await content.readPublicationErasureSupersession(publication.preparationId);
       if (erased) {
@@ -244,61 +233,103 @@ export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
               dataEpoch: erased.graphDataEpoch, sequence: erased.graphSequence })) {
           throw new ContentProjectionUnavailable('erased publication lacks exact graph suppression');
         }
-        await cursor.acknowledge(consumer, checkpoint, event.position);
-        return { sourceEpoch: event.position.dataEpoch,
-          sourceSequence: event.position.sequence, disposition: 'superseded' };
+        return 'superseded';
       }
+    }
+    const graph = await graphPublication(env, publication);
+    if (publication.status === 'rejected') return 'ignored';
+    if (graph.head !== graph.decision) {
+      if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');
+      return 'superseded';
     }
     const recipe = projectionRecipeFor(publication.reference.model);
     if (recipe.kind === 'skip') {
       // Prove the terminal graph receipt before advancing past a non-text revision.
-      await graphPublication(env, publication);
-      await cursor.acknowledge(consumer, checkpoint, event.position);
-      return { sourceEpoch: event.position.dataEpoch,
-        sourceSequence: event.position.sequence, disposition: 'ignored' };
+      return 'ignored';
     }
     if (publication.status === 'active') {
-      if (!rebuildId) await content.readProjectionPublication(event);
       const identity = projectionIdentity(event, rebuildId);
       const validations = await projectionValidation(env, identity.anchor, identity.unit);
-      const graph = await graphPublication(env, publication);
-      if (graph.head !== graph.decision) {
-        if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');
-        disposition = 'superseded';
-      } else {
-        // The metadata-only rebuild read is safe only for a superseded event.
-        // Recheck the current publication through Content's strict byte path.
-        if (rebuildId) await content.readProjectionPublication(event);
-        if (!graph.eligibility || graph.eligibleDecision !== graph.decision) {
-          throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
-        }
-        const exact = (await content.readExactBatch([publication.reference.revisionId],
-          async () => new Set([publication.reference.revisionId])))[0];
-        if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
-          throw new ContentProjectionUnavailable('exact Content body is unavailable');
-        }
-        const extracted = extractProjectionText(recipe, exact.body, exact.reference);
-        const update = projectionUpdate(env, event, publication, graph.decision!, graph.eligibility!,
-          extracted.text, extracted.language, identity);
-        const digest = hash(JSON.stringify({ event: event.id, source: event.position,
-          graph: publication.graph, reference: publication.reference,
-          eligibility: graph.eligibility,
-          text: hash(extracted.text), language: extracted.language, recipe: PROFILE_ID }));
-        const result = await env.fuseki.commandWithReceipt({ receipt: identity.receipt,
-          digest, update, validations, deadlineMs: 10_000 });
-        if (result.status !== 'committed' || result.position.dataEpoch !== env.lineage.dataEpoch) {
-          throw new ContentProjectionUnavailable(`Content projection command ${result.status}`);
-        }
-        disposition = 'projected';
+      // An obsolete head needs only its owner/graph proofs; bytes are required
+      // only for the exact current publication that will be projected.
+      await content.readProjectionPublication(event);
+      if (!graph.eligibility || graph.eligibleDecision !== graph.decision) {
+        throw new ContentProjectionUnavailable('public Content search eligibility is unproven');
       }
-    } else {
-      await graphPublication(env, publication);
+      const exact = (await content.readExactBatch([publication.reference.revisionId],
+        async () => new Set([publication.reference.revisionId])))[0];
+      if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
+        throw new ContentProjectionUnavailable('exact Content body is unavailable');
+      }
+      const extracted = extractProjectionText(recipe, exact.body, exact.reference);
+      const update = projectionUpdate(env, event, publication, graph.decision!, graph.eligibility!,
+        extracted.text, extracted.language, identity);
+      const digest = hash(JSON.stringify({ event: event.id, source: event.position,
+        graph: publication.graph, reference: publication.reference,
+        eligibility: graph.eligibility,
+        text: hash(extracted.text), language: extracted.language, recipe: PROFILE_ID }));
+      const result = await env.fuseki.commandWithReceipt({ receipt: identity.receipt,
+        digest, update, validations, deadlineMs: CONTENT_PROJECTION_COST.deadlineMs });
+      if (result.status !== 'committed' || result.position.dataEpoch !== env.lineage.dataEpoch) {
+        throw new ContentProjectionUnavailable(`Content projection command ${result.status}`);
+      }
+      disposition = 'projected';
     }
   } else if (!['content.revision.saved', 'content.draft.stale',
     'content.publication.prepared', 'content.comment.created',
     'content.comment.cancelled'].includes(event.eventType)) {
     throw new ContentProjectionUnavailable('unrecognized Content event');
   }
-  await cursor.acknowledge(consumer, checkpoint, event.position);
+  return disposition;
+}
+
+/** Advance one source event and independently retry a bounded set of failed targets. */
+export async function relayContentProjectionOnce(env: WorkActivationEnvironment,
+  content: ContentCore, cursor: ContentProjectionCursor, consumer: string,
+  rebuildId?: string): Promise<ContentProjectionResult | null> {
+  if (rebuildId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rebuildId)) {
+    throw new ContentProjectionUnavailable('invalid rebuild identity');
+  }
+  let retried: ContentProjectionResult | null = null;
+  for (const event of await cursor.retries(consumer)) {
+    let disposition: ContentProjectionResult['disposition'];
+    try {
+      const publication = await terminalPublication(content, event);
+      disposition = await projectEvent(env, content, event, publication, rebuildId);
+    }
+    catch {
+      await cursor.finishRetry(consumer, event, false);
+      continue;
+    }
+    await cursor.finishRetry(consumer, event, true);
+    retried = { sourceEpoch: event.position.dataEpoch, sourceSequence: event.position.sequence, disposition };
+  }
+  const checkpoint = await cursor.readScan(consumer);
+  const highWater = await content.ownerPosition();
+  if (checkpoint.dataEpoch !== highWater.dataEpoch || BigInt(checkpoint.sequence) > BigInt(highWater.sequence)) {
+    throw new ContentProjectionGap('Content checkpoint is outside current owner epoch');
+  }
+  let events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, CONTENT_PROJECTION_COST.scanEvents);
+  if (!events.length && await content.sequencePending()) {
+    events = await content.readOutbox(checkpoint.dataEpoch, checkpoint.sequence, CONTENT_PROJECTION_COST.scanEvents);
+  }
+  const event = events[0];
+  if (!event) {
+    if (checkpoint.sequence !== highWater.sequence) throw new ContentProjectionGap('Content outbox has a source gap');
+    return retried;
+  }
+  if (event.position.dataEpoch !== checkpoint.dataEpoch
+    || BigInt(event.position.sequence) !== BigInt(checkpoint.sequence) + 1n) {
+    throw new ContentProjectionGap('Content outbox event is incomplete');
+  }
+  const publication = await terminalPublication(content, event);
+  const target = publication?.reference.variantId;
+  let disposition: ContentProjectionResult['disposition'] = 'deferred';
+  if (!target || !await cursor.hasPendingTarget(consumer, event.position.dataEpoch, target)) {
+    try { disposition = await projectEvent(env, content, event, publication, rebuildId); }
+    catch (error) { if (!target) throw error; }
+  }
+  await cursor.acknowledge(consumer, checkpoint, event.position,
+    disposition === 'deferred' ? { event, target: target! } : undefined);
   return { sourceEpoch: event.position.dataEpoch, sourceSequence: event.position.sequence, disposition };
 }

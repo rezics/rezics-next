@@ -1,6 +1,6 @@
 import { publicWork } from '../work/public-patterns.ts';
 import { postBookPlacement } from '../post/patterns.ts';
-import type { ContentCore } from '../../../../content/src/core.ts';
+import { canonicalContentLanguage, type ContentCore } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
@@ -181,10 +181,12 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   input: { phrase: string; language: string | null },
   rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>) {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
-    || (input.language !== null && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
+  if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)) {
     throw new InvalidContentPhrase('invalid public Content phrase');
   }
+  let language: string | null = null;
+  try { language = input.language === null ? null : canonicalContentLanguage(input.language); }
+  catch { throw new InvalidContentPhrase('invalid public Content language'); }
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const { source, index, proof } = await prepareContentSearch(env, content, cursor, consumer);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
@@ -223,7 +225,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
           rv:variant ?variant ; rv:publicationDecision ?decision ;
           rv:disclosure rv:Public ; rv:rightsBasis ?rightsBasis .
           OPTIONAL { ?eligibility rv:rightsAssessment ?assessment } }
-        ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
+        ${language ? `FILTER(?language = ${lit(language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);

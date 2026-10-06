@@ -431,8 +431,8 @@ test('unrelated Content writes leave old rankings current and consume no ranking
   ).rows[0]!.position;
   await access.query(
     `INSERT INTO access.read_ranking_checkpoint
-    (singleton,generation,content_epoch,content_sequence,graph_epoch,review_position,updated_at)
-    VALUES (true,$1,$2,0,'ranking-graph',$3,now() - interval '2 minutes')`,
+    (singleton,generation,content_epoch,content_sequence,graph_epoch,review_position,review_scan_position,updated_at)
+    VALUES (true,$1,$2,0,'ranking-graph',$3,$3,now() - interval '2 minutes')`,
     [generation, owner.dataEpoch, reviewHead],
   );
   const env = {
@@ -479,7 +479,7 @@ test('unrelated Content writes leave old rankings current and consume no ranking
     await expect(projection.current()).rejects.toBeInstanceOf(RankingProjectionUnavailable);
     const last = (await core.ownerPosition()).sequence;
     await access.query(
-      "UPDATE access.read_ranking_checkpoint SET content_sequence = $1,updated_at = now() - interval '2 minutes'",
+      "UPDATE access.read_ranking_checkpoint SET content_sequence = $1,content_scan_sequence = $1,updated_at = now() - interval '2 minutes'",
       [String(BigInt(last) - 1n)],
     );
     // The final progress position crosses 99 to 100. A text-alias sort would

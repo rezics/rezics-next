@@ -8,7 +8,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
-import { authoredDocumentBody, authoredPostNotes, POST_CONTENT_MODEL,
+import { authoredDocumentBody, authoredPostNotes, POST_CONTENT_MODEL, CONTENT_TEXT_COST, checkedContentText,
   type PostNotesInput, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 
 export class ContentDraftDenied extends Error {}
@@ -85,14 +85,15 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   // Content's text API retains its 65,536 UTF-16-unit budget. UTF-8 custody
   // permits up to three bytes per unit; Contribution and reply limits differ.
   try {
-    body = authoredDocumentBody(input, 3 * 65_536);
+    body = authoredDocumentBody(input, CONTENT_TEXT_COST.textBytes);
+    checkedContentText(body.body);
     notes = authoredPostNotes(input.notes);
     if (notes !== undefined && input.targetProfile === 'catalog-description') {
       throw new Error('notes require a Post');
     }
   }
   catch { throw new ContentConflict('invalid authored Content body'); }
-  if (body.body.length > 65_536 || input.variant.resourceId !== input.resourceId
+  if (input.variant.resourceId !== input.resourceId
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.resourceId)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.actingSubject)
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/i.test(input.variant.id)

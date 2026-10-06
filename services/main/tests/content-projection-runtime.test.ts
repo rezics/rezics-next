@@ -180,3 +180,11 @@ test('SEARCH19/OPS16: worker retries a failed poll and restarted instance resume
   expect((await restarted.pollOnce())?.sourceSequence).toBe('2');
   expect(checkpoint).toBe(2);
 });
+
+
+test('Content phrase filters accept the same BCP 47 extensions as admitted bodies', async () => {
+  const run = fixture();
+  expect((await run.search('needle', 'en-US-u-nu-latn')).status).toBe(200);
+  expect((await run.search('needle', 'EN-us-u-nu-latn')).status).toBe(200);
+  expect((await run.search('needle', 'en-u')).status).toBe(400);
+});

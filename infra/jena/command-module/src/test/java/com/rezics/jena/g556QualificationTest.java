@@ -170,15 +170,22 @@ public class g556QualificationTest {
         }
     }
 
-    @Test public void unindexedAndTokenlessUnitsCannotQualify() {
+    @Test public void tokenlessUnitsQualifyButMissingStoredDocumentsDoNot() {
         try (Fixture fixture = new Fixture(1)) {
             fixture.data.begin(ReadWrite.WRITE);
             try {
                 Node unit = iri("urn:rezics:match:g556:missing");
                 fixture.data.add(PUBLIC, unit, RDF.type.asNode(), MATCH);
-                fixture.data.add(PUBLIC, unit, BODY, literal("   "));
+                fixture.data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("... !!!", "en"));
                 fixture.data.commit();
             } finally { fixture.data.end(); }
+            assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            assertEquals("2", SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("qualifiedPopulation"));
+            var removed = new org.apache.jena.query.text.Entity("urn:rezics:match:g556:missing",
+                CommandPolicy.PUBLIC_SEARCH, "en", null);
+            removed.put("body", "... !!!");
+            fixture.index.deleteEntity(removed);
+            fixture.index.commit();
             assertFalse(SearchDeltaJournal.qualify(fixture.data));
             assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
         }

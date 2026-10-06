@@ -16,11 +16,10 @@ const decision = 'urn:rezics:content-publication:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const eligibility = 'urn:rezics:content-search-eligibility:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const unit = 'urn:rezics:content:match-unit:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 const digest = 'd'.repeat(64);
-const body = 'Exact receipt provenance matters';
 const binding = (value: string, language?: string) => ({ type: language ? 'literal' : 'uri',
   value, ...(language ? { 'xml:lang': language } : {}) });
 
-test('SEARCH20 activation rejects an eligible head lacking its terminal receipt chain', async () => {
+function verifyFixture(missingReceipt = false, text = '... !!!', population = '1') {
   const head = { variant: binding(variant), resource: binding(resource), decision: binding(decision),
     eligibility: binding(eligibility), revision: binding(revision), digest: binding(digest) };
   const fuseki = { async query(sparql: string): Promise<SparqlResult> {
@@ -33,15 +32,13 @@ test('SEARCH20 activation rejects an eligible head lacking its terminal receipt 
     if (sparql.includes('SELECT ?variant WHERE')) return { results: { bindings: [{ variant: binding(variant) }] } };
     if (sparql.includes('SELECT ?variant ?resource')) {
       // A restored graph can retain the head/decision while losing its terminal receipt.
-      return { results: { bindings: sparql.includes('GRAPH <urn:rezics:graph:receipts>') ? [] : [head] } };
+      return { results: { bindings: missingReceipt && sparql.includes('GRAPH <urn:rezics:graph:receipts>') ? [] : [head] } };
     }
     if (sparql.includes('SELECT ?unit ?body')) return { results: { bindings: [{
-      unit: binding(unit), body: binding(body, 'en'), variant: binding(variant),
+      unit: binding(unit), body: binding(text, 'en'), resource: binding(resource), variant: binding(variant),
       revision: binding(revision), decision: binding(decision), eligibility: binding(eligibility),
     }] } };
-    if (sparql.includes('SELECT ?unit ?literal')) return { results: { bindings: [{
-      unit: binding(unit), literal: binding(body, 'en'), graph: binding('urn:rezics:search:public'),
-    }] } };
+    if (sparql.includes('publicTextInventory()')) return { results: { bindings: [{ population: binding(population) }] } };
     if (sparql.includes('ASK { GRAPH <urn:rezics:search:probe>')) return { boolean: true };
     throw new Error(`unexpected rebuild query: ${sparql.slice(0, 80)}`);
   } } as unknown as WorkActivationEnvironment['fuseki'];
@@ -49,11 +46,19 @@ test('SEARCH20 activation rejects an eligible head lacking its terminal receipt 
   const content = { ownerPosition: async () => position,
     readExactBatch: async () => [{ status: 'available',
       reference: { variantId: variant, resourceId: resource, byteDigest: digest,
-        language: { kind: 'tag', tag: 'en' } }, body: { body } }],
+        model: 'content-shape-v1', language: { kind: 'tag', tag: 'en' } }, body: { body: text } }],
   } as unknown as ContentCore;
   const cursor = { read: async () => position } as unknown as ContentProjectionCursor;
-  await expect(verifyQuarantinedContentIndex({ fuseki,
+  return verifyQuarantinedContentIndex({ fuseki,
     lineage: { dataEpoch: graphEpoch, routingEpoch: graphEpoch }, objectDirectory: '' },
-  content, cursor, { id: graphEpoch, cut: position, consumer: 'content-rebuild.fixture' }))
-    .rejects.toThrow('declared eligibility inventory differs');
+  content, cursor, { id: graphEpoch, cut: position, consumer: 'content-rebuild.fixture' });
+}
+
+test('SEARCH20 activation rejects an eligible head lacking its terminal receipt chain', async () => {
+  await expect(verifyFixture(true)).rejects.toThrow('declared eligibility inventory differs');
+});
+
+test('Rebuild verifies tokenless body membership through the native stored-field audit', async () => {
+  expect(await verifyFixture()).toMatchObject({ unitCount: 1, contentUnitCount: 1 });
+  await expect(verifyFixture(false, '... !!!', '0')).rejects.toThrow('Lucene membership differs');
 });

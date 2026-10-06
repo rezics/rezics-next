@@ -223,7 +223,7 @@ test('OPS10/OPS11: Content erasure journals exact targets with receipts, denial,
     const replayConsumer = `erasure-api-replay-${randomUUID()}`;
     const cursor = new ContentProjectionCursor(contentPool);
     await cursor.initialize(replayConsumer);
-    await contentPool.query(`UPDATE content.projection_checkpoint SET sequence = $2::bigint - 1
+    await contentPool.query(`UPDATE content.projection_checkpoint SET sequence = $2::bigint - 1, scan_sequence = $2::bigint - 1
       WHERE consumer = $1`, [replayConsumer, activeEvent.sequence]);
     expect(await relayContentProjectionOnce(environment, content, cursor, replayConsumer))
       .toMatchObject({ sourceSequence: activeEvent.sequence, disposition: 'superseded' });

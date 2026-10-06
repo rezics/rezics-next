@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 import { ContentCore, ContentProjectionCursor, ContentUnavailable,
   migrateContent, type VariantIdentity } from '../../content/src/index.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { ContentProjectionGap, ContentProjectionProfileUnavailable,
+import { ContentProjectionGap,
   ContentProjectionUnavailable, relayContentProjectionOnce } from
   '../src/modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../src/modules/content-publication/search.ts';
@@ -93,18 +93,15 @@ test('SEARCH15/WORK10: partial Content outbox checkpoint and fail-closed MatchUn
       { phrase: '中文检索', language: 'zh' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);
     // The graph publication proof is deliberately absent. The relay may not acknowledge
     // this Content terminal event, with or without a later installed native profile.
-    let stopped: unknown;
-    try { await relayContentProjectionOnce(environment, content, cursor, consumer); }
-    catch (error) { stopped = error; }
-    expect(stopped instanceof ContentProjectionProfileUnavailable
-      || stopped instanceof ContentProjectionUnavailable).toBe(true);
+    expect((await relayContentProjectionOnce(environment, content, cursor, consumer))?.disposition).toBe('deferred');
+    expect((await cursor.readScan(consumer)).sequence).toBe('3');
+    expect(await cursor.retries(consumer)).toHaveLength(1);
     expect((await cursor.read(consumer)).sequence).toBe('2');
     expect((await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
       ${iri(variant.id)} rv:contentPublicationHead ?decision } }`)).boolean).toBe(false);
     expect((await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <urn:rezics:search:public> {
       ?unit a rv:MatchUnit ; rv:variant ${iri(variant.id)} } }`)).boolean).toBe(false);
     await pool.query(`UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton`);
-    await pool.query(`UPDATE content.projection_checkpoint SET sequence = 3 WHERE consumer = $1`, [consumer]);
     await expect(relayContentProjectionOnce(environment, content, cursor, consumer))
       .rejects.toBeInstanceOf(ContentProjectionGap);
     await pool.query(`UPDATE content.owner_control SET data_epoch = gen_random_uuid() WHERE singleton`);

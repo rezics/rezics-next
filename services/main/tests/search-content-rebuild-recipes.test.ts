@@ -12,12 +12,13 @@ const bind = (value: string, language?: string) => ({ type: language ? 'literal'
   ...(language ? { 'xml:lang': language } : {}) });
 
 test('SEARCH20 rebuild verifies each Content MatchUnit with its exact model recipe', async () => {
-  const records = [
+  const templates = [
     { model: 'content-shape-v1', body: { body: 'single text Work source' }, text: 'single text Work source' },
     { model: 'rezics-prompt-v1', body: { content: 'Hub prompt source' }, text: 'Hub prompt source' },
     { model: 'rezics-skill-package-v1', body: { instructions: 'Hub skill source' },
       text: 'Hub skill source' },
-  ].map((item, index) => {
+  ];
+  const records = Array.from({ length: 9 }, (_, index) => templates[index % templates.length]!).map((item, index) => {
     const suffix = String(index + 1).repeat(36);
     const reference: ExactContentReference = { owner: 'content',
       resourceId: `https://rezics.com/id/${suffix}`, variantId: `urn:rezics:variant:${suffix}`,
@@ -47,22 +48,23 @@ test('SEARCH20 rebuild verifies each Content MatchUnit with its exact model reci
         variant: bind(record.reference.variantId) })) } };
       if (sparql.includes('SELECT ?variant ?resource')) return { results: { bindings: heads } };
       if (sparql.includes('SELECT ?unit ?body')) return { results: { bindings: rdf() } };
-      if (sparql.includes('SELECT ?unit ?literal ?graph')) return { results: { bindings: records.map(record => ({
-        unit: bind(record.unit), literal: bind(record.text, 'en'),
-        graph: bind('urn:rezics:search:public') })) } };
+      if (sparql.includes('publicTextInventory()')) return { results: { bindings: [{ population: bind(String(records.length)) }] } };
       if (sparql.includes('ASK { GRAPH <urn:rezics:search:probe>')) return { boolean: true };
       throw new Error(`unexpected rebuild query: ${sparql}`);
     },
   } } as unknown as WorkActivationEnvironment;
   const content = { ownerPosition: async () => source,
-    readExactBatch: async (ids: string[]) => ids.map(id => {
-      const record = records.find(item => item.reference.revisionId === id)!;
-      return { revisionId: id, status: 'available' as const, reference: record.reference,
-        body: record.body, serializedJson: JSON.stringify(record.body) };
-    }) } as unknown as ContentCore;
+    readExactBatch: async (ids: string[]) => {
+      expect(ids.length).toBeLessThanOrEqual(4);
+      return ids.map(id => {
+        const record = records.find(item => item.reference.revisionId === id)!;
+        return { revisionId: id, status: 'available' as const, reference: record.reference,
+          body: record.body, serializedJson: JSON.stringify(record.body) };
+      });
+    } } as unknown as ContentCore;
   const cursor = { read: async () => source } as unknown as ContentProjectionCursor;
   const job = { id: '33333333-3333-4333-8333-333333333333', cut: source, consumer: 'fixture' };
-  expect((await verifyQuarantinedContentIndex(env, content, cursor, job)).contentUnitCount).toBe(3);
+  expect((await verifyQuarantinedContentIndex(env, content, cursor, job)).contentUnitCount).toBe(records.length);
   records[1]!.text = 'wrong prompt text';
   await expect(verifyQuarantinedContentIndex(env, content, cursor, job))
     .rejects.toThrow('Content MatchUnit differs from exact approved source');

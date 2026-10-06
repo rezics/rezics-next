@@ -7,7 +7,7 @@ import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable } from './errors.ts';
 import { appendContentEvent, contentEventPosition, sequenceContentEvents,
   type ContentEvent } from './event-sequencer.ts';
-import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from './document-body.ts';
+import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL, CONTENT_TEXT_COST, checkedContentText } from './document-body.ts';
 import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
 
@@ -177,11 +177,20 @@ function checkId(value: string, name: string, max = 300): void {
   }
 }
 
+export function canonicalContentLanguage(value: string): string {
+  if (typeof value !== 'string' || !value) {
+    throw new Error('invalid Content language');
+  }
+  const canonical = Intl.getCanonicalLocales(value)[0];
+  if (!canonical) throw new Error('invalid Content language');
+  return canonical;
+}
+
 function checkedLanguage(language: LanguageIdentity): LanguageIdentity {
   if (language.kind !== 'tag') return language;
-  if (!language.originalTag || language.originalTag.length > 100) throw new ContentConflict('invalid original language tag');
+  if (!language.originalTag || language.originalTag.length > CONTENT_TEXT_COST.languageUnits) throw new ContentConflict('invalid original language tag');
   let canonical: string;
-  try { canonical = Intl.getCanonicalLocales(language.originalTag)[0] ?? ''; }
+  try { canonical = canonicalContentLanguage(language.originalTag); }
   catch { throw new ContentConflict('invalid language tag'); }
   if (!canonical || canonical !== language.tag) throw new ContentConflict('language tag must be canonical');
   return language;
@@ -487,12 +496,12 @@ export class ContentCore {
     if (body.notes !== undefined && command.model !== POST_CONTENT_MODEL) {
       throw new ContentConflict('notes require the Post Content model');
     }
-    if (command.model === POST_CONTENT_MODEL) {
+    if (['content-shape-v1', POST_CONTENT_MODEL, 'catalog-description-v1'].includes(command.model)) {
       try {
         const text = retainedDocumentBody(body);
-        if (text.body.length > 65_536) throw new Error('text exceeds Content bound');
+        checkedContentText(text.body);
         retainedPostNotes(body.notes);
-      } catch { throw new ContentConflict('invalid Post Content body or notes'); }
+      } catch { throw new ContentConflict('invalid Content body or notes'); }
     }
     if (body.document !== undefined) {
       try { retainedDocumentBody(body); }
@@ -785,9 +794,9 @@ export class ContentCore {
         }
         if (body.document !== undefined) retainedDocumentBody(body);
         if (body.notes !== undefined && row.model !== POST_CONTENT_MODEL) return { revisionId, status: 'corrupt' };
-        if (row.model === POST_CONTENT_MODEL) {
+        if (['content-shape-v1', POST_CONTENT_MODEL, 'catalog-description-v1'].includes(row.model)) {
           const text = retainedDocumentBody(body);
-          if (text.body.length > 65_536) return { revisionId, status: 'corrupt' };
+          checkedContentText(text.body);
           retainedPostNotes(body.notes);
         }
         return { revisionId, status: 'available', reference: referenceFromRow(row), serializedJson, body };

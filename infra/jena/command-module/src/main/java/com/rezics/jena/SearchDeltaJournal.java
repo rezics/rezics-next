@@ -18,8 +18,6 @@ import org.apache.jena.query.text.changes.TextDatasetChanges;
 import org.apache.jena.query.text.changes.TextQuadAction;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.vocabulary.RDF;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Term;
@@ -164,29 +162,29 @@ final class SearchDeltaJournal {
     }
 
     private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene) {
+        return auditGeneration(data, lucene, true);
+    }
+
+    private static Qualification auditGeneration(DatasetGraph data, TextIndexLucene lucene, boolean requireAnchor) {
         boolean ownsTransaction = !data.isInTransaction();
         if (ownsTransaction) data.begin(org.apache.jena.query.ReadWrite.READ);
         try {
             CommandInvariant.Control position = CommandInvariant.readControl(data);
             if (position == null || position.textGeneration() == null || lucene == null || position.held()
-                || !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
+                || requireAnchor && !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
                 return null;
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
                 IndexSearcher searcher = new IndexSearcher(reader);
                 Set<String> seen = new LinkedHashSet<>();
-                // body:* excludes tokenless bodies, which cannot be qualified.
-                var parser = new org.apache.lucene.queryparser.classic.QueryParser("body", lucene.getQueryAnalyzer());
-                parser.setAllowLeadingWildcard(true);
-                BooleanQuery query = new BooleanQuery.Builder()
-                    .add(parser.parse("body:*"), BooleanClause.Occur.MUST)
-                    .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
-                    .build();
+                // Membership is graph/document identity, independent of analyzer tokens.
+                TermQuery query = new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH));
                 searcher.search(query, new SimpleCollector() {
                     private LeafReaderContext leaf;
                     @Override protected void doSetNextReader(LeafReaderContext context) { leaf = context; }
                     @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
                     @Override public void collect(int doc) throws IOException {
                         Document stored = leaf.reader().storedFields().document(doc);
+                        if (stored.getValues("body").length == 0) return;
                         String subject = stored.get("uri");
                         if (subject == null || !seen.add(subject))
                             throw new IllegalStateException("duplicate public body document");
@@ -211,7 +209,7 @@ final class SearchDeltaJournal {
                 return new Qualification(position.epoch().getLiteralLexicalForm(),
                     position.textGeneration().getURI(), ordinal(data),
                     reader.getIndexCommit().getGeneration(), population, position.sequence().toString());
-            } catch (IOException | org.apache.lucene.queryparser.classic.ParseException | IllegalStateException ex) {
+            } catch (IOException | IllegalStateException ex) {
                 return null;
             }
         } finally { if (ownsTransaction) data.end(); }
@@ -220,7 +218,7 @@ final class SearchDeltaJournal {
     static long auditPopulation(DatasetGraph data, TextIndexLucene lucene) {
         // A bypass-writer service audits its own snapshot. It must not install
         // or invalidate the command-only service's generation qualification.
-        Qualification audited = auditGeneration(data, lucene);
+        Qualification audited = auditGeneration(data, lucene, false);
         if (audited == null) throw new IllegalStateException("public text generation is unqualified");
         return audited.population();
     }
@@ -533,26 +531,7 @@ final class SearchDeltaJournal {
             bodies++;
         }
         if (bodies != (exists ? 1 : 0)) throw new IllegalStateException("exact-subject index membership differs");
-        if (exists) {
-            // A stored body need not have any indexed terms (for example, only
-            // whitespace). The full body:* inventory would not count that unit.
-            // Verify one term produced by the exact configured index analyzer.
-            String token;
-            try (TokenStream stream = lucene.getAnalyzer().tokenStream("body", body.getLiteralLexicalForm())) {
-                CharTermAttribute terms = stream.addAttribute(CharTermAttribute.class);
-                stream.reset();
-                token = stream.incrementToken() ? terms.toString() : null;
-                stream.end();
-            }
-            if (token == null || token.isEmpty())
-                throw new IllegalStateException("exact-subject body has no indexed terms");
-            BooleanQuery indexed = new BooleanQuery.Builder()
-                .add(exact, BooleanClause.Occur.FILTER)
-                .add(new TermQuery(new Term("body", token)), BooleanClause.Occur.MUST)
-                .build();
-            if (searcher.search(indexed, 2).totalHits.value() != 1)
-                throw new IllegalStateException("exact-subject body token is absent from index");
-        }
+
     }
     private SearchDeltaJournal() {}
 }

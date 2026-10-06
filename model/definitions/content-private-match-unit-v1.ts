@@ -50,7 +50,7 @@ export const contentPrivateMatchUnitProfile = {
         oneIri('rv:resource'), oneIri('rv:variant'),
         { ...oneIri('rv:revision'), pattern: revision },
         oneIri('rv:projection'),
-        { ...oneString('rv:language'), pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' },
+        { ...oneString('rv:language'), pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$' },
         { path: 'rv:field', hasValue: 'rv:Body', maxCount: 1 },
         { path: 'rv:disclosure', hasValue: 'rv:Private', maxCount: 1 },
         { path: 'rv:privateSearchBody', minCount: 1, maxCount: 1,

@@ -11,6 +11,8 @@ import { extractProjectionText, projectionRecipeFor } from './projection-recipes
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
 const CLEAR_BATCH = 64;
+// Four retained revisions at at most 1 MiB each fit Content's 4 MiB read budget.
+const SOURCE_READ_BATCH = 4;
 const MAX_CLEAR_BATCHES = 2_000;
 const MAX_REPLAY_EVENTS = 100_000;
 const MAX_REBUILD_UNITS = 50_000;
@@ -349,10 +351,9 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         rv:searchChapterTitle ?chapterTitle . }
     }
     } LIMIT ${MAX_REBUILD_UNITS + 1}`),
-    env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
-      SELECT ?unit ?literal ?graph WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-      (?unit ?score ?literal ?graph) text:query (rv:searchBody "body:*" ${MAX_REBUILD_UNITS + 1}) .
-    } }`),
+    // The native audit compares graph-scoped identity and stored body/language,
+    // including legal bodies for which the analyzer emits no tokens.
+    env.fuseki.query(`PREFIX rv: <${RV}> SELECT (rv:publicTextInventory() AS ?population) WHERE {}`),
     env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
       ASK { ${textIndexProbePattern()} }`),
   ]);
@@ -360,8 +361,8 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
   const declared = declaredResult.results?.bindings ?? [];
   const heads = headsResult.results?.bindings ?? [];
   const rdf = rdfResult.results?.bindings ?? [];
-  const indexed = indexResult.results?.bindings ?? [];
-  if ([declared.length, heads.length, rdf.length, indexed.length].some(size => size > MAX_REBUILD_UNITS)) {
+  const indexedPopulation = Number(indexResult.results?.bindings?.[0]?.population?.value);
+  if ([declared.length, heads.length, rdf.length, indexedPopulation].some(size => size > MAX_REBUILD_UNITS)) {
     throw new ContentRebuildUnavailable('rebuild inventory exceeds fixed bound');
   }
   const declaredVariants = new Set(declared.map(row => value(row, 'variant')));
@@ -403,28 +404,15 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
       throw new ContentRebuildUnavailable('Content MatchUnit has incomplete provenance');
     }
   }
-  const indexKeys = new Set<string>();
-  for (const entry of indexed) {
-    const unit = value(entry, 'unit');
-    const literal = value(entry, 'literal');
-    const language = entry.literal?.['xml:lang'] ?? '';
-    if (!unit || literal === undefined || !language
-      || value(entry, 'graph') !== PUBLIC_SEARCH_GRAPH) {
-      throw new ContentRebuildUnavailable('Lucene indexed unit is incomplete or in another graph');
-    }
-    const key = textKey(unit, literal, language);
-    if (indexKeys.has(key)) throw new ContentRebuildUnavailable('Lucene has duplicate units');
-    indexKeys.add(key);
-  }
-  if (indexKeys.size !== rdfKeys.size || [...rdfKeys].some(key => !indexKeys.has(key))) {
+  if (!Number.isSafeInteger(indexedPopulation) || indexedPopulation !== rdfKeys.size) {
     throw new ContentRebuildUnavailable('Lucene membership differs from exact RDF MatchUnits');
   }
   if (contentUnits.size !== byVariant.size) {
     throw new ContentRebuildUnavailable('eligible Content publication has missing MatchUnit');
   }
   const expected = [...byVariant.entries()];
-  for (let offset = 0; offset < expected.length; offset += CLEAR_BATCH) {
-    const batch = expected.slice(offset, offset + CLEAR_BATCH);
+  for (let offset = 0; offset < expected.length; offset += SOURCE_READ_BATCH) {
+    const batch = expected.slice(offset, offset + SOURCE_READ_BATCH);
     const ids = batch.map(([, head]) => {
       const revision = value(head, 'revision')!;
       if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(revision)) {
@@ -455,7 +443,7 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         || value(unit, 'decision') !== value(head, 'decision')
         || value(unit, 'eligibility') !== value(head, 'eligibility')
         || value(unit, 'body') !== projected?.text
-        || unit.body?.['xml:lang'] !== projected?.language
+        || unit.body?.['xml:lang']?.toLowerCase() !== projected?.language.toLowerCase()
 ) {
         throw new ContentRebuildUnavailable('Content MatchUnit differs from exact approved source');
       }

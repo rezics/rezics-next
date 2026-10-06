@@ -1,3 +1,4 @@
+import { CONTENT_TEXT_COST } from '../../../content/src/document-body.ts';
 import { Elysia, t } from 'elysia';
 import { disclosureViewer, currentDisclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
@@ -376,9 +377,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-content-phrase-v1'),
         ...unsupportedPublicSearchSelectors,
         phrase: t.String({ minLength: 2, maxLength: 80 }),
+        // Canonical aliases can expand the admitted source spelling.
         language: t.Union([
-          t.String({ minLength: 2, maxLength: 35,
-            pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }), t.Null(),
+          t.String({ minLength: 2, maxLength: 2 * CONTENT_TEXT_COST.languageUnits }), t.Null(),
         ]) }, { additionalProperties: false }), t.Object({ profile: t.Literal('public-main-title-body-v1'),
         ...unsupportedPublicSearchSelectors,
         ...workTypeFilters,

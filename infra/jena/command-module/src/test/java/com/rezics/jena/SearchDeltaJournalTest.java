@@ -70,6 +70,20 @@ public class SearchDeltaJournalTest {
         @Override public void close() { data.close(); index.close(); }
     }
 
+    @Test public void admittedContentBodyKeepsUtf16AndUtf8BudgetsAndLanguageEquality() {
+        Node language = NodeFactory.createLiteralString("zh-Hans-u-nu-hanidec");
+        assertTrue(CommandService.admittedContentBody(
+            NodeFactory.createLiteralLang("中".repeat(65_536), "zh-Hans-u-nu-hanidec"), language));
+        assertFalse(CommandService.admittedContentBody(
+            NodeFactory.createLiteralLang("中".repeat(65_537), "zh-Hans-u-nu-hanidec"), language));
+        Node english = NodeFactory.createLiteralString("en-x-reader");
+        assertTrue(CommandService.admittedContentBody(
+            NodeFactory.createLiteralLang("😀".repeat(32_768), "en-x-reader"), english));
+        assertFalse(CommandService.admittedContentBody(
+            NodeFactory.createLiteralLang("😀".repeat(32_769), "en-x-reader"), english));
+        assertFalse(CommandService.admittedContentBody(NodeFactory.createLiteralLang("... !!!", "en"), language));
+    }
+
     @Test public void actualBeforeAfterAndExactLuceneDocuments() {
         try (Fixture fixture = new Fixture()) {
             DatasetGraphText data = fixture.data;
@@ -115,21 +129,30 @@ public class SearchDeltaJournalTest {
         }
     }
 
-    @Test public void storedBodyWithoutIndexedTermsCannotQualifyDelta() {
+    @Test public void storedBodyWithoutIndexedTermsQualifiesByIdentity() {
         try (Fixture fixture = new Fixture()) {
             fixture.data.begin(ReadWrite.WRITE);
             try {
                 SearchDeltaJournal.Capture capture = new SearchDeltaJournal.Capture(fixture.data);
                 DatasetGraph observed = capture.observed();
                 observed.add(PUBLIC, UNIT, RDF.type.asNode(), MATCH);
-                observed.add(PUBLIC, UNIT, BODY, NodeFactory.createLiteralLang("   ", "en"));
+                observed.add(PUBLIC, UNIT, BODY, NodeFactory.createLiteralLang("... !!!", "en"));
                 fixture.sequence("0", "1");
                 SearchDeltaJournal.append(fixture.data, capture, 2);
                 fixture.data.commit();
             } finally { fixture.data.end(); }
             assertTrue("the full body:* inventory cannot find a tokenless body",
                 fixture.index.query(BODY, "body:*", CommandPolicy.PUBLIC_SEARCH, null, 10).isEmpty());
-            assertEquals(false, SearchDeltaJournal.proof(fixture.data, 0, 2).get("available"));
+            assertEquals(true, SearchDeltaJournal.proof(fixture.data, 0, 2).get("available"));
+            assertEquals(1, SearchDeltaJournal.auditPopulation(fixture.data, fixture.index));
+            fixture.data.begin(ReadWrite.WRITE);
+            try {
+                fixture.data.add(PUBLIC, NodeFactory.createURI(CommandPolicy.PUBLIC_ANCHOR),
+                    RDF.type.asNode(), property("SearchGraphAnchor"));
+                fixture.data.commit();
+            } finally { fixture.data.end(); }
+            assertTrue(SearchDeltaJournal.qualifyAtStartup(fixture.data));
+            assertEquals("1", SearchDeltaJournal.qualifiedProof(fixture.data, -1, 2).get("qualifiedPopulation"));
         }
     }
 

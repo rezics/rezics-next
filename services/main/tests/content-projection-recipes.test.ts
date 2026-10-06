@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { ContentCore, ContentOutboxEvent, ProjectionPublication } from '../../content/src/core.ts';
 import type { ContentProjectionCursor } from '../../content/src/projection-cursor.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { ContentProjectionUnavailable, relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
+import { relayContentProjectionOnce } from '../src/modules/content-publication/relay.ts';
 import { discoverProjectionRecipes, projectionRecipeFor } from '../src/modules/content-publication/projection-recipes.ts';
 
 const contentEpoch = '11111111-1111-4111-8111-111111111111';
@@ -34,7 +34,8 @@ test('G-087: media-set publication is proven and acknowledged without text proje
     readPublicationErasureSupersession: async () => null,
     readExactBatch: async () => { throw new Error('non-text body was read'); },
   } as unknown as ContentCore;
-  const cursor = { read: async () => position('2'), acknowledge: async () => { acknowledgements++; } } as unknown as ContentProjectionCursor;
+  const cursor = { read: async () => position('2'), readScan: async () => position('2'),
+    retries: async () => [], hasPendingTarget: async () => false, acknowledge: async () => { acknowledgements++; } } as unknown as ContentProjectionCursor;
   const row = { epoch: bound(graphEpoch), sequence: bound('7'), routing: bound('1'),
     outcome: bound('https://rezics.com/vocab/Succeeded'), receiptEpoch: bound(graphEpoch),
     receiptSequence: bound('7'), decision: bound('urn:rezics:decision:1'),
@@ -55,10 +56,13 @@ test('G-087: media-set publication is proven and acknowledged without text proje
   expect(reads).toBe(1);
   expect(acknowledgements).toBe(1);
 
+  reference.model = 'catalog-description-v1';
+  expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('ignored');
+  expect(acknowledgements).toBe(2);
+
   reference.model = 'unknown-model-v1';
-  await expect(relayContentProjectionOnce(env, content, cursor, 'public-search'))
-    .rejects.toBeInstanceOf(ContentProjectionUnavailable);
-  expect(acknowledgements).toBe(1);
+  expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('deferred');
+  expect(acknowledgements).toBe(3);
 });
 
 test('G-087: owner projection recipes are discovered and duplicates fail at startup', async () => {
@@ -80,3 +84,25 @@ test('G-087: owner projection recipes are discovered and duplicates fail at star
     await expect(discoverProjectionRecipes(root)).rejects.toThrow(/Duplicate or invalid/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+for (const [body, language] of [['中'.repeat(65_536), 'zh-Hans-u-nu-hanidec'], ['... !!!', 'en-x-reader']] as const) {
+  test(`Private projection accepts the same legal single unit: ${language}`, async () => {
+    const { projectPrivateContentDraft } = await import('../src/modules/content-publication/search-private-projection.ts');
+    const { profileRegistry } = await import('../../../packages/model/src/generated/profiles.ts');
+    const reference = { model: 'content-shape-v1', resourceId: 'urn:rezics:resource:private', variantId: 'urn:rezics:variant:private',
+      revisionId: '33333333-3333-4333-8333-333333333333', language: { kind: 'tag', tag: language }, byteDigest: 'a'.repeat(64) };
+    const content = { readExactBatch: async () => [{ status: 'available', reference, body: { body } }],
+      readDraftHead: async () => ({ revisionId: reference.revisionId, position: position('1') }),
+    } as unknown as ContentCore;
+    let commands = 0;
+    const fuseki = { commandHealth: async () => ({ profiles: {
+      'content-private-match-unit-v1': profileRegistry['content-private-match-unit-v1'].sha256,
+    } }), commandWithReceipt: async () => { commands++; return { status: 'committed', position: { dataEpoch: graphEpoch } }; },
+    query: async () => ({ results: { bindings: [{ body: { ...bound(body), 'xml:lang': language.toLowerCase() },
+      digest: bound(reference.byteDigest), revision: bound(`urn:rezics:content:revision:${reference.revisionId}`) }] } }),
+    } as unknown as FusekiClient;
+    expect(await projectPrivateContentDraft({ fuseki, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' }, objectDirectory: '.temp/unused' },
+      content, reference.resourceId, reference.variantId, reference.revisionId, contentEpoch)).toMatchObject({ body, language });
+    expect(commands).toBe(1);
+  });
+}

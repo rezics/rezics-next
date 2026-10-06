@@ -747,6 +747,14 @@ final class CommandService extends ActionService {
             return "Content search eligibility receipt assessment mismatch: " + subject;
         return null;
     }
+    /** Java strings count UTF-16 units, matching Content admission's single-unit budget. */
+    static boolean admittedContentBody(Node body, Node language) {
+        return body != null && body.isLiteral() && language != null && language.isLiteral()
+            && body.getLiteralLanguage().equalsIgnoreCase(language.getLiteralLexicalForm())
+            && body.getLiteralLexicalForm().length() <= 65_536
+            && body.getLiteralLexicalForm().getBytes(StandardCharsets.UTF_8).length <= 196_608;
+    }
+
     private Map<String, Object> validateContentProjection(DatasetGraph dataset, String receipt,
                                                           String subject, CommandPolicy.Plan plan,
                                                           List<Validation> validations) {
@@ -812,9 +820,7 @@ final class CommandService extends ActionService {
         if (unitShape != null) return unitShape;
         Node body = exactlyOne(dataset, search, unit, "searchBody");
         Node language = exactlyOne(dataset, search, unit, "language");
-        if (body == null || !body.isLiteral() || language == null || !language.isLiteral()
-            || !body.getLiteralLanguage().equalsIgnoreCase(language.getLiteralLexicalForm())
-            || body.getLiteralLexicalForm().getBytes(StandardCharsets.UTF_8).length > 65_536)
+        if (!admittedContentBody(body, language))
             return invalid("Content MatchUnit body language or byte limit mismatch: " + subject);
         int units = 0;
         var found = dataset.find(search, Node.ANY, NodeFactory.createURI(RV + "variant"), variant);

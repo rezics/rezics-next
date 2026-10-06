@@ -58,6 +58,8 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
         await older.query(readFileSync(join(root, 'services/content/migrations', filename), 'utf8'));
         await older.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [version]);
       }
+      await older.query(`INSERT INTO content.projection_checkpoint(consumer,data_epoch,sequence)
+        SELECT 'retained-search',data_epoch,5 FROM content.owner_control WHERE singleton`);
       await migrateContent(older);
       await migrateContent(older);
       const upgraded = await older.query<{ version: number }>(
@@ -65,6 +67,8 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
       expect(upgraded.rows.map(row => row.version)).toEqual(local);
       const ordering = await older.query<{ name: string | null }>(
         "SELECT to_regclass('content.comment_list_order_seq')::text AS name");
+      expect((await older.query(`SELECT sequence::text,scan_sequence::text FROM content.projection_checkpoint
+        WHERE consumer = 'retained-search'`)).rows[0]).toEqual({ sequence: '5', scan_sequence: '5' });
       expect(ordering.rows[0]?.name).toBe('content.comment_list_order_seq');
       const triggers = await older.query<{ name: string }>(`SELECT tgname AS name FROM pg_trigger
         WHERE tgrelid = 'content.receipt'::regclass AND NOT tgisinternal`);

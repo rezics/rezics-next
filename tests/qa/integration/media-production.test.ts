@@ -17,7 +17,7 @@ test('VIEW08/SEARCH15: a media receipt advances the Content cursor without text 
   const baseline = await content.ownerPosition();
   await cursor.initialize(consumer);
   // Other files in this selected QA tier may already have advanced Content.
-  await contentPool.query('UPDATE content.projection_checkpoint SET sequence = $2 WHERE consumer = $1',
+  await contentPool.query('UPDATE content.projection_checkpoint SET sequence = $2, scan_sequence = $2 WHERE consumer = $1',
     [consumer, baseline.sequence]);
   const bytes = png(24, 24);
   const reserved = await owner.send('POST', '/v1/media/uploads', {

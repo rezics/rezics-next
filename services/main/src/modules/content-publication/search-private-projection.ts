@@ -3,12 +3,12 @@ import { POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
+import { extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 import { PRIVATE_SEARCH_GRAPH } from '../contribution/private-projection.ts';
 
 const PROFILE_ID = 'content-private-match-unit-v1';
 const PROFILE = 'https://rezics.com/definition/content-private-match-unit-v1';
 const REVISION = 'urn:rezics:content:revision:';
-const MAX_BODY_BYTES = 65_536;
 export const CONTENT_PRIVATE_PROJECTION_COST = { contentReads: 3, graphCommands: 1,
   graphProofs: 1, privateUnitsPerVariant: 1 } as const;
 
@@ -42,13 +42,9 @@ export async function projectPrivateContentDraft(env: WorkActivationEnvironment,
     || exact.reference.language.kind !== 'tag') {
     throw new ContentPrivateProjectionUnavailable('exact private Content body is unavailable');
   }
-  const language = exact.reference.language.tag;
-  const body = exact.body.body;
-  if (typeof body !== 'string' || !body || Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES
-    || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(body)
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language)) {
-    throw new ContentPrivateProjectionUnavailable('private Content body has no admitted text recipe');
-  }
+  const recipe = projectionRecipeFor(exact.reference.model);
+  if (recipe.kind !== 'text') throw new ContentPrivateProjectionUnavailable('private Content model has no text recipe');
+  const { text: body, language } = extractProjectionText(recipe, exact.body, exact.reference);
   const source = await content.readDraftHead(resource, variant);
   if (!source || source.revisionId !== expectedRevision
     || source.position.dataEpoch !== expectedOwnerEpoch) {
@@ -129,10 +125,11 @@ export async function projectPrivateContentDraft(env: WorkActivationEnvironment,
     GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} { ${iri(identity.unit)} a rv:MatchUnit ;
       rv:variant ${iri(variant)} ; rv:resource ${iri(resource)} ;
       rv:revision ${iri(revision)} ; rv:privateSearchBody ?body . }
-  }`, 262_144);
+  }`, 1_310_720);
   const rows = proof.results?.bindings ?? [];
   if (rows.length !== 1 || rows[0]?.body?.value !== body
-    || rows[0].body['xml:lang'] !== language
+    // RDF language tags compare without case; return the owner's canonical tag.
+    || rows[0].body['xml:lang']?.toLowerCase() !== language.toLowerCase()
     || rows[0]?.digest?.value !== exact.reference.byteDigest
     || rows[0]?.revision?.value !== revision) {
     throw new ContentPrivateProjectionUnavailable('private Content projection differs from source');
