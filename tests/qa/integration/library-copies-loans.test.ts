@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { LibraryCopyStore, LIBRARY_RECORD_COST, LibraryRecordDenied, type CopyState } from '../../../services/main/src/modules/library/copies.ts';
 import { LibraryLoanStore, type LoanState, type LoanView } from '../../../services/main/src/modules/library/loans.ts';
@@ -13,6 +14,8 @@ import { assertMergeCoverage, discoverMergeHandlers } from '../../../services/ma
 import { PERSON_STATE_MERGE_EXCLUSIONS } from '../../../services/main/src/modules/identity-merge/person-state-coverage.ts';
 import type { CanonicalRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { DEFAULT_PERSON_CHOICES } from '../../../services/main/src/modules/preferences/store.ts';
+import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 type Page<T> = { items: T[]; nextCursor: string | null };
@@ -21,6 +24,116 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
   return response.json() as Promise<T>;
 }
+
+for (const hiddenBy of ['private preferences', 'protection', 'private graph disclosure'] as const) {
+  test(`acquiredFrom and counterparty cannot distinguish a Person hidden by ${hiddenBy} from a nonexistent Person`, async () => {
+    const home = await startHomeStack('library-party-privacy');
+    try {
+      const agent = await home.provision('Copy owner', home.reader.token);
+      const hidden = await home.provision('Hidden Person', home.author.token);
+      if (hiddenBy === 'private preferences') {
+        await json(await home.call('PUT', '/v1/me/person-preferences', { ...DEFAULT_PERSON_CHOICES,
+          actingSubject: hidden, expectedVersion: 0, profileVisibility: 'private' }, home.author.token));
+      } else {
+        await home.stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(hidden)} <${RV}${hiddenBy === 'protection' ? 'protectionHead' : 'profileDisclosure'}>
+          ${hiddenBy === 'protection' ? iri(id()) : `<${RV}Private>`} } }`);
+      }
+      const copies = new LibraryCopyStore(home.stack.contentPool), loans = new LibraryLoanStore(home.stack.contentPool);
+      const app = createMainApp(home.stack.fuseki, { ...home.deps, libraryCopies: copies, libraryLoans: loans });
+      const call = (method: string, path: string, body: object) => app.handle(new Request(`http://main.local${path}`,
+        { method, headers: { authorization: `Bearer ${home.reader.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+      const outcomes: Array<{ status: number; body: unknown }> = [];
+      for (const person of [id(), hidden]) {
+        const release = id(), work = id();
+        const copy = await copies.write({ agent, release, expectedVersion: 0, idempotencyKey: randomUUID(), changes: {} },
+          async () => ({ work, release }));
+        for (const operation of ['acquiredFrom', 'counterparty'] as const) {
+          const response = operation === 'acquiredFrom'
+            ? await call('PATCH', `/v1/me/library-copies/${copy.id.slice(-36)}`, { actingSubject: agent, expectedVersion: 1,
+              acquiredFrom: { kind: 'person', person } })
+            : await call('POST', '/v1/me/library-loans', { actingSubject: agent, expectedVersion: 0, copy: copy.id,
+              direction: 'lent', counterparty: { kind: 'person', person },
+              startedAt: '2026-01-01T00:00:00Z', dueAt: '2026-01-10T00:00:00Z' });
+          outcomes.push({ status: response.status, body: await response.json() });
+        }
+      }
+      expect(outcomes.map(outcome => outcome.status)).toEqual([400, 400, 400, 400]);
+      expect(outcomes[2]).toEqual(outcomes[0]);
+      expect(outcomes[3]).toEqual(outcomes[1]);
+      expect((await loans.page(agent, {})).items).toEqual([]);
+      expect((await home.stack.contentPool.query('SELECT state FROM reader.library_copy WHERE agent=$1', [agent])).rows
+        .every(row => row.state.acquiredFrom === null && row.state.version === 1)).toBe(true);
+    } finally { await home.stop(); }
+  }, 600_000);
+}
+
+test('returned loan pages examine at most one bounded page despite thousands of active loans', async () => {
+  const home = await startHomeStack('library-returned-paging');
+  try {
+    const agent = await home.provision('Sparse returned history', home.reader.token), work = id(), release = id();
+    const now = new Date().toISOString(), returnedIds: string[] = [];
+    const copies: CopyState[] = [], loans: LoanState[] = [];
+    for (let i = 0; i < 6060; i++) {
+      const copy: CopyState = { id: id(), work, release, format: null, acquiredFrom: null, acquiredAt: null,
+        ownedFrom: null, ownedThrough: null, removed: false, version: 1, changedAt: now };
+      const loan: LoanState = { id: id(), copy: copy.id, direction: 'lent', counterparty: { kind: 'name', name: 'Reader' },
+        startedAt: '2026-01-01T00:00:00.000Z', dueAt: new Date(Date.UTC(2026, 0, 2) + Math.floor(i / 2) * 1000).toISOString(),
+        returnedAt: null, version: 1, changedAt: now };
+      copies.push(copy); loans.push(loan);
+      if (i % 101 === 100) returnedIds.push(loan.id);
+    }
+    await home.stack.contentPool.query(`INSERT INTO reader.library_copy(agent,id,work,release,state,version)
+      SELECT $1,s->>'id',s->>'work',s->>'release',s,1 FROM jsonb_array_elements($2::jsonb) s`, [agent, JSON.stringify(copies)]);
+    await home.stack.contentPool.query(`INSERT INTO reader.library_loan(agent,id,copy,state,due_at,version)
+      SELECT $1,s->>'id',s->>'copy',s,(s->>'dueAt')::timestamptz,1 FROM jsonb_array_elements($2::jsonb) s`, [agent, JSON.stringify(loans)]);
+    await home.stack.contentPool.query('ANALYZE reader.library_loan');
+    type Plan = { 'Node Type': string; 'Actual Rows': number; 'Actual Loops': number;
+      'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number; Plans?: Plan[] };
+    const plans: Plan[] = [];
+    // Explain the store's actual SQL and bind values on its own snapshot, rather
+    // than proving a hand-written approximation can use the desired index.
+    const measuredPool = { connect: async () => {
+      const client = await home.stack.contentPool.connect();
+      return { release: () => client.release(), query: async (text: string, values?: unknown[]) => {
+        const result = await client.query(text, values);
+        if (/SELECT id,state,statement_timestamp\(\) AS now FROM reader\.library_loan/.test(text)) {
+          const explained = await client.query('EXPLAIN (ANALYZE, FORMAT JSON) ' + text, values);
+          plans.push(explained.rows[0]['QUERY PLAN'][0].Plan as Plan);
+        }
+        return result;
+      } };
+    } } as unknown as Pool;
+    const store = new LibraryLoanStore(measuredPool);
+    expect((await store.page(agent, { state: 'returned' })).items).toEqual([]);
+    await home.stack.contentPool.query(`UPDATE reader.library_loan SET returned_at=$3::timestamptz,version=2,
+      state=state || jsonb_build_object('returnedAt',$3::text,'version',2)
+      WHERE agent=$1 AND id=ANY($2::text[])`, [agent, returnedIds, now]);
+    await home.stack.contentPool.query('ANALYZE reader.library_loan');
+    const seen: LoanView[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await store.page(agent, { state: 'returned', ...(cursor ? { cursor } : {}) });
+      seen.push(...page.items); cursor = page.nextCursor;
+    } while (cursor);
+    expect(seen).toHaveLength(60);
+    expect(new Set(seen.map(loan => loan.id))).toEqual(new Set(returnedIds));
+    expect(seen.every(loan => loan.state === 'returned')).toBe(true);
+    expect(seen.map(loan => `${loan.dueAt}:${loan.id}`)).toEqual(seen.map(loan => `${loan.dueAt}:${loan.id}`).sort());
+    // Also measure an empty continuation beyond the final returned record.
+    const last = seen.at(-1)!;
+    await measuredPool.connect().then(async client => {
+      try { await client.query(`SELECT id,state,statement_timestamp() AS now FROM reader.library_loan WHERE agent=$1
+        AND returned_at IS NOT NULL AND (due_at,id)>($3::timestamptz,$4) ORDER BY due_at,id LIMIT $2`,
+      [agent, LIBRARY_RECORD_COST.pageRows, last.dueAt, last.id]); } finally { client.release(); }
+    });
+    const examined = (plan: Plan): number => plan.Plans?.reduce((sum, child) => sum + examined(child), 0)
+      ?? (plan['Actual Rows'] + (plan['Rows Removed by Filter'] ?? 0) + (plan['Rows Removed by Index Recheck'] ?? 0)) * plan['Actual Loops'];
+    expect(plans).toHaveLength(5);
+    for (const plan of plans) expect(examined(plan)).toBeLessThanOrEqual(LIBRARY_RECORD_COST.pageRows);
+  } finally { await home.stop(); }
+}, 600_000);
 
 test('private exact-release copies and overdue loans preserve replay, CAS, concurrent transitions, paging, export and erasure', async () => {
   const preparation = Date.now(), home = await startHomeStack('library-copies-loans');
@@ -206,6 +319,7 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     const planClient = await stack.contentPool.connect();
     try {
       await planClient.query('BEGIN');
+      await planClient.query('ANALYZE reader.library_loan');
       await planClient.query('SET LOCAL enable_seqscan=off');
       const plan = await planClient.query(`EXPLAIN SELECT id,state FROM reader.library_loan
         WHERE agent=$1 AND returned_at IS NULL AND (due_at,id)>($2::timestamptz,$3) ORDER BY due_at,id LIMIT 21`,

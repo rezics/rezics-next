@@ -4,9 +4,9 @@ import type { Pool, PoolClient } from 'pg';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import { readId } from '../work/read-contract.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadUnavailable } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
 import { resolveTargets } from '../target/resolve.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
+import { readAgent } from '../profiles/read.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 
 const closed = { additionalProperties: false };
@@ -71,11 +71,14 @@ export async function resolveCopyRelease(session: WorkReadSession, release: stri
 export async function resolveLibraryParty(session: WorkReadSession, party: LibraryParty) {
   validateLibraryParty(party);
   if (party.kind === 'name') return;
-  const rows = await session.query(`SELECT ?person WHERE { GRAPH ${iri(GRAPHS.current)} {
-    VALUES ?person { ${iri(party.person)} }
-    ?person a rv:Agent ; rv:agentKind rv:PersonAgent ; rv:profileDisclosure rv:Public .
-  } } LIMIT 2`, 1);
-  if (rows.length !== 1) throw new InvalidLibraryRecord('Person reference is unavailable; use a free-text name');
+  try {
+    // References obey the profile owner's preferences, protection and live
+    // fences just like a profile read; hidden and absent Persons are identical.
+    if ((await readAgent(session, party.person)).kind === 'person') return;
+  } catch (error) {
+    if (!(error instanceof WorkReadMissing)) throw error;
+  }
+  throw new InvalidLibraryRecord('Person reference is unavailable; use a free-text name');
 }
 
 /** Receipts precede target resolution so a lost-response retry still succeeds

@@ -9,10 +9,19 @@ import { parseRezics } from '../src/modules/library-import/formats/rezics.ts';
 import { emptyRow } from '../src/modules/library-import/formats/contract.ts';
 import { libraryCopiesRoutes, openApiOperations } from '../src/routes/library-copies.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { rateLimitFamily } from '../src/modules/rate-limit/budgets.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const owner = id(), release = id(), work = id();
 const neverPool = { connect: () => { throw new Error('Invalid input reached PostgreSQL'); } } as unknown as Pool;
+
+test('all copy and loan operations have explicit read or write rate-limit admission', () => {
+  const families = Object.entries(openApiOperations).flatMap(([path, methods]) =>
+    Object.keys(methods).map(method => ({ method, path, family: rateLimitFamily(method.toUpperCase(), path) })));
+  expect(families).toHaveLength(8);
+  expect(families).toEqual(families.map(operation => ({ ...operation,
+    family: operation.method === 'get' ? null : 'write' })));
+});
 
 test('copy and loan validation refuses malformed commands before opening a transaction', async () => {
   const copies = new LibraryCopyStore(neverPool), loans = new LibraryLoanStore(neverPool);
