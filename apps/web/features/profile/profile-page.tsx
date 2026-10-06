@@ -378,6 +378,7 @@ export function ProfileShelfPage({ profile, status, shelf, cursor, reader, reade
       t={t} />
       : shelf.data.cards.length ? <WorkGrid works={shelf.data.cards.map(shelfCard)} headingLevel={2}
         avatarQuery={reader.avatarQuery} locale={locale} />
-        : shelf.data.nextCursor ? null : <p className="text-muted-foreground">{t.shelfEmpty}</p>}
+        : shelf.data.count === 0 && shelf.data.countKind === 'exact'
+          ? <p className="text-muted-foreground">{t.shelfEmpty}</p> : null}
   </ListFrame>;
 }

@@ -1,5 +1,8 @@
 import { uuidToSid } from '@rezics/model/address';
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ProfileShelfPage } from '../features/profile/profile-page.tsx';
 import { creditedCard, creditLine, shelfCard, worksSummary } from '../features/profile/cards.ts';
 import { authorWorks, organizationWorks, storyProfile } from '../features/profile/fixtures.ts';
 import { followerLabel } from '../features/profile/followers.ts';
@@ -21,6 +24,19 @@ beforeAll(seedServedTypes);
 
 const zh = { ...messages, ...zhHans };
 const uuid = '0192e0aa-4b5a-7c6d-8e7f-9a0b1c2d3e4f';
+
+test('An empty terminal continuation reports the accumulated total without calling the shelf empty', () => {
+  const render = (count: number, cursor?: string) => renderToStaticMarkup(createElement(ProfileShelfPage, {
+    profile: storyProfile(), status: 'reading', cursor, reader: { signedIn: false }, locale: 'en', messages,
+    shelf: { ok: true, data: { count, countKind: 'exact', cards: [], nextCursor: null } },
+  }));
+  const terminal = render(20, 'scan-last');
+  expect(terminal).toContain('20');
+  expect(terminal).not.toContain(messages.shelfEmpty);
+  expect(terminal).toContain('First page');
+  expect(terminal).not.toContain('Next page');
+  expect(render(0)).toContain(messages.shelfEmpty);
+});
 
 describe('profile addresses', () => {
   test('a `[handle]` segment names a profile only with `@` and a handle Main can hold', () => {

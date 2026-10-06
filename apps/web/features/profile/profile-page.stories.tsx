@@ -541,6 +541,20 @@ export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
   },
 };
 
+export const ShelfTerminalContinuation: StoryObj<typeof ProfileShelfPage> = {
+  render: () => <ProfileShelfPage profile={storyProfile()} status="reading" cursor="scan-last"
+    shelf={{ ok: true, data: { count: 20, countKind: 'exact', cards: [], nextCursor: null } }}
+    reader={signedOut} locale="en" messages={messages} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: /Currently reading.*20/ })).toBeVisible();
+    await expect(canvas.queryByText(messages.shelfEmpty)).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('link', { name: 'Next page' })).not.toBeInTheDocument();
+    await expect(canvas.getByRole('link', { name: 'First page' })).toHaveAttribute('href',
+      localizedPath(`${profileHref('lin_mei')}/shelves/reading`, 'en'));
+  },
+};
+
 export const AllWorks: StoryObj<typeof ProfileWorksPage> = {
   render: () => (
     <ProfileWorksPage
