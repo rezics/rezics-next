@@ -213,6 +213,9 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
       const copyPlan = await planClient.query(`EXPLAIN SELECT id,state FROM reader.library_copy
         WHERE agent=$1 AND work=$2 AND NOT removed AND id>$3 ORDER BY id LIMIT 21`, [agent,target.work,copied[250]!.id]);
       expect(copyPlan.rows.map(row => row['QUERY PLAN']).join('\n')).toContain('library_copy_work');
+      const historyPlan = await planClient.query(`EXPLAIN SELECT id FROM reader.library_loan WHERE agent=$1 AND copy=$2`,
+        [agent,copy.id]);
+      expect(historyPlan.rows.map(row => row['QUERY PLAN']).join('\n')).toContain('library_loan_copy');
     } finally { await planClient.query('ROLLBACK'); planClient.release(); }
     let exportedCopies = 0, exportedLoans = 0, snapshot: string | undefined;
     cursor = null;

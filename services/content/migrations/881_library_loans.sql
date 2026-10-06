@@ -12,6 +12,8 @@ CREATE TABLE reader.library_loan (
 );
 -- A copy can be in only one active loan; both directions share the same slot.
 CREATE UNIQUE INDEX library_loan_active_copy ON reader.library_loan (agent, copy) WHERE returned_at IS NULL;
+-- The FK cascade must find returned history too; the active slot cannot serve it.
+CREATE INDEX library_loan_copy ON reader.library_loan (agent, copy);
 CREATE INDEX library_loan_due ON reader.library_loan (agent, due_at, id);
 CREATE INDEX library_loan_active_due ON reader.library_loan (agent, due_at, id) WHERE returned_at IS NULL;
 CREATE TRIGGER library_bundle_loans AFTER INSERT OR UPDATE OR DELETE ON reader.library_loan
