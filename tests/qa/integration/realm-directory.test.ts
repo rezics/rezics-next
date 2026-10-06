@@ -1,3 +1,4 @@
+// sql-relations-allow: access.realm_directory_probe -- The test creates this trigger probe to count directory row mutations and drops it afterwards.
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
 import { RealmDirectoryIndex } from '../../../services/main/src/modules/realm-directory/index.ts';
 import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';

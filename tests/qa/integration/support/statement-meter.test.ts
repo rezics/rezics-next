@@ -1,3 +1,4 @@
+// sql-relations-allow: access.fixture -- A mocked pg.Client receives this statement; no database relation is involved.
 import { expect, spyOn, test } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
