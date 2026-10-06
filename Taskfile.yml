@@ -278,7 +278,7 @@ tasks:
   # Goal
 
   goal:
-    desc: Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 6 when it is unset.
+    desc: Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to the program's live-worker cap when it is unset.
     dir: '{{.ROOT_DIR}}'
     silent: true
     cmds:
