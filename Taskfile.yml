@@ -183,10 +183,12 @@ tasks:
     desc: Run Storybook stories as Vitest browser tests with accessibility checks.
     dir: apps/web
     cmds:
-      # A Goal worker's run takes a shared QA slot: unbounded parallel browser runs exhausted the host.
+      # A Goal worker's run takes a QA slot and the heavy lock with two story workers: unbounded parallel
+      # browser runs exhausted the host, and two browser suites at once left 5 GiB on 2026-10-07.
       - |
         if [ -n "${GOAL_TASK_ID:-}" ] && [ -z "${GOAL_IN_SLOT:-}" ]; then
-          exec bun ../../scripts/goal/goalctl.ts slot -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+          export STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}"
+          exec bun ../../scripts/goal/goalctl.ts slot --heavy -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
         fi
         exec ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
 
@@ -220,7 +222,13 @@ tasks:
     desc: Run the Accounts stories as Vitest browser tests with accessibility checks.
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+      # Same host guard as storybook:test.
+      - |
+        if [ -n "${GOAL_TASK_ID:-}" ] && [ -z "${GOAL_IN_SLOT:-}" ]; then
+          export STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}"
+          exec bun ../../scripts/goal/goalctl.ts slot --heavy -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+        fi
+        exec ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
 
   accounts:e2e:
     desc: Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004).
