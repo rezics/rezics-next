@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync,
   renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -33,6 +34,8 @@ export interface Manifest {
   shards: number; partial: boolean; status: 'running' | 'passed' | 'failed' | 'incomplete';
   files: ExpectedFile[]; batches: Batch[]; preflight: { commit: string; ok: boolean; artifactPaths: string[]; reason?: string };
   diagnoses: Diagnosis[];
+  /** Reserved before starting a probe, including interrupted probes, so resume cannot reset the eight-probe bound. */
+  probeCounts?: Record<string, number>;
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
@@ -128,7 +131,7 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
 }
 
 export function classify(evidence: string, code = 1): Classification {
-  if (/cannot connect to the docker daemon|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|is the docker daemon running|all predefined address pools|no available.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
+  if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(evidence)) return 'resource';
   if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded/i.test(evidence)) return 'deadline';
   return 'deterministic';
@@ -342,6 +345,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         preflight: { commit: pinned, ok: false, artifactPaths: [], reason: 'Pinned preflight pending' }, diagnoses: [] };
     }
     const save = () => atomic(path, manifest);
+    manifest.probeCounts ??= {};
     save();
     // Persist the SHA and selection before installation, so a stop during preparation can resume that exact revision.
     await checkoutAt(pinned);
@@ -410,7 +414,13 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         } else if ([initial, repeat, isolated].some(result => result.classification === 'resource' || result.classification === 'deadline')) {
           diagnosis.classification = [initial, repeat, isolated].find(result => result.classification === 'resource' || result.classification === 'deadline')!.classification!;
         } else {
-          await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute);
+          const takeProbe = () => {
+            const count = manifest.probeCounts![file] ?? 0;
+            if (count >= 8) return undefined;
+            manifest.probeCounts![file] = count + 1; save();
+            return count + 1;
+          };
+          await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute, takeProbe);
         }
         if (diagnosis.classification === 'infrastructure') {
           batch.state = 'pending';
@@ -456,7 +466,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
 
 async function bisectFailure(repo: string, stateDir: string, pinned: string, file: string, batch: Batch, events: MergeEvent[],
   diagnosis: Diagnosis, checkoutAt: (commit: string, probe?: string) => Promise<string>, prepared: Map<string, Manifest['preflight']>,
-  execute: (commit: string, batch: Batch, label: string, probeTree?: string) => Promise<Execution>): Promise<void> {
+  execute: (commit: string, batch: Batch, label: string, probeTree?: string) => Promise<Execution>,
+  takeProbe: () => number | undefined): Promise<void> {
   const passing = lastPassingCommit(repo, stateDir, file, pinned);
   const base = passing ?? git(repo, ['rev-list', '--first-parent', '--max-parents=0', pinned]).split('\n')[0]!;
   const commits = [base, ...git(repo, ['rev-list', '--first-parent', '--reverse', `${base}..${pinned}`]).split('\n').filter(Boolean)];
@@ -466,8 +477,9 @@ async function bisectFailure(repo: string, stateDir: string, pinned: string, fil
     .sort((a, b) => positions.get(a)! - positions.get(b)!);
   const seen = new Map<string, 'passed' | 'failed'>();
   const probe = async (commit: string): Promise<'passed' | 'failed' | undefined> => {
-    if (diagnosis.probes.length >= 8) { diagnosis.reason = 'Eight-probe budget exhausted'; return; }
-    const label = `${file.replaceAll(/[^a-z0-9.-]/gi, '-')}-${diagnosis.probes.length + 1}`;
+    const number = takeProbe();
+    if (number === undefined) { diagnosis.reason = 'Eight-probe budget exhausted'; return; }
+    const label = `${createHash('sha256').update(file).digest('hex')}-${number}`;
     const checkout = await checkoutAt(commit, label);
     let outcome: string = 'unavailable';
     if (existsSync(join(checkout, file)) && prepared.get(commit)?.ok) {

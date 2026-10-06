@@ -1406,7 +1406,8 @@ export function migrationsBelowMain(added: readonly string[], listMain: (directo
 export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>, after: string): string {
   const patch = (commit: string) => {
     const diff = git(repo, ['show', '--format=', commit]);
-    return git(repo, ['patch-id', '--stable'], false, { input: diff }).split(' ')[0];
+    // Whitespace can change strings and indentation-sensitive files; stable patch IDs discard it.
+    return git(repo, ['patch-id', '--verbatim'], false, { input: diff }).split(' ')[0];
   };
   const patches = new Set(git(repo, ['rev-list', `${task.base}..${task.branch}`, '--not', 'main']).split('\n').filter(Boolean).map(patch));
   patches.delete('');

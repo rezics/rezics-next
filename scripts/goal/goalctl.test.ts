@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas,
-  goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
+  goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
   type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
@@ -717,6 +717,21 @@ describe('goalctl shared lifecycle and launch gates', () => {
       expect(JSON.parse(r.run(['inbox']).stdout.trim())).toMatchObject({ acknowledged: true });
       expect(r.run(['inbox', '--ack', '2']).status).toBe(1);
       expect(r.run(['status']).stdout).not.toContain('1 unacknowledged regressions');
+    } finally { r.cleanup(); }
+  });
+
+  test('manual merge attribution preserves whitespace that changes a string value', () => {
+    const r = repo();
+    try {
+      const base = r.git('rev-parse', 'HEAD');
+      r.git('checkout', '-b', 'worker');
+      writeFileSync(join(r.dir, 'value.ts'), "export const value = 'a b';\n");
+      r.git('add', 'value.ts'); r.git('commit', '-qm', 'Worker');
+      r.git('checkout', 'main');
+      writeFileSync(join(r.dir, 'value.ts'), "export const value = 'ab';\n");
+      r.git('add', 'value.ts'); r.git('commit', '-qm', 'Different maintainer value');
+      const after = r.git('rev-parse', 'HEAD');
+      expect(landedBoundary(r.dir, { base, branch: 'worker' }, after)).toBe(after);
     } finally { r.cleanup(); }
   });
 

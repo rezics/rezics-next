@@ -123,6 +123,21 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
     } finally { r.cleanup(); }
   });
 
+  test('distinct paths cannot collide in probe worktrees or overwrite each other’s artifacts', async () => {
+    const r = repo();
+    try {
+      const files = ['tests/qa/unit/sub/entry.test.ts', 'tests/qa/unit/sub-entry.test.ts'];
+      for (const file of files) { r.write(file, 'pass\n'); r.files.push({ file, tier: 'unit', outcome: 'pending' }); }
+      const base = r.commit();
+      await r.run({ runId: 'base' });
+      const after = r.commit(Object.fromEntries(files.map(file => [file, 'fail\n']))); r.event(base, after);
+      const result = await r.run({ runId: 'paths' });
+      expect(result.diagnoses.every(diagnosis => diagnosis.status === 'attributed')).toBe(true);
+      const probes = r.calls.filter(call => call.directory.includes('/probes/'));
+      expect(new Set(probes.map(call => call.checkout)).size).toBe(probes.length);
+    } finally { r.cleanup(); }
+  });
+
   test('a failure present at the base is inherited', async () => {
     const r = repo();
     try {
@@ -175,9 +190,15 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
       for (let index = 0; index < 130; index++) {
         const next = r.commit({ [r.unit]: index >= 70 ? 'fail\n' : 'pass\n' }); r.event(previous, next); previous = next;
       }
-      const result = await r.run({ runId: 'budget' });
+      await expect(r.run({ runId: 'budget', runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (args[2].includes('/probes/') && args[2].endsWith('-8')) throw new Error('Interrupted final probe');
+        return result;
+      } })).rejects.toThrow('Interrupted final probe');
+      const result = await r.run({ resume: 'budget' });
       expect(result.diagnoses[0]!.status).toBe('inconclusive');
-      expect(result.diagnoses[0]!.probes).toHaveLength(8);
+      expect(result.probeCounts![r.unit]).toBe(8);
+      expect(r.calls.filter(call => call.directory.includes('/probes/'))).toHaveLength(8);
       expect(result.diagnoses[0]!.reason).toContain('budget');
       expect(result.diagnoses[0]!.goal).toBeUndefined();
     } finally { r.cleanup(); }
@@ -296,7 +317,8 @@ export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tie
 
 test('classification uses engine evidence without treating application ECONNREFUSED as Docker failure', () => {
   expect(classify('connect ECONNREFUSED 127.0.0.1:3001')).toBe('deterministic');
-  for (const log of ['docker engine ECONNREFUSED', 'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
+  for (const log of ['docker engine ECONNREFUSED', 'dial unix /var/run/docker.sock: connect: no such file or directory',
+    'failed to connect to the Docker API', 'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
   expect(classify('spawnSync bun ETIMEDOUT')).toBe('deadline');
   expect(classify('model failed or exceeded 180s')).toBe('deterministic');
   expect(classify('', 137)).toBe('resource');
