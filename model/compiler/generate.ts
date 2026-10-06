@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
-import { type ProfileDefinition } from './ir.ts';
+import { profileSnapshot, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
 import { renderTypeRegistry } from './type.ts';
@@ -58,6 +58,7 @@ export function discoverProfiles(directory: string,
   }
   if (declarations.size) throw new Error(`Turtle source is missing for ${[...declarations.keys()].join(', ')}`);
   if (new Set(profiles.map(profile => profile.id)).size !== profiles.length) throw new Error('Duplicate profile ID');
+  for (const profile of profiles) profileSnapshot(profile);
   // Source language does not change output order or canonical precedence.
   return profiles.sort((a, b) => a.id.localeCompare(b.id));
 }

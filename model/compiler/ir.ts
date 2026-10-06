@@ -74,6 +74,22 @@ export interface ProfileDefinition {
   binding?: BindingRequirement;
 }
 
+const profileSnapshots = new WeakMap<ProfileDefinition, ProfileDefinition>();
+
+/**
+ * One loaded authored definition supplies one compilation basis. Keep its data
+ * separate from consumer inspections of the module's shared objects; a source
+ * edit loads a new definition, and a derived definition has a new identity.
+ */
+export function profileSnapshot(profile: ProfileDefinition): ProfileDefinition {
+  let snapshot = profileSnapshots.get(profile);
+  if (!snapshot) {
+    snapshot = structuredClone(profile);
+    profileSnapshots.set(profile, snapshot);
+  }
+  return snapshot;
+}
+
 // Resource IRIs and vocabulary IRIs have different referents. A context may use
 // either compact prefix, but it must not turn a resource ID into a predicate (or
 // silently switch newly authored Schema.org terms to the HTTP alias).
@@ -180,6 +196,7 @@ function validateProperty(property: PropertyDefinition): void {
 }
 
 export function renderProfile(profile: ProfileDefinition): string {
+  profile = profileSnapshot(profile);
   knownFields(profile, ['id', 'comments', 'prefixes', 'layout', 'shapes', 'binding'], profile.id);
   if (profile.binding) knownFields(profile.binding, ['required', 'optional', 'roles', 'demandedBy'], `${profile.id} binding`);
   if (!/^[a-z0-9-]+-v\d+$/.test(profile.id)) throw new Error(`Invalid profile ID: ${profile.id}`);

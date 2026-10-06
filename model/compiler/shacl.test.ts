@@ -222,3 +222,39 @@ test('The DSL lowerer preserves literal enum term kinds in every generated conte
   const release = readFileSync(join(root, 'generated/model/contexts/release-v3.jsonld'), 'utf8');
   expect(JSON.parse(release)['@context']['rv:releaseKind']['@type']).toBeUndefined();
 });
+
+test('The DSL lowerer distinguishes single fixed literals from single fixed IRIs', async () => {
+  for (const hasValue of ['"download"', 'rv:download'] as const) {
+    const profile = parseTurtleProfile(
+      'probe-v1',
+      turtle('sh:path rv:value ; sh:datatype xsd:string'),
+    );
+    const fixed = {
+      ...profile,
+      shapes: [
+        {
+          ...profile.shapes[0]!,
+          properties: [{ path: 'rv:value' as const, hasValue, maxCount: 1 }],
+        },
+      ],
+    };
+    const context = JSON.parse(
+      buildModelOutputs([fixed]).get('generated/model/contexts/probe-v1.jsonld')!,
+    )['@context'];
+    const literal = hasValue.startsWith('"');
+    expect(context['rv:value']['@type']).toBe(literal ? undefined : '@id');
+    const shape = (await schemas(fixed))[fixed.shapes[0]!.iri]!;
+    expect(
+      Value.Check(
+        shape,
+        node({ 'rv:value': [literal ? 'download' : 'https://rezics.com/vocab/download'] }),
+      ),
+    ).toBe(true);
+    expect(
+      Value.Check(
+        shape,
+        node({ 'rv:value': [literal ? 'https://rezics.com/vocab/download' : 'download'] }),
+      ),
+    ).toBe(false);
+  }
+});
