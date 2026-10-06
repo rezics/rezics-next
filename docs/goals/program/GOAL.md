@@ -92,7 +92,15 @@ Its criteria bind every Goal:
    in a brief, the program removes its row from the root GOAL.md and runs
    `task goal -- goal close production-readiness`. The salvage branches
    (`goal/g-403`, `g-418`, `g-422`, `g-432`, `g-433`, `g-435`) are material
-   for their new owners, never whole cherry-picks.
+   for their new owners, never whole cherry-picks: `g-403` (shared dev
+   storage under QA memory pressure) for P4, `g-432` (chapter author notes)
+   for kernel's C2, the rest as the delivery briefs name them. The audit of
+   2026-10-07 (`.temp/goal-program/pr-retire-audit.md`) routed the items no
+   brief carried to their owners.
+7. **Closing gate.** A delivery Goal closes only when, besides its own
+   completion, the `product-audit` skill (`.agents/skills/product-audit`)
+   finds no open P0 or P1 class in its areas, as the production-readiness
+   milestones required.
 
 ## QA tiers
 
