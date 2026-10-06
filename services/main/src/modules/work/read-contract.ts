@@ -6,7 +6,8 @@ import { recordedText, recordedRelevance } from './metadata-schema.ts';
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 export const readUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 export const readLanguage = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 });
-export const readPosition = t.Object({ dataEpoch: t.String(), sequence: t.String() });
+export const readPosition = t.Object({ dataEpoch: t.String(), sequence: t.String(),
+  dependencyToken: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })) });
 export const readName = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   basis: displayLanguageBasis });

@@ -2,11 +2,13 @@ import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts'
 import type { Static } from 'typebox';
 import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
 import { workCard, workHeader } from './read-contract.ts';
-import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, type WorkReadSession } from './read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable, publicWork, unerased, readRowsToken, readDependencyToken,
+  type WorkReadSession } from './read-session.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
+  dependencyToken: string;
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
   disclosure: 'public' | 'restricted'; fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
 
@@ -39,13 +41,25 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     || !await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work))) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const selected = isPublic ? chooseMainLanguage(await readMainLanguageHeads(session.deps.environment,
-    row.main.value, true), session.options.language) : null;
+  const readHeads = async () => isPublic ? (await readMainLanguageHeads(session.deps.environment,
+    row.main!.value, true)).sort((a, b) => a.language.localeCompare(b.language)) : [];
+  const heads = await readHeads();
+  const languageToken = session.observeDependency(`language-heads:${row.main.value}`, heads, readHeads);
+  const selected = isPublic ? chooseMainLanguage(heads, session.options.language) : null;
+  const profiles = session.options.localBasis ? await session.dependency('work-profiles', async () => {
+    const health = await session.deps.environment.fuseki.commandHealth();
+    return [...new Set(['work-metadata-v1', ...(row.metadataHead ? ['work-metadata-details-v1'] : []),
+      ...(session.options.localProfiles ?? [])])]
+      .map(profile => { const digest = health.profiles[profile];
+        if (!digest) throw new WorkReadUnavailable('Selected Work profile is unavailable');
+        return [profile, digest]; });
+  }) : null;
   const summary = (await session.summaries([work]))[0];
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const metadata = await readMetadataHeader(session, work, row.metadataHead?.value ?? null);
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
-  const stats = (await session.deps?.serialStats?.batch([work], session.position.sequence))?.get(work);
+  const stats = (await session.deps?.serialStats?.batch([work],
+    session.options.localBasis ? undefined : session.position.sequence))?.get(work);
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     ...(row.provisional ? { verification: row.provisional.value === 'true' ? 'unverified' as const : 'verified' as const } : {}),
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),
@@ -53,6 +67,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
     chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
     lastUpdatedAt: stats?.lastUpdatedAt ?? null },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
+  dependencyToken: readDependencyToken([readRowsToken(rows), languageToken, profiles, summary]),
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
   ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
@@ -81,7 +96,8 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     metadataRevision: metadata.revision,
     originalTitle: metadata.originalTitle ? recordedDisplayText(metadata.originalTitle) : null,
     mainVersionRevision: basis.mainRevision, mainVersionLabel: selected.mainVersionLabel,
-    selectedLanguage: basis.selectedLanguage, sourcePosition: session.position,
+    selectedLanguage: basis.selectedLanguage, sourcePosition: { ...session.position,
+      ...(session.options.localBasis ? { dependencyToken: basis.dependencyToken } : {}) },
     links: { versions: `${path}/versions`, classifications: `${path}/classifications`,
       adoptions: `${path}/adoptions`, ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
       metadata: `${path}/metadata`, editions: `${path}/editions` } };

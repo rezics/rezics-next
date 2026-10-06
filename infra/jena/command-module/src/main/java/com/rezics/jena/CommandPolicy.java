@@ -82,6 +82,16 @@ final class CommandPolicy {
             if (!graph.isURI() || !GRAPHS.contains(graph.getURI()))
                 throw new IllegalArgumentException("write graph not admitted");
             String name = graph.getURI();
+            // Stream positions are stamped by the command service after validation,
+            // in the same transaction. Caller templates cannot forge their watermark.
+            if (Set.of(CONTROL, OUTBOX).contains(name)
+                && (!quad.getPredicate().isURI()
+                    || Set.of(RV + "streamScope", RV + "streamSequence", RV + "legacyThroughSequence")
+                        .contains(quad.getPredicate().getURI())))
+                throw new IllegalArgumentException("relay stream fields are server-owned");
+            if (CONTROL.equals(name) && (!quad.getSubject().isURI()
+                || CommandInvariant.MAIN_STREAM_SCOPE.equals(quad.getSubject().getURI())))
+                throw new IllegalArgumentException("relay stream record is server-owned");
             graphs.add(name);
             Node subject = quad.getSubject();
             if ((name.equals(CURRENT) || name.equals(REVISIONS))

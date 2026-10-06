@@ -59,7 +59,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     .get('/v1/works/:id', { params, detail, query: t.Object(readQuery, { additionalProperties: false }),
       response: { 200: workHeader, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
+      try { return Response.json(await workRead(work, request, { ...options, localBasis: true },
         session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
       catch (error) { return workReadError(error); }
     })

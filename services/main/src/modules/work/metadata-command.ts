@@ -101,8 +101,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
   }
   const revision = ID + Bun.randomUUIDv7();
   const validations = await profileValidations(env.fuseki, 'work-metadata-details-v1', [
-    ...(state.kind === 'header' ? [{ shape: `${METADATA_PROFILE}/work-shape`, focus: [work],
-      graphs: [GRAPHS.current, GRAPHS.revisions] }] : []),
+    { shape: `${METADATA_PROFILE}/work-shape`, focus: [work], graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: `${METADATA_PROFILE}/component-shape`, focus: [component], graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: `${METADATA_PROFILE}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]);
@@ -121,6 +120,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
       ${names ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?nameUnit rv:publicTitle ?oldName }` : ''}
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:metadataHead ${old} ;
         rv:editionState ?oldStatus ; rv:editionLanguage ?oldLanguage .
+        ${state.kind === 'edition' ? `${iri(work)} rv:editionsRevision ?oldEditionsRevision .` : ''}
         ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${old} ;
           rv:completionStatus ?oldCompletion ; rv:catalogueMetadataTitleKey ?oldTitleKey .` : ''} }
     }
@@ -130,6 +130,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
         ${[...names].map(name => `?nameUnit rv:publicTitle ${name} .`).join('\n')} }` : ''}
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:WorkMetadataComponent ;
         rv:work ${iri(work)} ; rv:metadataKind ${lit(state.kind)} ; rv:metadataHead ${iri(revision)} .
+        ${state.kind === 'edition' ? `${iri(work)} rv:editionsRevision ${iri(revision)} .` : ''}
         ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${iri(revision)} .
           ${[...new Set([...(state.originalTitle ? [state.originalTitle.value] : []),
             ...state.localized.flatMap(locale => locale.title ? [locale.title] : [])].map(catalogueTitleKey))]
@@ -161,6 +162,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
       GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ${iri(row.head.value)} ; rv:mainVersion ${iri(row.main.value)} .
         OPTIONAL { ${iri(component)} rv:editionState ?oldStatus }
         OPTIONAL { ${iri(component)} rv:editionLanguage ?oldLanguage }
+        ${state.kind === 'edition' ? `OPTIONAL { ${iri(work)} rv:editionsRevision ?oldEditionsRevision }` : ''}
         ${state.kind === 'header' ? `OPTIONAL { ${iri(work)} rv:completionStatus ?oldCompletion }
           OPTIONAL { ${iri(work)} rv:catalogueMetadataTitleKey ?oldTitleKey }` : ''}
         ${expectedHead ? `${iri(component)} a rv:WorkMetadataComponent ; rv:work ${iri(work)} ;
@@ -264,10 +266,12 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
     return false;
   }
   const revision = ID + Bun.randomUUIDv7();
-  const validations = await profileValidations(env.fuseki, 'work-metadata-details-v2', [
+  const validations = [...await profileValidations(env.fuseki, 'work-metadata-details-v1', [
+    { shape: `${METADATA_PROFILE}/work-shape`, focus: [intent.work], graphs: [GRAPHS.current, GRAPHS.revisions] },
+  ]), ...await profileValidations(env.fuseki, 'work-metadata-details-v2', [
     { shape: `${METADATA_DETAILS_V2}/component-shape`, focus: [component], graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: `${METADATA_DETAILS_V2}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
-  ]);
+  ])];
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, component, { intent, revision }, METADATA_DETAILS_V2)
     : prepareComponent(env.objectDirectory, component, { intent, revision }, METADATA_DETAILS_V2);
@@ -284,13 +288,14 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:metadataHead ${prior ? iri(prior) : '?absentHead'} ;
         rv:editionState ?oldStatus ; rv:editionLanguage ?oldLanguage ; rv:contentLanguages ?oldLanguages ;
         rv:titleLanguage ?oldTitle ; rv:tracklistLanguage ?oldTrack ; rv:originalLanguages ?oldOriginals ;
-        rv:isTranslation ?oldTranslation . }
+        rv:isTranslation ?oldTranslation . ${iri(intent.work)} rv:editionsRevision ?oldEditionsRevision . }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:EditionRecord ; rv:work ${iri(intent.work)} ;
         rv:metadataKind "edition" ; rv:metadataHead ${iri(revision)} ;
         rv:editionState rv:${state.status === 'active' ? 'Active' : 'Withdrawn'} .
+        ${iri(intent.work)} rv:editionsRevision ${iri(revision)} .
         ${languages ? `${iri(component)} rv:contentLanguages ${lit(languages)} .` : ''}
         ${single ? `${iri(component)} rv:editionLanguage ${lit(single)} .` : ''}
         ${state.titleLanguage ? `${iri(component)} rv:titleLanguage ${lit(state.titleLanguage)} .` : ''}
@@ -325,6 +330,7 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
         OPTIONAL { ${iri(component)} rv:tracklistLanguage ?oldTrack }
         OPTIONAL { ${iri(component)} rv:originalLanguages ?oldOriginals }
         OPTIONAL { ${iri(component)} rv:isTranslation ?oldTranslation }
+        OPTIONAL { ${iri(intent.work)} rv:editionsRevision ?oldEditionsRevision }
         ${prior ? `${iri(component)} a rv:EditionRecord ; rv:work ${iri(intent.work)} ;
           rv:metadataKind "edition" ; rv:metadataHead ${iri(prior)} .`
           : `FILTER NOT EXISTS { ${iri(component)} ?occupiedProperty ?occupiedValue }`} }

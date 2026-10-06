@@ -3,6 +3,7 @@ import { pendingOperation, problemResult, sourcePosition } from '../api-contract
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
+import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, PendingContextCommand, StaleContextCommand,
   runAdmittedCommand, type ContextCommandReceipt } from '../modules/context/command.ts';
 import { DEFINITION_STATE_FAMILY, activeDefinitionDependenciesGuard, definitionStateRequest, readDefinitionState,
@@ -153,7 +154,8 @@ const contextReadResponse = t.Object({ profile: t.Literal('context-v1'), context
   state: t.Union([t.Literal('active'), t.Literal('retired')]),
   disclosure: t.Union([t.Literal('public'), t.Literal('private')]),
   semanticHead: ref, revision: ref, predecessor: nullableRef, base: nullableRef,
-  inheritanceDepth: t.Integer(), entries: t.Array(entry), authoredBy: ref, sourcePosition: source });
+  inheritanceDepth: t.Integer(), entries: t.Array(entry), authoredBy: ref,
+  sourcePosition: t.Object({ ...source.properties, dependencyToken: t.String({ pattern: '^[0-9a-f]{64}$' }) }) });
 const privateSelectionFields = { profile: t.Literal('context-private-selection-v1'), scope,
   state: t.Union([t.Literal('selected'), t.Literal('cleared')]), context: nullableRef,
   semanticRevision: nullableRef, revision: ref, generation: t.String() };
@@ -164,12 +166,15 @@ const basis = t.Union([t.Literal('explicit'), t.Literal('speaker-object-relation
 const interpretationResponse = t.Union([
   t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('unavailable') }),
   t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('resolved'), basis,
+    sourcePosition: t.Optional(t.Object({ ...source.properties, dependencyToken: t.String() })),
     context: nullableRef, semanticRevision: nullableRef, definition: nullableRef,
     entryRevision: nullableRef, selectionRevision: nullableRef }),
   t.Object({ profile: t.Literal('context-interpretation-v1'), state: t.Literal('ambiguous'), basis,
+    sourcePosition: t.Optional(t.Object({ ...source.properties, dependencyToken: t.String() })),
     context: ref, semanticRevision: ref, selectionRevision: nullableRef,
     candidates: t.Array(t.Object({ relation: ref, definition: ref, entryRevision: ref }), { maxItems: 26 }) }),
   t.Object({ profile: t.Literal('context-interpretation-v1'),
+    sourcePosition: t.Optional(t.Object({ ...source.properties, dependencyToken: t.String() })),
     state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
     context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef }),
 ]);
@@ -604,8 +609,13 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     }, async ({ request, params, query }) => {
       try {
         const context = params.id === 'global' ? 'urn:rezics:semantic-context:global' : `https://rezics.com/id/${params.id}`;
-        return Response.json(await readContextRevision(env, context, query.revision ?? null,
-          await reader(request, query.actingSubject)), { headers: noStore });
+        const principal = request.headers.get('authorization') && query.actingSubject
+          ? await work.account.verify(request, ['context:read']) : null;
+        if (principal && !await work.access.activePrincipalId(principal)) throw new AccountAssertionDenied('Principal is inactive');
+        const revision = await readContextRevision(env, context, query.revision ?? null,
+          privateReader(principal, query.actingSubject ?? null));
+        if (principal && !await work.access.activePrincipalId(principal)) throw new AccountAssertionDenied('Principal is inactive');
+        return Response.json(revision, { headers: noStore });
       } catch (error) { return readError(error); }
     })
     .post('/v1/realms/:realm/context-selections', {
@@ -687,9 +697,11 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       try {
         await assertGraphAdmissionOpen(fuseki, env.lineage);
         const principal = await work.account.verify(request, ['context:read']);
+        if (!await work.access.activePrincipalId(principal)) throw new AccountAssertionDenied('Principal is inactive');
         const input = { speaker: body.speaker, actingSubject: body.actingSubject } as RecordStatementInput;
         const interpretation = await resolveInterpretation(env, { object: body.object, relation: body.relation,
           explicit: body.explicit, speaker: speakerFor(input, principal) });
+        if (!await work.access.activePrincipalId(principal)) throw new AccountAssertionDenied('Principal is inactive');
         return Response.json({ profile: 'context-interpretation-v1', ...interpretationBody(interpretation) },
           { headers: noStore });
       } catch (error) { return readError(error); }

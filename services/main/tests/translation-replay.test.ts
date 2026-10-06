@@ -50,7 +50,7 @@ function fixture(status: 'official' | 'third-party', sourceMainRevision: string 
         authorizationScope: status === 'official' ? scope : null,
         authorizationEpoch: status === 'official' ? '1' : null } },
   };
-  const coverage: RelayCoverage = { consumer, dataEpoch, sequence: '1', batchCount: '1',
+  const coverage: RelayCoverage = { consumer, streamScope: 'urn:rezics:stream:main-rdf', dataEpoch, sequence: '1', batchCount: '1',
     batchDigest: '', eventCount: '1', eventDigest: '' };
   return { input, envelope, eventId, batchId, coverage };
 }
@@ -107,7 +107,7 @@ function mockRecovery(status: 'official' | 'third-party', sourceRevision: string
   let eventPresent = true;
   let changeEventAfterScan = false;
   const relayQuery = async (sql: string) => {
-    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ data_epoch: dataEpoch, sequence: '1' }] };
+    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ stream_scope: 'urn:rezics:stream:main-rdf', data_epoch: dataEpoch, sequence: '1' }] };
     if (sql.includes('UNION ALL')) return { rows: [], rowCount: 0 };
     if (sql.includes('actual_count')) return { rows: [{ sequence: '1', batch_id: source.batchId,
       routing_epoch: 'routing-1', event_count: 1, actual_count: eventPresent ? '1' : '0' }] };

@@ -26,9 +26,67 @@ final class CommandInvariant {
     private static final Node OUTBOX = uri(CommandPolicy.OUTBOX);
     private static final Node PUBLIC_SEARCH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node PUBLIC_ANCHOR = uri(CommandPolicy.PUBLIC_ANCHOR);
+    static final String MAIN_STREAM_SCOPE = "urn:rezics:stream:main-rdf";
+    private static final Node MAIN_STREAM = uri(MAIN_STREAM_SCOPE);
 
     record Control(Node epoch, Node routing, BigInteger sequence, Node marker, boolean held,
         Node priorEpoch, BigInteger priorSequence, BigInteger cursor, Node textGeneration) {}
+
+    /** One stream-owned counter; DATASET sequence remains available to other owners. */
+    static String advanceRelayStream(DatasetGraph data, String receipt, CommandPolicy.Plan plan, Control before) {
+        Control after = readControl(data);
+        if (after == null) return "relay stream requires valid lineage";
+        if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:restore-cutover:")) {
+            data.deleteAny(CONTROL, MAIN_STREAM, Node.ANY, Node.ANY);
+            data.add(CONTROL, MAIN_STREAM, rv("dataEpoch"), after.epoch());
+            data.add(CONTROL, MAIN_STREAM, rv("streamSequence"), integer(BigInteger.ZERO));
+            data.add(CONTROL, MAIN_STREAM, rv("legacyThroughSequence"), integer(BigInteger.ZERO));
+            return null;
+        }
+        if (!plan.graphs().contains(CommandPolicy.OUTBOX)) return null;
+        Node batch = null;
+        if (plan.request().getOperations().getFirst() instanceof UpdateModify modify) {
+            for (Quad quad : modify.getInsertQuads()) if (OUTBOX.equals(quad.getGraph())
+                && RDF.type.asNode().equals(quad.getPredicate()) && rv("OutboxBatch").equals(quad.getObject())) {
+                if (batch != null && !batch.equals(quad.getSubject())) return "multiple relay stream batches";
+                batch = quad.getSubject();
+            }
+        }
+        if (batch == null || !batch.isURI()) return "relay stream batch is missing";
+        if (data.contains(OUTBOX, batch, rv("streamScope"), Node.ANY)
+            || data.contains(OUTBOX, batch, rv("streamSequence"), Node.ANY))
+            return "new relay batch already has a stream position";
+        BigInteger next;
+        if (before.held()) {
+            // Recovery reconstitutes an old immutable stream position while the
+            // new epoch remains held. It cannot advance the new stream head.
+            next = number(one(data, RECEIPTS, uri(receipt), rv("sequence")));
+        } else {
+            Node epoch = one(data, CONTROL, MAIN_STREAM, rv("dataEpoch"));
+            BigInteger prior = number(one(data, CONTROL, MAIN_STREAM, rv("streamSequence")));
+            BigInteger legacy = number(one(data, CONTROL, MAIN_STREAM, rv("legacyThroughSequence")));
+            if (epoch == null && prior == null && !data.contains(CONTROL, MAIN_STREAM, Node.ANY, Node.ANY)) {
+                // A populated pre-stream dataset supplies one legacy prefix cut.
+                // Subsequent ordering never reads the DATASET high-water.
+                prior = before.sequence();
+                data.add(CONTROL, MAIN_STREAM, rv("dataEpoch"), before.epoch());
+                data.add(CONTROL, MAIN_STREAM, rv("legacyThroughSequence"), integer(prior));
+            } else if (!before.epoch().equals(epoch) || prior == null || prior.signum() < 0
+                || legacy == null || legacy.signum() < 0 || legacy.compareTo(prior) > 0) {
+                return "relay stream lineage is missing or ambiguous";
+            }
+            next = prior.add(BigInteger.ONE);
+            data.deleteAny(CONTROL, MAIN_STREAM, rv("streamSequence"), Node.ANY);
+            data.add(CONTROL, MAIN_STREAM, rv("streamSequence"), integer(next));
+        }
+        data.add(OUTBOX, batch, rv("streamScope"), NodeFactory.createLiteralString(MAIN_STREAM_SCOPE));
+        data.add(OUTBOX, batch, rv("streamSequence"), integer(next));
+        return null;
+    }
+
+    private static Node integer(BigInteger value) {
+        return NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
+    }
 
     static String preflight(DatasetGraph data, String receipt, CommandPolicy.Plan plan) {
         if (data.contains(RECEIPTS, uri(receipt), Node.ANY, Node.ANY)) return "receipt already has triples";

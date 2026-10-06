@@ -118,7 +118,8 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
         t.Object({ ...metadataEditionStateV2.properties, revision: readId })]),
         { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
+      try { return Response.json(await workRead(work, request, { ...options, localBasis: true,
+        localProfiles: ['work-metadata-details-v1', 'work-metadata-details-v2'] },
         session => readWorkEditions(session, `https://rezics.com/id/${path.id}`, options.contentLanguage)), { headers }); }
       catch (error) { return metadataError(error); }
     });

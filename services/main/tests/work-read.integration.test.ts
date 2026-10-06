@@ -60,7 +60,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       originalTitle: null; mainVersion: string; selectedLanguage: string | null }>(await get(`${root}?language=fr`));
     expect(header).toMatchObject({ id: first.work, mainVersion: first.mainVersion,
       title: { value: first.title, language: 'en', basis: 'fallback' }, originalTitle: null, selectedLanguage: null });
-    expect(stack.fuseki.queries - before).toBe(6);
+    expect(stack.fuseki.queries - before).toBe(9);
     expect((await get(`/v1/works/${short(restricted.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${short(unreviewed.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${randomUUID()}`)).status).toBe(404);
@@ -76,7 +76,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     const chapterBefore = stack.fuseki.queries;
     expect(await json(await get(root))).toMatchObject({
       types: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'] });
-    expect(stack.fuseki.queries - chapterBefore).toBe(6);
+    expect(stack.fuseki.queries - chapterBefore).toBe(9);
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> DELETE DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(first.work)} schema:isPartOf ${iri(second.work)} ;
         a schema:DigitalDocument, schema:Book . } }`);

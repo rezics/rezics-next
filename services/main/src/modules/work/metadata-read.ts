@@ -2,7 +2,7 @@ import type { Static } from 'typebox';
 import { direction } from '../media/summary.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
 import { fenceWorkBasis, readWorkBasis } from './read-header.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkReadUnavailable,
+import { decodeReadCursor, encodeReadCursor, pageResult, readDependencyToken, readRowsToken, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from './read-session.ts';
 import { recordedLanguageTag } from '../release/languages.ts';
 import { checkedEditionV2, checkedMetadataState, metadataComponent, METADATA_DETAILS_V2, METADATA_PROFILE,
@@ -62,7 +62,12 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
   let listed = language ?? null;
   if (contentLanguage) { try { listed = recordedLanguageTag(contentLanguage); } catch { listed = language ?? null; } }
   const binding = ['editions', work, language ?? null, session.options.language ?? null];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const collection = session.options.localBasis ? await session.query(`SELECT ?collectionRevision WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/CreativeWork> .
+      OPTIONAL { ${iri(work)} rv:editionsRevision ?collectionRevision } } } LIMIT 2`, 1) : [];
+  const position = { ...session.position, ...(session.options.localBasis
+    ? { dependencyToken: readDependencyToken([basis.dependencyToken, readRowsToken(collection)]) } : {}) };
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
   const rows = await session.query(`SELECT ?edition ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { { ?edition a rv:WorkMetadataComponent } UNION { ?edition a rv:EditionRecord } .
       ?edition rv:metadataKind "edition" ; rv:work ${iri(work)} ; rv:editionState rv:Active ; rv:metadataHead ?revision .
@@ -97,8 +102,8 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
     return { ...state, revision: row.revision!.value };
   });
   await fenceWorkBasis(session, basis);
-  return pageResult(session, items, rows.length > limit
-    ? encodeReadCursor(binding, session.position, page.at(-1)!.edition!.value) : null);
+  return { ...pageResult(session, items, rows.length > limit
+    ? encodeReadCursor(binding, position, page.at(-1)!.edition!.value) : null), sourcePosition: position };
 }
 
 /** A withdrawn edition exposes its tombstone/head for a fresh conditional edit,

@@ -57,7 +57,7 @@ test('Work metadata: native writes, disclosure, editions, relevance, concurrent 
     expect((await put({ ...metadata, originalTitle: null }, null, key)).status).toBe(409);
     const afterQueries = stack.fuseki.queries;
     const header = await json<Header>(await get(`${root}?language=ja`));
-    expect(stack.fuseki.queries - afterQueries).toBe(7);
+    expect(stack.fuseki.queries - afterQueries).toBe(11);
     expect(header).toMatchObject({ revision: before.revision, metadataRevision: saved.revision,
       originalTitle: { value: '銀河の旅', language: 'ja' }, title: { value: '銀河の旅', language: 'ja', basis: 'requested' },
       description: { value: '記録された説明' }, tagline: { value: '星を越えて届く一通の手紙' },
@@ -81,10 +81,12 @@ test('Work metadata: native writes, disclosure, editions, relevance, concurrent 
     expect((await put(edition(before.revision))).status).toBe(409);
     const pageQueries = stack.fuseki.queries;
     const page = await json<Page<MetadataEditionState & { revision: string }>>(await get(`${root}/editions?limit=1`));
-    expect(stack.fuseki.queries - pageQueries).toBe(9);
+    expect(stack.fuseki.queries - pageQueries).toBe(17);
     expect(page.items.length).toBe(1);
     expect(page.count).toEqual({ value: 1, kind: 'exact-page', total: null });
     expect(page.nextCursor).toBeString();
+    // The continuation belongs to this Work's editions, not another Work's write.
+    await stack.privateWork(a.actor, 'An unrelated Work');
     const next = await json<Page<MetadataEditionState>>(await get(`${root}/editions?limit=1&cursor=${page.nextCursor}`));
     expect(new Set([...page.items, ...next.items].map(item => item.id)).size).toBe(2);
     expect(next.nextCursor).toBeNull();
@@ -94,6 +96,19 @@ test('Work metadata: native writes, disclosure, editions, relevance, concurrent 
     expect((await json<Page<MetadataEditionState>>(await get(`${root}/editions?contentLanguage=ja`))).items)
       .toMatchObject([{ id: secondEdition.id, publicationYear: 2001, publisher: 'Recorded publisher' }]);
     expect((await json<Page<unknown>>(await get(`${root}/versions`))).items.length).toBe(1);
+    const insertedEdition = edition();
+    const inserted = await json<Receipt>(await put(insertedEdition));
+    expect((await get(`${root}/editions?limit=1&cursor=${page.nextCursor}`)).status).toBe(409);
+    await json<Receipt>(await put({ ...insertedEdition, status: 'withdrawn' }, inserted.revision));
+    const v2Page = await json<Page<unknown>>(await get(`${root}/editions?limit=1`));
+    const { contentLanguage: _contentLanguage, ...editionFields } = edition();
+    const v2Edition = { ...editionFields, contentLanguages: ['en'], isTranslation: false,
+      originalLanguages: [], titleLanguage: null, tracklistLanguage: null };
+    const putV2 = (state: typeof v2Edition, expectedHead: string | null = null) =>
+      a.send('PUT', `${root}/metadata`, { profile: 'work-metadata-details-v2', state, expectedHead, actingSubject: a.actor });
+    const insertedV2 = await json<Receipt>(await putV2(v2Edition));
+    expect((await get(`${root}/editions?limit=1&cursor=${v2Page.nextCursor}`)).status).toBe(409);
+    await json<Receipt>(await putV2({ ...v2Edition, status: 'withdrawn' }, insertedV2.revision));
     const withdrawn = await json<Receipt>(await put({ ...firstEdition, status: 'withdrawn' }, first.revision));
     expect(await json(await get(`${root}/editions/${firstEdition.id.slice(-36)}`)))
       .toMatchObject({ id: firstEdition.id, revision: withdrawn.revision, status: 'withdrawn', record: null });

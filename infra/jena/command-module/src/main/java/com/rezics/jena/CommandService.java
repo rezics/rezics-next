@@ -504,6 +504,8 @@ final class CommandService extends ActionService {
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
+        String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
+        if (streamInvariant != null) return invalid(streamInvariant);
         return result;
     }
 

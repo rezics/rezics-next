@@ -31,8 +31,12 @@ export class WorkReadExpired extends WorkReadMoved {}
 export class WorkReadUnavailable extends Error {}
 export class WorkReadLimit extends Error {}
 export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
-export interface ReadPosition { dataEpoch: string; sequence: string }
+export interface ReadPosition { dataEpoch: string; sequence: string; dependencyToken?: string }
 export interface ReadOptions { language?: string; languages?: string; actingSubject?: string; cursor?: string; limit?: number;
+  /** The Work header and editions bind selected dependencies, rather than the dataset counter. */
+  localBasis?: boolean;
+  /** Edition pages consume both supported record profiles; the header consumes its selected metadata profile. */
+  localProfiles?: readonly string[];
   scope?: 'global' | 'realm' | 'mine'; realm?: string;
   /** Trusted internal audience for public hydration; grants no Agent or private Realm authority. */
   publicViewer?: Viewer;
@@ -49,6 +53,12 @@ const cursorKey = randomBytes(32);
 interface Cursor { version: 1; binding: string; position: ReadPosition; after: string; order: string;
   expiresAt?: number }
 const bindingOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+/** Query order is immaterial to a dependency set; preserve RDF term identity. */
+export const readRowsToken = (rows: readonly ReadRow[]) => bindingOf(rows.map(row =>
+  Object.entries(row).sort(([a], [b]) => a.localeCompare(b)).map(([key, term]) =>
+    [key, Object.entries(term).sort(([a], [b]) => a.localeCompare(b))]))
+  .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+export const readDependencyToken = bindingOf;
 export function encodeReadCursor(binding: unknown, position: ReadPosition, after: string, order = '', expiresAt?: number): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', cursorKey, iv);
@@ -70,6 +80,8 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
       || typeof decoded.after !== 'string' || typeof decoded.order !== 'string'
       || !decoded.position || typeof decoded.position.dataEpoch !== 'string'
       || typeof decoded.position.sequence !== 'string'
+      || decoded.position.dependencyToken !== undefined
+        && (typeof decoded.position.dependencyToken !== 'string' || !/^[0-9a-f]{64}$/.test(decoded.position.dependencyToken))
       || decoded.expiresAt !== undefined && !Number.isSafeInteger(decoded.expiresAt)) throw new Error('cursor');
   } catch { throw new WorkReadInvalid('Cursor is invalid or expired'); }
   if (decoded.expiresAt !== undefined && decoded.expiresAt <= Date.now()) {
@@ -78,13 +90,40 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
   // Only an owner with immutable retained rows may relax the graph sequence.
   // The epoch remains a recovery fence; a cursor never grants disclosure.
   if (decoded.position.dataEpoch !== position.dataEpoch
-    || (!retained || decoded.expiresAt === undefined) && decoded.position.sequence !== position.sequence) {
+    || (position.dependencyToken !== undefined || decoded.position.dependencyToken !== undefined
+      ? decoded.position.dependencyToken !== position.dependencyToken
+      : (!retained || decoded.expiresAt === undefined) && decoded.position.sequence !== position.sequence)) {
     throw new WorkReadExpired('Collection changed; restart from the first page');
   }
   return decoded;
 }
 
 export class WorkReadSession {
+  private readonly queryDependencies = new Map<string, { limit: number; token: string }>();
+  private readonly ownerDependencies = new Map<string, { token: string; read: () => Promise<unknown> }>();
+  async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
+    return this.observeDependency(name, await read(), read);
+  }
+  observeDependency(name: string, value: unknown, read: () => Promise<unknown>): string {
+    const token = readDependencyToken(value);
+    if (this.options.localBasis) {
+      const previous = this.ownerDependencies.get(name);
+      if (previous && previous.token !== token) throw new WorkReadMoved('Selected dependency changed');
+      this.ownerDependencies.set(name, { token, read });
+    }
+    return token;
+  }
+  /** Recheck only the bounded inputs consumed by this page. Retries share its HTTP budget. */
+  async fenceDependencies() {
+    for (const [body, prior] of this.queryDependencies) {
+      const rows = await this.query(body, prior.limit);
+      if (readRowsToken(rows) !== prior.token) throw new WorkReadMoved('Selected head changed');
+    }
+    for (const prior of this.ownerDependencies.values()) {
+      if (readDependencyToken(await prior.read()) !== prior.token) throw new WorkReadMoved('Selected dependency changed');
+    }
+    await this.fenceSummaryMedia();
+  }
   private readonly avatarSnapshots = new Map<string, { epoch: string;
     rows: Map<string, string>; targets: Set<string> }>();
   private readonly deliveredSummaryAssets = new Set<string>();
@@ -136,6 +175,11 @@ export class WorkReadSession {
     const rows = (await this.deps.environment.fuseki.query(`${READ_PREFIX}\n${body}`,
       WORK_READ_COST.queryBytes)).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadLimit('Read exceeds its bounded relation');
+    if (this.options.localBasis) {
+      const token = readRowsToken(rows), prior = this.queryDependencies.get(body);
+      if (prior && prior.token !== token) throw new WorkReadMoved('Selected head changed');
+      this.queryDependencies.set(body, { limit, token });
+    }
     return rows;
   }
 
@@ -166,8 +210,19 @@ export class WorkReadSession {
     } : undefined;
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-        languages: this.displayLanguages });
-    if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
+        languages: this.displayLanguages, localBasis: this.options.localBasis });
+    if (this.options.localBasis) {
+      const key = `summaries:${JSON.stringify(resources)}`;
+      const token = readDependencyToken([result.generation.graph, result.summaries]);
+      const previous = this.ownerDependencies.get(key);
+      if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
+      this.ownerDependencies.set(key, { token, read: async () => {
+        const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
+          { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
+            languages: this.displayLanguages, localBasis: true });
+        return [fresh.generation.graph, fresh.summaries];
+      } });
+    } else if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
         this.stale = true;
         return result.summaries;
@@ -212,10 +267,10 @@ export class WorkReadSession {
   checkDeadline(): void { fusekiReadBudget.getStore()?.signal.throwIfAborted(); }
 }
 
-async function position(deps: MainWorkDependencies): Promise<ReadPosition> {
+async function position(deps: MainWorkDependencies, fresh = false): Promise<ReadPosition> {
   const env = deps.environment;
   const known = knownSearchPosition(env.fuseki, env.lineage);
-  if (known) return { dataEpoch: known.dataEpoch, sequence: known.sequence };
+  if (known && !fresh) return { dataEpoch: known.dataEpoch, sequence: known.sequence };
   const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
@@ -266,7 +321,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {
-          const session = new WorkReadSession(deps, request, options, await position(deps), true);
+          const session = new WorkReadSession(deps, request, options, await position(deps, options.localBasis), true);
           if (request.headers.has('authorization')) {
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
             session.principal = await deps.account.verify(request, ['work:read']);
@@ -276,19 +331,21 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
             }
           } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
           const result = await withDisclosureViewer(session.viewer, () => operation(session));
-          const after = await position(deps);
-          if (after.dataEpoch !== session.position.dataEpoch || after.sequence !== session.position.sequence) {
+          const after = await position(deps, options.localBasis);
+          if (after.dataEpoch !== session.position.dataEpoch
+            || !options.localBasis && after.sequence !== session.position.sequence) {
             if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
               session.stale = true;
             } else {
               throw new WorkReadMoved('Graph changed during the read');
             }
           }
+          await session.fenceRealms();
+          await fenceAuthorNames(session);
+          if (options.localBasis) await session.fenceDependencies();
           if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
             throw new AccountAssertionDenied('Principal is inactive');
           }
-          await session.fenceRealms();
-          await fenceAuthorNames(session);
           signal.throwIfAborted();
           return complete ? complete(result, session) : result;
         } catch (error) {

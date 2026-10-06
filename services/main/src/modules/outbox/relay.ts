@@ -8,6 +8,7 @@ import { ownerOutboxEventHandler, type OwnerCloudEvent,
   type OwnerOutboxEventHandler } from './event-handlers.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from '../rating/target-context-authority.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from './relay-position.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -41,6 +42,7 @@ export function isRelayTransientFailure(error: unknown): boolean {
 }
 
 export interface RelayCoverage {
+  streamScope: string;
   consumer: string;
   dataEpoch: string;
   sequence: string;
@@ -58,13 +60,14 @@ interface CoverageScan {
 
 async function scanRelayCoverage(client: PoolClient, consumer: string,
   targetSequence?: string): Promise<CoverageScan> {
-  const checkpoint = await client.query<{ data_epoch: string; sequence: string }>(
-    'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
+  const checkpoint = await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
+    'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const row = checkpoint.rows[0];
   if (!row) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
+  if (row.stream_scope !== MAIN_RELAY_STREAM_SCOPE) throw new RelayCheckpointConflict('relay checkpoint stream differs');
   const uncheckpointed = await client.query(
-    `SELECT 1 FROM relay.delivered_event WHERE data_epoch = $1 AND sequence > $2
-     UNION ALL SELECT 1 FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence > $2 LIMIT 1`,
+    `SELECT 1 FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2
+     UNION ALL SELECT 1 FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence > $2 LIMIT 1`,
     [row.data_epoch, row.sequence]);
   if (uncheckpointed.rowCount) {
     throw new RelayCheckpointConflict('delivered handoff exceeds relay checkpoint');
@@ -77,9 +80,9 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
       routing_epoch: string; event_count: number; actual_count: string }>(
       `SELECT batch.sequence::text, batch.batch_id, batch.routing_epoch, batch.event_count,
          (SELECT count(*)::text FROM relay.delivered_event AS event
-          WHERE event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
+          WHERE event.stream_scope = batch.stream_scope AND event.data_epoch = batch.data_epoch AND event.sequence = batch.sequence) AS actual_count
        FROM relay.delivered_batch AS batch
-       WHERE batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
+       WHERE batch.stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND batch.data_epoch = $1 AND batch.sequence > $2 AND batch.sequence <= $3
        ORDER BY batch.sequence LIMIT 1000`,
       [row.data_epoch, batchCount.toString(), row.sequence]);
     for (const batch of page.rows) {
@@ -110,7 +113,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     const page = await client.query<{ source: string; event_id: string;
       sequence: string; body: string }>(
       `SELECT event.source, event.event_id, event.sequence::text, event.envelope::text AS body
-       FROM relay.delivered_event AS event WHERE event.data_epoch = $1 AND event.sequence <= $2
+       FROM relay.delivered_event AS event WHERE event.stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND event.data_epoch = $1 AND event.sequence <= $2
          AND (event.sequence, event.event_id) > ($3::numeric, $4)
        ORDER BY event.sequence, event.event_id LIMIT 1000`,
       [row.data_epoch, row.sequence, afterSequence, afterEventId]);
@@ -126,7 +129,7 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     }
     if (page.rows.length < 1000) break;
   }
-  return { coverage: { consumer, dataEpoch: row.data_epoch, sequence: row.sequence,
+  return { coverage: { consumer, streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: row.sequence,
     batchCount: batchCount.toString(), batchDigest: batchDigest.digest('hex'),
     eventCount: count.toString(), eventDigest: digest.digest('hex') },
     batch: selectedBatch, events: selectedEvents };
@@ -152,7 +155,10 @@ export async function relayCoverage(pool: Pool, consumer: string): Promise<Relay
 export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
   sequence: string): Promise<{ eventId: string; envelope: MainCloudEvent;
     batch: { batchId: string; routingEpoch: string; eventCount: number } }> {
-  if (!/^[1-9][0-9]*$/.test(sequence) || !/^[0-9]+$/.test(expected.sequence)
+  // Pre-stream recovery cuts came exclusively from this Main handoff. Their
+  // stored envelope digests survive the column-only migration unchanged.
+  const expectedScope = expected.streamScope ?? MAIN_RELAY_STREAM_SCOPE;
+  if (expectedScope !== MAIN_RELAY_STREAM_SCOPE || !/^[1-9][0-9]*$/.test(sequence) || !/^[0-9]+$/.test(expected.sequence)
     || BigInt(sequence) > BigInt(expected.sequence)) {
     throw new RelayCheckpointConflict('invalid retained event position');
   }
@@ -160,7 +166,7 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const { coverage, batch, events } = await scanRelayCoverage(client, expected.consumer, sequence);
-    if (coverage.consumer !== expected.consumer || coverage.dataEpoch !== expected.dataEpoch
+    if (coverage.consumer !== expected.consumer || coverage.streamScope !== expectedScope || coverage.dataEpoch !== expected.dataEpoch
       || coverage.sequence !== expected.sequence || coverage.batchCount !== expected.batchCount
       || coverage.batchDigest !== expected.batchDigest || coverage.eventCount !== expected.eventCount
       || coverage.eventDigest !== expected.eventDigest || !batch || events.length !== 1
@@ -168,7 +174,8 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
       throw new RelayCheckpointConflict('retained event coverage or batch differs');
     }
     const event = events[0]!;
-    const envelope = JSON.parse(event.body) as MainCloudEvent;
+    const envelope = retainedEnvelopePosition(JSON.parse(event.body) as MainCloudEvent,
+      coverage.streamScope, coverage.dataEpoch, sequence);
     await client.query('COMMIT');
     return { eventId: event.eventId, envelope, batch };
   } catch (error) {
@@ -180,10 +187,21 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
 }
 
 export interface RetainedRelayBatch {
+  streamScope: string;
   sequence: string;
   batchId: string;
   routingEpoch: string;
   events: MainCloudEvent[];
+}
+
+function retainedEnvelopePosition(event: MainCloudEvent, streamScope: string, dataEpoch: string,
+  sequence: string): MainCloudEvent {
+  const position = event.data.relayPosition ?? { streamScope, dataEpoch: event.data.sourcePosition.dataEpoch,
+    sequence: event.data.sourcePosition.sequence };
+  if (position.streamScope !== streamScope || position.dataEpoch !== dataEpoch || position.sequence !== sequence) {
+    throw new RelayCheckpointConflict('retained envelope stream position differs from its row');
+  }
+  return { ...event, data: { ...event.data, relayPosition: position } };
 }
 
 /** One complete, verified page from the product-owned handoff after a broker gap. */
@@ -204,7 +222,7 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
     const rows = await client.query<{ sequence: string; batch_id: string;
       routing_epoch: string; event_count: number }>(
       `SELECT batch.sequence::text, batch_id, routing_epoch, event_count
-       FROM relay.delivered_batch AS batch WHERE data_epoch = $1 AND batch.sequence > $2
+       FROM relay.delivered_batch AS batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND batch.sequence > $2
        ORDER BY batch.sequence LIMIT $3`, [coverage.dataEpoch, afterSequence, limit]);
     const batches: RetainedRelayBatch[] = [];
     let next = BigInt(afterSequence) + 1n;
@@ -214,18 +232,20 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
       }
       const events = await client.query<{ envelope: MainCloudEvent }>(
         `SELECT envelope FROM relay.delivered_event
-         WHERE data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
+         WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
         [coverage.dataEpoch, row.sequence]);
-      const ordered = events.rows.map(event => event.envelope)
+      const ordered = events.rows.map(event => retainedEnvelopePosition(event.envelope,
+        coverage.streamScope, coverage.dataEpoch, row.sequence))
         .sort((left, right) => left.data.ordinal - right.data.ordinal);
       if (ordered.length !== row.event_count || ordered.some((event, ordinal) =>
         event.data.ordinal !== ordinal || event.data.batchId !== row.batch_id
         || event.data.routingEpoch !== row.routing_epoch
-        || event.data.sourcePosition.dataEpoch !== coverage.dataEpoch
-        || event.data.sourcePosition.sequence !== row.sequence)) {
+        || event.data.relayPosition?.streamScope !== coverage.streamScope
+        || event.data.relayPosition.dataEpoch !== coverage.dataEpoch
+        || event.data.relayPosition.sequence !== row.sequence)) {
         throw new RelayCheckpointConflict('retained event envelope differs from batch header');
       }
-      batches.push({ sequence: row.sequence, batchId: row.batch_id,
+      batches.push({ streamScope: MAIN_RELAY_STREAM_SCOPE, sequence: row.sequence, batchId: row.batch_id,
         routingEpoch: row.routing_epoch, events: ordered });
     }
     if (BigInt(coverage.sequence) > BigInt(afterSequence) && batches.length === 0) {
@@ -240,6 +260,9 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
 }
 
 export interface MainOutboxBatch {
+  streamScope?: typeof MAIN_RELAY_STREAM_SCOPE;
+  /** Legacy graph position used to verify receipt and revision anchors. */
+  graphSequence?: string;
   batchId: string;
   dataEpoch: string;
   sequence: string;
@@ -291,7 +314,8 @@ export interface MainCloudEvent {
     | 'com.rezics.address.claimed.v1' | 'com.rezics.address.renamed.v1'
     | 'com.rezics.address.merged.v1' | 'com.rezics.address.retired.v1';
   datacontenttype: 'application/json';
-  data: { batchId: string; sourcePosition: { datasetId: 'product'; dataEpoch: string;
+  data: { batchId: string; relayPosition?: { streamScope: string; dataEpoch: string; sequence: string };
+    sourcePosition: { datasetId: 'product'; dataEpoch: string;
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
       id: string; action: 'work.title.apply' | 'work.title.return' | 'work.create' | 'work.edit' | 'work.derive' | 'release.seal' | 'address.claim' | 'address.rename' | 'address.dispose' | 'contribution.create' | 'contribution.edit' | 'contribution.publish' | 'publication.select' | 'space.create' | 'publication.adopt' | 'publication.reject' | 'publication.reject.organization' | 'classification.context.configure' | 'classification.proposition.define' | 'classification.decision.set' | 'rating.context.create' | 'rating.context.policy.set' | 'rating.observation.set' | 'translation.link' | 'translation.authorize';
       outcome: 'succeeded' | 'cancelled';
@@ -372,7 +396,8 @@ export interface SourceBoundaryCloudEvent {
     } };
 }
 
-export type DeliveredMainEvent = MainCloudEvent | ContentBoundaryCloudEvent | SourceBoundaryCloudEvent | OwnerCloudEvent;
+export type DeliveredMainEvent = (MainCloudEvent | ContentBoundaryCloudEvent | SourceBoundaryCloudEvent | OwnerCloudEvent)
+  & { data: { relayPosition?: { streamScope: string; dataEpoch: string; sequence: string } } };
 
 function decimal(value: string): bigint {
   if (!/^(0|[1-9][0-9]{0,99})$/.test(value)) throw new OutboxIncomplete('invalid outbox sequence');
@@ -388,12 +413,23 @@ export async function readNextMainOutboxBatch(
   // The exact numeric position uses TDB2's POSG quad index. Keeping control
   // and header in one query gives both facts the same graph read snapshot.
   const result = await fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?controlSequence ?routing ?hold ?batch ?eventCount WHERE {
+    SELECT ?controlSequence ?routing ?hold ?batch ?eventCount ?graphSequence WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(dataEpoch)} ;
-        rv:routingEpoch ?routing ; rv:sequence ?controlSequence . }
+        rv:routingEpoch ?routing .
+        ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(dataEpoch)} ; rv:streamSequence ?controlSequence ;
+          rv:legacyThroughSequence ?legacyThrough . }
       OPTIONAL { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:sequence ${next} ;
-        a rv:OutboxBatch ; rv:dataEpoch ${lit(dataEpoch)} ; rv:eventCount ?eventCount . } }
+      OPTIONAL {
+        { GRAPH ${iri(GRAPHS.outbox)} {
+          ?batch rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${next} . } }
+        UNION {
+          GRAPH ${iri(GRAPHS.control)} { ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:legacyThroughSequence ?legacyCut }
+          FILTER(${next} <= ?legacyCut)
+          GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:sequence ${next} .
+            FILTER NOT EXISTS { ?batch rv:streamScope ?scope } } }
+        GRAPH ${iri(GRAPHS.outbox)} {
+        ?batch a rv:OutboxBatch ; rv:dataEpoch ${lit(dataEpoch)} ; rv:eventCount ?eventCount ;
+          rv:sequence ?graphSequence . } }
     } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0 || !rows[0]?.controlSequence || !rows[0]?.routing) {
@@ -435,7 +471,9 @@ export async function readNextMainOutboxBatch(
     const exists = await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }`);
     if (exists.boolean !== true) throw new OutboxIncomplete('outbox event object is missing');
   }
-  return { batchId, dataEpoch, sequence: next.toString(),
+  if (!row.graphSequence) throw new OutboxIncomplete('outbox graph position is missing');
+  return { streamScope: MAIN_RELAY_STREAM_SCOPE, batchId, dataEpoch, sequence: next.toString(),
+    graphSequence: row.graphSequence.value,
     routingEpoch: row.routing.value, eventIds };
 }
 
@@ -777,6 +815,20 @@ async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch
 export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
   eventId: string,
   handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined = ownerOutboxEventHandler,
+): Promise<DeliveredMainEvent> {
+  if (batch.streamScope !== undefined && batch.streamScope !== MAIN_RELAY_STREAM_SCOPE) {
+    throw new OutboxIncomplete('outbox batch stream differs');
+  }
+  const event = await readMainOutboxGraphEnvelope(fuseki,
+    { ...batch, sequence: batch.graphSequence ?? batch.sequence }, eventId, handlerFor);
+  // Graph-based owners still consume receipt/revision positions. The relay's
+  // own ordering belongs to a separate position and never rewrites that basis.
+  return { ...event, data: { ...event.data, relayPosition: {
+    streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: batch.dataEpoch, sequence: batch.sequence } } } as DeliveredMainEvent;
+}
+
+async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
+  eventId: string, handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined,
 ): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId
@@ -1562,17 +1614,23 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
 
 /** Durable, idempotent first handoff. Consumers attach downstream effects later. */
 async function deliver(pool: Pool, event: DeliveredMainEvent): Promise<void> {
-  const sourcePosition = event.data.sourcePosition;
+  const sourcePosition = event.data.relayPosition;
+  if (!sourcePosition || sourcePosition.streamScope !== MAIN_RELAY_STREAM_SCOPE) {
+    throw new OutboxIncomplete('durable handoff requires the Main relay stream position');
+  }
   const body = JSON.stringify(event);
   const inserted = await pool.query(
-    `INSERT INTO relay.delivered_event (source, event_id, data_epoch, sequence, envelope)
-     VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT DO NOTHING`,
+    `INSERT INTO relay.delivered_event (source, event_id, data_epoch, sequence, envelope, stream_scope)
+     VALUES ($1, $2, $3, $4, $5::jsonb, '${MAIN_RELAY_STREAM_SCOPE}') ON CONFLICT DO NOTHING`,
     [event.source, event.id, sourcePosition.dataEpoch, sourcePosition.sequence, body]);
   if (inserted.rowCount === 0) {
     const existing = await pool.query<{ same: boolean }>(
-      `SELECT envelope = $3::jsonb AND data_epoch = $4 AND sequence = $5 AS same
-       FROM relay.delivered_event WHERE source = $1 AND event_id = $2`,
-      [event.source, event.id, body, sourcePosition.dataEpoch, sourcePosition.sequence]);
+      `SELECT (envelope = $3::jsonb OR
+         NOT (envelope->'data' ? 'relayPosition') AND
+         jsonb_set(envelope, '{data,relayPosition}', $6::jsonb) = $3::jsonb)
+         AND data_epoch = $4 AND sequence = $5 AS same
+       FROM relay.delivered_event WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND source = $1 AND event_id = $2`,
+      [event.source, event.id, body, sourcePosition.dataEpoch, sourcePosition.sequence, JSON.stringify(sourcePosition)]);
     if (existing.rows[0]?.same !== true) throw new OutboxIncomplete('event identity has a different durable envelope');
   }
 }
@@ -1580,13 +1638,13 @@ async function deliver(pool: Pool, event: DeliveredMainEvent): Promise<void> {
 async function retainBatch(pool: Pool, batch: MainOutboxBatch): Promise<void> {
   const inserted = await pool.query(
     `INSERT INTO relay.delivered_batch
-       (data_epoch, sequence, batch_id, routing_epoch, event_count)
-     VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+       (data_epoch, sequence, batch_id, routing_epoch, event_count, stream_scope)
+     VALUES ($1, $2, $3, $4, $5, '${MAIN_RELAY_STREAM_SCOPE}') ON CONFLICT DO NOTHING`,
     [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
   if (inserted.rowCount === 0) {
     const existing = await pool.query<{ same: boolean }>(
       `SELECT batch_id = $3 AND routing_epoch = $4 AND event_count = $5 AS same
-       FROM relay.delivered_batch WHERE data_epoch = $1 AND sequence = $2`,
+       FROM relay.delivered_batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2`,
       [batch.dataEpoch, batch.sequence, batch.batchId, batch.routingEpoch, batch.eventIds.length]);
     if (existing.rows[0]?.same !== true) {
       throw new OutboxIncomplete('batch position has a different durable header');
@@ -1596,8 +1654,8 @@ async function retainBatch(pool: Pool, batch: MainOutboxBatch): Promise<void> {
 
 export async function initializeRelayCheckpoint(pool: Pool, consumer: string, dataEpoch: string): Promise<void> {
   if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(consumer) || !dataEpoch) throw new RelayCheckpointConflict('invalid relay identity');
-  await pool.query(`INSERT INTO relay.checkpoint (consumer, data_epoch, sequence)
-    VALUES ($1, $2, 0) ON CONFLICT DO NOTHING`, [consumer, dataEpoch]);
+  await pool.query(`INSERT INTO relay.checkpoint (consumer, data_epoch, sequence, stream_scope)
+    VALUES ($1, $2, 0, '${MAIN_RELAY_STREAM_SCOPE}') ON CONFLICT DO NOTHING`, [consumer, dataEpoch]);
 }
 
 /** At least once handoff: a crash after delivery repeats the batch safely. */
@@ -1605,10 +1663,11 @@ export async function relayMainOutboxOnce(
   fuseki: FusekiClient, pool: Pool, consumer: string,
   hooks?: { afterDelivery?: (batch: MainOutboxBatch) => Promise<void> },
 ): Promise<MainOutboxBatch | null> {
-  const checkpoint = await pool.query<{ data_epoch: string; sequence: string }>(
-    'SELECT data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
+  const checkpoint = await pool.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
+    'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const cursor = checkpoint.rows[0];
   if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
+  if (cursor.stream_scope !== MAIN_RELAY_STREAM_SCOPE) throw new RelayCheckpointConflict('relay checkpoint stream differs');
   const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
   if (!batch) return null;
   const events = await Promise.all(batch.eventIds.map(async eventId => {
@@ -1628,7 +1687,7 @@ export async function relayMainOutboxOnce(
   await hooks?.afterDelivery?.(batch);
   const advanced = await pool.query(
     `UPDATE relay.checkpoint SET sequence = $3, updated_at = clock_timestamp()
-     WHERE consumer = $1 AND data_epoch = $2 AND sequence = $4`,
+     WHERE consumer = $1 AND stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $2 AND sequence = $4`,
     [consumer, batch.dataEpoch, batch.sequence, cursor.sequence]);
   if (advanced.rowCount !== 1) throw new RelayCheckpointConflict('relay checkpoint changed during delivery');
   return batch;

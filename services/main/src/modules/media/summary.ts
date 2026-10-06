@@ -74,6 +74,8 @@ export interface SummaryReader {
 }
 
 export interface SummaryInput {
+  /** Selected Work reads fence these resource dependencies instead of the dataset counter. */
+  localBasis?: boolean;
   /** Internal: the parts of a projection are read as ordinary summaries, never as projections themselves. */
   projectionPart?: true;
   /** Internal single-hop disclosure for G-506, which owns its own traversal. */
@@ -242,7 +244,7 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
 }
 
 /** One bounded graph query resolves type, labels and public disclosure for the batch. */
-async function graphRows(env: WorkActivationEnvironment, resources: readonly string[]) {
+async function graphRows(env: WorkActivationEnvironment, resources: readonly string[], localBasis = false) {
   // Test the owner branch, not BOUND(?work): an OPTIONAL can bind an initially
   // absent Work from its own label/head pattern and attach an unrelated owner.
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
@@ -402,7 +404,12 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     rows.set(reference, row);
   }
   for (const reference of ambiguous) rows.delete(reference);
-  return { rows, redirects, generation: `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
+  const dependencies = bindings.map(({ sequence: _sequence, ...binding }) =>
+    Object.entries(binding).sort(([a], [b]) => a.localeCompare(b)))
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return { rows, redirects, generation: localBasis
+    ? `${control.epoch.value}:${createHash('sha256').update(JSON.stringify(dependencies)).digest('hex')}`
+    : `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
 }
 
 const partOf = ({ resolution: _resolution, parts: _parts, ...part }: AvailableSummary): PartSummary => part;
@@ -421,7 +428,7 @@ async function readProjectionSummaries(env: WorkActivationEnvironment, reader: S
     const page = await readSummaryPage(env, undefined, reader, { ...input,
       resources: references.slice(offset, offset + MAX_SUMMARY_BATCH), includeCollections: true,
       projectionPart: true });
-    if (page.generation.graph !== generation) throw new SummaryGraphMoved('Projection parts graph moved');
+    if (!input.localBasis && page.generation.graph !== generation) throw new SummaryGraphMoved('Projection parts graph moved');
     for (const summary of page.summaries) {
       if (summary.status === 'available' && summary.type !== 'projection') parts.set(summary.reference, summary);
     }
@@ -457,7 +464,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Foreign references never enter graph, disclosure or Access queries. They
   // retain their input position and the same minimal unavailable item.
   const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
-  const graph = await graphRows(env, unique);
+  const graph = await graphRows(env, unique, input.localBasis);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
   // Check the entire requested batch, including missing identities, before
   // Access/name/avatar hydration. Rated and absent rows then have the same
@@ -728,6 +735,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
   const deadline = Date.now() + MERGE_COST.deadlineMs;
   const first = await readSummaryPage(env, media, reader, input);
+  const graphDependencies = [first.generation.graph];
   if (input.resolveMerges === false) return { summaries: first.summaries,
     generation: first.generation, cost: first.cost };
   const summaries = new Map(first.summaries.map(summary => [summary.reference, summary]));
@@ -755,7 +763,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     }
     if (Date.now() >= deadline) throw new MediaUnavailable('Identity merge read deadline exceeded');
     const page = await readSummaryPage(env, undefined, reader, { ...input, resources: [...frontier] });
-    if (page.generation.graph !== first.generation.graph) throw new MediaUnavailable('Identity merge graph moved');
+    if (!input.localBasis && page.generation.graph !== first.generation.graph) throw new MediaUnavailable('Identity merge graph moved');
+    graphDependencies.push(page.generation.graph);
     for (const summary of page.summaries) summaries.set(summary.reference, summary);
     for (const [source, target] of page.redirects) redirects.set(source, target);
     for (const key of ['graphQueries', 'mediaQueries', 'accessChecks', 'accessQueries'] as const) {
@@ -769,7 +778,8 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } } } LIMIT 2`, 4096)).results?.bindings ?? [];
     first.cost.graphQueries++;
     if (control.length !== 1 || control[0]?.hold
-      || `${control[0]?.epoch?.value}:${control[0]?.sequence?.value}` !== first.generation.graph) {
+      || (input.localBasis ? control[0]?.epoch?.value !== env.lineage.dataEpoch
+        : `${control[0]?.epoch?.value}:${control[0]?.sequence?.value}` !== first.generation.graph)) {
       throw new MediaUnavailable('Identity merge disclosure snapshot moved');
     }
   }
@@ -781,7 +791,9 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
         address: (summaries.get(path.current) as Extract<ResourceSummary,{ status: 'available' }>).address,
         resolution: { state: 'merged' as const, source: reference, survivor: path.current, hops: path.hops } } : summary;
     });
-  return { generation: { ...first.generation,addresses: addressGeneration(result) },cost: first.cost,summaries: result };
+  return { generation: { ...first.generation,
+    ...(input.localBasis ? { graph: createHash('sha256').update(JSON.stringify(graphDependencies)).digest('hex') } : {}),
+    addresses: addressGeneration(result) },cost: first.cost,summaries: result };
 }
 
 /** SQL name changes do not move the graph position. Conditional reads must
