@@ -268,7 +268,7 @@ export const TrailerFacade: Story = {
 export const ManualNavigation: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const first = canvas.getByRole('group', { name: 'Astral Tide · 1 of 3' });
+    const first = canvas.getByRole('group', { name: '1 of 3' });
     await expect(first).not.toHaveAttribute('inert');
     if (import.meta.env.MODE === 'test') {
       const { page } = await import('vitest/browser');
@@ -277,13 +277,13 @@ export const ManualNavigation: Story = {
     await waitFor(
       () =>
         expect(
-          canvas.getByRole('group', { name: 'The Cartographer’s Library · 2 of 3' }),
+          canvas.getByRole('group', { name: '2 of 3' }),
         ).toBeVisible(),
       { timeout: 4000 },
     );
     await waitFor(() => expect(first).toHaveAttribute('inert'));
     await waitFor(async () => {
-      const selected = canvas.getByRole('group', { name: 'The Cartographer’s Library · 2 of 3' });
+      const selected = canvas.getByRole('group', { name: '2 of 3' });
       const stage = canvasElement.querySelector('.showcase-stage')!.getBoundingClientRect();
       await expect(Math.abs(selected.getBoundingClientRect().left - stage.left)).toBeLessThan(1);
     });

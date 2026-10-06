@@ -100,7 +100,7 @@ try {
   await json(await owner.send('POST', '/v1/publication-selections', { profile: 'realm-local-selection-v1',
     context: { kind: 'realm-local', id: space.realm }, work, mainVersion: created.mainVersion, contribution: text.contribution,
     publicationDecision: text.decision, expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
-    actingSubject: owner.actor, idempotencyKey: randomUUID() }), 201, 'Adoption');
+    actingSubject: owner.actor }), 201, 'Adoption');
 
   // A campaign slide has no Work to carry art: its art is a Use of the Realm, made through the Zone.
   const campaign: { use: string; representation: string }[] = [];
