@@ -17,6 +17,7 @@ export type CreditRole = CreditedWork['attribution'][number]['role'];
 export type PublicShelves = Ok<Agent['shelves']['get']>;
 export type ShelfStatus = PublicShelves['statusShelves'][number]['status'];
 export type PublicShelfPage = Ok<ReturnType<Agent['shelves']['status']>['works']['get']>;
+export type ShelfCountKind = PublicShelfPage['statusCountKind'];
 export type ShelfCard = PublicShelfPage['items'][number]['card'];
 export type FollowState = Ok<ReturnType<MainClient['v1']['follows']>['get']>;
 export type FollowerCount = FollowState['followers'];
@@ -46,6 +47,7 @@ export function failureOf(status: number): ReadFailure {
 export interface ShelfSummary {
   status: ShelfStatus;
   count: number;
+  countKind: ShelfCountKind;
   works: Loaded<ShelfCard[]>;
 }
 

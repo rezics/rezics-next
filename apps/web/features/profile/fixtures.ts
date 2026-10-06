@@ -81,9 +81,9 @@ export const shelfCards = {
 
 export function publicLibrary(own = false): LibraryView {
   return { kind: 'shelves', own, shelves: [
-    { status: 'reading', count: 2, works: { ok: true, data: shelfCards.reading } },
-    { status: 'read', count: 48, works: { ok: true, data: shelfCards.read } },
-    { status: 'want-to-read', count: 2, works: { ok: true, data: shelfCards['want-to-read'] } },
+    { status: 'reading', count: 2, countKind: 'exact', works: { ok: true, data: shelfCards.reading } },
+    { status: 'read', count: 48, countKind: 'exact', works: { ok: true, data: shelfCards.read } },
+    { status: 'want-to-read', count: 2, countKind: 'exact', works: { ok: true, data: shelfCards['want-to-read'] } },
   ] };
 }
 

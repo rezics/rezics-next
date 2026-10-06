@@ -358,9 +358,9 @@ export const NothingYet: Story = {
       kind: 'shelves',
       own: false,
       shelves: [
-        { status: 'reading', count: 0, works: { ok: true, data: [] } },
-        { status: 'read', count: 0, works: { ok: true, data: [] } },
-        { status: 'want-to-read', count: 0, works: { ok: true, data: [] } },
+        { status: 'reading', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+        { status: 'read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+        { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
       ],
     },
   },
@@ -382,9 +382,9 @@ export const RegionsUnavailable: Story = {
       kind: 'shelves',
       own: false,
       shelves: [
-        { status: 'reading', count: 2, works: { ok: false, failure: 'unavailable' } },
-        { status: 'read', count: 48, works: { ok: true, data: shelfCards.read } },
-        { status: 'want-to-read', count: 0, works: { ok: true, data: [] } },
+        { status: 'reading', count: 2, countKind: 'exact', works: { ok: false, failure: 'unavailable' } },
+        { status: 'read', count: 48, countKind: 'exact', works: { ok: true, data: shelfCards.read } },
+        { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
       ],
     },
   },
@@ -454,7 +454,7 @@ export const Shelf: StoryObj<typeof ProfileShelfPage> = {
       profile={storyProfile()}
       status="read"
       cursor="page-2"
-      shelf={{ ok: true, data: { count: 48, cards: shelfCards.read, nextCursor: 'page-3' } }}
+      shelf={{ ok: true, data: { count: 48, countKind: 'exact', cards: shelfCards.read, nextCursor: 'page-3' } }}
       reader={signedOut}
       locale="en"
       messages={messages}
@@ -500,6 +500,44 @@ export const ShelfMoved: StoryObj<typeof ProfileShelfPage> = {
       'href',
       localizedPath(`${profileHref('lin_mei')}/shelves/want-to-read`, 'en'),
     );
+  },
+};
+
+async function captureShelfCount(name: string, width: number) {
+  if (import.meta.env.VITE_SHELF_COUNT_VISUAL !== '1') return;
+  const { page } = await import('vitest/browser');
+  await page.viewport(width, 860);
+  await document.fonts.ready;
+  await page.screenshot({ path: `../../../../.temp/shelf-counts/${name}.png` });
+}
+
+export const PublicLowerBounds: Story = {
+  args: { works: { ok: true, data: noWorks }, library: { kind: 'shelves', own: false, shelves: [
+    { status: 'reading', count: 0, countKind: 'lower-bound', works: { ok: true, data: [] } },
+    { status: 'read', count: 20, countKind: 'lower-bound', works: { ok: true, data: shelfCards.read } },
+    { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+  ] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const summary = within(canvas.getByRole('navigation', { name: 'Bookshelves' }));
+    await expect(summary.getByRole('link', { name: 'Currently reading 0+' })).toBeVisible();
+    await expect(summary.getByRole('link', { name: 'Read 20+' })).toBeVisible();
+    await expect(summary.getByRole('link', { name: 'Want to read 0' })).toBeVisible();
+    await captureShelfCount('public-lower-bounds', 1280);
+  },
+};
+
+export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
+  render: () => <ProfileShelfPage profile={storyProfile()} status="reading"
+    shelf={{ ok: true, data: { count: 0, countKind: 'lower-bound', cards: [], nextCursor: 'scan-next' } }}
+    reader={signedOut} locale="en" messages={messages} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: /Currently reading.*0\+/ })).toBeVisible();
+    await expect(canvas.queryByText(messages.shelfEmpty)).not.toBeInTheDocument();
+    await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
+      localizedPath(`${profileHref('lin_mei')}/shelves/reading?cursor=scan-next`, 'en'));
+    await captureShelfCount('empty-scan-continuation', 390);
   },
 };
 
