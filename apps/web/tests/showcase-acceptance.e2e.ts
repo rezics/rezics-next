@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { deriveAddressSuffix } from '@rezics/model/address';
 import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
@@ -51,13 +52,16 @@ for (const identity of ['signed out', 'signed in'] as const) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       const { space, work } = seeded();
       const zone = localizedPath(spaceHref(space, 'site'), 'en');
-      if (identity === 'signed in') await signInAtAccounts(page, zone, member());
+      // The Zone's own address carries its name; sign-in finishes on that canonical path.
+      if (identity === 'signed in') await signInAtAccounts(page, `${zone}-${deriveAddressSuffix('Games')}`, member());
       else await page.goto(zone);
       const stage = page.locator('.showcase-layout').first();
       await expect(stage).toBeVisible();
       await expect(page.locator('.showcase-slide')).toHaveCount(2);
       const shot = (name: string) => page.screenshot({ path: info.outputPath(`${identity.replace(' ', '-')}-${viewport.name}-${name}.png`), fullPage: false });
 
+      // Art waits for the reader's content preferences; the tree is read once every image has settled.
+      await expect(stage.getByRole('img', { name: 'Loading content preferences…' })).toHaveCount(0);
       // The first slide is the game's: its heading names it, its group only says where it is, and its art is decorative.
       const first = await stage.ariaSnapshot();
       expect(headings(first, gameTitle), first).toBe(1);
@@ -75,6 +79,7 @@ for (const identity of ['signed out', 'signed in'] as const) {
       // The campaign slide: its heading once, its group's position, and the author's description once as its art's name.
       await stage.getByRole('button', { name: new RegExp(`^${escape(campaignTitle)} · 2 of 2$`) }).click();
       await expect(stage.getByRole('heading', { name: campaignTitle })).toBeVisible();
+      await expect(stage.getByRole('img', { name: campaignAlt })).toHaveCount(1);
       const second = await stage.ariaSnapshot();
       expect(headings(second, campaignTitle), second).toBe(1);
       expect(second).toMatch(/group "2 of 2"/);
