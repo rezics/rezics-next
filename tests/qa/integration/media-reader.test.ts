@@ -16,10 +16,11 @@ test('signed-in public media readers need no Agent, and gain no private Work aut
   const hidden = await privateWork(owner.actor, `Private image ${randomUUID()}`);
   const bytes = png(256, 256);
   const asset = await owner.upload(bytes, 'public');
-  const select = async (work: string) => {
+  const hiddenAsset = await owner.upload(png(256,256), 'public');
+  const select = async (work: string, image = asset.asset) => {
     await owner.grant(`media:avatar:${work}`, 'media.avatar');
     const response = await owner.send('PUT', `/v1/resources/${work.slice(ID.length)}/avatar`, {
-      profile: 'resource-avatar-selection-v1', expectedSelection: null, asset: asset.asset,
+      profile: 'resource-avatar-selection-v1', expectedSelection: null, asset: image,
       crop: null, actingSubject: owner.actor,
     });
     expect(response.status).toBe(201);
@@ -27,18 +28,18 @@ test('signed-in public media readers need no Agent, and gain no private Work aut
   };
   const visibleAvatar = await select(visible.work);
   await owner.grant(`work:read:${hidden.work}`, 'work.read');
-  const hiddenAvatar = await select(hidden.work);
-  const prepare = async (work: string) => {
+  const hiddenAvatar = await select(hidden.work, hiddenAsset.asset);
+  const prepare = async (work: string, image = asset.asset) => {
     await owner.grant(`content:draft:${work}`, 'content.draft');
     const response = await owner.send('POST', '/v1/media/publications', {
       profile: 'media-set-v1', resourceId: work, variantId: `urn:rezics:variant:${randomUUID()}`,
-      expectedHead: null, assets: [asset.asset], actingSubject: owner.actor,
+      expectedHead: null, assets: [image], actingSubject: owner.actor,
     });
     expect(response.status).toBe(201);
     return (await response.json()).body.items[0] as { use: string; representation: string };
   };
   const visibleItem = await prepare(visible.work);
-  const hiddenItem = await prepare(hidden.work);
+  const hiddenItem = await prepare(hidden.work, hiddenAsset.asset);
   const paths = (avatar: string, item: typeof visibleItem) => [
     `/v1/media/avatars/${avatar}`, `/v1/media/uses/${item.use}`,
     `/v1/media/representations/${item.representation}/bytes?use=${item.use}`,

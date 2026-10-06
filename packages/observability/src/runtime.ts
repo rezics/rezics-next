@@ -95,6 +95,7 @@ export type WorkerName =
   | 'main.library.backfill'
   | 'main.post.backfill'
   | 'main.media.screen'
+  | 'main.media.required-match'
   | 'main.media.rendition'
   | 'main.verification.correction'
   | 'main.notification.producer'

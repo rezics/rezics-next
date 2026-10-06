@@ -43,7 +43,14 @@ New accounts have upload rate limits, and
 protects abuse-prone enrollment. Imported covers display with their source
 attribution and are removed on a valid notice. An NSFW classifier outage permits
 manual labeling and does not create a governance hold. Required safety-matching
-outages follow their own admission policy. Actual review holds and removals
+outages keep new media pending and private to its author until the exact bytes
+pass matching; retries after recovery admit the requested public delivery.
+This uses a separate required-matcher port and durable media job, never NSFW
+evidence or a classifier review hold. Development can supply a synthetic SHA-256
+corpus in `.temp/media-required-match-corpus.json` (a JSON array of hashes).
+The local provider is fixture evidence only; a production matcher remains a
+deployment condition, and an unconfigured production provider keeps uploads
+pending. Actual review holds and removals
 remain explicit platform decisions.
 
 ## Platform suitability moderation setup

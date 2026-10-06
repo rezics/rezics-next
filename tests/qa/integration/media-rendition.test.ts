@@ -106,7 +106,7 @@ test('a selected Use queues idempotent crop-width jobs, executes both real codec
   const { renditions, objects, use, worker, contentPool, image, call, bytes } = fixture;
   expect(
     (
-      await contentPool.query('SELECT id FROM media.transform_job WHERE source_id = $1', [
+      await contentPool.query('SELECT id FROM media.transform_job WHERE source_id = $1 AND profile <> \'required-image-match-v1\'', [
         image.representation,
       ])
     ).rowCount,
@@ -522,7 +522,7 @@ test('an object storage outage retries after lease expiry and sixteen interrupte
   await failed.tick();
   const interrupted = (
     await contentPool.query(
-      'SELECT id,status FROM media.transform_job WHERE source_id = $1 ORDER BY created_at,id',
+      'SELECT id,status FROM media.transform_job WHERE source_id = $1 AND profile <> \'required-image-match-v1\' ORDER BY created_at,id',
       [fixture.image.representation],
     )
   ).rows[0];

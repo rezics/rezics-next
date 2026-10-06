@@ -56,7 +56,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     // A bearer supplies current content preferences even on public reads that
     // name no Agent; it supplies no private Work or context proof on its own.
     if (!actingSubject) return { principal, reader: { ...anonymousReader, viewer: disclosureViewer(principal) } };
-    return { principal,reader: { viewer: disclosureViewer(principal), canReadWorks: batch && work.mediaAccess
+    return { principal,reader: { viewer: disclosureViewer(principal, actingSubject), canReadWorks: batch && work.mediaAccess
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
@@ -150,7 +150,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           }
         }
         const decisions = await discloseInventory(work.environment,facts,
-          principal ? disclosureViewer(principal) : ANONYMOUS_VIEWER,'media');
+          principal ? disclosureViewer(principal, body.actingSubject) : ANONYMOUS_VIEWER,'media');
         for (const item of batch.art.values()) {
           item.images = item.images.filter(image => indexes.get(image.use)!.every(index => decisions[index]==='visible'));
           if (item.trailer && !indexes.get(item.trailer.selection)!.every(index => decisions[index]==='visible')) item.trailer=null;

@@ -4,6 +4,7 @@ import type { GovernanceComponent, GovernanceOwner } from '../governance/store.t
 import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../governance/schema.ts';
 import { MediaUnavailable } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } from '../suitability/policy.ts';
+import { mediaVisibility } from '../media/visibility.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
   | 'count' | 'inbox' | 'digest' | 'preview' | 'seo' | 'sitemap' | 'export' | 'media' | 'email' | 'push';
@@ -176,7 +177,8 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]> {
   const result: DisclosureDecision[] = [];
-  if (!(env as ComposedEnvironment)[owner]) return targets.map(() => 'visible');
+  const mediaAllowed = await mediaVisibility(env, targets, viewer);
+  if (!(env as ComposedEnvironment)[owner]) return mediaAllowed.map(allowed => allowed ? 'visible' : 'hidden');
   // Exact title fences apply to today's Work head. Derivative callers may
   // supply only a target identity; resolve structural ownership here, never
   // let a missing parent descriptor weaken its assessment or removal gate.
@@ -239,5 +241,5 @@ export async function discloseInventory(env: WorkActivationEnvironment, targets:
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     result.push(...await disclose(env, current.slice(offset, offset + DISCLOSURE_COST.batch), viewer, channel));
   }
-  return result;
+  return result.map((decision, index) => mediaAllowed[index] ? decision : 'hidden');
 }

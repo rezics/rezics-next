@@ -247,11 +247,29 @@ need representative REZICS calibration.
 
 ## Clearance and identical copies
 
-New originals activate as `cleared` after binary admission. The retained
+New originals activate after binary admission with a separate durable
+`required-image-match-v1` job. Upload status stays `screening` with reason
+`required-matcher-pending` until that job succeeds. The shared
+[visibility gate](visibility.ts) permits the uploader's private use while
+withholding every public read, including bare originals, renditions, summaries
+and export. Matcher failures retain an expiring lease, and exhausted jobs roll
+over without opening disclosure; a recovered matcher settles the exact source
+and admits its requested public disclosure. Production has no fixture fallback.
+The retained
 `screening|cleared|held|rejected` upload shape remains compatible, but ordinary
 read clearance ignores historical classifier holds and failures. Actual staff
 rejection and exact-byte suppression still deny delivery. Neither NSFW nor age
 assessment decides whether an ordinarily authorized API returns the image.
+
+The same gate resolves all current attachments of an Asset even when a read
+omits its Use. Every attachment must be readable to the caller; a second public
+Use cannot widen a private draft's audience. Removed selection heads cease to
+bind that audience. Each page performs one indexed Asset/Use owner read and
+reads the distinct attachment targets through the existing summary/Access
+policy in pages of 64. Work scales with these assets' retained Uses and matching
+jobs, returning their current attachments without sampling or scanning unrelated
+assets. Private delivery remains `no-store`,
+including reads that name only a representation.
 
 `suppressIdenticalCopies(originalDigest, after?, limit?, decisionBasis?)` appends an immutable
 SHA-256 suppression before advancing at most 100 asset histories per call. Its asset

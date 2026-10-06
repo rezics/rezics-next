@@ -26,6 +26,7 @@ import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/vi
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
+import { mediaVisibility } from '../modules/media/visibility.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -159,7 +160,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     if (!request.headers.get('authorization')) return publicReader;
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
-    const viewer = disclosureViewer(await workPrincipal());
+    const viewer = disclosureViewer(await workPrincipal(), actingSubject);
     // Public image URLs do not choose an Agent. Keep the reader's live preferences
     // while leaving private Work/context authority absent until an Agent is supplied.
     if (!actingSubject) return { ...publicReader, viewer };
@@ -231,6 +232,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       return own;
     });
     const decisions=await discloseInventory(work.environment,facts,reader.viewer??ANONYMOUS_VIEWER,'media');
+    const publicMedia=await mediaVisibility(work.environment,facts,ANONYMOUS_VIEWER);
     return Promise.all(bases.map(async (basis,index)=>{
       if (!basis || basis.target && !available.has(`${basis.context}\0${basis.target}`)
         || indexes[index]!.some(index=>decisions[index]!=='visible')
@@ -248,7 +250,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const conceal=basis.metadata.controls.conceal?{...basis.metadata.controls.conceal,...concealControls,
         canEdit:concealControls.canEdit&&(!basis.metadata.controls.conceal.locked||canProtectConceal)}:null;
       // A public Asset can still be used by a draft Work or a private Context.
-      const publicTarget=basis.disclosure==='public' && (!basis.target || publicTargets.has(`${basis.context}\0${basis.target}`));
+      const publicTarget=basis.disclosure==='public' && indexes[index]!.every(index=>publicMedia[index])
+        && (!basis.target || publicTargets.has(`${basis.context}\0${basis.target}`));
       return {...basis,publicTarget,metadata:{...basis.metadata,
         controls:{nsfw,ageRating,conceal},
         canEdit:nsfw.canEdit||ageRating.canEdit||!!conceal?.canEdit,canProtect:canProtectLabels||canProtectConceal}};
@@ -300,6 +303,10 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         )).has(basis.metadata.use))) return unavailable();
         if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
           sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},basis.publicTarget);
+        // The shared metadata gate has established the uploader's own private
+        // audience even before this image is attached to a Work.
+        if (!basis.target) return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
+          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},false);
         if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
         const principal=await work.account.verify(request,['work:read']);
         lease=await work.downloadLeases.admit(principal,query.actingSubject,basis.target,basis.metadata.asset);

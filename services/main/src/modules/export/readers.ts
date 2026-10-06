@@ -85,7 +85,9 @@ function rightsIdentityFor(member: VerifiedExportMember): ExportRightsIdentity {
     : member.sourceGrain === 'structure_revision' || member.sourceGrain === 'occurrence' ? 'structure'
       : member.sourceOwner === 'object' ? 'cover'
       : 'record';
-  const targetResource = member.sourceOwner === 'source'
+  const targetResource = member.sourceOwner === 'object'
+    ? (/^[0-9a-f-]{36}$/.test(member.exactRef) ? `https://rezics.com/id/${member.exactRef}` : member.exactRef)
+    : member.sourceOwner === 'source'
     ? (typeof data.observation === 'string' ? data.observation
       : typeof data.run === 'string' ? data.run : member.exactRef)
     : (typeof data.resource === 'string' ? data.resource
@@ -538,5 +540,5 @@ export async function discloseExportPlan(env: WorkActivationEnvironment, plan: E
 export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
   actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope'], request?: Request): Promise<ExportPlan> {
   return discloseExportPlan(deps.env, await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope, request),
-    disclosureViewer(principal));
+    disclosureViewer(principal, actingSubject));
 }

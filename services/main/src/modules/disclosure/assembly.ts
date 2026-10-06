@@ -5,6 +5,7 @@ import type { MediaStore } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { configureDisclosure, discloseInventory, DisclosureUnavailable, type DisclosureChannel } from './read.ts';
 import { currentDisclosureViewer } from './viewer.ts';
+import { configureMediaVisibility } from '../media/visibility.ts';
 
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read'): Promise<ExactReadResult[]> {
@@ -74,6 +75,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
 /** Missing governance preserves legacy fixtures; configured owner failures deny reads. */
 export function composeDisclosure(deps: MainWorkDependencies): void {
   if (!deps.environment) return;
+  configureMediaVisibility(deps);
   configureDisclosure(deps.environment, deps.governance
     ? deps.governance.store.disclosure ?? { read: async () => { throw new DisclosureUnavailable('Disclosure owner is unavailable'); } }
     : null);

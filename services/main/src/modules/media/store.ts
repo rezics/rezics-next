@@ -6,6 +6,8 @@ import { advanceContentSequence, settledContentPosition } from '../content-seque
 import { MediaPresentationStore } from './presentation.ts';
 import { MediaRenditionStore } from '../media-rendition/store.ts';
 import { MediaShowcaseStore } from './showcase-store.ts';
+import { RequiredMediaMatchStore, REQUIRED_MATCH_PROFILE } from '../media-screen/required-match-store.ts';
+import type { MediaVisibilityFact } from './visibility.ts';
 import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
@@ -240,10 +242,39 @@ export class MediaStore {
   readonly presentation: MediaPresentationStore;
   readonly renditions: MediaRenditionStore;
   readonly showcase: MediaShowcaseStore;
+  readonly matching: RequiredMediaMatchStore;
   constructor(private readonly pool: Pool, private readonly content: ContentCore) {
     this.presentation = new MediaPresentationStore(pool);
     this.renditions = new MediaRenditionStore(pool);
     this.showcase = new MediaShowcaseStore(pool);
+    this.matching = new RequiredMediaMatchStore(pool);
+  }
+
+  /** One page of exact Asset/Use probes and indexed current attachment ranges.
+   * Output scales with these assets' Uses; it never samples their audience. */
+  async visibilityFacts(references: readonly string[]): Promise<Map<string, MediaVisibilityFact>> {
+    if (references.length > 64) throw new MediaInvalid('invalid visibility page');
+    const ids = references.map(reference => nativeId.test(reference) ? reference.slice(ID.length) : null);
+    const rows = (await this.pool.query(`WITH requested AS (
+      SELECT * FROM unnest($1::text[],$2::uuid[]) AS q(reference,id))
+      SELECT q.reference,a.owner,s.disclosure,
+        EXISTS (SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id
+          AND j.profile=$3 AND j.status IN ('queued','leased')) AS pending,
+        s.lifecycle <> 'active' OR s.moderation <> 'none' OR EXISTS (
+          SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id AND j.profile=$3
+            AND j.status='failed') AS blocked,
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('target',u.target,'context',u.context))
+          FROM media.use u WHERE u.asset_id=a.id AND
+            (u.role NOT IN ('avatar') AND u.role NOT LIKE 'showcase-%' OR EXISTS (
+              SELECT 1 FROM media.selection_slot slot JOIN media.selection_revision r ON r.id=slot.head
+              WHERE slot.target=u.target AND slot.context=u.context AND slot.role=u.role AND r.use_id=u.id))),
+          '[]'::jsonb) AS attachments
+      FROM requested q LEFT JOIN media.use requested_use ON requested_use.id=q.id
+      JOIN media.asset a ON a.id=COALESCE(requested_use.asset_id,q.id)
+      JOIN media.asset_state s ON s.id=a.state_head`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
+    return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,
+      disclosure: row.disclosure as string, pending: row.pending as boolean, blocked: row.blocked as boolean,
+      attachments: row.attachments as MediaVisibilityFact['attachments'] }]));
   }
 
   /** After commit: the command result with its receipt's exact Content position. */
@@ -324,12 +355,19 @@ export class MediaStore {
       u.declared_byte_length, u.declared_digest, u.quarantine_key, a.object_namespace, a.owner,
       u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason,
       CASE WHEN r.id IS NULL THEN NULL WHEN restriction.rejected THEN 'rejected'
+        WHEN EXISTS (SELECT 1 FROM media.transform_job j WHERE j.source_id=r.id
+          AND j.profile='required-image-match-v1' AND j.status IN ('queued','leased')) THEN 'screening'
         ELSE 'cleared' END AS clearance,
-      CASE WHEN restriction.rejected THEN 'restricted' ELSE NULL END AS clearance_reason
+      CASE WHEN restriction.rejected THEN 'restricted'
+        WHEN EXISTS (SELECT 1 FROM media.transform_job j WHERE j.source_id=r.id
+          AND j.profile='required-image-match-v1' AND j.status IN ('queued','leased')) THEN 'required-matcher-pending'
+        ELSE NULL END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.representation r ON r.upload_id = u.id
       LEFT JOIN LATERAL (SELECT media.digest_suppressed(r.byte_digest)
-        OR (r.clearance = 'rejected' AND r.clearance_reason = 'staff-rejected') AS rejected)
+        OR (r.clearance = 'rejected' AND r.clearance_reason = 'staff-rejected')
+        OR EXISTS (SELECT 1 FROM media.transform_job j WHERE j.source_id=r.id
+          AND j.profile='required-image-match-v1' AND j.status='failed') AS rejected)
         restriction ON true WHERE u.id = $1`, [upload]);
     const row = result.rows[0];
     return row ? { id: row.id, asset: row.asset_id, status: row.status, mediaType: row.declared_media_type,
@@ -377,6 +415,13 @@ export class MediaStore {
         VALUES ($1,$2,'original',$3,$4,$5,$6,$7,$8,$9)`,
       [representation, current.asset, upload, verdict.sha256, verdict.byteLength, verdict.mediaType,
         verdict.width, verdict.height, operationId]);
+      // Required matching is a separate admission job. Classifier evidence and
+      // historical classifier holds never supply its publication clearance.
+      await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
+        authority_epoch,erasure_epoch,operation_id)
+        SELECT $1,a.id,$2,$3,$4,s.authority_epoch,s.erasure_epoch,$5
+        FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head WHERE a.id=$6`,
+      [randomUUID(),representation,verdict.sha256,REQUIRED_MATCH_PROFILE,operationId,current.asset]);
       await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure, moderation,
         lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
         SELECT $1, a.id, a.state_head, s.disclosure, 'suppressed', s.lifecycle, s.erasure_epoch,

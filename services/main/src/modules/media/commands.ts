@@ -12,6 +12,8 @@ import { ImageFormatRejected, verifyImage } from './image.ts';
 import { validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
 import { receiptFamilies } from './receipt-family.ts';
+import type { RequiredSafetyMatcher } from '../media-screen/required-matcher.ts';
+import { RequiredMediaMatchWorker } from '../media-screen/required-match-worker.ts';
 import { LocalImageTransformer } from '../media-rendition/transform.ts';
 import { requestUseRenditions } from '../media-rendition/request.ts';
 import { RENDITION_LIMITS } from '../media-rendition/policy.ts';
@@ -29,6 +31,7 @@ export interface MediaDependencies {
   content: ContentCore;
   /** Returns the conditional-create adapter for one retention/disclosure namespace. */
   objects: (namespace: string) => ImmutableObjects;
+  matcher?: RequiredSafetyMatcher;
 }
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
@@ -168,8 +171,12 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
 
 async function finish(media: MediaDependencies, uploadId: string,
   settled: Awaited<ReturnType<MediaStore['settleUpload']>> | null) {
-  const upload = await media.store.readUpload(uploadId);
+  let upload = await media.store.readUpload(uploadId);
   if (!upload) throw new MediaMissing('media upload is unavailable');
+  if (upload.status === 'activated' && upload.representation && media.matcher) {
+    await new RequiredMediaMatchWorker(media.store.matching,media.matcher,media.objects).tick(upload.representation);
+    upload = (await media.store.readUpload(uploadId))!;
+  }
   if (upload.status !== 'activated') {
     return { asset: upload.asset, upload: uploadId, status: 'rejected' as const,
       reason: settled?.reason ?? upload.reason, clearance: 'rejected' as const, clearanceReason: null,
