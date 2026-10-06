@@ -37,7 +37,13 @@ command, export source, owner kind or block type. Their owners call
 `requireSelectedPlatformCapability` with that selection; a caller's declared
 field cannot open the selected capability. This includes closed query templates,
 historical exports, generic semantic/content/relation edits, adoptable
-Person-owned contexts and third-party Zone blocks.
+Person-owned contexts and third-party Zone blocks. Two of these groups have no
+representation yet and are closed by construction: `person-schemes`, because
+contexts have no Person-owned adoptable variant, and `third-party-blocks`,
+because Zone module types are a closed built-in set and advanced configuration
+is never executed. The change that first introduces either representation
+calls `requireSelectedPlatformCapability` at its resolution point in the same
+change, with a refusal test.
 
 `GET /v1/me/platform-access` works without a bearer and returns
 `{ groups: string[], operations: string[], generation: string }` with
