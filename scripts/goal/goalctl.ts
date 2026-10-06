@@ -1737,11 +1737,20 @@ async function status(): Promise<void> {
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
   console.log(`heavy QA: ${heavyQaStatus()}`);
-  for (const slug of activeGoals(ledger)) {
+  const active = activeGoals(ledger);
+  for (const slug of active) {
     const own = tasks.filter(task => task.goal === slug);
     console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
       + `${own.filter(task => !['verified', 'cancelled'].includes(task.state)).length} open; `
       + `${inboxEntries(stateDir, slug).filter(entry => !entry.acknowledged).length} unacknowledged regressions`);
+  }
+  const inboxDirectory = join(stateDir, 'inbox');
+  for (const file of existsSync(inboxDirectory) ? readdirSync(inboxDirectory).sort() : []) {
+    if (!file.endsWith('.jsonl')) continue;
+    const slug = file.slice(0, -6);
+    if (!validGoalSlug(slug) || active.includes(slug)) continue;
+    const count = inboxEntries(stateDir, slug).filter(entry => !entry.acknowledged).length;
+    if (count) console.log(`Goal ${slug}: inactive; ${count} unacknowledged regressions`);
   }
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);

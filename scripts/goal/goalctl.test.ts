@@ -720,6 +720,29 @@ describe('goalctl shared lifecycle and launch gates', () => {
     } finally { r.cleanup(); }
   });
 
+  test('status keeps pending inboxes visible after a Goal closes or leaves the ledger', () => {
+    const r = repo();
+    try {
+      const ledger = r.ledger(); ledger.goals!.alpha!.closedAt = new Date().toISOString(); r.save(ledger);
+      const dir = join(r.dir, '.temp/goal-orchestration/inbox'); mkdirSync(dir);
+      for (const goal of ['alpha', 'retired-owner']) {
+        const entry = { runId: 'run', atCommit: 'sha', failingTests: ['file'], after: 'sha', goal, taskIds: [],
+          status: 'inconclusive', classification: 'deterministic', artifactPaths: [] };
+        writeFileSync(join(dir, `${goal}.jsonl`), `${JSON.stringify(entry)}\n`);
+      }
+      const pending = r.run(['status']);
+      expect(pending.status).toBe(0);
+      for (const goal of ['alpha', 'retired-owner']) {
+        expect(pending.stdout).toContain(`Goal ${goal}: inactive; 1 unacknowledged regressions`);
+        expect(r.run(['inbox', '--ack', '1'], { GOAL_ID: goal }).status).toBe(0);
+      }
+      const acknowledged = r.run(['status']);
+      expect(acknowledged.status).toBe(0);
+      expect(acknowledged.stdout).not.toContain('inactive; 1 unacknowledged regressions');
+      expect(acknowledged.stdout).toContain('Goal beta:');
+    } finally { r.cleanup(); }
+  });
+
   test('manual merge attribution preserves whitespace that changes a string value', () => {
     const r = repo();
     try {
