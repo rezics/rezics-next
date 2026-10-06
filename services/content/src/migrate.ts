@@ -16,6 +16,16 @@ function migrations(directory: string): Array<{ version: number; sql: string; co
     // An online index is one standalone statement. Its catalog entry survives
     // cancellation, so the runner must repair invalid builds before retrying.
     const concurrentIndex = /^-- migrate: concurrent-index ([a-z_]+\.[a-z_]+)$/m.exec(sql)?.[1];
+    if (concurrentIndex) {
+      // Multiple statements in one query form an implicit transaction in Postgres,
+      // which cannot run CREATE INDEX CONCURRENTLY. Ignore comments and quoted
+      // values/identifiers when checking statement boundaries.
+      const statement = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'(?:''|[^'])*'|"(?:""|[^"])*"/g,
+        token => token.startsWith('--') || token.startsWith('/*') ? ' ' : '?').trim();
+      if (!/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b[^;]*;?$/i.test(statement)) {
+        throw new Error(`Content concurrent-index migration ${name} must hold exactly one CREATE INDEX CONCURRENTLY statement`);
+      }
+    }
     return { version, sql, concurrentIndex };
   });
 }
