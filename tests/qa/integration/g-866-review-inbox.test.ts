@@ -257,8 +257,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
     );
     let loseAcknowledgement = true;
     const interrupted = new NotificationProducer(f.accessPool,null,f.pool,f.env.fuseki,{
-      enqueue: async event => {
-        const result = await store.enqueue(event);
+      enqueue: async (...args) => {
+        const result = await store.enqueue(...args);
         if (loseAcknowledgement) { loseAcknowledgement = false; throw new Error('lost intake acknowledgement'); }
         return result;
       },

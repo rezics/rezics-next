@@ -27,6 +27,8 @@ test('SAFETY07 G918: recorded Content notice owners receive moderation notificat
       if (sql.includes('FROM access.notification_producer_event'))
         return { rows: [{ epoch: '0', xid: '42', id: '1', kind: 'moderation_outcome', event_id: decision }] };
       if (sql.includes('UPDATE access.notification_producer_cursor')) advanced = true;
+      if (sql.includes('FROM access.moderation_decision') || sql.includes('FROM access.governance_report')
+        || sql.includes('FROM access.safety_party_notice')) return access.query(sql);
       return { rows: [] };
     },
     release: () => {},
@@ -34,6 +36,8 @@ test('SAFETY07 G918: recorded Content notice owners receive moderation notificat
   const access = {
     connect: async () => client,
     query: async (sql: string) => {
+      if (sql.includes('FROM access.recovery_fence') || sql.includes('FROM access.notification_producer_cursor')
+        || sql.includes('FROM access.notification_producer_event')) return client.query(sql);
       if (sql.includes('FROM access.moderation_decision'))
         return {
           rows: [

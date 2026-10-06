@@ -5,7 +5,6 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { WorkReadMissing } from '../work/read-session.ts';
 import {
   relationshipEligible,
-  relationshipRecipients,
   type RelationshipRecipients,
 } from '../follows/recipients.ts';
 import { externalAuthorFollow } from '../follows/contract.ts';
@@ -155,19 +154,16 @@ export async function resourceNotification(
       except: actor ? [actor] : [],
       languages,
     };
-    const recipients = await relationshipRecipients(access, relationshipPlan);
-    return recipients.length
-      ? {
-          sourceOwner: 'graph',
-          sourceEvent: created ? `work-public:${target}` : envelope.id,
-          purpose: 'subscription',
-          topic: created ? 'new-work' : collection ? 'collection-change' : 'new-release',
-          subject: { owner: 'graph', ref: target, revision: null },
-          disclosureBasis: 'relationship-resource-v1',
-          recipients,
-          relationshipPlan,
-        }
-      : null;
+    return {
+      sourceOwner: 'graph',
+      sourceEvent: created ? `work-public:${target}` : envelope.id,
+      purpose: 'subscription',
+      topic: created ? 'new-work' : collection ? 'collection-change' : 'new-release',
+      subject: { owner: 'graph', ref: target, revision: null },
+      disclosureBasis: 'relationship-resource-v1',
+      recipients: [],
+      relationshipPlan,
+    };
   } catch (error) {
     if (error instanceof WorkReadMissing) return null;
     throw error;

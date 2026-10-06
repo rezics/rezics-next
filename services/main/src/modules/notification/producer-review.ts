@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
 import type { NotificationEvent } from './store.ts';
@@ -41,7 +41,7 @@ async function currentReviewTarget(graph: Pick<FusekiClient, 'query'>,
 }
 
 /** Producer events are appended by the review writer's Access transaction. */
-export async function reviewNotification(access: Pool, graph: Pick<FusekiClient, 'query'>,
+export async function reviewNotification(access: Pool | PoolClient, graph: Pick<FusekiClient, 'query'>,
   kind: ReviewKind, eventId: string): Promise<NotificationEvent | null> {
   const row = (await access.query<{ id: string; revision: string; principal_id: string;
     acting_subject: string; context: string; work: string; main_version: string;

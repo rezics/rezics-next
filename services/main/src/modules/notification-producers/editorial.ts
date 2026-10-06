@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { EditorialEvent } from '../editorial-review/store.ts';
 import type { NotificationEvent, ProposalSubscriptionReason } from '../notification/store.ts';
 import type { NotificationSubjectReader, SubjectResolution } from '../notification/dispatcher.ts';
@@ -6,7 +6,7 @@ import { AccessAdmissionRegistry } from '../access/admission.ts';
 import { resolveTargets, targetRead } from '../target/resolve.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { relationshipRecipients, relationshipEligible, type RelationshipRecipients } from '../follows/recipients.ts';
+import { relationshipEligible, type RelationshipRecipients } from '../follows/recipients.ts';
 
 /** Exhaustive lifecycle contract. A new G-865 event cannot silently miss a producer. */
 export const EDITORIAL_NOTIFICATION_TOPICS = {
@@ -42,7 +42,7 @@ export function editorialNotificationTopic(
 }
 
 export async function editorialNotification(
-  access: Pool,
+  access: Pool | PoolClient,
   event: EditorialEvent,
 ): Promise<NotificationEvent | null> {
   const row = (
@@ -122,8 +122,6 @@ export async function editorialNotification(
     direct: recipients.filter(item => ['author','reviewer'].includes(item.reason)).map(item => item.principal_id),
     relationships: stewards.map(item => item.id),
     except: row.actor_principal ? [row.actor_principal] : [] };
-  const related = await relationshipRecipients(access,relationshipPlan);
-  if (!related.length) return null;
   return {
     sourceOwner: 'access',
     sourceEvent: `editorial:${event.id}`,
@@ -131,12 +129,11 @@ export async function editorialNotification(
     topic,
     subject: { owner: 'access', ref: event.proposal, revision: String(event.revision) },
     disclosureBasis: 'editorial-proposal-v1',
-    recipients: related, relationshipPlan,
+    recipients: [], relationshipPlan,
     proposal: {
       id: event.proposal,
       revision: event.revision,
-      reasons: { ...Object.fromEntries(related.map(id => [id,'manual' as const])),
-        ...Object.fromEntries(recipients.map((item) => [item.principal_id, item.reason])) },
+      reasons: Object.fromEntries(recipients.map((item) => [item.principal_id, item.reason])),
     },
   };
 }

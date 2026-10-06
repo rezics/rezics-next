@@ -292,15 +292,17 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
     ).toEqual([home.reader.principalId]);
     expect(await relationshipRecipients(stack.accessPool,{ targets: [],highlights: true,
       watches: [one.id],relationships: [home.reader.principalId] })).toEqual([]);
-    expect(await resourceNotification(stack.accessPool,stack.fuseki,{ id: randomUUID(),
-      type: 'com.rezics.work.created.v1',data: { receipt: { work: works[0]!.work } } })).toBeNull();
+    const withoutFollowers = await resourceNotification(stack.accessPool,stack.fuseki,{ id: randomUUID(),
+      type: 'com.rezics.work.created.v1',data: { receipt: { work: works[0]!.work } } });
+    expect(withoutFollowers?.relationshipPlan).toBeDefined();
+    expect(await relationshipRecipients(stack.accessPool, withoutFollowers!.relationshipPlan!)).toEqual([]);
     const authorFollow = await json<Receipt>(await follow(author, true, null));
     const news = await resourceNotification(stack.accessPool, stack.fuseki, {
       id: randomUUID(),
       type: 'com.rezics.work.created.v1',
       data: { receipt: { work: works[0]!.work } },
     });
-    expect(news?.recipients).toContain(home.reader.principalId);
+    expect(await relationshipRecipients(stack.accessPool, news!.relationshipPlan!)).toContain(home.reader.principalId);
     const newsReader = resourceNotificationSubjectReader(stack.accessPool, stack.env);
     expect(
       await newsReader.resolve({

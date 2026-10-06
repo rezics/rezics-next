@@ -545,6 +545,7 @@ test('G961: reply mentions read only current Agent names from the registry', asy
     { query: async () => rows([]) },
     {
       enqueue: async (event) => {
+        if (event.relationshipPlan) return [];
         emitted.push(event);
         return undefined as never;
       },

@@ -33,7 +33,7 @@ async function mentionEvents(currentRevision: string) {
     rootRevision: native(4), variantId: id(11), revisionDigest: '0'.repeat(64), originRealm: null }] }) } as unknown as Pool;
   const graph = { query: async () => ({ results: { bindings: [] } }) } as never;
   const producer = new NotificationProducer(access, relay, content, graph,
-    { enqueue: async (event: NotificationEvent) => { events.push(event); return []; } } as never,
+    { enqueue: async (event: NotificationEvent) => { if (!event.relationshipPlan) events.push(event); return []; } } as never,
     'main-graph-v1');
   await producer.runRelayOnce();
   return events;

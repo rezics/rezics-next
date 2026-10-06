@@ -50,6 +50,7 @@ test('notification producer emits a submission decision to its represented recip
     if (sql.includes('FROM access.notification_producer_cursor')) return { rows: [{ position: '0', epoch: '0', xid: '0', id: '0' }] };
     if (sql.includes('FROM access.notification_producer_event')) return { rows: [{
       epoch: '0', xid: '42', id: '1', kind: 'submission_decision', event_id: 'decision' }] };
+    if (sql.includes('FROM access.realm_submission_revision') || sql.includes('FROM access.representation')) return access.query(sql);
     return { rows: [] };
   }, release: () => {} };
   const access = { connect: async () => client, query: async (sql: string) => {

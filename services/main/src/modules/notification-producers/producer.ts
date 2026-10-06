@@ -8,7 +8,7 @@ import { reviewNotification } from '../notification/producer-review.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { editorialNotification, EDITORIAL_NOTIFICATION_COST } from './editorial.ts';
 import type { EditorialEvent } from '../editorial-review/store.ts';
-import { relationshipRecipients, type RelationshipRecipients } from '../follows/recipients.ts';
+import type { RelationshipRecipients } from '../follows/recipients.ts';
 import { recoverSpaceFollows } from '../follows/recovery.ts';
 import { recoverLibraryFollows } from '../library/follows.ts';
 import { resourceNotification } from './resources.ts';
@@ -34,7 +34,7 @@ interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<str
 export type FollowNotificationHook = (event: NotificationEvent & {
   display: { kind: 'follow'; actorAgent: string; realm: null; groupKey: string | null } }) => Promise<void>;
 
-async function represented(pool: Pool, agent: string, actor: string | null,
+async function represented(pool: Pool | PoolClient, agent: string, actor: string | null,
   action?: string): Promise<string[]> {
   if (!native.test(agent)) return [];
   const rows = (await pool.query<{ id: string }>(`SELECT DISTINCT p.id FROM access.representation r
@@ -76,34 +76,32 @@ export class NotificationProducer {
   async observeLag(): Promise<void> { await observeHorizonLag(this.access); }
 
   /** Source and recipient identities are read after their owner commits. */
-  private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
+  private async accessNotification(event: AccessEvent, client: PoolClient): Promise<NotificationEvent | null> {
     if (event.kind === 'chapter_published') {
-      const row = (await this.access.query<{ activity: string; work: string; author: string;
+      const row = (await client.query<{ activity: string; work: string; author: string;
         content_revision: string }>(`SELECT activity, work, author, content_revision
         FROM access.chapter_notification_event WHERE id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
-      const authors = new Set(await represented(this.access, row.author, null));
+      const authors = new Set(await represented(client, row.author, null));
       const language = (await this.content.query<{ language_tag: string | null }>(`SELECT v.language_tag
         FROM content.revision r JOIN content.variant v ON v.id=r.variant_id WHERE r.id=$1`,
       [row.content_revision.replace(/^urn:rezics:content:revision:/,'')])).rows[0]?.language_tag;
       const relationshipPlan: RelationshipRecipients = { targets: [row.work,row.author],highlights: false,
         except: [...authors],languages: language ? [language] : [] };
-      const recipients = (await relationshipRecipients(this.access,relationshipPlan)).filter(id => !authors.has(id));
-      if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `chapter:${event.event_id}`,
         purpose: 'subscription', topic: 'followed-chapter',
         subject: { owner: 'graph', ref: row.activity, revision: row.content_revision },
-        disclosureBasis: 'followed-chapter-v1', recipients, relationshipPlan,
+        disclosureBasis: 'followed-chapter-v1', recipients: [], relationshipPlan,
         display: { kind: 'chapter', actorAgent: row.author, realm: null, groupKey: row.work } };
     }
     if (event.kind === 'feed_post_vote') {
-      const row = (await this.access.query<{ target: string; author: string; voter: string;
+      const row = (await client.query<{ target: string; author: string; voter: string;
         voter_principal: string; vote_revision: string }>(`SELECT e.target, e.author, e.voter,
           e.voter_principal::text, e.vote_revision::text FROM access.feed_post_vote_event e
           JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
             AND v.revision = e.vote_revision AND v.value <> 0 WHERE e.id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
-      const recipients = await represented(this.access, row.author, row.voter_principal);
+      const recipients = await represented(client, row.author, row.voter_principal);
       if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `post-vote:${event.event_id}`,
         purpose: 'social', topic: 'post-vote',
@@ -112,12 +110,12 @@ export class NotificationProducer {
         display: { kind: 'post_vote', actorAgent: row.voter, realm: null, groupKey: row.target } };
     }
     if (event.kind === 'realm_invitation') {
-      const row = (await this.access.query<{ realm: string; member: string; inviter: string;
+      const row = (await client.query<{ realm: string; member: string; inviter: string;
         principal_id: string }>(`SELECT realm, member, inviter, principal_id
         FROM access.realm_invitation WHERE id = $1 AND state = 'pending'
           AND expires_at > clock_timestamp()`, [event.event_id])).rows[0];
       if (!row) return null;
-      const recipients = await represented(this.access, row.member, row.principal_id);
+      const recipients = await represented(client, row.member, row.principal_id);
       if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `realm-invitation:${event.event_id}`,
         purpose: 'governance', topic: 'realm-invitation',
@@ -127,10 +125,10 @@ export class NotificationProducer {
           realm: row.realm, groupKey: null } };
     }
     if (event.kind === 'review_created' || event.kind === 'review_helpful_milestone') {
-      return reviewNotification(this.access, this.graph, event.kind, event.event_id);
+      return reviewNotification(client, this.graph, event.kind, event.event_id);
     }
     if (event.kind === 'submission_decision') {
-      const row = (await this.access.query<{ id: string; realm: string; work: string;
+      const row = (await client.query<{ id: string; realm: string; work: string;
         submitting_agent: string; reviewer: string; state: string; actor: string }>(`
         SELECT s.id, s.realm, s.work, s.submitting_agent, s.reviewer, s.state,
           a.principal_id AS actor FROM access.realm_submission_revision h
@@ -140,7 +138,7 @@ export class NotificationProducer {
       [event.event_id])).rows[0];
       if (!row) return null;
       if (row.submitting_agent === row.reviewer) return null;
-      const recipients = await represented(this.access, row.submitting_agent, row.actor, 'submission.submit');
+      const recipients = await represented(client, row.submitting_agent, row.actor, 'submission.submit');
       if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `submission:${event.event_id}`,
         purpose: 'governance', topic: 'submission-decision',
@@ -150,7 +148,7 @@ export class NotificationProducer {
     }
     if (event.kind === 'moderation_outcome') {
       const row = (
-        await this.access.query<{
+        await client.query<{
           case_id: string;
           principal_id: string;
           acting_subject: string;
@@ -170,7 +168,7 @@ export class NotificationProducer {
       ).rows[0];
       if (!row) return null;
       const reporters = (
-        await this.access.query<{ id: string }>(
+        await client.query<{ id: string }>(
           `
         SELECT DISTINCT p.id FROM access.governance_report r
         JOIN access.principal p ON p.id = r.principal_id AND p.active
@@ -182,7 +180,7 @@ export class NotificationProducer {
         throw new Error('moderation reporter bound exceeded');
       const recipients = new Set(reporters.map((reporter) => reporter.id));
       const parties = (
-        await this.access.query<{ id: string }>(
+        await client.query<{ id: string }>(
           `
         SELECT n.principal_id AS id FROM access.safety_party_notice n
         JOIN access.principal p ON p.id = n.principal_id AND p.active
@@ -199,7 +197,7 @@ export class NotificationProducer {
         ? []
         : await this.contributionAuthors(row.target_resource)) {
         if (author === row.acting_subject) continue;
-        for (const id of await represented(this.access, author, row.principal_id))
+        for (const id of await represented(client, author, row.principal_id))
           recipients.add(id);
       }
       if (recipients.size > PRODUCER_COST.recipientsPerEvent)
@@ -221,19 +219,19 @@ export class NotificationProducer {
         },
       };
     }
-    const row = (await this.access.query<{ realm: string; principal_id: string;
+    const row = (await client.query<{ realm: string; principal_id: string;
       acting_subject: string; result: unknown }>(`SELECT realm, principal_id, acting_subject, result
       FROM access.realm_admin_receipt WHERE id = $1`, [event.event_id])).rows[0];
     if (!row) return null;
     const effects = event.kind === 'realm_role_change'
-      ? (await this.access.query<{ member: string }>(`SELECT member FROM access.notification_realm_effect
+      ? (await client.query<{ member: string }>(`SELECT member FROM access.notification_realm_effect
         WHERE receipt_id = $1 ORDER BY member LIMIT $2`,
       [event.event_id, PRODUCER_COST.recipientsPerEvent + 1])).rows.map(effect => effect.member) : [];
     if (effects.length > PRODUCER_COST.recipientsPerEvent) throw new Error('Realm effect bound exceeded');
     const members = [...new Set([...effects, ...agentsInImpact(row.result)])]
       .filter(member => member !== row.acting_subject);
     const recipients = new Set<string>();
-    for (const member of members) for (const id of await represented(this.access, member, row.principal_id)) {
+    for (const member of members) for (const id of await represented(client, member, row.principal_id)) {
       recipients.add(id);
     }
     if (recipients.size > PRODUCER_COST.recipientsPerEvent) throw new Error('Realm recipient bound exceeded');
@@ -310,6 +308,7 @@ export class NotificationProducer {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '10s'");
+      await requireAccessOpen(client);
       await client.query(`INSERT INTO access.notification_producer_cursor (consumer)
         VALUES ($1) ON CONFLICT DO NOTHING`, [cursorName]);
       const cursor = (await client.query<AccessCursor>(`SELECT epoch::text, xid::text, id::text
@@ -319,12 +318,20 @@ export class NotificationProducer {
       const events = (await client.query<AccessEvent>(notificationProducerEventsSql,
       [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick])).rows;
       for (const event of events) {
-        const notice = await this.accessNotification(event);
-        if (notice && (await this.notifications.enqueue(notice))?.complete === false) { count++; break; }
+        const notice = await this.accessNotification(event, client);
+        if (notice && (await this.notifications.enqueue(notice, client))?.complete === false) { count++; break; }
         await client.query(`UPDATE access.notification_producer_cursor
           SET epoch = $2, xid = $3, id = $4, updated_at = clock_timestamp() WHERE consumer = $1`,
         [cursorName, event.epoch, event.xid, event.id]);
         count++;
+        await client.query('COMMIT');
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '10s'");
+        await requireAccessOpen(client);
+        const current = (await client.query<AccessCursor>(`SELECT epoch::text,xid::text,id::text
+          FROM access.notification_producer_cursor WHERE consumer=$1 FOR UPDATE SKIP LOCKED`, [cursorName])).rows[0];
+        if (!current || current.epoch !== event.epoch || current.xid !== event.xid || current.id !== event.id) break;
       }
       await client.query('COMMIT');
       return count;
@@ -341,51 +348,33 @@ export class NotificationProducer {
   async runSafetyCorrespondenceOnce(): Promise<number> {
     if (!this.safetyCorrespondence) return 0;
     const consumer = 'safety-correspondence-v1';
-    const client = await this.access.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '10s'");
-      await requireAccessOpen(client);
-      await client.query(
-        `INSERT INTO access.notification_producer_cursor (consumer)
-        VALUES ($1) ON CONFLICT DO NOTHING`,
-        [consumer],
-      );
-      const cursor = (
-        await client.query<AccessCursor>(
-          `SELECT epoch::text, xid::text, id::text
-        FROM access.notification_producer_cursor WHERE consumer = $1 FOR UPDATE SKIP LOCKED`,
-          [consumer],
-        )
-      ).rows[0];
-      if (!cursor) {
+    await requireAccessOpen(this.access);
+    const cursor = (await this.access.query<AccessCursor>(`SELECT epoch::text,xid::text,id::text
+      FROM access.notification_producer_cursor WHERE consumer=$1`, [consumer])).rows[0]
+      ?? { epoch: '0', xid: '0', id: '0' };
+    const events = (await this.access.query<AccessEvent>(notificationProducerEventsSql,
+      [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick])).rows;
+    for (const event of events) {
+      if (event.kind === 'moderation_outcome')
+        await this.safetyCorrespondence.enqueueDecision(event.event_id);
+      // Concurrent replays share immutable intake identities. A checkpoint may
+      // advance only after intake, and an older acknowledgement cannot rewind it.
+      const client = await this.access.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '10s'");
+        await requireAccessOpen(client);
+        await client.query(`INSERT INTO access.notification_producer_cursor(consumer,epoch,xid,id)
+          VALUES($1,$2,$3,$4) ON CONFLICT(consumer) DO UPDATE
+          SET epoch=EXCLUDED.epoch,xid=EXCLUDED.xid,id=EXCLUDED.id,updated_at=clock_timestamp()
+          WHERE (notification_producer_cursor.epoch,notification_producer_cursor.xid,notification_producer_cursor.id)
+            < (EXCLUDED.epoch,EXCLUDED.xid,EXCLUDED.id)`, [consumer,event.epoch,event.xid,event.id]);
         await client.query('COMMIT');
-        return 0;
-      }
-      const events = (
-        await client.query<AccessEvent>(
-          notificationProducerEventsSql,
-          [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick],
-        )
-      ).rows;
-      for (const event of events) {
-        if (event.kind === 'moderation_outcome')
-          await this.safetyCorrespondence.enqueueDecision(event.event_id);
-        await client.query(
-          `UPDATE access.notification_producer_cursor SET epoch = $2, xid = $3, id = $4,
-          updated_at = clock_timestamp() WHERE consumer = $1`,
-          [consumer, event.epoch, event.xid, event.id],
-        );
-      }
-      await client.query('COMMIT');
-      return events.length;
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    } finally {
-      client.release();
+      } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
+      finally { client.release(); }
     }
+    return events.length;
   }
 
   /** Cursor advances only after every recipient intake commits. Partial retries
@@ -394,6 +383,7 @@ export class NotificationProducer {
     await this.access.query('SELECT access.sequence_editorial_events($1)',
       [EDITORIAL_NOTIFICATION_COST.eventsPerTick]);
     const client = await this.access.connect();
+    let count = 0;
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -417,16 +407,26 @@ export class NotificationProducer {
         )
       ).rows;
       for (const event of events) {
-        const notice = await editorialNotification(this.access, event);
-        if (notice && (await this.notifications.enqueue(notice))?.complete === false) break;
+        const notice = await editorialNotification(client, event);
+        count++;
+        if (notice && (await this.notifications.enqueue(notice, client))?.complete === false) break;
         await client.query(
           `UPDATE access.notification_producer_cursor SET position = $1,
           updated_at = clock_timestamp() WHERE consumer = 'editorial-notification-v1'`,
           [event.sequence],
         );
+        await client.query('COMMIT');
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '10s'");
+        await requireAccessOpen(client);
+        const current = (await client.query<{ position: string }>(`SELECT position::text
+          FROM access.notification_producer_cursor WHERE consumer='editorial-notification-v1'
+          FOR UPDATE SKIP LOCKED`)).rows[0];
+        if (!current || current.position !== event.sequence) break;
       }
       await client.query('COMMIT');
-      return events.length;
+      return count;
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
   }
@@ -505,8 +505,7 @@ export class NotificationProducer {
     const relationshipPlan: RelationshipRecipients = { targets: [realm as string,author as string],
       highlights: false, watches: watchTargets,
       except: [actor,...direct] };
-    const related = await relationshipRecipients(this.access,relationshipPlan);
-    if (related.length) events.push({ ...event('reply',related), disclosureBasis: 'relationship-reply-v1', relationshipPlan });
+    events.push({ ...event('reply',[]), disclosureBasis: 'relationship-reply-v1', relationshipPlan });
     return events;
   }
 
@@ -572,11 +571,13 @@ export class NotificationProducer {
         }
         const resource = await resourceNotification(this.access,this.graph,event.envelope);
         if (resource) {
-          const result = await this.notifications.enqueue(resource); produced++;
+          const result = await this.notifications.enqueue(resource);
+          if (!result || result.length || result.complete === false) produced++;
           if (result?.complete === false) { pending = true; break; }
         }
         for (const notice of await this.replyNotifications(event.envelope)) {
-          const result = await this.notifications.enqueue(notice); produced++;
+          const result = await this.notifications.enqueue(notice);
+          if (!result || result.length || result.complete === false) produced++;
           if (result?.complete === false) { pending = true; break; }
         }
         if (pending) break;

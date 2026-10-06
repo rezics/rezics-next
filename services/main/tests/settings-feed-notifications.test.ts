@@ -15,9 +15,12 @@ async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = fa
     if (sql.includes('FROM access.notification_producer_cursor')) return { rows: [{ position: '0', epoch: '0', xid: '0', id: '0' }] };
     if (sql.includes('FROM access.notification_producer_event')) return { rows: [{ epoch: '0', xid: '42', id: '1',
       event_id: id(1), kind }] };
+    if (sql.includes('FROM access.chapter_notification_event') || sql.includes('FROM access.feed_post_vote_event')
+      || sql.includes('FROM access.representation')) return access.query(sql);
     return { rows: [] };
   }, release: () => {} };
   const access = { connect: async () => client, query: async (sql: string) => {
+    if (sql.includes('access.sequence_editorial_events')) return { rows: [] };
     if (sql.includes('FROM access.chapter_notification_event')) return { rows: [{ activity: native(2),
       work: native(3), author: native(4), content_revision: `urn:rezics:content:revision:${id(5)}` }] };
     if (sql.includes('FROM access.feed_post_vote_event')) {
@@ -37,9 +40,10 @@ async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = fa
   return events;
 }
 
-test('a followed chapter notifies Work and author followers once, excluding the author', async () => {
+test('a followed chapter plans Work and author interests while excluding the author', async () => {
   expect(await produced('chapter_published')).toMatchObject([{ purpose: 'subscription',
-    topic: 'followed-chapter', recipients: [id(10)], subject: { ref: native(2) } }]);
+    topic: 'followed-chapter', recipients: [], subject: { ref: native(2) },
+    relationshipPlan: { targets: [native(3),native(4)],except: [id(9)],languages: ['en'] } }]);
 });
 
 test('a current nonzero vote notifies the post author; a superseded vote emits nothing', async () => {

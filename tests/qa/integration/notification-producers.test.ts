@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
@@ -14,7 +15,7 @@ const agent = () => `https://rezics.com/id/${randomUUID()}`;
 test('G-297: Access and relay producers replay once per recipient, respect preferences and hide revoked targets', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'relay']);
-  const access = new Pool({ connectionString: databases.urls.access, max: 8 });
+  const access = boundedPool({ connectionString: databases.urls.access, max: 8 });
   const relay = new Pool({ connectionString: databases.urls.relay, max: 2 });
   try {
     const actorId = randomUUID();
@@ -54,9 +55,9 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
 
     const store = new NotificationStore(access);
     let failOnce = true;
-    const sink = { enqueue: async (event: Parameters<NotificationStore['enqueue']>[0]) => {
+    const sink = { enqueue: async (...args: Parameters<NotificationStore['enqueue']>) => {
       if (failOnce) { failOnce = false; throw new Error('simulated Access write failure'); }
-      return store.enqueue(event);
+      return store.enqueue(...args);
     } };
     const fakeContent = { query: async (sql: string) => ({ rows: sql.includes('SELECT p.id AS reply')
       ? [] : [{ author: member }] }) } as unknown as Pool;
@@ -128,10 +129,17 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     [bounded, realm, actorId, actor, `member-${bounded}`, '5'.repeat(64), { member }]);
     const beforeBound = (await access.query(`SELECT epoch::text, xid::text, id::text FROM
       access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0];
-    const tooMany = { connect: () => access.connect(), query: (statement: string, params: unknown[]) =>
-      statement.includes('SELECT DISTINCT p.id FROM access.representation r')
-        ? Promise.resolve({ rows: Array.from({ length: 257 }, () => ({ id: randomUUID() })) })
-        : access.query(statement, params) } as unknown as Pool;
+    const tooMany = { connect: async () => {
+      const client = await access.connect();
+      return new Proxy(client, { get(target, property) {
+        if (property === 'query') return (statement: string, params: unknown[]) =>
+          statement.includes('SELECT DISTINCT p.id FROM access.representation r')
+            ? Promise.resolve({ rows: Array.from({ length: 257 }, () => ({ id: randomUUID() })) })
+            : target.query(statement, params);
+        const value = Reflect.get(target, property);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    }, query: access.query.bind(access) } as unknown as Pool;
     await expect(new NotificationProducer(tooMany, null, fakeContent, fakeGraph, sink, null)
       .runAccessOnce()).rejects.toThrow('notification recipient bound exceeded');
     expect((await access.query(`SELECT epoch::text, xid::text, id::text FROM
@@ -386,3 +394,135 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     await databases.close();
   }
 }, 60_000);
+
+test('broadcast batches seek raw audiences, survive an empty first batch and resume across a database restart', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  let access = boundedPool({ connectionString: databases.urls.access, max: 1 });
+  const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
+  try {
+    const work = agent(), author = agent(), watch = agent();
+    const principals = Array.from({ length: 1325 }, (_, i) => id(i + 1));
+    await access.query(`INSERT INTO access.principal(id,account_issuer,account_subject,active)
+      SELECT id,'broadcast',id::text,ordinal>256 OR ordinal<=170
+      FROM unnest($1::uuid[]) WITH ORDINALITY AS source(id,ordinal)`, [principals]);
+    await access.query(`INSERT INTO access.authority_subject(id,kind) VALUES($1,'agent'),($2,'agent')`, [author, work]);
+    await access.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level)
+      SELECT id,$2,'work',$3,true,gen_random_uuid(),'all' FROM unnest($1::uuid[]) id`,
+    [principals.slice(0,1025), work, author]);
+    await access.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level)
+      SELECT id,$2,'release','manual','all' FROM unnest($1::uuid[]) id`, [principals, watch]);
+    await access.query(`INSERT INTO access.home_exclusion(principal_id,kind,target,strength)
+      SELECT id,'work',$2,'mute' FROM unnest($1::uuid[]) id`, [principals.slice(0,85), work]);
+    await access.query(`INSERT INTO access.person_block(principal_id,target_agent)
+      SELECT id,$2 FROM unnest($1::uuid[]) id`, [principals.slice(85,170), work]);
+    const chapter = randomUUID();
+    await access.query(`INSERT INTO access.chapter_notification_event(id,activity,work,author,occurrence,content_revision)
+      VALUES($1,$2,$3,$4,$5,$6)`, [chapter, agent(), work, author, agent(), `urn:rezics:content:revision:${randomUUID()}`]);
+    await access.query(`SELECT access.append_notification_producer_event('chapter_published',$1)`, [chapter]);
+    const content = { query: async () => ({ rows: [{ language_tag: 'en' }] }) } as unknown as Pool;
+    const makeProducer = () => new NotificationProducer(access, null, content, {} as FusekiClient,
+      new NotificationStore(access), null);
+    let producer = makeProducer();
+    expect(await producer.runAccessOnce()).toBe(1);
+    expect((await access.query(`SELECT 1 FROM access.notification_item`)).rowCount).toBe(0);
+    expect((await access.query(`SELECT after_principal,complete FROM access.notification_recipient_progress`)).rows)
+      .toEqual([{ after_principal: id(256), complete: false }]);
+    expect((await access.query(`SELECT id::text FROM access.notification_producer_cursor
+      WHERE consumer='notification-producer-v1'`)).rows[0]).toEqual({ id: '0' });
+    expect(await producer.runAccessOnce()).toBe(1);
+    const snapshot = await databases.snapshot('access', () => access.end());
+    access = boundedPool({ connectionString: snapshot, max: 1 });
+    producer = makeProducer();
+    const failing = new NotificationProducer(access, null, content, {} as FusekiClient,
+      { enqueue: async (...args) => {
+        await new NotificationStore(access).enqueue(...args);
+        throw new Error('lost intake acknowledgement');
+      } }, null);
+    await expect(failing.runAccessOnce()).rejects.toThrow('lost intake acknowledgement');
+    expect((await access.query(`SELECT after_principal FROM access.notification_recipient_progress`)).rows)
+      .toEqual([{ after_principal: id(512) }]);
+    expect((await access.query(`SELECT 1 FROM access.notification_item`)).rowCount).toBe(256);
+    for (let batch = 0; batch < 3; batch++) expect(await producer.runAccessOnce()).toBe(1);
+    expect(await producer.runAccessOnce()).toBe(0);
+    expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
+      WHERE source_event=$1 ORDER BY principal_id`, [`chapter:${chapter}`])).rows.map(row => row.principal_id))
+      .toEqual(principals.slice(256,1025));
+    // A lost checkpoint acknowledgement replays the completed frontier without
+    // appending another item or creating a gap in any inbox sequence.
+    await access.query(`UPDATE access.notification_producer_cursor SET epoch=0,xid='0',id=0
+      WHERE consumer='notification-producer-v1'`);
+    expect(await producer.runAccessOnce()).toBe(1);
+    expect((await access.query(`SELECT 1 FROM access.notification_item`)).rowCount).toBe(769);
+
+    const { relationshipRecipientPage } = await import('../../../services/main/src/modules/follows/recipients.ts');
+    const plan = { targets: [work], watches: [watch], highlights: false };
+    const notice = { sourceOwner: 'access' as const, sourceEvent: `broadcast:${randomUUID()}`,
+      purpose: 'subscription' as const, topic: 'new-release',
+      subject: { owner: 'graph' as const, ref: work, revision: null },
+      disclosureBasis: 'relationship-resource-v1', recipients: [], relationshipPlan: plan };
+    let store = new NotificationStore(access);
+    expect((await store.enqueue(notice)).complete).toBe(false);
+    expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event=$1`, [notice.sourceEvent])).rowCount).toBe(0);
+    const concurrent = boundedPool({ connectionString: snapshot, max: 1 });
+    try {
+      const acknowledgements = await Promise.all([store.enqueue(notice), new NotificationStore(concurrent).enqueue(notice)]);
+      expect(acknowledgements.every(result => result.complete === false)).toBe(true);
+    } finally { await concurrent.end(); }
+    let batches = 3;
+    while (!(await store.enqueue(notice)).complete) {
+      expect(++batches).toBeLessThan(7);
+      store = new NotificationStore(access);
+    }
+    expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
+      WHERE source_event=$1 ORDER BY principal_id`, [notice.sourceEvent])).rows.map(row => row.principal_id))
+      .toEqual(principals.slice(256));
+    // Shared follower/watcher identities appear once. Concurrent retries of a
+    // completed frontier also use the same recipient intake identities.
+    const other = boundedPool({ connectionString: snapshot, max: 1 });
+    try { await Promise.all([store.enqueue(notice), new NotificationStore(other).enqueue(notice)]); }
+    finally { await other.end(); }
+    expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event=$1`, [notice.sourceEvent])).rowCount).toBe(1069);
+
+    let selection = '', params: unknown[] = [];
+    await relationshipRecipientPage({ query: async (sql: string, values: unknown[]) => {
+      selection = sql; params = values; return { rows: [] };
+    } } as unknown as Pool, plan);
+    await access.query('ANALYZE access.follow');
+    await access.query('ANALYZE access.watch');
+    for (const after of [null,id(512)]) {
+      const seekParams = [...params]; seekParams[5] = after;
+      const explained = (await access.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${selection}`, seekParams)).rows[0]!['QUERY PLAN'][0].Plan as Record<string, unknown>;
+      type PlanNode = { 'Node Type': string; 'Relation Name'?: string; 'Actual Rows': number;
+        'Actual Loops': number; 'Rows Removed by Filter'?: number; Plans?: PlanNode[] };
+      const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
+      const scans = nodes(explained as PlanNode).filter(node => ['follow','watch'].includes(node['Relation Name'] ?? ''));
+      expect(scans.some(node => node['Relation Name'] === 'follow')).toBe(true);
+      expect(scans.some(node => node['Relation Name'] === 'watch')).toBe(true);
+      for (const scan of scans) {
+        expect(scan['Node Type']).toMatch(/Index/);
+        expect((scan['Actual Rows'] + (scan['Rows Removed by Filter'] ?? 0)) * scan['Actual Loops']).toBeLessThanOrEqual(514);
+      }
+      expect(nodes(explained as PlanNode).filter(node => node['Node Type'] === 'Limit' && node['Actual Rows'] === 257).length)
+        .toBeGreaterThanOrEqual(2);
+    }
+    // Direct involvement survives Ignore; a mute still takes precedence.
+    await access.query(`UPDATE access.watch SET level='ignore',revision=revision+1 WHERE target=$1 AND principal_id=$2`, [watch, id(257)]);
+    expect((await relationshipRecipientPage(access, { ...plan, direct: [id(257)] }, id(256))).items).toContain(id(257));
+    expect((await relationshipRecipientPage(access, { ...plan, direct: [id(257), id(1)] })).items).not.toContain(id(1));
+    const decision = randomUUID();
+    await access.query(`SELECT access.append_notification_producer_event('moderation_outcome',$1)`, [decision]);
+    let mailIntakes = 0;
+    producer.setSafetyCorrespondence({ enqueueDecision: async selected => {
+      expect(selected).toBe(decision);
+      await access.query('SELECT 1');
+      mailIntakes++;
+    } });
+    expect(await producer.runSafetyCorrespondenceOnce()).toBe(2);
+    expect(await producer.runSafetyCorrespondenceOnce()).toBe(0);
+    expect(mailIntakes).toBe(1);
+  } finally {
+    await access.end();
+    await databases.close();
+  }
+}, 90_000);

@@ -175,7 +175,7 @@ export async function rollback(client: PoolClient): Promise<void> {
 }
 
 /** Every ordinary Access transaction shares the global recovery pause. */
-export async function requireAccessOpen(client: PoolClient): Promise<void> {
+export async function requireAccessOpen(client: Pick<PoolClient, 'query'>): Promise<void> {
   const fence = await client.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (fence.rows[0]?.open !== true) throw new NotificationUnavailable('Access is held for recovery');
@@ -280,12 +280,14 @@ export class NotificationStore {
    * Producer intake for one domain event. Each recipient gets at most one item
    * per (source event, topic); deliveries are created only for currently
    * allowed channels and active endpoints and are rechecked again at delivery.
+   * A supplied Access client belongs to the caller's recovery-fenced transaction;
+   * intake and the source acknowledgement then commit together without a second checkout.
    */
-  async enqueue(event: NotificationEvent): Promise<EnqueuedItem[] & { complete?: boolean }> {
+  async enqueue(event: NotificationEvent, heldClient?: PoolClient): Promise<EnqueuedItem[] & { complete?: boolean }> {
     if (!(notificationPurposes as readonly string[]).includes(event.purpose) || !topicPattern.test(event.topic)
       || event.sourceEvent.length < 1 || event.sourceEvent.length > 256
       || event.subject.ref.length < 1 || event.subject.ref.length > 512
-      || event.recipients.length < 1 || event.recipients.length > NOTIFICATION_LIMITS.recipientsPerEvent
+      || (!event.relationshipPlan && event.recipients.length < 1) || event.recipients.length > NOTIFICATION_LIMITS.recipientsPerEvent
       || new Set(event.recipients).size !== event.recipients.length
       || !event.recipients.every(id => uuidPattern.test(id))
       || (event.proposal !== undefined &&
@@ -308,7 +310,7 @@ export class NotificationStore {
     }
     // Canonical order keeps concurrent producers from deadlocking on stream rows.
     let recipients = [...event.recipients].sort();
-    return this.transaction(async client => {
+    const intake = async (client: PoolClient) => {
       const results: EnqueuedItem[] & { complete?: boolean } = [];
       let nextCursor: string | null = null;
       if (event.relationshipPlan) {
@@ -442,7 +444,8 @@ export class NotificationStore {
         SET after_principal=$4,complete=$5,updated_at=clock_timestamp() WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
       [event.sourceOwner,event.sourceEvent,event.topic,nextCursor,nextCursor === null]);
       return results;
-    });
+    };
+    return heldClient ? intake(heldClient) : this.transaction(intake);
   }
 
   /** Resolve only this active Access principal for a verified Account identity. */
