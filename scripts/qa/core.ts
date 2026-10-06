@@ -269,6 +269,14 @@ export interface IsolationRecord { tier: Tier; file: string; afterProject: strin
   project?: string; shardFailures: string[];
   status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
 
+const commandProcessGroups = new Set<number>();
+function stopAsyncCommands(): void {
+  for (const pid of commandProcessGroups) {
+    try { process.kill(-pid, 'SIGKILL'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  }
+}
+
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env): Promise<{ ok: boolean; output: string; elapsedMs: number;
   timedOut: boolean }> {
@@ -276,6 +284,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
   const child = spawn(name, args, { cwd: root, detached: true,
     env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env,
     stdio: ['ignore', 'pipe', 'pipe'] });
+  if (child.pid) commandProcessGroups.add(child.pid);
   let stdout = '', stderr = '', timedOut = false;
   child.stdout.on('data', chunk => { stdout += String(chunk); });
   child.stderr.on('data', chunk => { stderr += String(chunk); });
@@ -302,6 +311,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     clearTimeout(timer);
     if (force) clearTimeout(force);
     if (timedOut) terminate('SIGKILL');
+    if (child.pid) commandProcessGroups.delete(child.pid);
   }
   const elapsedMs = Date.now() - start;
   return { ok: code === 0 && !timedOut, elapsedMs, timedOut,
@@ -756,32 +766,106 @@ export function goalSlotDirectory(root: string): string | undefined {
   return directory && existsSync(directory) ? directory : undefined;
 }
 
-// Shares the Goal's QA slots (`goalctl slot`, GOAL_QA_SLOTS): a run started under
-// a slot keeps it and takes free slots for extra shards without waiting.
-export function acquireQaSlots(
+export interface QaSlotOptions {
+  /** Wait deadline; runs without an inherited lease cannot start until one is free. */
+  deadline?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  pollMs?: number;
+  announce?: (message: string) => void;
+  /** The run must exit at its wall deadline rather than continue with released leases. */
+  runDeadline?: number;
+}
+
+// Share goalctl's directory leases. An inherited slot stays the caller's; extra
+// shards take only free slots. A direct run must wait for at least one real lease.
+export async function acquireQaSlots(
   directory: string | undefined,
   wanted: number,
   env: NodeJS.ProcessEnv = process.env,
   pid = process.pid,
-): { count: number; release: () => void } {
+  options: QaSlotOptions = {},
+): Promise<{ count: number; release: () => void }> {
   if (!directory) return { count: wanted, release: () => {} };
-  // Match goalctl's default; inventing slots 3..7 bypasses the manager's pool
-  // and can put more JVMs beside the shared stacks than the host can hold.
   const total = /^[1-9]\d*$/.test(env.GOAL_QA_SLOTS ?? '') ? Number(env.GOAL_QA_SLOTS) : 3;
+  const now = options.now ?? Date.now;
+  const deadline = options.deadline ?? now() + 3_600_000;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const lineage = ancestors(pid);
-  const owner = (path: string) => existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
-  const held = Array.from({ length: total }, (_, k) => join(directory, String(k)))
-    .some(path => existsSync(path) && lineage.has(owner(path))) ? 1 : 0;
+  const owner = (path: string) => {
+    try { return Number(readFileSync(join(path, 'pid'), 'utf8')); }
+    catch { return 0; }
+  };
+  const paths = Array.from({ length: total }, (_, k) => join(directory, String(k)));
   const acquired: string[] = [];
-  for (let k = 0; k < total && held + acquired.length < wanted; k++) {
-    const path = join(directory, String(k));
-    if (existsSync(path) && !pidAlive(owner(path)) && Date.now() - statSync(path).mtimeMs >= 10_000) {
-      rmSync(path, { recursive: true, force: true });
+  const token = randomBytes(16).toString('hex');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const release = () => {
+    if (timer) clearTimeout(timer);
+    process.off('exit', onExit);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+    for (const path of acquired) {
+      // An old cleanup must not delete a lease subsequently claimed by another run.
+      try {
+        if (readFileSync(join(path, 'lease'), 'utf8') === token)
+          rmSync(path, { recursive: true, force: true });
+      } catch { /* already removed */ }
     }
-    try { mkdirSync(path); } catch { continue; }
-    writeFileSync(join(path, 'pid'), String(pid));
-    acquired.push(path);
+  };
+  const onExit = () => {
+    // Detached stack:up children must stop before their leases become available.
+    stopAsyncCommands();
+    release();
+  };
+  const onSignal = (signal: NodeJS.Signals) => {
+    onExit();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  process.on('exit', onExit);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  try {
+    let announced = false;
+    for (;;) {
+      const held = paths.some(path => lineage.has(owner(path))) ? 1 : 0;
+      for (const path of paths) {
+        if (held + acquired.length >= wanted) break;
+        try {
+          if (existsSync(path) && !pidAlive(owner(path)) && now() - statSync(path).mtimeMs >= 10_000)
+            rmSync(path, { recursive: true, force: true });
+          mkdirSync(path);
+        } catch { continue; }
+        // Record ownership before writes, so a write failure still releases the directory.
+        acquired.push(path);
+        try {
+          writeFileSync(join(path, 'lease'), token);
+          writeFileSync(join(path, 'pid'), String(pid));
+        } catch (error) {
+          rmSync(path, { recursive: true, force: true });
+          throw error;
+        }
+      }
+      if (held + acquired.length > 0) {
+        if (options.runDeadline !== undefined) {
+          timer = setTimeout(() => {
+            console.error('QA run reached its deadline; releasing QA leases');
+            onExit();
+            process.exit(124);
+          }, Math.max(0, options.runDeadline - now()));
+          timer.unref();
+        }
+        return { count: held + acquired.length, release };
+      }
+      if (now() >= deadline) throw new Error('No QA slot became free before the deadline; no stack started');
+      if (!announced) {
+        (options.announce ?? console.error)(`Waiting for a QA slot; all ${total} slots are held`);
+        announced = true;
+      }
+      await sleep(Math.min(options.pollMs ?? 3_000, deadline - now()));
+    }
+  } catch (error) {
+    release();
+    throw error;
   }
-  return { count: Math.max(1, held + acquired.length),
-    release: () => { for (const path of acquired) rmSync(path, { recursive: true, force: true }); } };
 }

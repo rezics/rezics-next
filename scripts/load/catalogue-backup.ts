@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import {
   run,
@@ -83,12 +83,16 @@ export async function retainCatalogueBackup(
   return manifest;
 }
 
+const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts, now: Date.now };
+
 /** Restore into a distinct project under the QA slot; the caller closes it in
  * finally. The containing .temp directory may move with preserved worker
  * artifacts; recorded absolute directories are provenance, not restore keys.
  * Fresh ports, retained owner secrets/lineage and all stores agree. */
-export async function restoreCatalogueBackup(path: string, runId: string) {
-  const startedAt = Date.now(),
+export async function restoreCatalogueBackup(path: string, runId: string,
+  dependencies: Partial<typeof restoreRuntime> = {}) {
+  const { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts, now } = { ...restoreRuntime, ...dependencies };
+  const startedAt = now(),
     directory = privateDirectory(resolve(path, '..'));
   const backup = JSON.parse(
     readFileSync(join(directory, 'backup.json'), 'utf8'),
@@ -106,31 +110,59 @@ export async function restoreCatalogueBackup(path: string, runId: string) {
   if (projectRunning(project, docker) || projectRunning(backup.project, docker))
     throw new Error('Catalogue restore target/backup is running');
   const target = join(root, '.temp/stack', project);
-  mkdirSync(target, { recursive: true, mode: 0o700 });
-  const compose = { ...readEnv(join(directory, 'compose.env')), ...(await freshPorts()) };
-  replacePrivate(join(target, 'compose.env'), compose);
-  const apps = appEnvironment(compose, target);
-  replacePrivate(join(target, 'apps.env'), apps);
-  for (const kind of VOLUME_KINDS) {
-    const existing = run(
-      'docker',
-      ['volume', 'ls', '-q', '--filter', `name=^${project}_${kind}$`],
-      docker,
-    );
-    if (existing.trim()) throw new Error('Catalogue restore target already has storage');
-    await copyVolume(`${backup.project}_${kind}`, `${project}_${kind}`, docker);
-  }
-  cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
+  if (existsSync(target)) throw new Error('Catalogue restore target already exists');
+  // Check every destination before copying any store. Reset must never erase a
+  // stopped target's preexisting data discovered halfway through the restore.
+  const volumeExists = (name: string) => run('docker',
+    ['volume', 'ls', '-q', '--filter', `name=^${name}$`], docker).trim() !== '';
+  const destinations = VOLUME_KINDS.map(kind => `${project}_${kind}`);
+  if (destinations.some(volumeExists)) throw new Error('Catalogue restore target already has storage');
+  mkdirSync(join(root, '.temp/stack'), { recursive: true });
+  mkdirSync(target, { mode: 0o700 });
+  const copied: string[] = [];
+  let stackAttempted = false;
+  const cleanup = async (): Promise<unknown[]> => {
+    const errors: unknown[] = [];
+    if (stackAttempted) {
+      try { await task(['stack:reset', '--', '--profile', 'qa', '--run-id', runId, '--persistent']); }
+      catch (error) { errors.push(error); }
+    }
+    // A copy may have created its destination before rejecting. Also try each
+    // volume when stack reset fails, without abandoning the remaining cleanup.
+    for (const name of copied) {
+      try { if (volumeExists(name)) run('docker', ['volume', 'rm', name], docker); }
+      catch (error) { errors.push(error); }
+    }
+    try { rmSync(target, { recursive: true, force: true }); }
+    catch (error) { errors.push(error); }
+    return errors;
+  };
   try {
+    const compose = { ...readEnv(join(directory, 'compose.env')), ...(await freshPorts()) };
+    replacePrivate(join(target, 'compose.env'), compose);
+    const apps = appEnvironment(compose, target);
+    replacePrivate(join(target, 'apps.env'), apps);
+    for (const [index, kind] of VOLUME_KINDS.entries()) {
+      copied.push(destinations[index]!);
+      await copyVolume(`${backup.project}_${kind}`, destinations[index]!, docker);
+    }
+    cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
+    stackAttempted = true;
     await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    if (now() - startedAt > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');
+    return {
+      apps,
+      elapsedMs: now() - startedAt,
+      stop: async () => {
+        const errors = await cleanup();
+        if (errors.length) throw new AggregateError(errors, 'Catalogue restore cleanup failed');
+      },
+    };
   } catch (error) {
-    await task(['stack:reset', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    const cleanupErrors = await cleanup();
+    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors],
+      `Catalogue restore failed: ${error instanceof Error ? error.message : String(error)}; cleanup also failed`,
+      { cause: error });
     throw error;
   }
-  if (Date.now() - startedAt > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');
-  return {
-    apps,
-    elapsedMs: Date.now() - startedAt,
-    stop: () => task(['stack:reset', '--', '--profile', 'qa', '--run-id', runId, '--persistent']),
-  };
 }

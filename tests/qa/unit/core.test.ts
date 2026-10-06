@@ -386,10 +386,10 @@ test('QA shards: only a small file failure set is eligible for fresh-project iso
     new Set(['second.test.ts']))).toBe(false);
 });
 
-test('QA shards: Goal QA slots bound extra projects, keep the caller slot and release only their own', () => {
+test('QA shards: Goal QA slots bound extra projects, keep the caller slot and release only their own', async () => {
   const dir = mkdtempSync(join(scratch, 'rezics-qa-slots-'));
   try {
-    expect(acquireQaSlots(undefined, 3).count).toBe(3);
+    expect((await acquireQaSlots(undefined, 3)).count).toBe(3);
     // Slot 0 belongs to this process (as goalctl holds it for the harness); slot 1 to a live stranger.
     for (const [slot, pid] of [['0', process.pid], ['1', process.ppid]] as const) {
       mkdirSync(join(dir, slot));
@@ -400,19 +400,22 @@ test('QA shards: Goal QA slots bound extra projects, keep the caller slot and re
     writeFileSync(join(dir, '2', 'pid'), '999999999');
     utimesSync(join(dir, '2'), new Date(0), new Date(0));
     const env = { GOAL_QA_SLOTS: '4' };
-    const slots = acquireQaSlots(dir, 4, env);
+    const slots = await acquireQaSlots(dir, 4, env);
     expect(slots.count).toBe(3);
     expect(readFileSync(join(dir, '2', 'pid'), 'utf8')).toBe(String(process.pid));
     expect(existsSync(join(dir, '3'))).toBe(true);
-    expect(acquireQaSlots(dir, 2, env).count).toBe(1);
+    const borrowed = await acquireQaSlots(dir, 2, env);
+    expect(borrowed.count).toBe(1);
+    borrowed.release();
     slots.release();
     expect([0, 1, 2, 3].map(k => existsSync(join(dir, String(k))))).toEqual([true, true, false, false]);
-    const one = acquireQaSlots(dir, 1, env);
+    const one = await acquireQaSlots(dir, 1, env);
     expect(one.count).toBe(1);
     expect(existsSync(join(dir, '2'))).toBe(false);
     // A run outside any slot takes one for itself.
     rmSync(join(dir, '0'), { recursive: true });
-    const outside = acquireQaSlots(dir, 2, env, 999_999_998);
+    one.release();
+    const outside = await acquireQaSlots(dir, 2, env, 999_999_998);
     expect(outside.count).toBe(2);
     outside.release();
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -442,4 +445,91 @@ test('QA shards: summary records every project and per-file order dependence', (
     expect(summary).toContain('- Isolation integration: c.test.ts failed after 0 other files in run-2; '
       + 'passed alone in run-r2 after Docker network exhaustion');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('QA slots: zero leases wait until the deadline without starting a stack', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-slot-wait-'));
+  let now = 0;
+  const messages: string[] = [];
+  let started = false;
+  try {
+    mkdirSync(join(dir, '0'));
+    writeFileSync(join(dir, '0', 'pid'), String(process.pid));
+    await expect((async () => {
+      const slots = await acquireQaSlots(dir, 1, { GOAL_QA_SLOTS: '1' }, 999_999_998, {
+        deadline: 25, now: () => now, sleep: async ms => { now += ms; },
+        pollMs: 10, announce: message => messages.push(message),
+      });
+      started = true;
+      slots.release();
+    })()).rejects.toThrow('No QA slot became free before the deadline');
+    expect(started).toBe(false);
+    expect(messages).toEqual(['Waiting for a QA slot; all 1 slots are held']);
+    expect(now).toBe(25);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('QA slots: a waiter takes a newly released lease before it starts a stack', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-slot-turnover-'));
+  let now = 0;
+  try {
+    mkdirSync(join(dir, '0'));
+    writeFileSync(join(dir, '0', 'pid'), String(process.pid));
+    const slots = await acquireQaSlots(dir, 1, { GOAL_QA_SLOTS: '1' }, 999_999_998, {
+      deadline: 20, now: () => now, announce: () => {},
+      sleep: async ms => { now += ms; rmSync(join(dir, '0'), { recursive: true }); }, pollMs: 10,
+    });
+    expect(now).toBe(10);
+    expect(slots.count).toBe(1);
+    expect(readFileSync(join(dir, '0', 'pid'), 'utf8')).toBe('999999998');
+    slots.release();
+    expect(existsSync(join(dir, '0'))).toBe(false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline release leases', async () => {
+  for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'error', 'deadline'] as const) {
+    const dir = mkdtempSync(join(scratch, 'qa-slot-exit-'));
+    const script = join(dir, 'holder.ts');
+    const ready = join(dir, 'ready');
+    writeFileSync(script, `
+      import { acquireQaSlots, commandAsync } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/core.ts'))};
+      import { writeFileSync } from 'node:fs';
+      await acquireQaSlots(${JSON.stringify(dir)}, 1, { GOAL_QA_SLOTS: '1' }, process.pid,
+        ${mode === 'deadline' ? '{ runDeadline: Date.now() + 100 }' : '{}'});
+      ${mode === 'SIGTERM' || mode === 'SIGINT'
+        ? `await commandAsync(${JSON.stringify(dir)}, 'bun', ['-e', ${JSON.stringify(`require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1_000);`)}], 5_000);`
+        : `writeFileSync(${JSON.stringify(ready)}, 'ready');`}
+      ${mode === 'exit' ? 'process.exit(0);' : mode === 'error' ? "throw new Error('injected holder failure');" : 'await new Promise(() => { setInterval(() => {}, 1_000); });'}
+    `);
+    const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+    try {
+      const deadline = Date.now() + 2_000;
+      while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(5);
+      expect(existsSync(ready)).toBe(true);
+      if (mode === 'SIGTERM' || mode === 'SIGINT') {
+        expect(existsSync(join(dir, '0'))).toBe(true);
+        child.kill(mode);
+      }
+      expect(await child.exited).toBe(mode === 'SIGTERM' ? 143 : mode === 'SIGINT' ? 130 : mode === 'error' ? 1 : mode === 'deadline' ? 124 : 0);
+      expect(existsSync(join(dir, '0'))).toBe(false);
+      if (mode === 'SIGTERM' || mode === 'SIGINT') {
+        const subprocess = Number(readFileSync(ready, 'utf8'));
+        const alive = () => {
+          try { return !readFileSync(`/proc/${subprocess}/stat`, 'utf8').includes(') Z '); }
+          catch { return false; }
+        };
+        const stoppedBy = Date.now() + 1_000;
+        while (alive() && Date.now() < stoppedBy) await Bun.sleep(5);
+        expect(alive()).toBe(false);
+      }
+      if (mode === 'deadline') expect(await new Response(child.stderr).text()).toContain('reached its deadline');
+    } finally {
+      child.kill();
+      await child.exited;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
 });

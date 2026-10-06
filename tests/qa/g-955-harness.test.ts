@@ -432,10 +432,10 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
   expect(existsSync(join(root, '.temp'))).toBe(true);
 });
 
-test('G-955: shard claims respect goalctl default capacity instead of inventing five extra slots', () => {
+test('G-955: shard claims respect goalctl default capacity instead of inventing five extra slots', async () => {
   const directory = mkdtempSync(join(scratch, 'g-955-slots-'));
   try {
-    const slots = acquireQaSlots(directory, 8, {});
+    const slots = await acquireQaSlots(directory, 8, {});
     expect(slots.count).toBe(3);
     expect(readdirSync(directory).sort()).toEqual(['0', '1', '2']);
     slots.release();

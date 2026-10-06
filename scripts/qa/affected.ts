@@ -28,9 +28,32 @@ export interface GraphModule {
   }[];
 }
 
+const frontendWorkspaces = ['apps/web', 'apps/accounts', 'packages/ui', 'apps/about'] as const;
+export type FrontendWorkspace = typeof frontendWorkspaces[number];
+export interface FrontendChecks {
+  workspace: FrontendWorkspace;
+  check: string;
+  tests: string[];
+  deferred: { command: string; reason: string }[];
+}
+const frontendWorkspace = (path: string): FrontendWorkspace | undefined =>
+  frontendWorkspaces.find(workspace => path.startsWith(`${workspace}/`));
+
+function frontendChecks(workspace: FrontendWorkspace): FrontendChecks {
+  const browser = (command: string) => ({ command, reason: 'program tier; run explicitly' });
+  const checks = {
+    'apps/web': { check: 'web:typecheck', deferred: [browser('task storybook:test'), browser('task web:e2e')] },
+    'apps/accounts': { check: 'accounts:typecheck', deferred: [browser('task accounts:storybook:test'), browser('task accounts:e2e')] },
+    'packages/ui': { check: 'ui:typecheck', deferred: [browser('task storybook:test'), browser('task accounts:storybook:test'), browser('task web:e2e'), browser('task accounts:e2e')] },
+    'apps/about': { check: 'about:check', deferred: [browser('task about:e2e')] },
+  };
+  return { workspace, tests: [], ...checks[workspace] };
+}
+
 export interface AffectedPlan {
   base: string;
   changed: string[];
+  frontend: FrontendChecks[];
   tests: Record<AffectedTier, string[]>;
   widened: { tier: AffectedTier; because: string }[];
   deferred: { file: string; reason: string }[];
@@ -50,11 +73,17 @@ type Rule = { match: RegExp; reason: string } & (
   | { effect: 'ignore' }
   | { effect: 'widen'; tiers: AffectedTier[] }
   | { effect: 'smoke' }
+  | { effect: 'frontend' }
 );
 
 // Inputs that no import edge reaches. Order matters: the first match wins.
 // Anything unmatched and unreferenced widens to every tier (fail closed).
 export const inputRules: Rule[] = [
+  {
+    match: /^(?:apps\/(?:web|accounts|about)|packages\/ui)\//,
+    effect: 'frontend',
+    reason: 'frontend workspace checks',
+  },
   {
     match: /^docs\/|\.md$|^(?:LICENSE|NOTICE)$/,
     effect: 'ignore',
@@ -72,8 +101,9 @@ export const inputRules: Rule[] = [
   },
   {
     match: /^apps\/|^packages\/ui\//,
-    effect: 'ignore',
-    reason: 'frontend, outside the backend Goal',
+    effect: 'widen',
+    tiers: affectedTiers,
+    reason: 'unknown frontend workspace; no targeted checks registered',
   },
   {
     match:
@@ -127,7 +157,9 @@ export function classify(path: string): Rule | undefined {
   return rule;
 }
 
-export function routeTest(path: string): { tier: AffectedTier } | { deferred: string } | undefined {
+export function routeTest(path: string): { tier: AffectedTier } | { deferred: string } | { workspace: FrontendWorkspace } | undefined {
+  const workspace = frontendWorkspace(path);
+  if (workspace) return workspace === 'apps/about' || isQaE2ePath(path) ? undefined : { workspace };
   if (isQaE2ePath(path) || path.startsWith('apps/') || path.startsWith('packages/ui/'))
     return undefined;
   if ((legacyHostJenaGateFiles as readonly string[]).includes(path)) {
@@ -179,6 +211,7 @@ export function planAffected(input: {
   const plan: AffectedPlan = {
     base: input.base,
     changed: [...input.changed].sort(),
+    frontend: [],
     tests: { unit: [], integration: [], model: [], 'fault/recovery': [] },
     widened: [],
     deferred: [],
@@ -188,12 +221,28 @@ export function planAffected(input: {
     for (const tier of tiers)
       if (!plan.widened.some((item) => item.tier === tier)) plan.widened.push({ tier, because });
   };
+  const frontend = (workspace: FrontendWorkspace) => {
+    let checks = plan.frontend.find(item => item.workspace === workspace);
+    if (!checks) { checks = frontendChecks(workspace); plan.frontend.push(checks); }
+    return checks;
+  };
   const seeds = new Set<string>();
   for (const path of plan.changed) {
     // A root script edit changes command wiring, not installed dependencies.
     const rule = input.scriptOnlyManifests?.has(path)
       ? { match: /$^/, effect: 'smoke' as const, reason: 'root command wiring' }
       : classify(path);
+    if (rule?.effect === 'frontend') {
+      frontend(frontendWorkspace(path)!);
+      // About owns its full cheap check. Other workspaces use import edges for targeted tests.
+      if (frontendWorkspace(path) === 'apps/about') continue;
+      if (!codeFile.test(path)) {
+        if (input.exists(path)) seeds.add(path);
+        for (const source of referencedBy(path, input.sources, true))
+          if (frontendWorkspace(source)) seeds.add(source);
+        continue;
+      }
+    }
     if (rule?.effect === 'ignore') {
       plan.ignored.push({ path, reason: rule.reason });
       continue;
@@ -242,7 +291,8 @@ export function planAffected(input: {
     .sort()) {
     const route = routeTest(path);
     if (!route) continue;
-    if ('deferred' in route) plan.deferred.push({ file: path, reason: route.deferred });
+    if ('workspace' in route) frontend(route.workspace).tests.push(path);
+    else if ('deferred' in route) plan.deferred.push({ file: path, reason: route.deferred });
     else if (
       route.tier === 'unit'
         ? !(unitWidened && inRegisteredUnit(path))
@@ -251,6 +301,7 @@ export function planAffected(input: {
       plan.tests[route.tier].push(path);
     }
   }
+  plan.frontend.sort((a, b) => frontendWorkspaces.indexOf(a.workspace) - frontendWorkspaces.indexOf(b.workspace));
   plan.widened.sort((a, b) => affectedTiers.indexOf(a.tier) - affectedTiers.indexOf(b.tier));
   return plan;
 }
@@ -286,7 +337,7 @@ const graphRoots = [
   'infra',
 ];
 
-export function backendGraph(root: string): GraphModule[] {
+export function backendGraph(root: string, includeFrontend = false): GraphModule[] {
   const result = spawnSync(
     join(root, 'node_modules/.bin/depcruise'),
     [
@@ -299,6 +350,7 @@ export function backendGraph(root: string): GraphModule[] {
       '--output-type',
       'json',
       ...graphRoots,
+      ...(includeFrontend ? ['apps/web', 'apps/accounts', 'packages/ui'] : []),
     ],
     { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
   );
@@ -320,6 +372,7 @@ function resolveWorkspaceImports(root: string, modules: GraphModule[]): GraphMod
     'services/content',
     'packages/model',
     'packages/document',
+    'packages/ui',
   ]) {
     const manifest = JSON.parse(readFileSync(join(root, directory, 'package.json'), 'utf8')) as {
       name: string;
@@ -351,7 +404,16 @@ function resolveWorkspaceImports(root: string, modules: GraphModule[]): GraphMod
   return modules.map((module) => ({
     ...module,
     dependencies: module.dependencies.map((dependency) => {
-      const resolved = dependency.couldNotResolve ? target(dependency.module) : undefined;
+      let resolved = dependency.couldNotResolve ? target(dependency.module) : undefined;
+      // Each app's @/ alias is relative to that workspace, not the repository.
+      const workspace = frontendWorkspace(module.source);
+      if (!resolved && dependency.couldNotResolve && dependency.module.startsWith('@/')
+        && (workspace === 'apps/web' || workspace === 'apps/accounts')) {
+        const base = posix.join(workspace, dependency.module.slice(2));
+        resolved = [base, ...['.ts', '.tsx', '.js', '.jsx', '.json'].map(extension => `${base}${extension}`),
+          ...['.ts', '.tsx', '.js', '.jsx'].map(extension => `${base}/index${extension}`)]
+          .find(path => existsSync(join(root, path)));
+      }
       return resolved ? { ...dependency, resolved, couldNotResolve: false } : dependency;
     }),
   }));
@@ -382,14 +444,16 @@ export function needsGraph(
   scriptOnly: ReadonlySet<string> = new Set(),
 ): boolean {
   return changed.some(
-    (path) => scriptOnly.has(path) || !['ignore', 'widen'].includes(classify(path)?.effect ?? ''),
+    (path) => scriptOnly.has(path) || (classify(path)?.effect === 'frontend'
+      ? frontendWorkspace(path) !== 'apps/about'
+      : !['ignore', 'widen'].includes(classify(path)?.effect ?? '')),
   );
 }
 
 export function affectedPlan(root: string, ref?: string): AffectedPlan {
   const { base, changed } = changedPaths(root, ref);
   const manifests = scriptOnlyManifests(root, base, changed);
-  const graph = needsGraph(changed, manifests) ? backendGraph(root) : [];
+  const graph = needsGraph(changed, manifests) ? backendGraph(root, changed.some(path => frontendWorkspace(path) !== undefined)) : [];
   const sources = new Map<string, string>();
   for (const module of graph) {
     const path = join(root, module.source);
@@ -412,11 +476,18 @@ export function formatPlan(plan: AffectedPlan): string {
   for (const tier of affectedTiers) {
     for (const file of plan.tests[tier]) lines.push(`  ${tier}: ${file}`);
   }
+  for (const checks of plan.frontend) {
+    lines.push(`  ${checks.workspace}: task ${checks.check}`);
+    for (const file of checks.tests) lines.push(`  ${checks.workspace}: task test -- ${file}`);
+    if (!checks.tests.length && checks.workspace !== 'apps/about')
+      lines.push(`  ${checks.workspace}: no targeted unit/component tests found; workspace type check runs`);
+    for (const { command, reason } of checks.deferred) lines.push(`  not run: ${command} (${reason})`);
+  }
   for (const { file, reason } of plan.deferred) lines.push(`  not run: ${file} (${reason})`);
   const reasons = [...new Set(plan.ignored.map((item) => item.reason))];
   if (reasons.length)
     lines.push(`  no tests for ${plan.ignored.length} paths: ${reasons.join('; ')}`);
-  if (!plan.widened.length && affectedTiers.every((tier) => !plan.tests[tier].length)) {
+  if (!plan.frontend.length && !plan.widened.length && affectedTiers.every((tier) => !plan.tests[tier].length)) {
     lines.push('  no affected backend tests');
   }
   return lines.join('\n');

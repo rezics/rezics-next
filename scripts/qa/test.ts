@@ -92,6 +92,11 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
         command: ['bun', ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file])]] });
     }
   }
+  for (const checks of plan.frontend) {
+    commands.push({ label: `${checks.workspace} type/check`, command: ['task', [checks.check]] });
+    if (checks.tests.length) commands.push({ label: `${checks.workspace} unit/component (${checks.tests.length} files)`,
+      command: ['bun', ['test', ...checks.tests.map(file => `./${file}`)]] });
+  }
   return commands;
 }
 
@@ -104,6 +109,18 @@ async function run([program, args]: [string, string[]]): Promise<number> {
   return child.exited;
 }
 
+export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ failed: boolean; results: string[] }> {
+  const results: string[] = [];
+  let failed = false;
+  // Every cheap selection runs, so one failure does not hide another workspace's checks.
+  for (const { label, command } of affectedCommands(plan)) {
+    const code = await runner(command);
+    failed ||= code !== 0;
+    results.push(`  ${label}: ${code === 0 ? 'passed' : `failed (exit ${code})`}`);
+  }
+  return { failed, results };
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const affected = parseAffectedArgs(args);
@@ -111,14 +128,7 @@ if (import.meta.main) {
   const plan = affectedPlan(root, affected.ref);
   console.log(formatPlan(plan));
   if (affected.list) process.exit(0);
-  const results: string[] = [];
-  let failed = false;
-  // Tiers run in sequence and every tier runs, so one pass yields the whole repair queue.
-  for (const { label, command } of affectedCommands(plan)) {
-    const code = await run(command);
-    failed ||= code !== 0;
-    results.push(`  ${label}: ${code === 0 ? 'passed' : `failed (exit ${code})`}`);
-  }
+  const { failed, results } = await runAffected(plan);
   if (results.length) console.log(['Affected run:', ...results].join('\n'));
   process.exit(failed ? 1 : 0);
 }

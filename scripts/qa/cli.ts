@@ -86,6 +86,7 @@ const caseCoverage = declaredCaseCoverage(cases, options.backend ? 'backend' : '
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
 const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.backend ? backendTiers : implementedTiers);
 const chosen = options.files || options.id ? options : undefined;
+let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 async function resetChildStacks(registry: string): Promise<string[]> {
@@ -411,7 +412,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     tier === 'fault/recovery'
       ? Math.min(maximum, estimates.size)
       : shardCount(estimates, budget, maximum);
-  const slots = acquireQaSlots(goalSlotDirectory(root), wanted);
+  const slots = await acquireQaSlots(goalSlotDirectory(root), wanted);
   mkdirSync(join(directory, 'shards'), { recursive: true });
   try {
     const prefix = tier === 'integration' ? '' : 'f';
@@ -515,6 +516,11 @@ try {
   if (options.record) {
     const missing = missingCaseDeclarations(cases, caseCoverage);
     if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
+  }
+  // Reserve before any tier preparation: fixtures and singleton tiers also start stacks.
+  if (selected.some(tier => !['static', 'unit'].includes(tier))) {
+    runSlots = await acquireQaSlots(goalSlotDirectory(root), 1, process.env, process.pid,
+      { runDeadline: Date.now() + 6 * 3_600_000 });
   }
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
@@ -750,6 +756,7 @@ try {
       }
     }
   } finally {
+    runSlots?.release();
     release();
   }
   console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));

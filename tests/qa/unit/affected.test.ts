@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { classify, needsGraph, planAffected, type GraphModule } from '../../../scripts/qa/affected.ts';
-import { affectedCommands, parseAffectedArgs } from '../../../scripts/qa/test.ts';
+import { classify, formatPlan, needsGraph, planAffected, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
 const graph: GraphModule[] = [
@@ -120,4 +120,86 @@ test('affected commands run unit files directly and stack tiers through the QA h
   expect(affectedCommands(plan(['services/main/migrations/access/020_roles.sql'])).map(item => item.command))
     .toEqual([['bun', ['scripts/qa/cli.ts', '--tier', 'integration']],
       ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery']]]);
+});
+
+
+test('frontend-only changes list their workspace checks and run only targeted cheap checks', async () => {
+  const source = 'apps/web/features/feed/state.ts';
+  const test = 'apps/web/tests/feed-state.test.ts';
+  const ui = 'packages/ui/src/button.tsx';
+  const component = 'packages/ui/src/button.test.tsx';
+  const result = plan([source, ui], {
+    graph: [
+      { source, dependencies: [] }, { source: test, dependencies: [edge(source)] },
+      { source: ui, dependencies: [] }, { source: component, dependencies: [edge(ui)] },
+    ], exists: () => true,
+  });
+  expect(affectedCommands(result).map(item => item.command)).toEqual([
+    ['task', ['web:typecheck']], ['bun', ['test', './' + test]],
+    ['task', ['ui:typecheck']], ['bun', ['test', './' + component]],
+  ]);
+  const executed: [string, string[]][] = [];
+  const run = await runAffected(result, async command => {
+    executed.push(command);
+    return executed.length === 1 ? 1 : 0;
+  });
+  expect(executed).toEqual(affectedCommands(result).map(item => item.command));
+  expect(run.failed).toBe(true);
+  expect(run.results).toHaveLength(4);
+  const output = formatPlan(result);
+  for (const command of ['task web:typecheck', 'task ui:typecheck', 'task storybook:test', 'task web:e2e']) {
+    expect(output).toContain(command);
+  }
+  expect(output).toContain('not run:');
+  expect(output).toContain('program tier');
+  expect(output).not.toContain('no affected backend tests');
+  expect(result.ignored).toEqual([]);
+});
+
+test('Accounts and About retain their own checks, including non-code and documentation changes', () => {
+  const result = plan(['apps/accounts/messages/en.json', 'apps/about/README.md']);
+  expect(affectedCommands(result).map(item => item.command)).toEqual([
+    ['task', ['accounts:typecheck']], ['task', ['about:check']],
+  ]);
+  expect(formatPlan(result)).toContain('task accounts:storybook:test');
+  expect(formatPlan(result)).toContain('task accounts:e2e');
+  expect(needsGraph(['apps/accounts/messages/en.json', 'apps/about/README.md'])).toBe(true);
+  expect(needsGraph(['apps/about/README.md'])).toBe(false);
+  expect(needsGraph(['apps/web/features/feed/state.ts'])).toBe(true);
+});
+
+
+test('frontend data, deleted code, direct test edits and UI consumers remain targeted', () => {
+  const ui = 'packages/ui/src/components/work-cover.tsx';
+  const consumer = 'apps/web/tests/catalogue-face.test.ts';
+  const data = 'apps/accounts/messages/en.json';
+  const catalog = 'apps/accounts/tests/catalogs.test.ts';
+  const deleted = 'apps/web/features/removed.ts';
+  const importer = 'apps/web/tests/removed.test.ts';
+  const result = plan([ui, data, deleted, consumer], {
+    graph: [
+      { source: consumer, dependencies: [edge(ui)] },
+      { source: catalog, dependencies: [edge(data)] },
+      { source: importer, dependencies: [{ module: '../features/removed.ts', resolved: '../features/removed.ts',
+        coreModule: false, couldNotResolve: true }] },
+    ], exists: path => path !== deleted,
+  });
+  expect(result.frontend.map(item => [item.workspace, item.tests])).toEqual([
+    ['apps/web', [consumer, importer]], ['apps/accounts', [catalog]], ['packages/ui', []],
+  ]);
+  expect(result.widened).toEqual([]);
+  expect(Object.values(result.tests).flat()).toEqual([]);
+});
+
+
+test('frontend workspace metadata does not schedule stacks through broad directory text matches', () => {
+  const file = 'tests/qa/integration/source-contract.test.ts';
+  const result = plan(['packages/ui/package.json'], {
+    graph: [{ source: file, dependencies: [] }],
+    sources: new Map([[file, "readFileSync('packages/ui/src/components/button.tsx')"]]),
+    exists: () => true,
+  });
+  expect(Object.values(result.tests).flat()).toEqual([]);
+  expect(result.widened).toEqual([]);
+  expect(affectedCommands(result).map(item => item.command)).toEqual([['task', ['ui:typecheck']]]);
 });
