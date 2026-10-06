@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { WorkResolution } from '../work-page/read.ts';
@@ -96,6 +97,37 @@ export function workMetadata(work: WorkResolution, view: WorkView, query: Search
 }
 
 /**
+ * A Work as Main shows it to anyone: the public preview and the anonymous header, read with no token and no private
+ * preference. Null when the Work is not public to everyone, so nothing of it may be published.
+ */
+const anonymousWork = cache(async (id: string) => {
+  try {
+    const anonymous = mainApiWithToken(undefined);
+    const [preview, header] = await Promise.all([
+      anonymous.v1['public-previews']({ resource: id }).get(),
+      anonymous.v1.works({ id }).get({ query: {} }),
+    ]);
+    return preview.error || !preview.data || header.error || !header.data ? null : header.data;
+  } catch { return null; }
+});
+
+/**
+ * The page title of a Work, from the anonymous read only, optionally after a section name (`History · Title`). A
+ * Work that is not public to everyone, or whose anonymous read fails, never gives its title: the page is then named
+ * by its section, or by REZICS.
+ */
+export async function workTitle(work: WorkResolution, section?: string): Promise<string> {
+  const title = await anonymousWorkTitle(work);
+  if (!title) return section ?? 'REZICS';
+  return section ? `${section} · ${title}` : title;
+}
+
+/** The Work's title as Main shows it to anyone, or null when the Work is not public to everyone. */
+export async function anonymousWorkTitle(work: WorkResolution): Promise<string | null> {
+  return work.kind === 'work' ? (await anonymousWork(work.id))?.title.value ?? null : null;
+}
+
+/**
  * `workMetadata` at the current request's origin, for a page's `generateMetadata`. Metadata is an anonymous
  * delivery even when the page has a signed-in reader: it describes the Work as Main shows it to anyone, never
  * the personalized read the page itself renders.
@@ -106,15 +138,9 @@ export async function workPageMetadata(work: WorkResolution, view: WorkView, que
     openGraph: null, twitter: null, robots: { index: false } };
   let shown = work;
   if (work.kind === 'work') {
-    try {
-      const anonymous = mainApiWithToken(undefined);
-      const [preview, header] = await Promise.all([
-        anonymous.v1['public-previews']({ resource: work.id }).get(),
-        anonymous.v1.works({ id: work.id }).get({ query: {} }),
-      ]);
-      if (preview.error || !preview.data || header.error || !header.data) return undisclosed;
-      shown = { kind: 'work', id: work.id, header: header.data };
-    } catch { return undisclosed; }
+    const header = await anonymousWork(work.id);
+    if (!header) return undisclosed;
+    shown = { kind: 'work', id: work.id, header };
   }
   const page = await pageUrl();
   const metadata = workMetadata(shown, view, query, locale, page?.origin ?? null);

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { workPageMetadata } from '../../../../../features/seo/work.ts';
+import { workPageMetadata, workTitle } from '../../../../../features/seo/work.ts';
 import { TextNotFound, TextReader, TextUnavailable } from '../../../../../features/work-page/reader.tsx';
 import { parseReaderSettings, READER_COOKIE } from '../../../../../features/work-page/reader-settings.ts';
 import { loadWork, readingAgent, readText, resolveWork } from '../../../../../features/work-page/read.ts';
@@ -19,8 +19,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const language = parseReaderLanguage(query);
   const text = language === null ? null
     : await readText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
-  if (!text?.ok) return { title: `${t.textNotFoundTitle} · ${work.header.title.value}`, robots: { index: false } };
-  return { title: work.header.title.value, ...await workPageMetadata(work, { tab: 'text' }, query, locale) };
+  if (!text?.ok) return { title: await workTitle(work, t.textNotFoundTitle), robots: { index: false } };
+  return { title: await workTitle(work), ...await workPageMetadata(work, { tab: 'text' }, query, locale) };
 }
 
 // A Work with no chapters is read as its one selected text, outside the Work frame like a chapter.

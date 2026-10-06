@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { workPageMetadata } from '../../../../../../features/seo/work.ts';
+import { workPageMetadata, workTitle } from '../../../../../../features/seo/work.ts';
 import { loadWork, resolveWork } from '../../../../../../features/work-page/read.ts';
 import { parseContentsQuery } from '../../../../../../features/work-page/route.ts';
 import { WorkContents } from '../../../../../../features/work-page/work-views.tsx';
@@ -11,7 +11,7 @@ type Props = Params & { searchParams: Promise<Record<string, string | string[] |
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ ref }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
   const [work, { t }] = await Promise.all([resolveWork(ref, locale), getTranslation('workPage', [locale])]);
-  return { title: work.kind === 'work' ? `${t.contents} · ${work.header.title.value}` : t.contents,
+  return { title: await workTitle(work, t.contents),
     ...await workPageMetadata(work, { tab: 'contents' }, query, locale) };
 }
 

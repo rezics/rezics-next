@@ -105,7 +105,7 @@ export const loadPosition = cache(
 );
 
 /** The Work a package's positions are in is the first Work its `positions.mount` lists. */
-export const positionOf = (pkg: ZonePackage | null, zone: string, choice: PositionChoice) =>
+export const positionOf = (pkg: Pick<ZonePackage, 'positions'> | null, zone: string, choice: PositionChoice) =>
   pkg?.positions
     ? loadPosition(zone, pkg.positions.mount, positionParam(choice) ?? '')
     : Promise.resolve(null);

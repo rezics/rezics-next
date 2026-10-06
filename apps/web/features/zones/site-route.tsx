@@ -22,14 +22,14 @@ import type { ReadFailure, ZoneRouteRead } from '../realm/types.ts';
 import { ListFailure, Pager } from '../realm/views.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { pageUrl, representationPath } from '../seo/address.ts';
-import { workPageMetadata } from '../seo/work.ts';
+import { anonymousWorkTitle, workPageMetadata } from '../seo/work.ts';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { readMembers } from '../wiki/members.ts';
 import { continuityParam } from '../wiki/continuity.ts';
-import { type PositionChoice, parsePosition, positionParam } from '../wiki/position.ts';
-import { zoneContinuity } from '../wiki/zone-continuity.ts';
+import { positionParam } from '../wiki/position.ts';
+import { readingSelection } from '../wiki/selection.ts';
 import { readPositionedRoute } from '../wiki/read.ts';
-import { occurrenceName, positionNote, positionOf } from '../wiki/state.ts';
+import { occurrenceName, positionNote } from '../wiki/state.ts';
 import { keepReading, type ZoneSite } from '../wiki/links.ts';
 import { loadWork, readText, resolveWork } from '../work-page/read.ts';
 import { idOf, shortId, type WorkTab } from '../work-page/route.ts';
@@ -139,16 +139,17 @@ async function siteContentMetadata({ params, searchParams }: ZoneSiteProps): Pro
   }
   const id = idOf(route.resource.id);
   const work = id ? await resolveWork(id, locale) : null;
+  // A mounted Work's title is published only as Main shows it to anyone; a private Work is named by its Zone.
   if (route.kind === 'document')
-    return address(work?.kind === 'work' ? work.header.title.value : zone);
+    return address((work && (await anonymousWorkTitle(work))) || zone);
   // A page that is not a Work's depends on the reader's position, so it is not indexed.
   if (!work || work.kind !== 'work') return { title: zone, ...hidden };
   const tab = route.tab === null ? 'overview' : (route.tab as WorkTab);
   const { scope: _scope, realm: _realm, ...rest } = search;
-  return {
-    ...(await workPageMetadata(work, { tab }, rest, locale)),
-    ...(await address(work.header.title.value)),
-  };
+  const title = await anonymousWorkTitle(work);
+  // A Work that is not public to everyone gives no title and no preview, whatever the reader may see.
+  if (!title) return { ...(await workPageMetadata(work, { tab }, rest, locale)), title: zone };
+  return { ...(await workPageMetadata(work, { tab }, rest, locale)), ...(await address(title)) };
 }
 
 /** A read made as the signed-in reader can also fail on their identity; to the page that is the Zone being unavailable. */
@@ -201,9 +202,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   const cursor = routeCursor(path, search);
   // A Zone whose package reads at the reader's position sends it with every read, as the signed-in reader, whether or
   // not the package's presentation runs (safe mode and the standard look keep the reader's position).
-  const choice: PositionChoice = parsePosition(search);
-  const state = await positionOf(view.dataPackage, zone.id, choice);
-  const reading = await zoneContinuity(view.dataPackage, state, search);
+  const { choice, state, reading } = await readingSelection(view.data, zone.id, search);
   const site: ZoneSite = {
     zone: zone.id,
     ref,

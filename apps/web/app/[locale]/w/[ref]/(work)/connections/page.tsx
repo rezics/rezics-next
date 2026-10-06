@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { workTitle } from '../../../../../../features/seo/work.ts';
 import { copyOf } from '../../../../../../features/work-levels/messages.ts';
 import { ConnectionsPage } from '../../../../../../features/work-levels/pages.tsx';
 import { parseConnectionsQuery } from '../../../../../../features/work-levels/route.ts';
@@ -13,7 +14,7 @@ type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<st
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [{ ref }, locale] = await Promise.all([params, requestLocale()]);
   const [work, t] = await Promise.all([resolveWork(ref, locale), copyOf(locale)]);
-  return { title: work.kind === 'work' ? `${t.connections} · ${work.header.title.value}` : t.connections };
+  return { title: await workTitle(work, t.connections) };
 }
 
 /** `/w/{ref}/connections`: the reader's series progress, the Work's parts, what it is part of, its franchises and its typed relations. */

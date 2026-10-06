@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { workPageMetadata } from '../../../../../../features/seo/work.ts';
+import { workPageMetadata, workTitle } from '../../../../../../features/seo/work.ts';
 import { ChapterNotFound, ChapterReader, ChapterUnavailable } from '../../../../../../features/work-page/reader.tsx';
 import { parseReaderSettings, READER_COOKIE } from '../../../../../../features/work-page/reader-settings.ts';
 import { loadWork, postPlaceInBook, readChapter, readingAgent, readProgress, resolveWork }
@@ -24,9 +24,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (work.kind !== 'work') return { title: t.notFoundTitle };
   // As in the page, a chapter address under another Work's ref is not this Work's chapter.
   if (!read?.ok || read.data.work !== work.header.id) {
-    return { title: `${t.chapterNotFoundTitle} · ${work.header.title.value}`, robots: { index: false } };
+    return { title: await workTitle(work, t.chapterNotFoundTitle), robots: { index: false } };
   }
-  return { title: work.header.title.value, ...await workPageMetadata(work, { tab: 'read', chapter }, query, locale) };
+  return { title: await workTitle(work), ...await workPageMetadata(work, { tab: 'read', chapter }, query, locale) };
 }
 
 // The reader sits outside the Work frame: it keeps only a way back and the text.

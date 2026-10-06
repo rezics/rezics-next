@@ -95,7 +95,7 @@ export interface ZoneContinuity {
  * switch has none.
  */
 export async function zoneContinuity(
-  pkg: ZonePackage | null,
+  pkg: Pick<ZonePackage, 'continuity'> | null,
   state: PositionState | null,
   search: Search,
 ): Promise<ZoneContinuity | null> {

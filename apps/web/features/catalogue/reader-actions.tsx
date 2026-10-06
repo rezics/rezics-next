@@ -7,7 +7,7 @@ import { Rating, RatingLabel } from '@rezics/ui/rating';
 import { cn } from '@rezics/ui/utils';
 import { BookmarkCheckIcon, BookmarkPlusIcon, CheckIcon, ChevronDownIcon, StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { createContext, lazy, type ReactNode, Suspense, useContext, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, lazy, type ReactNode, Suspense, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from '../tracking/api.ts';
@@ -49,6 +49,8 @@ export type ReaderActions =
     rate: ((work: string, value: number | null) => Promise<boolean>) | null;
     /** Reads the Work's reader state again, for a rating that is still being processed. */
     refresh?: (work: string) => Promise<void>;
+    /** Marks the actions as in use by a mounted page; the returned disposal cancels what is queued and its timers. */
+    connect?: () => () => void;
     ratingMax: number;
     /** Tells controls when state read later (a "Show more" page) arrives. */
     subscribe?: (listener: () => void) => () => void;
@@ -76,6 +78,8 @@ export function ReaderActionsProvider({ signedIn, signInHref, actingSubject, see
 }) {
   const [store] = useState(() => signedIn && actingSubject && !actions
     ? createReaderStore({ actingSubject, seed, ratingTarget }) : null);
+  // Leaving the page cancels the store's queued choices and read-back timers, so it cannot write after a newer store has.
+  useEffect(() => store?.connect?.(), [store]);
   const value: ReaderActions = actions ?? store
     ?? (signedIn ? { kind: 'unavailable' } : { kind: 'signed-out', signInHref });
   return <ReaderActionsContext value={value}>{children}</ReaderActionsContext>;

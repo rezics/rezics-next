@@ -5,7 +5,9 @@ import { cookies, headers } from 'next/headers';
 import { cache, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
-import { installedDigest, loadPackage } from '../../zones/official/index.ts';
+import { declaredData, installedDigest, loadPackage } from '../../zones/official/index.ts';
+import { resolvePackage } from '../zones/package-source.ts';
+import { readingSelection, type ZoneData } from '../wiki/selection.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
@@ -16,7 +18,6 @@ import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import {
-  declaringSlug,
   decideExecution,
   type Execution,
   isSafeMode,
@@ -30,9 +31,6 @@ import { zoneTheme } from '../zones/theme.ts';
 import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
-import { zoneContinuity } from '../wiki/zone-continuity.ts';
-import { parsePosition } from '../wiki/position.ts';
-import { positionOf } from '../wiki/state.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmMembership } from './membership.tsx';
@@ -76,7 +74,7 @@ export interface RealmView {
    * The package whose position and continuity declarations the reads follow: the running one, or, when the reader
    * switched presentation off (safe mode, the standard look), the same approved package read for data only.
    */
-  dataPackage: ZonePackage | null;
+  data: ZoneData | null;
   zone: ZoneContext;
   context: AdaptContext;
   lookEnabled: boolean;
@@ -88,33 +86,6 @@ export interface RealmView {
   membership: Membership | null;
   messages: RealmMessages;
   zoneMessages: ZoneMessages;
-}
-
-async function runnablePackage(
-  execution: Execution,
-): Promise<{ execution: Execution; pkg: ZonePackage | null }> {
-  if (execution.mode !== 'package') return { execution, pkg: null };
-  try {
-    const pkg = await loadPackage(execution.slug);
-    if (pkg) return { execution, pkg };
-  } catch (error) {
-    console.error(
-      `Official Zone package ${execution.slug} failed to load; showing its fallback`,
-      error,
-    );
-  }
-  return { execution: { mode: 'fallback', reason: 'load-failed' }, pkg: null };
-}
-
-/** The package to read positions and continuities from: the one running, else the approved one when the reader turned its presentation off. */
-async function declaredPackage(running: ZonePackage | null, slug: string | null): Promise<ZonePackage | null> {
-  if (running || !slug) return running;
-  try {
-    return await loadPackage(slug);
-  } catch (error) {
-    console.error(`Official Zone package ${slug} failed to load; its positions are not offered`, error);
-    return null;
-  }
 }
 
 /**
@@ -205,11 +176,12 @@ export async function loadRealmView(
     installedDigest: main?.approved && slug ? await installedDigest(slug) : null,
   };
   const decided = decideExecution({ ...approval, safeMode: isSafeMode(search), lookEnabled });
-  const { execution, pkg } = await runnablePackage(
-    surface === 'site' ? decided : { mode: 'fallback', reason: 'none-approved' },
-  );
-  const dataPackage =
-    surface === 'site' ? await declaredPackage(pkg, declaringSlug(approval)) : null;
+  const { execution, pkg, data } = await resolvePackage({
+    decided,
+    approval,
+    surface,
+    source: { load: loadPackage, declarations: declaredData },
+  });
   const header = realm.header;
   const mounts = read?.ok ? read.data.navigation : [];
   const zone: ZoneContext = {
@@ -237,7 +209,7 @@ export async function loadRealmView(
     slideMedia,
     execution,
     pkg,
-    dataPackage,
+    data,
     zone,
     lookEnabled,
     messages,
@@ -294,7 +266,7 @@ export async function RealmFrame({
   crumbs?: readonly SiteCrumb[];
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
-  const { realm, presentation, execution, pkg, dataPackage, zone, messages, zoneMessages, lookEnabled } = view;
+  const { realm, presentation, execution, pkg, data, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
   const theme = zoneTheme(presentation.tokens, {
     reader: parseTheme(jar.get(THEME_COOKIE)?.value),
@@ -303,8 +275,9 @@ export async function RealmFrame({
   const members = membersText(realm.header.membership.count, locale, messages);
   const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
   // A Zone whose package reads at the reader's position in a story offers the choice on every page.
-  const positions = realm.zone ? await positionOf(dataPackage, realm.zone.id, parsePosition(search)) : null;
-  const continuity = await zoneContinuity(dataPackage, positions, search);
+  const { state: positions, reading: continuity } = realm.zone
+    ? await readingSelection(data, realm.zone.id, search)
+    : { state: null, reading: null };
   // Join or Follow first, as every community page offers; the page style stays beside it.
   const actions = (
     <>

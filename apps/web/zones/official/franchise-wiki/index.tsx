@@ -1,4 +1,5 @@
 import { defineZonePackage } from '@rezics/zone-sdk';
+import declarations from './declarations.ts';
 import css from './franchise-wiki.css?raw';
 import { WikiEntity, WikiHome, WikiMemberIndex } from './slots.tsx';
 
@@ -13,7 +14,6 @@ import { WikiEntity, WikiHome, WikiMemberIndex } from './slots.tsx';
 export default defineZonePackage({
   slug: 'franchise-wiki',
   css,
-  positions: { mount: 'franchise' },
-  continuity: {},
+  ...declarations,
   slots: { home: WikiHome, memberIndex: WikiMemberIndex, entity: WikiEntity },
 });

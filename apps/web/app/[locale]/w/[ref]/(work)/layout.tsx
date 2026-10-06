@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { workTitle } from '../../../../../features/seo/work.ts';
 import { resolveWork } from '../../../../../features/work-page/read.ts';
 import { WorkFrameView } from '../../../../../features/work-page/work-views.tsx';
 import { WorkUnavailable } from '../../../../../features/work-page/work-states.tsx';
@@ -10,7 +11,7 @@ type Params = { params: Promise<{ ref: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const locale = await requestLocale();
   const [work, { t }] = await Promise.all([resolveWork((await params).ref, locale), getTranslation('workPage', [locale])]);
-  return { title: work.kind === 'work' ? work.header.title.value
+  return { title: work.kind === 'work' ? await workTitle(work)
     : work.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle };
 }
 

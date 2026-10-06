@@ -1,11 +1,14 @@
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
+import type { Metadata } from 'next';
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external.js';
 import { workUnitAsyncStorage, type RequestStore } from 'next/dist/server/app-render/work-unit-async-storage.external.js';
 import { SERVER_DEADLINE_HEADER } from '../features/api/server-fetch.ts';
 import { localeAlternates } from '../features/seo/address.ts';
-import { type WorkView, workMetadata, workPageMetadata, workViewAddress } from '../features/seo/work.ts';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { type WorkView, workMetadata, workPageMetadata, workTitle, workViewAddress } from '../features/seo/work.ts';
 import { metadataOnlyWork, work as header, workRef as id } from '../features/work-page/fixtures.ts';
 import type { WorkResolution } from '../features/work-page/read.ts';
 import { uiLocales } from '../i18n/define.ts';
@@ -182,7 +185,7 @@ describe('Anonymous Work metadata', () => {
   });
 
   /** Renders a page's metadata for a request that carries a signed-in session, and records what Main was asked. */
-  async function render(personal: WorkResolution, answer: (url: URL) => unknown) {
+  async function render(personal: WorkResolution, answer: (url: URL) => unknown, run?: () => Promise<void>) {
     process.env.MAIN_ORIGIN = 'http://main.test';
     const asked: { url: URL; authorization: string | null }[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -199,7 +202,7 @@ describe('Anonymous Work metadata', () => {
     const store = spyOn(workAsyncStorage, 'getStore').mockReturnValue({ route: '/en/w' } as WorkStore);
     const request = spyOn(workUnitAsyncStorage, 'getStore').mockReturnValue(
       { type: 'request', phase: 'render', headers, cookies } as RequestStore);
-    try { return { metadata: await workPageMetadata(personal, { tab: 'overview' }, {}, 'en'), asked }; }
+    try { return run ? (await run(), { metadata: {} as Metadata, asked }) : { metadata: await workPageMetadata(personal, { tab: 'overview' }, {}, 'en'), asked }; }
     finally { store.mockRestore(); request.mockRestore(); }
   }
 
@@ -220,6 +223,46 @@ describe('Anonymous Work metadata', () => {
     const { asked } = await render(personalised, publicAnswers);
     expect(asked.every(call => call.authorization === null)).toBe(true);
     expect(asked.some(call => call.url.pathname.startsWith('/v1/me/'))).toBe(false);
+  });
+
+  /** The title `workTitle` gives for a request that carries a session. */
+  async function titleOf(personal: WorkResolution, answer: (url: URL) => unknown, section?: string) {
+    let title = '';
+    await render(personal, answer, async () => { title = await workTitle(personal, section); });
+    return title;
+  }
+
+  test('page titles come from the anonymous read, never the personalized Work', async () => {
+    expect(await titleOf(personalised, publicAnswers)).toBe('The public title');
+    expect(await titleOf(personalised, publicAnswers, 'History')).toBe('History · The public title');
+  });
+
+  test('a Work that is not public to everyone never gives its title, only its section or the site name', async () => {
+    const privateWork = (url: URL) => url.pathname === `/v1/works/${id}` ? anonymous : undefined;
+    expect(await titleOf(personalised, privateWork)).toBe('REZICS');
+    expect(await titleOf(personalised, privateWork, 'History')).toBe('History');
+    expect(await titleOf({ kind: 'missing' }, publicAnswers)).toBe('REZICS');
+  });
+
+  test('no Work page or Zone route publishes the title of the personalized Work read', () => {
+    const web = join(import.meta.dir, '..');
+    const files: string[] = [];
+    const walk = (directory: string) => {
+      for (const name of readdirSync(directory)) {
+        const path = join(directory, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(name)) files.push(path);
+      }
+    };
+    walk(join(web, 'app/[locale]/w'));
+    files.push(join(web, 'features/zones/site-route.tsx'));
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      const metadata = source.slice(source.search(/export async function (generateMetadata|zoneSiteMetadata)/));
+      if (!/export async function (generateMetadata|zoneSiteMetadata)/.test(source)) continue;
+      const body = metadata.slice(0, metadata.search(/\n}\n/));
+      expect({ file, leak: /header\.title/.test(body) }).toEqual({ file, leak: false });
+    }
   });
 
   test('a Work that is not public to anyone is left undisclosed', async () => {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { workTitle } from '../../../../../../features/seo/work.ts';
 import { copyOf } from '../../../../../../features/work-levels/messages.ts';
 import { EditionsPage } from '../../../../../../features/work-levels/pages.tsx';
 import { parseEditionsQuery } from '../../../../../../features/work-levels/route.ts';
@@ -11,7 +12,7 @@ type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<st
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const [{ ref }, locale] = await Promise.all([params, requestLocale()]);
   const [work, t] = await Promise.all([resolveWork(ref, locale), copyOf(locale)]);
-  return { title: work.kind === 'work' ? `${t.editions} · ${work.header.title.value}` : t.editions };
+  return { title: await workTitle(work, t.editions) };
 }
 
 /** `/w/{ref}/editions`: realizations by language and script, and the releases that carry them. */

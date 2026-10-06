@@ -2,7 +2,10 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external.js';
 import { workUnitAsyncStorage, type RequestStore } from 'next/dist/server/app-render/work-unit-async-storage.external.js';
 import { SERVER_DEADLINE_HEADER } from '../features/api/server-fetch.ts';
-import { positionOf } from '../features/wiki/state.ts';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { readingSelection, type ZoneData } from '../features/wiki/selection.ts';
+import { type PackageSource, resolvePackage } from '../features/zones/package-source.ts';
 import { declaringSlug, decideExecution } from '../features/zones/execution.ts';
 import type { ZonePackage } from '@rezics/zone-sdk';
 
@@ -57,27 +60,110 @@ async function signedInRender<T>(answer: (url: URL) => unknown, run: () => Promi
   try { return { result: await run(), asked }; } finally { work.mockRestore(); request.mockRestore(); }
 }
 
-test('selection: with safe mode on, the reader\'s chosen position still reaches every read', async () => {
-  const decided = decideExecution({ ...approval, safeMode: true, lookEnabled: true });
-  expect(decided).toEqual({ mode: 'fallback', reason: 'safe-mode' });
-  // The Zone page reads the approved package for what it declares (the mount its positions are in), and does not run it.
-  expect(declaringSlug(approval)).toBe('franchise-wiki');
-  const declared = { slug: 'franchise-wiki', positions: { mount: 'franchise' } } as unknown as ZonePackage;
+const declarations: ZoneData = { positions: { mount: 'franchise' }, continuity: {} };
+const running = { slug: 'franchise-wiki', ...declarations } as unknown as ZonePackage;
+
+/** A source that records what was asked of it; importing a package's code is a failure when the view runs none. */
+function source(options: { code?: boolean } = {}) {
+  const asked: string[] = [];
+  const result: PackageSource = {
+    async load(slug) {
+      asked.push(`load ${slug}`);
+      if (!options.code) throw new Error('package code imported for a view that does not run it');
+      return running;
+    },
+    async declarations(slug) { asked.push(`declarations ${slug}`); return declarations; },
+  };
+  return { asked, source: result };
+}
+
+test('selection: safe mode and the standard look read the approved declarations without importing package code', async () => {
+  for (const view of [{ safeMode: true, lookEnabled: true }, { safeMode: false, lookEnabled: false }]) {
+    const { asked, source: read } = source();
+    const decided = decideExecution({ ...approval, ...view });
+    const resolved = await resolvePackage({ decided, approval, surface: 'site', source: read });
+    expect(resolved.execution).toEqual(decided);
+    expect(resolved.pkg).toBeNull();
+    expect(resolved.data).toEqual(declarations);
+    expect(asked).toEqual(['declarations franchise-wiki']);
+  }
+});
+
+test('selection: a view that runs the package follows the package itself, and an unapproved one follows nothing', async () => {
+  const live = source({ code: true });
+  const decided = decideExecution({ ...approval, safeMode: false, lookEnabled: true });
+  expect(await resolvePackage({ decided, approval, surface: 'site', source: live.source }))
+    .toEqual({ execution: decided, pkg: running, data: running });
+  for (const other of [{ ...approval, installedDigest: 'sha256:other' }, { ...approval, main: null }]) {
+    const none = source();
+    const resolved = await resolvePackage({ decided: decideExecution({ ...other, safeMode: true, lookEnabled: true }),
+      approval: other, surface: 'site', source: none.source });
+    expect(resolved).toMatchObject({ pkg: null, data: null });
+    expect(none.asked).toEqual([]);
+  }
+  const community = source();
+  expect(await resolvePackage({ decided: decideExecution({ ...approval, safeMode: false, lookEnabled: true }), approval,
+    surface: 'community', source: community.source })).toMatchObject({ pkg: null, data: null });
+  expect(community.asked).toEqual([]);
+});
+
+test('selection: declarations that cannot be read leave the page without a position, not failing', async () => {
+  const quiet = spyOn(console, 'error').mockImplementation(() => {});
+  const broken: PackageSource = { load: async () => null, declarations: async () => { throw new Error('missing'); } };
+  const resolved = await resolvePackage({ decided: decideExecution({ ...approval, safeMode: true, lookEnabled: true }),
+    approval, surface: 'site', source: broken });
+  quiet.mockRestore();
+  expect(resolved).toMatchObject({ pkg: null, data: null });
+});
+
+test('selection: with safe mode on, the reader\'s chosen position still reaches every read the Zone page makes', async () => {
+  const { source: read } = source();
+  const resolved = await resolvePackage({ decided: decideExecution({ ...approval, safeMode: true, lookEnabled: true }),
+    approval, surface: 'site', source: read });
+  expect(resolved.execution).toEqual({ mode: 'fallback', reason: 'safe-mode' });
+  // The helper the realm frame and the Zone site route both call for the reader's selection.
   const { result, asked } = await signedInRender(url => {
     if (url.pathname === '/v1/me/session-agent') return { sessionAgent: { eligible: true, actingSubject: person } };
     if (url.pathname === `/v1/zones/${zone}/routes`) return { kind: 'index', items: [{ id: franchise, title: { value: 'Franchise' } }] };
     if (url.pathname.startsWith('/v1/reading-positions/'))
       return { resolved: `https://rezics.com/id/${chapter}`, items: [], complete: true, nextCursor: null };
     return undefined;
-  }, () => positionOf(declared, zone, { kind: 'at', occurrence: chapter }));
-  expect(result).toMatchObject({ mode: 'chosen', main: `https://rezics.com/id/${chapter}`, choice: { kind: 'at', occurrence: chapter } });
+  }, () => readingSelection(resolved.data, zone, { position: chapter }));
+  expect(result.choice).toEqual({ kind: 'at', occurrence: chapter });
+  expect(result.state).toMatchObject({ mode: 'chosen', main: `https://rezics.com/id/${chapter}` });
   const chooser = asked.find(url => url.pathname.startsWith('/v1/reading-positions/'))!;
   expect(chooser.searchParams.get('position')).toBe(`https://rezics.com/id/${chapter}`);
   expect(chooser.searchParams.get('actingSubject')).toBe(person);
 });
 
-test('selection: a Zone page that drops the package for presentation has no position to keep', async () => {
-  const { result, asked } = await signedInRender(() => undefined, () => positionOf(null, zone, { kind: 'at', occurrence: chapter }));
-  expect(result).toBeNull();
+test('selection: a Zone page given no data has no position to keep', async () => {
+  const { result, asked } = await signedInRender(() => undefined, () => readingSelection(null, zone, { position: chapter }));
+  expect(result.state).toBeNull();
   expect(asked).toEqual([]);
+});
+
+const web = join(import.meta.dir, '..');
+const text = (path: string) => readFileSync(join(web, path), 'utf8');
+
+test('selection: the realm frame and the Zone site route follow the resolved data, never the running package', () => {
+  for (const file of ['features/realm/realm-page.tsx', 'features/zones/site-route.tsx']) {
+    const source = text(file);
+    expect(source).toMatch(/readingSelection\((view\.)?data,/);
+    expect(source).not.toMatch(/positionOf\(|zoneContinuity\(/);
+    expect(source).not.toMatch(/\bloadPackage\(/);
+  }
+});
+
+test('selection: an official package declares its positions in a data file that imports no package code', () => {
+  const official = join(web, 'zones/official');
+  for (const slug of readdirSync(official, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)) {
+    const index = readFileSync(join(official, slug, 'index.tsx'), 'utf8');
+    const file = join(official, slug, 'declarations.ts');
+    if (/\b(positions|continuity)\s*:/.test(index)) throw new Error(`${slug} declares positions or continuity inline; use declarations.ts`);
+    if (!existsSync(file)) continue;
+    expect(index).toContain("from './declarations.ts'");
+    for (const line of readFileSync(file, 'utf8').split('\n').filter(line => /^import\b/.test(line)))
+      expect(line).toMatch(/^import type /);
+  }
+  expect(text('zones/official/index.ts')).toContain("import.meta.glob<Pick<ZonePackage, 'positions' | 'continuity'>>('./*/declarations.ts'");
 });
