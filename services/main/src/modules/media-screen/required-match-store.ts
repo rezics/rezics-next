@@ -9,8 +9,18 @@ export const REQUIRED_MATCH_COST = {
   ownerTransactions: 2,
   sourceBytes: 8 * 1024 * 1024,
   lookup:
-    'ready/expired transform queue with profile filter and exact source/asset probes; work scales with ready jobs examined',
+    'partial required-match queue index and exact source/asset probes; work scales with ready matching jobs examined',
 } as const;
+// Literal profile/status predicates also retain the partial index under generic plans.
+export const REQUIRED_MATCH_LEASE_SQL = `SELECT j.*,a.object_namespace,p.media_type,s.erasure_epoch AS current_erasure_epoch FROM media.transform_job j
+        JOIN media.asset a ON a.id=j.asset_id JOIN media.asset_state s ON s.id=a.state_head
+        JOIN media.representation p ON p.id=j.source_id
+        WHERE j.profile='required-image-match-v1' AND j.status IN ('queued','leased')
+          AND (j.status='queued' OR j.lease_expires_at<=clock_timestamp())
+          AND ($1::uuid IS NULL OR j.source_id=$1) AND s.lifecycle='active' AND s.moderation='none'
+          AND p.availability='available'
+        ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED`;
+
 export interface RequiredMatchLease {
   job: string;
   asset: string;
@@ -45,18 +55,7 @@ export class RequiredMediaMatchStore {
     if (!Number.isInteger(leaseMs) || leaseMs < 1 || leaseMs > 30_000)
       throw new Error('invalid matcher lease');
     return this.transaction(async (client) => {
-      const row = (
-        await client.query(
-          `SELECT j.*,a.object_namespace,p.media_type,s.erasure_epoch AS current_erasure_epoch FROM media.transform_job j
-        JOIN media.asset a ON a.id=j.asset_id JOIN media.asset_state s ON s.id=a.state_head
-        JOIN media.representation p ON p.id=j.source_id
-        WHERE j.profile=$1 AND (j.status='queued' OR j.status='leased' AND j.lease_expires_at<=clock_timestamp())
-          AND ($2::uuid IS NULL OR j.source_id=$2) AND s.lifecycle='active' AND s.moderation='none'
-          AND p.availability='available'
-        ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,
-          [REQUIRED_MATCH_PROFILE, source ?? null],
-        )
-      ).rows[0];
+      const row = (await client.query(REQUIRED_MATCH_LEASE_SQL, [source ?? null])).rows[0];
       if (!row) return null;
       let job = row.id as string;
       // Roll over exhaustion and restored input epochs without opening admission.

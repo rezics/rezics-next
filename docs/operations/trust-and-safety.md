@@ -42,16 +42,18 @@ New accounts have upload rate limits, and
 [Turnstile](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 protects abuse-prone enrollment. Imported covers display with their source
 attribution and are removed on a valid notice. An NSFW classifier outage permits
-manual labeling and does not create a governance hold. Required safety-matching
-outages keep new media pending and private to its author until the exact bytes
-pass matching; retries after recovery admit the requested public delivery.
-This uses a separate required-matcher port and durable media job, never NSFW
-evidence or a classifier review hold. Development can supply a synthetic SHA-256
-corpus in `.temp/media-required-match-corpus.json` (a JSON array of hashes).
-The local provider is fixture evidence only; a production matcher remains a
-deployment condition, and an unconfigured production provider keeps uploads
-pending. Actual review holds and removals
-remain explicit platform decisions.
+manual labeling and does not create a governance hold. Uploads open at launch;
+pre-publication safety matching is added once a provider is approved, rather
+than waiting for it. `MAIN_REQUIRED_MEDIA_MATCHER` defaults to `none` in every
+environment, so unconfigured matching creates no admission job or publication
+hold. When matching is configured and fails, new media stays pending and private
+to its author until the exact bytes pass; retries after recovery admit the
+requested public delivery. This uses a separate required-matcher port and durable
+media job, never NSFW evidence or a classifier review hold. Development and tests
+may explicitly select `local:<path>` with their own synthetic SHA-256 corpus
+(a JSON array of hashes); production refuses this fixture provider. `provider`
+requires an approved deployment adapter and remains unavailable until one is
+supplied. Actual review holds and removals remain explicit platform decisions.
 
 ## Platform suitability moderation setup
 

@@ -40,7 +40,7 @@ import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/lib
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
-import { LocalRequiredSafetyMatcher, type RequiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
+import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -71,7 +71,7 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
  * bearer-to-principal table so several isolated members can act concurrently. */
 export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean;
   autoClearUploads?: boolean; agents?: boolean; rights?: boolean; library?: boolean;
-  requiredMatcher?: RequiredSafetyMatcher;
+  matcherMode?: string;
   matchUploads?: boolean;
   ownerUrls?: { access: string; content: string; relay: string } } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
@@ -95,15 +95,14 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const content = new ContentCore(contentPool);
   const contentCursor = new ContentProjectionCursor(contentPool);
   const contentConsumer = `${label}-content-public-search-v1`;
-  const store = new MediaStore(contentPool, content);
+  const matcherMode = requiredMatcherMode(options.matcherMode);
+  const store = new MediaStore(contentPool, content, matcherMode);
   const objects = (prefix: string) => new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix });
   await objects('media/').initialize();
-  const corpusPath = join(directory,'required-match-corpus.json');
-  await Bun.write(corpusPath,'[]');
   const media: MediaDependencies = { store, content, objects,
-    matcher: options.matchUploads === false ? undefined : options.requiredMatcher ?? new LocalRequiredSafetyMatcher(corpusPath) };
+    matcher: options.matchUploads === false ? undefined : requiredSafetyMatcher(matcherMode) };
   const access = new AccessAdmissionRegistry(accessPool);
   access.configureBaseline(fuseki);
   const grants = new AccessGrants(accessPool);

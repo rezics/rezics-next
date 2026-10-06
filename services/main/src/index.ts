@@ -1,6 +1,6 @@
 import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { RequiredMediaMatchWorker } from './modules/media-screen/required-match-worker.ts';
-import { LocalRequiredSafetyMatcher, UnavailableRequiredSafetyMatcher } from './modules/media-screen/required-matcher.ts';
+import { requiredMatcherMode, requiredSafetyMatcher } from './modules/media-screen/required-matcher.ts';
 import { MediaScreenWorker } from './modules/media-screen/worker.ts';
 import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { MediaRenditionWorker } from './modules/media-rendition/worker.ts';
@@ -296,9 +296,9 @@ const packageInstallations = new PackageInstallationStore(contentPool, packageLo
   { rootDirectory: join(environment.objectDirectory, 'package-installations'),
     hookExecutor: new DockerNodeHookExecutor(join(environment.objectDirectory, 'package-installations'),
       process.env.PATH ?? '/usr/bin:/bin') });
-const media = { store: new MediaStore(contentPool, content), content, objects: mediaObjects };
-const requiredMatcher = process.env.NODE_ENV === 'production' ? new UnavailableRequiredSafetyMatcher()
-  : new LocalRequiredSafetyMatcher(new URL('../../../.temp/media-required-match-corpus.json', import.meta.url));
+const matcherMode = requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER, process.env.NODE_ENV === 'production');
+const media = { store: new MediaStore(contentPool, content, matcherMode), content, objects: mediaObjects };
+const requiredMatcher = requiredSafetyMatcher(matcherMode);
 const account = new AccountAssertionVerifier({
   issuer: config.ACCOUNT_ISSUER, audience: config.ACCOUNT_MAIN_RESOURCE,
   jwksUrl: config.ACCOUNT_JWKS_URL, introspectUrl: config.ACCOUNT_INTROSPECT_URL,
@@ -613,8 +613,9 @@ libraryImportRetentionWorker.start();
 const mediaScreenWorker = new MediaScreenWorker(new MediaScreenStore(contentPool), new LocalImageClassifier(),
   mediaObjects, governanceServices(pool, contentPool, content, sourceIntake, access, environment).store);
 mediaScreenWorker.start();
-const requiredMediaMatchWorker = new RequiredMediaMatchWorker(media.store.matching, requiredMatcher, mediaObjects);
-requiredMediaMatchWorker.start();
+const requiredMediaMatchWorker = requiredMatcher
+  ? new RequiredMediaMatchWorker(media.store.matching, requiredMatcher, mediaObjects) : undefined;
+requiredMediaMatchWorker?.start();
 const mediaRenditionWorker = new MediaRenditionWorker(media.store.renditions, new LocalImageTransformer(), mediaObjects);
 mediaRenditionWorker.start();
 discoveryWorker?.start();
@@ -637,7 +638,7 @@ async function stop(): Promise<void> {
   await realmPolicyRecovery.stop();
   await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();
-  await requiredMediaMatchWorker.stop();
+  await requiredMediaMatchWorker?.stop();
   await mediaRenditionWorker.stop();
   await serialStats?.stop();
   await zoneBrowse?.stop();

@@ -247,7 +247,12 @@ need representative REZICS calibration.
 
 ## Clearance and identical copies
 
-New originals activate after binary admission with a separate durable
+New originals activate after binary admission. Main's
+`MAIN_REQUIRED_MEDIA_MATCHER` defaults to `none` in every environment; that mode
+creates no pre-publication matching job or hold. Explicit `local:<path>` uses a
+synthetic corpus supplied by development or tests and is refused in production.
+`provider` reserves the approved deployment adapter; until supplied, it fails
+as unavailable. A configured matcher admits a separate durable
 `required-image-match-v1` job. Upload status stays `screening` with reason
 `required-matcher-pending` until that job succeeds. The shared
 [visibility gate](visibility.ts) permits the uploader's private use while

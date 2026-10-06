@@ -8,6 +8,7 @@ import { MediaRenditionStore } from '../media-rendition/store.ts';
 import { MediaShowcaseStore } from './showcase-store.ts';
 import { RequiredMediaMatchStore, REQUIRED_MATCH_PROFILE } from '../media-screen/required-match-store.ts';
 import type { MediaVisibilityFact } from './visibility.ts';
+import type { RequiredMatcherMode } from '../media-screen/required-matcher.ts';
 import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
@@ -243,7 +244,8 @@ export class MediaStore {
   readonly renditions: MediaRenditionStore;
   readonly showcase: MediaShowcaseStore;
   readonly matching: RequiredMediaMatchStore;
-  constructor(private readonly pool: Pool, private readonly content: ContentCore) {
+  constructor(private readonly pool: Pool, private readonly content: ContentCore,
+    private readonly matcherMode: RequiredMatcherMode = { kind: 'none' }) {
     this.presentation = new MediaPresentationStore(pool);
     this.renditions = new MediaRenditionStore(pool);
     this.showcase = new MediaShowcaseStore(pool);
@@ -417,7 +419,7 @@ export class MediaStore {
         verdict.width, verdict.height, operationId]);
       // Required matching is a separate admission job. Classifier evidence and
       // historical classifier holds never supply its publication clearance.
-      await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
+      if (this.matcherMode.kind !== 'none') await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
         authority_epoch,erasure_epoch,operation_id)
         SELECT $1,a.id,$2,$3,$4,s.authority_epoch,s.erasure_epoch,$5
         FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head WHERE a.id=$6`,

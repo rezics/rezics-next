@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { cleanEnv, url, type ValidatorSpec } from 'envalid';
 import { Pool } from 'pg';
 import { mainSpec, relaySpec, relayInitSpec } from '../../services/main/src/config.ts';
+import { requiredMatcherMode } from '../../services/main/src/modules/media-screen/required-matcher.ts';
 import { accountSpec, accountCoreSpec } from '../../services/account/src/config.ts';
 import { webSpec } from '../../apps/web/features/config/env.ts';
 import { accountsSpec } from '../../apps/accounts/features/config/env.ts';
@@ -131,6 +132,7 @@ export function checkProductionEnv(
   env: Record<string, string | undefined>,
   roles: ProductionRole[] = ['main', 'account', 'relay', 'relay-init', 'migrate'],
 ) {
+  requiredMatcherMode(env.MAIN_REQUIRED_MEDIA_MATCHER, true);
   telemetryConfig(env);
   assertClassifiedDefaults();
   const specs = Object.assign({}, ...roles.map((role) => productionSpecs[role])) as Record<
@@ -254,6 +256,7 @@ if (import.meta.main) {
   const path = process.argv[2];
   if (!path) throw new Error('ops:env-check requires an environment file');
   const env = readProductionEnv(path);
+  console.log(`Required media matcher mode: ${env.MAIN_REQUIRED_MEDIA_MATCHER ?? 'none'}`);
   checkProductionEnv(env);
   await assertNoPaymentProvider(env.ACCESS_DATABASE_URL!, true);
   console.log('Production configuration accepted; payments disabled');

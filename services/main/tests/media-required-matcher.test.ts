@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import {
+  requiredMatcherMode,
+  requiredSafetyMatcher,
   LocalRequiredSafetyMatcher,
   UnavailableRequiredSafetyMatcher,
 } from '../src/modules/media-screen/required-matcher.ts';
@@ -10,6 +12,9 @@ import type {
   RequiredMediaMatchStore,
   RequiredMatchLease,
 } from '../src/modules/media-screen/required-match-store.ts';
+import { mainConfig } from '../src/config.ts';
+import { checkProductionEnv } from '../../../scripts/ops/production-env.ts';
+import { productionExample } from '../../../scripts/ops/tests/g-722-fixture.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 
 const bytes = new Uint8Array([1, 2, 3]);
@@ -101,4 +106,77 @@ test('required matcher worker fences integrity failures, deadlines and late prov
     10,
   ).tick();
   expect(settled).toBe(1);
+});
+
+test('matcher configuration defaults to none in every environment and production refuses local corpora', async () => {
+  const env = productionExample();
+  delete env.MAIN_REQUIRED_MEDIA_MATCHER;
+  for (const NODE_ENV of [undefined, 'development', 'test', 'production']) {
+    const config = mainConfig({ ...env, NODE_ENV });
+    expect(config.MAIN_REQUIRED_MEDIA_MATCHER).toBe('none');
+    expect(
+      requiredSafetyMatcher(requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER)),
+    ).toBeUndefined();
+  }
+  expect(checkProductionEnv(env).MAIN_REQUIRED_MEDIA_MATCHER).toBe('none');
+  expect(
+    checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: 'provider' })
+      .MAIN_REQUIRED_MEDIA_MATCHER,
+  ).toBe('provider');
+  const local = 'local:.temp/test-owned-corpus.json';
+  expect(
+    mainConfig({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local, NODE_ENV: 'test' })
+      .MAIN_REQUIRED_MEDIA_MATCHER,
+  ).toBe(local);
+  expect(requiredMatcherMode(local)).toEqual({
+    kind: 'local',
+    path: '.temp/test-owned-corpus.json',
+  });
+  expect(() =>
+    mainConfig({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local, NODE_ENV: 'production' }),
+  ).toThrow('Production forbids local');
+  // Check even a combined environment whose selected role does not consume Main config.
+  expect(() => checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local }, ['web'])).toThrow(
+    'Production forbids local',
+  );
+  expect(() => checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: 'unexpected' })).toThrow(
+    'must be none',
+  );
+  for (const value of ['', 'local', 'local:', 'local:   ', 'NONE', 'provider:fixture']) {
+    expect(() => requiredMatcherMode(value)).toThrow('must be none');
+  }
+  const provider = requiredSafetyMatcher(requiredMatcherMode('provider', true))!;
+  await expect(provider.match(bytes, 'image/png', new AbortController().signal)).rejects.toThrow(
+    'not configured',
+  );
+});
+
+test('ops:env-check prints the matcher mode and rejects local before opening owners', async () => {
+  const directory = `.temp/media-matcher-env-${randomUUID()}`;
+  mkdirSync(directory, { recursive: true });
+  try {
+    const path = `${directory}/production.env`;
+    for (const mode of [undefined, 'provider', 'local:.temp/no-corpus.json']) {
+      await Bun.write(path, mode ? `MAIN_REQUIRED_MEDIA_MATCHER=${mode}\n` : '# default mode\n');
+      const child = Bun.spawn(['task', 'ops:env-check', '--', path], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      expect(stdout).toContain(`Required media matcher mode: ${mode ?? 'none'}`);
+      // The incomplete environment fails validation without reaching any database.
+      expect(code).not.toBe(0);
+      expect(stderr).toContain(
+        mode?.startsWith('local:')
+          ? 'Production forbids local'
+          : 'Invalid production configuration',
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

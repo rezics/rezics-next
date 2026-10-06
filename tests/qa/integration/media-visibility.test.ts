@@ -10,17 +10,24 @@ import { planExport } from '../../../services/main/src/modules/export/planner.ts
 import { disclosureViewer } from '../../../services/main/src/modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability/policy.ts';
 import { LocalRequiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
+import {
+  requiredMatcherMode,
+  requiredSafetyMatcher,
+} from '../../../services/main/src/modules/media-screen/required-matcher.ts';
+import { REQUIRED_MATCH_LEASE_SQL } from '../../../services/main/src/modules/media-screen/required-match-store.ts';
 import { RequiredMediaMatchWorker } from '../../../services/main/src/modules/media-screen/required-match-worker.ts';
 
 const ID = 'https://rezics.com/id/';
 let started: Promise<MediaStack> | undefined;
 let outageStack: Promise<MediaStack> | undefined;
+let providerStack: Promise<MediaStack> | undefined;
 const directory = `.temp/media-matcher-${randomUUID()}`;
 const corpus = `${directory}/corpus.json`;
 const stack = () => (started ??= startMediaStack('media-visibility'));
 afterAll(async () => {
   if (started) await (await started).stop();
   if (outageStack) await (await outageStack).stop();
+  if (providerStack) await (await providerStack).stop();
   rmSync(directory, { recursive: true, force: true });
 });
 async function status(response: Response, expected: number) {
@@ -262,12 +269,56 @@ test('saved image NSFW correction uses the existing command, receipt and predece
   ).toBeGreaterThan(0);
 });
 
+test('default none publishes normally without a matching job; configured provider failure keeps author access', async () => {
+  const fixture = await stack();
+  const author = await fixture.member('no-matcher-author');
+  const asset = await author.upload(await image());
+  const upload = await fixture.store.readUpload(asset.upload);
+  expect(upload?.clearance).toBe('cleared');
+  expect(upload?.clearanceReason).toBeNull();
+  expect(
+    (
+      await fixture.contentPool.query(
+        `SELECT id FROM media.transform_job
+    WHERE source_id=$1 AND profile='required-image-match-v1'`,
+        [asset.representation],
+      )
+    ).rowCount,
+  ).toBe(0);
+  await status(
+    await fixture.call('GET', `/v1/media/representations/${asset.representation}/bytes`),
+    200,
+  );
+
+  providerStack = startMediaStack('configured-media-provider', {
+    matcherMode: 'provider',
+    matchUploads: false,
+  });
+  const configured = await providerStack;
+  const owner = await configured.member('provider-author');
+  const pending = await owner.upload(await image());
+  const worker = new RequiredMediaMatchWorker(
+    configured.store.matching,
+    requiredSafetyMatcher(requiredMatcherMode('provider'))!,
+    configured.objects,
+  );
+  await worker.tick(pending.representation);
+  expect((await configured.store.readUpload(pending.upload))?.clearanceReason).toBe(
+    'required-matcher-pending',
+  );
+  const url = `/v1/media/representations/${pending.representation}/bytes`;
+  await status(await configured.call('GET', url), 404);
+  expect((await status(await owner.read(url), 200)).headers.get('cache-control')).toBe(
+    'private, no-store',
+  );
+});
+
 test('required matcher provider outage keeps uploads privately usable and pending; recovery after exhausted leases admits public delivery', async () => {
   mkdirSync(directory, { recursive: true });
   await Bun.write(corpus, '[]');
   const provider = new LocalRequiredSafetyMatcher(corpus);
   outageStack = startMediaStack('required-media-matcher', {
-    requiredMatcher: provider,
+    matcherMode: `local:${corpus}`,
     matchUploads: false,
   });
   const fixture = await outageStack;
@@ -275,6 +326,19 @@ test('required matcher provider outage keeps uploads privately usable and pendin
   const author = await member('matcher-author');
   const outsider = await member('matcher-outsider');
   rmSync(corpus);
+  const client = await contentPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL enable_seqscan=off');
+    await client.query('SET LOCAL plan_cache_mode=force_generic_plan');
+    await client.query(`PREPARE required_match_queue(uuid) AS ${REQUIRED_MATCH_LEASE_SQL}`);
+    const plan = await client.query('EXPLAIN EXECUTE required_match_queue(NULL)');
+    expect(JSON.stringify(plan.rows)).toContain('required_match_job_ready');
+  } finally {
+    await client.query('DEALLOCATE ALL');
+    await client.query('ROLLBACK');
+    client.release();
+  }
   const asset = await author.upload(await image());
   const worker = new RequiredMediaMatchWorker(store.matching, provider, objects, 20, 40);
   await worker.tick(asset.representation);

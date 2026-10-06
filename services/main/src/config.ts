@@ -3,6 +3,7 @@
 // renders them into services/main/.env.example.
 import { cleanEnv, num, port, str, url } from 'envalid';
 import { telemetrySpec } from '@rezics/observability/config';
+import { requiredMatcherMode } from './modules/media-screen/required-matcher.ts';
 
 const postgres = (desc: string) => url({ desc, example: 'postgres://role:password@127.0.0.1:5432/role' });
 const optionalPostgres = (desc: string) => url({ desc, default: undefined,
@@ -40,6 +41,8 @@ export const mainSpec = {
   MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS: str({ default: '', desc: 'Comma-separated exact peer IP addresses allowed to supply the client IP header.' }),
   MAIN_RATE_LIMIT_CLIENT_IP_HEADER: str({ default: 'x-rezics-client-ip', desc: 'Single client IP header replaced by a configured trusted proxy.' }),
   CONTENT_DATABASE_URL: postgres('Content owner PostgreSQL URL.'),
+  MAIN_REQUIRED_MEDIA_MATCHER: str({ default: 'none',
+    desc: 'Pre-publication safety matcher: none, local:<corpus path> (development/tests only), or provider (requires an approved deployment adapter).' }),
   MAIN_RELAY_DATABASE_URL: optionalPostgres('Relay PostgreSQL URL; enables relay hand-off positions.'),
   MAIN_RELAY_CONSUMER: str({ desc: 'Relay consumer name; set together with MAIN_RELAY_DATABASE_URL.', default: undefined }),
   ACCOUNT_RELAY_DATABASE_URL: optionalPostgres('Account relay URL for erasure and recommendation events.'),
@@ -93,6 +96,7 @@ export const relayInitSpec = {
 
 export function mainConfig(env: Record<string, string | undefined> = process.env) {
   const config = cleanEnv(env, mainSpec);
+  requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER, env.NODE_ENV === 'production');
   if (Boolean(config.MAIN_RELAY_DATABASE_URL) !== Boolean(config.MAIN_RELAY_CONSUMER)) {
     throw new Error('MAIN_RELAY_DATABASE_URL and MAIN_RELAY_CONSUMER are configured together');
   }
