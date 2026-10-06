@@ -1013,7 +1013,7 @@ export const profileRegistry = {
     ]
   },
   "relation-occurrence-v1": {
-    "sha256": "085eb7668d18baad0c135943856d0f428d31d5a5429216155f967a8001b75222",
+    "sha256": "27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6",
     "file": "shapes/relation-occurrence-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/relation-occurrence-v1/occurrence-shape",
@@ -1024,16 +1024,6 @@ export const profileRegistry = {
       "occurrence",
       "participation",
       "revision"
-    ]
-  },
-  "relation-occurrence-v2": {
-    "sha256": "b1dadb00f88e14bd2fbe61f6d753e3e261ac9a474d5db4e36caf0251feed9c67",
-    "file": "shapes/relation-occurrence-v2.ttl",
-    "shapes": [
-      "https://rezics.com/definition/relation-occurrence-v2/participation-shape"
-    ],
-    "focusRoles": [
-      "participation"
     ]
   },
   "release-v1": {

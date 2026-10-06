@@ -39,6 +39,9 @@
       "@id": "https://rezics.com/vocab/component",
       "@type": "@id"
     },
+    "rv:creditedName": {
+      "@id": "https://rezics.com/vocab/creditedName"
+    },
     "rv:dataEpoch": {
       "@id": "https://rezics.com/vocab/dataEpoch"
     },
