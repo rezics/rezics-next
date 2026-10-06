@@ -12,7 +12,7 @@ export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
-  /** A shared worktree name: tasks naming the same one work concurrently in one tree and branch. */
+  /** A shared worktree name within a Goal: its tasks work concurrently in one tree and branch. */
   worktree?: string;
 }
 export interface Attempt {
@@ -849,6 +849,23 @@ function running(task: Task): boolean {
   return task.state === 'running' && pidAlive(lastAttempt(task).pid, programOf(engineOf(lastAttempt(task))));
 }
 
+/** Dispatch and resume consume the same host capacity and the selected engine's account. */
+function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
+  const live = tasks.filter(running).length;
+  const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
+  if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
+  const usage = currentUsage();
+  const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
+  if (!forceUsage) {
+    if (isClaudeCode(engine) && ['restricted', 'critical'].includes(usage.level)) {
+      throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
+        + 'use another engine or pass --force-usage');
+    }
+    if (account?.reached) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
+  }
+  return { live, limit, usage, account };
+}
+
 function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
   manager: string, engine: Engine = engineOf(task)): Attempt {
   const n = task.attempts.length + 1;
@@ -959,32 +976,26 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     for (const id of brief.depends) {
       const dependency = ledger.tasks[id];
-      if (dependency && !['merged', 'verified'].includes(dependency.state)) {
+      if (!dependency) {
+        throw new Error(`Unknown dependency ${id}; cross-Goal dependencies are contracts on the program's board `
+          + '(docs/goals/program/state.md), not task IDs');
+      }
+      if (!['merged', 'verified'].includes(dependency.state)) {
         throw new Error(`${brief.id} depends on ${id}, which is ${dependency.state}`);
       }
     }
-    const live = tasks.filter(running).length;
-    const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
-    if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
-    const usage = currentUsage();
     const engine = brief.engine ?? DEFAULT_ENGINE;
-    const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
-    if (!flags.has('--force-usage')) {
-      if (isClaudeCode(engine) && ['restricted', 'critical'].includes(usage.level)) {
-        throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
-          + 'use another engine or pass --force-usage');
-      }
-      if (account?.reached) {
-        throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
-      }
+    const { live, limit, usage, account } = launchGates(tasks, engine, flags.has('--force-usage'));
+    const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
+    const worktree = join(root, '.temp', 'worktrees', name);
+    const branch = `goal/${name}`;
+    if (brief.worktree && tasks.some(task => task.worktree === worktree && HOLDING.includes(task.state) && task.goal !== goal)) {
+      throw new Error(`${worktree} has open tasks belonging to another Goal; use a different shared worktree`);
     }
     if (flags.has('--dry-run')) {
       console.log(`${brief.id}: claims ok; ${live}/${limit} live; ${account ? describeAccount(account) : `Claude usage ${usage.level}`}`);
       return;
     }
-    const name = brief.worktree ?? brief.id.toLowerCase();
-    const worktree = join(root, '.temp', 'worktrees', name);
-    const branch = `goal/${name}`;
     const reuse = brief.worktree !== undefined && existsSync(worktree);
     if (existsSync(worktree) && !reuse) throw new Error(`${worktree} already exists; remove it or use another ID`);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
@@ -1046,12 +1057,14 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
   let effort: string | undefined;
   let engine: Engine | undefined;
   let fresh = false;
+  let forceUsage = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '-m') message = args[++i] ?? '';
     else if (args[i] === '--file') message = readFileSync(args[++i] ?? '', 'utf8');
     else if (args[i] === '--effort') effort = args[++i];
     else if (args[i] === '--engine') engine = args[++i] as Engine;
     else if (args[i] === '--fresh') fresh = true;
+    else if (args[i] === '--force-usage') forceUsage = true;
     else throw new Error(`Unsupported resume option: ${args[i]}`);
   }
   if (!message.trim()) throw new Error('resume needs -m <message> or --file <path>');
@@ -1066,6 +1079,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
+    launchGates(Object.values(ledger.tasks), nextEngine, forceUsage);
     const manager = managerOf(ledger, task.goal);
     // A session continues only on its own engine: switching back resumes that engine's latest session,
     // and an engine without one starts fresh on the same worktree.
@@ -1085,11 +1099,10 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
 }
 
 
-/** Worker-started dev servers (task dev, Storybook, browsers) detach from the
- * worker's process group and outlive it; they held several GB each on a
- * 62 GB host. Terminate every process whose working directory is inside the
- * worktree. Linux only: reads /proc. */
-export function killWorktreeProcesses(worktree: string): number {
+/** Detached children inherit the launcher's task marker even if they change cwd.
+ * Without a task ID, sweep the worktree only when its last live worker has stopped.
+ * Linux only: reads /proc. */
+export function killWorktreeProcesses(worktree: string, taskId?: string, signal: NodeJS.Signals = 'SIGTERM'): number {
   if (!existsSync('/proc')) return 0;
   const prefix = worktree.endsWith('/') ? worktree : `${worktree}/`;
   const victims: number[] = [];
@@ -1097,11 +1110,15 @@ export function killWorktreeProcesses(worktree: string): number {
     const pid = Number(entry);
     if (!Number.isInteger(pid) || pid === process.pid) continue;
     try {
-      const cwd = readlinkSync(`/proc/${pid}/cwd`);
-      if (cwd === worktree || cwd.startsWith(prefix)) victims.push(pid);
+      if (taskId) {
+        if (readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').includes(`GOAL_TASK_ID=${taskId}`)) victims.push(pid);
+      } else {
+        const cwd = readlinkSync(`/proc/${pid}/cwd`);
+        if (cwd === worktree || cwd.startsWith(prefix)) victims.push(pid);
+      }
     } catch { /* exited or not ours */ }
   }
-  for (const pid of victims) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone */ } }
+  for (const pid of victims) { try { process.kill(pid, signal); } catch { /* gone */ } }
   return victims.length;
 }
 
@@ -1128,19 +1145,32 @@ export function preserveWorktreeArtifacts(worktree: string, runDir: string): str
 }
 
 async function stopTask(id: string): Promise<void> {
-  assertOwner(taskOf(readLedger(), id));
-  const attempt = lastAttempt(taskOf(readLedger(), id));
-  const program = programOf(engineOf(attempt));
-  if (pidAlive(attempt.pid, program)) {
-    process.kill(-attempt.pid, 'SIGTERM');
-    const deadline = Date.now() + 30_000;
-    while (pidAlive(attempt.pid, program) && Date.now() < deadline) await Bun.sleep(500);
-    if (pidAlive(attempt.pid, program)) process.kill(-attempt.pid, 'SIGKILL');
-  }
-  killWorktreeProcesses(taskOf(readLedger(), id).worktree);
-  removeWorktreeStack(taskOf(readLedger(), id).worktree);
-  await withLedger(ledger => {
+  // Keep dispatch/resume from adding a live sharer between the last-worker check and the cwd sweep.
+  await withLedger(async ledger => {
     const task = taskOf(ledger, id);
+    assertOwner(task);
+    const attempt = lastAttempt(task);
+    const program = programOf(engineOf(attempt));
+    const signalGroup = (signal: NodeJS.Signals) => {
+      if (!pidAlive(attempt.pid, program)) return;
+      try { process.kill(-attempt.pid, signal); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+    };
+    signalGroup('SIGTERM');
+    const deadline = Date.now() + 30_000;
+    let children = killWorktreeProcesses(task.worktree, task.id);
+    while ((pidAlive(attempt.pid, program) || children) && Date.now() < deadline) {
+      await Bun.sleep(100);
+      children = killWorktreeProcesses(task.worktree, task.id);
+    }
+    signalGroup('SIGKILL');
+    killWorktreeProcesses(task.worktree, task.id, 'SIGKILL');
+    const liveSharers = Object.values(ledger.tasks).some(other => other.id !== task.id
+      && other.worktree === task.worktree && HOLDING.includes(other.state) && running(other));
+    if (!liveSharers) {
+      killWorktreeProcesses(task.worktree);
+      removeWorktreeStack(task.worktree);
+    }
     lastAttempt(task).endedAt ??= new Date().toISOString();
     if (task.state === 'running') task.state = 'stopped';
   });
@@ -1376,8 +1406,17 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   const failure = await withLedger((ledger): string | undefined => {
     const task = taskOf(ledger, id);
     assertOwner(task);
-    if (running(task)) throw new Error(`${task.id} is still running`);
-    if (!['exited', 'conflict', 'stopped'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
+    const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree
+      && HOLDING.includes(other.state));
+    for (const sharer of sharers) {
+      if (sharer.goal !== task.goal) throw new Error(`${sharer.id} belongs to another Goal; cannot merge a shared branch`);
+      if (sharer.branch !== task.branch) throw new Error(`${sharer.id} uses another branch in ${task.worktree}`);
+      if (running(sharer)) throw new Error(`${sharer.id} is still running`);
+    }
+    if (!['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
+    const recordMerged = (commit: string) => {
+      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = commit; }
+    };
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
@@ -1388,29 +1427,30 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     }
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
-      task.mergedCommit = git(root, ['rev-parse', 'HEAD']);
-      task.state = 'merged';
-      console.log(`${task.id} recorded as landed at ${task.mergedCommit.slice(0, 12)}`);
+      const commit = git(root, ['rev-parse', 'HEAD']);
+      recordMerged(commit);
+      console.log(`${sharers.map(sharer => sharer.id).join(', ')} recorded as landed at ${commit.slice(0, 12)}`);
       return;
     }
     if (!ahead) {
       // A resumed task whose earlier commits already landed may hand off with nothing new.
       if (spawnSync('git', ['merge-base', '--is-ancestor', task.branch, 'main'], { cwd: root }).status === 0
         && task.mergedCommit) {
-        task.state = 'merged';
+        recordMerged(task.mergedCommit);
         console.log(`${task.id} has nothing new; its branch is already in main`);
         return;
       }
       throw new Error(`${task.id} has no commits to merge`);
     }
-    // Files merged with git's union driver take concurrent appends (route registrations), so any task may add to them.
+    // Single-task branches may append to union registries without a claim; shared branches use their full claim union.
     const union = new Set(committed.filter(file =>
       git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
-    const violations = outOfScope(committed.filter(file => !union.has(file)), task.paths);
+    const sharedTree = !!task.worktreeName || sharers.length > 1;
+    const violations = outOfScope(committed.filter(file => sharedTree || !union.has(file)), sharers.flatMap(sharer => sharer.paths));
     if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
     }
-    const history = task.historyGate && !flags.has('--allow-ids') ? historyIntroductions(branchChanges(task)) : [];
+    const history = sharers.some(sharer => sharer.historyGate) && !flags.has('--allow-ids') ? historyIntroductions(branchChanges(task)) : [];
     if (history.length) {
       throw new Error(`${task.id} names tasks in the tree; task IDs belong in commit messages:\n  ${history.join('\n  ')}`);
     }
@@ -1459,10 +1499,9 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     }
     const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
-    task.state = 'merged';
-    task.mergedCommit = git(root, ['rev-parse', 'HEAD']);
+    recordMerged(git(root, ['rev-parse', 'HEAD']));
 
-    console.log(`${task.id} merged at ${task.mergedCommit.slice(0, 12)}; ${committed.length} file(s):`);
+    console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${committed.length} file(s):`);
     console.log(`  ${committed.join('\n  ')}`);
     return undefined;
   });
@@ -1941,7 +1980,7 @@ async function main(argv: string[]): Promise<number> {
       console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
-        + ` [--engine ${ENGINES.join('|')}] [--fresh]`
+        + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | test [--heavy] <task test args> | slot [--heavy] -- <command>');

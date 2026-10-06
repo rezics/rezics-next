@@ -1,12 +1,12 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
-  type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
+  type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -517,6 +517,280 @@ describe('goalctl reclaim', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
     expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
+  });
+});
+
+describe('goalctl shared lifecycle and launch gates', () => {
+  function repo() {
+    const dir = mkdtempSync(join(tmpdir(), 'goalctl-lifecycle-'));
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout.trim();
+    };
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'goal@example.invalid');
+    git('config', 'user.name', 'goalctl test');
+    mkdirSync(join(dir, 'scripts/goal'), { recursive: true });
+    copyFileSync(join(import.meta.dir, 'dedupe-imports.ts'), join(dir, 'scripts/goal/dedupe-imports.ts'));
+    for (const root of ['app.ts', 'index.ts', 'routes/dependencies.ts']) {
+      mkdirSync(join(dir, 'services/main/src/routes'), { recursive: true });
+      writeFileSync(join(dir, 'services/main/src', root), 'export {};\n');
+    }
+    writeFileSync(join(dir, '.gitignore'), '.temp/\n');
+    git('add', '.');
+    git('commit', '-qm', 'start');
+    mkdirSync(join(dir, '.temp/bin'), { recursive: true });
+    const fixture = join(import.meta.dir, 'fixtures/sleep-worker.ts');
+    for (const binary of ['grok', 'claude', 'codex', 'codex-1']) {
+      writeFileSync(join(dir, '.temp/bin', binary), `#!/usr/bin/env bun\nimport ${JSON.stringify(fixture)};\n`);
+      chmodSync(join(dir, '.temp/bin', binary), 0o755);
+    }
+    writeFileSync(join(dir, '.temp/bin/corepack'), '#!/bin/sh\nexit 0\n');
+    for (const binary of ['grok', 'corepack']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
+    const ready = join(dir, '.temp/ready');
+    mkdirSync(ready);
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25',
+      GOAL_CODEX_HOME: join(dir, '.temp/codex'), GOAL_CODEX_1_HOME: join(dir, '.temp/codex-1'),
+      GOAL_USAGE_FILE: join(dir, '.temp/usage.json'), GOAL_SLEEP_READY_DIR: ready,
+      PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}` };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
+    const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
+    const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
+    const save = (value: Ledger) => writeFileSync(ledgerPath, JSON.stringify(value));
+    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}) => spawnSync('bun',
+      [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout: 45_000 });
+    for (const goal of ['alpha', 'beta']) {
+      mkdirSync(join(dir, 'docs/goals', goal), { recursive: true });
+      writeFileSync(join(dir, 'docs/goals', goal, 'GOAL.md'), '---\nareas: []\n---\n');
+      expect(run(['goal', 'start', goal, '--manager', `${goal}-manager`], { GOAL_ID: goal }).status).toBe(0);
+    }
+    git('add', '.');
+    git('commit', '-qm', 'Goals');
+    const brief = (id: string, options: { worktree?: string; depends?: string; engine?: string } = {}) => {
+      const path = join(dir, '.temp', `${id}.md`);
+      writeFileSync(path, ['---', `id: ${id}`, 'title: Sleeping test worker', 'effort: high',
+        `engine: ${options.engine ?? 'grok'}`, `paths: [worker-${id.slice(2)}.ts]`, `depends: [${options.depends ?? ''}]`,
+        ...options.worktree ? [`worktree: ${options.worktree}`] : [], '---', ''].join('\n'));
+      return path;
+    };
+    const workers = new Map<string, { worker: number; child: number }>();
+    const start = async (id: string, goal = 'alpha', worktree?: string) => {
+      const result = run(['dispatch', brief(id, { worktree })], { GOAL_ID: goal });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const deadline = Date.now() + 5000;
+      while (!existsSync(join(ready, id)) && Date.now() < deadline) await Bun.sleep(20);
+      const pids = JSON.parse(readFileSync(join(ready, id), 'utf8')) as { worker: number; child: number };
+      workers.set(id, pids);
+      return ledger().tasks[id]!;
+    };
+    const alive = (pid: number) => {
+      try { return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0] !== 'Z'; }
+      catch { return false; }
+    };
+    const stopFixture = async (id: string) => {
+      const pids = workers.get(id)!;
+      for (const pid of [pids.worker, pids.child]) { try { process.kill(pid, 'SIGTERM'); } catch { /* exited */ } }
+      const deadline = Date.now() + 5000;
+      while ([pids.worker, pids.child].some(alive) && Date.now() < deadline) await Bun.sleep(20);
+      const value = ledger();
+      value.tasks[id]!.state = 'exited';
+      save(value);
+    };
+    const commit = (task: Task, path = `worker-${task.id.slice(2)}.ts`) => {
+      writeFileSync(join(task.worktree, path), `export const value = '${task.id.slice(2)}';\n`);
+      const result = spawnSync('git', ['-C', task.worktree, 'add', path], { encoding: 'utf8' });
+      expect(result.status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', `Deliver ${task.id}`]).status).toBe(0);
+    };
+    const cleanup = () => {
+      for (const entry of readdirSync('/proc')) {
+        if (!/^\d+$/.test(entry)) continue;
+        try {
+          if (readFileSync(`/proc/${entry}/environ`, 'utf8').split('\0').includes(`GOAL_SLEEP_READY_DIR=${ready}`)) {
+            process.kill(Number(entry), 'SIGKILL');
+          }
+        } catch { /* exited */ }
+      }
+      for (const { worker, child } of workers.values()) {
+        for (const pid of [worker, child]) { try { process.kill(pid, 'SIGKILL'); } catch { /* exited */ } }
+      }
+      rmSync(dir, { recursive: true, force: true });
+    };
+    return { dir, git, env, run, ledger, save, brief, start, workers, alive, stopFixture, commit, cleanup };
+  }
+
+  test('stop preserves a live sharer, its detached children, commits and shared stack', async () => {
+    const r = repo();
+    let server: ChildProcess | undefined;
+    try {
+      const first = await r.start('G-001', 'alpha', 'wave-1');
+      const second = await r.start('G-002', 'alpha', 'wave-1');
+      r.commit(first);
+      r.commit(second);
+      const head = r.git('rev-parse', first.branch);
+      const env = { ...r.env };
+      delete env.GOAL_TASK_ID;
+      server = spawn('bun', [join(import.meta.dir, 'fixtures/sleep-worker.ts'), '--child'],
+        { cwd: first.worktree, detached: true, stdio: 'ignore', env });
+      const dockerLog = join(r.dir, '.temp/docker.log');
+      writeFileSync(join(r.dir, '.temp/bin/docker'), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${dockerLog}'\necho container\n`);
+      chmodSync(join(r.dir, '.temp/bin/docker'), 0o755);
+      expect(r.run(['stop', first.id]).status).toBe(0);
+      await Bun.sleep(100);
+      expect(r.alive(r.workers.get(first.id)!.worker)).toBe(false);
+      expect(r.alive(r.workers.get(first.id)!.child)).toBe(false);
+      expect(r.alive(r.workers.get(second.id)!.worker)).toBe(true);
+      expect(r.alive(r.workers.get(second.id)!.child)).toBe(true);
+      expect(r.alive(server.pid!)).toBe(true);
+      expect(existsSync(dockerLog)).toBe(false);
+      expect(r.git('rev-parse', first.branch)).toBe(head);
+      expect(r.ledger().tasks[first.id]!.state).toBe('stopped');
+      expect(r.run(['stop', second.id]).status).toBe(0);
+      await Bun.sleep(100);
+      expect(r.alive(server.pid!)).toBe(false);
+      expect(readFileSync(dockerLog, 'utf8')).toContain(`compose -p rezics-qa-wt-${second.worktree.split('/').at(-1)} down -v`);
+    } finally { server?.kill('SIGKILL'); r.cleanup(); }
+  }, 30_000);
+
+  test('merges the shared branch once, accepts both claims and records all open sharers', async () => {
+    const r = repo();
+    try {
+      const first = await r.start('G-001', 'alpha', 'wave-1');
+      const second = await r.start('G-002', 'alpha', 'wave-1');
+      r.commit(first);
+      r.commit(second);
+      await r.stopFixture(first.id);
+      await r.stopFixture(second.id);
+      const result = r.run(['merge', first.id]);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const tasks = r.ledger().tasks;
+      expect(tasks[first.id]!.state).toBe('merged');
+      expect(tasks[second.id]!.state).toBe('merged');
+      expect(tasks[first.id]!.mergedCommit).toBe(r.git('rev-parse', 'main'));
+      expect(tasks[second.id]!.mergedCommit).toBe(tasks[first.id]!.mergedCommit);
+      expect(r.run(['merge', second.id]).status).toBe(0);
+      // A resumed sharer may finish without new commits; the no-op merge still records its delivered work.
+      await r.stopFixture(second.id);
+      expect(r.run(['merge', first.id]).status).toBe(0);
+      expect(r.ledger().tasks[second.id]!.state).toBe('merged');
+      expect(r.ledger().tasks[second.id]!.mergedCommit).toBe(tasks[first.id]!.mergedCommit);
+    } finally { r.cleanup(); }
+  }, 30_000);
+
+  test('refuses a shared merge while another sharer is running', async () => {
+    const r = repo();
+    try {
+      const first = await r.start('G-001', 'alpha', 'wave-1');
+      await r.start('G-002', 'alpha', 'wave-1');
+      r.commit(first);
+      await r.stopFixture(first.id);
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', first.id]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('G-002 is still running');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+    } finally { r.cleanup(); }
+  });
+
+  test('refuses files outside every shared claim', async () => {
+    const r = repo();
+    try {
+      const first = await r.start('G-001', 'alpha', 'wave-1');
+      await r.start('G-002', 'alpha', 'wave-1');
+      r.commit(first, 'unclaimed.ts');
+      await r.stopFixture(first.id);
+      await r.stopFixture('G-002');
+      const result = r.run(['merge', first.id]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('unclaimed.ts');
+    } finally { r.cleanup(); }
+  });
+
+  test('two Goals naming wave-1 get different trees and branches', async () => {
+    const r = repo();
+    try {
+      const first = await r.start('G-001', 'alpha', 'wave-1');
+      const second = await r.start('G-002', 'beta', 'wave-1');
+      expect(first.worktree).toBe(join(r.dir, '.temp/worktrees/alpha-wave-1'));
+      expect(second.worktree).toBe(join(r.dir, '.temp/worktrees/beta-wave-1'));
+      expect(first.branch).toBe('goal/alpha-wave-1');
+      expect(second.branch).toBe('goal/beta-wave-1');
+    } finally { r.cleanup(); }
+  });
+
+  test('refuses joining a tree occupied by another Goal even when its worker has exited', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001', 'alpha', 'wave-1');
+      await r.stopFixture('G-001');
+      const value = r.ledger();
+      value.tasks['G-001']!.goal = 'beta';
+      r.save(value);
+      const result = r.run(['dispatch', r.brief('G-002', { worktree: 'wave-1' }), '--dry-run']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('another Goal');
+    } finally { r.cleanup(); }
+  });
+
+  test('dispatch refuses an unknown dependency with the cross-Goal contract location', () => {
+    const r = repo();
+    try {
+      const result = r.run(['dispatch', r.brief('G-001', { depends: 'G-999' }), '--dry-run']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Unknown dependency G-999');
+      expect(result.stderr).toContain('docs/goals/program/state.md');
+    } finally { r.cleanup(); }
+  });
+
+  test('resume checks the live-worker limit even with --force-usage', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001');
+      await r.start('G-002');
+      await r.stopFixture('G-001');
+      for (const flags of [[], ['--force-usage']]) {
+        const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MAX_WORKERS: '1' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Concurrency limit reached: 1/1 live workers');
+        expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
+      }
+    } finally { r.cleanup(); }
+  });
+
+  test('resume checks the chosen engine usage and --force-usage overrides it', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001');
+      await r.stopFixture('G-001');
+      writeFileSync(r.env.GOAL_USAGE_FILE!, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
+        five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 } } }));
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+        const sessions = join(home, 'sessions/2026/10/07');
+        mkdirSync(sessions, { recursive: true });
+        writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
+          type: 'token_count', rate_limits: { primary: { used_percent: 100, window_minutes: 10080,
+            resets_at: Date.now() / 1000 + 3600 } } } }));
+      }
+      for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'codex-1', 'luna']) {
+        const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(engine.startsWith('codex') || engine === 'luna' ? 'EXHAUSTED' : 'Claude usage is critical');
+        expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
+      }
+      // A fake Claude executable proves the escape reaches launch without calling a real engine.
+      copyFileSync(join(r.dir, '.temp/bin/grok'), join(r.dir, '.temp/bin/claude'));
+      const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', 'claude', '--force-usage']);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const deadline = Date.now() + 5000;
+      while (r.workers.get('G-001')!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number }).worker
+        && Date.now() < deadline) await Bun.sleep(20);
+      r.workers.set('G-001', JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number });
+      expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(2);
+    } finally { r.cleanup(); }
   });
 });
 

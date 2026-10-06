@@ -1,5 +1,5 @@
 // Union merges of composition roots can keep an older single-line import beside its updated form.
-// Drop an import whose names are all provided by another import of the same module; report changes.
+// Drop an import only when another supplies every name with the same type/value kind; report changes.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const roots = ['services/main/src/app.ts', 'services/main/src/index.ts', 'services/main/src/routes/dependencies.ts'];
@@ -20,7 +20,12 @@ for (const file of roots) {
     console.log(`${file}: hoisted ${stray.length} import(s)`);
   }
   const imports = lines.map((line, index) => ({ index, match: pattern.exec(line) })).filter(item => item.match);
-  const names = (match: RegExpExecArray) => new Set(match[2]!.split(',').map(name => name.trim().replace(/^type /, '')));
+  const names = (match: RegExpExecArray) => new Set(match[2]!.split(',').map(specifier => {
+    const name = specifier.trim();
+    // `type as Alias` imports a value named "type"; only the modifier consumes the first word.
+    const inlineType = !match[1] && /^type\s+(?!as(?:\s|$))/.test(name);
+    return `${match[1] || inlineType ? 'type' : 'value'}:${inlineType ? name.slice(5) : name}`;
+  }));
   const drop = new Set<number>();
   for (const a of imports) {
     for (const b of imports) {
