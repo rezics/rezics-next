@@ -174,6 +174,10 @@ regression until it closed on 2026-10-06. These remain:
 - **Test fault injectors.** Several fault injectors and counters still count
   background work; the audit is in the Goal's archived notes. Scope them when
   a test that uses one flakes.
+- **Checkbox journeys.** G-1212 made the shared checkbox's input take pointer
+  hits; run `g-839-work-levels-edit`, `g-843-catalogue-intake` and `library`
+  journeys, which call `.check()` on it and failed before (the last run was
+  stopped by host memory pressure).
 - **Order-dependent tests.** g-832-lexicon, g-856-position,
   post-search-disclosure, projection-by-frame and growth-search-context pass
   alone but assume a fresh database.
