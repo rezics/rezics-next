@@ -11,7 +11,7 @@ const agent = id(900_000);
 
 function fixture(size: number, visible: (index: number) => boolean = () => true,
   published: (index: number) => boolean = visible, allShelves = false) {
-  let revision = '0', disclosureRevision = '0', visibility = 'public', graphCalls = 0, candidates = 0, batches = 0;
+  let revision = '0', visibility = 'public', graphCalls = 0, candidates = 0, batches = 0;
   const shelfCandidates = new Map<string, number>();
   const store = {
     fence: async () => revision,
@@ -32,7 +32,7 @@ function fixture(size: number, visible: (index: number) => boolean = () => true,
     principal: null, displayLanguages: ['en'], checkDeadline: () => {},
     viewer: { signedIn: false, age: 'unknown', country: null,
       optIns: { general: true, r15: false, sexual: false, grotesque: false } },
-    deps: { profiles: { agentFence: async () => 'agent-head', disclosureFence: async () => disclosureRevision,
+    deps: { profiles: { agentFence: async () => 'agent-head',
       visibility: { read: async () => ({ visibility, version: 1 }) },
       listing: { read: async () => ({ listing: 'listed', version: 1 }) } },
       personPreferences: { profileVisible: async () => true } },
@@ -50,7 +50,7 @@ function fixture(size: number, visible: (index: number) => boolean = () => true,
       : { status: 'unavailable' }),
   }) as unknown as WorkReadSession;
   return { store, session, measure: () => ({ graphCalls, candidates, batches }),
-    shelfCandidates, changeDisclosure: () => { disclosureRevision = '1'; },
+    shelfCandidates,
     change: () => { revision = '1'; }, hide: () => { visibility = 'private'; } };
 }
 
@@ -70,40 +70,37 @@ function httpFixture(home: ReturnType<typeof fixture>) {
   return { app, summaries };
 }
 
-test('A carried count is rejected when an earlier Work read gate closes without a graph or shelf change', async () => {
+test.each([1, 2])('A carried count stays approximate and never shows a Work hidden mid-walk (Work %s)', async hidden => {
   let closed = false;
-  const home = fixture(2, index => !closed || index !== 1, () => true);
-  const first = await readPublicStatusShelf(home.session(undefined, 1), agent, home.store, 'reading');
-  expect(first).toMatchObject({ statusCount: 1, statusCountKind: 'lower-bound' });
-  closed = true;
-  home.changeDisclosure();
-  await expect(readPublicStatusShelf(home.session(first.nextCursor!, 1), agent, home.store, 'reading'))
-    .rejects.toBeInstanceOf(WorkReadMoved);
-  expect(home.measure().candidates).toBe(2);
+  const home = fixture(2, index => !closed || index !== hidden, () => true);
+  const { app, summaries } = httpFixture(home);
+  const path = `http://main.local/v1/agents/${agent.slice(-36)}/shelves/status/reading/works?limit=1`;
+  try {
+    const firstResponse = await app.handle(new Request(path));
+    expect(firstResponse.status).toBe(200);
+    const first = await firstResponse.json();
+    expect(first).toMatchObject({ statusCount: 1, statusCountKind: 'lower-bound' });
+    expect(Number.isFinite(Date.parse(first.statusCountBasis))).toBe(true);
+    closed = true;
+    const continuedResponse = await app.handle(new Request(`${path}&cursor=${encodeURIComponent(first.nextCursor)}`));
+    expect(continuedResponse.status).toBe(200);
+    const continued = await continuedResponse.json();
+    expect(continued).toMatchObject({ statusCount: hidden === 1 ? 2 : 1, statusCountKind: 'approximate',
+      statusCountBasis: first.statusCountBasis, nextCursor: null });
+    expect(continued.items.map((item: { work: string }) => item.work)).toEqual(hidden === 1 ? [id(2)] : []);
+    expect(home.measure().candidates).toBe(3);
+  } finally { summaries.mockRestore(); }
 });
 
-test('Summary continuations reject disclosure changes without recounting the delivered prefix', async () => {
+test('Summary continuations preserve the lagging count and first-page time without recounting', async () => {
   const home = fixture(30);
   const summary = await readPublicShelves(home.session(), agent, home.store);
   const shelf = summary.statusShelves.find(row => row.status === 'reading')!;
   expect(shelf).toMatchObject({ count: 20, countKind: 'lower-bound' });
   const before = home.measure();
-  home.changeDisclosure();
-  await expect(readPublicStatusShelf(home.session(shelf.nextCursor!), agent, home.store, 'reading'))
-    .rejects.toBeInstanceOf(WorkReadMoved);
-  expect(home.measure().candidates).toBe(before.candidates);
-});
-
-test.each([false, true])('A disclosure change during hydration discards the public count (summary=%s)', async summary => {
-  const home = fixture(30), session = home.session();
-  const hydrate = session.summaries.bind(session);
-  session.summaries = async (...args) => {
-    const result = await hydrate(...args);
-    home.changeDisclosure();
-    return result;
-  };
-  await expect(summary ? readPublicShelves(session, agent, home.store)
-    : readPublicStatusShelf(session, agent, home.store, 'reading')).rejects.toBeInstanceOf(WorkReadMoved);
+  const continued = await readPublicStatusShelf(home.session(shelf.nextCursor!), agent, home.store, 'reading');
+  expect(continued).toMatchObject({ statusCount: 30, statusCountKind: 'approximate', statusCountBasis: shelf.countBasis });
+  expect(home.measure().candidates - before.candidates).toBe(10);
 });
 
 test.each(['public', 'summary', 'private'])('The HTTP retry wrapper shares the forty-candidate budget per shelf (%s)', async surface => {
@@ -169,7 +166,7 @@ test('Hidden and nameless prefixes yield resumable empty pages and never contrib
     expect(home.measure().batches - before.batches).toBeLessThanOrEqual(2);
     works.push(...page.items.map(item => item.work));
     expect(page.statusCount).toBe(works.length);
-    expect(page.statusCountKind).toBe(page.nextCursor ? 'lower-bound' : 'exact');
+    expect(page.statusCountKind).toBe(page.nextCursor ? 'lower-bound' : 'approximate');
     cursor = page.nextCursor ?? undefined;
     expect(++pages).toBeLessThanOrEqual(7);
   } while (cursor);
@@ -186,13 +183,16 @@ test('Hidden and nameless prefixes yield resumable empty pages and never contrib
 test('Counting through all 1,000 cards preserves each identity exactly once, including the terminal boundary', async () => {
   const home = fixture(1_000);
   let cursor: string | undefined;
+  let basis: string | undefined;
   const works: string[] = [];
   do {
     const page = await readPublicStatusShelf(home.session(cursor), agent, home.store, 'reading');
+    basis ??= page.statusCountBasis;
+    expect(page.statusCountBasis).toBe(basis);
+    expect(page.statusCountKind).toBe(page.nextCursor ? 'lower-bound' : 'approximate');
     works.push(...page.items.map(item => item.work));
     expect(page.statusCount).toBe(works.length);
     cursor = page.nextCursor ?? undefined;
-    if (!cursor) expect(page.statusCountKind).toBe('exact');
   } while (cursor);
   expect(works).toHaveLength(1_000);
   expect(new Set(works).size).toBe(1_000);

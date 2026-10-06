@@ -165,9 +165,10 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           scans.mockClear();
           const graphBefore = home.stack.fuseki.queries;
           const page = await fixtureDeadline(home.call('GET', `${sharedBase}&cursor=${encodeURIComponent(sharedCursor)}`)
-            .then(response => home.json<Page & { statusCount: number }>(response)), 'G-824 public read/title/asc');
+            .then(response => home.json<Page & { statusCount: number; statusCountKind: string }>(response)), 'G-824 public read/title/asc');
           recordPage(page.items.map(item => item.work), page.nextCursor);
           expect(page.statusCount).toBe(sharedWorks.length + page.items.length);
+          expect(page.statusCountKind).toBe(page.nextCursor ? 'lower-bound' : 'approximate');
           // Two candidate batches at most (including lookahead); no count scan.
           expect(scans.mock.calls.length).toBeLessThanOrEqual(2);
           expect(scans.mock.calls.every(call => call[2] === STATUS_SHELF_COST.candidateBatch)).toBe(true);
@@ -256,7 +257,7 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
       { visibility: 'public', expectedVersion: 0 }, home.reader.token));
     const publicBase = `/v1/agents/${agent.slice(-36)}/shelves/status/reading/works?limit=1`;
     // Invisible prefixes advance in bounded empty pages. Count only delivered
-    // cards and follow the cursor until the total is exact.
+    // cards and follow the cursor until the lagging total finishes.
     const publicTraversal = async () => {
       const works: Page['items'] = [];
       let cursor: string | null = null, pages = 0;
@@ -277,7 +278,7 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
     };
     const shared = await publicTraversal();
     expect(shared.items.map(item => item.work)).toEqual([parent.work]);
-    expect(shared).toMatchObject({ statusCount: 1, statusCountKind: 'exact', nextCursor: null });
+    expect(shared).toMatchObject({ statusCount: 1, statusCountKind: 'approximate', nextCursor: null });
     // A publication pointer alone is insufficient: a missing display name also
     // makes the card unavailable, and the public total must agree with its page.
     await home.stack.fuseki.update(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>

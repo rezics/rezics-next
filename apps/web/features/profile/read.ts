@@ -96,19 +96,19 @@ const ownShelves = (profile: AgentProfile) => profile.links.statusShelves?.start
 
 /** One page of a status shelf: public, or the owner's own. Cards Main could not name are left out. */
 export async function readShelfPage(profile: AgentProfile, status: ShelfStatus, limit: number, cursor?: string):
-  Promise<Loaded<{ count: number; countKind: ShelfCountKind; cards: ShelfCard[]; nextCursor: string | null }>> {
+  Promise<Loaded<{ count: number; countKind: ShelfCountKind; countBasis: string | null; cards: ShelfCard[]; nextCursor: string | null }>> {
   const { main, actingSubject } = await profileReader();
   if (ownShelves(profile) && actingSubject) {
     const read = await settle(() => main.v1.me.shelves.status({ status }).works.get({ query: { actingSubject, limit,
       cursor } }), cursor);
     const summary = await readOwnCounts(actingSubject);
-    return read.ok ? { ok: true, data: { count: summary.find(item => item.status === status)?.count ?? 0, countKind: 'exact',
+    return read.ok ? { ok: true, data: { count: summary.find(item => item.status === status)?.count ?? 0, countKind: 'exact', countBasis: null,
       cards: read.data.items.flatMap(item => (item.card ? [item.card] : [])), nextCursor: read.data.nextCursor } }
       : read;
   }
   const read = await settle<PublicShelfPage>(() => main.v1.agents({ id: profile.id.slice(-36) }).shelves
     .status({ status }).works.get({ query: { actingSubject, limit, cursor } }), cursor);
-  return read.ok ? { ok: true, data: { count: read.data.statusCount, countKind: read.data.statusCountKind,
+  return read.ok ? { ok: true, data: { count: read.data.statusCount, countKind: read.data.statusCountKind, countBasis: read.data.statusCountBasis,
     cards: read.data.items.map(item => item.card),
     nextCursor: read.data.nextCursor } } : read;
 }
@@ -120,7 +120,7 @@ const readOwnCounts = cache(async (actingSubject: string) => {
 });
 
 /** How many Works each status shelf holds, in the profile's order. */
-async function readShelfCounts(profile: AgentProfile): Promise<Loaded<{ status: ShelfStatus; count: number; countKind: ShelfCountKind }[]>> {
+async function readShelfCounts(profile: AgentProfile): Promise<Loaded<Pick<ShelfSummary, 'status' | 'count' | 'countKind' | 'countBasis'>[]>> {
   const { main, actingSubject } = await profileReader();
   const read = ownShelves(profile) && actingSubject
     ? await settle(() => main.v1.me.shelves.get({ query: { actingSubject, limit: 1 } }))
@@ -129,8 +129,9 @@ async function readShelfCounts(profile: AgentProfile): Promise<Loaded<{ status: 
   return { ok: true, data: shelfStatuses.map(status => {
     const shelf = read.data.statusShelves.find(item => item.status === status);
     return { status, count: shelf?.count ?? 0,
-      countKind: shelf && 'countKind' in shelf && shelf.countKind === 'lower-bound'
-        ? 'lower-bound' as const : 'exact' as const };
+      countKind: shelf && 'countKind' in shelf && (shelf.countKind === 'lower-bound' || shelf.countKind === 'approximate')
+        ? shelf.countKind : 'exact' as const,
+      countBasis: shelf && 'countBasis' in shelf && typeof shelf.countBasis === 'string' ? shelf.countBasis : null };
   }) };
 }
 
@@ -144,10 +145,10 @@ export const readLibrary = cache(async (profile: AgentProfile, perShelf: number)
   }
   const counts = await readShelfCounts(profile);
   if (!counts.ok) return { kind: 'failed', failure: counts.failure };
-  const shelves = await Promise.all(counts.data.map(async ({ status, count, countKind }): Promise<ShelfSummary> => {
-    if (!count && countKind === 'exact') return { status, count, countKind, works: { ok: true, data: [] } };
+  const shelves = await Promise.all(counts.data.map(async ({ status, count, countKind, countBasis }): Promise<ShelfSummary> => {
+    if (!count && countKind === 'exact') return { status, count, countKind, countBasis, works: { ok: true, data: [] } };
     const page = await readShelfPage(profile, status, perShelf);
-    return { status, count, countKind, works: page.ok ? { ok: true, data: page.data.cards } : page };
+    return { status, count, countKind, countBasis, works: page.ok ? { ok: true, data: page.data.cards } : page };
   }));
   return { kind: 'shelves', own: ownShelves(profile), shelves };
 });

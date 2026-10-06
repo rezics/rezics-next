@@ -48,6 +48,7 @@ export interface ShelfSummary {
   status: ShelfStatus;
   count: number;
   countKind: ShelfCountKind;
+  countBasis: string | null;
   works: Loaded<ShelfCard[]>;
 }
 

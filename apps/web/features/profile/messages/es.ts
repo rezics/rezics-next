@@ -41,6 +41,8 @@ export default {
   shelfRead: 'Leídos',
   shelfWantToRead: 'Quiero leer',
   shelfSummary: 'Estanterías',
+  shelfCountAbout: insert('aproximadamente {{count}}', { count: String }),
+  shelfCountBasis: insert('Inicio del recuento: {{time}}', { time: String }),
   shelfEmpty: 'Esta estantería todavía está vacía.',
   shelfUnavailable: 'No se pudo cargar esta estantería',
   shelvesUnavailable: 'No se pudieron cargar las estanterías',

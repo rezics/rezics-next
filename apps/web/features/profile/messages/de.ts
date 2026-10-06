@@ -41,6 +41,8 @@ export default {
   shelfRead: 'Gelesen',
   shelfWantToRead: 'Möchte ich lesen',
   shelfSummary: 'Regale',
+  shelfCountAbout: insert('etwa {{count}}', { count: String }),
+  shelfCountBasis: insert('Zählung begonnen: {{time}}', { time: String }),
   shelfEmpty: 'Dieses Regal ist noch leer.',
   shelfUnavailable: 'Dieses Regal konnte nicht geladen werden',
   shelvesUnavailable: 'Regale konnten nicht geladen werden',

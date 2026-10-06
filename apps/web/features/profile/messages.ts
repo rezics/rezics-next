@@ -46,6 +46,8 @@ export const messages = {
   shelfRead: 'Read',
   shelfWantToRead: 'Want to read',
   shelfSummary: 'Bookshelves',
+  shelfCountAbout: insert('about {{count}}', { count: String }),
+  shelfCountBasis: insert('Count started {{time}}', { time: String }),
   shelfEmpty: 'Nothing on this shelf yet.',
   shelfUnavailable: 'Couldn’t load this shelf',
   shelvesUnavailable: 'Couldn’t load bookshelves',

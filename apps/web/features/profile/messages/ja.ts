@@ -41,6 +41,8 @@ export default {
   shelfRead: '読んだ本',
   shelfWantToRead: '読みたい本',
   shelfSummary: '本棚',
+  shelfCountAbout: insert('約{{count}}', { count: String }),
+  shelfCountBasis: insert('集計開始：{{time}}', { time: String }),
   shelfEmpty: 'この本棚はまだ空です。',
   shelfUnavailable: 'この本棚を読み込めませんでした',
   shelvesUnavailable: '本棚を読み込めませんでした',

@@ -27,7 +27,7 @@ import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
-test('Public shelf continuation rejects closure of a previously counted Work read gate', async () => {
+test('Public shelf continuation keeps its count approximate when Work read gates close mid-walk', async () => {
   const stack = await startMediaStack('shelf-count-disclosure', { library: true, agents: true });
   try {
     const disclosure = new DisclosureStore(stack.accessPool);
@@ -52,7 +52,7 @@ test('Public shelf continuation rejects closure of a previously counted Work rea
     const response = await stack.call('GET', path);
     expect(response.status).toBe(200);
     const first = await response.json() as { items: { work: string }[]; statusCount: number;
-      statusCountKind: string; nextCursor: string };
+      statusCountKind: string; statusCountBasis: string; nextCursor: string };
     expect(first).toMatchObject({ statusCount: 1, statusCountKind: 'lower-bound' });
     const before = await status.fence(agent);
     const work = first.items[0]!.work, scope = `work:read:${work}`;
@@ -62,12 +62,25 @@ test('Public shelf continuation rejects closure of a previously counted Work rea
       ANONYMOUS_VIEWER, 'summary')).toEqual(['tombstone']);
     expect(await status.fence(agent)).toBe(before);
     const continued = await stack.call('GET', `${path}&cursor=${encodeURIComponent(first.nextCursor)}`);
-    expect(continued.status).toBe(409);
-    expect(await continued.json()).toMatchObject({ code: 'read_basis_changed' });
+    expect(continued.status).toBe(200);
+    const lagging = await continued.json() as { items: { work: string }[] };
+    expect(lagging).toMatchObject({ statusCount: 2, statusCountKind: 'approximate',
+      statusCountBasis: first.statusCountBasis, nextCursor: null });
+    expect(lagging.items.some(item => item.work === work)).toBe(false);
+    // Closing the not-yet-delivered Work must also hide it on the continuation.
+    const remaining = works.find(item => item.work !== work)!.work;
+    const remainingScope = `work:read:${remaining}`;
+    const remainingGate = (await stack.accessPool.query(
+      'SELECT authority_epoch::text FROM access.scope_gate WHERE id=$1', [remainingScope])).rows[0];
+    await stack.access.strongCloseScope(remainingScope, remainingGate.authority_epoch);
+    const hiddenTail = await stack.call('GET', `${path}&cursor=${encodeURIComponent(first.nextCursor)}`);
+    expect(hiddenTail.status).toBe(200);
+    expect(await hiddenTail.json()).toMatchObject({ items: [], statusCount: 1, statusCountKind: 'approximate',
+      statusCountBasis: first.statusCountBasis, nextCursor: null });
     const restarted = await stack.call('GET', path);
     expect(restarted.status).toBe(200);
     const fresh = await restarted.json();
-    expect(fresh).toMatchObject({ statusCount: 1, statusCountKind: 'exact', nextCursor: null });
+    expect(fresh).toMatchObject({ statusCount: 0, statusCountKind: 'exact', nextCursor: null });
     expect(fresh.items.map((item: { work: string }) => item.work)).not.toContain(work);
   } finally { await stack.stop(); }
 }, 120_000);
@@ -280,7 +293,7 @@ test.each(['initial context', 'retained context'])(
       + `&cursor=${encodeURIComponent(firstPublicBody.nextCursor)}`));
     expect(secondPublicPage.status).toBe(200);
     const secondPublicBody = await secondPublicPage.json() as { items: { work: string }[] };
-    expect(secondPublicBody).toMatchObject({ statusCount: 2, statusCountKind: 'exact' });
+    expect(secondPublicBody).toMatchObject({ statusCount: 2, statusCountKind: 'approximate' });
     expect(new Set([firstPublicBody.items[0]?.work, secondPublicBody.items[0]?.work]))
       .toEqual(new Set([publicWork.work, secondPublic.work]));
     await status.write({ agent: person.agent, work: secondPublic.work, status: 'read',

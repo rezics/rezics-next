@@ -28,14 +28,16 @@ const uuid = '0192e0aa-4b5a-7c6d-8e7f-9a0b1c2d3e4f';
 test('An empty terminal continuation reports the accumulated total without calling the shelf empty', () => {
   const render = (count: number, cursor?: string) => renderToStaticMarkup(createElement(ProfileShelfPage, {
     profile: storyProfile(), status: 'reading', cursor, reader: { signedIn: false }, locale: 'en', messages,
-    shelf: { ok: true, data: { count, countKind: 'exact', cards: [], nextCursor: null } },
+    shelf: { ok: true, data: { count, countKind: cursor ? 'approximate' : 'exact', countBasis: cursor ? '2026-10-07T00:00:00.000Z' : null, cards: [], nextCursor: null } },
   }));
   const terminal = render(20, 'scan-last');
-  expect(terminal).toContain('20');
+  expect(terminal).toContain('about 20');
+  expect(terminal).toContain('Count started Oct 7, 2026, 12:00 AM UTC');
   expect(terminal).not.toContain(messages.shelfEmpty);
   expect(terminal).toContain('First page');
   expect(terminal).not.toContain('Next page');
   expect(render(0)).toContain(messages.shelfEmpty);
+  expect(render(0, 'scan-last')).not.toContain(messages.shelfEmpty);
 });
 
 describe('profile addresses', () => {

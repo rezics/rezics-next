@@ -358,9 +358,9 @@ export const NothingYet: Story = {
       kind: 'shelves',
       own: false,
       shelves: [
-        { status: 'reading', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
-        { status: 'read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
-        { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+        { status: 'reading', count: 0, countKind: 'exact', countBasis: null, works: { ok: true, data: [] } },
+        { status: 'read', count: 0, countKind: 'exact', countBasis: null, works: { ok: true, data: [] } },
+        { status: 'want-to-read', count: 0, countKind: 'exact', countBasis: null, works: { ok: true, data: [] } },
       ],
     },
   },
@@ -382,9 +382,9 @@ export const RegionsUnavailable: Story = {
       kind: 'shelves',
       own: false,
       shelves: [
-        { status: 'reading', count: 2, countKind: 'exact', works: { ok: false, failure: 'unavailable' } },
-        { status: 'read', count: 48, countKind: 'exact', works: { ok: true, data: shelfCards.read } },
-        { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+        { status: 'reading', count: 2, countKind: 'exact', countBasis: null, works: { ok: false, failure: 'unavailable' } },
+        { status: 'read', count: 48, countKind: 'exact', countBasis: null, works: { ok: true, data: shelfCards.read } },
+        { status: 'want-to-read', count: 0, countKind: 'exact', countBasis: null, works: { ok: true, data: [] } },
       ],
     },
   },
@@ -454,7 +454,7 @@ export const Shelf: StoryObj<typeof ProfileShelfPage> = {
       profile={storyProfile()}
       status="read"
       cursor="page-2"
-      shelf={{ ok: true, data: { count: 48, countKind: 'exact', cards: shelfCards.read, nextCursor: 'page-3' } }}
+      shelf={{ ok: true, data: { count: 48, countKind: 'exact', countBasis: null, cards: shelfCards.read, nextCursor: 'page-3' } }}
       reader={signedOut}
       locale="en"
       messages={messages}
@@ -513,9 +513,9 @@ async function captureShelfCount(name: string, width: number) {
 
 export const PublicLowerBounds: Story = {
   args: { works: { ok: true, data: noWorks }, library: { kind: 'shelves', own: false, shelves: [
-    { status: 'reading', count: 0, countKind: 'lower-bound', works: { ok: true, data: [] } },
-    { status: 'read', count: 20, countKind: 'lower-bound', works: { ok: true, data: shelfCards.read } },
-    { status: 'want-to-read', count: 0, countKind: 'exact', works: { ok: true, data: [] } },
+    { status: 'reading', count: 0, countKind: 'lower-bound', countBasis: '2026-10-07T00:00:00.000Z', works: { ok: true, data: [] } },
+    { status: 'read', count: 20, countKind: 'lower-bound', countBasis: '2026-10-07T00:00:00.000Z', works: { ok: true, data: shelfCards.read } },
+    { status: 'want-to-read', count: 0, countKind: 'exact', countBasis: null, works: { ok: true, data: [] } },
   ] } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -529,7 +529,7 @@ export const PublicLowerBounds: Story = {
 
 export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
   render: () => <ProfileShelfPage profile={storyProfile()} status="reading"
-    shelf={{ ok: true, data: { count: 0, countKind: 'lower-bound', cards: [], nextCursor: 'scan-next' } }}
+    shelf={{ ok: true, data: { count: 0, countKind: 'lower-bound', countBasis: '2026-10-07T00:00:00.000Z', cards: [], nextCursor: 'scan-next' } }}
     reader={signedOut} locale="en" messages={messages} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -543,11 +543,12 @@ export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
 
 export const ShelfTerminalContinuation: StoryObj<typeof ProfileShelfPage> = {
   render: () => <ProfileShelfPage profile={storyProfile()} status="reading" cursor="scan-last"
-    shelf={{ ok: true, data: { count: 20, countKind: 'exact', cards: [], nextCursor: null } }}
+    shelf={{ ok: true, data: { count: 20, countKind: 'approximate', countBasis: '2026-10-07T00:00:00.000Z', cards: [], nextCursor: null } }}
     reader={signedOut} locale="en" messages={messages} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 1, name: /Currently reading.*20/ })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 1, name: /Currently reading.*about 20/ })).toBeVisible();
+    await expect(canvas.getByText('Count started Oct 7, 2026, 12:00 AM UTC')).toBeVisible();
     await expect(canvas.queryByText(messages.shelfEmpty)).not.toBeInTheDocument();
     await expect(canvas.queryByRole('link', { name: 'Next page' })).not.toBeInTheDocument();
     await expect(canvas.getByRole('link', { name: 'First page' })).toHaveAttribute('href',

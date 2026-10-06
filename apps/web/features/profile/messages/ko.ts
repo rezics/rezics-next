@@ -38,6 +38,8 @@ export default {
   shelfRead: '읽은 책',
   shelfWantToRead: '읽고 싶은 책',
   shelfSummary: '책장',
+  shelfCountAbout: insert('약 {{count}}', { count: String }),
+  shelfCountBasis: insert('집계 시작: {{time}}', { time: String }),
   shelfEmpty: '아직 이 책장에 책이 없습니다.',
   shelfUnavailable: '이 책장을 불러오지 못했습니다',
   shelvesUnavailable: '책장을 불러오지 못했습니다',

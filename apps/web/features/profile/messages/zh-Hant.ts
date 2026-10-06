@@ -41,6 +41,8 @@ export default {
   shelfRead: '已讀',
   shelfWantToRead: '想讀',
   shelfSummary: '書架',
+  shelfCountAbout: insert('約{{count}}', { count: String }),
+  shelfCountBasis: insert('計數開始時間：{{time}}', { time: String }),
   shelfEmpty: '這個書架還是空的。',
   shelfUnavailable: '無法載入這個書架',
   shelvesUnavailable: '無法載入書架',

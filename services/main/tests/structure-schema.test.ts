@@ -9,7 +9,6 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Client, Pool } from 'pg';
 import { ReaderLibraryStatusStore } from '../src/modules/library/status.ts';
-import { ProfilesAccess } from '../src/modules/profiles/access.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { migrateContentFromArtifact } from '../../../scripts/ops/migrate.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, checkOccurrenceRecord, checkStructureManifest,
@@ -300,65 +299,6 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
   // never rekeys this private state away from the stable occurrence ID.
   expect(await store.read(principal, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
 });
-
-test('Disclosure count fences migrate populated gates and read one source row at 1,000 and 20,000 Works', async () => {
-  const pool = await database('disclosure_count_revision');
-  const directory = join(root, 'services/main/migrations/access');
-  for (const name of schemaFiles(root, 'access').filter(name => migrationVersion(name) < 1251)) {
-    await pool.query(readFileSync(join(directory, name), 'utf8'));
-  }
-  const gates = (size: number, after = 0) => pool.query(`INSERT INTO access.scope_gate(id,open,dispatch_open)
-    SELECT 'work:read:https://rezics.com/id/' || md5(n::text)::uuid, n<>1, n<>1
-    FROM generate_series($1::int,$2::int) n`, [after + 1, size]);
-  await gates(1_000);
-  await pool.query(readFileSync(join(directory, '1251_disclosure_revision.sql'), 'utf8'));
-  const owner = new ProfilesAccess(pool);
-  expect(await owner.disclosureFence()).toBe('0'); // No inventory backfill or gate rewrite.
-  expect((await pool.query(`SELECT open FROM access.scope_gate
-    WHERE id='work:read:https://rezics.com/id/' || md5('1')::uuid`)).rows[0]).toEqual({ open: false });
-  const queries: string[] = [];
-  const original = Client.prototype.query;
-  const capture = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
-    if (typeof args[0] === 'string' && args[0].includes('FROM access.disclosure_revision')) queries.push(args[0]);
-    return (original as (...args: unknown[]) => unknown).apply(this, args);
-  } as typeof Client.prototype.query);
-  try {
-    for (const size of [1_000, 20_000]) {
-      if (size > 1_000) await gates(size, 1_000);
-      expect(await owner.disclosureFence()).toBe('0'); // Open baseline gates do not invalidate a count.
-      const plan = (await pool.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${queries.at(-1)!}`)).rows[0]['QUERY PLAN'][0].Plan;
-      expect(plan['Actual Rows']).toBe(1);
-      expect(plan['Rows Removed by Filter'] ?? 0).toBe(0);
-      expect(plan.Plans ?? []).toEqual([]); // No join or scan of the Work inventory.
-    }
-  } finally { capture.mockRestore(); }
-  const update = `UPDATE access.scope_gate SET open=false,dispatch_open=false
-    WHERE id='work:read:https://rezics.com/id/' || md5('2')::uuid`;
-  const writer = await pool.connect();
-  try {
-    await writer.query('BEGIN');
-    await writer.query(update);
-    expect(await owner.disclosureFence()).toBe('0'); // Uncommitted closure is not a count cut.
-    await writer.query('ROLLBACK');
-    expect(await owner.disclosureFence()).toBe('0');
-    await writer.query('BEGIN; SAVEPOINT before_closure');
-    await writer.query(update);
-    await writer.query('ROLLBACK TO SAVEPOINT before_closure');
-    await writer.query(update); // The transaction-local mark must roll back too.
-    await writer.query('COMMIT');
-    expect(await owner.disclosureFence()).toBe('1');
-    await pool.query(update); // No-op does not close another disclosure episode.
-    expect(await owner.disclosureFence()).toBe('1');
-    await writer.query('BEGIN');
-    await writer.query(`UPDATE access.scope_gate SET open=false,dispatch_open=false
-      WHERE id=ANY(ARRAY['work:read:https://rezics.com/id/' || md5('3')::uuid,
-        'work:read:https://rezics.com/id/' || md5('4')::uuid])`);
-    await writer.query('COMMIT');
-    expect(await owner.disclosureFence()).toBe('2'); // One atomic cut per transaction.
-    await pool.query('TRUNCATE access.governance_enforcement');
-    expect(await owner.disclosureFence()).toBe('3');
-  } finally { await writer.query('ROLLBACK'); writer.release(); }
-}, 30_000);
 
 test.each(['startup', 'artifact'])('Progress index migration commits library changes before its online build and recovers a cancelled invalid index (%s)', async runner => {
   const pool = await database(`progress_online_upgrade_${runner}`);

@@ -28,9 +28,21 @@ import { ProfileContributions } from './contributions.tsx';
 import type { ContributionPage } from './contributions.tsx';
 import { profileHref, type ProfileView } from './route.ts';
 import type { AgentProfile, AgentWorksPage, FollowState, LibraryView, Loaded, ReadFailure, ShelfCard,
-  ShelfStatus } from './types.ts';
+  ShelfCountKind, ShelfStatus } from './types.ts';
 
 type Text = ReturnType<typeof materializeData<ProfileMessages>>;
+
+function shelfCount(count: number, kind: ShelfCountKind, locale: UiLocale, t: Text) {
+  const value = new Intl.NumberFormat(locale).format(count);
+  return kind === 'approximate' ? t.shelfCountAbout({ count: value }) : `${value}${kind === 'lower-bound' ? '+' : ''}`;
+}
+
+function ShelfCountBasis({ kind, basis, locale, t }: { kind: ShelfCountKind; basis: string | null; locale: UiLocale; t: Text }) {
+  if (kind === 'exact' || !basis) return null;
+  const time = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(basis));
+  return <span className="block text-muted-foreground text-sm font-normal tracking-normal">
+    {t.shelfCountBasis({ time: `${time} UTC` })}</span>;
+}
 
 /** Who is looking: signed in or not, the Agent they act as, and their shelf state for the Works shown. */
 export interface ProfileReader {
@@ -218,17 +230,19 @@ function LibrarySection({ profile, library, avatarQuery, locale, messages }: {
           {library.shelves.map(shelf => <li key={shelf.status}>
             <Link href={profileHref(profile, { kind: 'shelf', status: shelf.status })} className={pillClass}>
               {shelfLabel(shelf.status, t)}
-              <span className="text-muted-foreground tabular-nums">{new Intl.NumberFormat(locale).format(shelf.count)}{shelf.countKind === 'lower-bound' ? '+' : ''}</span>
+              <span className="text-muted-foreground tabular-nums">{shelfCount(shelf.count, shelf.countKind, locale, t)}</span>
             </Link>
+            <ShelfCountBasis kind={shelf.countKind} basis={shelf.countBasis} locale={locale} t={t} />
           </li>)}
         </ul>
       </nav>
       {library.own ? <p className="flex items-center gap-2 text-muted-foreground text-sm">
         <LockIcon aria-hidden="true" className="size-4 shrink-0" />{t.ownShelves}</p> : null}
     </section>
-    {library.shelves.filter(shelf => shelf.count > 0 || shelf.countKind === 'lower-bound').map(shelf => {
+    {library.shelves.filter(shelf => shelf.count > 0 || shelf.countKind !== 'exact').map(shelf => {
       const title = <>{shelfLabel(shelf.status, t)} <span className="font-normal text-muted-foreground tabular-nums">
-        {new Intl.NumberFormat(locale).format(shelf.count)}{shelf.countKind === 'lower-bound' ? '+' : ''}</span></>;
+        {shelfCount(shelf.count, shelf.countKind, locale, t)}</span>
+        <ShelfCountBasis kind={shelf.countKind} basis={shelf.countBasis} locale={locale} t={t} /></>;
       return shelf.works.ok
         ? <WorkShelf key={shelf.status} heading={{ title,
           seeAll: { href: profileHref(profile, { kind: 'shelf', status: shelf.status }) } }}
@@ -264,7 +278,7 @@ export function ProfilePage({ profile, works, follow, library, reader, readerAct
   messages, contributionsRead }: ProfilePageProps) {
   const t = materializeData(messages, { locale });
   const credited = works.ok && works.data.items.length > 0;
-  const hasShelves = library?.kind === 'shelves' && library.shelves.some(shelf => shelf.count > 0 || shelf.countKind === 'lower-bound');
+  const hasShelves = library?.kind === 'shelves' && library.shelves.some(shelf => shelf.count > 0 || shelf.countKind !== 'exact');
   const worksRegion = !works.ok || credited
     ? <WorksSection profile={profile} works={works} own={ownProfile(reader, profile)} avatarQuery={reader.avatarQuery}
       locale={locale} messages={messages} /> : null;
@@ -364,16 +378,17 @@ export function ProfileWorksPage({ profile, works, cursor, reader, readerActions
 /** `/@{handle}/shelves/{status}`: one shelf in full, as a grid of covers. */
 export function ProfileShelfPage({ profile, status, shelf, cursor, reader, readerActions, locale, messages }: {
   profile: AgentProfile; status: ShelfStatus;
-  shelf: Loaded<{ count: number; countKind: 'exact' | 'lower-bound'; cards: ShelfCard[]; nextCursor: string | null }>; cursor?: string;
+  shelf: Loaded<{ count: number; countKind: ShelfCountKind; countBasis: string | null; cards: ShelfCard[]; nextCursor: string | null }>; cursor?: string;
   reader: ProfileReader; readerActions?: ReaderActions; locale: UiLocale; messages: ProfileMessages;
 }) {
   const t = materializeData(messages, { locale });
   const view = { kind: 'shelf', status } as const;
   const count = shelf.ok ? <span className="font-normal text-muted-foreground text-2xl tabular-nums">
-    {new Intl.NumberFormat(locale).format(shelf.data.count)}{shelf.data.countKind === 'lower-bound' ? '+' : ''}</span> : null;
+    {shelfCount(shelf.data.count, shelf.data.countKind, locale, t)}</span> : null;
   return <ListFrame profile={profile} title={shelfLabel(status, t)} count={count} view={view} cursor={cursor}
     nextCursor={shelf.ok ? shelf.data.nextCursor : null} reader={reader} readerActions={readerActions} locale={locale}
     messages={messages}>
+    {shelf.ok ? <ShelfCountBasis kind={shelf.data.countKind} basis={shelf.data.countBasis} locale={locale} t={t} /> : null}
     {!shelf.ok ? <Failure failure={shelf.failure} title={t.shelfUnavailable} retryHref={profileHref(profile, view)}
       t={t} />
       : shelf.data.cards.length ? <WorkGrid works={shelf.data.cards.map(shelfCard)} headingLevel={2}

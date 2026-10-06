@@ -27,31 +27,32 @@ export async function publishedWorks(session: WorkReadSession, works: string[]) 
   return new Set(rows.map(row => row.id!.value));
 }
 
-/** The public lower bound counts only delivered cards. Its encrypted continuation
- * binds that count to the candidate keyset and graph, owner and disclosure cuts.
- * A policy change rejects the carried count before examining more candidates. */
+/** Counts include only delivered cards. Across requests, disclosure may change:
+ * carry the walk's start time and always describe its total as lagging. */
 export function shelfPageBasis(session: WorkReadSession, agent: string,
   status: ReadingStatus, options: ShelfOptions,
   fence: string, publishedOnly: boolean) {
   const sort = options.sort ?? 'added', order = options.order ?? (sort === 'title' ? 'asc' : 'desc');
   if (sort === 'finished' && status !== 'read') throw new WorkReadInvalid('Finished sort requires the read shelf');
-  const binding = [publishedOnly ? 'agent-status-shelf-v4' : 'reader-status-shelf-v3', agent, status, sort, order,
+  const binding = [publishedOnly ? 'agent-status-shelf-v5' : 'reader-status-shelf-v3', agent, status, sort, order,
     publishedOnly ? [session.principal?.issuer ?? null, session.principal?.subject ?? null,
       session.options.actingSubject ?? null, session.viewer] : null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: ShelfAfter | undefined;
   let statusCount: number | undefined;
+  let statusCountBasis = new Date().toISOString();
   if (cursor) {
     let value: unknown;
     try { value = JSON.parse(cursor.order); } catch { throw new WorkReadInvalid('Invalid shelf cursor'); }
-    if (!Array.isArray(value) || value.length !== (publishedOnly ? 3 : 2) || typeof value[0] !== 'string'
+    if (!Array.isArray(value) || value.length !== (publishedOnly ? 4 : 2) || typeof value[0] !== 'string'
       || value[1] !== null && typeof value[1] !== 'string'
-      || publishedOnly && (!Number.isSafeInteger(value[2]) || value[2] < 0)) throw new WorkReadInvalid('Invalid shelf cursor');
+      || publishedOnly && (!Number.isSafeInteger(value[2]) || value[2] < 0
+        || typeof value[3] !== 'string' || !Number.isFinite(Date.parse(value[3])))) throw new WorkReadInvalid('Invalid shelf cursor');
     if (value[0] !== fence) throw new WorkReadMoved('Status shelf changed');
     after = { work: cursor.after, value: value[1] as string | null };
-    if (publishedOnly) statusCount = value[2] as number;
+    if (publishedOnly) { statusCount = value[2] as number; statusCountBasis = value[3] as string; }
   }
-  return { binding, sort, order, after, statusCount };
+  return { binding, sort, order, after, statusCount, statusCountBasis };
 }
 
 /** Public refill examines at most two batches, advancing over invisible rows.
@@ -95,6 +96,7 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
   const statusCount = (basis.statusCount ?? 0) + items.length;
   return { ...pageResult(session, items, hasMore
     ? encodeReadCursor(binding, session.position, last!.work,
-      JSON.stringify(publishedOnly ? [fence, last!.value, statusCount] : [fence, last!.value])) : null),
-    ...(publishedOnly ? { statusCount, statusCountKind: hasMore ? 'lower-bound' as const : 'exact' as const } : {}) };
+      JSON.stringify(publishedOnly ? [fence, last!.value, statusCount, basis.statusCountBasis] : [fence, last!.value])) : null),
+    ...(publishedOnly ? { statusCount, statusCountBasis: basis.statusCountBasis,
+      statusCountKind: hasMore ? 'lower-bound' as const : basis.after ? 'approximate' as const : 'exact' as const } : {}) };
 }

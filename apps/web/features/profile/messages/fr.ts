@@ -41,6 +41,8 @@ export default {
   shelfRead: 'Lu',
   shelfWantToRead: 'À lire',
   shelfSummary: 'Étagères',
+  shelfCountAbout: insert('environ {{count}}', { count: String }),
+  shelfCountBasis: insert('Début du décompte : {{time}}', { time: String }),
   shelfEmpty: 'Cette étagère est encore vide.',
   shelfUnavailable: 'Impossible de charger cette étagère',
   shelvesUnavailable: 'Impossible de charger les étagères',
