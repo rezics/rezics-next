@@ -32,6 +32,24 @@ final class CommandInvariant {
     record Control(Node epoch, Node routing, BigInteger sequence, Node marker, boolean held,
         Node priorEpoch, BigInteger priorSequence, BigInteger cursor, Node textGeneration) {}
 
+    /** Upgrade only the fixed record before HTTP traffic; retained legacy batches stay immutable. */
+    static void initializeRelayStreamAtStartup(DatasetGraph data) {
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        boolean committed = false;
+        try {
+            Control control = readControl(data);
+            if (control == null || control.held() || data.contains(CONTROL, MAIN_STREAM, Node.ANY, Node.ANY)) return;
+            data.add(CONTROL, MAIN_STREAM, rv("dataEpoch"), control.epoch());
+            data.add(CONTROL, MAIN_STREAM, rv("streamSequence"), integer(control.sequence()));
+            data.add(CONTROL, MAIN_STREAM, rv("legacyThroughSequence"), integer(control.sequence()));
+            data.commit();
+            committed = true;
+        } finally {
+            try { if (!committed) data.abort(); }
+            finally { data.end(); }
+        }
+    }
+
     /** One stream-owned counter; DATASET sequence remains available to other owners. */
     static String advanceRelayStream(DatasetGraph data, String receipt, CommandPolicy.Plan plan, Control before) {
         Control after = readControl(data);

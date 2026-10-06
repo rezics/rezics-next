@@ -64,6 +64,7 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void configDataAccessPoint(org.apache.jena.fuseki.server.DataAccessPoint point, Model configModel) {
+        CommandInvariant.initializeRelayStreamAtStartup(point.getDataService().getDataset());
         OccurrenceTextSchema.rebuildIfIncompatible(point.getDataService().getDataset());
         // Qualification precedes HTTP traffic, including after an offline rebuild.
         // An empty/uninitialized dataset qualifies when bootstrap commits instead.

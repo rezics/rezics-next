@@ -1,6 +1,7 @@
 package com.rezics.jena;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 
@@ -73,6 +74,38 @@ public class CommandInvariantRelayStreamTest {
             assertEquals("17", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "legacyThroughSequence"));
             assertEquals("18", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "streamSequence"));
         } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void startupUpgradesPopulatedLegacyStateBeforeAnyCommandAndSurvivesRestart() {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        try {
+            data.begin(ReadWrite.WRITE);
+            control(data, 17);
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH <" + CommandPolicy.OUTBOX
+                + "> { <urn:rezics:outbox:legacy> a rv:OutboxBatch ; rv:dataEpoch \"epoch\" ; rv:sequence 17 ; rv:eventCount 0 } }",
+                DatasetFactory.wrap(data));
+            data.commit(); data.end();
+            CommandInvariant.initializeRelayStreamAtStartup(data);
+            CommandInvariant.initializeRelayStreamAtStartup(data);
+            data.begin(ReadWrite.WRITE);
+            assertEquals("17", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "streamSequence"));
+            assertEquals("17", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "legacyThroughSequence"));
+            assertFalse(data.contains(uri(CommandPolicy.OUTBOX), uri("urn:rezics:outbox:legacy"), uri(RV + "streamScope"), Node.ANY));
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> DELETE { GRAPH <" + CommandPolicy.CONTROL
+                + "> { <" + PRODUCT + "> rv:sequence 17 } } INSERT { GRAPH <" + CommandPolicy.CONTROL
+                + "> { <" + PRODUCT + "> rv:sequence 900 } } WHERE {}", DatasetFactory.wrap(data));
+            data.commit(); data.end();
+            CommandInvariant.initializeRelayStreamAtStartup(data);
+            data.begin(ReadWrite.WRITE);
+            assertEquals("17", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "streamSequence"));
+            var before = CommandInvariant.readControl(data);
+            var plan = CommandPolicy.parse(envelope(), RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            assertNull(CommandInvariant.advanceRelayStream(data, RECEIPT, plan, before));
+            assertEquals("18", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "streamSequence"));
+            assertEquals("17", value(data, CommandInvariant.MAIN_STREAM_SCOPE, "legacyThroughSequence"));
+            data.abort(); data.end();
+        } finally { if (data.isInTransaction()) { data.abort(); data.end(); } data.close(); }
     }
 
     @Test public void callerCannotForgeStreamWatermarksOrBatchScope() {

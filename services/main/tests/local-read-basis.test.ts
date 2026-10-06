@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
+import { execFileSync } from 'node:child_process';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { workRead, WorkReadExpired, WorkReadMissing, type ReadRow } from '../src/modules/work/read-session.ts';
@@ -14,6 +15,10 @@ import { ContextCommandUnavailable } from '../src/modules/context/command.ts';
 import { CONTEXT_PROFILE, GLOBAL_SEMANTIC_CONTEXT, contextSelectionScopeKey } from '../src/modules/context/schema.ts';
 import { prepareComponent } from '../src/modules/work/activate.ts';
 import { contextRoutes } from '../src/routes/contexts.ts';
+import { configureMediaVisibility } from '../src/modules/media/visibility.ts';
+import { DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../src/modules/media/store.ts';
+import { projectName } from '../../../scripts/dev/config.ts';
+import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import { MAIN_RELAY_STREAM_SCOPE, compareRelayPositions } from '../src/modules/outbox/relay-position.ts';
 import { OutboxGap, RelayCheckpointConflict, readNextMainOutboxBatch, relayMainOutboxOnce }
   from '../src/modules/outbox/relay.ts';
@@ -107,6 +112,34 @@ test('Local Work pages still recheck principal revocation, private grants and er
   graph.public = true; graph.erased = true;
   await expect(workRead(deps, new Request(request.url), { localBasis: true },
     session => readWorkHeader(session, work))).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('An author reading a private Work through their Agent keeps its private draft cover; another principal cannot see the cover', async () => {
+  const graph = new WorkGraph(); graph.public = false;
+  const author = id(30), outsider = id(31), asset = id(32), selection = id(33);
+  const { deps } = workDeps(graph);
+  deps.account.verify = async request => ({ issuer: 'account', subject: request.headers.get('authorization') === 'Bearer author'
+    ? 'author' : 'outsider' }) as never;
+  deps.access.canReadWork = async (principal, actor) => principal.subject === 'author' && actor === author;
+  const avatar = { target: work, context: DEFAULT_MEDIA_CONTEXT, selection: selection.slice(-36),
+    selectionPosition: '1', use: id(34).slice(-36), asset: asset.slice(-36), crop: null,
+    representation: id(35).slice(-36), sha256: 'a'.repeat(64), mediaType: 'image/png',
+    width: 400, height: 600, byteLength: 1000, disclosure: 'public', moderation: 'none', lifecycle: 'active',
+    availability: 'available', clearance: 'cleared' } as AvatarRow;
+  deps.media = { store: {
+    avatarRows: async () => ({ rows: new Map([[work, avatar]]), generation: { dataEpoch: 'epoch', sequence: '1' } }),
+    visibilityFacts: async (references: readonly string[]) => new Map(references.map(reference => [reference,
+      { owner: author, disclosure: 'public', pending: false, blocked: false,
+        attachments: [{ target: work, context: DEFAULT_MEDIA_CONTEXT }] }])),
+  } } as never;
+  configureMediaVisibility(deps);
+  const read = (bearer: string, actor: string) => workRead(deps, new Request(`http://main.test/v1/works/${work.slice(-36)}`,
+    { headers: { authorization: `Bearer ${bearer}` } }), { localBasis: true, actingSubject: actor },
+  session => readWorkHeader(session, work));
+  expect((await read('author', author)).cover).toMatchObject({ kind: 'image', selection: selection.slice(-36) });
+  // Public Asset bytes do not widen the private Work attachment's audience.
+  await expect(read('outsider', outsider)).rejects.toBeInstanceOf(WorkReadMissing);
+  await expect(read('outsider', author)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
 test('Context interpretation binds fallback, absent higher-priority slots, pinned heads, disclosure and selected shapes', async () => {
@@ -307,6 +340,7 @@ test.skipIf(!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCOUNT_RELAY_DATABASE_URL)('L
   try {
     const actor = await stack.member('relay-reader');
     await stack.privateWork(actor.actor, 'Legacy source fixture');
+    await stack.privateWork(actor.actor, 'Second retained legacy batch');
     const control = async () => {
       const row = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?graphSequence ?streamSequence WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?graphSequence .
@@ -314,18 +348,58 @@ test.skipIf(!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCOUNT_RELAY_DATABASE_URL)('L
       return { epoch: row.epoch!.value, graph: row.graphSequence!.value, stream: row.streamSequence!.value };
     };
     const legacy = await control();
-    // A bounded populated-source fixture drops the new selector from one old
-    // batch and the stream record; the next admitted write seeds its old cut.
+    await pool.query(`INSERT INTO relay.checkpoint (consumer, stream_scope, data_epoch, sequence)
+      VALUES ('upgrade-restart', $1, $2, $3)`, [MAIN_RELAY_STREAM_SCOPE, legacy.epoch, (BigInt(legacy.stream) - 2n).toString()]);
+    const retained = await relayMainOutboxOnce(stack.fuseki, pool, 'upgrade-restart');
+    expect(retained?.sequence).toBe((BigInt(legacy.stream) - 1n).toString());
+    await pool.query("UPDATE relay.delivered_event SET envelope = envelope #- '{data,relayPosition}' WHERE data_epoch=$1 AND sequence=$2",
+      [legacy.epoch, retained!.sequence]);
+    const retainedBytes = (await pool.query('SELECT envelope::text AS body FROM relay.delivered_event WHERE data_epoch=$1 AND sequence=$2',
+      [legacy.epoch, retained!.sequence])).rows[0]!.body;
+    const restart = async () => {
+      const previous = (await stack.fuseki.commandHealth()).instanceId;
+      const dockerEnv = loadDockerEnvironment();
+      const project = projectName({ profile: 'qa', runId: Bun.env.REZICS_QA_RUN_ID! });
+      const container = execFileSync('docker', ['ps', '-q', '--filter', `label=com.docker.compose.project=${project}`,
+        '--filter', 'label=com.docker.compose.service=fuseki'], { env: dockerEnv, encoding: 'utf8', timeout: 10_000 }).trim();
+      if (!/^[a-f0-9]{12,64}$/.test(container)) throw new Error('Disposable QA Fuseki container is unavailable or ambiguous');
+      execFileSync('docker', ['restart', '--time', '30', container], { env: dockerEnv, timeout: 60_000, stdio: 'pipe' });
+      for (let attempt = 0; attempt < 120; attempt++) {
+        try { if ((await stack.fuseki.commandHealth()).instanceId !== previous) return; } catch { /* restarting */ }
+        await Bun.sleep(250);
+      }
+      throw new Error('Disposable QA Fuseki did not restart');
+    };
+    // A populated pre-upgrade source and SQL checkpoint: service restart is
+    // the only transition before the relay resumes its retained legacy prefix.
     await stack.fuseki.update(`PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(MAIN_RELAY_STREAM_SCOPE)} ?p ?value }
         GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:streamScope ?scope ; rv:streamSequence ?sequence } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(MAIN_RELAY_STREAM_SCOPE)} ?p ?value }
-        GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:dataEpoch ${lit(legacy.epoch)} ; rv:sequence ${legacy.graph} ;
+        GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:dataEpoch ${lit(legacy.epoch)} ;
           rv:streamScope ?scope ; rv:streamSequence ?sequence } }`);
-    await stack.privateWork(actor.actor, 'Populate the upgraded source');
+    await restart();
+    expect((await control()).stream).toBe(legacy.stream);
     const legacyBatch = await readNextMainOutboxBatch(stack.fuseki, legacy.epoch, (BigInt(legacy.stream) - 1n).toString());
     expect(legacyBatch?.streamScope).toBe(MAIN_RELAY_STREAM_SCOPE);
     expect(legacyBatch?.sequence).toBe(legacy.stream);
+    await expect(relayMainOutboxOnce(stack.fuseki, pool, 'upgrade-restart', {
+      afterDelivery: async () => { throw new Error('crash during legacy upgrade'); },
+    })).rejects.toThrow('crash during legacy upgrade');
+    await restart();
+    expect((await relayMainOutboxOnce(stack.fuseki, pool, 'upgrade-restart'))?.sequence).toBe(legacy.stream);
+    await stack.privateWork(actor.actor, 'First scoped batch after restart');
+    const scoped = await relayMainOutboxOnce(stack.fuseki, pool, 'upgrade-restart');
+    expect(scoped?.sequence).toBe((BigInt(legacy.stream) + 1n).toString());
+    expect((await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.outbox)} {
+      ${iri(scoped!.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${scoped!.sequence} } }`)).boolean).toBeTrue();
+    expect((await pool.query('SELECT sequence::text FROM relay.delivered_batch WHERE data_epoch=$1 ORDER BY sequence', [legacy.epoch])).rows)
+      .toEqual([retained!.sequence, legacy.stream, scoped!.sequence].map(sequence => ({ sequence })));
+    expect((await pool.query('SELECT count(*)::integer AS count FROM relay.delivered_event WHERE data_epoch=$1', [legacy.epoch])).rows[0]!.count)
+      .toBe(3);
+    expect((await pool.query('SELECT envelope::text AS body FROM relay.delivered_event WHERE data_epoch=$1 AND sequence=$2',
+      [legacy.epoch, retained!.sequence])).rows[0]!.body).toBe(retainedBytes);
+    expect(await relayMainOutboxOnce(stack.fuseki, pool, 'upgrade-restart')).toBeNull();
     const before = await control();
     await pool.query(`INSERT INTO relay.checkpoint (consumer, stream_scope, data_epoch, sequence)
       VALUES ('local-handoff', $1, $2, $3)`, [MAIN_RELAY_STREAM_SCOPE, before.epoch, before.stream]);

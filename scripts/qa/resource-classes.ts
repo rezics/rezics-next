@@ -32,6 +32,8 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 
 /** Heavy files own one project each; retained data cannot accumulate in a 2 GiB shard. */
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
+  // Container restart must retain legacy RDF, and the terminal gap needs its own project.
+  ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
   ...[
     'g-1021-reading-cost',
     'g-1022-reading-cost',

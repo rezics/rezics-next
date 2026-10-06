@@ -138,7 +138,7 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
-  get viewer() { return this.principal ? disclosureViewer(this.principal)
+  get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
   disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
     return discloseInventory(this.deps.environment, targets, this.viewer, channel);
