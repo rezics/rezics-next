@@ -12,7 +12,10 @@ export function stackStorage(options: StackOptions): 'persistent' | 'tmpfs' {
   return options.profile === 'dev' || options.persistent ? 'persistent' : 'tmpfs';
 }
 
-/** Only the fixed shared dev project outranks disposable QA and worktree stacks. */
+/** Only the fixed shared dev project outranks disposable QA and worktree stacks.
+ * Dev ignores a surrounding Fuseki cap, so a QA allocation in the process
+ * environment cannot bound shared storage. A QA project records the caller's
+ * allocation instead of one hardcoded cap. */
 export function stackMemorySettings(options: StackOptions,
   env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   // A seeded worktree Fuseki used 5.6 GiB resident with a 2 GiB heap. Allow

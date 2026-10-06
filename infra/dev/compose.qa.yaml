@@ -1,6 +1,9 @@
 # Disposable QA state. Recovery drills use the base compose.yaml with an isolated project.
 services:
   postgres:
+    # docker stats on 2026-10-07: 426 MiB in an ordinary integration batch, 628 MiB
+    # on a large-tmpfs file, including this tmpfs data directory.
+    mem_limit: ${REZICS_POSTGRES_MEMORY_LIMIT:-2g}
     healthcheck:
       start_period: 15s
       start_interval: 500ms
@@ -22,8 +25,20 @@ services:
       - /fuseki/databases:mode=0777
 
   rustfs:
+    # docker stats on 2026-10-07: 379 MiB in the ordinary batch, 371 MiB on large-tmpfs.
+    mem_limit: ${REZICS_RUSTFS_MEMORY_LIMIT:-1g}
     healthcheck:
       start_interval: 500ms
     volumes: !reset []
     tmpfs:
       - /data:mode=0777
+
+  toxiproxy:
+    # Integration does not start this service. A live QA proxy peaked at 5.3 MiB
+    # (docker stats, 2026-10-07).
+    mem_limit: ${REZICS_TOXIPROXY_MEMORY_LIMIT:-128m}
+
+  mailpit:
+    # docker stats on 2026-10-07: 20 MiB in the ordinary batch, 22 MiB on large-tmpfs.
+    # Those runs send no mail; the cap still bounds a retained inbox.
+    mem_limit: ${REZICS_MAILPIT_MEMORY_LIMIT:-256m}

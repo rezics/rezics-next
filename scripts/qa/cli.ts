@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   acquireFullLock,
@@ -53,7 +53,7 @@ import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
-import { browserBudgets, browserFileCounts, browserProjectCount } from './browser-budget.ts';
+import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
@@ -511,6 +511,20 @@ async function runStackTier(tier: StackTier): Promise<void> {
   }
 }
 
+function noteBrowserPlan(artifactDirectory: string): void {
+  const path = join(artifactDirectory, 'e2e-browser-plan.json');
+  if (!existsSync(path)) return;
+  const plan = JSON.parse(readFileSync(path, 'utf8')) as {
+    stories: boolean; storySkipReason?: string; accountsJourneys: boolean; selectedFiles: string[];
+  };
+  const notes: string[] = [];
+  if (!plan.stories) notes.push(`- Storybook: skipped (${plan.storySkipReason ?? 'not a full e2e tier'})`);
+  if (!plan.accountsJourneys && plan.selectedFiles.length) {
+    notes.push('- Accounts journeys: skipped (selected journey files; a full e2e tier runs them)');
+  }
+  if (notes.length) appendFileSync(join(artifactDirectory, 'summary.md'), `${notes.join('\n')}\n`);
+}
+
 try {
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {
@@ -608,13 +622,22 @@ try {
           continue;
         }
         const args = e2eArgs(selection, chosen);
+        const plan = e2eBrowserPlan(args, options.storybook === true);
         const counts = browserFileCounts(root, args);
-        const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
+        const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
+          playwright: plan.accountsJourneys ? counts.accountsPlaywright : 0,
+          stories: plan.stories ? counts.accountsStories : 0,
+        });
         const preparation = preparationBudgetMs(selectJourneyPreparations(
           await discoverJourneyPreparations(root), args));
+        const storyBudget = plan.stories ? budgets.storybook + budgets.accountsStorybook : 0;
+        const e2eEnv: NodeJS.ProcessEnv = { ...process.env, REZICS_WEB_E2E_BASE_URL: origin,
+          REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) };
+        if (options.storybook) e2eEnv.REZICS_E2E_STORYBOOK = '1';
+        else delete e2eEnv.REZICS_E2E_STORYBOOK;
         const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
-          preparation + budgets.setup + budgets.playwright + budgets.storybook + 30_000,
-          { ...process.env, REZICS_WEB_E2E_BASE_URL: origin, REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) });
+          preparation + budgets.setup + budgets.playwright + budgets.accountsPlaywright + storyBudget + 30_000,
+          e2eEnv);
         writeFileSync(join(logs, 'e2e.log'), result.output);
         const browserTests = junitResults(directory, ['e2e']);
         const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
@@ -746,6 +769,7 @@ try {
       diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage,
       scope: options.backend ? 'backend' : 'all', excludedCases: backendSelection?.excluded,
       inventoryFingerprint: backendSelection?.inventoryFingerprint });
+    noteBrowserPlan(directory);
     if (options.record && errors.length === 0) {
       const record = JSON.parse(readFileSync(join(directory, 'acceptance.json'), 'utf8')) as QualificationRecord;
       if (record.certifiesFull) {

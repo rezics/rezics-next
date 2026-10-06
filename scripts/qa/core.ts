@@ -25,12 +25,13 @@ export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
 
 export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
-  files?: string[]; id?: string; backend?: boolean } {
+  files?: string[]; id?: string; backend?: boolean; storybook?: boolean } {
   let tier: Tier | undefined;
   let onlyFailed: string | undefined;
   let keep = false;
   let record = false;
   let backend = false;
+  let storybook = false;
   const files: string[] = [];
   let id: string | undefined;
   for (let i = 0; i < args.length; i++) {
@@ -41,17 +42,20 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
     else if (args[i] === '--keep') keep = true;
     else if (args[i] === '--record') record = true;
     else if (args[i] === '--backend') backend = true;
+    else if (args[i] === '--storybook') storybook = true;
     else throw new Error(`Unsupported QA option: ${args[i]}`);
   }
   if (record && (tier || onlyFailed || files.length || id)) throw new Error('--record requires a full run');
   if (backend && tier === 'e2e') throw new Error('The backend scope has no e2e tier');
   if (backend && onlyFailed) throw new Error('--backend --only-failed is unsupported');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
+  if (storybook && tier !== 'e2e') throw new Error('--storybook requires the e2e tier');
   if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier))) {
     throw new Error('--file and --id require a unit, integration, model, fault/recovery, e2e or load tier');
   }
   return { tier, onlyFailed, keep, record,
     ...(backend ? { backend } : {}),
+    ...(storybook ? { storybook } : {}),
     ...(files.length ? { files } : {}), ...(id ? { id } : {}) };
 }
 

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { join } from 'node:path';
 import { ACCOUNTS_PORT, appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, ensureSecrets,
-  parseOptions, projectName, stackDirectory } from './config.ts';
+  parseOptions, projectName, stackDirectory, stackMemorySettings } from './config.ts';
 
 const roots: string[] = [];
 mkdirSync('.temp', { recursive: true });
@@ -136,6 +136,50 @@ test('shared dev storage wins host OOM selection while QA and worktree Fuseki st
   expect(upgraded.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('-800');
   expect(upgraded.REZICS_FUSEKI_MEMORY_LIMIT).toBe('0');
   expect(upgraded.REZICS_FUSEKI_JVM_ARGS).toBe('-Xms256m -Xmx2g');
+});
+
+test('disposable QA caps every service beside Fuseki and still accepts an override', () => {
+  const root = mkdtempSync('.temp/qa-memory-caps-'); roots.push(root);
+  const saved = ensureSecrets(root, { profile: 'qa', runId: 'caps' });
+  const base = join(import.meta.dir, '../../infra/dev/compose.yaml');
+  const overlay = join(import.meta.dir, '../../infra/dev/compose.qa.yaml');
+  const overlayText = readFileSync(overlay, 'utf8');
+  expect(overlayText).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}');
+  const resolve = (extra: Record<string, string>) => {
+    const env = composeProcessEnvironment(process.env, saved);
+    for (const name of ['REZICS_POSTGRES_MEMORY_LIMIT', 'REZICS_RUSTFS_MEMORY_LIMIT',
+      'REZICS_TOXIPROXY_MEMORY_LIMIT', 'REZICS_MAILPIT_MEMORY_LIMIT']) delete env[name];
+    const resolved = Bun.spawnSync(['docker', 'compose', '-f', base, '-f', overlay, 'config', '--format', 'json'],
+      { env: { ...env, ...extra } });
+    expect(resolved.exitCode).toBe(0);
+    return JSON.parse(new TextDecoder().decode(resolved.stdout)).services as Record<string, { mem_limit?: number }>;
+  };
+  const defaults = resolve({});
+  expect(Number(defaults.postgres.mem_limit)).toBe(2 * 1024 ** 3);
+  expect(Number(defaults.rustfs.mem_limit)).toBe(1024 ** 3);
+  expect(Number(defaults.toxiproxy.mem_limit)).toBe(128 * 1024 ** 2);
+  expect(Number(defaults.mailpit.mem_limit)).toBe(256 * 1024 ** 2);
+  const overridden = resolve({ REZICS_POSTGRES_MEMORY_LIMIT: '1536m' });
+  expect(Number(overridden.postgres.mem_limit)).toBe(1536 * 1024 ** 2);
+  expect(Number(overridden.fuseki.mem_limit)).toBe(Number(defaults.fuseki.mem_limit));
+});
+
+test('a surrounding QA Fuseki cap does not bound the shared dev stack', () => {
+  const surrounding = {
+    REZICS_FUSEKI_MEMORY_LIMIT: '2g',
+    REZICS_FUSEKI_JVM_ARGS: '-Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m',
+  };
+  const dev = stackMemorySettings({ profile: 'dev' }, surrounding);
+  expect(dev.REZICS_FUSEKI_MEMORY_LIMIT).toBe('0');
+  expect(dev.REZICS_FUSEKI_OOM_SCORE_ADJ).toBe('-900');
+  expect(dev.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('-800');
+  expect(dev.REZICS_FUSEKI_JVM_ARGS).toBe('-Xms256m -Xmx2g');
+  const qa = stackMemorySettings({ profile: 'qa', runId: 'ordinary' }, surrounding);
+  expect(qa.REZICS_FUSEKI_MEMORY_LIMIT).toBe('2g');
+  expect(qa.REZICS_FUSEKI_JVM_ARGS).toBe(surrounding.REZICS_FUSEKI_JVM_ARGS);
+  expect(qa.REZICS_FUSEKI_OOM_SCORE_ADJ).toBe('0');
+  expect(qa.REZICS_POSTGRES_OOM_SCORE_ADJ).toBe('0');
+  expect(stackMemorySettings({ profile: 'qa', runId: 'ordinary' }, {}).REZICS_FUSEKI_MEMORY_LIMIT).toBe('7g');
 });
 
 test('OPS01/OPS14 PostgreSQL stack readiness waits for its final TCP server', () => {

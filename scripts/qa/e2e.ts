@@ -205,16 +205,24 @@ async function runE2e(): Promise<void> {
   const { Pool } = await import('pg');
   const { initializeRelayCheckpoint } = await import('../../services/main/src/modules/outbox/relay.ts');
   const { readEnv } = await import('../dev/config.ts');
-  const { browserBudgets, browserFileCounts, browserProjectCount } = await import('./browser-budget.ts');
+  const { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan, storybookCommands } = await import('./browser-budget.ts');
   const root = resolve(import.meta.dir, '../..');
-  const [appsPath, artifactDir, runId, ...playwrightArgs] = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  const storybookRequested = rawArgs.includes('--storybook') || process.env.REZICS_E2E_STORYBOOK === '1';
+  const [appsPath, artifactDir, runId, ...playwrightArgs] = rawArgs.filter(arg => arg !== '--storybook');
   if (!appsPath || !artifactDir || !runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) {
     throw new Error('e2e requires an apps file, artifact directory and isolated run ID');
   }
   const web = requiredWebOrigin();
   const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
+  const plan = e2eBrowserPlan(playwrightArgs, storybookRequested);
   const counts = browserFileCounts(root, playwrightArgs);
-  const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
+  const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
+    playwright: plan.accountsJourneys ? counts.accountsPlaywright : 0,
+    stories: plan.stories ? counts.accountsStories : 0,
+  });
+  writeFileSync(join(artifactDir, 'e2e-browser-plan.json'), JSON.stringify(plan, null, 2));
+  if (!plan.stories) console.log(`Storybook: skipped (${plan.storySkipReason})`);
   const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
   const runtime = readEnv(join(authDir, 'runtime.env'));
   const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
@@ -229,7 +237,7 @@ async function runE2e(): Promise<void> {
     REZICS_WEB_E2E_PORT_HOLDER: String(web.holderPid) };
   const children: ChildProcess[] = [];
   const launchErrors = new WeakMap<ChildProcess, Error>();
-  const steps: { step: string; budgetMs: number; elapsedMs: number; passed: boolean; error?: string }[] = [];
+  const steps: { step: string; budgetMs: number; elapsedMs: number; passed: boolean; error?: string; skipped?: string }[] = [];
   let ownedPort: number | undefined;
 
   async function measured(step: string, budgetMs: number, run: () => Promise<void>): Promise<void> {
@@ -317,12 +325,10 @@ async function runE2e(): Promise<void> {
       const account = launch('account', 'bun', ['services/account/src/index.ts']);
       await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
       if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
-      const accounts = launch('accounts', join(root, 'node_modules/.bin/vinext'),
-        ['dev', '--hostname', '127.0.0.1', '--port', apps.ACCOUNTS_PORT], {
-          ACCOUNT_SERVICE_ORIGIN: `http://127.0.0.1:${apps.ACCOUNT_PORT}`,
-          WEB_ORIGIN: web.origin,
-        }, join(root, 'apps/accounts'));
-      await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 90_000);
+      const accounts = launch('accounts', 'bun', ['scripts/dev/accounts-preview.ts', '--profile', 'qa', '--run-id', runId], {
+        REZICS_WEB_E2E_BASE_URL: web.origin,
+      });
+      await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 240_000);
       const main = launch('main', 'bun', ['services/main/src/index.ts']);
       await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
@@ -345,7 +351,21 @@ async function runE2e(): Promise<void> {
       const code = await completed('Playwright', browser, budgets.playwright);
       if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
     });
-    console.log('Built Worker, Main, Account and Playwright completed');
+    if (plan.accountsJourneys) {
+      await measured('Accounts Playwright', budgets.accountsPlaywright, async () => {
+        const browser = launch('accounts-playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/accounts/playwright.config.ts',
+          '--reporter=junit', '--output', join(artifactDir, 'accounts-playwright')], {
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'accounts-e2e.xml'),
+          ACCOUNTS_URL: `http://127.0.0.1:${apps.ACCOUNTS_PORT}`,
+          WEB_URL: web.origin,
+        });
+        const code = await completed('Accounts Playwright', browser, budgets.accountsPlaywright);
+        if (code !== 0) throw new Error(`Accounts Playwright failed (${code}); see logs/e2e-accounts-playwright.log`);
+      });
+    } else {
+      console.log('Accounts journeys: skipped (selected journey files; a full e2e tier runs them)');
+    }
+    console.log('Built Workers, Main, Account and Playwright completed');
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
@@ -355,13 +375,27 @@ async function runE2e(): Promise<void> {
   }
 
   // The browser suite has finished using the services. Release them before
-  // Storybook and give it a separate deadline, even if Playwright failed.
+  // Storybook and give each workspace its own deadline, even if Playwright failed.
+  // A selected journey file skips both suites and records that in the run summary.
+  const storySteps = storybookCommands(plan);
+  if (!storySteps.length) {
+    const reason = plan.storySkipReason ?? 'not a full e2e tier';
+    console.log(`Storybook: skipped (${reason})`);
+    steps.push({ step: 'Storybook', budgetMs: 0, elapsedMs: 0, passed: true, skipped: reason });
+    writeFileSync(join(artifactDir, 'e2e-steps.json'), JSON.stringify(steps, null, 2));
+  }
   try {
-    await measured('Storybook', budgets.storybook, async () => {
-      const stories = launch('storybook', 'node_modules/.bin/vitest', ['run', '--root', 'apps/web', '--project', 'storybook']);
-      const code = await completed('Storybook', stories, budgets.storybook);
-      if (code !== 0) throw new Error(`Storybook failed (${code}); see logs/e2e-storybook.log`);
-    });
+    for (const story of storySteps) {
+      const label = story.root === 'apps/accounts' ? 'Accounts Storybook' : 'Storybook';
+      const budgetMs = story.root === 'apps/accounts' ? budgets.accountsStorybook : budgets.storybook;
+      await measured(label, budgetMs, async () => {
+        const stories = launch(story.name, 'node_modules/.bin/vitest',
+          ['run', '--root', story.root, '--project', 'storybook'],
+          { STORYBOOK_MAX_WORKERS: process.env.STORYBOOK_MAX_WORKERS ?? '2' });
+        const code = await completed(label, stories, budgetMs);
+        if (code !== 0) throw new Error(`${label} failed (${code}); see logs/e2e-${story.name}.log`);
+      });
+    }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
