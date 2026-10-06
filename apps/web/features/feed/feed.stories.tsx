@@ -260,7 +260,7 @@ export const VoteRefused: Story = {
 /** Hiding a post leaves one line that says so, with Undo. */
 /**
  * Discussions read as Reddit posts: the author's first line is the title and
- * leads to the thread, the Work it is about names its source, an announced
+ * leads to the thread, the Work it is about names its source, a declared
  * spoiler stays veiled until asked for, and a reply opens its place in the thread.
  */
 export const Discussions: Story = {
@@ -297,8 +297,8 @@ export const Discussions: Story = {
       `${thread}#reply`,
     );
 
-    // The author announced a spoiler: the words stay out of the page until the reader asks.
-    const spoiler = article(canvas, '【剧透】《雨夜书店》第二章：那张旧车票');
+    // The author declared a spoiler. The title does not contain a spoiler word; the words stay hidden until asked.
+    const spoiler = article(canvas, '《雨夜书店》第二章：那张旧车票');
     await expect(spoiler).not.toHaveTextContent('二十年前的车票');
     await userEvent.click(within(spoiler).getByRole('button', { name: 'Show spoiler' }));
     await expect(spoiler).toHaveTextContent('二十年前的车票');
@@ -324,29 +324,28 @@ export const Discussions: Story = {
   },
 };
 
-/** Main's show-spoilers choice opens an announced discussion in Home. */
+const declaredSpoiler = (item: (typeof everyKind)[number]) =>
+  item.kind === 'discussion' && (item.post as { spoiler?: boolean }).spoiler === true;
+
+/** A declared spoiler stays veiled on Home until the reader asks. */
 export const DiscussionsVeiled: Story = {
   args: {
     initial: {
       ok: true,
-      data: page(
-        everyKind.filter(
-          (item) => item.kind === 'discussion' && item.post.title?.startsWith('【剧透】'),
-        ),
-      ),
+      data: page(everyKind.filter(declaredSpoiler)),
     },
     api: memoryFeed(),
   },
 };
 
-/** Main's show-spoilers choice opens an announced discussion in Home. */
+/** The reader's show-spoilers choice opens a declared discussion on Home. */
 export const DiscussionsWithSpoilersShown: Story = {
   args: {
     initial: {
       ok: true,
       data: page(
         everyKind
-          .filter((item) => item.kind === 'discussion' && item.post.title?.startsWith('【剧透】'))
+          .filter(declaredSpoiler)
           .map((item) => ({
             ...item,
             viewerState: {
@@ -361,7 +360,7 @@ export const DiscussionsWithSpoilersShown: Story = {
     api: memoryFeed(),
   },
   async play({ canvasElement }) {
-    const spoiler = article(within(canvasElement), '【剧透】《雨夜书店》第二章：那张旧车票');
+    const spoiler = article(within(canvasElement), '《雨夜书店》第二章：那张旧车票');
     await expect(spoiler).toHaveTextContent('二十年前的车票');
     await expect(within(spoiler).queryByRole('button', { name: 'Show spoiler' })).toBeNull();
   },

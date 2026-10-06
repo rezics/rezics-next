@@ -1,7 +1,7 @@
 import { uuidToSid } from '@rezics/model/address';
 import { spaceHref } from '../features/address/path.ts';
 import { describe, expect, test } from 'bun:test';
-import { announcesSpoilers, threadPath } from '../features/feed/discussion.ts';
+import { markedSpoiler, threadPath } from '../features/feed/discussion.ts';
 import {
   parseThreadSort,
   parseThreadWindow,
@@ -27,20 +27,10 @@ function reply(value: number, parent: number | null): ThreadReply {
 }
 
 describe('how a discussion reads', () => {
-  test('only a spoiler the author announced at the start of the title veils the body', () => {
-    for (const title of [
-      '【剧透】《雨夜书店》第二章：那张旧车票',
-      'Spoilers (chapter 35): Darcy’s letter',
-      '[Spoiler] the ending',
-      'ネタバレ注意：最終章',
-    ])
-      expect(announcesSpoilers(title)).toBe(true);
-    for (const title of [
-      'No spoilers please: first impressions',
-      'Which edition of Jane Eyre for a first read?',
-      '[Solved] Lumen Lanterns render as black cubes',
-    ])
-      expect(announcesSpoilers(title)).toBe(false);
+  test('a spoiler warning follows the declaration, never words in the title', () => {
+    expect(markedSpoiler(true)).toBe(true);
+    expect(markedSpoiler(false)).toBe(false);
+    expect(markedSpoiler(undefined)).toBe(false);
   });
 
   test('a thread lives under its Realm’s address, by the reply’s SID', () => {

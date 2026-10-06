@@ -257,11 +257,14 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
   realmPath: (realm: string, address?: AddressTarget) => string): DiscussionPost {
   const { target } = item;
   const community = realmPath(item.realm.id, 'address' in item.realm ? item.realm.address as AddressTarget : undefined);
+  // Home's post shape does not declare this yet. A carried boolean still warns; a title never does.
+  const spoiler = (item.post as { spoiler?: unknown }).spoiler;
   return { kind: item.kind === 'reply' ? 'reply' : 'discussion',
     href: threadPath(community, target.id),
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
     realm: item.realm, lead: metaLead(item), author: item.actor, time: item.time,
     title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
+    ...(typeof spoiler === 'boolean' ? { spoiler } : {}),
     showSpoilers: item.viewerState.status === 'available' && item.viewerState.spoiler.policy === 'show',
     work: target.work ? { id: target.work,
       address: 'address' in target ? target.address as AddressTarget : undefined, title: target.title, cover: target.cover, types: target.types,

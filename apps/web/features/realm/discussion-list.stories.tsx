@@ -67,6 +67,9 @@ export const Threads: Story = {
     const spoiler = canvas.getByRole('article', { name: /Spoilers \(chapter 35\)/ });
     await expect(within(spoiler).getByText('Spoiler')).toBeVisible();
     await expect(within(spoiler).queryByText(/rereads it/)).toBeNull();
+    const unmarked = canvas.getByRole('article', { name: 'Spoilers: a review of spoiler culture' });
+    await expect(within(unmarked).getByText(/The title names the subject/)).toBeVisible();
+    await expect(within(unmarked).queryByText('Spoiler')).toBeNull();
     await expect(canvas.getByRole('link', { name: 'More discussions' })).toHaveAttribute('href', `${base}?cursor=next`);
     await userEvent.click(canvas.getByRole('button', { name: 'Sort: Best' }));
     await waitFor(() => expect(screen.getByRole('menuitemradio', { name: /^Top/ })).toBeVisible());

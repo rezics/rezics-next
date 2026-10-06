@@ -70,21 +70,31 @@ function head(row: ReadRow): Head {
     epochOrder: row.epochOrder?.value ?? '0', sequence: row.sequence!.value };
 }
 
-/** Exact placed bodies, in Content's 64-revision batches. Unreadable bodies keep a neutral reply position. */
+/** A boolean on the exact revision body, or absent. Anything else is a corrupt declaration, not "safe". */
+function declaredSpoiler(body: Record<string, unknown>): boolean | undefined {
+  if (!Object.hasOwn(body, 'spoiler') || body.spoiler == null) return undefined;
+  if (typeof body.spoiler !== 'boolean') throw new WorkReadUnavailable('Reply spoiler declaration is invalid');
+  return body.spoiler;
+}
+
+/** Exact placed bodies, in Content's 64-revision batches. Unreadable bodies keep a neutral reply position.
+ * The spoiler declaration is a field of that same body: no second read per reply. */
 async function bodies(session: WorkReadSession, heads: readonly Head[], realm: string) {
   const decisions = await discloseInventory(session.deps.environment, heads.map((item) => ({ owner: 'content',
     resource: item.reply, component: 'body', revision: item.revisionId,
     work: item.work, context: realm })), disclosureViewer(session.principal), 'thread');
   heads = heads.filter((_item, index) => decisions[index] === 'visible');
   const revisions = [...new Set(heads.map((item) => item.revisionId))];
-  const read = new Map<string, { body: string; document?: DocumentSnapshot; language: string | null }>();
+  const read = new Map<string, { body: string; document?: DocumentSnapshot; language: string | null; spoiler?: boolean }>();
   for (let start = 0; start < revisions.length; start += REALM_THREAD_COST.contentBatch) {
     const batch = revisions.slice(start, start + REALM_THREAD_COST.contentBatch);
     const results = await session.deps.content!.readExactBatch(batch, async (ids) => new Set(ids));
     for (const result of results) {
       if (result.status !== 'available' || typeof result.body.body !== 'string') continue;
       const { language } = result.reference;
+      const spoiler = declaredSpoiler(result.body);
       read.set(result.revisionId, { ...retainedDocumentBody(result.body),
+        ...(spoiler === undefined ? {} : { spoiler }),
         language: language.kind === 'tag' ? language.tag : null });
     }
   }
@@ -285,6 +295,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     return [{ reply: row.reply, placement: row.placement, work: about, author: named(row.author),
       time: row.time.toISOString(), language: text.language, title,
       excerpt: clip(body, REALM_THREAD_COST.excerptChars),
+      ...(typeof text.spoiler === 'boolean' ? { spoiler: text.spoiler } : {}),
       vote: votes.get(row.placement) ?? closed,
       replies: { value: counted.counts.get(row.reply) ?? 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
   });
@@ -370,6 +381,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       time: row.time.toISOString(), language: text?.language ?? null, revisionId: row.revisionId,
       title: hidden ? null : title,
       body: hidden ? '' : clip(body, REALM_THREAD_COST.bodyChars),
+      ...(!hidden && typeof text?.spoiler === 'boolean' ? { spoiler: text.spoiler } : {}),
       ...(!hidden && text?.document ? { document: text.document } : {}),
       vote: hidden ? closed : (votes.get(row.placement) ?? closed),
       }];

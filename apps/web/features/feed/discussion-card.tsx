@@ -7,7 +7,7 @@ import { type ReactNode, useState } from 'react';
 import { discussionTarget } from '../safety/report.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { FollowRealmButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
-import { announcesSpoilers } from './discussion.ts';
+import { markedSpoiler } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import type { MetaLead } from './lead.ts';
 import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, useIdentity, WorkAttachment } from './post-row.tsx';
@@ -27,6 +27,8 @@ export interface DiscussionPost {
   time: string;
   /** A discussion's title, its author's first line as Main reads it; a reply has none. */
   title: string | null;
+  /** The author's declaration. Absent or false leaves the words visible; the title never decides this. */
+  spoiler?: boolean;
   /** The words after the title, or all of a reply's. */
   body: string;
   language: string | null;
@@ -70,7 +72,7 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
   menu?: ReactNode; position?: number; total?: number }) {
   const { t, locale } = useFeed();
   const title = post.title ?? '', body = post.body.trim();
-  const spoiler = post.kind === 'discussion' && announcesSpoilers(title);
+  const spoiler = markedSpoiler(post.spoiler);
   const count = post.comments ? new Intl.NumberFormat(locale, { notation: 'compact' }).format(post.comments.value) : null;
   const words = body ? <span lang={post.language ?? undefined} className={cn('whitespace-pre-line',
     post.kind === 'reply' && 'text-foreground')}>{body}</span> : null;
@@ -99,6 +101,6 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
       <LocalizedLink href={`${post.href}#reply`} className={barAction}>
         <ReplyIcon aria-hidden="true" />{post.kind === 'discussion' ? t.replyAction : t.viewThread}
       </LocalizedLink>
-      <ShareButton href={post.href} title={title || body} />
+      <ShareButton href={post.href} title={spoiler ? (title || t.spoilerTag) : (title || body)} />
     </>} />;
 }

@@ -47,7 +47,7 @@ export function newPostProgress(): PostProgress {
   };
 }
 
-/** Keep the title/spoiler announcement as the first text unit without flattening the body. */
+/** Keep the writer's title as the first text unit without flattening the body. Spoilers are a separate declaration. */
 export function postDocument(intent: PostIntent, progress: PostProgress): DocumentSnapshot {
   const stored = parseStoredDocument(intent.body);
   const source = stored ?? fromMarkdown(intent.body.trim(), 'blocks');
@@ -61,7 +61,7 @@ export function postDocument(intent: PostIntent, progress: PostProgress): Docume
   });
   // Import IDs are derived from the operation key, so a lost draft response retries identical content.
   const body = stored ? source.doc : imported(source.doc);
-  const title = `${intent.spoiler ? 'Spoilers: ' : ''}${intent.title.trim()}`;
+  const title = intent.title.trim();
   return normalizeDocument({
     ...source,
     profile: 'blocks',
@@ -117,6 +117,7 @@ export async function submitPost(
           originRealm: intent.realm,
           language: intent.language,
           direction: direction(intent.language, text),
+          spoiler: intent.spoiler,
           expectedHead,
           ...(deleted ? { body: null } : { document }),
           actingSubject: intent.actingSubject,
@@ -142,6 +143,7 @@ export async function submitPost(
           parentReply: null,
           parentRevision: null,
           contextRevision: null,
+          spoiler: intent.spoiler,
         },
         keyed('identity'),
       );

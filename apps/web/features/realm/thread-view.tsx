@@ -15,9 +15,8 @@ import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
 import { LinkMenu } from '../feed/controls.tsx';
-import { SpoilerVeil } from '../feed/discussion-card.tsx';
 import { resourceHref } from '../address/path.ts';
-import { announcesSpoilers, threadPath } from '../feed/discussion.ts';
+import { markedSpoiler, threadPath } from '../feed/discussion.ts';
 import { useFeed } from '../feed/feed-context.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
@@ -135,7 +134,7 @@ function OpeningPost({
       >
         {title || t.untitled}
       </h1>
-      {post.blocked ? null : announcesSpoilers(title) ? (
+      {post.blocked ? null : markedSpoiler(post.spoiler) ? (
         <>
           <span
             className="w-fit rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-[11px] text-warning-foreground
@@ -143,7 +142,7 @@ function OpeningPost({
           >
             {t.spoilerTag}
           </span>
-          {words ? <SpoilerVeil>{words}</SpoilerVeil> : null}
+          {words}
         </>
       ) : (
         words
@@ -216,7 +215,11 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
           <ReplyBody
             reply={parent}
             ratingTarget={read.work.id}
-            className="line-clamp-4 text-muted-foreground text-sm"
+            className={
+              markedSpoiler(parent.spoiler)
+                ? 'text-sm'
+                : 'line-clamp-4 text-muted-foreground text-sm'
+            }
           />
         </figure>
       ) : null}

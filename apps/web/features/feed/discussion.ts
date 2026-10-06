@@ -1,16 +1,11 @@
 import { spaceHref, threadHref, type AddressTarget } from '../address/path.ts';
 // How a discussion reads. Main titles a discussion by its author's first line
-// (`services/main/src/modules/realm-reply/discussion-text.ts`) but keeps no
-// spoiler flag: people announce spoilers in that title ("【剧透】…",
-// "Spoilers (chapter 35): …"), as on forums. These functions only read that
-// convention; they never invent a title, flair or flag the author did not write.
+// (`services/main/src/modules/realm-reply/discussion-text.ts`). Spoilers are the
+// post's `spoiler` declaration, in every language; a title is never one.
 
-// A spoiler announcement at the start of the title, bracketed or not.
-const spoilerMark = /^\s*[【[(（「『]?\s*(?:剧透|劇透|ネタバレ|스포일러|spoilers?\b|spoiler alert\b)/iu;
-
-/** Whether the author announced spoilers in the title, so the body stays veiled until the reader asks. */
-export function announcesSpoilers(title: string): boolean {
-  return spoilerMark.test(title);
+/** Whether the author declared spoilers. Absent and `false` both leave the words visible. */
+export function markedSpoiler(spoiler: boolean | undefined): boolean {
+  return spoiler === true;
 }
 
 /** A thread's page: `/r/{realm}/discussions/{reply}`, under the Realm's Zone segment when it has one. */

@@ -6,10 +6,11 @@ import { threadHref } from '../address/path.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { memoryFeed } from '../feed/fixtures.ts';
 import { messages } from '../feed/messages.ts';
+import ja from '../feed/messages/ja.ts';
 import zhHans from '../feed/messages/zh-Hans.ts';
 import type { ReplyMode } from '../feed/reply-composer.tsx';
-import { memoryThreads, type MemoryThreads, storyBranch, storyQuietThread, storyRealm, storyReply,
-  storySpoilerThread, storyThread, THREAD_NOW } from '../feed/thread-fixtures.ts';
+import { memoryThreads, type MemoryThreads, storyBranch, storyJapaneseSpoiler, storyQuietThread, storyRealm,
+  storyReply, storySpoilerThread, storyThread, storyUnmarkedTitle, THREAD_NOW } from '../feed/thread-fixtures.ts';
 import type { ThreadRead } from '../feed/thread.ts';
 import { communityZone } from '../zones/fixtures.ts';
 import { RealmPageStory } from './story-page.tsx';
@@ -33,8 +34,10 @@ const rules = [
 function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads() }: Args) {
   const zone = communityZone(locale);
   const here = localizedPath(threadHref(storyRealm.path, read.focus), locale);
+  const feedMessages = locale === 'zh-Hans' ? { ...messages, ...zhHans }
+    : locale === 'ja' ? { ...messages, ...ja } : messages;
   return <RealmPageStory zone={zone} locale={locale} members={locale === 'zh-Hans' ? '10 位成员' : '10 members'}>
-    <FeedProvider locale={locale} messages={locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages} now={THREAD_NOW}
+    <FeedProvider locale={locale} messages={feedMessages} now={THREAD_NOW}
       signedIn={signedIn} actingSubject={signedIn ? 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40' : null}
       signInHref={`/auth/start?next=${encodeURIComponent(here)}`} avatarQuery="" tab="all" followedRealms={null}
       api={memoryFeed()}>
@@ -215,14 +218,46 @@ export const NoComments: Story = {
   },
 };
 
-/** The author announced spoilers in the title: the words stay veiled until asked for. */
+/** The author marked the discussion and a reply. Titles stay as typed; bodies stay veiled until asked for. */
 export const Spoiler: Story = {
   args: { read: storySpoilerThread },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Spoilers (chapter 35): Darcy’s letter' })).toBeVisible();
     await expect(canvas.queryByText(/rereads it until she has to admit/)).toBeNull();
-    await userEvent.click(canvas.getByRole('button', { name: 'Show spoiler' }));
+    await expect(canvas.queryByText(/changes her mind on the page/)).toBeNull();
+    const [opening, replyButton] = canvas.getAllByRole('button', { name: 'Show spoiler' });
+    await userEvent.click(opening!);
     await expect(canvas.getByText(/rereads it until she has to admit/)).toBeVisible();
+    await expect(canvas.queryByText(/changes her mind on the page/)).toBeNull();
+    await userEvent.click(replyButton!);
+    await expect(canvas.getByText(/changes her mind on the page/)).toBeVisible();
+  },
+};
+
+/** A Japanese title with no spoiler word still warns, in Japanese, because the post is marked. */
+export const JapaneseSpoiler: Story = {
+  args: { read: storyJapaneseSpoiler, locale: 'ja' },
+  globals: { locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: '最終章の手紙' })).toBeVisible();
+    await expect(canvas.getByText('作者がネタバレとして指定しました。')).toBeVisible();
+    await expect(canvas.queryByText(/読み返す/)).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'ネタバレを表示' }));
+    await expect(canvas.getByText(/読み返す/)).toBeVisible();
+  },
+};
+
+/** A title that starts with "Spoilers" and is not marked shows its body and no warning. */
+export const UnmarkedTitle: Story = {
+  args: { read: storyUnmarkedTitle },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Spoilers: a review of spoiler culture' })).toBeVisible();
+    await expect(canvas.getByText(/The title names the subject/)).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Show spoiler' })).toBeNull();
+    await expect(canvas.queryByText('Spoiler')).toBeNull();
   },
 };
 

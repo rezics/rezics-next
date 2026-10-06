@@ -103,14 +103,14 @@ export const everyKind: FeedItem[] = [
     target: { id: storyId(7, 'dddd'), title: name('Pride and Prejudice'),
       excerpt: 'Is Mr. Bennet a good father?\nChapter 2 makes me think he enjoys his family’s confusion more than he '
         + 'should. He teases Mrs. Bennet in front of the girls and never once takes their future seriously.' } }),
-  // Home groups one Realm's discussions of a Work on one day; the author announced spoilers in the title.
+  // Home groups one Realm's discussions of a Work on one day. The spoiler warning is the declaration, not the title.
   post(15, { kind: 'discussion', realm: realms.fiction, actor: people.aria, score: 6, card: { kind: 'activity' },
     primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(15, 'cccc')) }, group: { key: 'rainy-day', count: 3,
       actors: [people.aria, people.leo, people.mei] },
-    post: { title: '【剧透】《雨夜书店》第二章：那张旧车票', language: 'zh-Hans',
-      excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' },
+    post: { title: '《雨夜书店》第二章：那张旧车票', language: 'zh-Hans',
+      excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。', spoiler: true } as FeedItem['post'],
     target: { id: storyId(15, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
-      excerpt: '【剧透】《雨夜书店》第二章：那张旧车票\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' } }),
+      excerpt: '《雨夜书店》第二章：那张旧车票\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' } }),
   // A reply reads as a quoted comment that opens its place in the thread.
   post(16, { kind: 'reply', realm: realms.fiction, actor: people.daniel, score: 3, card: { kind: 'activity' },
     primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(16, 'cccc')) },

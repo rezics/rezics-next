@@ -36,11 +36,12 @@ const titled = (text: string) => {
 };
 
 function reply(n: number, parent: number | null, author: keyof typeof people | null, minutes: number, text: string,
-  vote: Partial<ThreadReply['vote']> = {}, language = 'en'): ThreadReply {
+  vote: Partial<ThreadReply['vote']> = {}, language = 'en', spoiler?: boolean): ThreadReply {
   const { title, body } = parent === null ? titled(text) : { title: null, body: text };
   return { reply: id(n), placement: id(n, 'eeee'), parent: parent === null ? null : id(parent),
     author: author ? people[author] : null, time: ago(minutes), language,
     revisionId: `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`, title, body,
+    ...(spoiler === undefined ? {} : { spoiler }),
     vote: { score: 0, value: 0, revision: null, open: true, ...vote } };
 }
 
@@ -84,23 +85,34 @@ export const storyQuietThread: ThreadRead = { ...storyThread, thread: id(20), fo
   items: [reply(20, null, 'nora', 12, 'Frankenstein for Halloween?\nShould we read it in the last week of October, '
     + 'or save it for next year?')] };
 
-/** A discussion whose author announced spoilers in its title. */
+/** A discussion the author marked as a spoiler. The title still says what they typed, including the word "Spoilers". */
 export const storySpoilerThread: ThreadRead = { ...storyThread, thread: id(21), focus: id(21),
   items: [reply(21, null, 'sophie', 45, 'Spoilers (chapter 35): Darcy’s letter\nThe letter changes everything: '
-    + 'Elizabeth rereads it until she has to admit she was wrong about Wickham.', { score: 8 }),
-  reply(22, 21, 'daniel', 40, 'The rereading is the whole point. She changes her mind on the page.')] };
+    + 'Elizabeth rereads it until she has to admit she was wrong about Wickham.', { score: 8 }, 'en', true),
+  reply(22, 21, 'daniel', 40, 'The rereading is the whole point. She changes her mind on the page.', {}, 'en', true)] };
+
+/** A Japanese discussion marked as a spoiler. The warning is the localized label, not words in the title. */
+export const storyJapaneseSpoiler: ThreadRead = { ...storyThread, thread: id(30), focus: id(30),
+  items: [reply(30, null, 'hana', 20, '最終章の手紙\nエリザベスは手紙を読み返す。', { score: 3 }, 'ja', true)] };
+
+/** A title that begins with "Spoilers" and is not marked. The body stays visible. */
+export const storyUnmarkedTitle: ThreadRead = { ...storyThread, thread: id(31), focus: id(31),
+  items: [reply(31, null, 'daniel', 15, 'Spoilers: a review of spoiler culture\nThe title names the subject. '
+    + 'The post is not a spoiler.')] };
 
 const summary = (n: number, author: keyof typeof people | null, minutes: number, excerpt: string, score: number,
-  replies: number, title = work.title): ThreadSummary => ({ reply: id(n), placement: id(n, 'eeee'),
+  replies: number, title = work.title, spoiler?: boolean): ThreadSummary => ({ reply: id(n), placement: id(n, 'eeee'),
   work: { ...work, id: id(960 + n, 'cccc'), title }, author: author ? people[author] : null, time: ago(minutes),
   language: 'en', ...(({ title: heading, body }) => ({ title: heading, excerpt: body }))(titled(excerpt)),
+  ...(spoiler === undefined ? {} : { spoiler }),
   vote: { score, value: 0, revision: null, open: true },
   replies: { value: replies, kind: 'exact' } });
 
 /** A Realm's discussions as its list shows them. */
 export const storyThreads: ThreadSummary[] = [
   summary(1, 'priya', 180, `${items[0]!.title}\n${items[0]!.body}`, 14, 11),
-  summary(21, 'sophie', 45, `${storySpoilerThread.items[0]!.title}\n${storySpoilerThread.items[0]!.body}`, 8, 1),
+  summary(21, 'sophie', 45, `${storySpoilerThread.items[0]!.title}\n${storySpoilerThread.items[0]!.body}`, 8, 1, work.title, true),
+  summary(31, 'daniel', 15, `${storyUnmarkedTitle.items[0]!.title}\n${storyUnmarkedTitle.items[0]!.body}`, 1, 0),
   summary(23, 'aria', 300, 'Which edition of Jane Eyre for a first read?\nPenguin, Oxford or the Norton critical '
     + 'edition? I want notes that explain without spoiling.', 5, 4, name('Jane Eyre')),
   summary(20, 'nora', 12, `${storyQuietThread.items[0]!.title}\n${storyQuietThread.items[0]!.body}`, 0, 0,

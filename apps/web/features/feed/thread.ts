@@ -7,9 +7,11 @@ type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
 type Threads = ReturnType<MainClient['v1']['realms']>['threads'];
 
 export type ThreadsPage = Ok<Threads['get']>;
-export type ThreadSummary = ThreadsPage['items'][number];
 export type ThreadRead = Ok<ReturnType<Threads>['get']>;
-export type ThreadReply = ThreadRead['items'][number];
+/** Author declaration on the exact revision. Absent when that revision never set one. */
+type SpoilerDeclaration = { spoiler?: boolean };
+export type ThreadSummary = ThreadsPage['items'][number] & SpoilerDeclaration;
+export type ThreadReply = ThreadRead['items'][number] & SpoilerDeclaration;
 
 export const threadSorts = ['best', 'top', 'new'] as const;
 export type ThreadSort = (typeof threadSorts)[number];

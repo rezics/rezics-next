@@ -9,6 +9,8 @@ import { ReportAction } from '../safety/report-action.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { VoteControl } from './actions.tsx';
+import { SpoilerVeil } from './discussion-card.tsx';
+import { markedSpoiler } from './discussion.ts';
 import { readableText } from './post-row.tsx';
 import { useFeed } from './feed-context.tsx';
 import { ReplyComposer, type ReplyTarget } from './reply-composer.tsx';
@@ -67,7 +69,7 @@ function CopyLink({ href }: { href: string }) {
   );
 }
 
-/** The reply's words, paragraph by paragraph, in its own language. */
+/** The reply's words, paragraph by paragraph, in its own language. A declared spoiler stays veiled until the reader asks. */
 export function ReplyBody({ reply, className, ratingTarget }: { reply: ThreadReply; className?: string; ratingTarget?: string }) {
   const { t } = useFeed();
   const document =
@@ -80,6 +82,11 @@ export function ReplyBody({ reply, className, ratingTarget }: { reply: ThreadRep
           doc: { ...reply.document.doc, content: reply.document.doc.content.slice(1) },
         }
       : reply.document;
+  const words = document ? (
+    <DocumentBody document={document} className="grid gap-2" spoilerLabel={t.showSpoiler} />
+  ) : (
+    <MarkdownBody text={reply.body} showSpoiler={t.showSpoiler} className="grid gap-2" />
+  );
   return (
     <div
       lang={reply.language ?? undefined}
@@ -91,11 +98,7 @@ export function ReplyBody({ reply, className, ratingTarget }: { reply: ThreadRep
       )}
     >
       <WebRatedContent target={ratingTarget}>
-      {document ? (
-        <DocumentBody document={document} className="grid gap-2" spoilerLabel={t.showSpoiler} />
-      ) : (
-        <MarkdownBody text={reply.body} showSpoiler={t.showSpoiler} className="grid gap-2" />
-      )}
+        {markedSpoiler(reply.spoiler) ? <SpoilerVeil>{words}</SpoilerVeil> : words}
       </WebRatedContent>
     </div>
   );

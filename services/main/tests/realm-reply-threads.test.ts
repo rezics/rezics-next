@@ -13,10 +13,10 @@ import { decodeReadCursor, WorkReadMissing, WorkReadMoved, type WorkReadSession 
 // fakes answer the reads' batches, so the tests pin which replies a Realm
 // shows, in what order, and that each read stays a fixed number of batches.
 
-const realm = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000a';
+export const realm = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000a';
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-00000000000b';
 const n = (value: number) => value.toString(16).padStart(12, '0');
-const reply = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n(value)}`;
+export const reply = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n(value)}`;
 // UUIDv7 placements carry their time: `minutes` after a fixed start.
 const start = Date.parse('2026-09-20T00:00:00Z');
 const placement = (value: number, minutes = value) => {
@@ -30,9 +30,11 @@ const bind = (value: string) => ({ value });
 
 interface Placed { id: number; parent?: number; author: number; minutes?: number; body?: string;
   approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean; rootRevision?: string;
+  /** `bad` is a corrupt declaration. Null is an unset JSON value. */
+  spoiler?: boolean | null | 'bad';
 }
 
-function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
+export function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
   truncated?: boolean; countsComplete?: boolean; blocked?: number[];
   } = {}) {
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
@@ -103,7 +105,9 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
         calls.bodies++;
         return ids.map((id) => {
           const item = placed.find((candidate) => revision(candidate.id) === id)!;
-          return { revisionId: id, status: 'available', body: { body: item.body ?? `Title ${item.id}\nBody ${item.id}` },
+          const spoiler = item.spoiler === 'bad' ? 'yes' : item.spoiler;
+          return { revisionId: id, status: 'available', body: { body: item.body ?? `Title ${item.id}\nBody ${item.id}`,
+            ...(spoiler === undefined ? {} : { spoiler }) },
             reference: { resourceId: reply(item.id), language: { kind: 'tag', tag: 'en', originalTag: 'en' } } };
         });
       } },

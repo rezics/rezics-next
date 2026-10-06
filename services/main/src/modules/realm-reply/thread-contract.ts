@@ -36,7 +36,10 @@ export const realmThreadSummary = t.Object({ reply: readId, placement: readId,
   work: threadWork, author: threadAuthor,
   time: t.String(), language: t.Nullable(t.String()),
   title: t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 }),
-  excerpt: t.String({ maxLength: REALM_THREAD_COST.excerptChars }), vote: threadVote, replies: count });
+  excerpt: t.String({ maxLength: REALM_THREAD_COST.excerptChars }),
+  /** From the exact revision already read. Omitted when that revision never declared one; `false` is a cleared declaration. */
+  spoiler: t.Optional(t.Boolean()),
+  vote: threadVote, replies: count });
 export const realmThreadsQuery = t.Object({ sort: t.Optional(threadSort), window: t.Optional(threadWindow),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: REALM_THREAD_COST.pageSize })),
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
@@ -54,6 +57,8 @@ export const realmThreadReply = t.Object({ reply: readId, placement: readId, par
   author: threadAuthor, time: t.String(), language: t.Nullable(t.String()), revisionId: readUuid,
   title: t.Nullable(t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 })),
   body: t.String({ maxLength: REALM_THREAD_COST.bodyChars }),
+  /** From the exact revision already read. Omitted when that revision never declared one; `false` is a cleared declaration. */
+  spoiler: t.Optional(t.Boolean()),
   /** Complete snapshot, including the root heading; renderers may omit it when already shown as title. */
   document: t.Optional(documentSnapshotSchema),
   /** The reader blocked this author; the body and author are withheld from this read. */
