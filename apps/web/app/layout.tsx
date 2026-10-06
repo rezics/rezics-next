@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 import { AccountMenu } from '../features/auth/account-menu.tsx';
+import { readPlatformAccess } from '../features/api/main.ts';
 import { serviceOrigin } from '../features/api/origins.ts';
 import { DisplayPreferenceSync } from '../features/api/preferences-sync.tsx';
 import { readSession } from '../features/auth/session.ts';
@@ -23,12 +24,13 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, view
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const jar = await cookies();
   const locale = await requestLocale();
-  const [messages, auth, session] = await Promise.all([getMessages('shell', locale),
-    getMessages('auth', locale), readSession()]);
+  const [messages, auth, session, platformAccess] = await Promise.all([getMessages('shell', locale),
+    getMessages('auth', locale), readSession(), readPlatformAccess()]);
   const theme = parseTheme(jar.get(THEME_COOKIE)?.value);
   return <html lang={locale} className={themeClass(theme)}>
     <body className="min-h-dvh bg-background">
       <AppShell locale={locale} messages={messages} theme={theme} signedIn={Boolean(session)}
+        platformAccess={platformAccess}
         navCollapsed={parseNavCollapsed(jar.get(NAV_COOKIE)?.value)}
         notifications={session ? <NotificationsLink /> : null} communities={<ShellCommunities locale={locale} />}
         account={session ? <AccountMenu session={session} messages={auth}

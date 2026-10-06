@@ -1,5 +1,6 @@
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
 import { browserMainApi } from '../api/browser.ts';
+import { type OperationGate, platformClosed } from '../api/platform-access.ts';
 import { discoveryApi, type ConceptChoice, type ListInput, type ListPage } from '../discover/api.ts';
 import { type Loaded, type MainClient, settle } from '../feed/types.ts';
 import type { CommandFailure, CommandResult, ConceptDetail, ConceptSearchItem, SavedFilter, SavedFilterReceipt,
@@ -33,6 +34,7 @@ type Answer<T> = { data: T | null; error: { status: number; value: unknown } | n
 
 /** A command's refusal in the reader's terms, from Main's status and problem code. */
 export function commandFailure(status: number, code: unknown): CommandFailure {
+  if (platformClosed(status, { code })) return 'closed';
   if (status === 401 || status === 403) return 'sign-in';
   if (status === 409) return code === 'home_tabs_full' ? 'full' : code === 'saved_filter_followed' ? 'followed' : 'stale';
   if (status === 422) return 'unsupported';
@@ -50,23 +52,35 @@ async function command<T>(call: () => Promise<Answer<T>>): Promise<CommandResult
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
-export function mainSavedFilterApi(actingSubject: string, main: MainClient = browserMainApi()): SavedFilterApi {
+/**
+ * The client for one viewer. Every call to a Saved Filter operation first asks `operationOpen`, so a surface that
+ * outlives a revoked grant answers `closed` without a request; a grant revoked after that check is refused by Main
+ * and reads the same way.
+ */
+export function mainSavedFilterApi(actingSubject: string, main: MainClient = browserMainApi(),
+  operationOpen: OperationGate = () => true): SavedFilterApi {
   const headers = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
   const filters = main.v1.me['saved-filters'];
+  const closed = { ok: false, failure: 'closed' } as const;
   return {
-    list: locale => settle(() => filters.get({ query: { actingSubject, language: locale } })),
+    list: async locale => operationOpen('getV1MeSaved-filters')
+      ? settle(() => filters.get({ query: { actingSubject, language: locale } })) : closed,
 
-    create: input => command(() => filters.post({ profile: 'saved-filter-create-v1', actingSubject,
-      context: 'global', ...input }, headers())),
+    create: async input => operationOpen('postV1MeSaved-filters')
+      ? command(() => filters.post({ profile: 'saved-filter-create-v1', actingSubject,
+        context: 'global', ...input }, headers())) : closed,
 
-    update: (filter, change) => command(() => filters({ id: filter.id }).patch({ profile: 'saved-filter-update-v1',
-      actingSubject, expectedRevision: filter.revision, ...change }, headers())),
+    update: async (filter, change) => operationOpen('patchV1MeSaved-filtersById')
+      ? command(() => filters({ id: filter.id }).patch({ profile: 'saved-filter-update-v1',
+        actingSubject, expectedRevision: filter.revision, ...change }, headers())) : closed,
 
-    reorder: (pinned, revision) => command(() => filters.order.put({ profile: 'saved-filter-order-v1', actingSubject,
-      expectedRevision: revision, pinned: [...pinned] }, headers())),
+    reorder: async (pinned, revision) => operationOpen('putV1MeSaved-filtersOrder')
+      ? command(() => filters.order.put({ profile: 'saved-filter-order-v1', actingSubject,
+        expectedRevision: revision, pinned: [...pinned] }, headers())) : closed,
 
-    remove: filter => command(() => filters({ id: filter.id }).delete(undefined, {
-      query: { actingSubject, expectedRevision: filter.revision }, ...headers() })),
+    remove: async filter => operationOpen('deleteV1MeSaved-filtersById')
+      ? command(() => filters({ id: filter.id }).delete(undefined, {
+        query: { actingSubject, expectedRevision: filter.revision }, ...headers() })) : closed,
 
     async followConcept(concept, following) {
       const state = await settle(() => main.v1.follows({ id: concept.slice(-36) })

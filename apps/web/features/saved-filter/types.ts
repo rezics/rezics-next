@@ -25,7 +25,8 @@ export interface SavedFilters {
  * Why a Saved Filter command did not apply: `stale` when the filters changed
  * first (refresh and try again), `full` when Home already has eight tabs,
  * `followed` for a followed Concept's filter, which unfollowing removes,
- * `unsupported` for a filter Home cannot show.
+ * `unsupported` for a filter Home cannot show, `closed` when the platform has not opened Saved Filters for the
+ * reader (the surface goes away; it is not an error).
  */
-export type CommandFailure = 'stale' | 'full' | 'followed' | 'unsupported' | 'sign-in' | 'unavailable';
+export type CommandFailure = 'stale' | 'full' | 'followed' | 'unsupported' | 'closed' | 'sign-in' | 'unavailable';
 export type CommandResult<T> = { ok: true; data: T } | { ok: false; failure: CommandFailure };

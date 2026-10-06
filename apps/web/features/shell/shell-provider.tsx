@@ -2,6 +2,7 @@
 
 import { materializeData } from 'native-i18n';
 import { createContext, use, useMemo, useRef, useState, type ReactNode } from 'react';
+import { type OperationGate, gateFor, type PlatformAccess } from '../api/platform-access.ts';
 import { saveDisplayPreference } from '../api/preferences.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { ShellMessages } from './messages.ts';
@@ -11,6 +12,8 @@ interface ShellState {
   locale: UiLocale;
   /** Whether a session exists: personal reads such as the unread count start only then. */
   signedIn: boolean;
+  /** Which closed operations this viewer may use, read once for the request; client components gate on it. */
+  operationOpen: OperationGate;
   /** Shell strings, materialized for client components and route boundaries. */
   t: ReturnType<typeof materializeData<ShellMessages>>;
   collapsed: boolean;
@@ -37,12 +40,25 @@ export function useOptionalShell(): ShellState | null {
   return use(ShellContext);
 }
 
+const everythingOpen: OperationGate = () => true;
+
+/**
+ * The viewer's operation gate. Outside a shell, as in stories and component tests, nobody is being decided
+ * for, so every operation counts as open; the app's own layout always supplies the platform-access read.
+ */
+export function useOperationGate(): OperationGate {
+  return useOptionalShell()?.operationOpen ?? everythingOpen;
+}
+
 function writeCookie(name: string, value: string) {
   document.cookie = preferenceCookie(name, value, location.protocol === 'https:');
 }
 
-export function ShellProvider({ locale, messages, initialTheme, initialCollapsed, signedIn = false, children }: {
+export function ShellProvider({ locale, messages, initialTheme, initialCollapsed, signedIn = false, platformAccess,
+  children }: {
   locale: UiLocale; messages: ShellMessages; initialTheme: Theme; initialCollapsed: boolean; signedIn?: boolean;
+  /** Omitted only where no viewer is being decided for (stories); the layout always passes the request's read. */
+  platformAccess?: PlatformAccess;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsedState] = useState(initialCollapsed);
@@ -58,8 +74,9 @@ export function ShellProvider({ locale, messages, initialTheme, initialCollapsed
     if (applied) root.classList.add(applied);
   }
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
+  const operationOpen = useMemo(() => platformAccess ? gateFor(platformAccess) : everythingOpen, [platformAccess]);
   const state: ShellState = {
-    locale, signedIn, t, collapsed, theme,
+    locale, signedIn, operationOpen, t, collapsed, theme,
     setCollapsed(next) {
       setCollapsedState(next);
       writeCookie(NAV_COOKIE, next ? 'collapsed' : 'expanded');

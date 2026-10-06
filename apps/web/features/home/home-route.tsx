@@ -4,6 +4,8 @@ import { Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
+import { readPlatformAccess } from '../api/main.ts';
+import { operationOpen } from '../api/platform-access.ts';
 import { signInPath } from '../auth/paths.ts';
 import { feedSearch, withChange } from '../feed/state.ts';
 import { readSavedFilters } from '../saved-filter/server.ts';
@@ -51,9 +53,9 @@ async function StreamedPosts({ posts, ...props }: Omit<HomePostsProps, 'query' |
 export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
   searchParams: Record<string, string | string[] | undefined> }) {
   // Every read that does not depend on another starts at once, so the page waits for the slowest, not their sum.
-  const [home, feedMessages, view, jar, continueItems, official, savedFilters] = await Promise.all([
+  const [home, feedMessages, view, jar, continueItems, official, savedFilters, access] = await Promise.all([
     getMessages('home', locale), getMessages('feed', locale), readHomeView(searchParams, locale), cookies(),
-    readContinue(), readOfficialZones(locale), readSavedFilters(locale)]);
+    readContinue(), readOfficialZones(locale), readSavedFilters(locale), readPlatformAccess()]);
   const messages = { home, feed: feedMessages };
   // Sign-in returns to this view, with its filters.
   const here = localizedPath(`/${feedSearch(view.state, view.defaults)}`, locale);
@@ -62,7 +64,9 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
     ...[...view.followed.realms, ...view.followed.zones].map(item => item.id)] : []);
   const pinned = view.state.tab === 'pinned' && savedFilters ? [...savedFilters.pinned, ...savedFilters.unpinned]
     .find(filter => filter.id === view.state.filter) ?? null : null;
-  const missing = view.state.tab === 'pinned' && savedFilters !== null && !pinned;
+  // Pinned tabs exist only where Saved Filters are open for the reader: an address kept from before is a gone tab.
+  const savedFiltersOpen = operationOpen('getV1MeSaved-filters', access);
+  const missing = view.state.tab === 'pinned' && (savedFilters !== null || !savedFiltersOpen) && !pinned;
   const posts = missing ? null : readHomePosts(view, locale);
   const allHref = localizedPath(`/${feedSearch(withChange(view.state, { tab: 'all' }), view.defaults)}`, locale);
   return <HomePage locale={locale} messages={messages} now={Date.now()}

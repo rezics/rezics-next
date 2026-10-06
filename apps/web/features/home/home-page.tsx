@@ -16,6 +16,7 @@ import type { FeedMessages } from '../feed/messages.ts';
 import type { ContinueItem } from '../feed/types.ts';
 import { type FeedDefaults, feedSearch, type FeedState, withChange } from '../feed/state.ts';
 import type { FeedPage, FeedQuery, Loaded } from '../feed/types.ts';
+import type { OperationGate } from '../api/platform-access.ts';
 import type { SavedFilterApi } from '../saved-filter/api.ts';
 import { currentFiltersDocument, filterTitle } from '../saved-filter/tabs.ts';
 import type { SavedFilter, SavedFilters } from '../saved-filter/types.ts';
@@ -63,6 +64,8 @@ export interface HomePageProps {
   /** Stories: an in-memory Main. */
   api?: FeedApi;
   filtersApi?: SavedFilterApi;
+  /** Stories: the operations open for the reader, instead of the shell's. */
+  operationGate?: OperationGate;
 }
 
 export interface HomePostsProps {
@@ -179,8 +182,10 @@ export function HomePage(props: HomePageProps) {
     ...state.realms.map(realm => realms.find(item => item.id === realm)?.name ?? feed.realms)] } : null;
   const tabs = actingSubject ? <HomeTabs state={state} defaults={defaults} locale={locale} messages={messages}
     actingSubject={actingSubject} filters={props.savedFilters} api={props.filtersApi}
+    gate={props.operationGate}
     picker={props.savedFilters ? <PinPicker state={state} defaults={defaults} locale={locale} messages={messages.home}
-      actingSubject={actingSubject} filters={props.savedFilters} current={current} api={props.filtersApi} /> : null} />
+      actingSubject={actingSubject} filters={props.savedFilters} current={current} api={props.filtersApi}
+      gate={props.operationGate} /> : null} />
     : undefined;
   return <FeedProvider locale={locale} messages={messages.feed} now={props.now} signedIn={signedIn}
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}

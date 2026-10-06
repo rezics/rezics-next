@@ -17,7 +17,9 @@ import { topicItem, type TopicItem } from '../discover/topic-picker.tsx';
 import { browseMessages } from '../discover/browse-messages.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Loaded } from '../feed/types.ts';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { type FeedDefaults, feedSearch, type FeedState, pinnedTab } from '../feed/state.ts';
+import type { OperationGate } from '../api/platform-access.ts';
 import { mainSavedFilterApi, type SavedFilterApi } from '../saved-filter/api.ts';
 import { currentFiltersName, filterTitle, MAX_PINNED } from '../saved-filter/tabs.ts';
 import type { CommandFailure, ConceptDetail, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
@@ -42,6 +44,8 @@ export interface PinPickerProps {
   current: { document: FilterDocument; labels: string[] } | null;
   /** Stories: an in-memory Main. */
   api?: SavedFilterApi;
+  /** Stories: the operations open for the reader, instead of the shell's. */
+  gate?: OperationGate;
   /** Stories: start open. */
   defaultOpen?: boolean;
 }
@@ -53,11 +57,19 @@ export interface PinPickerProps {
  * as the invitation Home gives a reader who skipped choosing topics.
  */
 export function PinPicker({ state, defaults, locale, messages, actingSubject, filters, current, api: given,
-  defaultOpen = false }: PinPickerProps) {
+  gate: givenGate, defaultOpen = false }: PinPickerProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
+  // What the reader may do follows the grants the layout read; the client asks it at each call.
+  const shellGate = useOperationGate();
+  const gate = givenGate ?? shellGate;
+  const gateRef = useRef(gate);
+  gateRef.current = gate;
+  const canCreate = gate('postV1MeSaved-filters');
+  const canPin = gate('patchV1MeSaved-filtersById');
   const api = useRef<SavedFilterApi | null>(given ?? null);
-  const client = useCallback(() => api.current ??= mainSavedFilterApi(actingSubject), [actingSubject]);
+  const client = useCallback(() => api.current ??= mainSavedFilterApi(actingSubject, undefined,
+    operation => gateRef.current(operation)), [actingSubject]);
   const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<CommandFailure | null>(null);
@@ -68,7 +80,12 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
     setOpen(false);
     router.push(localizedPath(`/${feedSearch(pinnedTab(state, id), defaults)}`, locale));
   };
-  const fail = (reason: CommandFailure) => { setBusy(null); setFailure(reason); };
+  const fail = (reason: CommandFailure) => {
+    setBusy(null);
+    // A grant that went away: the refreshed page no longer offers the picker, and says nothing about it.
+    if (reason === 'closed') { setOpen(false); router.refresh(); return; }
+    setFailure(reason);
+  };
 
   async function pinConcept(topic: Topic) {
     setBusy(topic.id); setFailure(null);
@@ -100,6 +117,8 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
     return created.ok && created.data.id ? go(created.data.id) : fail(created.ok ? 'unavailable' : created.failure);
   }
 
+  // Neither way of adding a tab is open: nothing here would work, so there is no `+`.
+  if (!canCreate && !canPin) return null;
   return <Dialog open={open} onOpenChange={details => { setOpen(details.open); if (!details.open) setFailure(null); }}>
     <DialogTrigger aria-label={empty ? undefined : t.pinMore} title={empty ? undefined : t.pinMore}
       className={cn('flex h-12 shrink-0 items-center gap-1.5 border-border/60 border-s px-3.5 font-medium text-sm',
@@ -119,8 +138,8 @@ export function PinPicker({ state, defaults, locale, messages, actingSubject, fi
         <TopicSearch t={t} locale={locale} api={client} disabled={full} busy={busy}
           pinned={filters.pinned.flatMap(filter => filter.concept ? [filter.concept.id] : [])}
           known={[...filters.pinned, ...filters.unpinned].flatMap(filter => filter.concept ? [filter.concept.id] : [])}
-          unpinned={filters.unpinned} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
-        {current ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
+          unpinned={canPin ? filters.unpinned : []} onPin={topic => void pinConcept(topic)} onPinFilter={filter => void pinFilter(filter)} />
+        {current && canCreate ? <SaveCurrent t={t} labels={current.labels} disabled={full} busy={busy === 'current'}
           onSave={name => void saveCurrent(name)} /> : null}
       </DialogBody>
     </DialogContent>

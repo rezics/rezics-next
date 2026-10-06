@@ -2,6 +2,7 @@ import interfaceFont from '@fontsource-variable/manrope/files/manrope-latin-wght
 import { SkipNavLink } from '@rezics/ui/skip-nav';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { NO_PLATFORM_ACCESS, type PlatformAccess } from '../api/platform-access.ts';
 import { BottomNav } from './bottom-nav.tsx';
 import { Logo } from './logo.tsx';
 import { LocaleSelect } from './locale-switch.tsx';
@@ -22,6 +23,8 @@ export interface AppShellProps {
   theme: Theme;
   navCollapsed: boolean;
   signedIn?: boolean;
+  /** What the request's viewer may use beyond public operations (`readPlatformAccess()`); omitted, none. */
+  platformAccess?: PlatformAccess;
   /** The account slot, normally <AccountMenu session={…} />. */
   account: ReactNode;
   /** The notifications slot; omitted while signed out. */
@@ -36,10 +39,10 @@ export interface AppShellProps {
  * navigation. Phones: a compact top bar, a bottom navigation and the side
  * navigation in a drawer. Routes render their content, not a second <main>.
  */
-export function AppShell({ locale, messages, theme, navCollapsed, signedIn, account, notifications, communities,
-  children }: AppShellProps) {
+export function AppShell({ locale, messages, theme, navCollapsed, signedIn, platformAccess, account, notifications,
+  communities, children }: AppShellProps) {
   return <ShellProvider locale={locale} messages={messages} initialTheme={theme} initialCollapsed={navCollapsed}
-    signedIn={signedIn}>
+    signedIn={signedIn} platformAccess={platformAccess ?? NO_PLATFORM_ACCESS}>
     {/* The interface face, requested with the stylesheet rather than after it (React hoists this into <head>):
         a round trip later on a phone, its swap re-wrapped the text above the fold and shifted Home (CLS 0.15). */}
     <link rel="preload" href={interfaceFont} as="font" type="font/woff2" crossOrigin="anonymous" />

@@ -1,4 +1,5 @@
 import type { browserMainApi } from '../api/browser.ts';
+import { platformClosed } from '../api/platform-access.ts';
 
 // Main's home shapes (`services/main/src/modules/feed/contract.ts`, `feed/personal.ts`,
 // `modules/follows`, `modules/continue`, `modules/onboarding`), taken
@@ -34,13 +35,15 @@ export type FeedbackStrength = FeedbackBody['strength'];
  * Why a read has no data. Each region shows its own and the rest of the page
  * stays: `moved` is Main's 409 when the feed or follows changed under a cursor,
  * `sign-in` a refused or expired session, `missing` a read Main does not serve
- * (yet), `unavailable` anything else.
+ * (yet), `closed` an operation the platform has not opened for this viewer (Main's `platform_closed`:
+ * callers render it as absent, never as an error), `unavailable` anything else.
  */
-export type ReadFailure = 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget' | 'unavailable';
+export type ReadFailure = 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget' | 'closed' | 'unavailable';
 
 export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
 
-export function failureOf(status: number): ReadFailure {
+export function failureOf(status: number, body?: unknown): ReadFailure {
+  if (platformClosed(status, body)) return 'closed';
   if (status === 404) return 'missing';
   if (status === 401 || status === 403) return 'sign-in';
   if (status === 409) return 'moved';
@@ -55,7 +58,7 @@ type Answer<T> = { data: T | null; error: { status: number; value: unknown } | n
 export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
   try {
     const { data, error } = await call();
-    if (error) return { ok: false, failure: failureOf(error.status) };
+    if (error) return { ok: false, failure: failureOf(error.status, error.value) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };

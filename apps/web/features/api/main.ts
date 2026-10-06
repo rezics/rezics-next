@@ -9,6 +9,7 @@ import { mainReadHeaders } from './main-read.ts';
 import { serverRead } from './server-read.ts';
 import { SERVER_READ_LIMITS } from './server-fetch.ts';
 import { mainBodyRead } from './main-read-operation.ts';
+import { NO_PLATFORM_ACCESS, parsePlatformAccess, type PlatformAccess } from './platform-access.ts';
 
 const profileContentLanguages = cache(
   async (token: string, sessionKey: string): Promise<string[]> => {
@@ -99,3 +100,26 @@ export function mainApiWithToken(accessToken: string | undefined) {
 export async function mainApi() {
   return mainApiWithToken((await cookies()).get(ACCESS_COOKIE)?.value);
 }
+
+/**
+ * What the viewer's session may use beyond the public operations: Main's platform groups and operations.
+ * One read per request, shared by the layout and every page through React's cache; it holds nothing
+ * across requests or viewers. A refusal or an unreachable Main reads as no access, so closed surfaces
+ * stay hidden rather than appear and fail.
+ */
+export const readPlatformAccess = cache(async (): Promise<PlatformAccess> => {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  try {
+    const response = await serverRead(
+      `${serviceOrigin('MAIN_ORIGIN')}/v1/me/platform-access`,
+      {
+        headers: await mainReadHeaders(token ? { authorization: `Bearer ${token}` } : undefined),
+        cache: 'no-store',
+      },
+      { timeoutMs: SERVER_READ_LIMITS.metadata },
+    );
+    return (response.ok ? parsePlatformAccess(await response.json()) : null) ?? NO_PLATFORM_ACCESS;
+  } catch {
+    return NO_PLATFORM_ACCESS;
+  }
+});

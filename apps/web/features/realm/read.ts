@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { mainApiWithToken } from '../api/main.ts';
+import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
+import { operationOpen } from '../api/platform-access.ts';
 import { idOf } from './route.ts';
 import { resolveAddress } from '../address/server.ts';
 import { addressKey } from '../address/path.ts';
@@ -43,7 +44,7 @@ import {
 
 const main = () => mainApiWithToken(undefined);
 
-type Answer<T> = { data: T | null; error: { status: number } | null };
+type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 
 /**
  * One Main read as a `Loaded` result. Main answers 409 when the graph moved
@@ -54,7 +55,7 @@ async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promi
   try {
     let { data, error } = await call();
     if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status) };
+    if (error) return { ok: false, failure: failureOf(error.status, error.value) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };
@@ -272,14 +273,15 @@ export const readFacets = cache(async (): Promise<Loaded<FacetList>> =>
   settle(() => main().v1.facets.get()),
 );
 
-/** A mod Work's disclosed releases, newest first. */
-export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> =>
-  settle(() =>
+/** A mod Work's disclosed releases, newest first; `closed` while the platform has not opened the read. */
+export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> => {
+  if (!operationOpen('getV1Mod-releasesByWork', await readPlatformAccess())) return { ok: false, failure: 'closed' };
+  return settle(() =>
     main()
       .v1['mod-releases']({ work })
       .get({ query: { limit: 20 } }),
-  ),
-);
+  );
+});
 
 /** A few active public Realms, for "Other communities". */
 export const readRealmDirectory = cache(

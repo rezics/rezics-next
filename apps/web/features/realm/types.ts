@@ -1,3 +1,4 @@
+import { platformClosed } from '../api/platform-access.ts';
 import type { MainClient } from '../discover/types.ts';
 
 // Main's Realm, Zone presentation and Zone module read shapes, taken from the
@@ -44,11 +45,13 @@ export type MainName = RealmHeader['name'];
 export type MainAvatar = RealmHeader['icon'];
 
 /** Why a region has no data. Each region shows its own; the rest of the page stays. */
-export type ReadFailure = 'missing' | 'moved' | 'invalid' | 'budget' | 'unavailable';
+/** `closed` is an operation the platform has not opened for this viewer: absent, not an error. */
+export type ReadFailure = 'missing' | 'moved' | 'invalid' | 'budget' | 'closed' | 'unavailable';
 
 export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
 
-export function failureOf(status: number): ReadFailure {
+export function failureOf(status: number, body?: unknown): ReadFailure {
+  if (platformClosed(status, body)) return 'closed';
   if (status === 404 || status === 410 || status === 401 || status === 403) return 'missing';
   if (status === 409) return 'moved';
   if (status === 400) return 'invalid';

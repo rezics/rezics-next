@@ -15,6 +15,8 @@ export async function WorkTypeSections({ work, types, locale }: {
 }) {
   if (!types.includes(MOD_PACKAGE)) return null;
   const [page, messages] = await Promise.all([readModReleases(work), getMessages('zones', locale)]);
+  // A closed read leaves no section, not an empty or failed one.
+  if (!page.ok && page.failure === 'closed') return null;
   return <ModSections releases={page.ok ? page.data.items : []} failed={!page.ok && page.failure !== 'missing'}
     moreReleases={page.ok && page.data.nextCursor !== null} locale={locale} messages={messages} />;
 }

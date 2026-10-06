@@ -19,7 +19,7 @@ import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
-import { chooseOption } from '../stories/choose-option.ts';
+import { chooseMenuItem, chooseOption } from '../stories/choose-option.ts';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
@@ -394,6 +394,42 @@ export const TabsFull: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
     await expect(dialog.getByRole('status')).toHaveTextContent('Home has room for eight tabs');
+  },
+};
+
+/** Saved Filters closed for the reader: Following and All only, with nothing to pin and no menu to open. */
+export const SavedViewsClosed: Story = {
+  args: props({ savedFilters: null, state: state({ tab: 'all' }) }),
+  async play({ canvasElement }) {
+    const tabs = within(canvasElement).getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['Following', 'All']);
+    await expect(within(tabs).queryByRole('button')).toBeNull();
+    await expect(within(canvasElement).queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+  },
+};
+
+/** Only reading Saved Filters is open: the tabs show, with no way to change them. */
+export const SavedViewsReadOnly: Story = {
+  args: props({ state: pinnedState(), operationGate: operation => operation === 'getV1MeSaved-filters' }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Fantasy' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Options for Fantasy' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+  },
+};
+
+/** A grant revoked after the page loaded: Main's refusal is not shown as a failure, the page refreshes without it. */
+export const SavedViewsRevokedAfterLoad: Story = {
+  args: props({ state: pinnedState(), filtersApi: memorySavedFilters(readerFilters, { refuse: 'closed' }) }),
+  async play({ canvasElement, args }) {
+    const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
+    await chooseMenuItem(screen, 'menuitem', 'Remove from Home');
+    await waitFor(() => expect(api.calls).toContain('update:01:{"pinned":false}'));
+    await expect(canvas.queryByRole('status')).toBeNull();
+    await expect(canvas.queryByText(/could not/i)).toBeNull();
   },
 };
 

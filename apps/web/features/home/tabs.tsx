@@ -13,9 +13,11 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 import { tabLink } from '../feed/controls.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import { type FeedDefaults, feedSearch, type FeedState, pinnedTab, withChange } from '../feed/state.ts';
+import type { OperationGate } from '../api/platform-access.ts';
 import { mainSavedFilterApi, type SavedFilterApi } from '../saved-filter/api.ts';
 import { droppedOn, filterTitle, moved } from '../saved-filter/tabs.ts';
 import type { CommandResult, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
@@ -35,6 +37,8 @@ export interface HomeTabsProps {
   picker?: ReactNode;
   /** Stories: an in-memory Main. */
   api?: SavedFilterApi;
+  /** Stories: the operations open for the reader, instead of the shell's. */
+  gate?: OperationGate;
 }
 
 /**
@@ -43,12 +47,21 @@ export interface HomeTabsProps {
  * desktop a pinned tab is dragged to a new place, and every tab's menu moves,
  * renames or removes it with the keyboard too. Each tab has its own address.
  */
-export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, picker, api: given }: HomeTabsProps) {
+export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, picker, api: given,
+  gate: givenGate }: HomeTabsProps) {
   const t = materializeData(messages.home, { locale });
   const feed = materializeData(messages.feed, { locale });
   const router = useRouter();
+  // What the reader may do with a tab follows the grants the layout read; the client asks it at each call, so a
+  // refresh that changes the grants applies to the client already made.
+  const shellGate = useOperationGate();
+  const gate = givenGate ?? shellGate;
+  const gateRef = useRef(gate);
+  gateRef.current = gate;
+  const can = { edit: gate('patchV1MeSaved-filtersById'), order: gate('putV1MeSaved-filtersOrder'),
+    delete: gate('deleteV1MeSaved-filtersById') };
   const api = useRef<SavedFilterApi | null>(given ?? null);
-  const client = () => api.current ??= mainSavedFilterApi(actingSubject);
+  const client = () => api.current ??= mainSavedFilterApi(actingSubject, undefined, operation => gateRef.current(operation));
   const server = filters?.pinned.map(filter => filter.id) ?? [];
   // The order shown: the server's, or a reorder waiting for Main's answer.
   const [order, setOrder] = useState<string[] | null>(null);
@@ -90,13 +103,15 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     const done = await result;
     if (done.ok) { setStatus(null); after?.(); router.refresh(); return true; }
     setOrder(null);
+    // A grant that went away: the refreshed page no longer offers what was just refused, and says nothing.
+    if (done.failure === 'closed') { setStatus(null); router.refresh(); return false; }
     setStatus(done.failure === 'stale' ? t.tabsChanged : t.tabsFailed);
     if (done.failure === 'stale') router.refresh();
     return false;
   }
 
   function reorder(next: string[]) {
-    if (!filters?.revision || next.join() === (order ?? server).join()) return;
+    if (!can.order || !filters?.revision || next.join() === (order ?? server).join()) return;
     setOrder(next);
     void settle(client().reorder(next, filters.revision));
   }
@@ -126,14 +141,14 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
         const title = filterTitle(filter);
         const name = title?.value ?? t.untitledTab;
         const current = state.tab === 'pinned' && state.filter === filter.id;
-        return <li key={filter.id} draggable={shown.length > 1} data-dragging={dragging === filter.id || undefined}
+        return <li key={filter.id} draggable={can.order && shown.length > 1} data-dragging={dragging === filter.id || undefined}
           className="group/tab relative flex shrink-0 snap-start items-stretch data-dragging:opacity-50"
           onDragStart={event => { event.dataTransfer.setData('text/plain', filter.id); setDragging(filter.id); }}
           onDragEnd={() => setDragging(null)}
           onDragOver={event => { if (dragging && dragging !== filter.id) event.preventDefault(); }}
           onDrop={event => {
             event.preventDefault();
-            if (dragging) reorder(droppedOn(order ?? server, dragging, filter.id));
+            if (dragging && can.order) reorder(droppedOn(order ?? server, dragging, filter.id));
             setDragging(null);
           }}>
           <Link href={href(pinnedTab(state, filter.id))} aria-current={current ? 'page' : undefined}
@@ -141,7 +156,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
             className={cn(tabLink, 'max-w-56 sm:pe-10', current && 'pe-9')}>
             <span className="truncate">{name}</span></Link>
           <TabMenu t={t} name={name} filter={filter} first={index === 0} last={index === shown.length - 1}
-            visible={current} onSelect={action => {
+            can={can} visible={current} onSelect={action => {
               if (action === 'rename') setRenaming(filter);
               else if (action === 'left' || action === 'right') {
                 reorder(moved(order ?? server, filter.id, action === 'left' ? -1 : 1));
@@ -162,8 +177,12 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
 type TabAction = 'rename' | 'left' | 'right' | 'unpin' | 'unfollow' | 'delete';
 
 /** A pinned tab's own menu: shown on the current tab, and on hover or focus for the others. */
-function TabMenu({ t, name, filter, first, last, visible, onSelect }: { t: T; name: string; filter: SavedFilter;
-  first: boolean; last: boolean; visible: boolean; onSelect: (action: TabAction) => void }) {
+function TabMenu({ t, name, filter, first, last, can, visible, onSelect }: { t: T; name: string; filter: SavedFilter;
+  first: boolean; last: boolean; can: { edit: boolean; order: boolean; delete: boolean }; visible: boolean;
+  onSelect: (action: TabAction) => void }) {
+  // A follow is its own public operation; every other action needs its Saved Filter operation open.
+  const removable = filter.concept ? true : can.delete;
+  if (!can.edit && !can.order && !removable) return null;
   return <Menu onSelect={({ value }) => onSelect(value as TabAction)} positioning={{ placement: 'bottom-end' }}>
     <MenuTrigger aria-label={t.tabOptions({ tab: name })} className={cn('absolute end-1.5 top-1/2 grid size-7',
       '-translate-y-1/2 place-items-center rounded-full text-muted-foreground outline-none transition-opacity',
@@ -174,16 +193,17 @@ function TabMenu({ t, name, filter, first, last, visible, onSelect }: { t: T; na
       <EllipsisIcon aria-hidden="true" className="size-4" />
     </MenuTrigger>
     <MenuContent className="w-60">
-      <MenuItem value="rename"><PencilIcon aria-hidden="true" />{t.renameTab}</MenuItem>
-      {first ? null : <MenuItem value="left"><ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />
-        {t.moveLeft}</MenuItem>}
-      {last ? null : <MenuItem value="right"><ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" />
-        {t.moveRight}</MenuItem>}
-      <MenuSeparator />
-      <MenuItem value="unpin"><PinOffIcon aria-hidden="true" />{t.unpinTab}</MenuItem>
+      {can.edit ? <MenuItem value="rename"><PencilIcon aria-hidden="true" />{t.renameTab}</MenuItem> : null}
+      {can.order && !first ? <MenuItem value="left"><ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />
+        {t.moveLeft}</MenuItem> : null}
+      {can.order && !last ? <MenuItem value="right"><ArrowRightIcon aria-hidden="true" className="rtl:rotate-180" />
+        {t.moveRight}</MenuItem> : null}
+      {can.edit && (can.order || removable) ? <MenuSeparator /> : null}
+      {can.edit ? <MenuItem value="unpin"><PinOffIcon aria-hidden="true" />{t.unpinTab}</MenuItem> : null}
       {filter.concept ? <MenuItem value="unfollow" variant="destructive"><UserMinusIcon aria-hidden="true" />
         {t.unfollowTopic({ topic: filter.concept.name?.value ?? name })}</MenuItem>
-        : <MenuItem value="delete" variant="destructive"><Trash2Icon aria-hidden="true" />{t.deleteFilter}</MenuItem>}
+        : can.delete ? <MenuItem value="delete" variant="destructive"><Trash2Icon aria-hidden="true" />{t.deleteFilter}</MenuItem>
+          : null}
     </MenuContent>
   </Menu>;
 }
