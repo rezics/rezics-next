@@ -131,6 +131,7 @@ import { openApiOperations as owner128 } from '../../routes/works.ts';
 import { openApiOperations as owner129 } from '../../routes/zone-modules.ts';
 import { openApiOperations as owner130 } from '../../routes/zones.ts';
 import { openApiOperations as owner131 } from '../../routes/platform-access.ts';
+import { openApiOperations as owner132 } from '../../routes/library-copies.ts';
 import type { ExposureDeclarations } from './exposure.ts';
 
 export const exposureDeclarations: readonly ExposureDeclarations[] = [
@@ -266,4 +267,5 @@ export const exposureDeclarations: readonly ExposureDeclarations[] = [
   owner129,
   owner130,
   owner131,
+  owner132,
 ];
