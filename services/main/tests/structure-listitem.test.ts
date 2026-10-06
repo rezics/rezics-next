@@ -14,25 +14,33 @@ const binding = (item?: string, legacyTarget?: string) => ({
   ...(item ? { item: field(item) } : {}),
   ...(legacyTarget ? { legacyTarget: field(legacyTarget) } : {}),
 });
-const env = (row: ReturnType<typeof binding>): WorkActivationEnvironment => ({
+const env = (row: Omit<ReturnType<typeof binding>, 'mode'> & { mode?: ReturnType<typeof field> }): WorkActivationEnvironment => ({
   fuseki: { query: async (query: string) => {
     expect(query).toContain(`<${GRAPHS.current}>`);
     expect(query).toContain('schema:item ?item');
-    expect(query).toContain('rv:target ?legacyTarget');
+    expect(query).not.toContain('rv:target');
     return { results: { bindings: [row] } };
   } },
 }) as unknown as WorkActivationEnvironment;
 
-test('MODEL13: ListItem read accepts schema:item and retained rv:target data', async () => {
+test('MODEL13: ListItem read requires normalized schema:item membership', async () => {
   const target = id('target');
   const generation = id('generation');
-  for (const row of [binding(target), binding(undefined, target)]) {
+  for (const row of [binding(target)]) {
     const placements = await readPlacements(env(row), generation,
       { occurrences: [id('occurrence')] });
     expect(placements).toHaveLength(1);
     expect(placements[0]).toMatchObject({ occurrence: id('occurrence'), target,
       role: 'chapter', orderKey: '1' });
   }
-  await expect(readPlacements(env(binding(target, id('other'))), generation,
+  await expect(readPlacements(env(binding(undefined, target)), generation,
     { occurrences: [id('occurrence')] })).rejects.toBeInstanceOf(CompositionCorrupt);
+});
+
+test('ListItem group payload stays structural when read back for editing', async () => {
+  const row = { ...binding(id('occurrence')), role: field(`${RV}GroupRole`), mode: undefined };
+  const placements = await readPlacements(env(row), id('generation'),
+    { occurrences: [id('occurrence')] });
+  expect(placements[0]).toMatchObject({ role: 'group', occurrence: id('occurrence') });
+  expect(placements[0]?.target).toBeUndefined();
 });

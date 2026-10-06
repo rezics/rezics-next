@@ -23,9 +23,12 @@ test('RECIPE04: two Realms independently adopt published Recipe variants of one 
     })), 201);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
-    const structure = await f.json<{ structure: string }>(await f.call('POST', '/v1/recipes', {
-      owner: work.work, mainVersion: work.mainVersion, actingSubject: f.actor,
-    }, `recipe-${randomUUID()}`), 201);
+    const structure = await f.json<{ structure: string }>(await f.call('POST', '/v1/compositions', {
+          profile: 'recipe-composition',
+          work: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: f.actor,
+        }, `recipe-${randomUUID()}`), 201);
     expect(structure.structure).toMatch(/^https:\/\/rezics\.com\/id\//);
 
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');

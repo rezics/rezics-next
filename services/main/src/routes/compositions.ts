@@ -30,6 +30,7 @@ import { workRead, type WorkReadSession } from '../modules/work/read-session.ts'
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
+import { ingredientLine, recipeStep } from './recipe-qualifiers.ts';
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const selection = t.Union([t.Object({ mode: t.Literal('follow-context') }),
   t.Object({ mode: t.Literal('fixed-revision'), revision: t.String() })]);
@@ -39,18 +40,37 @@ const position = t.Union([t.Literal('first'), t.Literal('last'),
   t.Object({ after: ref }, { additionalProperties: false })]);
 /** How a group divides the Book: numbered volumes, titled parts, or unnumbered extras. */
 const division = t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]);
-const profile = t.Union([t.Literal('book-composition'), t.Literal('work-composition')]);
+const profile = t.Union([
+  t.Literal('book-composition'),
+  t.Literal('work-composition'),
+  t.Literal('recipe-composition'),
+]);
 const inclusion = t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]);
 const completion = t.Object({ status: t.Union([t.Literal('concluded'), t.Literal('ongoing'), t.Literal('unknown')]),
   evidence: t.Array(t.String({ format: 'uri', maxLength: 2048 }), { maxItems: 16, uniqueItems: true }) }, { additionalProperties: false });
 const operation = t.Union([
   t.Object({ op: t.Literal('completion'), completion }, { additionalProperties: false }),
-  t.Object({ op: t.Literal('insert'), parent: ref, position,
-    role: t.Union([t.Literal('group'), t.Literal('chapter'), t.Literal('part')]),
-    target: t.Optional(t.String({ format: 'uri' })),
-    selection: t.Optional(selection), label: t.Optional(label), sourceKey: t.Optional(t.String()),
-    division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
-    inclusion: t.Optional(inclusion) },
+  t.Object({
+      op: t.Literal('insert'),
+      parent: ref,
+      position,
+      role: t.Union([
+        t.Literal('group'),
+        t.Literal('chapter'),
+        t.Literal('part'),
+        t.Literal('ingredient'),
+        t.Literal('step'),
+        t.Literal('equipment'),
+      ]),
+      target: t.Optional(t.String({ format: 'uri' })),
+      qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
+      selection: t.Optional(selection),
+      label: t.Optional(label),
+      sourceKey: t.Optional(t.String()),
+      division: t.Optional(division),
+      displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
+      inclusion: t.Optional(inclusion),
+    },
   { additionalProperties: false }),
   t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position },
     { additionalProperties: false }),
@@ -64,6 +84,13 @@ type BodyOperation = Static<typeof operation>;
 /** A group's division travels as the Book group qualifier of the Structure command. */
 function commandOperation(item: BodyOperation): CompositionOperation {
   if (item.op !== 'insert' && item.op !== 'update') return item;
+  if (
+    item.op === 'insert' &&
+    item.qualifier &&
+    (item.division !== undefined || item.displayLabel !== undefined || item.inclusion !== undefined)
+  ) {
+    throw new InvalidCompositionChange('an occurrence carries one qualifier');
+  }
   const { division: groupDivision, displayLabel, inclusion: partInclusion, ...rest } = item;
   if (displayLabel !== undefined || partInclusion !== undefined || item.op === 'insert' && item.role === 'part') {
     if (!displayLabel || !partInclusion || groupDivision || item.op === 'insert' && item.role !== 'part') {
@@ -88,10 +115,24 @@ const writeResult = t.Object({ structure: ref, owner: t.Optional(ref), component
 const occurrence = t.Object({ occurrence: ref, state: t.Union([t.Literal('active'),
   t.Literal('removed')]), parent: ref,
   segmentKey: t.Optional(t.String()), orderKey: t.Optional(t.String()),
-  removedBy: t.Optional(ref), role: t.Union([t.Literal('group'),
-    t.Literal('chapter'), t.Literal('part')]), target: t.Optional(t.String()), selection: t.Optional(selection),
+  removedBy: t.Optional(ref), role: t.Union([
+    t.Literal('group'),
+    t.Literal('chapter'),
+    t.Literal('part'),
+    t.Literal('ingredient'),
+    t.Literal('step'),
+    t.Literal('equipment'),
+  ]), target: t.Optional(t.String()), selection: t.Optional(selection),
   labels: t.Array(label), sourceKey: t.Optional(t.String()), introducedBy: ref,
-  qualifier: t.Optional(t.Object({ type: t.String() }, { additionalProperties: true })) });
+  qualifier: t.Optional(t.Union([
+      ingredientLine,
+      recipeStep,
+      t.Object({ type: t.Literal('book-group'), division }, { additionalProperties: false }),
+      t.Object(
+        { type: t.Literal('work-part'), displayLabel: t.String(), inclusion },
+        { additionalProperties: false },
+      ),
+    ])) });
 const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: ref,
   mainVersion: ref, revision: ref,
   predecessor: t.Nullable(ref), placementCount: t.Optional(t.Integer()), completion: t.Optional(completion),
@@ -110,7 +151,7 @@ async function disclosedComposition<T>(work: MainWorkDependencies, request: Requ
   read: (session: WorkReadSession, header: NonNullable<Awaited<ReturnType<typeof readCompositionHeader>>>) => Promise<T>) {
   return workRead(work, request, { actingSubject }, async session => {
     const header = await readCompositionHeader(work.environment, structure);
-    if (!header || !await (header.profile === 'work-composition' || header.profile === 'book-composition'
+    if (!header || !await (structureProfileFor(header.profile).componentPredicate
       ? canReadCompositionWork(session, header.work) : canReadCompositionResource(session, header.owner))) {
       throw new CompositionUnavailable('Composition is unavailable');
     }

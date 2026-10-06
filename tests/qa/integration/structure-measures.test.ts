@@ -27,7 +27,12 @@ test('RECIPE05: expected-head measure edits retain exact revisions and receipt r
       [`work:edit:${work.work}`]);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
     const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',
-      '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion, actingSubject: f.actor },
+      '/v1/compositions', {
+          profile: 'recipe-composition',
+          work: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: f.actor,
+        },
       `recipe-${randomUUID()}`), 201);
     const request = new Request('http://main.local/v1/recipes/measures', {
       headers: { authorization: `Bearer ${f.account.tokenA}` },

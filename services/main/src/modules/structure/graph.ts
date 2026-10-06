@@ -17,6 +17,12 @@ export function structureIri(value: string): string {
   if (!STRUCTURE_IRI.test(value)) throw new CompositionUnavailable('invalid Structure reference');
   return `<${value}>`;
 }
+/** A parent owns one ordered list in each topology generation. */
+export const itemListIri = (generation: string, parent: string) =>
+  `urn:rezics:item-list:${createHash('sha256').update(`${generation}\0${parent}`).digest('hex')}`;
+
+/** Text positions preserve sibling byte order without a list-wide renumber. */
+export const itemPosition = (segmentKey: string, orderKey: string) => `${segmentKey}-${orderKey}`;
 export const ROLE_IRI: Record<OccurrenceRole, string> = {
   group: `${RV}GroupRole`, chapter: `${RV}ChapterRole`, member: `${RV}MemberRole`,
   part: `${RV}PartRole`,
@@ -148,7 +154,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     : `?placement rv:orderSegment ${iri(selector.segment)} .`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?placement ?occurrence ?type ?segment ?parent ?segmentKey ?orderKey ?role ?label
-      ?item ?legacyTarget ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
+      ?item ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ${scope}
         ?placement rv:generation ${iri(generation)} ; rv:occurrence ?occurrence ; a ?type ;
@@ -159,7 +165,6 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
           ?segment rv:parent ?parent ; rv:segmentKey ?segmentKey . }
         OPTIONAL { ?placement rv:occurrenceLabel ?label }
         OPTIONAL { ?placement schema:item ?item }
-        OPTIONAL { ?placement rv:target ?legacyTarget }
         OPTIONAL { ?placement rv:selectionMode ?mode }
         OPTIONAL { ?placement rv:pinnedRevision ?pinned }
         OPTIONAL { ?placement rv:sourceKey ?sourceKey }
@@ -180,11 +185,8 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
       ?? null) as OccurrenceRole | null;
     const mode = value(row, 'mode');
     const item = value(row, 'item');
-    const legacyTarget = value(row, 'legacyTarget');
-    if (item && legacyTarget && item !== legacyTarget) {
-      throw new CompositionCorrupt('placement has conflicting target predicates');
-    }
-    const target = item ?? legacyTarget;
+    const target = role && (registration.targetRoles.includes(role)
+      || registration.optionalTargetRoles?.includes(role)) ? item : undefined;
     const labelLanguage = row.label?.['xml:lang'];
     const state: PlacementState = { occurrence, placement: value(row, 'placement')!, active,
       parent: active ? value(row, 'parent') ?? '' : value(row, 'lastParent') ?? '',
@@ -202,7 +204,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     const catalogTarget = target !== undefined && catalogTargetTypes.includes(target);
     const needsSelection = target !== undefined && !catalogTarget
       && selectionRequiredRoles.includes(state.role);
-    if (!role || !state.parent || ((active || tombstone)
+    if (!role || !state.parent || ((active || tombstone) && !item) || ((active || tombstone)
       && (!state.segment || !state.orderKey || !state.segmentKey))
       || (!active && !state.removedBy) || needsSelection && !state.selection
       || state.selection && !needsSelection

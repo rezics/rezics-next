@@ -26,20 +26,51 @@ test('G-415: a visible Recipe Work page scales the pinned ingredient revision an
     const query = `?actingSubject=${encodeURIComponent(f.actor)}`;
     expect(await f.json(await f.call('GET', path + query), 200)).toBeNull();
     const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',
-      '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion, actingSubject: f.actor },
+      '/v1/compositions', {
+          profile: 'recipe-composition',
+          work: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: f.actor,
+        },
       `recipe-${randomUUID()}`), 201);
     const changed = await f.json<{ revision: string }>(await f.call('POST',
-      `/v1/recipes/${shortId(created.structure)}/changes`, {
-        expectedHead: created.revision, actingSubject: f.actor, operations: [
-          { op: 'insert', parent: created.structure, position: 'last', role: 'ingredient',
-            qualifier: { type: 'ingredient-line', originalText: { value: '1 1/2 cups flour', language: 'en' },
-              amountLexical: '1 1/2', amount: { numerator: 3, denominator: 2 }, unitText: 'cups',
-              optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'parsed' } },
-          { op: 'insert', parent: created.structure, position: 'last', role: 'step',
-            qualifier: { type: 'recipe-step', instructionText: { value: 'Cook for 5 minutes.', language: 'en' },
-              usesIngredient: [], media: [], scaling: 'linear' } },
-        ],
-      }, `recipe-${randomUUID()}`), 200);
+      `/v1/compositions/${shortId(created.structure)}/changes`, {
+          profile: 'recipe-composition',
+          expectedHead: created.revision,
+          actingSubject: f.actor,
+          operations: [
+            {
+              op: 'insert',
+              parent: created.structure,
+              position: 'last',
+              role: 'ingredient',
+              qualifier: {
+                type: 'ingredient-line',
+                originalText: { value: '1 1/2 cups flour', language: 'en' },
+                amountLexical: '1 1/2',
+                amount: { numerator: 3, denominator: 2 },
+                unitText: 'cups',
+                optional: false,
+                scaling: 'linear',
+                substituteFor: [],
+                parseStatus: 'parsed',
+              },
+            },
+            {
+              op: 'insert',
+              parent: created.structure,
+              position: 'last',
+              role: 'step',
+              qualifier: {
+                type: 'recipe-step',
+                instructionText: { value: 'Cook for 5 minutes.', language: 'en' },
+                usesIngredient: [],
+                media: [],
+                scaling: 'linear',
+              },
+            },
+          ],
+        }, `recipe-${randomUUID()}`), 200);
     await f.json(await f.call('POST', `/v1/recipes/${shortId(created.structure)}/measures`, {
       expectedHead: changed.revision, actingSubject: f.actor,
       yield: { value: { numerator: 4, denominator: 1 }, unitText: 'servings',

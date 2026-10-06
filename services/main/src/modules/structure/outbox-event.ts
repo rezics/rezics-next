@@ -68,6 +68,65 @@ function structureStageEvent(kind: string, action: string, type: string,
 }
 
 export const outboxEventHandlers = [
+  {
+    kind: `${RV}MembershipNormalizedEvent`,
+    action: 'structure.membership.normalize',
+    type: 'com.rezics.structure.membership-normalized.v1',
+    authority: 'system',
+    read: async ({ fuseki, batch, eventId, value, ordinal }) => {
+      const receipt = value('receipt'),
+        digest = value('digest');
+      if (
+        !receipt ||
+        !digest ||
+        receipt !== `urn:rezics:receipt:bootstrap:ordered-membership:${digest}` ||
+        eventId !== `urn:rezics:event:${hash(receipt)}` ||
+        ordinal !== 0 ||
+        batch.batchId !== `urn:rezics:outbox:${hash(receipt)}` ||
+        batch.eventIds.length !== 1 ||
+        value('outcome') !== `${RV}Succeeded`
+      ) {
+        throw new Error('Membership normalization event differs from its maintenance receipt');
+      }
+      const proof = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?count WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:action "structure.membership.normalize" ;
+          rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ; rv:placementCount ?count ;
+          rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a rv:MembershipNormalizedEvent ;
+          rv:receipt ${iri(receipt)} ; rv:action "structure.membership.normalize" ; rv:ordinal 0 . }
+      } LIMIT 2`);
+      const rows = proof.results?.bindings ?? [];
+      const count = Number(rows[0]?.count?.value);
+      if (rows.length !== 1 || !Number.isInteger(count) || count < 1 || count > 24) {
+        throw new Error('Membership normalization receipt lacks its bounded graph proof');
+      }
+      return {
+        specversion: '1.0',
+        id: eventId,
+        source: 'https://rezics.com/services/main',
+        type: 'com.rezics.structure.membership-normalized.v1',
+        datacontenttype: 'application/json',
+        data: {
+          batchId: batch.batchId,
+          sourcePosition: {
+            datasetId: 'product',
+            dataEpoch: batch.dataEpoch,
+            sequence: batch.sequence,
+          },
+          routingEpoch: batch.routingEpoch,
+          ordinal,
+          receipt: {
+            id: receipt,
+            action: 'structure.membership.normalize',
+            outcome: 'succeeded',
+            requestDigest: digest,
+            systemProof: { kind: 'ordered-membership-normalization', placements: count },
+          },
+        },
+      };
+    },
+  },
+
   { kind: `${RV}StructureCommandEvent`, action: 'structure.command',
     type: 'com.rezics.structure.command.v1',
     read: async ({ fuseki, batch, eventId, value, ordinal }) => {

@@ -24,7 +24,12 @@ test('RECIPE05: receipt-backed nutrition and yield retain coverage, basis and ex
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
     const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',
-      '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion, actingSubject: f.actor },
+      '/v1/compositions', {
+          profile: 'recipe-composition',
+          work: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: f.actor,
+        },
       `recipe-${randomUUID()}`), 201);
     const path = `/v1/recipes/${shortId(created.structure)}/measures`;
     const read = (revision?: string, token = f.account.tokenA) => f.call('GET', path

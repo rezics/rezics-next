@@ -107,7 +107,7 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
       activatedLarge = await json<StructureStage & { cost: { placementsWritten: number } }>(
         await call('POST', `${stages}/${interrupted.id}/activate`, { actingSubject: f.actor }), 200);
     } finally { f.env.fuseki = originalStageFuseki; }
-    expect(projectedRecordCounts).toEqual([30, 30, 30, 4]);
+    expect(projectedRecordCounts).toEqual([24, 24, 24, 16]);
     expect(activatedLarge).toMatchObject({ status: 'activated', projectionBatches: 3 });
     expect(activatedLarge.cost.placementsWritten).toBe(64);
     activeHead = activatedLarge.revision;

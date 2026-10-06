@@ -44,7 +44,8 @@ export function invalidWorkTargets(owner: string, targets: readonly string[]): s
   const paths = Array.from({ length: 4 }, (_, index) => Array(index + 1).fill(edge).join('/'));
   const branches = [
     `FILTER(?target = ${iri(owner)})`,
-    `FILTER NOT EXISTS { ?target a <https://schema.org/CreativeWork> ; rv:mainVersion ?targetMain . ?targetMain a rv:MainVersion }`,
+    `FILTER EXISTS { ?target a <https://schema.org/CreativeWork> }
+      FILTER NOT EXISTS { ?target rv:mainVersion ?targetMain . ?targetMain a rv:MainVersion }`,
     `?target (${paths.join('|')}) ${iri(owner)} .`,
     ...Array.from({ length: 5 }, (_, ancestors) => {
       const descendants = 4 - ancestors;
@@ -72,7 +73,13 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',
   editPermission: 'work:edit', editAction: 'work.edit', receiptFamily: 'edit-metadata-work',
   targetReadPermission: 'work:read',
-  authorizeTarget: ({ access, principal, actingSubject, target }) => access.canReadWork(principal, actingSubject, target),
+  authorizeTarget: async ({ targetReader, target }) => {
+      const { WorkReadUnavailable } = await import('../work/read-session.ts');
+      if (!targetReader) throw new WorkReadUnavailable('Composition target reader is unavailable');
+      const { resolveTargets } = await import('../target/resolve.ts');
+      await targetReader((session) => resolveTargets(session, [target], 'collection-member'));
+      return true;
+    },
   targetGuard: workTargetGuard, withholdUnreadableTargets: true,
   roles: ['group', 'part'], targetRoles: ['part'], selectionRequiredRoles: [],
   topologyValidationProfile: 'structure-work-composition-v1',

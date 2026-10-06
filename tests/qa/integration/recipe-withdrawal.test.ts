@@ -26,7 +26,12 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
     await h.grant(`work:edit:${work.work}`, 'work.edit');
     await h.grant(`work:read:${work.work}`, 'work.read');
     const created = await h.json<{ structure: string; revision: string }>(await h.call('POST',
-      '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion, actingSubject: h.actor },
+      '/v1/compositions', {
+          profile: 'recipe-composition',
+          work: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: h.actor,
+        },
       `recipe-${randomUUID()}`), 201);
     const recipePath = `/v1/recipes/${shortId(created.structure)}`;
     const intake = async (ingredients: unknown[], externalId: string, instructions?: unknown[],
@@ -54,7 +59,7 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
       await h.call('POST', `${recipePath}/imports`, importA, importKey), 200)).toMatchObject(first);
     const page = await h.json<{ revision: string; occurrences: Array<{ occurrence: string;
       sourceKey: string; qualifier: { originalText: { value: string } } }> }>(await h.call('GET',
-      `${recipePath}?actingSubject=${encodeURIComponent(h.actor)}`), 200);
+      `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(h.actor)}`), 200);
     const salt = page.occurrences.find(row => row.qualifier?.originalText?.value === 'salt');
     expect(salt).toBeDefined();
     const sourceSupportA = await h.json<{ supportIdentity: string; occurrence: string;
@@ -147,7 +152,7 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
     expect(stillSupported).toMatchObject({ state: 'recorded', occurrence: salt!.occurrence });
     const after = await h.json<{ revision: string; occurrences: Array<{ occurrence: string;
       qualifier: { originalText: { value: string } } }> }>(await h.call('GET',
-      `${recipePath}?actingSubject=${encodeURIComponent(h.actor)}`), 200);
+      `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(h.actor)}`), 200);
     expect(after.revision).toBe(second.revision);
     expect(after.occurrences).toContainEqual(expect.objectContaining({ occurrence: salt!.occurrence,
       qualifier: expect.objectContaining({ originalText: { value: 'salt', language: 'en' } }) }));

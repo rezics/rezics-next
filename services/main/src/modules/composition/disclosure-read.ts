@@ -50,10 +50,8 @@ export async function canReadCompositionResource(session: WorkReadSession, resou
 export function compositionTargetReader(session: WorkReadSession, profile: StructureProfileRegistration) {
   return (target: string) => {
     if (isCatalogTarget(profile, target)) return Promise.resolve(true);
-    if (profile.id === 'work-composition' || profile.id === 'book-composition') {
-      return canReadCompositionWork(session, target);
-    }
-    if (profile.id === 'collection-membership') {
+    if (profile.id === 'book-composition') return canReadCompositionWork(session, target);
+    if (profile.id === 'collection-membership' || profile.id === 'work-composition') {
       return resolveTargets(session, [target], 'collection-member').then(() => true).catch((error: unknown) => {
         if (error instanceof WorkReadMissing) return false;
         throw error;

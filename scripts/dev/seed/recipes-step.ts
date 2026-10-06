@@ -47,19 +47,24 @@ export async function seedRecipes(state: SeedState) {
       actingSubject: author.actingSubject }, [
       { action: 'recipe.edit', scope: `work:edit:${work.work}` },
     ]);
-    const created = await state.api.post<{ structure: string; revision: string }>('/v1/recipes', {
-      owner: work.work, mainVersion: work.mainVersion, actingSubject: author.actingSubject,
-    }, author.token, seedKey('recipe-structure', 'pancakes'));
-    const path = `/v1/recipes/${short(created.structure)}`;
+    const created = await state.api.post<{ structure: string; revision: string }>('/v1/compositions', {
+        profile: 'recipe-composition',
+        work: work.work,
+        mainVersion: work.mainVersion,
+        actingSubject: author.actingSubject,
+      }, author.token, seedKey('recipe-structure', 'pancakes'));
+    const path = `/v1/compositions/${short(created.structure)}`;
     const changed = await state.api.post<{ revision: string }>(`${path}/changes`, {
-      expectedHead: created.revision, actingSubject: author.actingSubject,
-      operations: pancakeOperations(created.structure),
-    }, author.token, seedKey('recipe-ingredients', 'pancakes')).catch((error: unknown) => {
+          profile: 'recipe-composition',
+          expectedHead: created.revision,
+          actingSubject: author.actingSubject,
+          operations: pancakeOperations(created.structure),
+        }, author.token, seedKey('recipe-ingredients', 'pancakes')).catch((error: unknown) => {
       // A stack seeded before the current operations keeps its recipe; the scaling read below still checks it.
       if (error instanceof SeedApiError && error.status === 409) return null;
       throw error;
     });
-    if (changed) await state.api.post(`${path}/measures`, {
+    if (changed) await state.api.post(`/v1/recipes/${short(created.structure)}/measures`, {
       expectedHead: changed.revision, actingSubject: author.actingSubject,
       yield: { value: { numerator: servings, denominator: 1 }, unitText: 'servings',
         coverage: 'complete', provenance: 'declared' },

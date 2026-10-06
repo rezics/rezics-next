@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { ObjectUnavailable, S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 
 test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scales exactly and imports source', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -21,30 +22,79 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
       profile: 'metadata-only-v1', title: 'Recipe structure acceptance',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
     })), 201);
-    const createBody = { owner: work.work, mainVersion: work.mainVersion, actingSubject: f.actor };
+    const createBody = {
+      profile: 'recipe-composition',
+      work: work.work,
+      mainVersion: work.mainVersion,
+      actingSubject: f.actor,
+    };
+    expect(
+      (
+        await f.call('POST', '/v1/recipes', {
+          owner: work.work,
+          mainVersion: work.mainVersion,
+          actingSubject: f.actor,
+        })
+      ).status,
+    ).toBe(404);
     await f.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
       [`work:edit:${work.work}`]);
-    expect((await f.call('POST', '/v1/recipes', createBody, `recipe-${randomUUID()}`)).status).toBe(403);
+    expect(
+      (await f.call('POST', '/v1/compositions', createBody, `recipe-${randomUUID()}`)).status,
+    ).toBe(403);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
     await f.grant(`work:edit:${work.work}`, 'work.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
-    const denied = await f.call('POST', '/v1/recipes', { owner: work.work,
-      mainVersion: work.mainVersion, actingSubject: f.actor }, `recipe-${randomUUID()}`, f.account.noScope);
+    const denied = await f.call('POST', '/v1/compositions', {
+        profile: 'recipe-composition',
+        work: work.work,
+        mainVersion: work.mainVersion,
+        actingSubject: f.actor,
+      }, `recipe-${randomUUID()}`, f.account.noScope);
     expect(denied.status).toBe(401);
 
     const createKey = `recipe-${randomUUID()}`;
     const created = await f.json<{ structure: string; revision: string; receipt: string }>(
-      await f.call('POST', '/v1/recipes', createBody, createKey), 201);
-    expect(await f.json<{ structure: string; revision: string; replayed: boolean }>(
-      await f.call('POST', '/v1/recipes', createBody, createKey), 200)).toMatchObject({
-      structure: created.structure, revision: created.revision, replayed: true,
+      await f.call('POST', '/v1/compositions', createBody, createKey), 201);
+    expect(
+      await f.json<{ structure: string; revision: string; replayed: boolean }>(
+        await f.call('POST', '/v1/compositions', createBody, createKey),
+        200,
+      ),
+    ).toMatchObject({
+      structure: created.structure,
+      revision: created.revision,
+      replayed: true,
     });
-    const groups = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
-      `/v1/recipes/${shortId(created.structure)}/changes`, { expectedHead: created.revision,
-        actingSubject: f.actor, operations: [
-          { op: 'insert', parent: created.structure, position: 'last', role: 'group', sourceKey: 'stage-a' },
-          { op: 'insert', parent: created.structure, position: 'last', role: 'group', sourceKey: 'stage-b' },
-        ] }, `recipe-${randomUUID()}`), 200);
+    const groups = await f.json<{ revision: string; occurrences: string[] }>(
+      await f.call(
+        'POST',
+        `/v1/compositions/${shortId(created.structure)}/changes`,
+        {
+          profile: 'recipe-composition',
+          expectedHead: created.revision,
+          actingSubject: f.actor,
+          operations: [
+            {
+              op: 'insert',
+              parent: created.structure,
+              position: 'last',
+              role: 'group',
+              sourceKey: 'stage-a',
+            },
+            {
+              op: 'insert',
+              parent: created.structure,
+              position: 'last',
+              role: 'group',
+              sourceKey: 'stage-b',
+            },
+          ],
+        },
+        `recipe-${randomUUID()}`,
+      ),
+      200,
+    );
     const line = (amount: number, denominator: number, sourceKey: string) => ({
       op: 'insert', parent: '', position: 'last', role: 'ingredient', sourceKey,
       qualifier: { type: 'ingredient-line', originalText: { value: 'flour', language: 'en' },
@@ -52,33 +102,122 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
         unitText: 'cup', optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'partial' },
     });
     const recipePath = `/v1/recipes/${shortId(created.structure)}`;
-    const ingredientChange = { expectedHead: groups.revision, actingSubject: f.actor,
-      operations: [line(3, 2, 'stage-a/flour'), line(1, 4, 'stage-b/flour')]
-        .map((item, index) => ({ ...item, parent: groups.occurrences[index] })) };
+    expect(
+      (await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await f.call('POST', `${recipePath}/changes`, {
+          expectedHead: created.revision,
+          actingSubject: f.actor,
+          operations: [],
+        })
+      ).status,
+    ).toBe(404);
+    const ingredientChange = {
+      profile: 'recipe-composition',
+      expectedHead: groups.revision,
+      actingSubject: f.actor,
+      operations: [line(3, 2, 'stage-a/flour'), line(1, 4, 'stage-b/flour')].map((item, index) => ({
+        ...item,
+        parent: groups.occurrences[index],
+      })),
+    };
     const ingredientKey = `recipe-${randomUUID()}`;
     const changed = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
-      `${recipePath}/changes`, { expectedHead: groups.revision, actingSubject: f.actor,
-        operations: ingredientChange.operations }, ingredientKey), 200);
+      `/v1/compositions/${shortId(created.structure)}/changes`, {
+          profile: 'recipe-composition',
+          expectedHead: groups.revision,
+          actingSubject: f.actor,
+          operations: ingredientChange.operations,
+        }, ingredientKey), 200);
+    const projectedMembership = () => f.env.fuseki.query(`PREFIX rv: <${RV}>
+      PREFIX schema: <https://schema.org/>
+      SELECT ?placement ?item ?position ?qualifier WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(created.structure)} rv:selectedGeneration ?generation .
+        ?placement a schema:ListItem ; rv:generation ?generation ;
+          schema:item ?item ; schema:position ?position .
+        OPTIONAL { ?placement rv:qualifier ?qualifier }
+      } } ORDER BY ?placement`);
+    const membership = (await projectedMembership()).results?.bindings ?? [];
+    expect(membership).toHaveLength(4);
+    const lines = membership.filter(row => row.qualifier);
+    expect(lines).toHaveLength(2);
+    for (const row of lines) expect(row.item?.value).toBe(row.qualifier?.value);
+    // A populated legacy Recipe copy has structural groups and qualifier payloads,
+    // neither of which used a resource target predicate before normalization.
+    await f.nativeFuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      DELETE { GRAPH ${iri(GRAPHS.current)} {
+        ?placement a schema:ListItem ; schema:item ?item ; schema:position ?position .
+      } } WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(created.structure)} rv:selectedGeneration ?generation .
+        ?placement rv:generation ?generation ; schema:item ?item ; schema:position ?position .
+      } }`);
+    expect((await projectedMembership()).results?.bindings ?? []).toHaveLength(0);
+    expect(await normalizeStoredMembership(f.env)).toMatchObject({
+      complete: true, placements: 4, receipts: expect.arrayContaining([expect.any(String)]),
+    });
+    expect((await projectedMembership()).results?.bindings).toEqual(membership);
+    expect(await normalizeStoredMembership(f.env)).toEqual({
+      complete: true, placements: 0, receipts: [],
+    });
     expect(changed.occurrences).toHaveLength(2);
     expect(new Set(changed.occurrences).size).toBe(2);
     expect((changed as typeof changed & { cost: { placementsWritten: number } }).cost.placementsWritten).toBe(2);
-    expect(await f.json<{ revision: string; replayed: boolean }>(await f.call('POST',
-      `${recipePath}/changes`, ingredientChange, ingredientKey), 200)).toMatchObject({
-      revision: changed.revision, replayed: true,
+    expect(
+      await f.json<{ revision: string; replayed: boolean }>(
+        await f.call(
+          'POST',
+          `/v1/compositions/${shortId(created.structure)}/changes`,
+          ingredientChange,
+          ingredientKey,
+        ),
+        200,
+      ),
+    ).toMatchObject({
+      revision: changed.revision,
+      replayed: true,
     });
-    expect((await f.call('POST', `${recipePath}/changes`, { ...ingredientChange,
-      operations: ingredientChange.operations.slice(0, 1) }, ingredientKey)).status).toBe(409);
+    expect(
+      (
+        await f.call(
+          'POST',
+          `/v1/compositions/${shortId(created.structure)}/changes`,
+          { ...ingredientChange, operations: ingredientChange.operations.slice(0, 1) },
+          ingredientKey,
+        )
+      ).status,
+    ).toBe(409);
     const stageA = await f.json<{ occurrences: Array<{ occurrence: string; qualifier: unknown }> }>(
-      await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(groups.occurrences[0]!)}`), 200);
+      await f.call(
+        'GET',
+        `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(groups.occurrences[0]!)}`,
+      ),
+      200,
+    );
     const stageB = await f.json<{ occurrences: Array<{ occurrence: string; qualifier: unknown }> }>(
-      await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(groups.occurrences[1]!)}`), 200);
+      await f.call(
+        'GET',
+        `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(groups.occurrences[1]!)}`,
+      ),
+      200,
+    );
     expect(stageA.occurrences[0]?.qualifier).toMatchObject({ type: 'ingredient-line',
       amount: { numerator: 3, denominator: 2 }, unitText: 'cup' });
     expect(stageB.occurrences[0]?.qualifier).toMatchObject({ type: 'ingredient-line',
       amount: { numerator: 1, denominator: 4 }, unitText: 'cup' });
     expect(stageA.occurrences[0]?.occurrence).not.toBe(stageB.occurrences[0]?.occurrence);
-    expect((await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`,
-      undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
+    expect(
+      (
+        await f.call(
+          'GET',
+          `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(f.actor)}`,
+          undefined,
+          randomUUID(),
+          f.account.tokenB,
+        )
+      ).status,
+    ).toBe(404);
 
     const scaled = await f.json<{ cost: { pages: number; pagesRead: number; occurrences: number };
       ingredients: Array<{ amount: { numerator: number; denominator: number };
@@ -132,8 +271,7 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
     expect(await f.json<{ revision: string; residualDigest: string }>(await f.call('POST',
       `${recipePath}/imports`, importBody, importKey), 200)).toMatchObject(imported);
     const earlier = await f.json<{ revision: string; occurrences: Array<{ role: string; sourceKey?: string }> }>(
-      await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`
-        + `&revision=${encodeURIComponent(changed.revision)}`), 200);
+      await f.call('GET', `/v1/compositions/${shortId(created.structure)}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     expect(earlier.revision).toBe(changed.revision);
     expect(earlier.occurrences.some(row => row.sourceKey?.includes(intake.observation.observation))).toBe(false);
     const oldManifest = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
@@ -145,21 +283,44 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
         ? Promise.reject(new ObjectUnavailable('missing immutable revision')) : objects.get(digest),
     };
     try {
-      expect((await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`
-        + `&revision=${encodeURIComponent(changed.revision)}`)).status).toBe(503);
+      expect(
+        (
+          await f.call(
+            'GET',
+            `/v1/compositions/${shortId(created.structure)}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`,
+          )
+        ).status,
+      ).toBe(503);
     } finally {
       (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
     }
-    expect((await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`
-      + `&revision=${encodeURIComponent(changed.revision)}`)).status).toBe(200);
-    const latest = await f.json<{ occurrences: Array<{ occurrence: string; sourceKey?: string;
-      role: string; labels?: Array<{ value: string; language: string }> }> }>(
-      await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    expect(
+      (
+        await f.call(
+          'GET',
+          `/v1/compositions/${shortId(created.structure)}/revisions/${shortId(changed.revision)}?actingSubject=${encodeURIComponent(f.actor)}`,
+        )
+      ).status,
+    ).toBe(200);
+    const latest = await f.json<{
+      occurrences: Array<{
+        occurrence: string;
+        sourceKey?: string;
+        role: string;
+        labels?: Array<{ value: string; language: string }>;
+      }>;
+    }>(
+      await f.call(
+        'GET',
+        `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(f.actor)}`,
+      ),
+      200,
+    );
     const importedGroup = latest.occurrences.find(row => row.role === 'group' && row.sourceKey?.includes(intake.observation.observation));
     expect(importedGroup).toBeDefined();
     expect(importedGroup?.labels).toContainEqual({ value: 'Finish', language: 'en' });
     const importedChildren = await f.json<{ occurrences: Array<{ role: string; qualifier?: unknown }> }>(
-      await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(importedGroup!.occurrence)}`), 200);
+      await f.call('GET', `/v1/compositions/${shortId(created.structure)}?actingSubject=${encodeURIComponent(f.actor)}&parent=${encodeURIComponent(importedGroup!.occurrence)}`), 200);
     expect(importedChildren.occurrences).toEqual(expect.arrayContaining([
       expect.objectContaining({ role: 'step', qualifier: expect.objectContaining({
         type: 'recipe-step', instructionText: { value: 'Stir until glossy.', language: 'en' },
@@ -213,12 +374,68 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
       text: 'Chill before serving.',
     }));
 
-    const raceBody = (sourceKey: string) => ({ expectedHead: refreshed.revision, actingSubject: f.actor,
-      operations: [{ op: 'insert', parent: created.structure, position: 'last', role: 'group', sourceKey }] });
+    const raceBody = (sourceKey: string) => ({
+      profile: 'recipe-composition',
+      expectedHead: refreshed.revision,
+      actingSubject: f.actor,
+      operations: [
+        { op: 'insert', parent: created.structure, position: 'last', role: 'group', sourceKey },
+      ],
+    });
     const races = await Promise.all([
-      f.call('POST', `${recipePath}/changes`, raceBody('race-a'), `recipe-${randomUUID()}`),
-      f.call('POST', `${recipePath}/changes`, raceBody('race-b'), `recipe-${randomUUID()}`),
+      f.call('POST', `/v1/compositions/${shortId(created.structure)}/changes`, raceBody('race-a'), `recipe-${randomUUID()}`),
+      f.call('POST', `/v1/compositions/${shortId(created.structure)}/changes`, raceBody('race-b'), `recipe-${randomUUID()}`),
     ]);
-    expect(races.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(races.map(response => response.status).sort()).toEqual([200, 409]);const compositionPath = `/v1/compositions/${shortId(created.structure)}`;
+    const current = await f.json<{ revision: string }>(
+      await f.call('GET', `${compositionPath}?actingSubject=${encodeURIComponent(f.actor)}`),
+      200,
+    );
+    const restore = {
+      expectedHead: current.revision,
+      restoredFrom: changed.revision,
+      actingSubject: f.actor,
+    };
+    expect(
+      (
+        await f.call(
+          'POST',
+          `${compositionPath}/restorations`,
+          restore,
+          randomUUID(),
+          f.account.tokenB,
+        )
+      ).status,
+    ).toBe(403);
+    const restoreKey = `recipe-restore-${randomUUID()}`;
+    const restored = await f.json<{ revision: string; receipt: string }>(
+      await f.call('POST', `${compositionPath}/restorations`, restore, restoreKey),
+      200,
+    );
+    expect(
+      await f.json(
+        await f.call('POST', `${compositionPath}/restorations`, restore, restoreKey),
+        200,
+      ),
+    ).toMatchObject({ revision: restored.revision, receipt: restored.receipt, replayed: true });
+    expect(
+      await f.json(
+        await f.call(
+          'GET',
+          `${compositionPath}?actingSubject=${encodeURIComponent(f.actor)}` +
+            `&parent=${encodeURIComponent(groups.occurrences[0]!)}`,
+        ),
+        200,
+      ),
+    ).toMatchObject({
+      revision: restored.revision,
+      occurrences: [
+        {
+          occurrence: changed.occurrences[0],
+          qualifier: { type: 'ingredient-line', amount: { numerator: 3, denominator: 2 } },
+        },
+      ],
+    });
+
   } finally { await f.close(); }
 }, 180_000);

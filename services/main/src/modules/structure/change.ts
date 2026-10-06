@@ -14,11 +14,31 @@ import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MAN
   checkRecipeMeasures, WorkCompletion, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
   type StructureProfile } from './format.ts';
-import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE_ID, ROLE_IRI,
-  derivedId, orderTreeKey, placementIri, placementRecord, readCompositionHeader,
-  readPlacements, readPublishedVariants, readSegment, readSegments, recordTreeKey, structureIri,
-  type CompositionHeader, type Label, type PlacementState, type SegmentState, type Selection }
-  from './graph.ts';
+import {
+  COMPOSITION_PROFILE,
+  CompositionCorrupt,
+  CompositionUnavailable,
+  NATIVE_ID,
+  ROLE_IRI,
+  derivedId,
+  itemListIri,
+  itemPosition,
+  orderTreeKey,
+  placementIri,
+  placementRecord,
+  readCompositionHeader,
+  readPlacements,
+  readPublishedVariants,
+  readSegment,
+  readSegments,
+  recordTreeKey,
+  structureIri,
+  type CompositionHeader,
+  type Label,
+  type PlacementState,
+  type SegmentState,
+  type Selection,
+} from './graph.ts';
 import { deepestLevel, isCatalogTarget, structureProfileFor, structureProfileForAction,
   type StructureProfileRegistration } from './profiles.ts';
 import { OrderKeyInvalid, evenKeys, keyBetween, segmentKeyBetween, withinBudget } from './order-key.ts';
@@ -29,6 +49,8 @@ export const MAX_OPERATIONS = 16;
 /** A seal reads the whole revision; larger compositions need a staged seal job. */
 export const SEAL_PLACEMENT_LIMIT = 4096;
 const PROFILE_ID = 'structure-composition-v1';
+// A candidate batch may touch its placement, occurrence, segment and parent list.
+const PROJECTION_BATCH_RECORDS = Math.min(24, STRUCTURE_LIMITS.projectionBatchRecords);
 const LANGUAGE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 
 export class InvalidCompositionChange extends Error {}
@@ -539,7 +561,11 @@ export async function structureCreationValidations(env: WorkActivationEnvironmen
   profile: StructureProfileRegistration, owner: string, structure: string,
   generation: string, revision: string): Promise<CommandValidation[]> {
   const common = await validations(env, [
-    ['structure', structure], ['generation', generation], ['revision', revision]], profile);
+      ['structure', structure],
+      ['generation', generation],
+      ['revision', revision],
+      ['item-list', itemListIri(generation, structure)],
+    ], profile);
   if (!profile.structurePredicate || !profile.ownerValidation) return common;
   return [...common, ...await profileValidations(env.fuseki, profile.ownerValidation.profile,
     [{ shape: profile.ownerValidation.shape, focus: [owner], graphs: [GRAPHS.current] }])];
@@ -679,17 +705,33 @@ export async function createComposition(env: WorkActivationEnvironment,
           rv:structureProfile <${profile.graphProfile}> ; rv:structureHead ${iri(revision)} ;
           rv:selectedGeneration ${iri(generation)} .
         ${structureLink}
+        ${itemListTriples(generation, structure)}
         ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(structure)} ;
           rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ; rv:placementCount 0 .
       }
-      GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision, structure, operation,
-        kind: 'StructureCreate', generation, manifest, count: 0 })} }
-      GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',
+      GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, {
+        revision,
+        structure,
+        operation,
+        kind: 'StructureCreate',
+        generation,
+        manifest,
+        count: 0,
+      })} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(
+        env,
+        intent.admission,
+        receipt,
+        'Succeeded',
         `rv:operation ${iri(operation)} ; rv:action "composition.create" ; rv:structure ${iri(structure)} ;
         rv:structureOwner ${iri(owner)} ; rv:structureComponent ${iri(component)} ;
-        ${profile.id === 'book-composition'
-          ? `rv:work ${iri(owner)} ; rv:mainVersion ${iri(component)} ;` : ''}
-        rv:structureRevision ${iri(revision)} ;`)} }
+        ${
+          profile.id === 'book-composition'
+            ? `rv:work ${iri(owner)} ; rv:mainVersion ${iri(component)} ;`
+            : ''
+        }
+        rv:structureRevision ${iri(revision)} ;`,
+      )} }
       GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt)} }
     }
     WHERE { ${controlGuard(env)}
@@ -1079,8 +1121,11 @@ async function checkFixedSelections(env: WorkActivationEnvironment,
 function placementTriples(state: PlacementState, generation: string,
   profile?: StructureProfile): string[] {
   const subject = iri(state.placement);
-  const triples = [`${subject} a ${state.active || state.tombstone
-    ? 'rv:OccurrencePlacement' : 'rv:RemovedPlacement'} .`];
+  const triples = [`${subject} a ${
+      state.active || state.tombstone
+        ? 'rv:OccurrencePlacement, <https://schema.org/ListItem>'
+        : 'rv:RemovedPlacement'
+    } .`];
   const add = (predicate: string, object: string) => triples.push(`${subject} rv:${predicate} ${object} .`);
   add('occurrence', iri(state.occurrence));
   add('generation', iri(generation));
@@ -1088,6 +1133,14 @@ function placementTriples(state: PlacementState, generation: string,
   if (state.active || state.tombstone) {
     add('orderSegment', iri(state.segment!));
     add('orderKey', lit(state.orderKey!));
+    triples.push(
+      `${subject} <https://schema.org/position> ${lit(itemPosition(state.segmentKey!, state.orderKey!))} .`,
+    );
+  }
+  if (state.active) {
+    triples.push(
+      `${iri(itemListIri(generation, state.parent))} <https://schema.org/itemListElement> ${subject} .`,
+    );
   }
   if (!state.active) {
     add('lastParent', iri(state.parent));
@@ -1096,15 +1149,17 @@ function placementTriples(state: PlacementState, generation: string,
   for (const label of state.labels ?? (state.label ? [state.label] : [])) {
     add('occurrenceLabel', `${lit(label.value)}@${label.language}`);
   }
-  if (state.target) triples.push(`${subject} <https://schema.org/item> ${profile
-    && isCatalogTarget(profile, state.target) ? structureIri(state.target) : iri(state.target)} .`);
+  const qualifier = profile && structureProfileFor(profile).projectQualifier?.(state, generation);
+  // Structural groups use their identity; Recipe lines use their projected qualifier.
+  const item = state.target ?? (qualifier ? qualifier.iri : state.occurrence);
+  triples.push(`${subject} <https://schema.org/item> ${profile
+    && isCatalogTarget(profile, item) ? structureIri(item) : iri(item)} .`);
   if (state.selection?.mode === 'follow-context') add('selectionMode', 'rv:FollowContext');
   if (state.selection?.mode === 'fixed-revision') {
     add('selectionMode', 'rv:FixedRevision');
     add('pinnedRevision', iri(state.selection.revision));
   }
   if (state.sourceKey) add('sourceKey', lit(state.sourceKey));
-  const qualifier = profile && structureProfileFor(profile).projectQualifier?.(state, generation);
   if (qualifier) {
     add('qualifier', iri(qualifier.iri));
     triples.push(...qualifier.triples);
@@ -1112,6 +1167,10 @@ function placementTriples(state: PlacementState, generation: string,
   return triples;
 }
 
+function itemListTriples(generation: string, parent: string): string {
+  return `${iri(itemListIri(generation, parent))} a <https://schema.org/ItemList> ;
+    rv:generation ${iri(generation)} ; rv:parent ${iri(parent)} .`;
+}
 function segmentTriples(segment: SegmentState, generation: string): string[] {
   const subject = iri(segment.segment);
   return [`${subject} a rv:OrderSegment .`, `${subject} rv:generation ${iri(generation)} .`,
@@ -1219,15 +1278,23 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const deletes: string[] = [];
   const inserts: string[] = [];
   const changedExisting: PlacementState[] = [];
+  const listParents = new Set<string>();
   for (const [occurrence, state] of w.placements) {
     const before = w.original.get(occurrence);
-    const old = before ? JSON.parse(before) as PlacementState : undefined;
-    const change = diff(old ? placementTriples(old, header.generation, header.profile) : [],
-      placementTriples(state, header.generation, header.profile));
+    const old = before ? (JSON.parse(before) as PlacementState) : undefined;
+    const change = diff(
+      old ? placementTriples(old, header.generation, header.profile) : [],
+      placementTriples(state, header.generation, header.profile),
+    );
     if (old && !change.removed.length && !change.added.length) continue;
     const record = placementRecord(state);
-    checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
-      profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles);
+    checkOccurrenceRecord(
+      record,
+      header.profile,
+      profile.catalogTargetTypes,
+      profile.selectionRequiredRoles ?? profile.targetRoles,
+      profile.selectionOptionalRoles,
+    );
     records.set(occurrence, record);
     if (old) {
       changedExisting.push(old);
@@ -1236,10 +1303,13 @@ export async function changeComposition(env: WorkActivationEnvironment,
       inserts.push(`${iri(occurrence)} a <https://schema.org/ListItem> ; rv:structure ${iri(header.structure)} ;
         rv:introducedBy ${iri(revision)} .`);
     }
+    if (old?.active) listParents.add(old.parent);
+    if (state.active) listParents.add(state.parent);
     deletes.push(...change.removed);
     inserts.push(...change.added);
     cost.placementsWritten++;
   }
+  for (const parent of listParents) inserts.push(itemListTriples(header.generation, parent));
   for (const occurrence of records.keys()) {
     const state = w.placements.get(occurrence)!;
     if (state.active) {
@@ -1332,8 +1402,14 @@ export async function changeComposition(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
       BIND(?n + 1 AS ?next) }`;
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('composition admission expired');
-  const focus: [string, string][] = [['structure', header.structure],
-    ['generation', header.generation], ['revision', revision]];
+  const focus: [string, string][] = [
+    ['structure', header.structure],
+    ['generation', header.generation],
+    ['revision', revision],
+    ...[...listParents].map(
+      (parent) => ['item-list', itemListIri(header.generation, parent)] as [string, string],
+    ),
+  ];
   for (const occurrence of records.keys()) {
     const state = w.placements.get(occurrence)!;
     focus.push([state.active || state.tombstone ? 'placement' : 'removed-placement', state.placement]);
@@ -1788,20 +1864,39 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   }
   const segmentEntries = [...segments.values()];
   for (const [index, record] of records.entries()) {
-    const segment = record.state === 'active'
-      ? derivedId(`${generation}\0${record.parent}\0${record.segmentKey}`) : undefined;
-    const state: PlacementState = { occurrence: record.occurrence,
-      placement: placementIri(generation, record.occurrence), active: record.state === 'active',
-      parent: record.parent, role: record.role, introducedBy: record.introducedBy,
-      ...(segment ? { segment, segmentKey: record.segmentKey, orderKey: record.orderKey } : {
-        removedBy: record.removedBy }),
-      labels: record.labels, ...(record.labels[0] ? { label: record.labels[0] } : {}),
-      ...(record.target ? { target: record.target,
-        ...(record.selection ? { selection: record.selection as Selection } : {}) } : {}),
+    const segment =
+      record.state === 'active'
+        ? derivedId(`${generation}\0${record.parent}\0${record.segmentKey}`)
+        : undefined;
+    const state: PlacementState = {
+      occurrence: record.occurrence,
+      placement: placementIri(generation, record.occurrence),
+      active: record.state === 'active',
+      parent: record.parent,
+      role: record.role,
+      introducedBy: record.introducedBy,
+      ...(segment
+        ? { segment, segmentKey: record.segmentKey, orderKey: record.orderKey }
+        : {
+            removedBy: record.removedBy,
+          }),
+      labels: record.labels,
+      ...(record.labels[0] ? { label: record.labels[0] } : {}),
+      ...(record.target
+        ? {
+            target: record.target,
+            ...(record.selection ? { selection: record.selection as Selection } : {}),
+          }
+        : {}),
       ...(record.qualifier ? { qualifier: record.qualifier } : {}),
-      ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
+      ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}),
+    };
     projectedStates.push(state);
     projectionByRecord[index]!.push(...placementTriples(state, generation, header.profile));
+    if (state.active) {
+      projectionByRecord[index]!.push(itemListTriples(generation, state.parent));
+      focusByRecord[index]!.push(['item-list', itemListIri(generation, state.parent)]);
+    }
     if (intent.stage && record.introducedBy === revision) {
       projectionByRecord[index]!.push(`${iri(record.occurrence)} a <https://schema.org/ListItem> ;
         rv:structure ${iri(header.structure)} ; rv:introducedBy ${iri(revision)} .`);
@@ -1820,7 +1915,8 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   }
   const commonFocus: [string, string][] = [['structure', header.structure],
     ['generation', generation], ['generation', header.generation], ['revision', revision]];
-  const projection = projectionByRecord.flat();
+  commonFocus.push(['item-list', itemListIri(generation, header.structure)]);
+  const projection = [itemListTriples(generation, header.structure), ...projectionByRecord.flat()];
   const focus = [...commonFocus, ...focusByRecord.flat()];
   if (!intent.stage && focus.length > 100) {
     throw new CompositionTooLarge('restore requires the staged generation path');
@@ -1840,38 +1936,74 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     const generationTriples = `${iri(generation)} a rv:StructureGeneration ;
       rv:structure ${iri(header.structure)} ; rv:generationState rv:Staging ;
       rv:stagedBy ${iri(operation)} ; rv:baseRevision ${iri(intent.expectedHead)} ;
-      rv:placementCount ${active.length} .`;
-    const candidateRevisionTriples = revisionTriples(env, { revision, structure: header.structure,
-      predecessor: intent.expectedHead, operation,
-      kind: intent.stage.kind === 'refresh' ? 'StructureRefresh'
-        : intent.stage.kind === 'import' ? 'StructureImport' : 'StructureReplace',
-      generation, manifest: next, count: active.length,
-      ...(imported ? { source: sourceManifest.source as { ref: string; revision: string;
-        mappingPolicy: 'source-key' | 'explicit' } } : {}) });
-    const totalBatches = Math.max(1, Math.ceil(records.length / STRUCTURE_LIMITS.projectionBatchRecords));
+      rv:placementCount ${active.length} . ${itemListTriples(generation, header.structure)}`;
+    const candidateRevisionTriples = revisionTriples(env, {
+      revision,
+      structure: header.structure,
+      predecessor: intent.expectedHead,
+      operation,
+      kind:
+        intent.stage.kind === 'refresh'
+          ? 'StructureRefresh'
+          : intent.stage.kind === 'import'
+            ? 'StructureImport'
+            : 'StructureReplace',
+      generation,
+      manifest: next,
+      count: active.length,
+      ...(imported
+        ? {
+            source: sourceManifest.source as {
+              ref: string;
+              revision: string;
+              mappingPolicy: 'source-key' | 'explicit';
+            },
+          }
+        : {}),
+    });
+    const totalBatches = Math.max(1, Math.ceil(records.length / PROJECTION_BATCH_RECORDS));
     let checkpoint = await intent.stage.onGraphStart();
-    if (checkpoint > totalBatches) throw new CompositionCorrupt('stage projection checkpoint exceeds its manifest');
+    if (checkpoint > totalBatches)
+      throw new CompositionCorrupt('stage projection checkpoint exceeds its manifest');
     while (checkpoint < totalBatches) {
       const ordinal = checkpoint;
-      const first = ordinal * STRUCTURE_LIMITS.projectionBatchRecords;
-      const last = Math.min(records.length, first + STRUCTURE_LIMITS.projectionBatchRecords);
+      const first = ordinal * PROJECTION_BATCH_RECORDS;
+      const last = Math.min(records.length, first + PROJECTION_BATCH_RECORDS);
       const batchProjection = projectionByRecord.slice(first, last).flat();
-      const batchFocus: [string, string][] = ordinal === 0
-        ? [['generation', generation], ['revision', revision]] : [];
+      const batchFocus: [string, string][] =
+        ordinal === 0
+          ? [
+              ['generation', generation],
+              ['revision', revision],
+              ['item-list', itemListIri(generation, header.structure)],
+            ]
+          : [];
       batchFocus.push(...focusByRecord.slice(first, last).flat());
-      const qualifierFocus = new Set(projectedStates.slice(first, last).flatMap(state => {
-        const projected = registration.projectQualifier?.(state, generation);
-        return projected ? [projected.iri] : [];
-      }));
-      await projectStageBatch(env, intent.admission, { stageId: intent.stage.id,
-        structure: header.structure, generation, expectedHead: intent.expectedHead,
-        previousGeneration: header.generation, ordinal,
+      const qualifierFocus = new Set(
+        projectedStates.slice(first, last).flatMap((state) => {
+          const projected = registration.projectQualifier?.(state, generation);
+          return projected ? [projected.iri] : [];
+        }),
+      );
+      await projectStageBatch(env, intent.admission, {
+        stageId: intent.stage.id,
+        structure: header.structure,
+        generation,
+        expectedHead: intent.expectedHead,
+        previousGeneration: header.generation,
+        ordinal,
         generationTriples: ordinal === 0 ? generationTriples : '',
         revisionTriples: ordinal === 0 ? candidateRevisionTriples : '',
-        projection: batchProjection, focus: batchFocus, registration,
-        qualifierChecks: qualifierChecks.map(check => ({ ...check,
-          focus: check.focus.filter(value => qualifierFocus.has(value)),
-        })).filter(check => check.focus.length > 0) });
+        projection: batchProjection,
+        focus: batchFocus,
+        registration,
+        qualifierChecks: qualifierChecks
+          .map((check) => ({
+            ...check,
+            focus: check.focus.filter((value) => qualifierFocus.has(value)),
+          }))
+          .filter((check) => check.focus.length > 0),
+      });
       checkpoint = await intent.stage.onProjectionBatch(ordinal);
     }
   }

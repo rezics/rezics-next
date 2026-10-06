@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { createHash } from 'node:crypto';
 import type { Static } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
-import { createAdmittedComposition, changeAdmittedComposition, changeAdmittedStructureMeasures }
+import { changeAdmittedComposition, changeAdmittedStructureMeasures }
   from '../modules/structure/change-admitted.ts';
 import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
   from '../modules/structure/change.ts';
@@ -36,40 +36,11 @@ import { groupUuid } from './shared.ts';
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const rational = t.Object({ numerator: t.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
   denominator: t.Integer({ minimum: 1, maximum: 1_000_000_000_000 }) }, { additionalProperties: false });
-const scaling = t.Union([t.Literal('linear'), t.Literal('non-linear'), t.Literal('not-scalable')]);
-const text = (max: number) => t.Object({ value: t.String({ minLength: 1, maxLength: max }),
-  language: t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }) }, { additionalProperties: false });
-const ingredientLine = t.Object({ type: t.Literal('ingredient-line'), originalText: text(1000),
-  amountLexical: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
-  amount: t.Optional(rational), amountUpper: t.Optional(rational),
-  unit: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
-  unitText: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
-  preparation: t.Optional(text(500)), optional: t.Boolean(), scaling,
-  substituteFor: t.Array(ref, { maxItems: 16 }),
-  parseStatus: t.Union([t.Literal('parsed'), t.Literal('partial'), t.Literal('unparsed')]),
-  residual: t.Optional(t.String({ pattern: '^sha256:[0-9a-f]{64}$' })) }, { additionalProperties: false });
-const recipeStep = t.Object({ type: t.Literal('recipe-step'), instructionText: text(4000),
-  usesIngredient: t.Array(ref, { maxItems: 64 }), media: t.Array(t.String({ format: 'uri' }), { maxItems: 16 }),
-  scaling }, { additionalProperties: false });
-const position = t.Union([t.Literal('first'), t.Literal('last'),
-  t.Object({ after: ref }, { additionalProperties: false })]);
-const operation = t.Union([
-  t.Object({ op: t.Literal('insert'), parent: ref, position,
-    role: t.Union([t.Literal('group'), t.Literal('ingredient'), t.Literal('step'), t.Literal('equipment')]),
-    qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
-    label: t.Optional(text(500)), sourceKey: t.Optional(t.String({ maxLength: 200 })) },
-  { additionalProperties: false }),
-  t.Object({ op: t.Literal('move'), occurrence: ref, parent: ref, position }, { additionalProperties: false }),
-  t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
-]);
 const write = t.Object({ receipt: t.String(), replayed: t.Boolean(), structure: ref,
   revision: t.Optional(ref), occurrences: t.Optional(t.Array(ref)),
   cost: t.Optional(t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer(),
     placementsWritten: t.Integer(), segmentsWritten: t.Integer(), rebalanced: t.Integer() })),
   sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) });
-const readResult = t.Object({ structure: ref, owner: ref, component: ref, revision: ref,
-  predecessor: t.Nullable(ref), placementCount: t.Integer(), occurrences: t.Array(t.Any()),
-  next: t.Nullable(t.String()), sourcePosition: t.Any(), cost: t.Any() });
 const problems = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const nutritionBody = t.Object({ basis: t.Union([t.Literal('per-serving'), t.Literal('whole-recipe')]),
@@ -103,10 +74,7 @@ const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingS
 
 export const openApiOperations = {
   '/v1/recipes/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
-  '/v1/recipes': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/recipes/{id}/changes': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/measures': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true }, get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
-  '/v1/recipes/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/{id}/scalings': { post: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/{id}/imports': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/exports/schema-org': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
@@ -210,53 +178,6 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings)),
         { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return workReadError(error); }
-    })
-    .post('/v1/recipes', { body: t.Object({ owner: ref, mainVersion: ref, actingSubject: ref },
-      { additionalProperties: false }), response: { 200: write, 201: write, ...problems } },
-    async ({ request, body }) => {
-      const idempotencyKey = key(request);
-      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
-      try {
-        const result = await createAdmittedComposition(work.environment, work.account, work.access,
-          request, { profile: 'recipe-composition', owner: body.owner, component: body.mainVersion,
-            actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ structure: result.structure, revision: result.revision,
-          receipt: result.receipt, replayed: result.replayed,
-          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence } },
-        { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return routeError(error); }
-    })
-    .post('/v1/recipes/:id/changes', { params: t.Object({ id: groupUuid }),
-      body: t.Object({ expectedHead: ref, actingSubject: ref,
-        operations: t.Array(operation, { minItems: 1, maxItems: 16 }) }, { additionalProperties: false }),
-      response: { 200: write, 202: problemResult(202), ...problems } },
-    async ({ request, params, body }) => {
-      const idempotencyKey = key(request);
-      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
-      try {
-        const result = await changeAdmittedComposition(work.environment, work.account, work.access,
-          request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            operations: body.operations, actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ structure: result.structure, revision: result.revision,
-          receipt: result.receipt, replayed: result.replayed, occurrences: result.occurrences ?? [],
-          ...(result.cost ? { cost: result.cost } : {}),
-          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence } },
-        { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return routeError(error); }
-    })
-    .get('/v1/recipes/:id', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: ref, revision: t.Optional(ref), parent: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 512 })),
-        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
-      response: { 200: readResult, ...authorizedReadProblems } },
-    async ({ request, params, query }) => {
-      try {
-        const page = await readPage(work, request, { structure: `https://rezics.com/id/${params.id}`,
-          actingSubject: query.actingSubject, ...(query.revision ? { revision: query.revision } : {}),
-          ...(query.parent ? { parent: query.parent } : {}),
-          ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50 });
-        return Response.json(page, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return routeError(error); }
     })
     .post('/v1/recipes/:id/measures', { params: t.Object({ id: groupUuid }),
       body: storedNutritionBody, response: { 200: write, 202: problemResult(202), ...problems } },

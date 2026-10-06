@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { structureCreationValidations } from '../src/modules/structure/change.ts';
+import { itemListIri } from '../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { GRAPHS, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -21,13 +22,14 @@ test('Structure create validates Collection and Zone owner links under their own
   ] as const) {
     const checks = await structureCreationValidations(environment, structureProfileFor(profileId),
       owner, structure, generation, revision);
-    expect(checks).toHaveLength(4);
+    expect(checks).toHaveLength(5);
     expect(checks.slice(0, 3).map(check => check.focus))
       .toEqual([[structure], [generation], [revision]]);
-    expect(checks[3]).toMatchObject({ profile: ownerProfile,
+    expect(checks[3]!.focus).toEqual([itemListIri(generation, structure)]);
+    expect(checks[4]).toMatchObject({ profile: ownerProfile,
       shape: `https://rezics.com/definition/${ownerProfile}/${ownerShape}`,
       focus: [owner], graphs: [GRAPHS.current] });
   }
   expect(await structureCreationValidations(environment, structureProfileFor('book-composition'),
-    owner, structure, generation, revision)).toHaveLength(3);
+    owner, structure, generation, revision)).toHaveLength(4);
 });

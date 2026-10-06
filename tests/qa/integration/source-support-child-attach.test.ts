@@ -31,17 +31,34 @@ test('LIVE04/RECIPE06: a child occurrence has exact source support that withdraw
     await h.grant(`work:edit:${work.work}`, 'work.edit');
     await h.grant(`work:read:${work.work}`, 'work.read');
     const structure = await h.json<{ structure: string; revision: string }>(await h.call('POST',
-      '/v1/recipes', { owner: work.work, mainVersion: work.mainVersion,
-        actingSubject: h.actor }), 201);
+      '/v1/compositions', {
+        profile: 'recipe-composition',
+        work: work.work,
+        mainVersion: work.mainVersion,
+        actingSubject: h.actor,
+      }), 201);
     const ingredients = ['2 tbsp olive oil', 'salt'];
     const changed = await h.json<{ revision: string; occurrences: string[] }>(await h.call('POST',
-      `/v1/recipes/${shortId(structure.structure)}/changes`, {
-        expectedHead: structure.revision, actingSubject: h.actor,
-        operations: ingredients.map((value, index) => ({ op: 'insert',
-          parent: structure.structure, position: 'last', role: 'ingredient',
+      `/v1/compositions/${shortId(structure.structure)}/changes`, {
+        profile: 'recipe-composition',
+        expectedHead: structure.revision,
+        actingSubject: h.actor,
+        operations: ingredients.map((value, index) => ({
+          op: 'insert',
+          parent: structure.structure,
+          position: 'last',
+          role: 'ingredient',
           sourceKey: `human-confirmed-${index}`,
-          qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
-            optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'unparsed' } })) }), 200);
+          qualifier: {
+            type: 'ingredient-line',
+            originalText: { value, language: 'en' },
+            optional: false,
+            scaling: 'linear',
+            substituteFor: [],
+            parseStatus: 'unparsed',
+          },
+        })),
+      }), 200);
     expect(changed.occurrences).toHaveLength(2);
     const mapping = `fixture-${randomUUID().replaceAll('-', '')}-v1`;
     const record = randomUUID(), observation = randomUUID(), conversion = randomUUID();
