@@ -150,6 +150,34 @@ acceptance pass; these remain:
 - **goalctl.** Merging a shared worktree's branch should mark every task on it
   merged (G-1111 and G-1143 had to be closed as cancelled).
 
+## Inherited from write-concurrency
+
+The write-concurrency Goal removed platform-wide write serialization from user
+paths (rules in [workload budgets](../../storage/workload-budgets.md#complexity-contracts),
+enforced by `scripts/qa/serialization-points.ts`) and held main-wide
+regression until it closed on 2026-10-06. These remain:
+
+- **Deployment PostgreSQL.** Production provisioning must grant
+  `pg_read_all_stats` to the Access and Content owners (horizon lag gauges)
+  and set `max_prepared_transactions=0`; the local compose and init script do.
+- **Long migrations.** Content 791 and some later migrations validate or index
+  whole tables under exclusive locks; run them in the maintenance window and
+  measure them on a production-sized restore first.
+- **Row lock upgrades.** The guard refuses shared-then-exclusive upgrades on
+  scope gates only; library visibility hit the same deadlock on an Agent row
+  (fixed). Alert on `pg_stat_database.deadlocks` and audit other
+  share-then-update paths.
+- **Seed in operator mode.** Since Zone denials answer 404, the seed cannot
+  tell an absent Zone from a denied one when an operator grant failed.
+- **Review queue lag.** Review-rank rows keep only their occurrence time, so
+  the review horizon reports the oldest writer but not the queue's own age.
+- **Test fault injectors.** Several fault injectors and counters still count
+  background work; the audit is in the Goal's archived notes. Scope them when
+  a test that uses one flakes.
+- **Order-dependent tests.** g-832-lexicon, g-856-position,
+  post-search-disclosure, projection-by-frame and growth-search-context pass
+  alone but assume a fresh database.
+
 ## Completion
 
 The Goal ends when the maintainer stops it, or when M8 passes its exit and the
