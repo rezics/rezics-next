@@ -55,9 +55,23 @@ music grains do not correspond exactly to REZICS identities.
 Decision 6, product manager under maintainer delegation, 2026-09-29.
 Versioned profiles must distinguish series and independently identified volumes,
 editions/releases and coverage (omnibus, partial, region, platform), anime
-series/seasons/episodes, characters and contextual credits, reading sessions,
-copies and loans. Reviews identify story, translation, narration or production;
+series/seasons/episodes, characters and contextual credits, and reading sessions.
+Copies and loans keep distinct identity as private records in the library
+owner's PostgreSQL, beside reading status, rather than versioned model profiles
+(Kernel and launch, 2026-10-07). A copy names an exact release; a loan names that
+copy, its direction, a Person reference or free-text counterparty, start, due and
+return instants. A free-text name never resolves to a Person. Ownership does not
+imply reading completion or a public graph fact. Reviews identify story,
+translation, narration or production;
 Collection entries do not become Works. Matching titles never establish identity.
+
+The private library bundle preserves native copy and loan state and maps it to
+[OwnershipInfo](https://schema.org/OwnershipInfo),
+[LendAction](https://schema.org/LendAction) and
+[BorrowAction](https://schema.org/BorrowAction). Its `endTime` is the promised
+due instant; the native `returnedAt` records actual return separately. Imported
+portable rows retain this evidence privately through the existing bundle
+importer; importing a bundle does not grant authority over its original owner.
 
 The reason is task fidelity: a person can own an omnibus, reread one volume and
 review its translation without making those three acts target the same object.
