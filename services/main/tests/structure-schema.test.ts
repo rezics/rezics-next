@@ -10,6 +10,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Client, Pool } from 'pg';
 import { ReaderLibraryStatusStore } from '../src/modules/library/status.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
+import { migrateContentFromArtifact } from '../../../scripts/ops/migrate.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, checkOccurrenceRecord, checkStructureManifest,
   checkStructurePage, type OccurrenceRecord, type StructureManifest } from '../src/modules/structure/format.ts';
 import { stageJob, stagePage } from '../src/modules/structure/stage-schema.ts';
@@ -298,6 +299,68 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
   // never rekeys this private state away from the stable occurrence ID.
   expect(await store.read(principal, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
 });
+
+test.each(['startup', 'artifact'])('Progress index migration commits library changes before its online build and recovers a cancelled invalid index (%s)', async runner => {
+  const pool = await database(`progress_online_upgrade_${runner}`);
+  const run = () => runner === 'startup' ? migrateContent(pool) : migrateContentFromArtifact(
+    `postgresql://${encodeURIComponent(process.env.USER!)}@127.0.0.1:${port}/${pool.options.database}`, root);
+  await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
+    (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {
+    await pool.query(readFileSync(join(migrations, name), 'utf8'));
+    await pool.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [migrationVersion(name)]);
+  }
+  const agent = id(), work = id(), structure = id();
+  await pool.query(`INSERT INTO reader.library_status(agent,work,status,version) VALUES ($1,$2,'reading',7)`, [agent, work]);
+  await pool.query(`INSERT INTO structure.progress(principal_issuer,principal_subject,structure,occurrence,completed,version)
+    SELECT 'issuer','subject',$1,'https://rezics.com/id/' || md5(n::text)::uuid,false,4 FROM generate_series(1,20000) n`, [structure]);
+  const blocker = await pool.connect();
+  let migration: Promise<unknown> | undefined;
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query(`UPDATE structure.progress SET completed=true WHERE occurrence='https://rezics.com/id/' || md5('1')::uuid`);
+    migration = run().then(() => null, error => error);
+    let pid: number | undefined;
+    for (let attempt = 0; attempt < 200 && !pid; attempt++) {
+      pid = (await pool.query<{ pid: number }>(`SELECT pid FROM pg_stat_activity
+        WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock'
+          AND query LIKE '%CREATE INDEX%progress_latest%'`)).rows[0]?.pid;
+      if (!pid) await Bun.sleep(10);
+    }
+    expect(pid).toBeDefined();
+    // A held writer makes the inventory-sized build wait deterministically.
+    // Library DDL must already be committed and both kinds of writer stay open.
+    expect((await pool.query('SELECT 1 FROM content.schema_migration WHERE version=870')).rowCount).toBe(1);
+    const writer = await pool.connect();
+    try {
+      await writer.query("SET statement_timeout='700ms'");
+      await writer.query(`UPDATE structure.progress SET completed=true WHERE occurrence='https://rezics.com/id/' || md5('2')::uuid`);
+      await writer.query('UPDATE reader.library_status SET version=version+1 WHERE agent=$1 AND work=$2', [agent, work]);
+    } finally { writer.release(); }
+    await pool.query('SELECT pg_cancel_backend($1)', [pid]);
+    expect(await migration).toMatchObject({ code: '57014' });
+    expect((await pool.query('SELECT 1 FROM content.schema_migration WHERE version=871')).rowCount).toBe(0);
+    expect((await pool.query(`SELECT indisvalid FROM pg_index WHERE indexrelid='structure.progress_latest'::regclass`)).rows)
+      .toEqual([{ indisvalid: false }]);
+  } finally {
+    await pool.query(`SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE datname=current_database()
+      AND pid<>pg_backend_pid() AND query LIKE '%CREATE INDEX%progress_latest%'`);
+    await blocker.query('ROLLBACK');
+    blocker.release();
+    await migration;
+  }
+  await run();
+  const installed = (await pool.query(`SELECT indexrelid::text,indisvalid FROM pg_index
+    WHERE indexrelid='structure.progress_latest'::regclass`)).rows[0];
+  expect(installed.indisvalid).toBe(true);
+  expect((await pool.query('SELECT version::int FROM reader.library_status WHERE agent=$1 AND work=$2', [agent, work])).rows[0])
+    .toEqual({ version: 8 });
+  // A crash after the build, before recording it, must retain the valid index.
+  await pool.query('DELETE FROM content.schema_migration WHERE version=871');
+  await run();
+  expect((await pool.query(`SELECT indexrelid::text,indisvalid FROM pg_index
+    WHERE indexrelid='structure.progress_latest'::regclass`)).rows[0]).toEqual(installed);
+}, 30_000);
 
 test('Populated libraries migrate to point revisions without rewriting saved state; mutation, rollback and concurrent writes fence cursors', async () => {
   const pool = await database('library_revision_upgrade');

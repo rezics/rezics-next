@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../lib/migration-order.ts';
 import { Pool, type PoolClient } from 'pg';
+import { migrateContent } from '../../services/content/src/migrate.ts';
 
 export const migrationDirectories = {
   access: 'services/main/migrations/access',
@@ -109,36 +110,10 @@ export async function migrateTracked(
 }
 
 export async function migrateContentFromArtifact(url: string, root: string): Promise<string[]> {
-  return withDatabaseLock(url, async (_pool, client) => {
-    const files = migrationFiles(root, 'content');
-    const applied: string[] = [];
-    await client.query('BEGIN');
-    try {
-      // Also serialize with Main's existing Content migration runner.
-      await client.query(
-        "SELECT pg_advisory_xact_lock(hashtextextended('rezics-content-schema', 0))",
-      );
-      await client.query('CREATE SCHEMA IF NOT EXISTS content');
-      await client.query(`CREATE TABLE IF NOT EXISTS content.schema_migration (
-        version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-      const history = (
-        await client.query<{ version: number }>('SELECT version FROM content.schema_migration')
-      ).rows;
-      for (const file of files) {
-        if (!history.some((row) => row.version === file.version)) {
-          await client.query(file.sql);
-          await client.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [
-            file.version,
-          ]);
-          applied.push(file.name);
-        }
-      }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-    return applied;
+  return withDatabaseLock(url, async pool => {
+    // Startup and release share online-build recovery and the Content lock.
+    const installed = new Set(await migrateContent(pool, join(root, migrationDirectories.content)));
+    return migrationRecords(root, 'content').filter(file => installed.has(file.version)).map(file => file.name);
   });
 }
 

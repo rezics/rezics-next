@@ -3,8 +3,7 @@ import { join } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../../../scripts/lib/migration-order.ts';
 import type { Pool } from 'pg';
 
-function migrations(): Array<{ version: number; sql: string }> {
-  const directory = join(import.meta.dir, '../migrations');
+function migrations(directory: string): Array<{ version: number; sql: string; concurrentIndex?: string }> {
   const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths);
   if (!files.length) throw new Error('Content migrations are missing');
   // Versions strictly increase; gaps are allowed because parallel owner work reserves number ranges.
@@ -13,17 +12,26 @@ function migrations(): Array<{ version: number; sql: string }> {
     const version = migrationVersion(name);
     if (version <= previous) throw new Error(`Content migration sequence repeats a version at ${name}`);
     previous = version;
-    return { version, sql: readFileSync(join(directory, name), 'utf8') };
+    const sql = readFileSync(join(directory, name), 'utf8');
+    // An online index is one standalone statement. Its catalog entry survives
+    // cancellation, so the runner must repair invalid builds before retrying.
+    const concurrentIndex = /^-- migrate: concurrent-index ([a-z_]+\.[a-z_]+)$/m.exec(sql)?.[1];
+    return { version, sql, concurrentIndex };
   });
 }
 
 /** Apply Content and private source-staging schemas in Main's PostgreSQL database. */
-export async function migrateContent(pool: Pool): Promise<void> {
-  const pending = migrations();
+export async function migrateContent(pool: Pool, directory = join(import.meta.dir, '../migrations')): Promise<number[]> {
+  const pending = migrations(directory);
+  const installed: number[] = [];
   const client = await pool.connect();
+  let locked = false, inTransaction = false;
   try {
+    // The same connection retains this lock across the online build's commits.
+    await client.query("SELECT pg_advisory_lock(hashtextextended('rezics-content-schema', 0))");
+    locked = true;
     await client.query('BEGIN');
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-content-schema', 0))");
+    inTransaction = true;
     await client.query('CREATE SCHEMA IF NOT EXISTS content');
     await client.query(`CREATE TABLE IF NOT EXISTS content.schema_migration (
       version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
@@ -38,13 +46,32 @@ export async function migrateContent(pool: Pool): Promise<void> {
       throw new Error('Content schema history differs from local migrations');
     }
     for (const migration of pending.filter(migration => !versions.has(migration.version))) {
-      await client.query(migration.sql);
+      if (migration.concurrentIndex) {
+        // Release preceding DDL locks (including library revision triggers)
+        // before waiting for any inventory-sized progress index build.
+        await client.query('COMMIT');
+        inTransaction = false;
+        const index = (await client.query<{ indisvalid: boolean }>(
+          'SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)', [migration.concurrentIndex])).rows[0];
+        if (index && !index.indisvalid) await client.query(`DROP INDEX CONCURRENTLY ${migration.concurrentIndex}`);
+        // A crash after a successful build but before its receipt is harmless.
+        if (!index?.indisvalid) await client.query(migration.sql);
+        await client.query('BEGIN');
+        inTransaction = true;
+      } else await client.query(migration.sql);
       await client.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
         [migration.version]);
+      installed.push(migration.version);
     }
     await client.query('COMMIT');
+    inTransaction = false;
+    return installed;
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (inTransaction) await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally {
+    try {
+      if (locked) await client.query("SELECT pg_advisory_unlock(hashtextextended('rezics-content-schema', 0))");
+    } finally { client.release(); }
+  }
 }
