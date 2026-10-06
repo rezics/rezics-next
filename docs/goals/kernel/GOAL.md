@@ -115,6 +115,16 @@ qualification harness that imports through the API in batches.
   start-up limit, whole-graph relocation, Definition history drift, the
   language-selection cap, and the npm solver re-run on read (return the sealed
   result; re-running is an explicit audit operation).
+- production-readiness (program audit, 2026-10-07):
+  - Content document recovery: restore a document from a bad revision or after
+    deletion, or prove with a test that it already works.
+  - Exact stored artifacts stay immutable after C0 drops the append-only lock:
+    editing a persisted profile in place was caught five times under the old
+    rule, so a check must now refuse a change to bytes that a record pins, and
+    a changed candidate must invalidate an approval given to the earlier one.
+  - Salvage branch `goal/g-432` (chapter author note, withdrawn pending the
+    shared document contract) is material for C2 Blocks, never a whole
+    cherry-pick.
 
 ## Cut lines
 
@@ -130,5 +140,6 @@ history engine. Every Sol brief names the smallest change and what not to build.
 
 The outcome holds through the program's regression and the owner checks, the
 contracts board shows C0, C2–C6 landed with acceptance, and record §10's
-population-scale list is empty. Capacity at 300 and 500 million business
+population-scale list is empty, and the `product-audit` skill finds no open P0
+or P1 class in this Goal's areas. Capacity at 300 and 500 million business
 entities is a later Goal (program, Completion).
