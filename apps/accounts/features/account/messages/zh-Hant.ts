@@ -1,7 +1,9 @@
+import { recoveryCopy } from './recovery.ts';
 import { insert, plural } from 'native-i18n';
 import { zhHant as additions } from './additions-rest.ts';
 
 export default {
+  recovery: recoveryCopy['zh-Hant'],
   nsfwDisplayLabel: "遮罩 NSFW 圖片",
   nsfwDisplayHelp: "標記為 NSFW 的圖片可能不適合在工作或公共場所查看。年齡分類設定與作者遮罩仍然適用。",
   contentTitle: "生日與內容",

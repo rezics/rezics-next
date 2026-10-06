@@ -59,7 +59,7 @@ test('IAM08: Account recovery migration installs fresh and upgrades the prior ow
     expect((await fresh.query(verificationIndex)).rows).toEqual([{ amname: 'hash' }]);
     expect((await fresh.query(`SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name LIKE 'rezics_account_recovery_%'`)).rows)
-      .toHaveLength(4);
+      .toHaveLength(5);
     await expect(accountRecoveryCoverage(fresh)).resolves.toMatchObject({ rowCount: '0' });
 
     await migrateAuth(upgrade);

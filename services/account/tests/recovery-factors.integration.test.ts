@@ -9,6 +9,7 @@ import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 import {
   beginRecoveryPasskeyRegistration,
+  acceptGuardian,
   cookies,
   recoveryProof,
   registerRecoveryPasskey,
@@ -31,6 +32,7 @@ test('recovery rejects missing approval, the waiting period, wrong proof and exp
         )
       ).status,
     ).toBe(200);
+    await acceptGuardian(f, member, guardian);
     expect(
       (
         await f.request('/api/account/recovery-claims', {

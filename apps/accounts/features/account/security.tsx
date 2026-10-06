@@ -182,6 +182,12 @@ export function SecurityOverview({ signIn, issues, checkupComplete, failedSignIn
             : <span className="text-muted-foreground">{common.unavailableTitle}</span>}
         </SettingsLinkRow>
       </SettingsCard>
+      <SettingsCard title={t.recovery.title} description={t.recovery.intro}>
+        <SettingsLinkRow label={t.recovery.ownerTitle} href="/security/recovery"
+          icon={<ShieldCheckIcon className="size-4" aria-hidden="true" />}>
+          {t.recovery.manage}
+        </SettingsLinkRow>
+      </SettingsCard>
       <SettingsCard title={t.devices} description={t.devicesIntro}><DeviceSummary devices={devices} /></SettingsCard>
       <SettingsCard title={t.activity} description={t.activityIntro}>
         {activity.status === 'ok' ? <ActivityList entries={activity.entries} apps={activity.apps} />

@@ -14,12 +14,13 @@ export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-l
   // Registration declarations and content qualification.
   | 'minimum-age-confirmation-required' | 'invalid-birth-date' | 'birth-date-required' | 'age-ineligible' | 'market-restricted' | 'market-unavailable'
   | 'policy-acceptance-required' | 'denied' | 'invalid-request' | 'not-found'
-  | 'account-suspended' | 'password-reset-required' | 'account-unavailable';
+  | 'account-suspended' | 'password-reset-required' | 'account-unavailable' | 'guardian-duty';
 
 interface Failure { ok: false; kind: FailureKind; status: number; minimumAge?: number }
 export type Result<T> = { ok: true; data: T } | Failure;
 
 const byCode: Record<string, FailureKind> = {
+  RECOVERY_GUARDIAN_DUTY: 'guardian-duty',
   ACCOUNT_UNAVAILABLE: 'account-unavailable',
   INVALID_ORIGIN: 'invalid-request',
   FORBIDDEN: 'denied',
@@ -53,6 +54,7 @@ const byCode: Record<string, FailureKind> = {
 
 // The Account service's own routes answer `{ error: <code> }`.
 const byError: Record<string, FailureKind> = {
+  invalid_password: 'invalid-credentials',
   forbidden: 'denied',
   invalid_origin: 'invalid-request',
   invalid_request: 'invalid-request',

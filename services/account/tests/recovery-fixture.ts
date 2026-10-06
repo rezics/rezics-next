@@ -11,6 +11,15 @@ export const cookies = (response: Response) =>
     .map((value) => value.split(';')[0])
     .join('; ');
 
+export async function acceptGuardian(f: RecoveryFixture, owner: RecoveryMember, guardian: RecoveryMember) {
+  const response = await f.request('/api/account/recovery-policy/read', {}, owner.cookie);
+  expect(response.status).toBe(200);
+  const { policy } = await response.json() as { policy: { invitationId: string } };
+  expect((await f.request(`/api/account/recovery-guardians/${policy.invitationId}`,
+    { action: 'accept' }, guardian.cookie)).status).toBe(200);
+  return policy.invitationId;
+}
+
 export async function recoveryProof(
   f: RecoveryFixture,
   member: RecoveryMember,
@@ -27,6 +36,7 @@ export async function recoveryProof(
       )
     ).status,
   ).toBe(200);
+  await acceptGuardian(f, member, guardian);
   const path = `/api/account/recovery-claims/${claimId}`;
   const request = { claimId, targetEmail: member.email, recoveryCode };
   expect((await f.request('/api/account/recovery-claims', request)).status).toBe(200);

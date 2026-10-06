@@ -1,7 +1,9 @@
+import { recoveryCopy } from './recovery.ts';
 import { insert, plural } from 'native-i18n';
 import { en as additions } from './additions.ts';
 
 export default {
+  recovery: recoveryCopy['en'],
   nsfwDisplayLabel: "Mask NSFW images",
   nsfwDisplayHelp: "Images marked NSFW may be unsuitable for work or public places. Age-category choices and author masks still apply.",
   contentTitle: "Birthday & content",

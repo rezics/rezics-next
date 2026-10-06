@@ -223,20 +223,35 @@ export function accountAuthOptions(config: AccountConfig) {
         if (ownedClient.rowCount) {
           throw new APIError('CONFLICT', { message: 'transfer OAuth clients before deletion' });
         }
-        const recoveryDuty = await config.pool.query(`SELECT 1 FROM
-          public.rezics_account_recovery_policy WHERE guardian_user_id = $1 LIMIT 1`, [user.id]);
-        if (recoveryDuty.rowCount) {
-          throw new APIError('CONFLICT', { message: 'transfer Account recovery duty before deletion' });
-        }
+        const client = await config.pool.connect();
         try {
+          await client.query('BEGIN');
+          await client.query("SET LOCAL lock_timeout = '2s'");
+          await client.query("SET LOCAL statement_timeout = '5s'");
+          // Acceptance takes this identity lock too. A deletion fence cannot
+          // race a newly accepted duty and then partially delete credentials.
+          await client.query('SELECT id FROM public."user" WHERE id = $1 FOR UPDATE', [user.id]);
+          const recoveryDuty = await client.query(`SELECT 1 FROM
+            public.rezics_account_recovery_policy p JOIN public.rezics_account_recovery_guardian_invitation i
+              ON i.id = p.guardian_invitation_id
+            WHERE p.guardian_user_id = $1 AND p.code_hash IS NOT NULL AND i.state = 'accepted' LIMIT 1`, [user.id]);
+          if (recoveryDuty.rowCount) {
+            throw new APIError('CONFLICT', { code: 'RECOVERY_GUARDIAN_DUTY',
+              message: 'Withdraw accepted recovery guardianships in Accounts before deletion' });
+          }
           await config.accessDeletionFence!(user.id);
           // Better Auth deletes credential rows before the user row. Mark the
           // fenced deletion so last-method protection permits only that path.
-          await config.pool.query(`UPDATE rezics_account_security SET deletion_started_at = now(), generation = generation + 1
+          await client.query(`UPDATE rezics_account_security SET deletion_started_at = now(), generation = generation + 1
             WHERE user_id = $1 AND deletion_started_at IS NULL`, [user.id]);
+          await client.query('COMMIT');
         }
-        catch { throw new APIError('SERVICE_UNAVAILABLE',
-          { message: 'Account deletion awaits the Access fence and retained deletion journal' }); }
+        catch (error) {
+          try { await client.query('ROLLBACK'); } catch { /* preserve the denial */ }
+          if (error instanceof APIError) throw error;
+          throw new APIError('SERVICE_UNAVAILABLE',
+            { message: 'Account deletion awaits the Access fence and retained deletion journal' });
+        } finally { client.release(); }
       },
     } },
     plugins: [

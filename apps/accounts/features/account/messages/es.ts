@@ -1,7 +1,9 @@
+import { recoveryCopy } from './recovery.ts';
 import { insert, plural } from 'native-i18n';
 import { es as additions } from './additions-rest.ts';
 
 export default {
+  recovery: recoveryCopy['es'],
   nsfwDisplayLabel: "Ocultar imágenes NSFW",
   nsfwDisplayHelp: "Las imágenes marcadas como NSFW pueden ser inadecuadas en el trabajo o en lugares públicos. Se siguen aplicando las categorías de edad y las máscaras del autor.",
   contentTitle: "Cumpleaños y contenido",

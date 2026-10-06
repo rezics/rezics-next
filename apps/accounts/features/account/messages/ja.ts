@@ -1,7 +1,9 @@
+import { recoveryCopy } from './recovery.ts';
 import { insert, plural } from 'native-i18n';
 import { ja as additions } from './additions-rest.ts';
 
 export default {
+  recovery: recoveryCopy['ja'],
   nsfwDisplayLabel: "NSFW 画像を隠す",
   nsfwDisplayHelp: "NSFW とマークされた画像は、職場や公共の場所での閲覧に適さない場合があります。年齢カテゴリの設定と投稿者のマスクは引き続き適用されます。",
   contentTitle: "誕生日とコンテンツ",

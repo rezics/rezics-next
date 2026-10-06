@@ -5,7 +5,7 @@ import { mkdirSync, openSync, closeSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Route } from '@playwright/test';
 import { accountFixture, freePort } from '../../../services/account/tests/account-fixture.ts';
-import { registerRecoveryPasskey } from '../../../services/account/tests/recovery-fixture.ts';
+import { acceptGuardian, registerRecoveryPasskey } from '../../../services/account/tests/recovery-fixture.ts';
 
 test('Accounts recovery: request, guardian approval, passwordless rebind, lost-response retry and fresh sign-in at phone and desktop widths', async () => {
   const f = await accountFixture({}, 'localhost');
@@ -28,6 +28,7 @@ test('Accounts recovery: request, guardian approval, passwordless rebind, lost-r
         )
       ).status,
     ).toBe(200);
+    await acceptGuardian(f, owner, guardian);
     const oldPasskey = await registerRecoveryPasskey(f, owner, await browser.newPage());
     expect((await f.request('/api/account/methods/password/remove', {}, owner.cookie)).status).toBe(
       200,
@@ -180,6 +181,7 @@ test('Accounts recovery: request, guardian approval, passwordless rebind, lost-r
         )
       ).status,
     ).toBe(200);
+    await acceptGuardian(f, { ...owner, cookie: current.headers.get('set-cookie')! }, guardian);
     expect(
       (
         await f.request('/api/account/recovery-claims', {

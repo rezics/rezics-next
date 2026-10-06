@@ -17,6 +17,7 @@ export const failureKeys = {
   'invalid-request': 'refusalInvalidRequest', 'not-found': 'refusalNotFound',
   'account-suspended': 'refusalSuspended', 'password-reset-required': 'refusalResetRequired',
   'account-unavailable': 'refusalAccountBlocked',
+  'guardian-duty': 'refusalConflict',
 } as const satisfies Record<FailureKind, keyof typeof refusalMessages.en | 'unavailableBody'>;
 
 type CommonText = typeof refusalMessages.en & { unavailableBody: string };

@@ -1,7 +1,9 @@
+import { recoveryCopy } from './recovery.ts';
 import { insert, plural } from 'native-i18n';
 import { zhHans as additions } from './additions.ts';
 
 export default {
+  recovery: recoveryCopy['zh-Hans'],
   nsfwDisplayLabel: "遮罩 NSFW 图片",
   nsfwDisplayHelp: "标记为 NSFW 的图片可能不适合在工作或公共场所查看。年龄分类设置与作者遮罩仍然适用。",
   contentTitle: "生日与内容",

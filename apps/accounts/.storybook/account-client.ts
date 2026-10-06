@@ -21,6 +21,10 @@ export const totpEnrollment = { totpURI: 'otpauth://totp/REZICS:ada%40example.te
 
 export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
   const api: AccountApi = {
+    readRecoveryPolicy: () => ok({ policy: null }),
+    readGuardianInvitations: () => ok({ items: [], nextCursor: null }),
+    enrollRecovery: () => ok({ generation: '0', replayed: false }),
+    changeGuardian: (_id, action) => ok({ state: action === 'accept' ? 'accepted' : action === 'decline' ? 'declined' : 'withdrawn', replayed: false }),
     signIn: () => ok({}), verifyTwoFactor: () => ok({}), signInWithPasskey: ({ conditional, signal }) => conditional ? pendingAutofill(signal) : ok({}), signUp: () => ok({}), acceptPolicies: () => ok(undefined), unsubscribe: () => ok(undefined),
     requestPasswordReset: () => ok(undefined), resetPassword: () => ok(undefined),
     requestRecovery: () => Promise.resolve({ ok: false, kind: 'unavailable', status: 503 }),

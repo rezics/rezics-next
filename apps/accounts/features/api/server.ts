@@ -6,6 +6,7 @@ import { parseActivity, parseConnectedApps, parseConsentPreview, parseDisplayPre
   parseSessions, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
 import { parsePolicyStatus } from '../auth/policies.ts';
+import { parseGuardianPage, parseRecoveryPolicy } from './recovery-policy.ts';
 
 export type { AccountSession } from './account-data.ts';
 
@@ -48,6 +49,9 @@ async function read<T>(path: string, parse: (value: unknown) => T | null,
 /** One session read per request, shared by the page and its sections. */
 export const readSession = cache(() => read('/api/auth/get-session', parseSession));
 export const readMethods = cache(() => read('/api/account/methods', parseMethods));
+export const readRecoveryPolicy = cache(() => read('/api/account/recovery-policy/read', parseRecoveryPolicy, { body: {} }));
+export const readGuardianInvitations = cache((acceptedOnly = false) =>
+  read('/api/account/recovery-guardians/read', parseGuardianPage, { body: { acceptedOnly } }));
 export const readContentPreferences = cache(() => read('/api/account/content-preferences', parseContentPreferences));
 export const readPublicBirthday = cache((id: string) => read(`/api/account/birthday/${encodeURIComponent(id)}`,
   value => typeof record(value)?.birthDate === 'string' ? record(value)!.birthDate as string : null, { anonymous: true }));

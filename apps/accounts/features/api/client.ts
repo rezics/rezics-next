@@ -4,6 +4,8 @@
 import { parseContentPreferences, type ContentPreferences, type ContentPreferenceChange } from './content-preferences.ts';
 import { classifyFailure, refusedMinimumAge, type FailureKind, type Result } from './errors.ts';
 import { parseDisplayPreferences, type AccountLocale, type DisplayPreferences } from './account-data.ts';
+import { parseGuardianPage, parseRecoveryPolicy, type GuardianPage, type RecoveryEnrollment,
+  type RecoveryPolicyView } from './recovery-policy.ts';
 import { creationOptions, credentialJson, isCancelled, passkeysSupported,
   requestOptions } from '../auth/webauthn.ts';
 
@@ -26,6 +28,11 @@ export interface RecoveryClaim {
 }
 
 export interface AccountApi {
+  readRecoveryPolicy(): Promise<Result<RecoveryPolicyView>>;
+  readGuardianInvitations(cursor?: string): Promise<Result<GuardianPage>>;
+  enrollRecovery(input: RecoveryEnrollment): Promise<Result<{ generation: string; replayed: boolean }>>;
+  changeGuardian(invitationId: string, action: 'accept' | 'decline' | 'withdraw'):
+    Promise<Result<{ state: string; replayed: boolean }>>;
   /** `twoFactor` means the password was right and a second step is needed. */
   signIn(input: { email: string; password: string; oauthQuery?: string }):
   Promise<Result<Continuation & { twoFactor?: boolean }>>;
@@ -161,6 +168,20 @@ async function assertPasskey(conditional = false, signal?: AbortSignal): Promise
 }
 
 export const browserAccountApi: AccountApi = {
+  async readRecoveryPolicy() {
+    const result = await account('/recovery-policy/read', {});
+    if (!result.ok) return result;
+    const data = parseRecoveryPolicy(result.data);
+    return data ? { ok: true, data } : failed('unavailable');
+  },
+  async readGuardianInvitations(cursor) {
+    const result = await account('/recovery-guardians/read', cursor ? { cursor } : {});
+    if (!result.ok) return result;
+    const data = parseGuardianPage(result.data);
+    return data ? { ok: true, data } : failed('unavailable');
+  },
+  enrollRecovery: input => account('/recovery-policy', { ...input }),
+  changeGuardian: (invitationId, action) => account(`/recovery-guardians/${encodeURIComponent(invitationId)}`, { action }),
   async signIn({ email, password, oauthQuery }) {
     const result = await auth<{ twoFactorRedirect?: boolean }>('/sign-in/email', { email, password,
       rememberMe: true, ...(oauthQuery ? { oauth_query: oauthQuery } : {}) });

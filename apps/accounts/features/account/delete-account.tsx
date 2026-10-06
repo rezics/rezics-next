@@ -29,7 +29,7 @@ function Step({ number, title, children }: { number: number; title: string; chil
  * first (keep a copy, hand over duties), then the person's password (or
  * passkey, through step-up) and an explicit acknowledgement. Account enables
  * the delete-user flow only with its Access deletion fence. */
-export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean }) {
+export function DeleteAccount({ hasPassword = true, guardianDuty = false }: { hasPassword?: boolean; guardianDuty?: boolean }) {
   const { t } = useTranslation('account');
   const common = useTranslation('common').t;
   const showLabel = useTranslation('auth').t.showPassword;
@@ -40,6 +40,7 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
   const [errors, setErrors] = useState<{ password?: string; acknowledged?: string }>({});
   const [failure, setFailure] = useState('');
   const [busy, setBusy] = useState(false);
+  const [duty, setDuty] = useState(guardianDuty);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -54,6 +55,7 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
     setBusy(false);
     if (result.kind === 'cancelled') return;
     if (result.kind === 'invalid-credentials') return setErrors({ password: t.wrongCurrentPassword });
+    if (result.kind === 'guardian-duty') { setDuty(true); return; }
     setFailure(result.kind === 'conflict' ? t.deleteBlocked : result.kind === 'not-enabled'
       ? t.deleteNotAvailable : result.kind === 'unavailable' ? t.deleteRetry : failureText(result.kind, common));
   }
@@ -66,6 +68,7 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
         <ul className="list-disc space-y-1.5 ps-5 text-muted-foreground">
           <li>{t.deleteSignedOut}</li><li>{t.deleteApps}</li><li>{t.deleteContent}</li>
           <li className="font-medium text-foreground">{t.deletePermanent}</li>
+          <li>{t.recovery.retainedHistory}</li>
         </ul>
       </Step>
       <Step number={2} title={t.deleteStepBefore}>
@@ -73,6 +76,10 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
         <Button variant="outline" className="mt-3" asChild><a href={focusedPaths.download}>
           <DownloadIcon aria-hidden="true" />{t.downloadTitle}</a></Button>
         <p className="mt-4 text-muted-foreground">{t.deleteDuties}</p>
+        {duty ? <Alert role="alert" className="mt-4"><AlertDescription>
+          <p>{t.recovery.deleteDuty}</p>
+          <a href="/security/recovery" className="mt-2 inline-block font-medium text-primary underline">{t.recovery.manage}</a>
+        </AlertDescription></Alert> : null}
       </Step>
       <Step number={3} title={t.deleteStepConfirm}>
         <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5">
@@ -94,7 +101,7 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
           {failure ? <Alert role="alert" variant="destructive"><AlertDescription>{failure}</AlertDescription></Alert> : null}
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" size="lg" disabled={busy} asChild><a href={sectionPaths['data-privacy']}>{t.cancel}</a></Button>
-            <Button type="submit" variant="destructive" size="lg" isLoading={busy}>{busy ? t.deleting : t.deleteButton}</Button>
+            <Button type="submit" variant="destructive" size="lg" isLoading={busy} disabled={duty}>{busy ? t.deleting : t.deleteButton}</Button>
           </div>
         </form>
       </Step>

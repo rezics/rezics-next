@@ -4,6 +4,7 @@ import { createEmailVerificationToken } from 'better-auth/api';
 import { hashPassword } from 'better-auth/crypto';
 import type { PoolClient } from 'pg';
 import { accountFixture } from './account-fixture.ts';
+import { acceptGuardian } from './recovery-fixture.ts';
 import { sensitiveAuthPaths } from '../src/methods.ts';
 
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
@@ -40,6 +41,7 @@ async function recovery(f: Fixture, member: Member, guardian: Member) {
   const claimId = randomUUID();
   expect((await f.request('/api/account/recovery-policy', { guardianEmail: guardian.email, recoveryCode,
     currentPassword: member.password }, member.cookie)).status).toBe(200);
+  await acceptGuardian(f, member, guardian);
   expect((await f.request('/api/account/recovery-claims', { claimId, targetEmail: member.email, recoveryCode })).status).toBe(200);
   expect((await f.request(`/api/account/recovery-claims/${claimId}/approval`, {}, guardian.cookie)).status).toBe(200);
   await f.pool.query("UPDATE rezics_account_recovery_claim SET not_before = now() - interval '1 second' WHERE id = $1", [claimId]);

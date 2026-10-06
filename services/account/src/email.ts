@@ -19,6 +19,8 @@ export interface AccountEmail {
     message?: string;
     safetyCorrespondence?: true;
     retainedContact?: true;
+    /** Bound invitation notice; the mailbox need not have an Account yet. */
+    guardianInvitationId?: string;
   }): Promise<void>;
 }
 
@@ -32,6 +34,8 @@ export async function enqueueAccountEmail(
     throw new Error('Safety correspondence must be a mandatory notice');
   if (input.retainedContact && !input.safetyCorrespondence)
     throw new Error('Retained contact requires private safety correspondence');
+  if (input.guardianInvitationId && (input.purpose !== 'notice' || input.retainedContact || input.safetyCorrespondence))
+    throw new Error('Guardian invitations must be ordinary mandatory notices');
   if (input.purpose === 'digest' && (await optionalMailSuppressed(db, input.to))) return;
   const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
   await db.query(
@@ -127,6 +131,17 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
         try {
           const input = JSON.parse(await symmetricDecrypt({ key: secret, data: row.payload })) as
             Parameters<AccountEmail['enqueue']>[0];
+          if (input.guardianInvitationId) {
+            const current = await pool.query(`SELECT 1 FROM rezics_account_recovery_guardian_invitation i
+              JOIN rezics_account_recovery_policy p ON p.guardian_invitation_id = i.id
+              WHERE i.id = $1 AND i.owner_user_id = $2 AND i.guardian_email = $3
+                AND i.state = 'pending' AND i.expires_at > now()`,
+            [input.guardianInvitationId, row.user_id, input.to]);
+            if (!current.rowCount) {
+              await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
+              continue;
+            }
+          }
           // A changed or deleted account must not receive an old reset link.
           // Verification of a new address legitimately targets a different email.
           const user = input.retainedContact
@@ -166,6 +181,7 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
           }
           if (
             user &&
+            !input.guardianInvitationId &&
             input.purpose !== 'verify' &&
             (user.rows[0]!.email !== input.to ||
               (input.purpose === 'digest' && !user.rows[0]!.emailVerified))

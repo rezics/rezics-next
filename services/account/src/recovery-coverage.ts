@@ -16,6 +16,7 @@ const TABLES = [
   'oauthClientResource', 'oauthConsent', 'oauthRefreshToken', 'oauthResource',
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim', 'rezics_account_recovery_policy',
+  'rezics_account_recovery_guardian_invitation',
   'rezics_oauth_code_basis', 'rezics_oauth_first_party_client', 'rezics_oauth_installation', 'rezics_signing_key',
   'session', 'user', 'verification',
   'passkey', 'twoFactor', 'rezics_account_email', 'rezics_account_rate_limit',
@@ -34,6 +35,7 @@ const OPTIONAL_TABLES = ['rezics_local_migration'] as const;
 const UUID_ID_TABLES = new Set<string>([
   'rezics_account_recovery_activation', 'rezics_account_recovery_approval',
   'rezics_account_recovery_claim',
+  'rezics_account_recovery_guardian_invitation',
   'rezics_account_email', 'rezics_account_security_event', 'rezics_account_operator_audit',
   'rezics_account_operator_note', 'rezics_account_operator_job',
 ]);

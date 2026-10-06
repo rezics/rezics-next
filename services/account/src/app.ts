@@ -1,4 +1,5 @@
 import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
+import { APIError } from 'better-auth/api';
 import { httpTelemetry } from '@rezics/observability/elysia';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
@@ -29,8 +30,9 @@ import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
 import { withRecoveryAuthentication } from './recovery-auth.ts';
+import { changeGuardianInvitation, readGuardianInvitations, readRecoveryPolicy } from './recovery-guardian.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
-import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
+import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale, AccountRecoveryRateLimited,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
 
@@ -120,6 +122,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       : Response.json({ error: 'unauthenticated' }, { status: 401 });
   };
   const recoveryError = (error: unknown): Response => {
+    if (error instanceof AccountRecoveryRateLimited) {
+      return Response.json({ error: 'rate_limited' }, { status: 429,
+        headers: { 'retry-after': String(error.retryAfter) } });
+    }
     if (error instanceof AccountRecoveryDenied) {
       return Response.json({ error: 'recovery_denied' }, { status: 403 });
     }
@@ -352,23 +358,71 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       } catch (error) { return installationError(error); }
     })
     .post('/api/account/recovery-policy', {
-      body: t.Object({ currentPassword: t.String({ minLength: 1, maxLength: 256 }),
+      body: t.Object({ currentPassword: t.Optional(t.String({ minLength: 1, maxLength: 256 })),
         guardianEmail: t.String({ minLength: 3, maxLength: 320 }), recoveryCode,
         previousRecoveryCode: t.Optional(recoveryCode) },
       { additionalProperties: false }),
       response: { 200: t.Object({ generation: t.String(), replayed: t.Boolean() }),
-        401: accountProblem, 403: accountProblem, 409: accountProblem, 503: accountProblem },
+        401: accountProblem, 403: accountProblem, 409: accountProblem, 429: accountProblem, 503: accountProblem },
     }, async ({ request, body }) => {
       const actor = await accountActor(request);
       if (actor instanceof Response) return actor;
-      try { await auth.api.verifyPassword({ headers: request.headers,
-        body: { password: body.currentPassword } }); }
-      catch { return Response.json({ error: 'recovery_denied' }, { status: 403 }); }
+      try {
+        if (body.currentPassword) await auth.api.verifyPassword({ headers: request.headers,
+          body: { password: body.currentPassword } });
+        else await requireStepUp(pool, await accountSession(auth, request));
+      } catch (error) {
+        if (body.currentPassword && error instanceof APIError && error.statusCode < 500) {
+          return Response.json({ error: error.statusCode === 401 ? 'unauthenticated' : 'invalid_password' },
+            { status: error.statusCode === 401 ? 401 : 403, headers: { 'cache-control': 'no-store' } });
+        }
+        return accountFailure(error);
+      }
       try {
         return Response.json(await enrollAccountRecovery(pool, actor.userId, actor.sessionId,
-          body.guardianEmail, body.recoveryCode, body.previousRecoveryCode),
+          body.guardianEmail, body.recoveryCode, body.previousRecoveryCode,
+          { secret: String(auth.options.secret), baseURL: origin }),
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-policy/read', {
+      body: t.Object({}, { additionalProperties: false }),
+      response: { 200: t.Object({ policy: t.Nullable(t.Object({ invitationId: t.String(), guardianEmail: t.String(),
+        state: t.String(), expiresAt: t.String(), hasCode: t.Boolean() })) }),
+      401: accountProblem, 403: accountProblem, 503: accountProblem },
+    }, async ({ request }) => {
+      const actor = await accountActor(request);
+      if (actor instanceof Response) return actor;
+      try { return Response.json(await readRecoveryPolicy(pool, actor.userId, actor.sessionId),
+        { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-guardians/read', {
+      body: t.Object({ cursor: t.Optional(recoveryId), limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+        acceptedOnly: t.Optional(t.Boolean()) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(t.Object({ invitationId: t.String(), ownerEmail: t.String(),
+        state: t.Union([t.Literal('pending'), t.Literal('accepted')]), expiresAt: t.String() })),
+        nextCursor: t.Nullable(t.String()) }), 401: accountProblem, 403: accountProblem, 503: accountProblem },
+    }, async ({ request, body }) => {
+      const actor = await accountActor(request);
+      if (actor instanceof Response) return actor;
+      try { return Response.json(await readGuardianInvitations(pool, actor.userId, actor.sessionId, body.cursor, body.limit, body.acceptedOnly),
+        { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
+    })
+    .post('/api/account/recovery-guardians/:invitationId', {
+      params: t.Object({ invitationId: recoveryId }),
+      body: t.Object({ action: t.Union([t.Literal('accept'), t.Literal('decline'), t.Literal('withdraw')]) },
+        { additionalProperties: false }),
+      response: { 200: t.Object({ state: t.String(), replayed: t.Boolean() }),
+        401: accountProblem, 403: accountProblem, 409: accountProblem, 503: accountProblem },
+    }, async ({ request, body, params }) => {
+      const actor = await accountActor(request);
+      if (actor instanceof Response) return actor;
+      try { return Response.json(await changeGuardianInvitation(pool, params.invitationId,
+        actor.userId, actor.sessionId, body.action), { headers: { 'cache-control': 'no-store' } }); }
+      catch (error) { return recoveryError(error); }
     })
     .post('/api/account/recovery-claims', {
       body: t.Object({ claimId: recoveryId,
