@@ -70,6 +70,18 @@ function httpFixture(home: ReturnType<typeof fixture>) {
   return { app, summaries };
 }
 
+test('A carried count is rejected when an earlier Work read gate closes without a graph or shelf change', async () => {
+  let closed = false;
+  const home = fixture(2, index => !closed || index !== 1, () => true);
+  const first = await readPublicStatusShelf(home.session(undefined, 1), agent, home.store, 'reading');
+  expect(first).toMatchObject({ statusCount: 1, statusCountKind: 'lower-bound' });
+  closed = true;
+  home.changeDisclosure();
+  await expect(readPublicStatusShelf(home.session(first.nextCursor!, 1), agent, home.store, 'reading'))
+    .rejects.toBeInstanceOf(WorkReadMoved);
+  expect(home.measure().candidates).toBe(2);
+});
+
 test.each(['public', 'summary', 'private'])('The HTTP retry wrapper shares the forty-candidate budget per shelf (%s)', async surface => {
   const home = fixture(200, () => false, () => true, surface === 'summary');
   let fenceReads = 0;

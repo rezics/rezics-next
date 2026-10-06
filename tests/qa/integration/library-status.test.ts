@@ -22,8 +22,50 @@ import { InvalidLibraryStatus, LibraryStatusConflict, ReaderLibraryStatusStore,
   StaleLibraryStatus } from '../../../services/main/src/modules/library/status.ts';
 import { prepareLibraryShelves } from '../../../services/main/src/modules/library/backfill.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability/policy.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
+
+test('Public shelf continuation rejects closure of a previously counted Work read gate', async () => {
+  const stack = await startMediaStack('shelf-count-disclosure', { library: true, agents: true });
+  try {
+    const disclosure = new DisclosureStore(stack.accessPool);
+    configureDisclosure(stack.env, disclosure);
+    const member = await stack.member('shelf-reader');
+    const provision = await member.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', displayName: 'Shelf reader', kind: 'person',
+    });
+    expect(provision.status).toBe(201);
+    const { agent } = await provision.json() as { agent: string };
+    expect((await member.send('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
+      { visibility: 'public', expectedVersion: 0 })).status).toBe(200);
+    const status = new ReaderLibraryStatusStore(stack.contentPool);
+    const works = [await stack.publicWork(agent, ['en'], 'First visible book'),
+      await stack.publicWork(agent, ['en'], 'Second visible book')];
+    for (const { work } of works) {
+      await status.write({ agent, work, status: 'reading', startedOn: null, finishedOn: null,
+        expectedVersion: 0, idempotencyKey: randomUUID() });
+      await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [`work:read:${work}`]);
+    }
+    const path = `/v1/agents/${agent.slice(-36)}/shelves/status/reading/works?limit=1`;
+    const response = await stack.call('GET', path);
+    expect(response.status).toBe(200);
+    const first = await response.json() as { items: { work: string }[]; statusCount: number;
+      statusCountKind: string; nextCursor: string };
+    expect(first).toMatchObject({ statusCount: 1, statusCountKind: 'lower-bound' });
+    const before = await status.fence(agent);
+    const work = first.items[0]!.work, scope = `work:read:${work}`;
+    const gate = (await stack.accessPool.query('SELECT authority_epoch::text FROM access.scope_gate WHERE id=$1', [scope])).rows[0];
+    await stack.access.strongCloseScope(scope, gate.authority_epoch);
+    expect(await disclosure.read([{ owner: 'graph', resource: work, component: 'name', work }],
+      ANONYMOUS_VIEWER, 'summary')).toEqual(['tombstone']);
+    expect(await status.fence(agent)).toBe(before);
+    const continued = await stack.call('GET', `${path}&cursor=${encodeURIComponent(first.nextCursor)}`);
+    expect(continued.status).toBe(409);
+    expect(await continued.json()).toMatchObject({ code: 'read_basis_changed' });
+  } finally { await stack.stop(); }
+}, 120_000);
 
 test.each([0, 1])('concurrent library visibility at version %s returns one stale conflict and preserves replay', async expectedVersion => {
   const stack = await startMediaStack('library-visibility-concurrency', { library: true });
