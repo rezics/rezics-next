@@ -11,6 +11,17 @@ import { readProblems, spaceReadResult, spaceWriteResult, writeProblems }
   from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
+import { realmSettings, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid,
+  RealmAdminStale, RealmAdminUnavailable } from '../modules/realm-admin/contract.ts';
+
+export function spaceCreationError(error: unknown): Response {
+  if (error instanceof RealmAdminInvalid) return problem(400, 'invalid_realm_management_request', error.message);
+  if (error instanceof RealmAdminDenied) return problem(403, 'realm_management_denied', error.message);
+  if (error instanceof RealmAdminConflict) return problem(409, 'idempotency_conflict', error.message);
+  if (error instanceof RealmAdminStale) return problem(409, 'stale_realm_management_basis', error.message);
+  if (error instanceof RealmAdminUnavailable) return problem(503, 'realm_management_unavailable', error.message);
+  return addressError(error);
+}
 
 export const openApiOperations = {
   '/v1/spaces': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
@@ -45,12 +56,14 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           handle: t.Optional(t.String({ pattern: '^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$' })),
           visibility: t.Optional(visibility), listing: t.Optional(listing),
         }, { additionalProperties: false }),
-        t.Object({ profile: t.Literal('space-realm-v1'), ...spaceCreateFields },
+        t.Object({ profile: t.Literal('space-realm-v1'), ...spaceCreateFields,
+          initialSettings: t.Optional(realmSettings) },
           { additionalProperties: false }),
         t.Object({ profile: t.Literal('space-realm-v2'), ...spaceCreateFields,
         handle: t.Optional(t.String({ pattern: '^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$' })),
         topics: t.Optional(t.Array(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
           { maxItems: 3, uniqueItems: true })),
+        initialSettings: t.Optional(realmSettings),
         }, { additionalProperties: false }),
       ]),
       response: { 200: t.Union([spaceWriteResult, zoneSpaceWrite]),
@@ -79,7 +92,7 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           request, { name: body.name, language: body.language,
             handle: body.profile !== 'space-realm-v1' ? body.handle : undefined,
             topics: body.profile !== 'space-realm-v1' ? body.topics : undefined,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, initialSettings: body.initialSettings, idempotencyKey }, work.realmAdmin);
         return Response.json({ space: receipt.space, realm: receipt.realm,
           spaceRevision: receipt.spaceRevision, realmRevision: receipt.realmRevision,
           owner: receipt.owner, capabilities: ['realm'],
@@ -87,7 +100,7 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return addressError(error); }
+      } catch (error) { return spaceCreationError(error); }
     })
     .get('/v1/spaces/:space', {
       params: t.Object({ space: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),

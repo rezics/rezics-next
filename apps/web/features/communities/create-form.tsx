@@ -25,11 +25,37 @@ import { CommunityUploadField, type UploadOutcome } from './upload-field.tsx';
 type Rule = { key: string; title: string; body: string };
 type Translation = NameTranslation & { key: string };
 type Visibility = 'public' | 'restricted';
+type SpacePost = ReturnType<typeof browserMainApi>['v1']['spaces']['post'];
+export type CommunityCreationIntent = Extract<Parameters<SpacePost>[0], { profile: 'space-realm-v2' }>;
+type CreationResponse = Awaited<ReturnType<SpacePost>>;
 
-/** A multi-step command keeps its created Realm visible if a later configuration step fails. */
+export function initialCommunitySettings(visibility: Visibility,
+  rules: NonNullable<CommunityCreationIntent['initialSettings']>['rules']): NonNullable<CommunityCreationIntent['initialSettings']> {
+  // The form promises member-only disclosure. API "restricted" exposes public
+  // headers; "private" is the API policy that fulfills this choice.
+  return { visibility: visibility === 'restricted' ? 'private' : 'public',
+    reviewRequired: visibility === 'restricted', reviewMode: visibility === 'restricted' ? 'mandatory' : 'open',
+    whoMaySubmit: visibility === 'restricted' ? 'granted' : 'members', selfJoin: visibility === 'public', rules };
+}
+
+/** Replay the same command to read its receipt and settle pending initialization.
+ * A lost response never restarts browser-side management/settings writes. */
+export async function createCommunityWithReadback(input: CommunityCreationIntent, key: string,
+  send: (input: CommunityCreationIntent, key: string) => Promise<CreationResponse> =
+    (body, operationKey) => browserMainApi().v1.spaces.post(body,
+      { headers: { 'idempotency-key': operationKey } })) {
+  try {
+    const result = await send(input, key);
+    if (result.error?.status !== 503 && !(result.data && 'operationId' in result.data)) return result;
+  } catch { /* An uncertain response is reconciled by the same creation key. */ }
+  return send(input, key);
+}
+
+/** Disclosure, admission and rules are one server-owned creation operation. */
 export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: string; locale: UiLocale }) {
   const router = useRouter();
   const key = useRef<string | null>(null);
+  const creationIntent = useRef<CommunityCreationIntent | null>(null);
   const [name, setName] = useState('');
   // The language the writer chose for the name, description and rules; never the interface locale.
   const [chosenLanguage, setChosenLanguage] = useState<string | null>(null);
@@ -46,7 +72,6 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const [iconSelection, setIconSelection] = useState<string | null>(null);
   const [bannerSelection, setBannerSelection] = useState<string | null>(null);
   const [createdRealm, setCreatedRealm] = useState<string | null>(null);
-  const [configured, setConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<'create' | 'handle' | 'configure' | null>(null);
   const [translationError, setTranslationError] = useState(false);
@@ -66,41 +91,32 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     key.current ??= crypto.randomUUID();
     const operation = key.current;
     const main = browserMainApi();
+    const publishedRules = rules.map((rule, index) =>
+      ruleFromText(`rule-${index + 1}`, rule.title.trim(), rule.body.trim(), nameLanguage));
     let realm = createdRealm;
     let uploading: 'icon' | 'banner' = 'icon';
     try {
       if (!realm) {
-        const { data, error } = await main.v1.spaces.post({ profile: 'space-realm-v2',
-          name: name.trim(), handle, topics: topics.map(topic => topic.id), capabilities: ['realm'], actingSubject },
-        { headers: { 'idempotency-key': `${operation}:create` } });
+        creationIntent.current ??= { profile: 'space-realm-v2', language: nameLanguage,
+          name: name.trim(), handle, topics: topics.map(topic => topic.id), capabilities: ['realm'], actingSubject,
+          initialSettings: initialCommunitySettings(visibility, publishedRules) };
+        const { data, error } = await createCommunityWithReadback(creationIntent.current, `${operation}:create`);
         if (!data || !('realm' in data) || !data.realm) {
-          setFailure(error?.status === 409 || error?.status === 400 ? 'handle' : 'create');
+          const code = error && error.value && typeof error.value === 'object' && 'code' in error.value
+            ? error.value.code : null;
+          if (code === 'alias_conflict' || code === 'invalid_alias') {
+            // A refused alias has no created Realm. A corrected address is a
+            // new command; uncertain outcomes retain their original intent.
+            creationIntent.current = null;
+            key.current = null;
+            setFailure('handle');
+          } else setFailure('create');
           return;
         }
         realm = data.realm;
         setCreatedRealm(realm);
       }
       const id = realm.slice(-36);
-      const enrolled = await main.v1.realms({ realm: id }).management.post({ actingSubject },
-        { headers: { 'idempotency-key': `${operation}:management` } });
-      if (!enrolled.data) throw new Error('management-enrollment-failed');
-      const publishedRules = rules.map((rule, index) =>
-        ruleFromText(`rule-${index + 1}`, rule.title.trim(), rule.body.trim(), nameLanguage));
-      if (!configured) {
-        const current = await main.v1.realms({ realm: id }).settings.get({ query: { actingSubject } });
-        if (!current.data) throw new Error('settings-read-failed');
-        const settings = { ...current.data.settings,
-          visibility, reviewRequired: visibility === 'restricted',
-          reviewMode: visibility === 'restricted' ? 'mandatory' as const : 'open' as const,
-          whoMaySubmit: visibility === 'restricted' ? 'granted' as const : 'members' as const,
-          selfJoin: visibility === 'public', rules: publishedRules };
-        const updated = await main.v1.realms({ realm: id }).settings.put({ actingSubject,
-          expectedGeneration: current.data.generation, expectedRulesRevision: current.data.ruleBasis.revision,
-          reason: 'Set up the community', settings },
-        { headers: { 'idempotency-key': `${operation}:settings` } });
-        if (!updated.data) throw new Error('settings-write-failed');
-        setConfigured(true);
-      }
       let selectedIcon = iconSelection;
       let selectedBanner = bannerSelection;
       if (icon && !selectedIcon) {
@@ -118,7 +134,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const publication = { ...names,
         iconSelection: selectedIcon, bannerSelection: selectedBanner,
         replyPolicy: visibility === 'public' ? 'members-direct' as const : 'moderated' as const,
-        rules: publishedRules,
+        rules: creationIntent.current?.initialSettings?.rules ?? publishedRules,
         count: { kind: 'exact' as const, value: null }, moderators: [] };
       const saved = await main.v1.realms({ realm: id }).profile.put({ profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject, publication },
@@ -140,10 +156,10 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-name">{words.name[locale]}</label>
         <Input id="community-name" required maxLength={120} value={name} {...textAttributes(nameLanguage, name)} onChange={event => setName(event.currentTarget.value)}
-          disabled={Boolean(createdRealm)} /></div>
+          disabled={Boolean(creationIntent.current)} /></div>
       <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-handle">{words.handle[locale]}</label>
         <Input id="community-handle" required pattern="[a-z][a-z0-9-]{2,29}" minLength={3} maxLength={30} value={handle}
-          onChange={event => setHandle(event.currentTarget.value.toLowerCase())} disabled={Boolean(createdRealm)} />
+          onChange={event => setHandle(event.currentTarget.value.toLowerCase())} disabled={Boolean(creationIntent.current)} />
         <span className="text-muted-foreground text-xs font-normal">{words.handleHelp[locale]}</span></div>
     </div>
     <div className="grid gap-1.5 text-sm font-medium"><label htmlFor="community-description">{words.description[locale]}</label>
@@ -153,7 +169,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     <div className="grid justify-items-start gap-1.5 text-sm font-medium">
       <label htmlFor="community-name-language">{words.nameLanguage[locale]}</label>
       <LanguageSelect id="community-name-language" value={nameLanguage} onChange={setChosenLanguage} locale={locale}
-        reading={reading} label={words.nameLanguage[locale]} disabled={Boolean(createdRealm)} />
+        reading={reading} label={words.nameLanguage[locale]} disabled={Boolean(creationIntent.current)} />
       <span className="text-muted-foreground text-xs font-normal">{words.languageHelp[locale]}</span></div>
     {translations.map((translation, index) => <fieldset key={translation.key}
       className="grid gap-3 rounded-xl border border-border p-4">
@@ -185,7 +201,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         { key: crypto.randomUUID(), language: '', name: '', description: '' }])}>
       <PlusIcon aria-hidden="true" />{words.addTranslation[locale]}</Button> : null}
     {translationError ? <p role="alert" className="text-destructive text-sm">{words.translationError[locale]}</p> : null}
-    <fieldset className="grid gap-2">
+    <fieldset className="grid gap-2" disabled={Boolean(creationIntent.current)}>
       <legend className="mb-2 text-sm font-semibold">{words.visibility[locale]}</legend>
       <RadioGroup value={visibility} onValueChange={details => {
         if (details.value === 'public' || details.value === 'restricted') setVisibility(details.value);
@@ -197,11 +213,11 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         </RadioGroupItem>)}
       </RadioGroup>
     </fieldset>
-    <fieldset className="grid gap-2">
+    <fieldset className="grid gap-2" disabled={Boolean(creationIntent.current)}>
       <legend className="text-sm font-semibold">{words.topics[locale]}</legend>
       <TopicPicker locale={locale} value={topics} onChange={setTopics} />
     </fieldset>
-    <fieldset className="grid gap-3">
+    <fieldset className="grid gap-3" disabled={Boolean(creationIntent.current)}>
       <legend className="text-sm font-semibold">{words.rules[locale]}</legend>
       {rules.map((rule, index) => <div key={rule.key} className="grid gap-3 rounded-xl border border-border p-3">
         <div className="flex justify-between gap-2"><span className="font-medium text-sm">{index + 1}</span>

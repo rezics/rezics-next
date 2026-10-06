@@ -6,16 +6,21 @@ import { CancelledActivation, IdempotencyConflict,
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { AliasInvalid, AliasConflict, AliasUnavailable } from '../address/registry.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
-  spaceCreationDigest, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
+  spaceCreationDigest, initialRealmSettings, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
 import { createZoneSpace, zoneSpaceCreationDigest, type CreateZoneSpaceInput } from './create-zone.ts';
+import type { AccessRealmManagement } from '../access/realm-management.ts';
+import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale,
+  RealmAdminUnavailable } from '../realm-admin/contract.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
   & Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>;
 
 export function createAdmittedRealmSpace(env: WorkActivationEnvironment, account: Account,
-  access: Access, request: Request, input: CreateRealmSpaceInput & { idempotencyKey: string }) {
-  return createAdmittedSpace(env, account, access, request, { capability: 'realm', input });
+  access: Access, request: Request, input: CreateRealmSpaceInput & { idempotencyKey: string },
+  realmAdmin?: Pick<AccessRealmManagement, 'initializeCreated'>) {
+  if (input.initialSettings && !realmAdmin) throw new RealmAdminUnavailable('Realm initialization is unavailable');
+  return createAdmittedSpace(env, account, access, request, { capability: 'realm', input }, realmAdmin);
 }
 
 export function createAdmittedZoneSpace(env: WorkActivationEnvironment, account: Account,
@@ -30,6 +35,7 @@ async function createAdmittedSpace(
   request: Request,
   creation: { capability: 'realm'; input: CreateRealmSpaceInput & { idempotencyKey: string } }
     | { capability: 'zone'; input: CreateZoneSpaceInput & { idempotencyKey: string } },
+  realmAdmin?: Pick<AccessRealmManagement, 'initializeCreated'>,
 ): Promise<SpaceCreationReceipt & { replayed: boolean }> {
   const { input } = creation;
   const digest = creation.capability === 'realm'
@@ -92,11 +98,22 @@ async function createAdmittedSpace(
       if (input.handle) await env.addresses?.retireFailedCreation(`https://rezics.com/id/${registered.id}`);
       throw new CancelledActivation('Space creation was cancelled');
     }
+    if (creation.capability === 'realm' && realmAdmin) {
+      const { rules, ...settings } = initialRealmSettings(creation.input);
+      // A sealed graph receipt is only the first owner's outcome. Even on a
+      // replay, settle Access before acknowledging the complete create job.
+      await realmAdmin.initializeCreated(principal, { realm: terminal.realm!,
+        actingSubject: input.actingSubject, creationKey: input.idempotencyKey,
+        creationDigest: digest, settings, rules }, env);
+    }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
       || error instanceof InvalidSpaceInput || error instanceof AliasInvalid
-      || error instanceof AliasConflict || error instanceof AliasUnavailable) throw error;
+      || error instanceof AliasConflict || error instanceof AliasUnavailable
+      || error instanceof RealmAdminInvalid || error instanceof RealmAdminDenied
+      || error instanceof RealmAdminConflict || error instanceof RealmAdminStale
+      || error instanceof RealmAdminUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'space-create');
   }
 }

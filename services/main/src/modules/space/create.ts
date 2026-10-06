@@ -4,6 +4,8 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
+import { checkedInitialRealmSettings, type RealmSettings } from '../realm-admin/contract.ts';
+import { reviewPolicy } from './policy.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -17,7 +19,7 @@ export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-review
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const COMMUNITY_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
 export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 2, handleChecks: 2,
-  graphCommandCalls: 1, deadlineMs: 10_000 } as const;
+  graphCommandCalls: 1, initialRulesBytes: 16_384, deadlineMs: 10_000 } as const;
 
 export class InvalidSpaceInput extends Error {}
 
@@ -29,6 +31,13 @@ export interface CreateRealmSpaceInput {
   handle?: string;
   /** Global SKOS Concepts that describe this community. */
   topics?: string[];
+  /** Founder intent is bound to the creation receipt, including initial rules. */
+  initialSettings?: RealmSettings;
+}
+
+export function initialRealmSettings(input: CreateRealmSpaceInput): RealmSettings {
+  return checkedInitialRealmSettings(input.initialSettings ?? { visibility: 'public',
+    reviewRequired: true, reviewMode: 'mandatory', whoMaySubmit: 'granted', selfJoin: false, rules: [] });
 }
 
 export interface SpaceCreationReceipt {
@@ -52,6 +61,7 @@ export interface SpaceCreationReceipt {
 }
 
 export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
+  const settings = initialRealmSettings(input);
   const language = canonicalLanguage(input.language ?? 'und');
   if (input.name.length < 1 || input.name.length > 120
     || /[\u0000-\u001f\u007f]/u.test(input.name)
@@ -67,7 +77,12 @@ export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
     capabilities: ['realm'], owner: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, membershipPolicy: MEMBERSHIP_POLICY,
     reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
-    ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }));
+    ...input.topics?.length ? { topics: [...input.topics].sort() } : {},
+    // Preserve old callers' digests. Explicit settings bind all founder intent;
+    // localized label object ordering does not change that intent.
+    ...input.initialSettings ? { initialSettings: JSON.parse(JSON.stringify(settings,
+      (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)) } : {} }));
 }
 
 export async function validateTopics(env: WorkActivationEnvironment, topics: readonly string[]): Promise<void> {
@@ -157,11 +172,14 @@ async function validateCandidate(env: WorkActivationEnvironment, space: string, 
   ]);
 }
 
-/** Create one public Space and its distinct Realm capability in one graph position. */
+/** Create the intended Space and Realm policy in one graph position. */
 export async function createRealmSpace(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: CreateRealmSpaceInput): Promise<SpaceCreationReceipt> {
   const digest = spaceCreationDigest(input);
   const language = canonicalLanguage(input.language ?? 'und')!;
+  const settings = initialRealmSettings(input);
+  const disclosure = settings.visibility === 'private' ? 'private' : 'public';
+  const policy = reviewPolicy(settings.reviewMode!);
   if (admission.action !== 'space.create' || admission.scope !== 'space:create:root'
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Space admission differs from intent');
@@ -179,10 +197,11 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
-      capabilities: ['realm'], disclosure: 'public' }, SPACE_REALM_PROFILE);
+      capabilities: ['realm'], disclosure }, SPACE_REALM_PROFILE);
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
-      membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: REVIEW_POLICY,
+      membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: policy,
+      initialSettings: settings,
       ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
@@ -200,14 +219,17 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
-          rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public ;
+          rv:realmCapability ${iri(realm)} ; rv:disclosure rv:${disclosure === 'private' ? 'Private' : 'Public'} ;
+          rv:listing "listed" ;
           rdfs:label ${lit(input.name)}@${language} ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
-          rv:reviewPolicy ${iri(REVIEW_POLICY)} ; rv:head ${iri(realmRevision)} .
+          rv:visibility ${lit(settings.visibility)} ; rv:reviewMode ${lit(settings.reviewMode!)} ;
+          rv:historyVisibility "everything" ; rv:admissionMode ${lit(settings.selfJoin ? 'open' : 'invitation')} ;
+          rv:reviewPolicy ${iri(policy)} ; rv:head ${iri(realmRevision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;

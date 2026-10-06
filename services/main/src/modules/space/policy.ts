@@ -26,7 +26,8 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
     GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
       ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure ?disclosure .
       OPTIONAL { ${iri(realm)} rv:head ?realmRevision }
-      OPTIONAL { ${iri(realm)} rv:visibility ?visibility ; rv:reviewMode ?mode ; rv:realmPolicyHead ?head }
+      OPTIONAL { ${iri(realm)} rv:visibility ?visibility ; rv:reviewMode ?mode }
+      OPTIONAL { ${iri(realm)} rv:realmPolicyHead ?head }
       OPTIONAL { ?space rv:listing ?listing }
       OPTIONAL { ${iri(realm)} rv:historyVisibility ?history }
       OPTIONAL { ${iri(realm)} rv:admissionMode ?admission }

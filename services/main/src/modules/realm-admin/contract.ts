@@ -1,7 +1,8 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { readId, readUuid } from '../work/read-contract.ts';
-import { localizedCommunityRule, MAX_RULES } from '../realm-profile/schema.ts';
+import { localizedCommunityRule, MAX_RULES, checkedCommunityRules } from '../realm-profile/schema.ts';
+import { Value } from 'typebox/value';
 
 // Management uses indexed Access reads. Settings also deliver one pending policy
 // receipt through a bounded graph command; no Realm contents are scanned.
@@ -73,6 +74,24 @@ export const realmSettings = t.Object({ visibility: t.Union([t.Literal('public')
   selfJoin: t.Optional(t.Boolean()),
   rules: t.Array(localizedCommunityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
 export type RealmSettings = Static<typeof realmSettings>;
+/** Creation validates before any owner effect, using the settings command's
+ * semantic constraints as well as its served schema. */
+export function checkedInitialRealmSettings(input: unknown): RealmSettings {
+  if (!Value.Check(realmSettings, input)) throw new RealmAdminInvalid('Invalid Realm settings');
+  const reviewMode = input.reviewMode ?? (input.reviewRequired ? 'mandatory' : 'open');
+  if (input.reviewRequired !== (reviewMode === 'mandatory')) {
+    throw new RealmAdminInvalid('Review mode and reviewRequired disagree');
+  }
+  try { checkedCommunityRules(input.rules); }
+  catch { throw new RealmAdminInvalid('Rules need unique identities and valid localized text'); }
+  if (Buffer.byteLength(JSON.stringify({ profile: 'realm-settings-rules-v2',
+    public: input.visibility !== 'private', rules: input.rules })) > 16_384) {
+    throw new RealmAdminInvalid('Rules exceed the governance document budget');
+  }
+  return { visibility: input.visibility, reviewRequired: input.reviewRequired,
+    reviewMode, whoMaySubmit: input.whoMaySubmit, selfJoin: input.selfJoin ?? false,
+    rules: input.rules };
+}
 export const settingsCommand = t.Object({ ...commandFields, settings: realmSettings,
   expectedRulesRevision: t.Nullable(generation) }, { additionalProperties: false });
 export type SettingsCommand = Static<typeof settingsCommand>;
