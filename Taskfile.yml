@@ -278,11 +278,11 @@ tasks:
   # Goal
 
   goal:
-    desc: Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset.
+    desc: Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 6 when it is unset.
     dir: '{{.ROOT_DIR}}'
     silent: true
     cmds:
-      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-5}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
+      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-6}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
 
   # Checks and tests
 
