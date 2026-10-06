@@ -410,6 +410,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/zones/{id}/presentation', 'read'],
   ['GET', '/v1/zones/{id}/query-blocks', 'read'],
   ['GET', '/v1/zones/{id}/revisions/{revision}', 'read'],
+  ['GET', '/v1/zones/{id}/showcase-editor', 'read'],
   ['GET', '/v2/works/{id}/source-supports', 'read'],
   ['GET', '/v2/works/{id}/source-supports/{binding}', 'read'],
   ['WS', '/v1/private-queries', 'read'],
