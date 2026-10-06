@@ -109,11 +109,6 @@ try {
     }
     throw new Error('Realm scale projection exceeded 1600 resumable ticks');
   };
-  await stack.accessPool.query(
-    `INSERT INTO access.platform_administrator(principal_id,role,receipt,request_digest,idempotency_key)
-    VALUES($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
-    [home.author.principalId, `urn:rezics:access-receipt:${'a'.repeat(64)}`, 'a'.repeat(64)],
-  );
   const actor = (
     await api.command<{ agent: string }>('g1034:actor', {
       method: 'POST',
@@ -125,8 +120,9 @@ try {
       },
     })
   ).agent;
-  await stack.accessPool.query(`SELECT access.seed_platform_grants(principal_id,receipt)
-    FROM access.platform_administrator WHERE singleton`);
+  await stack.accessPool.query('SELECT access.seed_platform_grants($1,$2)', [
+    home.author.principalId, `urn:rezics:access-receipt:${'a'.repeat(64)}`,
+  ]);
   const reader = await home.provision('Rank reader', home.reader.token);
   const realm = (
     await api.command<{ realm: string }>('g1034:realm', {

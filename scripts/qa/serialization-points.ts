@@ -30,7 +30,8 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     key: 'platform-grant-continuity',
     class: 'per-object management revision',
-    reason: 'The platform grant authority is one governance unit; simultaneous removals must retain its permanent holder.',
+    reason:
+      'The platform grant authority is one governance unit; simultaneous removals must retain its permanent holder.',
     writers: [access + '1290_platform_grants.sql'],
   },
   {
@@ -234,12 +235,9 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'access.platform_administrator',
     class: 'operator/startup',
-    reason: 'Startup retains the first designation for the legacy rate-limit reader; Access authority comes from grants.',
-    writers: [
-      access + '983_platform_administrator.sql',
-      access + '1290_platform_grants.sql',
-      main + 'modules/access/platform-administrator.ts',
-    ],
+    reason:
+      'Historical designation is transferred to immutable grant episodes in 1290 and dropped in 1291.',
+    writers: [access + '983_platform_administrator.sql', access + '1290_platform_grants.sql'],
   },
   {
     relation: 'public.rezics_account_operator_bootstrap',

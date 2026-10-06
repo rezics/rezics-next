@@ -120,7 +120,9 @@ test('service is only an allowlisted workload whose subject is the client, in on
     RATE_LIMIT_COST_V1.representations + 1, RATE_LIMIT_COST_V1.roleRowsPerRepresentation + 1,
   ]);
   expect(member.calls[0]!.sql).toContain('account_issuer');
-  expect(member.calls[0]!.sql).toContain('platform_administrator');
+  expect(member.calls[0]!.sql).toContain('access.read_platform_permissions(p.id)');
+  expect(member.calls[0]!.sql).toContain("permission.action = 'platform:use:platform-admin'");
+  expect(member.calls[0]!.sql).not.toContain('FROM access.platform_administrator');
 
   const sameSubject = scriptedPool(memberRow);
   expect(await new PostgresRateLimitStore(sameSubject.pool, options).classify({

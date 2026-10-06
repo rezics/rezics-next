@@ -61,10 +61,10 @@ interface ClassificationRow {
 const CLASSIFICATION_SQL = `WITH principal AS (
   SELECT p.id, p.active,
     p.first_seen_at > now() - interval '7 days' AS newcomer,
-    EXISTS (
-      SELECT 1 FROM access.platform_administrator administrator
-      WHERE administrator.singleton AND administrator.principal_id = p.id
-    ) AS platform_administrator
+    CASE WHEN p.active THEN EXISTS (
+      SELECT 1 FROM access.read_platform_permissions(p.id) permission
+      WHERE permission.action = 'platform:use:platform-admin'
+    ) ELSE false END AS platform_administrator
   FROM access.principal p
   WHERE p.account_issuer = $1 AND p.account_subject = $2
 ),
@@ -128,8 +128,9 @@ SELECT
   COALESCE((SELECT bool_or(trusted) FROM role_rows), false) AS trusted`;
 
 /** One statement classifies a token: the principal by its unique account key,
- * then at most 65 represented Agents and 65 role rows for each. Overflow is
- * unavailable, never a trust upgrade. The hook caches the result for at most
+ * the bounded live platform grant proof, then at most 65 represented Agents
+ * and 65 role rows for each. Overflow is unavailable, never a trust upgrade.
+ * The hook caches the result for at most
  * the verified token's lifetime. Consume uses one atomic PK upsert; an expired
  * key resets lazily. */
 export class PostgresRateLimitStore implements RateLimitStore {

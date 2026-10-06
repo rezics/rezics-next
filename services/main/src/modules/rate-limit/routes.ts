@@ -203,6 +203,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations', 'read'],
   ['GET', '/v1/main-versions/{mainVersion}/selection', 'read'],
   ['GET', '/v1/me/acting-contexts', 'read'],
+  ['GET', '/v1/me/platform-access', 'read'],
   ['GET', '/v1/me/agents/{agent}/works', 'read'],
   ['GET', '/v1/me/agents/{agent}/works/{id}', 'read'],
   ['GET', '/v1/me/agents/{agent}/works/{id}/chapters', 'read'],

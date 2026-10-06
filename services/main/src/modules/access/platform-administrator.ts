@@ -97,7 +97,7 @@ export interface PlatformAdministratorProof {
 }
 
 /** The bounded platform grant proof plus one exact live controller. Its digest
- * pins grant and group episodes; the legacy singleton is never authority. */
+ * pins immutable grant and group episodes. */
 export async function platformAdministratorProof(
   client: Pick<PoolClient, 'query'>,
   principalId: string,
@@ -203,7 +203,7 @@ export type FirstAdministratorResult =
   | { status: 'granted' | 'ignored'; receipt: string };
 
 /** Access owner startup command. The recovery singleton serializes simultaneous
- * first boots. Role and audit receipt commit together; configuration is never
+ * first boots. Grants and audit receipts commit together; configuration is never
  * authority again once a designation exists, even for the same subject. */
 export class AccessPlatformAdministrators {
   constructor(private readonly pool: Pool) {}
@@ -224,13 +224,21 @@ export class AccessPlatformAdministrators {
         )
       ).rows[0];
       const existing = (
-        await client.query<{ receipt: string }>(
-          'SELECT receipt FROM access.platform_administrator WHERE singleton LIMIT 1',
+        await client.query<{ principal_id: string; receipt: string }>(
+          `SELECT g.principal_id,e.receipt FROM access.platform_grant_episode e
+          JOIN access.principal_permission_grant g ON g.id = e.principal_grant_id
+          WHERE e.permission = 'platform:grant' AND e.principal_grant_id IS NOT NULL
+          ORDER BY e.created_at,e.id LIMIT 1`,
         )
       ).rows[0];
       if (existing) {
-        await client.query(`SELECT access.seed_platform_grants(principal_id,receipt)
-          FROM access.platform_administrator WHERE singleton`);
+        // Complete assignment ceilings if the holder provisioned its Agent
+        // after bootstrap. The seed never reactivates a terminal grant.
+        if (fence?.open)
+          await client.query('SELECT access.seed_platform_grants($1,$2)', [
+            existing.principal_id,
+            existing.receipt,
+          ]);
         await client.query('COMMIT');
         log('PLATFORM_FIRST_ADMIN_ACCOUNT ignored: a platform administrator already exists');
         return { status: 'ignored', receipt: existing.receipt };
@@ -250,12 +258,6 @@ export class AccessPlatformAdministrators {
         .update(JSON.stringify(['platform-first-administrator-v1', issuer, subject]))
         .digest('hex');
       const receipt = `urn:rezics:access-receipt:${digest}`;
-      await client.query(
-        `INSERT INTO access.platform_administrator
-        (singleton,principal_id,role,receipt,request_digest,idempotency_key)
-        VALUES (true,$1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
-        [principal.id, receipt, digest],
-      );
       await client.query('SELECT access.seed_platform_grants($1,$2)', [principal.id, receipt]);
       await client.query('COMMIT');
       log(`Access designated the first platform administrator; audit receipt ${receipt}`);

@@ -51,6 +51,8 @@ test('G-543: every current OpenAPI operation has an explicit policy and path bou
   expect(rateLimitFamily('POST', '/v1/new-unclassified-operation')).toBeUndefined();
   expect(rateLimitFamily('GET', '/v1/unclassified-read')).toBeUndefined();
   expect(rateLimitFamily('HEAD', '/v1/works')).toBeNull();
+  expect(rateLimitFamily('GET', '/v1/me/platform-access')).toBeNull();
+  expect(rateLimitFamily('HEAD', '/v1/me/platform-access')).toBeNull();
   expect(rateLimitFamily('POST', '/v1/queries')).toBe('search');
   expect(rateLimitFamily('POST', '/v1/queries/page')).toBe('search');
   expect(rateLimitFamily('PUT', '/v1/media/uploads/123/bytes')).toBe('upload');

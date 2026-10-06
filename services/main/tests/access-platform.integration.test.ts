@@ -36,6 +36,12 @@ import {
   openApiOperations as savedOperations,
 } from '../src/routes/saved-filters.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { PostgresRateLimitStore } from '../src/modules/rate-limit/store.ts';
+import {
+  PLATFORM_COST,
+  PlatformAccessUnavailable,
+  readPlatformPermissions,
+} from '../src/modules/access/platform-permissions.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const state = join(root, '.temp', `platform-access-${randomUUID()}`);
@@ -49,6 +55,13 @@ let exposure: AccessExposure;
 let app: ReturnType<typeof buildApp>;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()) });
+const rateStore = (owner: Pool = pool) =>
+  new PostgresRateLimitStore(owner, {
+    secret: 'platform-proof-fixture-secret-at-least-32',
+    serviceClientIds: new Set(),
+    trustedProxyPeers: new Set(),
+    clientIpHeader: 'x-forwarded-for',
+  });
 
 beforeAll(async () => {
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -421,11 +434,12 @@ test('assignment beyond the ceiling and assignment by a mere platform user are r
   ).rejects.toBeInstanceOf(PlatformGrantDenied);
 });
 
-test('administrator authority uses resource grants while the legacy singleton remains', async () => {
+test('administrator authority survives upgrade and removal of the legacy singleton', async () => {
   expect(
-    (await pool.query('SELECT count(*)::int AS count FROM access.platform_administrator')).rows[0]
-      .count,
-  ).toBe(1);
+    (await pool.query('SELECT to_regclass($1) AS relation', ['access.platform_administrator']))
+      .rows[0].relation,
+  ).toBeNull();
+  expect(await rateStore().classify(admin.principal)).toBe('trusted');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -455,6 +469,118 @@ test('administrator authority uses resource grants while the legacy singleton re
     client.release();
   }
 });
+
+test('rate-limit trust follows live platform-admin grants, expiry and principal activation in one query', async () => {
+  const recipient = await person();
+  const calls: string[] = [];
+  const store = rateStore({
+    query: async (sql: string, params: unknown[]) => {
+      calls.push(sql);
+      return pool.query(sql, params);
+    },
+  } as unknown as Pool);
+  expect(await store.classify(recipient.principal)).toBe('new-account');
+  const designation = await grants.platform.create(
+    await context(),
+    randomUUID(),
+    'platform:use:platform-admin',
+    { principalId: recipient.id },
+    new Date(Date.now() + 60_000),
+    receipt(),
+  );
+  expect(await store.classify(recipient.principal)).toBe('trusted');
+  await pool.query('UPDATE access.principal SET active=false WHERE id=$1', [recipient.id]);
+  expect(await store.classify(recipient.principal)).toBe('new-account');
+  await pool.query('UPDATE access.principal SET active=true WHERE id=$1', [recipient.id]);
+  await grants.platform.revoke(
+    await context(),
+    designation.grant.id,
+    designation.grant.generation,
+    receipt(),
+  );
+  expect(await store.classify(recipient.principal)).toBe('new-account');
+  await grants.platform.create(
+    await context(),
+    randomUUID(),
+    'platform:use:platform-admin',
+    { principalId: recipient.id },
+    new Date(Date.now() + 300),
+    receipt(),
+  );
+  expect(await store.classify(recipient.principal)).toBe('trusted');
+  await Bun.sleep(350);
+  expect(await store.classify(recipient.principal)).toBe('new-account');
+  expect(calls).toHaveLength(6);
+  expect(
+    calls.every(
+      (sql) =>
+        sql.includes('access.read_platform_permissions') &&
+        !sql.includes('FROM access.platform_administrator'),
+    ),
+  ).toBe(true);
+});
+
+test('fresh startup serializes first designation and configuration never resurrects a revoked grant', async () => {
+  const database = `platform_bootstrap_${randomUUID().replaceAll('-', '')}`;
+  await pool.query(`CREATE DATABASE ${database}`);
+  const bootstrap = new Pool({ ...pool.options, database, max: 4 });
+  try {
+    const client = await bootstrap.connect();
+    try {
+      await client.query('BEGIN');
+      for (const file of schemaFiles(root, 'access'))
+        await client.query(
+          readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'),
+        );
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+    const first = await person(bootstrap),
+      second = await person(bootstrap);
+    const administrators = new AccessPlatformAdministrators(bootstrap);
+    const results = await Promise.all(
+      [first, second].map((candidate) =>
+        administrators.designateFirst(
+          candidate.principal.issuer,
+          candidate.principal.subject,
+          () => undefined,
+        ),
+      ),
+    );
+    expect(results.map((result) => result.status).sort()).toEqual(['granted', 'ignored']);
+    expect(results[0]).toHaveProperty('receipt');
+    expect(results[1]).toHaveProperty(
+      'receipt',
+      'receipt' in results[0]! ? results[0].receipt : undefined,
+    );
+    const holder = results[0]!.status === 'granted' ? first : second;
+    const other = holder === first ? second : first;
+    expect(await rateStore(bootstrap).classify(holder.principal)).toBe('trusted');
+    expect(await rateStore(bootstrap).classify(other.principal)).toBe('new-account');
+    await bootstrap.query(
+      `UPDATE access.principal_permission_grant SET active=false,generation=generation+1
+      WHERE principal_id=$1 AND action='platform:use:platform-admin'`,
+      [holder.id],
+    );
+    await administrators.designateFirst(
+      other.principal.issuer,
+      other.principal.subject,
+      () => undefined,
+    );
+    expect(await rateStore(bootstrap).classify(holder.principal)).toBe('new-account');
+    expect(await rateStore(bootstrap).classify(other.principal)).toBe('new-account');
+    expect(
+      (
+        await bootstrap.query(`SELECT count(*)::int AS count FROM access.principal_permission_grant
+      WHERE action='platform:grant'`)
+      ).rows[0].count,
+    ).toBe(1);
+  } finally {
+    await bootstrap.end();
+    await pool.query(`DROP DATABASE ${database}`);
+  }
+}, 60_000);
 
 test('group platform grants follow the private membership episode and inherited group path', async () => {
   const recipient = await person(),
@@ -498,7 +624,45 @@ test('group platform grants follow the private membership episode and inherited 
     new Date(Date.now() + 60_000),
     receipt(),
   );
-  expect((await exposure.summary(recipient.principal)).groups).toEqual(['saved-views']);
+  await grants.platform.create(
+    await context(),
+    randomUUID(),
+    'platform:use:platform-admin',
+    { groupId: parent },
+    new Date(Date.now() + 60_000),
+    receipt(),
+  );
+  expect((await exposure.summary(recipient.principal)).groups).toEqual([
+    'platform-admin',
+    'saved-views',
+  ]);
+  expect(await rateStore().classify(recipient.principal)).toBe('trusted');
+  // SQL must retain the previous proof witness so saved admissions survive the
+  // evaluator migration, including the exact membership serialization.
+  const members = (
+    await pool.query(
+      `SELECT m.id,m.group_id,m.generation,m.private_membership_generation
+    FROM access.private_group_member m WHERE m.principal_id=$1 ORDER BY m.id`,
+      [recipient.id],
+    )
+  ).rows;
+  const path = (
+    await pool.query(`SELECT id,generation FROM access.recipient_group WHERE id=ANY($1::uuid[])`, [
+      [child, parent],
+    ])
+  ).rows;
+  const generationOf = (id: string) => path.find((group) => group.id === id).generation;
+  const episode = (
+    await pool.query('SELECT receipt FROM access.platform_grant_episode WHERE group_grant_id=$1', [
+      inherited.grant.id,
+    ])
+  ).rows[0];
+  const proof = (await readPlatformPermissions(pool, recipient.id)).find(
+    (grant) => grant.id === inherited.grant.id,
+  )!;
+  expect(proof.witness).toBe(
+    `${episode.receipt}:${inherited.grant.generation}:${child}:${generationOf(child)}:${parent}:${generationOf(parent)}:${JSON.stringify(members)}`,
+  );
   // The older work.create manager shares these tables but cannot inventory or
   // revoke a platform permission through its narrower authority boundary.
   await pool.query(
@@ -529,13 +693,51 @@ test('group platform grants follow the private membership episode and inherited 
       inherited.grant.generation,
     ),
   ).rejects.toBeInstanceOf(GroupDenied);
-  expect((await exposure.summary(recipient.principal)).groups).toEqual(['saved-views']);
+  expect((await exposure.summary(recipient.principal)).groups).toEqual([
+    'platform-admin',
+    'saved-views',
+  ]);
   await pool.query(
     `UPDATE access.private_membership SET state='left',generation=generation+1,
     terms_revision=NULL,consent_reference=NULL WHERE id=$1`,
     [membership],
   );
   expect((await exposure.summary(recipient.principal)).groups).toEqual([]);
+  expect(await rateStore().classify(recipient.principal)).toBe('new-account');
+  // Even a direct matching grant cannot short-circuit a malformed oversized
+  // membership proof into a trust upgrade.
+  await grants.platform.create(
+    await context(),
+    randomUUID(),
+    'platform:use:platform-admin',
+    { principalId: recipient.id },
+    new Date(Date.now() + 60_000),
+    receipt(),
+  );
+  await pool.query(
+    `UPDATE access.private_membership SET state='joined',generation=generation+1,
+    terms_revision='terms',consent_reference=$2 WHERE id=$1`,
+    [membership, consent],
+  );
+  const current = (
+    await pool.query('SELECT generation FROM access.private_membership WHERE id=$1', [membership])
+  ).rows[0];
+  for (let index = 0; index < PLATFORM_COST.groups + 1; index++) {
+    const group = randomUUID();
+    await pool.query(
+      "INSERT INTO access.recipient_group(id,scope_id) VALUES ($1,'work:create:root')",
+      [group],
+    );
+    await pool.query(
+      `INSERT INTO access.private_group_member(id,group_id,principal_id,private_membership_id,
+      private_membership_generation,assigned_by_principal) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [randomUUID(), group, recipient.id, membership, current.generation, admin.id],
+    );
+  }
+  await expect(readPlatformPermissions(pool, recipient.id)).rejects.toBeInstanceOf(
+    PlatformAccessUnavailable,
+  );
+  await expect(rateStore().classify(recipient.principal)).rejects.toMatchObject({ code: '54000' });
 });
 
 test('individual operation grants open only that operation and summary retains at most 64', async () => {
