@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { assertCommandRace } from './command-race.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -12,7 +12,7 @@ import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_OBSERVATION_ID } from '../../../servi
 import { EXPERIENCE_AGGREGATE_PROFILES, type ExperienceAggregateProfile } from '../../../services/main/src/modules/rating/experience-reduction.ts';
 import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from '../../../services/main/src/modules/rating/experience-aggregate.ts';
 import { DATASET, GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { accessStateCoverage, accessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import { accessStateTables, type AccessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { ratingAggregateBackground } from './rating-aggregate-background.ts';
 
 interface Opinion { observation: string; observationRevision: string; context: string; value: number | null;
@@ -295,41 +295,94 @@ export async function exerciseRatingAggregates(f: Fixture) {
   writeFileSync(file, bytes);
   // Reverse faults: graph is current, while the independent private owner loses
   // or rolls back one head. Neither direction may silently shrink the population.
-  const inventoryTablesBefore = await accessStateTables(accessPool);
-  // Each out-of-band head write appends one unfolded row to both source change logs.
-  const sourceChanges: readonly string[] = ['access.discovery_source_change', 'access.also_enjoyed_source_change'];
-  const logged = (writes: number) => BigInt(sourceChanges.length * writes);
-  const inventoryCoverage = { before: inventoryTablesBefore.state,
-    missing: { count: '', digest: '' }, rolledBack: { count: '', digest: '' }, restored: { count: '', digest: '' } };
-  const removed = (await accessPool.query('DELETE FROM access.rating_aggregate_head WHERE observation = $1 RETURNING *', [tied.observation])).rows[0]!;
-  expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
-  inventoryCoverage.missing = await accessStateCoverage(accessPool);
-  expect(inventoryCoverage.missing.digest).not.toBe(inventoryCoverage.before.digest);
-  expect(BigInt(inventoryCoverage.missing.count)).toBe(BigInt(inventoryCoverage.before.count) - 1n + logged(1));
-  await accessPool.query('INSERT INTO access.rating_aggregate_head SELECT (jsonb_populate_record(NULL::access.rating_aggregate_head, $1::jsonb)).*', [JSON.stringify(removed)]);
-  await accessPool.query('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
-    [tied.observation, priorInventoryHead.revision, priorInventoryHead.admission_id]);
-  expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
-  inventoryCoverage.rolledBack = await accessStateCoverage(accessPool);
-  expect(BigInt(inventoryCoverage.rolledBack.count)).toBe(BigInt(inventoryCoverage.before.count) + logged(3));
-  expect(inventoryCoverage.rolledBack.digest).not.toBe(inventoryCoverage.before.digest);
-  await accessPool.query('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
-    [tied.observation, removed.revision, removed.admission_id]);
-  const inventoryTablesRestored = await accessStateTables(accessPool);
-  inventoryCoverage.restored = inventoryTablesRestored.state;
-  expect(BigInt(inventoryCoverage.restored.count)).toBe(BigInt(inventoryCoverage.before.count) + logged(4));
-  expect(inventoryTablesRestored.catalogDigest).toBe(inventoryTablesBefore.catalogDigest);
-  // These out-of-band writes have no classified rating outbox event. Their
-  // source changes must survive restoration of the authoritative head.
-  expect((await accessPool.query("SELECT current_setting('rezics.discovery_rating_outbox',true) AS marker"))
-    .rows[0]!.marker).not.toBe('on');
-  for (const [table, coverage] of Object.entries(inventoryTablesBefore.tables)) {
-    if (sourceChanges.includes(table)) {
-      expect(BigInt(inventoryTablesRestored.tables[table]!.count)).toBe(BigInt(coverage.count) + 4n);
-      expect(inventoryTablesRestored.tables[table]?.digest).not.toBe(coverage.digest);
-    } else expect(inventoryTablesRestored.tables[table]).toEqual(coverage);
+  // Folders consume logs and advance their fence/key rows independently of
+  // authoritative heads. Compare durable state, and check each trigger's own
+  // uncommitted contribution before a folder can see or consume it.
+  const foldedTables = [
+    'access.discovery_source_change', 'access.also_enjoyed_source_change',
+    'access.discovery_source_fence', 'access.also_enjoyed_source_fence',
+    'access.discovery_source_key',
+  ];
+  function inventoryState(coverage: AccessStateTables) {
+    const digest = createHash('sha256').update(coverage.catalogDigest);
+    let count = 0n;
+    for (const [table, rows] of Object.entries(coverage.tables)) {
+      if (foldedTables.includes(table)) continue;
+      count += BigInt(rows.count);
+      digest.update(JSON.stringify([table, rows.count, rows.digest]));
+    }
+    return { count: count.toString(), digest: digest.digest('hex') };
   }
-  expect(inventoryCoverage.restored.digest).not.toBe(inventoryCoverage.before.digest);
+  const sourceChanges: { discovery: { context_key: string; statement: string }[];
+    alsoEnjoyed: { privacy: boolean }[] }[] = [];
+  async function headWrite(sql: string, values: unknown[], privacy: boolean) {
+    const client = await accessPool.connect();
+    try {
+      await client.query('BEGIN');
+      expect((await client.query("SELECT current_setting('rezics.discovery_rating_outbox',true) AS marker"))
+        .rows[0]!.marker).not.toBe('on');
+      const result = await client.query(sql, values);
+      expect(result.rowCount).toBe(1);
+      const discovery = (await client.query<{ context_key: string; statement: string }>(
+        `SELECT context_key, statement FROM access.discovery_source_change
+         WHERE xmin = pg_current_xact_id()::text::xid`)).rows;
+      const alsoEnjoyed = (await client.query<{ privacy: boolean }>(
+        `SELECT privacy FROM access.also_enjoyed_source_change
+         WHERE xmin = pg_current_xact_id()::text::xid`)).rows;
+      expect(discovery).toEqual([{ context_key: '', statement: '' }]);
+      expect(alsoEnjoyed).toEqual([{ privacy }]);
+      sourceChanges.push({ discovery, alsoEnjoyed });
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
+  }
+  const inventoryCoverage = { before: { count: '', digest: '' },
+    missing: { count: '', digest: '' }, rolledBack: { count: '', digest: '' }, restored: { count: '', digest: '' },
+    foldedTables, sourceChanges };
+  const projectionFence = await accessPool.connect();
+  try {
+    await projectionFence.query('BEGIN');
+    // Realm creation projects its directory asynchronously. Hold its writes
+    // while measuring owner recovery so the original per-table check stays exact.
+    await projectionFence.query('LOCK TABLE access.realm_directory IN SHARE MODE');
+    const inventoryTablesBefore = await accessStateTables(accessPool);
+    inventoryCoverage.before = inventoryState(inventoryTablesBefore);
+    const removed = (await headWrite('DELETE FROM access.rating_aggregate_head WHERE observation = $1 RETURNING *',
+      [tied.observation], true)).rows[0]!;
+    expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
+    const missingTables = await accessStateTables(accessPool);
+    inventoryCoverage.missing = inventoryState(missingTables);
+    expect(inventoryCoverage.missing.digest).not.toBe(inventoryCoverage.before.digest);
+    expect(BigInt(inventoryCoverage.missing.count), JSON.stringify(Object.entries(missingTables.tables)
+      .filter(([table, rows]) => !foldedTables.includes(table)
+        && JSON.stringify(rows) !== JSON.stringify(inventoryTablesBefore.tables[table])))).toBe(BigInt(inventoryCoverage.before.count) - 1n);
+    await headWrite('INSERT INTO access.rating_aggregate_head SELECT (jsonb_populate_record(NULL::access.rating_aggregate_head, $1::jsonb)).*',
+      [JSON.stringify(removed)], false);
+    await headWrite('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
+      [tied.observation, priorInventoryHead.revision, priorInventoryHead.admission_id], false);
+    expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
+    const rolledBackTables = await accessStateTables(accessPool);
+    inventoryCoverage.rolledBack = inventoryState(rolledBackTables);
+    expect(inventoryCoverage.rolledBack.count, JSON.stringify(Object.entries(rolledBackTables.tables)
+      .filter(([table, rows]) => !foldedTables.includes(table)
+        && JSON.stringify(rows) !== JSON.stringify(inventoryTablesBefore.tables[table])))).toBe(inventoryCoverage.before.count);
+    expect(inventoryCoverage.rolledBack.digest).not.toBe(inventoryCoverage.before.digest);
+    await headWrite('UPDATE access.rating_aggregate_head SET revision = $2, admission_id = $3 WHERE observation = $1',
+      [tied.observation, removed.revision, removed.admission_id], false);
+    const inventoryTablesRestored = await accessStateTables(accessPool);
+    inventoryCoverage.restored = inventoryState(inventoryTablesRestored);
+    expect(inventoryTablesRestored.catalogDigest).toBe(inventoryTablesBefore.catalogDigest);
+    for (const [table, coverage] of Object.entries(inventoryTablesBefore.tables)) {
+      if (!foldedTables.includes(table)) expect(inventoryTablesRestored.tables[table], table).toEqual(coverage);
+    }
+    expect(sourceChanges).toHaveLength(4);
+    expect(inventoryCoverage.restored).toEqual(inventoryCoverage.before);
+  } finally {
+    try { await projectionFence.query('ROLLBACK'); } finally { projectionFence.release(); }
+  }
   await all('private-inventory-restored', finalMeans);
   await accessPool.query('UPDATE access.rating_aggregate_head SET principal_id = $2 WHERE observation = $1', [tied.observation, f.principalB]);
   expect((await aggregate(EXPERIENCE_AGGREGATE_PROFILES[0])).status).toBe(503);
@@ -408,7 +461,9 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   for (const node of nodes((plans.at(-1) as { Plan: Record<string, unknown> }[])[0]!.Plan)
     .filter(node => node['Relation Name'] === 'admission')) {
-    expect(node['Index Name']).toBe('admission_id_principal_unique');
+    // Both unique indexes bound an admission-ID probe to one row; planner
+    // cost estimates may choose either as background rows and statistics change.
+    expect(['admission_id_principal_unique', 'admission_pkey']).toContain(node['Index Name']);
     expect(node['Actual Rows']).toBeLessThanOrEqual(1);
   }
   await unrelated.clear();
