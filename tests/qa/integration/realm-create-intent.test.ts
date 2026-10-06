@@ -11,6 +11,8 @@ import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts
 import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
+import { withRealmPermit } from '../../../services/main/src/modules/access/realm-management-policy.ts';
+import { realmCreationPolicyReceipt } from '../../../services/main/src/modules/space/create.ts';
 
 test('Private creation never exposes a public shell through failures, concurrent retries or lost responses', async () => {
   const s = await startMediaStack('realm-create-intent');
@@ -73,10 +75,14 @@ test('Private creation never exposes a public shell through failures, concurrent
     }
   };
   let currentName = '';
+  let graphFailure = '';
   s.fuseki.commandWithReceipt = async envelope => {
     if (!envelope.update.includes('rv:SpaceCreatedEvent')) return graphCommand(envelope);
     fail('graph-before');
-    const result = await graphCommand(envelope);
+    const result = await graphCommand(envelope).catch((error: unknown) => {
+      graphFailure = error instanceof Error ? error.message : String(error);
+      throw error;
+    });
     const row = (await realms(currentName))[0]!;
     expect(row.disclosure?.value).toBe('https://rezics.com/vocab/Private');
     // Probe between graph commit and the first Access initialization attempt.
@@ -102,13 +108,16 @@ test('Private creation never exposes a public shell through failures, concurrent
       if (intermediate[0]) await invisible(intermediate[0].space!.value, intermediate[0].realm!.value);
       stage = '';
       const retries = await Promise.all([call('POST', '/v1/spaces', body, key), call('POST', '/v1/spaces', body, key)]);
-      for (const response of retries) expect(response.status, await response.clone().text()).toBe(200);
+      for (const response of retries) expect(response.status, `${await response.clone().text()} ${graphFailure}`).toBe(200);
       const created = await retries[0]!.json() as { space: string; realm: string; realmRevision: string; replayed: boolean };
       expect(await retries[1]!.json()).toEqual(created);
       expect(created.replayed).toBe(true);
       expect(await realms(currentName)).toHaveLength(1);
       await invisible(created.space, created.realm);
       expect(await readRealmPolicy(s.env, created.realm)).toMatchObject({ visibility: 'private', reviewMode: 'mandatory', admission: 'invitation' });
+      const initialPolicyRevision = `urn:rezics:realm-policy:${realmCreationPolicyReceipt({
+        principalId: creator.principalId, idempotencyKey: key })}`;
+      expect((await readRealmPolicy(s.env, created.realm))?.revision).toBe(initialPolicyRevision);
       const view = await call('GET', `/v1/realms/${created.realm.slice(-36)}/settings?actingSubject=${encodeURIComponent(creator.actor)}`);
       expect(view.status, await view.clone().text()).toBe(200);
       expect(await view.json()).toMatchObject({ generation: '1', settings, ruleBasis: { revision: '1' } });
@@ -116,7 +125,7 @@ test('Private creation never exposes a public shell through failures, concurrent
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(created.realmRevision)} rv:manifest ?manifest } } LIMIT 1`, 1024)).results!.bindings;
       const manifest = JSON.parse(readFileSync(join(s.env.objectDirectory, anchors[0]!.manifest!.value.slice('urn:rezics:sha256:'.length)), 'utf8')) as { payload: string };
       const payload = JSON.parse(readFileSync(join(s.env.objectDirectory, manifest.payload.slice(7)), 'utf8')) as { state: unknown };
-      expect(payload.state).toMatchObject({ initialSettings: settings });
+      expect(payload.state).toMatchObject({ initialSettings: settings, initialPolicyRevision });
       expect((await call('POST', '/v1/spaces', { ...body, initialSettings: { ...settings, selfJoin: true } }, key)).status).toBe(409);
       const grants = (await s.accessPool.query(`SELECT count(*)::int AS count FROM access.permission_grant
         WHERE scope_id = $1 AND recipient_subject = $2 AND action = 'realm.owner'`,
@@ -142,7 +151,7 @@ test('Private creation never exposes a public shell through failures, concurrent
   } finally { await s.stop(); }
 }, 180_000);
 
-test('An initial open review mode admits a submission without a separate settings write', async () => {
+test('Initial review policy accepts trusted member submissions in open mode and keeps mandatory review pending', async () => {
   const s = await startMediaStack('realm-create-open-review');
   try {
     const creator = await s.member('founder');
@@ -158,23 +167,33 @@ test('An initial open review mode admits a submission without a separate setting
     const post = (path: string, body: unknown) => app.handle(new Request(`http://main.test${path}`, {
       method: 'POST', headers: { authorization: `Bearer ${creator.token}`,
         'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
-    const response = await post('/v1/spaces', { profile: 'space-realm-v2', name: 'Open review from creation',
-      capabilities: ['realm'], actingSubject: creator.actor,
-      initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open',
-        whoMaySubmit: 'granted', selfJoin: true, rules: [] } });
-    expect(response.status, await response.clone().text()).toBe(201);
-    const { realm } = await response.json() as { realm: string };
-    expect(await readRealmPolicy(s.env, realm)).toMatchObject({ visibility: 'public', reviewMode: 'open', admission: 'open' });
-    await creator.grant(`submission:submit:${realm}`, 'submission.submit');
     await creator.grant('work:create:root', 'work.create');
     await provisionFixtureAuthor(s.env, creator.actor);
     const createdWork = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
       title: 'A book to admit', language: 'en', actingSubject: creator.actor });
     expect(createdWork.status, await createdWork.clone().text()).toBe(201);
     const work = await createdWork.json() as { work: string; mainVersion: string; workRevision: string };
-    const submitted = await post(`/v1/realms/${realm.slice(-36)}/submissions`, { kind: 'work', actingSubject: creator.actor,
-      work: work.work, mainVersion: work.mainVersion, workRevision: work.workRevision });
-    expect(submitted.status, await submitted.clone().text()).toBe(201);
-    expect(await submitted.json()).toMatchObject({ submission: { state: 'accepted' } });
+    for (const reviewMode of ['open', 'trusted-members', 'mandatory'] as const) {
+      const response = await post('/v1/spaces', { profile: 'space-realm-v2', name: `${reviewMode} review from creation`,
+        capabilities: ['realm'], actingSubject: creator.actor,
+        initialSettings: { visibility: 'public', reviewRequired: reviewMode === 'mandatory', reviewMode,
+          whoMaySubmit: 'members', selfJoin: true, rules: [] } });
+      expect(response.status, await response.clone().text()).toBe(201);
+      const { realm } = await response.json() as { realm: string };
+      const policy = await readRealmPolicy(s.env, realm);
+      expect(policy).toMatchObject({ visibility: 'public', reviewMode, admission: 'open' });
+      const permit = await withRealmPermit(s.accessPool, creator.principal, creator.actor, realm, 'submission',
+        async current => current);
+      const revisions = JSON.stringify({ realm, reviewMode, member: permit.member,
+        permitRevision: permit.revision, graphPolicyRevision: policy?.revision, permitReviewMode: permit.reviewMode });
+      expect(permit.member, revisions).toBe(true);
+      expect(permit.revision, revisions).toBe(policy!.revision);
+      expect(permit.revision, revisions).not.toBeNull();
+      await creator.grant(`submission:submit:${realm}`, 'submission.submit');
+      const submitted = await post(`/v1/realms/${realm.slice(-36)}/submissions`, { kind: 'work', actingSubject: creator.actor,
+        work: work.work, mainVersion: work.mainVersion, workRevision: work.workRevision });
+      expect(submitted.status, await submitted.clone().text()).toBe(201);
+      expect(await submitted.json(), revisions).toMatchObject({ submission: { state: reviewMode === 'mandatory' ? 'pending' : 'accepted' } });
+    }
   } finally { await s.stop(); }
 }, 120_000);

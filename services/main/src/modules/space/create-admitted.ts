@@ -6,7 +6,7 @@ import { CancelledActivation, IdempotencyConflict,
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { AliasInvalid, AliasConflict, AliasUnavailable } from '../address/registry.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
-  spaceCreationDigest, initialRealmSettings, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
+  spaceCreationDigest, initialRealmSettings, realmCreationPolicyReceipt, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
 import { createZoneSpace, zoneSpaceCreationDigest, type CreateZoneSpaceInput } from './create-zone.ts';
 import type { AccessRealmManagement } from '../access/realm-management.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale,
@@ -104,7 +104,7 @@ async function createAdmittedSpace(
       // replay, settle Access before acknowledging the complete create job.
       await realmAdmin.initializeCreated(principal, { realm: terminal.realm!,
         actingSubject: input.actingSubject, creationKey: input.idempotencyKey,
-        creationDigest: digest, settings, rules }, env);
+        creationDigest: digest, policyReceipt: realmCreationPolicyReceipt(registered), settings, rules }, env);
     }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {

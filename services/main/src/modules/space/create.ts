@@ -6,6 +6,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { checkedInitialRealmSettings, type RealmSettings } from '../realm-admin/contract.ts';
 import { reviewPolicy } from './policy.ts';
+import { initialRealmPolicyFacts } from '../access/realm-initialization.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -38,6 +39,14 @@ export interface CreateRealmSpaceInput {
 export function initialRealmSettings(input: CreateRealmSpaceInput): RealmSettings {
   return checkedInitialRealmSettings(input.initialSettings ?? { visibility: 'public',
     reviewRequired: true, reviewMode: 'mandatory', whoMaySubmit: 'granted', selfJoin: false, rules: [] });
+}
+
+/** Domain-separated UUIDv8: one policy identity per principal-scoped creation
+ * key, independent of retries, candidate Realm IDs and mutable settings. */
+export function realmCreationPolicyReceipt(admission: Pick<RegisteredAdmission, 'principalId' | 'idempotencyKey'>): string {
+  const hex = hash(JSON.stringify(['realm-creation-policy-v1', admission.principalId, admission.idempotencyKey]));
+  const variant = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 export interface SpaceCreationReceipt {
@@ -194,6 +203,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const spaceRevision = ID + Bun.randomUUIDv7();
   const realmRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
+  const { rules, ...accessSettings } = settings;
+  const policyFacts = initialRealmPolicyFacts({ realm, actingSubject: input.actingSubject,
+    creationKey: admission.idempotencyKey, creationDigest: digest,
+    policyReceipt: realmCreationPolicyReceipt(admission), settings: accessSettings, rules }, space);
   const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
@@ -202,6 +215,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
       membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: policy,
       initialSettings: settings,
+      initialPolicyRevision: policyFacts.revision,
       ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
@@ -219,17 +233,14 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(space)} a rv:Space ; rv:owner ${iri(input.actingSubject)} ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
-          rv:realmCapability ${iri(realm)} ; rv:disclosure rv:${disclosure === 'private' ? 'Private' : 'Public'} ;
-          rv:listing "listed" ;
+          rv:realmCapability ${iri(realm)} ;
           rdfs:label ${lit(input.name)}@${language} ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
-          rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
-          rv:visibility ${lit(settings.visibility)} ; rv:reviewMode ${lit(settings.reviewMode!)} ;
-          rv:historyVisibility "everything" ; rv:admissionMode ${lit(settings.selfJoin ? 'open' : 'invitation')} ;
-          rv:reviewPolicy ${iri(policy)} ; rv:head ${iri(realmRevision)} .
+          rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ; rv:head ${iri(realmRevision)} .
+        ${policyFacts.current}
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
@@ -242,6 +253,9 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
+        ${policyFacts.receipt}
+        ${iri(policyFacts.revision)} rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
           rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
           rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
