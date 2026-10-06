@@ -170,16 +170,6 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     const emailPaths = new Set(['/api/auth/sign-up/email', '/api/auth/request-password-reset',
       '/api/auth/send-verification-email']);
     if (request.method === 'POST' && emailPaths.has(path)) {
-      const body = await request.clone().json().catch(() => null) as { email?: unknown } | null;
-      const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-      if (email.length <= 320) {
-        try {
-          if (!await consumeAccountLimit(pool, String(auth.options.secret), `${path}:${email}`, 3, 300)) {
-            return Response.json({ error: 'rate_limited' }, { status: 429,
-              headers: { 'retry-after': '300' } });
-          }
-        } catch { return Response.json({ error: 'temporarily_unavailable' }, { status: 503 }); }
-      }
       const response = await auth.handler(request);
       // Strip the provider's synthetic user too: future plugin fields must not
       // turn sign-up back into a public account-directory oracle.
@@ -222,7 +212,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(httpTelemetry())
     .request(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;
-      if (new URL(request.url).pathname === '/api/auth/oauth2/register') {
+      if (new URL(request.url).pathname.startsWith('/api/auth/')) {
         const forwarded = request.headers.get('x-forwarded-for')?.trim();
         const address = peer && options.trustedProxyPeers?.has(peer) && forwarded && isIP(forwarded)
           ? forwarded : peer;

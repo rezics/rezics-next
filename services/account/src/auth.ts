@@ -27,6 +27,7 @@ import { SignupPolicyProblem } from './market-policy.ts';
 import type { PolicyVersion } from './policy-versions.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
+const enrollmentEndpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
 
 export interface AccountConfig {
   baseURL: string;
@@ -119,6 +120,21 @@ export function accountAuthOptions(config: AccountConfig) {
           if (!(error instanceof SignupPolicyProblem)) throw error;
           throw new APIError('BAD_REQUEST', { code: error.reason, reason: error.reason,
             minimumAge: error.minimumAge, message: error.reason });
+        }
+      }
+      // Better Auth runs plugin onRequest verification before endpoint hooks.
+      // Charging here keeps failed challenges out of a caller-selected target's
+      // budget, including embedded clients that bypass the HTTP app adapter.
+      if (enrollmentEndpoints.includes(ctx.path)) {
+        const body = ctx.body as { email?: unknown } | undefined;
+        const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+        if (email && email.length <= 320) {
+          let admitted: boolean;
+          try { admitted = await consumeAccountLimit(config.pool, config.secret,
+            `/api/auth${ctx.path}:${email}`, 3, 300); }
+          catch { throw new APIError('SERVICE_UNAVAILABLE', { error: 'temporarily_unavailable' }); }
+          if (!admitted) throw new APIError('TOO_MANY_REQUESTS', { error: 'rate_limited' },
+            { 'Retry-After': '300' });
         }
       }
       if (ctx.path === '/oauth2/authorize') {
@@ -224,7 +240,7 @@ export function accountAuthOptions(config: AccountConfig) {
       },
     } },
     plugins: [
-      ...((config.turnstileMode || config.turnstileSecretKey) ? [enrollmentChallenge(config)] : []),
+      enrollmentChallenge(config),
       openAPI({ disableDefaultReference: true }),
       twoFactor({ issuer: 'REZICS', allowPasswordless: true,
         backupCodeOptions: { storeBackupCodes: 'encrypted' } }),
@@ -375,16 +391,30 @@ export function accountAuthOptions(config: AccountConfig) {
 /** The local profile is an explicit offline development verifier, never a
  * fallback from a failed provider. OAuth and session endpoints are unaffected. */
 function enrollmentChallenge(config: AccountConfig) {
-  const endpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
   const hostname = new URL(config.baseURL).hostname;
   const plugin = captcha({ provider: 'cloudflare-turnstile', secretKey: config.turnstileSecretKey ?? '',
-    siteVerifyURLOverride: config.turnstileVerifyURL, endpoints,
+    siteVerifyURLOverride: config.turnstileVerifyURL, endpoints: enrollmentEndpoints,
     expectedAction: 'account-enrollment', allowedHostnames: [hostname] });
-  if (config.turnstileMode !== 'local') return plugin;
-  // Explicit local mode is always-pass, so offline API clients and localhost
-  // aliases need neither a widget nor a host-bound synthetic token. Production
-  // configuration rejects this mode; the cloudflare branch still binds both.
-  return { ...plugin, onRequest: async () => undefined };
+  return { ...plugin, onRequest: async (request: Request, ctx: Parameters<typeof plugin.onRequest>[1]) => {
+    const pathname = new URL(request.url).pathname;
+    const basePath = ctx.options.basePath ?? '/api/auth';
+    const path = (pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname)
+      .replace(/\/{2,}/g, '/').replace(/\/$/, '');
+    if (!enrollmentEndpoints.includes(path)) return;
+    // Local mode explicitly passes without a provider. Embedded protocol
+    // fixtures may omit CAPTCHA configuration; production requires it.
+    if (config.turnstileMode === 'local' || (!config.turnstileMode && !config.turnstileSecretKey)) return;
+    // This ceiling bounds failed CAPTCHA attempts and provider work by caller,
+    // never by the victim's email. The HTTP boundary replaces this address.
+    const address = request.headers.get('x-rezics-client-ip') ?? 'unknown';
+    try {
+      if (!await consumeAccountLimit(config.pool, config.secret, `enrollment-caller:${address}`, 20, 300)) {
+        return { response: Response.json({ error: 'rate_limited' }, { status: 429,
+          headers: { 'retry-after': '300' } }) };
+      }
+    } catch { return { response: Response.json({ error: 'temporarily_unavailable' }, { status: 503 }) }; }
+    return plugin.onRequest(request, ctx);
+  } };
 }
 
 /** Every issued access token names the App installation that admitted it. An

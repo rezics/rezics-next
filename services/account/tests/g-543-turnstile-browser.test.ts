@@ -55,10 +55,11 @@ test('G-543: offline enrollment works at localhost and permits direct admin setu
     await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth
       && !!document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value);
     await page.screenshot({ path: join(evidence, 'signup-narrow-phone.png'), fullPage: true });
-    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('G543 Browser');
+    await page.getByRole('textbox', { name: 'Display name', exact: true }).fill('G543 Browser');
     await page.getByRole('textbox', { name: 'Email', exact: true }).fill('enrolled-browser@example.test');
     await page.getByLabel('Password', { exact: true }).fill('a long secure password');
     await page.getByLabel('Confirm', { exact: true }).fill('a long secure password');
+    await page.getByRole('checkbox', { name: /I meet the minimum age/ }).check();
     await page.waitForFunction(() => !!document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value
       && !document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled);
     const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/auth/sign-up/email')
