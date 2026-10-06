@@ -27,6 +27,7 @@ import { accessOutboxCoverage, accessStateCoverage,
   RecoveryHold, RestoreLineageConflict, type RecoveryCoverage,
   type DeletionReleaseEvidence } from '../../main/src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage } from '../../main/src/modules/outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../main/src/modules/outbox/relay-position.ts';
 import { captureCommerceRecoveryCoverage } from '../../main/src/modules/commerce/recovery-coverage.ts';
 import { assertAccountDeletionJournalCoverage, mirrorAccountDeletionIntent,
   mirrorAccountDeletionIntents } from
@@ -461,7 +462,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
         accessStateCount: retained.access.state.count,
         accessStateDigest: retained.access.state.digest,
         commerce: await captureCommerceRecoveryCoverage(accessFull.pool),
-        relay: { consumer: 'held-graph', dataEpoch: graphEpoch, sequence: '0',
+        relay: { consumer: 'held-graph', streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: graphEpoch, sequence: '0',
           batchCount: '0', batchDigest: '0'.repeat(64),
           eventCount: '0', eventDigest: '0'.repeat(64) },
       })).rejects.toThrow('Account deletion recovery evidence is incomplete');
