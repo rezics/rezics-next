@@ -18,13 +18,13 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | --- | --- |
 | `task goal -- goal start <goal> --manager <session>` | Registers a Goal whose `GOAL.md` exists, refusing areas that overlap another running Goal's; after a manager restart it records the new session name. |
 | `task goal -- new [--goal <goal>] <title>` | Reserves the next task ID for the Goal and writes the brief skeleton at `docs/goals/<goal>/tasks/G-NNN.md`, so two managers never take the same number. |
-| `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, paths in another Goal's areas, unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. |
+| `task goal -- dispatch docs/goals/<goal>/tasks/G-NNN.md [--dry-run] [--force-usage]` | Validates the brief, refuses overlapping claims, paths in another Goal's areas, unknown or unmet dependencies, the live-worker limit and exhausted usage for the brief's engine, then creates the worktree, installs dependencies (about 6 s), copies the brief and starts a detached worker. Cross-Goal dependencies are contracts on the [program's board](program/state.md), not task IDs. |
 | `task goal -- wait G-NNN` | Run in the background. Blocks until the worker exits, then prints branch, cleanliness, scope check, token use and the handoff. |
-| `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh]` | Continues the same session with full context, optionally at another effort. Another engine continues its own latest session or starts fresh on the same worktree. |
+| `task goal -- resume G-NNN -m <text> [--effort e] [--engine e] [--fresh] [--force-usage]` | Re-checks the live-worker limit and selected engine's usage, then continues the session, optionally at another effort. Another engine continues its own latest session or starts fresh on the same worktree; `--force-usage` bypasses only the usage gate. |
 | `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
-| `task goal -- stop G-NNN` | Terminates the worker's process group and confirms exit. Claims and worktree remain. |
+| `task goal -- stop G-NNN` | Terminates the worker's process group and its task-marked detached children. Preserves other live sharers and shared resources; after the last live worker stops, also sweeps worktree processes and removes its stack. Claims and worktree remain. |
 | `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
-| `task goal -- merge G-NNN [--allow-scope] [--allow-ids]` | Requires an exited worker, a clean worktree, in-scope files and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. A conflict marks the task `conflict` for the worker to resolve. |
+| `task goal -- merge G-NNN [--allow-scope] [--allow-ids]` | Requires all open sharers to have exited, a clean worktree, files within their combined claims and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. Records every open sharer as merged at the same commit; a repeated merge with nothing new succeeds. A conflict marks the named task `conflict` for the worker to resolve. |
 | `task goal -- close G-NNN... verified\|cancelled` | Removes the worktrees and releases the claims, then moves the briefs and handoffs to `archive/goals` and removes the briefs from the tree in one commit. |
 | `task goal -- tidy [--legacy <dir>]` / `task goal -- goal close <goal> [--dry-run]` | Archives closed briefs still in the tree / ends a Goal once nothing of it remains ([convergence](#convergence)). |
 | `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, the heavy QA holder and the usage of every account. |
@@ -137,11 +137,17 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 Maintainer, 2026-10-02: one worktree per task multiplied dev servers, Storybook,
 type-checkers and QA runs until 64 GB was not enough. Related tasks now name one
 `worktree:`; their agents work concurrently in that tree on disjoint claims and
-commit only their own paths. The manager starts one web dev server, one
+commit only their own paths. Names are scoped by Goal: `worktree: wave-1` in
+Goal `program` uses `.temp/worktrees/program-wave-1` and branch
+`goal/program-wave-1`; joining a tree with another Goal's open tasks is refused.
+Stopping one worker preserves its live peers and shared resources until the
+last live worker stops. The manager starts one web dev server, one
 Storybook and one type-check watcher there and lists them in
 `.temp/goal/shared.md`; workers start none of their own and run only unit tests
 of their files. The manager merges the shared branch once, after its tasks
-exit, and runs the integration tiers, Storybook and browser journeys once.
+exit, against their combined claims. That merge records every open sharer at
+the same commit, and a later merge with nothing new is a no-op. The manager
+runs the integration tiers, Storybook and browser journeys once.
 
 ## Integration and QA
 
