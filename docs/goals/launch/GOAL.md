@@ -69,7 +69,16 @@ only); fold the change into that document as the work lands.
 - **Gradual opening.** Anything not ready stays closed behind a platform gate
   (trust-ops) and opens later: saved views, Agent mode, the LLM index, events and
   geography, commerce, worldbuilding, developer extras and the rest of the former
-  M7. Contribute the launch operation matrix to trust-ops.
+  M7. Contribute the launch operation matrix to trust-ops. When the first scope
+  is folded into `docs/product/capabilities.md`, every closed-until-later item
+  stays listed as closed behind a platform gate, not dropped: one-click
+  franchise-wiki building by holders' agents; serial drafting and scheduling;
+  recognition, points and credit; review lifecycle; subscriptions and inbox;
+  settings and modes; saved views; the editor; Realm wikis; developer
+  onboarding and extras; worldbuilding; wiki maintenance on new chapters; the
+  agent platform; and distribution behind the payment gate.
+- **Real devices early.** Phones and desktops are tested on real devices from
+  the first browser acceptance, not in a final pass.
 - **Defaults** (maintainer, 2026-10-07): community surfaces may lag (counts,
   ranks, sections show their freshness); moderators and team roles are public;
   member counts are public and member lists visible to the Realm's members (the
@@ -98,8 +107,8 @@ import does not replace them.
 
 ## Inherited
 
-- Main-wide failures recorded in production-readiness state.md on 2026-10-05,
-  to re-verify first: Zone browse keyboard filter loses the release query; Light
+- Main-wide failures recorded on 2026-10-05 (QA run 20261005t055701-eb9da5;
+  journey files in G-1222's brief), to re-verify first: Zone browse keyboard filter loses the release query; Light
   Novels and Visual Novels "Zone editor" links fail axe target size; library
   export hides "The download stopped after N records"; library import misses
   "Unfinished imports" and the Korean ambiguous tab; `/auth/start` lands on the
@@ -137,5 +146,7 @@ or per-component queries, and no third-party blocks this round.
 Each launch kind and the listed Realm and Zone capabilities pass paired API and
 browser journeys with real data (ambiguous editions, mixed formats, non-UI
 languages, thousand-chapter inventories, revoked editors, interrupted exports,
-two-device progress), the launch matrix is enforced, and the program's
-regression is green on a pinned candidate.
+two-device progress, expired loans), the launch matrix is enforced, the
+`product-audit` skill (`.agents/skills/product-audit`) finds no open P0 or P1
+class in launch's areas, and the program's regression is green on a pinned
+candidate.

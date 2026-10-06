@@ -51,5 +51,6 @@ is the product precedent, and RFC 9700 above remains the security basis.
 
 GitHub-style developer settings, OAuth apps, Realm-level OAuth installations and
 MCP management are non-core extras, sequenced after the shared authority model
-(M7 in the production-readiness Goal). Their UI does not create a second grant
+and closed behind a platform gate at launch
+([capabilities](../product/capabilities.md)). Their UI does not create a second grant
 model; the [identity owner](identity-and-access.md#one-authority-model) owns it.
