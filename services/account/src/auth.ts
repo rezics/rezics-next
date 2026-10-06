@@ -1,7 +1,8 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
+import { APIError, createAuthMiddleware, createEmailVerificationToken, getSessionFromCtx } from 'better-auth/api';
+import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
@@ -85,6 +86,32 @@ export function accountAuthOptions(config: AccountConfig) {
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
+      if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
+        // Email verification links are stateless JWTs, so deleting verification
+        // rows cannot revoke them. Bind new links to the same recovery generation.
+        const verified = await jwtVerify(ctx.query.token, new TextEncoder().encode(config.secret),
+          { algorithms: ['HS256'] }).catch(() => null);
+        // Let the provider keep its normal invalid/expired-link redirects.
+        const user = typeof verified?.payload.email === 'string'
+          ? (await config.pool.query<{ id: string }>('SELECT id FROM public."user" WHERE email = $1',
+            [verified.payload.email])).rows[0] : undefined;
+        if (user && (verified!.payload[RECOVERY_GENERATION_CLAIM] ?? '0')
+          !== await currentRecoveryGeneration(config.pool, user.id)) {
+          // This hook precedes the provider's origin middleware. Redirect only
+          // to this issuer; never let an invalidated link become an open redirect.
+          if (typeof ctx.query.callbackURL === 'string') {
+            const callback = new URL(ctx.query.callbackURL, config.baseURL);
+            if (callback.origin === new URL(config.baseURL).origin) {
+              callback.searchParams.set('error', 'INVALID_TOKEN');
+              throw ctx.redirect(callback.toString());
+            }
+          }
+          throw new APIError('FORBIDDEN', {
+            code: 'INVALID_TOKEN',
+            message: 'Verification link is unavailable',
+          });
+        }
+      }
       if (ctx.path === '/sign-up/email') {
         try { signupPolicyInput(ctx.body as Record<string, unknown>,
           ctx.headers?.get('x-rezics-request-country'), config.policyVersions); }
@@ -156,7 +183,10 @@ export function accountAuthOptions(config: AccountConfig) {
       sendVerificationEmail: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
-        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(url, 'verified'),
+        const bound = new URL(url);
+        bound.searchParams.set('token', await createEmailVerificationToken(config.secret, user.email,
+          undefined, 1800, { [RECOVERY_GENERATION_CLAIM]: await currentRecoveryGeneration(config.pool, user.id) }));
+        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(bound.toString(), 'verified'),
           purpose: 'verify', locale: await languageForSignupEmail(config.pool, user, request) })
           .catch(() => console.error('Account email intent unavailable'));
       },

@@ -28,6 +28,7 @@ import { safetyCorrespondenceApi } from './email-safety.ts';
 import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
+import { withRecoveryAuthentication } from './recovery-auth.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   activateAccountRecovery, approveAccountRecovery, enrollAccountRecovery,
@@ -434,7 +435,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       catch (error) { return recoveryError(error); }
     })
     .cleanup(async () => { await guardPool?.end(); })
-    .mount((request: Request) => observeAuthentication(auth, pool, request, () => guardedAuthHandler(request)));
+    .mount((request: Request) => observeAuthentication(auth, pool, request,
+      () => withRecoveryAuthentication(guard(), request, () => guardedAuthHandler(request))));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),

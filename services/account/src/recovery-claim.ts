@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { hashPassword } from 'better-auth/crypto';
 import type { Pool, PoolClient } from 'pg';
 
@@ -185,81 +185,148 @@ export async function approveAccountRecovery(pool: Pool, claimId: string,
   });
 }
 
-/** Replaces one credential only after both independent factors and the waiting
- * period. The generation advances with the password and session/token removal
+/** Binds a new password only after both independent proofs and the waiting
+ * period. The generation advances with all old factor and session/token removal
  * in one Account transaction. Token introspection rejects every old generation
  * before cleanup could otherwise be mistaken for an authorization fence.
- * Cost: indexed claim/policy/account reads plus O(S+T) removal of this user's
- * own sessions and token families; unrelated Account rows are not visited. */
-export async function activateAccountRecovery(pool: Pool, input: {
-  claimId: string; recoveryCode: string; newPassword: string; digestKey: string;
-}): Promise<{ claimId: string; recoveryGeneration: string; replayed: boolean }> {
-  if (!uuid.test(input.claimId) || !validCode(input.recoveryCode)
-    || input.newPassword.length < 12 || input.newPassword.length > 128
-    || input.digestKey.length < 32) throw new AccountRecoveryDenied('invalid credential recovery');
+ * Cost: indexed claim/policy/account reads and O(F+S+T) owned factor/session/token
+ * removal. Verification cleanup is O(V): Better Auth stores magic-link and
+ * WebAuthn ownership inside text values, without an owner index. The transaction's
+ * statement timeout bounds that scan; failure rolls back the entire claim. */
+export async function activateAccountRecovery(
+  pool: Pool,
+  input: {
+    claimId: string;
+    recoveryCode: string;
+    newPassword: string;
+    digestKey: string;
+  },
+): Promise<{ claimId: string; recoveryGeneration: string; replayed: boolean }> {
+  if (
+    !uuid.test(input.claimId) ||
+    !validCode(input.recoveryCode) ||
+    input.newPassword.length < 12 ||
+    input.newPassword.length > 128 ||
+    input.digestKey.length < 32
+  )
+    throw new AccountRecoveryDenied('invalid credential recovery');
   const hash = codeHash(input.recoveryCode);
   const digest = createHmac('sha256', input.digestKey)
-    .update(JSON.stringify([input.claimId, input.recoveryCode, input.newPassword])).digest('hex');
-  const replay = await pool.query<{ activation_digest: string;
-    recovery_generation: string }>(`SELECT activation_digest, recovery_generation FROM
-    public.rezics_account_recovery_activation WHERE id = $1`, [input.claimId]);
+    .update(JSON.stringify([input.claimId, input.recoveryCode, input.newPassword]))
+    .digest('hex');
+  const replay = await pool.query<{ activation_digest: string; recovery_generation: string }>(
+    `SELECT activation_digest, recovery_generation FROM
+    public.rezics_account_recovery_activation WHERE id = $1`,
+    [input.claimId],
+  );
   if (replay.rows[0]) {
     if (replay.rows[0].activation_digest !== digest) {
       throw new AccountRecoveryConflict('claim activation binds another credential');
     }
-    return { claimId: input.claimId,
-      recoveryGeneration: replay.rows[0].recovery_generation, replayed: true };
+    return {
+      claimId: input.claimId,
+      recoveryGeneration: replay.rows[0].recovery_generation,
+      replayed: true,
+    };
   }
-  const preflight = await pool.query<{ code_hash: string; not_before: Date;
-    expires_at: Date; current_code_hash: string | null; generation: string;
-    policy_generation: string; guardian_user_id: string;
-    approver_user_id: string | null }>(`SELECT c.code_hash, c.not_before,
+  const preflight = await pool.query<{
+    code_hash: string;
+    not_before: Date;
+    expires_at: Date;
+    current_code_hash: string | null;
+    generation: string;
+    policy_generation: string;
+    guardian_user_id: string;
+    approver_user_id: string | null;
+    activation_digest: string | null;
+    recovery_generation: string | null;
+  }>(
+    `SELECT c.code_hash, c.not_before,
     c.expires_at, c.policy_generation, p.code_hash AS current_code_hash,
-    p.generation, p.guardian_user_id, a.approver_user_id
+    p.generation, p.guardian_user_id, a.approver_user_id,
+    activated.activation_digest, activated.recovery_generation
     FROM public.rezics_account_recovery_claim c
     JOIN public.rezics_account_recovery_policy p ON p.id = c.target_user_id
     LEFT JOIN public.rezics_account_recovery_approval a ON a.id = c.id
-    WHERE c.id = $1`, [input.claimId]);
+    LEFT JOIN public.rezics_account_recovery_activation activated ON activated.id = c.id
+    WHERE c.id = $1`,
+    [input.claimId],
+  );
   const candidate = preflight.rows[0];
-  if (!candidate || candidate.code_hash !== hash
-    || candidate.approver_user_id !== candidate.guardian_user_id) {
+  // Activation can commit between the first replay read and this preflight.
+  if (candidate?.activation_digest) {
+    if (candidate.activation_digest !== digest)
+      throw new AccountRecoveryConflict('claim activation binds another credential');
+    return {
+      claimId: input.claimId,
+      recoveryGeneration: candidate.recovery_generation!,
+      replayed: true,
+    };
+  }
+  if (
+    !candidate ||
+    candidate.code_hash !== hash ||
+    candidate.approver_user_id !== candidate.guardian_user_id
+  ) {
     throw new AccountRecoveryDenied('recovery proof is unavailable');
   }
-  if (candidate.current_code_hash !== hash
-    || candidate.policy_generation !== candidate.generation) {
+  if (
+    candidate.current_code_hash !== hash ||
+    candidate.policy_generation !== candidate.generation
+  ) {
     throw new AccountRecoveryStale('recovery code or policy changed');
   }
   const currentTime = Date.now();
-  if (candidate.not_before.getTime() > currentTime
-    || candidate.expires_at.getTime() <= currentTime) {
+  if (
+    candidate.not_before.getTime() > currentTime ||
+    candidate.expires_at.getTime() <= currentTime
+  ) {
     throw new AccountRecoveryStale('recovery waiting period or window is not open');
   }
   const passwordHash = await hashPassword(input.newPassword);
-  return transaction(pool, async client => {
-    const claim = await client.query<RecoveryClaim>(`SELECT * FROM
-      public.rezics_account_recovery_claim WHERE id = $1 FOR UPDATE`, [input.claimId]);
+  return transaction(pool, async (client) => {
+    const claim = await client.query<RecoveryClaim>(
+      `SELECT * FROM
+      public.rezics_account_recovery_claim WHERE id = $1 FOR UPDATE`,
+      [input.claimId],
+    );
     const row = claim.rows[0];
     if (!row) throw new AccountRecoveryDenied('recovery claim is unavailable');
-    const prior = await client.query<{ activation_digest: string;
-      recovery_generation: string }>(`SELECT activation_digest, recovery_generation
-      FROM public.rezics_account_recovery_activation WHERE id = $1`, [input.claimId]);
+    const prior = await client.query<{ activation_digest: string; recovery_generation: string }>(
+      `SELECT activation_digest, recovery_generation
+      FROM public.rezics_account_recovery_activation WHERE id = $1`,
+      [input.claimId],
+    );
     if (prior.rows[0]) {
       if (prior.rows[0].activation_digest !== digest) {
         throw new AccountRecoveryConflict('claim activation binds another credential');
       }
-      return { claimId: input.claimId,
-        recoveryGeneration: prior.rows[0].recovery_generation, replayed: true };
+      return {
+        claimId: input.claimId,
+        recoveryGeneration: prior.rows[0].recovery_generation,
+        replayed: true,
+      };
     }
-    const policy = await client.query<RecoveryPolicy>(`SELECT id, guardian_user_id,
+    const policy = await client.query<RecoveryPolicy>(
+      `SELECT id, guardian_user_id,
       code_hash, generation, recovered_at FROM public.rezics_account_recovery_policy
-      WHERE id = $1 FOR UPDATE`, [row.target_user_id]);
+      WHERE id = $1 FOR UPDATE`,
+      [row.target_user_id],
+    );
     const current = policy.rows[0];
-    if (!current?.code_hash || !sameHash(current.code_hash, hash)
-      || row.code_hash !== hash || row.policy_generation !== current.generation) {
+    if (
+      !current?.code_hash ||
+      !sameHash(current.code_hash, hash) ||
+      row.code_hash !== hash ||
+      row.policy_generation !== current.generation
+    ) {
       throw new AccountRecoveryStale('recovery code or policy changed');
     }
-    const approved = await client.query<{ approver_user_id: string }>(`SELECT approver_user_id
-      FROM public.rezics_account_recovery_approval WHERE id = $1`, [input.claimId]);
+    const approved = await client.query<{ approver_user_id: string }>(
+      `SELECT approver_user_id
+      FROM public.rezics_account_recovery_approval WHERE id = $1`,
+      [input.claimId],
+    );
     if (approved.rows[0]?.approver_user_id !== current.guardian_user_id) {
       throw new AccountRecoveryDenied('independent approval is missing');
     }
@@ -267,26 +334,87 @@ export async function activateAccountRecovery(pool: Pool, input: {
     if (row.not_before.getTime() > now || row.expires_at.getTime() <= now) {
       throw new AccountRecoveryStale('recovery waiting period or window is not open');
     }
-    const credential = await client.query<{ id: string }>(`SELECT id FROM public."account"
-      WHERE "userId" = $1 AND "providerId" = 'credential' FOR UPDATE`, [row.target_user_id]);
-    if (credential.rowCount !== 1) throw new AccountRecoveryDenied('credential is unavailable');
-    await client.query(`UPDATE public."account" SET password = $2, "updatedAt" = now()
-      WHERE id = $1`, [credential.rows[0]!.id, passwordHash]);
-    await client.query(`DELETE FROM public."oauthAccessToken" WHERE "userId" = $1`, [row.target_user_id]);
-    await client.query(`DELETE FROM public."oauthRefreshToken" WHERE "userId" = $1`, [row.target_user_id]);
-    await client.query(`DELETE FROM public."oauthConsent" WHERE "userId" = $1`, [row.target_user_id]);
+    const target = await client.query<{ email: string }>(
+      `SELECT email FROM public."user"
+      WHERE id = $1 FOR UPDATE`,
+      [row.target_user_id],
+    );
+    if (!target.rows[0]) throw new AccountRecoveryDenied('Account is unavailable');
+    const credential = await client.query<{ id: string }>(
+      `SELECT id FROM public."account"
+      WHERE "userId" = $1 AND "providerId" = 'credential' FOR UPDATE`,
+      [row.target_user_id],
+    );
+    if (credential.rows.length > 1) throw new AccountRecoveryDenied('credential is ambiguous');
+    // Bind first, so last-method protection also permits passkey-only recovery.
+    if (credential.rows[0]) {
+      await client.query(
+        `UPDATE public."account" SET password = $2, "updatedAt" = now()
+        WHERE id = $1`,
+        [credential.rows[0].id, passwordHash],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO public."account"
+        (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+        VALUES ($1,$2,'credential',$2,$3,now(),now())`,
+        [randomUUID(), row.target_user_id, passwordHash],
+      );
+    }
+    await client.query(`DELETE FROM public.passkey WHERE "userId" = $1`, [row.target_user_id]);
+    // Better Auth stores the encrypted backup codes alongside the TOTP secret.
+    await client.query(`DELETE FROM public."twoFactor" WHERE "userId" = $1`, [row.target_user_id]);
+    await client.query(
+      `UPDATE public."user" SET "twoFactorEnabled" = false, "updatedAt" = now()
+      WHERE id = $1`,
+      [row.target_user_id],
+    );
+    await client.query(`DELETE FROM public."oauthAccessToken" WHERE "userId" = $1`, [
+      row.target_user_id,
+    ]);
+    await client.query(`DELETE FROM public."oauthRefreshToken" WHERE "userId" = $1`, [
+      row.target_user_id,
+    ]);
+    await client.query(`DELETE FROM public."oauthConsent" WHERE "userId" = $1`, [
+      row.target_user_id,
+    ]);
     await client.query(`DELETE FROM public."session" WHERE "userId" = $1`, [row.target_user_id]);
-    await client.query(`DELETE FROM public."verification"
-      WHERE value = $1 AND identifier LIKE 'reset-password:%'`, [row.target_user_id]);
-    const advanced = await client.query<{ generation: string }>(`UPDATE
+    await client.query(
+      `WITH removed AS (DELETE FROM public."verification"
+      WHERE value = $1
+        OR identifier = ANY($3::text[])
+        OR lower((CASE WHEN pg_input_is_valid(value, 'jsonb') THEN value::jsonb END)->>'email') = lower($2)
+        OR (CASE WHEN pg_input_is_valid(value, 'jsonb') THEN value::jsonb END)->'userData'->>'id' = $1
+      RETURNING identifier)
+      DELETE FROM public."verification" WHERE identifier IN
+        (SELECT '2fa-attempts-' || identifier FROM removed)`,
+      [
+        row.target_user_id,
+        target.rows[0].email,
+        [
+          `sign-in-otp-${target.rows[0].email}`,
+          `email-verification-otp-${target.rows[0].email}`,
+          `forget-password-otp-${target.rows[0].email}`,
+        ],
+      ],
+    );
+    const advanced = await client.query<{ generation: string }>(
+      `UPDATE
       public.rezics_account_recovery_policy SET code_hash = NULL,
       generation = generation + 1, recovered_at = clock_timestamp()
-      WHERE id = $1 RETURNING generation`, [row.target_user_id]);
-    await client.query(`INSERT INTO public.rezics_account_recovery_activation
+      WHERE id = $1 RETURNING generation`,
+      [row.target_user_id],
+    );
+    await client.query(
+      `INSERT INTO public.rezics_account_recovery_activation
       (id, activation_digest, recovery_generation) VALUES ($1,$2,$3)`,
-    [input.claimId, digest, advanced.rows[0]!.generation]);
-    return { claimId: input.claimId,
-      recoveryGeneration: advanced.rows[0]!.generation, replayed: false };
+      [input.claimId, digest, advanced.rows[0]!.generation],
+    );
+    return {
+      claimId: input.claimId,
+      recoveryGeneration: advanced.rows[0]!.generation,
+      replayed: false,
+    };
   });
 }
 
