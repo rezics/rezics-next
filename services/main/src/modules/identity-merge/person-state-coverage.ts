@@ -27,6 +27,7 @@ export const PERSON_STATE_MERGE_EXCLUSIONS: Readonly<Record<string,string>> = {
   'table:structure.progress_command.structure': 'Exact occurrence command receipt retains its original structure and selection.',
   'table:structure.progress.structure': 'Reading progress pins an exact structure, occurrence and selection; independent attempts remain on the original Work, like sessions.',
   'table:reader.consumption_session.work': 'Independent reading sessions remain distinct; no session reconciliation at launch.',
+  'table:reader.library_copy.work': 'Independent copies retain their exact original release and parent Work; merge never coalesces physical ownership or loan history.',
   'table:reader.consumption_session_target.resource': 'An exact target within an independent session retains its original identity.',
   'table:access.reader_review_revision.work': 'Retained review revision is immutable history, not a live review slot.',
   'table:access.target_rating_head.target': 'Ratings of non-Work capability targets retain their exact grain.',

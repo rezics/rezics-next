@@ -8,6 +8,9 @@ import { LibraryFileStore } from '../../../services/main/src/modules/library-imp
 import { ReaderLibraryImportStore } from '../../../services/main/src/modules/library-import/reader-import.ts';
 import { eraseLibraryImportsForPrincipals } from '../../../services/main/src/modules/library-import/privacy.ts';
 import { parseRezics } from '../../../services/main/src/modules/library-import/formats/rezics.ts';
+import { discoverOwnerIdentityReferences } from '../../../services/main/src/modules/identity-merge/reference-discovery.ts';
+import { assertMergeCoverage } from '../../../services/main/src/modules/identity-merge/handlers.ts';
+import { PERSON_STATE_MERGE_EXCLUSIONS } from '../../../services/main/src/modules/identity-merge/person-state-coverage.ts';
 import type { CanonicalRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
@@ -23,6 +26,10 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
   const preparation = Date.now(), home = await startHomeStack('library-copies-loans');
   try {
     const { stack } = home;
+    const copyReferences = (await discoverOwnerIdentityReferences(stack.contentPool))
+      .filter(reference => reference.startsWith('table:reader.library_copy.'));
+    expect(copyReferences).toEqual(['table:reader.library_copy.work']);
+    assertMergeCoverage(copyReferences, [], PERSON_STATE_MERGE_EXCLUSIONS);
     const agent = await home.provision('Copy owner', home.reader.token);
     const other = await home.provision('Other copy owner', home.author.token);
     const editor = await stack.member('release-editor');
