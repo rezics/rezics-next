@@ -436,7 +436,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .cleanup(async () => { await guardPool?.end(); })
     .mount((request: Request) => observeAuthentication(auth, pool, request,
-      () => withRecoveryAuthentication(guard(), request, () => guardedAuthHandler(request))));
+      () => withRecoveryAuthentication(guard(), request, () => guardedAuthHandler(request),
+        () => auth.api.getSession({ headers: request.headers }))));
   return app.get('/api/account/openapi.json', () => ({ openapi: '3.1.2',
     info: { title: 'REZICS Account API', version: '1' },
     ...toOpenAPISchema(app, { paths: [/^\/api\/auth\//, /^\/health\//, '/api/account/openapi.json'] }),

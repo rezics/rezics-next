@@ -53,6 +53,10 @@ test('IAM08: Account recovery migration installs fresh and upgrades the prior ow
     await migrateAuth(fresh);
     await installConsentRefreshFence(fresh);
     await installConsentRefreshFence(fresh);
+    const verificationIndex = `SELECT am.amname FROM pg_index i
+      JOIN pg_class idx ON idx.oid = i.indexrelid JOIN pg_am am ON am.oid = idx.relam
+      WHERE idx.relname = 'account_verification_value_lookup'`;
+    expect((await fresh.query(verificationIndex)).rows).toEqual([{ amname: 'hash' }]);
     expect((await fresh.query(`SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name LIKE 'rezics_account_recovery_%'`)).rows)
       .toHaveLength(4);
@@ -69,6 +73,7 @@ test('IAM08: Account recovery migration installs fresh and upgrades the prior ow
     await upgrade.query(readFileSync(join(root,
       'services/account/migrations/020_independent_credential_recovery.sql'), 'utf8'));
     await installConsentRefreshFence(upgrade);
+    expect((await upgrade.query(verificationIndex)).rows).toEqual([{ amname: 'hash' }]);
     expect((await upgrade.query(`SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'rezics_oauth_code_basis'
         AND column_name = 'recovery_generation'`)).rowCount).toBe(1);

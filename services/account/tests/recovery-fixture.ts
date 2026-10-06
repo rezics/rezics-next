@@ -48,7 +48,7 @@ export async function recoveryProof(
   };
 }
 
-export async function registerRecoveryPasskey(
+export async function beginRecoveryPasskeyRegistration(
   f: RecoveryFixture,
   member: RecoveryMember,
   page: Page,
@@ -91,15 +91,25 @@ export async function registerRecoveryPasskey(
     },
     await options.json(),
   );
-  expect(
-    (
-      await f.request(
+  const challengeCookie = cookies(options);
+  return {
+    challengeCookie,
+    complete: (sessionCookie = member.cookie) =>
+      f.request(
         '/api/auth/passkey/verify-registration',
         { response, name: 'Old laptop' },
-        `${member.cookie}; ${cookies(options)}`,
-      )
-    ).status,
-  ).toBe(200);
+        `${sessionCookie}; ${challengeCookie}`,
+      ),
+  };
+}
+
+export async function registerRecoveryPasskey(
+  f: RecoveryFixture,
+  member: RecoveryMember,
+  page: Page,
+) {
+  const registration = await beginRecoveryPasskeyRegistration(f, member, page);
+  expect((await registration.complete()).status).toBe(200);
   return async () => {
     const options = await f.request('/api/auth/passkey/generate-authenticate-options');
     const response = await page.evaluate(
