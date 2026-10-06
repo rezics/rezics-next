@@ -26,7 +26,8 @@ export function selectTestCommand(args: string[]): [string, string[]] {
   const stories = files.filter(file => file.includes('.stories.'));
   if (stories.length) {
     const workspace = stories[0]!.startsWith('apps/accounts/') ? 'apps/accounts' : 'apps/web';
-    if (stories.length !== files.length || !stories.every(file => file.startsWith(`${workspace}/`))) {
+    if (stories.length !== files.length || !stories.every(file => file.startsWith(`${workspace}/`)
+      || (workspace === 'apps/web' && file.startsWith('packages/ui/')))) {
       throw new Error('Run each workspace’s stories separately from other tests');
     }
     return ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',

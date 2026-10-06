@@ -2,10 +2,11 @@
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
+import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
   renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -1400,6 +1401,27 @@ export function migrationsBelowMain(added: readonly string[], listMain: (directo
   return late;
 }
 
+/** A hand-landed cherry-pick is attributable only across its contiguous patch-equivalent suffix.
+ * An unknown boundary is recorded with zero width, so unrelated manager commits cannot be blamed on this task. */
+export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>, after: string): string {
+  const patch = (commit: string) => {
+    const diff = git(repo, ['show', '--format=', commit]);
+    return git(repo, ['patch-id', '--stable'], false, { input: diff }).split(' ')[0];
+  };
+  const patches = new Set(git(repo, ['rev-list', `${task.base}..${task.branch}`, '--not', 'main']).split('\n').filter(Boolean).map(patch));
+  patches.delete('');
+  if (!patches.size && git(repo, ['rev-parse', task.branch]) === after) {
+    const reflog = git(repo, ['reflog', 'show', 'main', '--format=%H%x09%gs']).split('\n');
+    if (reflog[0]?.startsWith(`${after}\tmerge ${task.branch}: Fast-forward`) && reflog[1]) return reflog[1].split('\t')[0]!;
+  }
+  let before = after;
+  for (const commit of git(repo, ['rev-list', '--first-parent', `${task.base}..${after}`]).split('\n').filter(Boolean)) {
+    if (!patches.has(patch(commit))) break;
+    before = git(repo, ['rev-parse', `${commit}^`]);
+  }
+  return before;
+}
+
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
@@ -1414,7 +1436,12 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
       if (running(sharer)) throw new Error(`${sharer.id} is still running`);
     }
     if (!['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
-    const recordMerged = (commit: string) => {
+    const recordMerged = (commit: string, before?: string) => {
+      if (before !== undefined) {
+        const event: MergeEvent = { before, after: commit, goal: task.goal ?? 'program',
+          taskIds: sharers.map(sharer => sharer.id).sort(), at: new Date().toISOString() };
+        appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
+      }
       for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = commit; }
     };
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
@@ -1428,7 +1455,8 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       const commit = git(root, ['rev-parse', 'HEAD']);
-      recordMerged(commit);
+      if (!sharers.every(sharer => sharer.mergedCommit === commit)) recordMerged(commit, landedBoundary(root, task, commit));
+      else recordMerged(commit);
       console.log(`${sharers.map(sharer => sharer.id).join(', ')} recorded as landed at ${commit.slice(0, 12)}`);
       return;
     }
@@ -1497,9 +1525,11 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
     }
+    const before = git(root, ['rev-parse', 'HEAD']);
+    const after = git(root, ['rev-parse', task.branch]);
     const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
-    recordMerged(git(root, ['rev-parse', 'HEAD']));
+    recordMerged(after, before);
 
     console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${committed.length} file(s):`);
     console.log(`  ${committed.join('\n  ')}`);
@@ -1709,7 +1739,8 @@ async function status(): Promise<void> {
   for (const slug of activeGoals(ledger)) {
     const own = tasks.filter(task => task.goal === slug);
     console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
-      + `${own.filter(task => !['verified', 'cancelled'].includes(task.state)).length} open`);
+      + `${own.filter(task => !['verified', 'cancelled'].includes(task.state)).length} open; `
+      + `${inboxEntries(stateDir, slug).filter(entry => !entry.acknowledged).length} unacknowledged regressions`);
   }
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
@@ -1895,7 +1926,12 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
   }
 }
 
-async function withSlot(command: string[], heavy = false): Promise<number> {
+async function withSlot(command: string[], heavy = false, resultFile?: string): Promise<number> {
+  const queuedAt = Date.now();
+  let startedAt: number | undefined;
+  let code: number | undefined;
+  const artifactRoot = join(process.cwd(), '.artifacts', 'qa');
+  const prior = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
   const slots = Number(process.env.GOAL_QA_SLOTS ?? 3);
   const dir = join(stateDir, 'qa-slots');
   mkdirSync(dir, { recursive: true });
@@ -1917,17 +1953,36 @@ async function withSlot(command: string[], heavy = false): Promise<number> {
     const slot = held;
     reapStaleQaStacks();
     try {
+      startedAt = Date.now();
       const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit',
         env: { ...process.env, GOAL_IN_SLOT: '1' } });
       const forward = (signal: NodeJS.Signals) => child.kill(signal);
       process.on('SIGINT', forward);
       process.on('SIGTERM', forward);
-      return await new Promise<number>(done => child.on('exit', code => done(code ?? 1)));
+      try {
+        code = await new Promise<number>((done, reject) => {
+          child.once('error', reject);
+          child.once('exit', exit => done(exit ?? 1));
+        });
+        return code;
+      } finally {
+        process.off('SIGINT', forward);
+        process.off('SIGTERM', forward);
+      }
     } finally {
       rmSync(slot, { recursive: true, force: true });
     }
   } finally {
     releaseHeavy?.();
+    if (resultFile) {
+      const finishedAt = Date.now();
+      mkdirSync(dirname(resultFile), { recursive: true });
+      writeFileSync(resultFile, JSON.stringify({ code, queuedAt, startedAt, finishedAt,
+        queueMs: (startedAt ?? finishedAt) - queuedAt, testMs: startedAt ? finishedAt - startedAt : 0,
+        totalMs: finishedAt - queuedAt,
+        artifactPaths: (existsSync(artifactRoot) ? readdirSync(artifactRoot) : [])
+          .filter(name => !prior.has(name)).map(name => join(artifactRoot, name)) }, null, 2));
+    }
   }
 }
 
@@ -1967,10 +2022,39 @@ async function main(argv: string[]): Promise<number> {
       return holders.length ? 1 : 0;
     }
     case 'status': await status(); return 0;
+    case 'regress': {
+      // Worktree smoke runs can keep reports/inboxes in their writable checkout; QA still uses the shared host lock.
+      const regressionState = process.env.GOAL_REGRESS_STATE_DIR ? resolve(process.env.GOAL_REGRESS_STATE_DIR) : stateDir;
+      const manifest = await runRegression({ ...parseRegressArgs(rest), repo: process.cwd(), stateDir: regressionState,
+        route: entry => regressionState === stateDir ? withLedger(() => appendInbox(stateDir, entry))
+          : Promise.resolve(appendInbox(regressionState, entry)) });
+      console.log(`Regression ${manifest.runId}: ${manifest.status} at ${manifest.atCommit}`);
+      console.log(`Manifest: ${join(regressionState, 'regress', manifest.runId, 'manifest.json')}`);
+      return manifest.status === 'passed' ? 0 : 1;
+    }
+    case 'inbox': {
+      const goal = process.env.GOAL_ID ?? 'program';
+      if (!validGoalSlug(goal)) throw new Error('Invalid inbox Goal');
+      if (rest.length && (rest.length !== 2 || rest[0] !== '--ack' || !/^\d+$/.test(rest[1]!))) {
+        throw new Error('inbox accepts --ack <number> (the displayed line number)');
+      }
+      await withLedger(() => {
+        const entries = inboxEntries(stateDir, goal, rest.length ? Number(rest[1]) : undefined);
+        for (const entry of entries) console.log(JSON.stringify(entry));
+        if (!entries.length) console.log(`Goal ${goal}: inbox empty`);
+      });
+      return 0;
+    }
     case 'usage':
       console.log(JSON.stringify({ claude: { ...currentUsage(), file: usagePath }, codex: codexAccounts() }, null, 2));
       return 0;
-    case 'test': return withSlot(['bun', 'scripts/qa/test.ts', ...rest.filter(arg => arg !== '--heavy')], isHeavyTest(rest));
+    case 'test': {
+      const at = rest.indexOf('--result-file');
+      const resultFile = at < 0 ? undefined : rest[at + 1];
+      if (at >= 0 && (!resultFile || resultFile.startsWith('--'))) throw new Error('--result-file needs a path');
+      const args = rest.filter((arg, index) => arg !== '--heavy' && (at < 0 || (index !== at && index !== at + 1)));
+      return withSlot(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
+    }
     case 'slot': {
       const heavy = rest[0] === '--heavy';
       const command = heavy ? rest.slice(1) : rest;
@@ -1983,7 +2067,8 @@ async function main(argv: string[]): Promise<number> {
         + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
         + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
-        + ' | status | usage | test [--heavy] <task test args> | slot [--heavy] -- <command>');
+        + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
+        + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy] -- <command>');
       return 2;
   }
 }

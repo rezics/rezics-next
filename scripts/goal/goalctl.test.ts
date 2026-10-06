@@ -663,6 +663,7 @@ describe('goalctl shared lifecycle and launch gates', () => {
       r.commit(second);
       await r.stopFixture(first.id);
       await r.stopFixture(second.id);
+      const before = r.git('rev-parse', 'main');
       const result = r.run(['merge', first.id]);
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
@@ -671,14 +672,69 @@ describe('goalctl shared lifecycle and launch gates', () => {
       expect(tasks[second.id]!.state).toBe('merged');
       expect(tasks[first.id]!.mergedCommit).toBe(r.git('rev-parse', 'main'));
       expect(tasks[second.id]!.mergedCommit).toBe(tasks[first.id]!.mergedCommit);
+      const events = () => readFileSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'), 'utf8')
+        .trim().split('\n').map(line => JSON.parse(line));
+      expect(events()).toEqual([{ before, after: tasks[first.id]!.mergedCommit, goal: 'alpha',
+        taskIds: [first.id, second.id], at: expect.any(String) }]);
       expect(r.run(['merge', second.id]).status).toBe(0);
       // A resumed sharer may finish without new commits; the no-op merge still records its delivered work.
       await r.stopFixture(second.id);
       expect(r.run(['merge', first.id]).status).toBe(0);
       expect(r.ledger().tasks[second.id]!.state).toBe('merged');
       expect(r.ledger().tasks[second.id]!.mergedCommit).toBe(tasks[first.id]!.mergedCommit);
+      expect(events()).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 30_000);
+
+  test('a manually landed cherry-pick records its boundary and preserves intervening maintainer commits', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task); await r.stopFixture(task.id);
+      writeFileSync(join(r.dir, 'maintainer.ts'), 'export {};\n');
+      r.git('add', 'maintainer.ts'); r.git('commit', '-qm', 'Maintainer edit');
+      const before = r.git('rev-parse', 'main');
+      r.git('cherry-pick', task.branch);
+      const after = r.git('rev-parse', 'main');
+      expect(r.run(['merge', task.id, '--landed']).status).toBe(0);
+      const path = join(r.dir, '.temp/goal-orchestration/merges.jsonl');
+      expect(JSON.parse(readFileSync(path, 'utf8').trim())).toMatchObject({ before, after, goal: 'alpha', taskIds: [task.id] });
+      expect(r.run(['merge', task.id, '--landed']).status).toBe(0);
+      expect(readFileSync(path, 'utf8').trim().split('\n')).toHaveLength(1);
+    } finally { r.cleanup(); }
+  }, 30_000);
+
+  test('inbox lists, acknowledges a displayed line and status prints the unacknowledged count', () => {
+    const r = repo();
+    try {
+      const dir = join(r.dir, '.temp/goal-orchestration/inbox'); mkdirSync(dir);
+      const entry = { runId: 'run', atCommit: 'sha', failingTests: ['file'], after: 'sha', goal: 'alpha', taskIds: [],
+        status: 'inconclusive', classification: 'deterministic', artifactPaths: [] };
+      writeFileSync(join(dir, 'alpha.jsonl'), `${JSON.stringify(entry)}\n`);
+      expect(r.run(['status']).stdout).toContain('1 unacknowledged regressions');
+      expect(JSON.parse(r.run(['inbox']).stdout.trim())).toMatchObject({ number: 1, acknowledged: false });
+      expect(r.run(['inbox', '--ack', '1']).status).toBe(0);
+      expect(JSON.parse(r.run(['inbox']).stdout.trim())).toMatchObject({ acknowledged: true });
+      expect(r.run(['inbox', '--ack', '2']).status).toBe(1);
+      expect(r.run(['status']).stdout).not.toContain('1 unacknowledged regressions');
+    } finally { r.cleanup(); }
+  });
+
+  test('test records queue, test and total time and retains its first test argument', () => {
+    const r = repo();
+    try {
+      mkdirSync(join(r.dir, 'scripts/qa'), { recursive: true });
+      writeFileSync(join(r.dir, 'scripts/qa/test.ts'), "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.REGRESSION_ARGUMENTS!, JSON.stringify(process.argv.slice(2)));\n");
+      writeFileSync(join(r.dir, '.temp/bin/docker'), '#!/bin/sh\nexit 0\n'); chmodSync(join(r.dir, '.temp/bin/docker'), 0o755);
+      const report = join(r.dir, '.temp/result.json'); const args = join(r.dir, '.temp/args.json');
+      expect(r.run(['test', 'example.test.ts', '--result-file', report], { REGRESSION_ARGUMENTS: args }).status).toBe(0);
+      expect(JSON.parse(readFileSync(args, 'utf8'))).toEqual(['example.test.ts']);
+      const result = JSON.parse(readFileSync(report, 'utf8'));
+      expect(result.code).toBe(0);
+      expect(result.totalMs).toBe(result.queueMs + result.testMs);
+      expect(result.testMs).toBeGreaterThanOrEqual(0);
+    } finally { r.cleanup(); }
+  });
 
   test('refuses a shared merge while another sharer is running', async () => {
     const r = repo();
