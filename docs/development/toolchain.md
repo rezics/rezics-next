@@ -383,7 +383,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task document:typecheck` | Type-check the independent document protocol. |
 | `task document:gen` | Generate the standalone Document Core, Text and Blocks JSON Schemas. |
-| `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to the program's live-worker cap when it is unset. |
+| `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to the program's live-worker cap and STORYBOOK_MAX_WORKERS to 2 when they are unset. |
 | `task observability:typecheck` | Type-check the shared telemetry runtime and probes. |
 | `task observability:aspire-smoke` | Verify real server spans, structured logs and OTLP authentication against the running backend AppHost. |
 | `task observability:check` | Validate the pinned observability Compose and Collector configurations with disposable local secrets. |
