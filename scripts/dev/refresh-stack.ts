@@ -326,13 +326,17 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
 }
 
 export async function refreshSharedStack(root: string, args: string[], preparation: RefreshPreparation): Promise<void> {
-  if (args.length > 1 || args.some(arg => arg !== '--dry-run')) throw new Error('Usage: task dev:refresh -- [--dry-run]');
+  if (args.length > 1 || args.some(arg => !['--dry-run', '--wait'].includes(arg))) {
+    throw new Error('Usage: task dev:refresh -- [--dry-run | --wait]');
+  }
+  // With several Goals the heavy lock is rarely free and unqueued; --wait joins its queue like any heavy run.
+  const wait = args.includes('--wait');
   const gitDir = command(root, 'git', ['rev-parse', '--path-format=absolute', '--git-dir']);
   const common = command(root, 'git', ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   assertRefreshCheckout(gitDir !== common, command(root, 'git', ['branch', '--show-current']),
     Boolean(command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])));
   const lock = join(resolve(common, '..'), '.temp/goal-orchestration/qa-slots/heavy');
-  if (refreshHeavyLockHeld(lock)) throw new Error('Shared-stack refresh refused: the host-wide heavy QA lock is held; retry after that run finishes');
+  if (!wait && refreshHeavyLockHeld(lock)) throw new Error('Shared-stack refresh refused: the host-wide heavy QA lock is held; retry after that run finishes or pass --wait');
   if (args.includes('--dry-run')) {
     const snapshot = await inspectRefresh(root);
     printRefreshPlan(snapshot);
@@ -341,8 +345,8 @@ export async function refreshSharedStack(root: string, args: string[], preparati
     return;
   }
   let release: () => void;
-  try { release = await acquireHeavy(['task', 'dev:refresh'], { lockDir: lock, deadline: Date.now() - 1 }); }
-  catch { throw new Error('Shared-stack refresh refused: heavy QA is held or queued; retry after it finishes'); }
+  try { release = await acquireHeavy(['task', 'dev:refresh'], { lockDir: lock, deadline: wait ? Date.now() + 2 * 3_600_000 : Date.now() - 1 }); }
+  catch { throw new Error(`Shared-stack refresh refused: heavy QA is held or queued; ${wait ? 'it stayed held for two hours' : 'retry after it finishes or pass --wait'}`); }
   const onExit = () => release();
   process.once('exit', onExit);
   try {
