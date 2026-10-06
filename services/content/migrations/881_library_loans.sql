@@ -16,5 +16,7 @@ CREATE UNIQUE INDEX library_loan_active_copy ON reader.library_loan (agent, copy
 CREATE INDEX library_loan_copy ON reader.library_loan (agent, copy);
 CREATE INDEX library_loan_due ON reader.library_loan (agent, due_at, id);
 CREATE INDEX library_loan_active_due ON reader.library_loan (agent, due_at, id) WHERE returned_at IS NULL;
+-- Returned pages skip active loans before applying the keyset limit.
+CREATE INDEX library_loan_returned_due ON reader.library_loan (agent, due_at, id) WHERE returned_at IS NOT NULL;
 CREATE TRIGGER library_bundle_loans AFTER INSERT OR UPDATE OR DELETE ON reader.library_loan
   FOR EACH ROW EXECUTE FUNCTION reader.advance_library_bundle_fence();
