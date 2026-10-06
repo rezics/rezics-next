@@ -8,6 +8,9 @@ import { canonicalExport, InvalidExportPlan, type ExportPlan } from './planner.t
 import { ExportSourceNotFound, ExportSourceUnavailable, ExportStale, readExportPlan, type ExportReaderDependencies,
   type ExportSelection } from './readers.ts';
 import { ExportDenied, ExportStore, exportTerminal, type SealedExport } from './store.ts';
+import { PlatformClosed, requireSelectedPlatformCapability } from '../access/exposure.ts';
+import { PlatformAccessUnavailable } from '../access/platform-permissions.ts';
+import { exportProfileExposure } from './readers.ts';
 
 export class ExportPending extends Error {
   constructor(readonly operationId: string) { super('export needs owner reconciliation'); }
@@ -38,15 +41,24 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
   input: CreateExportInput): Promise<SealedExport> {
   const principal = await deps.account.verify(request, ['export:create']);
   await assertGraphAdmissionOpen(deps.readers.env.fuseki, deps.readers.env.lineage);
+  let selected: { plan: ExportPlan } | { error: unknown };
+  try {
+    selected = { plan: await readExportPlan(deps.readers, principal, input.actingSubject,
+      input.selection, input.useScope, request) };
+  } catch (error) {
+    // A closed capability creates no admission. Ordinary source refusals retain
+    // the existing durable cancellation/recovery path after resource admission.
+    if (error instanceof PlatformClosed || error instanceof PlatformAccessUnavailable) throw error;
+    selected = { error };
+  }
   const requestDigest = sha({ profile: 'export-create-v1', ...input });
   const admission = await deps.access.register({ principal, actingSubject: input.actingSubject,
     scope: scope(input.selection), action: 'export.create', idempotencyKey: input.idempotencyKey,
     requestDigest });
   const previous = await deps.store.readByAdmission(admission.principalId, admission.id);
   if (previous) {
-    const current = await readExportPlan(deps.readers, principal, input.actingSubject,
-      input.selection, input.useScope, request);
-    if (current.manifestDigest !== previous.manifestDigest) throw new ExportStale('export basis changed');
+    if ('error' in selected) throw selected.error;
+    if (selected.plan.manifestDigest !== previous.manifestDigest) throw new ExportStale('export basis changed');
     await deps.access.recordGraphOutcome(admission.id, exportTerminal(admission, previous.position, 'succeeded'));
     return { ...previous, replayed: true };
   }
@@ -63,20 +75,16 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
     await deps.access.recordGraphOutcome(admission.id, terminal);
     throw new ExportDenied('export authority is not current');
   }
-  let plan: ExportPlan;
-  try {
-    plan = await readExportPlan(deps.readers, principal, input.actingSubject,
-      input.selection, input.useScope, request);
-  } catch (error) {
+  if ('error' in selected) {
+    const error = selected.error;
     if (error instanceof ExportDenied || error instanceof ExportStale || error instanceof ExportSourceUnavailable
-      || error instanceof ExportSourceNotFound
-      || error instanceof RevisionNotFound
-      || error instanceof InvalidExportPlan) {
+      || error instanceof ExportSourceNotFound || error instanceof RevisionNotFound || error instanceof InvalidExportPlan) {
       const terminal = await deps.store.cancel(admission);
       await deps.access.recordGraphOutcome(admission.id, terminal);
     }
     throw error;
   }
+  const plan = selected.plan;
   if (plan.licenseScope === 'blocked') {
     const terminal = await deps.store.cancel(admission);
     await deps.access.recordGraphOutcome(admission.id, terminal);
@@ -100,6 +108,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   if (!principalId) throw new ExportDenied('export principal is inactive');
   await assertGraphAdmissionOpen(deps.readers.env.fuseki, deps.readers.env.lineage);
   const saved = await deps.store.read(principalId, manifestId);
+  await requireSelectedPlatformCapability(deps.readers.platformAccess ?? deps.readers.wiki?.platformAccess,
+    principal, { exposure: exportProfileExposure(saved.plan.targetProfile), operationId: 'getV1ExportsByExport' });
   const first = saved.plan.members[0];
   const profile = saved.plan.targetProfile;
   const assessment = saved.plan.members[1];
@@ -143,7 +153,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
       revisions: data.revisions as import('../wiki/delta.ts').WikiRevisionSet,
       scope: data.scope as import('../wiki/history-read.ts').WikiHistoryScope };
   } else throw new ExportSourceUnavailable('export source locator is unavailable');
-  const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope, request);
+  const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope, request,
+    'getV1ExportsByExport');
   if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');
   if (await deps.access.activePrincipalId(principal) !== principalId) {
     throw new ExportDenied('export principal is inactive');

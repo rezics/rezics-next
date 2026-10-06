@@ -108,7 +108,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
             ...(body.revealedAt ? { revealedAt: body.revealedAt } : {}),
             ...(body.applicability ? { applicability: body.applicability } : {}),
             ...(body.lifecycle ? { lifecycle: body.lifecycle } : {}) },
-          actingSubject: body.actingSubject, idempotencyKey });
+          actingSubject: body.actingSubject, idempotencyKey }, work.platformAccess);
         return Response.json({ profile: 'relation-change-v1', occurrence: result.occurrence, revision: result.revision,
           predecessor: result.predecessor, receipt: result.receipt, sourcePosition: { datasetId: 'product',
             dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed },

@@ -44,6 +44,8 @@ import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageRe
   unsupportedPublicSearchSelectors, workTypeFilters } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
+import { semanticTypeCapabilities } from '../modules/semantic/selected-capability.ts';
 
 /** Adapter discovery consumes the same public operation and its runtime schema. */
 export const capabilities = { '/v1/search/catalogue': { get: { disposition: 'supported',
@@ -348,7 +350,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         if (!work.privateSearch || !principal) return ws.close(4503, 'private_search_unavailable');
         connections.set(ws.id, new PrivateSearchConnection(work.environment, work.privateSearch,
           principal, { send: frame => ws.send(frame), close: (code, reason) => ws.close(code, reason),
-            terminate: () => ws.terminate() }));
+            terminate: () => ws.terminate() }, work.platformAccess));
       },
       async message(ws, body) { await connections.get(ws.id)?.message(body); },
       async close(ws) {
@@ -452,7 +454,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }),
       }, { additionalProperties: false })]),
-      response: { 200: publicQueryResult, 400: problemResult(400),
+      response: { 200: publicQueryResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body, request }) => {
@@ -460,6 +462,12 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       try {
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
+        // Only validated keyword profiles are admitted here; saved-view and LLM-index execution have no template yet.
+        const capabilities = semanticTypeCapabilities('includeTypes' in body ? body.includeTypes ?? [] : []);
+        const principal = capabilities.some(exposure => exposure !== 'public') && request.headers.has('authorization')
+          ? await work.account.verify(request, []) : undefined;
+        for (const exposure of capabilities) await requireSelectedPlatformCapability(work.platformAccess, principal,
+          { exposure, operationId: 'postV1Queries' });
         if (body.profile === 'public-content-phrase-v1' && !work.contentProjection) {
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
@@ -532,7 +540,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
     })
     .post('/v1/queries/page', {
       body: publicPhrasePageRequest,
-      response: { 200: publicPhrasePageResult, 400: problemResult(400),
+      response: { 200: publicPhrasePageResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 409: problemResult(409), 422: problemResult(422),
         500: problemResult(500), 503: problemResult(503) },
     }, async ({ body, request }) => {
@@ -540,6 +548,11 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       try {
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
+        const capabilities = semanticTypeCapabilities('includeTypes' in body ? body.includeTypes ?? [] : []);
+        const principal = capabilities.some(exposure => exposure !== 'public') && request.headers.has('authorization')
+          ? await work.account.verify(request, []) : undefined;
+        for (const exposure of capabilities) await requireSelectedPlatformCapability(work.platformAccess, principal,
+          { exposure, operationId: 'postV1QueriesPage' });
         const page = await readerSnapshot(request, async () => {
           const readPage = async () => {
             const publicFields = fieldOwners();

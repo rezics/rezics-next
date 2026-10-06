@@ -9,7 +9,7 @@ import { readConceptWorks, readFilteredWorks } from '../modules/concept-page/rea
 import { discoveryError } from '../modules/discovery/management.ts';
 import { publicWorkRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
-import { type AdmittedQuery, compileQuery, QUERY_COST, QueryRejected, type CompiledQuery }
+import { type AdmittedQuery, compileQuery, compiledQueryCapabilities, QUERY_COST, QueryRejected, type CompiledQuery }
   from '../modules/query/compile.ts';
 import { interpretationForConcept } from '../modules/query/concept.ts';
 import { combineConcepts, completeSearch, pageConcepts, type ConceptRelation }
@@ -18,6 +18,7 @@ import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { searchRoutes } from './search.ts';
 import { commandError, problem } from './problems.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
 import { workReadError } from './work-reads.ts';
 import { releaseWorksPage } from '../modules/facets/release-contract.ts';
 import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/release-read.ts';
@@ -93,11 +94,16 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia().post('/v1/query', { body, response: {
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
       result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage]) }),
-    400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
+    400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
       const compiled = compileQuery(input as AdmittedQuery | ResourceListQuery);
+      const capabilities = compiledQueryCapabilities(compiled);
+      const principal = capabilities.some(exposure => exposure !== 'public') && request.headers.has('authorization')
+        ? await work.account.verify(request, []) : undefined;
+      for (const exposure of capabilities) await requireSelectedPlatformCapability(work.platformAccess,
+        principal, { exposure, operationId: 'postV1Query' });
       if (compiled.template === 'resource-list') {
         const query = compiled.request.input;
         let result;

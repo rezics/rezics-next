@@ -17,7 +17,8 @@ import { checkedComponentState, ownedTriples, propertyRdf, referencedResources,
   valueValidations, type ComponentInput, type ComponentState } from './change.ts';
 import { allocateNativeIri, checkedNativeIri, PROFILES } from './schema.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { referenceReader, SEMANTIC_WRITE_SCOPE, type SemanticAccess } from './admitted.ts';
+import { referenceReader, semanticTypeCapabilities, SEMANTIC_WRITE_SCOPE, type SemanticAccess } from './admitted.ts';
+import { requireSelectedPlatformCapability } from '../access/exposure.ts';
 import { cancelSemanticAdmission, ensureModelGeneration, familyReceiptIri, sealSemanticRejection,
   sealComponentState, SemanticChangeRejected, validationsFor, type SemanticAdmission,
   type SemanticTerminal } from './command.ts';
@@ -565,12 +566,16 @@ async function activate(env: WorkActivationEnvironment, access: Pick<AccessAdmis
 /** Access admission, Content page stage/read-back, exact-generation validation and one atomic Jena activation. */
 export async function admittedSemanticBulkChange(input: {
   env: WorkActivationEnvironment; account: Pick<AccountAssertionVerifier, 'verify'>; access: SemanticAccess;
+  platformAccess?: Pick<import('../access/exposure.ts').AccessExposure, 'require'>;
   store: SemanticStageStore; request: Request; actingSubject: string; idempotencyKey: string; states: unknown[];
 }) {
   await assertGraphAdmissionOpen(input.env.fuseki, input.env.lineage);
   const principal = await input.account.verify(input.request, [SEMANTIC_WRITE_SCOPE]);
   const states = input.states.map(state => checkedComponentState(state));
   if (states.length < 1 || states.length > STAGE_LIMITS.items) throw new SemanticStageRejected('too-large');
+  for (const exposure of semanticTypeCapabilities(states.flatMap(state => state.component === 'resource' ? state.types : [])))
+    await requireSelectedPlatformCapability(input.platformAccess, principal,
+      { exposure, operationId: 'postV1SemanticChangesBulk' });
   const preparedPages = prepareSemanticStagePages(states.map(state => ({ target: allocateNativeIri(),
     expectedHead: null, state })));
   const digest = semanticBulkDigest(states);

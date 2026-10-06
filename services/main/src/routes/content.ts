@@ -17,6 +17,8 @@ import { authorizedReadProblems, contentCommentPageResult, contentCommentResult,
   contentPublicationWriteResult, exactContentRevision, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
+import { resolvedSemanticCapabilities } from '../modules/semantic/admitted.ts';
 import { titleControlBasis } from './shared.ts';
 import { publicDomainRevisionCurrent } from '../modules/content-publication/public-domain-read.ts';
 import { authoredBodySchema } from '../api-document.ts';
@@ -326,6 +328,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        const principal = await work.account.verify(request, ['work:edit']);
+        for (const exposure of await resolvedSemanticCapabilities(work.environment, [body.work]))
+          await requireSelectedPlatformCapability(work.platformAccess, principal,
+            { exposure, operationId: 'postV1Content-edits' });
         const receipt = await editAdmittedMetadataWork(work.environment, work.account, work.access,
           request, { work: body.work, expectedHead: body.expectedHead, title: body.title, language: body.language,
             actingSubject: body.actingSubject, idempotencyKey, titleControl: body.titleControl });

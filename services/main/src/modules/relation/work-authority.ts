@@ -1,7 +1,8 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { admitted, type AdmittedRelationChangeInput, type SemanticAccess } from '../semantic/admitted.ts';
+import { admitted, relationSelectedCapabilities, type AdmittedRelationChangeInput, type SemanticAccess } from '../semantic/admitted.ts';
+import type { AccessExposure } from '../access/exposure.ts';
 import { SemanticChangeRejected } from '../semantic/command.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertIdentityParticipants, relationReferences, canonicalRelation, changeRelationOccurrence, readCurrentOccurrence, readExactDefinition,
@@ -19,7 +20,7 @@ export function relationSubjectWork(definition: ExactDefinition, state: Occurren
 
 export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
-  input: AdmittedRelationChangeInput) {
+  input: AdmittedRelationChangeInput, platformAccess?: Pick<AccessExposure, 'require'>) {
   // System reader: the writer validates participants against the full member list; the disclosure rule decides what the caller may name.
   const definition = await readExactDefinition(env, input.input.definition, systemDisclosure);
   if (!definition?.workSubjectRole) throw new SemanticChangeRejected('invalid', 'definition has no Work subject role');
@@ -49,6 +50,8 @@ export async function admittedWorkRelationChange(env: WorkActivationEnvironment,
     return typeof value === 'function' ? value.bind(target) : value;
   } });
   return admitted({ env, account, access: workAccess, request, actingSubject: input.actingSubject,
+    platformAccess, operationId: 'postV1RelationsChanges',
+    selectedCapabilities: () => relationSelectedCapabilities(env, definition, state, input),
     idempotencyKey: input.idempotencyKey, action: 'relation.change', family: RELATION_CHANGE_FAMILY,
     scope: `work:edit:${subject}`, digest,
     references: async principal => {

@@ -1,4 +1,6 @@
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
+import { PlatformClosed } from '../modules/access/exposure.ts';
+import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
 import { ContentConflict, ContentLimitExceeded, ContentUnavailable }
   from '../../../content/src/core.ts';
 import { ContentEmbedInvalid } from '../../../content/src/embed.ts';
@@ -129,6 +131,7 @@ export function problem(status: number, code: string, title: string, headers?: H
 }
 
 export function commandError(error: unknown): Response {
+  if (error instanceof PlatformClosed) return platformExposureProblem(error);
   if (error instanceof TranslationBasisRequired) return problem(409, error.code, error.message);
   if (error instanceof SourceIntakeInvalid) {
     return problem(400, 'invalid_source_intake', 'Source intake does not match its profile');

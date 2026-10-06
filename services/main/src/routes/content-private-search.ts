@@ -6,6 +6,8 @@ import { ContentPrivateConnection, contentPrivateProblem }
   from '../modules/search-disclosure/content-socket.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
+import { resolvedSemanticCapabilities } from '../modules/semantic/admitted.ts';
 
 export const openApiOperations = {
   '/v1/private-content-queries': { post: { exposure: 'public', bearer: true } , ws: { exposure: 'public' } },
@@ -24,11 +26,16 @@ export function contentPrivateSearchRoutes(work: MainWorkDependencies) {
         phrase: t.String({ minLength: 2, maxLength: 80 }),
       }, { additionalProperties: false }),
       response: { 200: t.Object({ transport: t.Literal('websocket'), path: t.Literal('/v1/private-content-queries') }),
-        400: problemResult(400), 401: problemResult(401), 503: problemResult(503) },
-    }, async ({ request }) => {
+        400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 503: problemResult(503) },
+    }, async ({ request, body }) => {
       if (!owners) return problem(503, 'private_search_unavailable',
         'Private Content phrase delivery is unavailable');
-      try { await work.account.verify(request, ['work:read']); }
+      try {
+        const principal = await work.account.verify(request, ['work:read']);
+        for (const exposure of await resolvedSemanticCapabilities(work.environment, [body.resource]))
+          await requireSelectedPlatformCapability(work.platformAccess, principal,
+            { exposure, operationId: 'postV1Private-content-queries' });
+      }
       catch (error) {
         const failure = contentPrivateProblem(error);
         return problem(failure.status, failure.code, failure.title,
@@ -54,7 +61,7 @@ export function contentPrivateSearchRoutes(work: MainWorkDependencies) {
         if (!owners || !principal) return ws.close(4503, 'private_search_unavailable');
         connections.set(ws.id, new ContentPrivateConnection(work.environment, owners,
           principal, { send: frame => ws.send(frame), close: (code, reason) => ws.close(code, reason),
-            terminate: () => ws.terminate() }));
+            terminate: () => ws.terminate() }, work.platformAccess));
       },
       async message(ws, body) { await connections.get(ws.id)?.message(body); },
       async close(ws) {

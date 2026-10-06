@@ -1,5 +1,7 @@
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { requireSelectedPlatformCapability, type AccessExposure } from '../access/exposure.ts';
+import { resolvedSemanticCapabilities } from '../semantic/admitted.ts';
 import { PrivateSearchReceiptSession } from '../contribution/private-delivery-fence.ts';
 import type { PrivateSearchSettlement } from '../contribution/private-search-settlement.ts';
 import { PRIVATE_SEARCH_GRAPH } from '../contribution/private-projection.ts';
@@ -12,7 +14,7 @@ import { projectPrivateContentDraft }
 const resourceId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const variantId = /^urn:rezics:variant:[0-9a-f-]{36}$/;
 const decimal = /^(0|[1-9][0-9]*)$/;
-export const CONTENT_PRIVATE_SEARCH_COST = { contentReads: 4, fusekiReads: 10,
+export const CONTENT_PRIVATE_SEARCH_COST = { contentReads: 4, fusekiReads: 12,
   graphCommands: 1, textCandidateLimit: 2,
   resultBytes: 1_048_576, phraseCodepoints: 80 } as const;
 
@@ -121,8 +123,14 @@ export async function prepareAdmittedPrivateContentPhrase(env: WorkActivationEnv
   content: ContentCore, access: ContentSearchReadAccess,
   settlement: Pick<PrivateSearchSettlement, 'settle'>,
   principal: VerifiedPrincipal, actingSubject: string,
-  input: PrivateContentPhraseInput): Promise<PrivateSearchReceiptSession> {
+  input: PrivateContentPhraseInput, platformAccess?: Pick<AccessExposure, 'require'>): Promise<PrivateSearchReceiptSession> {
   const phrase = phraseOf(input);
+  const checkSelectedCapability = async () => {
+    for (const exposure of await resolvedSemanticCapabilities(env, [input.resource]))
+      await requireSelectedPlatformCapability(platformAccess, principal,
+        { exposure, operationId: 'wsV1Private-content-queries' });
+  };
+  await checkSelectedCapability();
   const lease = await access.admit(principal, actingSubject, input.resource, input.variant);
   let prepared: Awaited<ReturnType<typeof candidate>>;
   try { prepared = await candidate(env, content, input, phrase); }
@@ -141,6 +149,7 @@ export async function prepareAdmittedPrivateContentPhrase(env: WorkActivationEnv
   }, { settlement,
     messageTypes: { result: 'private-content-result-v1', receipt: 'private-content-receipt-v1' },
     afterArm: async () => {
+      await checkSelectedCapability();
       const [current, graph] = await Promise.all([
         content.readDraftHead(input.resource, input.variant), position(env),
       ]);

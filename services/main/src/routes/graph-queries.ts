@@ -13,7 +13,8 @@ import {
   queryRelationGraph,
 } from '../modules/graph-query/query.ts';
 import { queryStatementGraph } from '../modules/graph-query/statements.ts';
-import { InvalidGraphQuery } from '../modules/graph-query/schema.ts';
+import { checkedRelationGraphQuery, checkedStatementGraphQuery, InvalidGraphQuery } from '../modules/graph-query/schema.ts';
+import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -260,11 +261,18 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
     async ({ request: webRequest, body }) => {
       try {
         const principal = await work.account.verify(webRequest, [SEMANTIC_READ_SCOPE]);
+        const selected = body.profile === 'relation-graph-v1'
+          ? checkedRelationGraphQuery(body) : checkedStatementGraphQuery(body);
+        // Both admitted profiles traverse one hop. No generic SPARQL or multi-hop
+        // profile is currently admitted by this owner's request schema.
+        await requireSelectedPlatformCapability(work.platformAccess, principal,
+          { exposure: selected.profile === 'relation-graph-v1' || selected.profile === 'statement-graph-v1'
+            ? 'public' : 'platform:sparql', operationId: 'postV1GraphQueries' });
         if (!work.access.canReadSemanticResource) {
           return problem(503, 'graph_query_unavailable', 'Graph read authority is unavailable');
         }
-        const canRead = referenceReader(work.access, principal, body.actingSubject);
-        if (body.profile === 'relation-graph-v1') {
+        const canRead = referenceReader(work.access, principal, selected.actingSubject);
+        if (selected.profile === 'relation-graph-v1') {
           const readReferences = work.access.canReadReferences?.bind(work.access);
           if (!readReferences) {
             return problem(503, 'graph_query_unavailable', 'Graph read authority is unavailable');
@@ -274,15 +282,15 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
             {
               canReadResource: canRead,
               canReadResources: (resources) =>
-                readReferences(principal, body.actingSubject, resources),
+                readReferences(principal, selected.actingSubject, resources),
             },
-            body,
+            selected,
           );
           return Response.json(result, { headers: { 'cache-control': 'no-store' } });
         }
         if (
-          !(await canReadSemantic(work.access, principal, body.actingSubject, body.anchor)) &&
-          !(await work.access.canReadWork(principal, body.actingSubject, body.anchor))
+          !(await canReadSemantic(work.access, principal, selected.actingSubject, selected.anchor)) &&
+          !(await work.access.canReadWork(principal, selected.actingSubject, selected.anchor))
         ) {
           return problem(404, 'graph_anchor_unavailable', 'Graph anchor is unavailable');
         }
@@ -293,7 +301,7 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
           | undefined;
         const positionUrl = new URL(webRequest.url);
         // POST selection comes from the body; ignore a competing URL query value.
-        positionUrl.searchParams.set('position', body.position ?? 'mine');
+        positionUrl.searchParams.set('position', selected.position ?? 'mine');
         const positionRequest = new Request(positionUrl, {
           headers: webRequest.headers,
           signal: webRequest.signal,
@@ -302,7 +310,7 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
           work,
           positionRequest,
           principal,
-          body.actingSubject,
+          selected.actingSubject,
           async (boundary) =>
             queryStatementGraph(
               work.environment,
@@ -317,11 +325,11 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
                     .catch(() => null);
                   const verified = await contextPrincipal;
                   return (
-                    !!verified && selections.canReadPrivate(verified, body.actingSubject, context)
+                    !!verified && selections.canReadPrivate(verified, selected.actingSubject, context)
                   );
                 },
               },
-              body,
+              selected,
             ),
         );
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });

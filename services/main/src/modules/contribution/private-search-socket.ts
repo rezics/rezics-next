@@ -3,6 +3,7 @@ import { AdmissionConflict, AdmissionDenied, AdmissionExpired, AdmissionUnavaila
   type VerifiedPrincipal } from '../access/admission.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from '../account/verify-assertion.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { PlatformClosed, type AccessExposure } from '../access/exposure.ts';
 import { PrivateSearchOfferExpired, type PrivateSearchReceiptSession } from './private-delivery-fence.ts';
 import { PRIVATE_SEARCH_QUERY_SWEEP, PRIVATE_SEARCH_RECEIPT_MS, type PrivateSearchSettlement }
   from './private-search-settlement.ts';
@@ -46,6 +47,8 @@ function queryMessage(value: unknown) {
 
 /** Problems carry no match, count or timing detail; every denial is identical. */
 export function privateSearchProblem(error: unknown): PrivateSearchProblem {
+  if (error instanceof PlatformClosed)
+    return { status: 403, code: 'platform_closed', title: 'This capability is closed' };
   if (error instanceof InvalidPrivateQuery) {
     return { status: 400, code: 'invalid_request', title: 'Private query does not match its profile' };
   }
@@ -80,7 +83,8 @@ export class PrivateSearchConnection {
 
   constructor(private readonly environment: WorkActivationEnvironment,
     private readonly owners: PrivateSearchSocketDependencies,
-    private readonly principal: VerifiedPrincipal, private readonly socket: PrivateSearchSocket) {}
+    private readonly principal: VerifiedPrincipal, private readonly socket: PrivateSearchSocket,
+    private readonly platformAccess?: Pick<AccessExposure, 'require'>) {}
 
   async message(value: unknown): Promise<void> {
     if (this.state === 'waiting') return this.query(value);
@@ -108,7 +112,7 @@ export class PrivateSearchConnection {
       await this.owners.settlement.sweep(PRIVATE_SEARCH_QUERY_SWEEP);
       this.session = await prepareAdmittedPrivateContributionPhrase(this.environment,
         this.owners.access, this.owners.settlement, this.principal, input.actingSubject,
-        { contribution: input.contribution, phrase: input.phrase });
+        { contribution: input.contribution, phrase: input.phrase }, this.platformAccess);
       if (this.peerClosed) return this.settle();
       await this.session.send(frame => this.socket.send(frame));
     } catch (error) {

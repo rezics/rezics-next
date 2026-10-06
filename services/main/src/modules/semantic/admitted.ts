@@ -1,4 +1,6 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import { requireSelectedPlatformCapability, type AccessExposure, type Exposure } from '../access/exposure.ts';
+import { resolvedSemanticCapabilities } from './selected-capability.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type VerifiedPrincipal } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
@@ -7,8 +9,8 @@ import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { systemDisclosure, undisclosedReferences } from '../target/disclosed-references.ts';
 import { ModelGenerationChanged, modelGenerationRefusalGuard } from './generation-guard.ts';
-import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
-  relationChangeDigest, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
+import { ProjectionParticipantRefused, relationReferences, canonicalRelation, changeRelationOccurrence, readExactDefinition, readExactOccurrence, readRelationChangeTerminal, RELATION_CHANGE_FAMILY,
+  relationChangeDigest, type ExactDefinition, type CanonicalRelation, type RelationChangeResult, type RelationInput, type RelationPublication } from '../relation/change.ts';
 import { changeSemanticComponent, checkedComponentState, type ComponentInput, readSemanticChangeTerminal, referencedResources,
   semanticChangeDigest, semanticPredecessor, type SemanticChangeResult } from './change.ts';
 import { ACTIVE_GENERATION, cancelSemanticAdmission, checkedSemanticTerminal, familyReceiptIri, sealSemanticRejection, SemanticChangeRejected,
@@ -21,6 +23,8 @@ export type SemanticAccess = Pick<AccessAdmissionRegistry,
 /** Coarse OAuth capability; fine authority is the Access `semantic.*` grant on the exact scope. */
 export const SEMANTIC_WRITE_SCOPE = 'work:edit';
 export const SEMANTIC_READ_SCOPE = 'work:read';
+
+export { semanticTypeCapabilities, resolvedSemanticCapabilities } from './selected-capability.ts';
 
 export class PendingSemanticChange extends PendingAdmittedWork {
   constructor(admissionId: string, phase: 'semantic-change' | 'relation-change') {
@@ -54,6 +58,9 @@ interface AdmittedCall<T> {
   family: string;
   scope: string;
   digest: string;
+  platformAccess?: Pick<AccessExposure, 'require'>;
+  selectedCapabilities?: () => Promise<Exposure[]>;
+  operationId?: string;
   references: (principal: VerifiedPrincipal) => Promise<string[]>;
   dispatch: (admission: SemanticAdmission, canRead: (resource: string) => Promise<boolean>) => Promise<T>;
   readTerminal: (admissionId: string) => Promise<SemanticTerminal | null>;
@@ -68,6 +75,9 @@ interface AdmittedCall<T> {
 export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   await assertGraphAdmissionOpen(call.env.fuseki, call.env.lineage);
   const principal = await call.account.verify(call.request, [SEMANTIC_WRITE_SCOPE]);
+  for (const exposure of await call.selectedCapabilities?.() ?? ['public'])
+    await requireSelectedPlatformCapability(call.platformAccess, principal,
+      { exposure, operationId: call.operationId ?? 'postV1SemanticChanges' });
   const readable = referenceReader(call.access, principal, call.actingSubject);
   for (const ref of await call.references(principal)) {
     if (!await readable(ref)) throw new SemanticChangeRejected('unavailable-reference', 'a referenced resource is unavailable');
@@ -141,10 +151,13 @@ export interface AdmittedSemanticChangeInput {
 
 export async function admittedSemanticChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
-  input: AdmittedSemanticChangeInput): Promise<SemanticChangeResult> {
+  input: AdmittedSemanticChangeInput,
+  platformAccess?: Pick<AccessExposure, 'require'>): Promise<SemanticChangeResult> {
   const state = checkedComponentState(input.state);
   const digest = semanticChangeDigest(input.target, input.expectedHead, state);
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
+    platformAccess, selectedCapabilities: () => resolvedSemanticCapabilities(env,
+      input.target ? [input.target] : [], state.component === 'resource' ? state.types : []),
     idempotencyKey: input.idempotencyKey, action: 'semantic.change', family: 'semantic-change',
     scope: input.target ? `semantic:edit:${input.target}` : 'semantic:create:root', digest,
     references: async principal => {
@@ -174,14 +187,33 @@ export interface AdmittedRelationChangeInput {
   idempotencyKey: string;
 }
 
+/** The expected immutable revision retains the capability being removed, also
+ * on replay. At most two retained component reads and three 64-resource type
+ * batches cover the previous and proposed 64-participant occurrences. */
+export async function relationSelectedCapabilities(env: WorkActivationEnvironment, definition: ExactDefinition,
+  state: CanonicalRelation, input: AdmittedRelationChangeInput): Promise<Exposure[]> {
+  const previous = input.occurrence && input.expectedHead
+    ? await readExactOccurrence(env, input.occurrence, input.expectedHead) : null;
+  const previousDefinition = previous && previous.state.definition !== definition.revision
+    ? await readExactDefinition(env, previous.state.definition, systemDisclosure) : null;
+  return resolvedSemanticCapabilities(env, [definition.definition,
+    ...(previousDefinition ? [previousDefinition.definition] : []),
+    ...(input.occurrence ? [input.occurrence] : []),
+    ...[...state.participations, ...(previous?.state.participations ?? [])]
+      .flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : [])]);
+}
+
 export async function admittedRelationChange(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>, access: SemanticAccess, request: Request,
-  input: AdmittedRelationChangeInput): Promise<RelationChangeResult> {
+  input: AdmittedRelationChangeInput,
+  platformAccess?: Pick<AccessExposure, 'require'>): Promise<RelationChangeResult> {
   // System reader: the writer validates participants against the full member list; the disclosure rule below decides what the caller may name.
   const definition = await readExactDefinition(env, input.input.definition, systemDisclosure);
   if (!definition) throw new SemanticChangeRejected('unavailable-reference', 'relation definition is unavailable');
   const { state, digest } = relationIntent(definition, input);
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
+    platformAccess, operationId: 'postV1RelationsChanges',
+    selectedCapabilities: () => relationSelectedCapabilities(env, definition, state, input),
     idempotencyKey: input.idempotencyKey, action: 'relation.change', family: RELATION_CHANGE_FAMILY,
     scope: input.occurrence ? `relation:edit:${input.occurrence}` : 'relation:create:root', digest,
     references: async principal => {

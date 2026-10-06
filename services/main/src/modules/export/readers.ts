@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { requireSelectedPlatformCapability, type AccessExposure, type Exposure } from '../access/exposure.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { readSemanticRevision } from '../semantic/read.ts';
 import type { SemanticValue } from '../semantic/value.ts';
@@ -58,6 +59,7 @@ export type ExportSelection =
   | { kind: 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
 
 export interface ExportReaderDependencies {
+  platformAccess?: Pick<AccessExposure, 'require'>;
   wiki?: MainWorkDependencies;
   env: WorkActivationEnvironment;
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
@@ -67,6 +69,17 @@ export interface ExportReaderDependencies {
   structureObjects?: ImmutableObjects;
   verification?: Pick<VerificationStore, 'readEvidenceFor'>;
   rights?: LicenseScopeHook;
+}
+
+/** Ordinary scoped exports stay public. The two historical/dump profiles are
+ * selected by the reader; a client's source-kind label cannot open them. */
+export function exportProfileExposure(profile: ExportPlan['targetProfile']): Exposure {
+  switch (profile) {
+    case 'rezics-projection-v1': case 'rezics-rating-aggregate-v1': case 'rezics-rating-rollup-v1':
+    case 'rezics-composition-v1': case 'rezics-verification-v1': case 'rezics-wiki-v1':
+    case 'rezics-vndb-concept-source-v1': return 'public';
+    default: return 'platform:dataset-dumps';
+  }
 }
 
 function pinned(actual: OwnerPosition, expected: OwnerPosition, epoch: string, label: string): void {
@@ -538,7 +551,11 @@ export async function discloseExportPlan(env: WorkActivationEnvironment, plan: E
 }
 
 export async function readExportPlan(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
-  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope'], request?: Request): Promise<ExportPlan> {
-  return discloseExportPlan(deps.env, await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope, request),
+  actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope'], request?: Request,
+  operationId = 'postV1Exports'): Promise<ExportPlan> {
+  const plan = await readExportPlanUnchecked(deps, principal, actingSubject, selection, useScope, request);
+  await requireSelectedPlatformCapability(deps.platformAccess ?? deps.wiki?.platformAccess, principal,
+    { exposure: exportProfileExposure(plan.targetProfile), operationId });
+  return discloseExportPlan(deps.env, plan,
     disclosureViewer(principal, actingSubject));
 }

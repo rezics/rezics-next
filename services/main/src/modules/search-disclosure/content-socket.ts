@@ -10,6 +10,7 @@ import { InvalidPrivateContentPhrase, PrivateContentSearchUnavailable,
   prepareAdmittedPrivateContentPhrase } from '../content-publication/search-private.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { ContentSearchReadAccess } from './content-read-lease.ts';
+import { PlatformClosed, type AccessExposure } from '../access/exposure.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const variant = /^urn:rezics:variant:[0-9a-f-]{36}$/;
@@ -44,6 +45,8 @@ function queryMessage(value: unknown) {
 }
 
 export function contentPrivateProblem(error: unknown): { status: number; code: string; title: string } {
+  if (error instanceof PlatformClosed)
+    return { status: 403, code: 'platform_closed', title: 'This capability is closed' };
   if (error instanceof InvalidPrivateContentPhrase) {
     return { status: 400, code: 'invalid_request', title: 'Private Content query is invalid' };
   }
@@ -74,7 +77,8 @@ export class ContentPrivateConnection {
   constructor(private readonly env: WorkActivationEnvironment,
     private readonly owners: ContentPrivateSearchOwners,
     private readonly principal: VerifiedPrincipal,
-    private readonly socket: ContentPrivateSocket) {}
+    private readonly socket: ContentPrivateSocket,
+    private readonly platformAccess?: Pick<AccessExposure, 'require'>) {}
 
   async message(value: unknown): Promise<void> {
     if (this.state === 'waiting') return this.query(value);
@@ -104,7 +108,7 @@ export class ContentPrivateConnection {
       await this.owners.settlement.sweep(PRIVATE_SEARCH_QUERY_SWEEP);
       const session = await prepareAdmittedPrivateContentPhrase(this.env,
         this.owners.content, this.owners.access, this.owners.settlement,
-        this.principal, input.actingSubject, input);
+        this.principal, input.actingSubject, input, this.platformAccess);
       this.session = session;
       if (this.peerClosed) { await this.settle(); return; }
       await session.send(frame => this.socket.send(frame));

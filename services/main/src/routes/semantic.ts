@@ -119,7 +119,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const result = await admittedSemanticChange(work.environment, work.account, work.access, request, {
           ...(body.target ? { target: body.target } : {}), expectedHead: body.expectedHead, state: body.state,
-          actingSubject: body.actingSubject, idempotencyKey });
+          actingSubject: body.actingSubject, idempotencyKey }, work.platformAccess);
         return Response.json({ profile: 'semantic-change-v1', component: result.component, revision: result.revision,
           predecessor: result.predecessor, receipt: result.receipt, sourcePosition: { datasetId: 'product',
             dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed },
@@ -139,6 +139,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       }
       try {
         const result = await admittedSemanticBulkChange({ env: work.environment, account: work.account,
+          platformAccess: work.platformAccess,
           access: work.access, store: work.semanticStages, request, actingSubject: body.actingSubject,
           idempotencyKey, states: body.items });
         return Response.json({ ...result, replayed: result.replayed },

@@ -1,6 +1,7 @@
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { COMMAND_MODULE_VERSION } from '../../infrastructure/profile.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
+import { requireSelectedPlatformCapability, type AccessExposure } from '../access/exposure.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
 import { readExactContributionDraft } from './history.ts';
@@ -169,8 +170,11 @@ export type PrivateSearchAccess = Pick<AccessAdmissionRegistry, 'admitContributi
 export async function prepareAdmittedPrivateContributionPhrase(env: WorkActivationEnvironment,
   access: PrivateSearchAccess, settlement: Pick<PrivateSearchSettlement, 'settle'>,
   principal: VerifiedPrincipal, actingSubject: string,
-  input: PrivateContributionPhraseInput): Promise<PrivateSearchReceiptSession> {
+  input: PrivateContributionPhraseInput, platformAccess?: Pick<AccessExposure, 'require'>): Promise<PrivateSearchReceiptSession> {
   privatePhrase(input);
+  // This owner admits only the exact keyword contribution template.
+  await requireSelectedPlatformCapability(platformAccess, principal,
+    { exposure: 'public', operationId: 'wsV1Private-queries' });
   const lease = await access.admitContributionSearchRead(principal, actingSubject,
     input.contribution);
   let candidate: Awaited<ReturnType<typeof queryPrivateContributionPhraseCandidate>>;
@@ -185,6 +189,8 @@ export async function prepareAdmittedPrivateContributionPhrase(env: WorkActivati
     await access.beginContributionSearchDelivery(lease.id, principal, actingSubject,
       input.contribution);
   }, { settlement, afterArm: () => withPrivateSearchBudget(async () => {
+    await requireSelectedPlatformCapability(platformAccess, principal,
+      { exposure: 'public', operationId: 'wsV1Private-queries' });
     const final = await position(env, input.contribution);
     if (!samePosition(candidate.position, final)) {
       throw new PrivateSearchUnavailable('private position moved before delivery');

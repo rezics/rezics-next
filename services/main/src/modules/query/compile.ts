@@ -9,6 +9,8 @@ import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
 import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
 import { compileReleaseQuery, relatedCondition, type ReleaseQuery } from '../facets/release-query.ts';
 import type { ResourceListQuery, ResourceListPlan, ResourceCondition } from './resource-contract.ts';
+import type { Exposure } from '../access/exposure.ts';
+import { semanticTypeCapabilities } from '../semantic/selected-capability.ts';
 
 export const QUERY_COST = {
   nodes: 32, depth: 4, graphReads: 7, candidateRows: 512,
@@ -198,6 +200,18 @@ export function compileQuery(query: AdmittedQuery | ResourceListQuery): Compiled
   }
   const legacy = query as ResourceQuery | ResourceQueryV2;
   return compileLegacyQuery(legacy);
+}
+
+/** Exposure follows the admitted execution plan, never the input profile's name.
+ * Filters are ordinary public reads; persisting a saved view is a different operation. */
+export function compiledQueryCapabilities(plan: CompiledQuery): Exposure[] {
+  if (plan.template === 'release-works') return ['platform:commerce'];
+  const types = plan.template === 'resource-list' ? plan.request.conditions.flatMap(condition =>
+    condition.facet === 'type' && condition.operator !== 'none' ? condition.values : [])
+    : plan.template === 'search' || plan.template === 'search-concepts' ? plan.request.includeTypes ?? []
+      : plan.template === 'zone-browse' ? plan.request.type ?? []
+        : plan.request.type ? [plan.request.type] : [];
+  return semanticTypeCapabilities(types);
 }
 
 function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQuery {

@@ -70,6 +70,8 @@ class CapturingFuseki extends FusekiClient {
     profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
   override async query(query: string): Promise<SparqlResult> {
     if (query.includes('ASK')) return { boolean: !query.includes('rv:InvalidProfile') };
+    // This fixture's Work has no closed descriptive capability type.
+    if (query.includes('SELECT ?type WHERE')) return { results: { bindings: [] } };
     if (query.includes('SELECT ?cursor')) return { results: { bindings: [{ cursor: lit('1') }] } };
     if (query.includes('SELECT ?work ?operation ?manifest')) return { results: { bindings: [{
       work: uri(work), operation: uri(ids[4]!), manifest: uri(this.priorManifest), model: uri(PROFILE), shape: uri(PROFILE),
