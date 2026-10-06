@@ -82,6 +82,30 @@ test('A carried count is rejected when an earlier Work read gate closes without 
   expect(home.measure().candidates).toBe(2);
 });
 
+test('Summary continuations reject disclosure changes without recounting the delivered prefix', async () => {
+  const home = fixture(30);
+  const summary = await readPublicShelves(home.session(), agent, home.store);
+  const shelf = summary.statusShelves.find(row => row.status === 'reading')!;
+  expect(shelf).toMatchObject({ count: 20, countKind: 'lower-bound' });
+  const before = home.measure();
+  home.changeDisclosure();
+  await expect(readPublicStatusShelf(home.session(shelf.nextCursor!), agent, home.store, 'reading'))
+    .rejects.toBeInstanceOf(WorkReadMoved);
+  expect(home.measure().candidates).toBe(before.candidates);
+});
+
+test.each([false, true])('A disclosure change during hydration discards the public count (summary=%s)', async summary => {
+  const home = fixture(30), session = home.session();
+  const hydrate = session.summaries.bind(session);
+  session.summaries = async (...args) => {
+    const result = await hydrate(...args);
+    home.changeDisclosure();
+    return result;
+  };
+  await expect(summary ? readPublicShelves(session, agent, home.store)
+    : readPublicStatusShelf(session, agent, home.store, 'reading')).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
 test.each(['public', 'summary', 'private'])('The HTTP retry wrapper shares the forty-candidate budget per shelf (%s)', async surface => {
   const home = fixture(200, () => false, () => true, surface === 'summary');
   let fenceReads = 0;

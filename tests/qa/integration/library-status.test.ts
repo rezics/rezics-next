@@ -64,6 +64,11 @@ test('Public shelf continuation rejects closure of a previously counted Work rea
     const continued = await stack.call('GET', `${path}&cursor=${encodeURIComponent(first.nextCursor)}`);
     expect(continued.status).toBe(409);
     expect(await continued.json()).toMatchObject({ code: 'read_basis_changed' });
+    const restarted = await stack.call('GET', path);
+    expect(restarted.status).toBe(200);
+    const fresh = await restarted.json();
+    expect(fresh).toMatchObject({ statusCount: 1, statusCountKind: 'exact', nextCursor: null });
+    expect(fresh.items.map((item: { work: string }) => item.work)).not.toContain(work);
   } finally { await stack.stop(); }
 }, 120_000);
 

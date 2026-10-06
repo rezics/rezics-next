@@ -5,7 +5,8 @@ import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus, t
 
 export const PUBLIC_SHELF_COST = { candidateBatch: STATUS_SHELF_COST.candidateBatch,
   candidateBatches: STATUS_SHELF_COST.candidateBatches, pageSize: STATUS_SHELF_COST.pageSize,
-  summaryShelves: 3, countScan: 'delivered cards only; resumable with the page cursor' } as const;
+  summaryShelves: 3, disclosureFenceRows: 1, disclosureFenceReads: 2,
+  countScan: 'delivered cards only; resumable with the page cursor' } as const;
 
 async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore, sort: ShelfSort = 'added') {
   await readAgent(session, agent);
@@ -14,7 +15,7 @@ async function projection(session: WorkReadSession, agent: string, store: Reader
   const visibility = await owner.visibility.read(agent);
   if (visibility.visibility !== 'public') throw new WorkReadMissing('Shelf unavailable');
   return { sort, statusFence: await store.fence(agent, sort), visibilityVersion: visibility.version,
-    agentFence: await owner.agentFence(agent) };
+    agentFence: await owner.agentFence(agent), disclosureFence: await owner.disclosureFence() };
 }
 
 async function fenceProjection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore,
@@ -22,13 +23,14 @@ async function fenceProjection(session: WorkReadSession, agent: string, store: R
   const owner = session.deps.profiles;
   const final = await owner?.visibility.read(agent);
   if (final?.visibility !== 'public' || final.version !== before.visibilityVersion
-    || await store.fence(agent, before.sort) !== before.statusFence || await owner?.agentFence(agent) !== before.agentFence) {
+    || await store.fence(agent, before.sort) !== before.statusFence || await owner?.agentFence(agent) !== before.agentFence
+    || await owner?.disclosureFence() !== before.disclosureFence) {
     throw new WorkReadMoved('Public shelf changed');
   }
 }
 
 const projectionFence = (before: Awaited<ReturnType<typeof projection>>) =>
-  `${before.statusFence}:${before.visibilityVersion}:${before.agentFence}`;
+  `${before.statusFence}:${before.visibilityVersion}:${before.agentFence}:${before.disclosureFence}`;
 
 export async function readPublicShelves(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore,
   budget = new ShelfCandidateBudget()) {

@@ -9,6 +9,7 @@ export type SerializationClass =
   | 'builder fold'
   | 'operator/startup'
   | 'recovery fence'
+  | 'disclosure fence'
   | 'rate gate'
   | 'external log head'
   | 'per-object management revision'

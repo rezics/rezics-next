@@ -13,7 +13,7 @@ export interface OwnRatingHead { id: string; revision: string; work: string; mai
   receipt: string; epoch: string; sequence: string; actingSubject: string; contextRevision: string }
 
 /** Access-only adapter: private Account/Agent links and counting slots never
- * leave this boundary in an HTTP response. No new authority or SQL schema. */
+ * leave this boundary in an HTTP response. Fences never grant authority. */
 export class ProfilesAccess {
   readonly visibility: AgentLibraryVisibilityStore;
   readonly listing: AgentListingStore;
@@ -61,6 +61,17 @@ export class ProfilesAccess {
 
   async agentFence(agent: string): Promise<string | null> {
     return (await this.agentFences([agent])).get(agent) ?? null;
+  }
+
+  /** One source row fences every already-counted Work, regardless of shelf size.
+   * Unrelated disclosure changes conservatively require a fresh traversal. */
+  async disclosureFence(): Promise<string> {
+    return this.transaction(async client => {
+      const row = (await client.query<{ revision: string }>(
+        'SELECT revision::text FROM access.disclosure_revision WHERE id')).rows[0];
+      if (!row) throw new WorkReadUnavailable('Disclosure fence unavailable');
+      return row.revision;
+    }, true);
   }
 
   /** One indexed probe for a page of Agents; an inactive Agent is absent. */

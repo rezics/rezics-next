@@ -28,7 +28,8 @@ export async function publishedWorks(session: WorkReadSession, works: string[]) 
 }
 
 /** The public lower bound counts only delivered cards. Its encrypted continuation
- * binds that count to the candidate keyset and the graph/owner source fences. */
+ * binds that count to the candidate keyset and graph, owner and disclosure cuts.
+ * A policy change rejects the carried count before examining more candidates. */
 export function shelfPageBasis(session: WorkReadSession, agent: string,
   status: ReadingStatus, options: ShelfOptions,
   fence: string, publishedOnly: boolean) {
