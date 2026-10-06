@@ -24,11 +24,13 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
 | `task goal -- stop G-NNN` | Terminates the worker's process group and its task-marked detached children. Preserves other live sharers and shared resources; after the last live worker stops, also sweeps worktree processes and removes its stack. Claims and worktree remain. |
 | `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
-| `task goal -- merge G-NNN [--allow-scope] [--allow-ids]` | Requires all open sharers to have exited, a clean worktree, files within their combined claims and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. Records every open sharer as merged at the same commit; a repeated merge with nothing new succeeds. A conflict marks the named task `conflict` for the worker to resolve. |
+| `task goal -- merge G-NNN [--allow-scope] [--allow-ids] [--landed]` | Requires all open sharers to have exited, a clean worktree, files within their combined claims and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. Records every open sharer and a merge event with both commit boundaries; `--landed` records manually landed work. A repeated merge with nothing new succeeds. A conflict marks the named task `conflict` for the worker to resolve. |
 | `task goal -- close G-NNN... verified\|cancelled` | Removes the worktrees and releases the claims, then moves the briefs and handoffs to `archive/goals` and removes the briefs from the tree in one commit. |
 | `task goal -- tidy [--legacy <dir>]` / `task goal -- goal close <goal> [--dry-run]` | Archives closed briefs still in the tree / ends a Goal once nothing of it remains ([convergence](#convergence)). |
-| `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, the heavy QA holder and the usage of every account. |
+| `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, unacknowledged regression counts, the heavy QA holder and the usage of every account. |
 | `task goal -- test [--heavy] <task test args>` / `task goal -- slot [--heavy] -- <cmd>` | Runs a check inside one of the shared QA slots; heavy runs also take the [host-wide heavy lock](#integration-and-qa). |
+| `task goal -- regress [--at <rev>] [--resume <run-id>]` | Pins `main` (or the selected revision) in a detached worktree, checks committed generated artifacts and runs the harness manifest. Integration batches contain at most 15 files and release the heavy lock between batches; `REZICS_QA_SHARDS` defaults to 1. Reports and checkpoints live under `.temp/goal-orchestration/regress/<run-id>/`; resume keeps the SHA and skips finished batches. `--only unit,model --integration-batches 2` runs a restricted check, which cannot certify a complete pass. `GOAL_REGRESS_STATE_DIR` keeps smoke-run reports in a writable worktree. |
+| `task goal -- inbox [--ack <n>]` | Lists the caller Goal's regression inbox (`GOAL_ID`, default `program`) and acknowledges the displayed line number. Verified merge boundaries route deterministic failures to their Goal; uncertain ownership, inherited, flaky and order-dependent failures go to `program`. Infrastructure results are void and re-queued. |
 
 Engines are `claude`, `sonnet`, `fable`, `codex`, `codex-1`, `luna`, `grok` and `cursor`; the
 [charter](manager.md#resources) lists their models and accounts; the
@@ -106,9 +108,13 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   schedules heavy QA and the live-worker cap, balances the accounts and restarts
   managers that die. It runs no product work and reviews no other Goal's diffs.
   Its [QA tiers](program/GOAL.md#qa-tiers) replace the rotating duty below: Goal
-  managers run worker and wave checks only, and the program batches heavy
-  affected sets and the full tiers on a pinned commit, then routes each failure
-  to its owner. The rest of this bullet records the earlier practice.
+  managers run worker and wave checks only. The program runs `task goal -- regress`
+  on one pinned SHA, resumes its recorded batches after interruption, and uses
+  at most eight probes per failing file to verify a merge boundary. Results go
+  to `goalctl inbox`; `status` shows unacknowledged counts. Unavailable builds,
+  non-monotonic evidence and unrecorded manager or maintainer commits leave an
+  explicit suspect range rather than a guessed task. The rotating duty below
+  records the earlier practice.
 - **Main-wide regression.** Maintainer, 2026-10-05: with continuous merging
   into one `main`, the whole of `main` is tested in one place instead of once
   per Goal. One manager at a time holds the duty: from time to time it runs
