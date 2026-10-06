@@ -16,12 +16,14 @@ test('G-320: chapter batch 328 follows stored ordinals even when event IDs sort 
   const queries: string[] = [];
   const fuseki = { query: async (query: string) => {
     queries.push(query);
-    if (queries.length === 1) return { results: { bindings: [{ controlSequence: binding('328'),
+    if (queries.length === 1) return { results: { bindings: [{ controlSequence: binding('328'), graphSequence: binding('1328'),
       routing: binding('route-1'), batch: binding(batch), eventCount: binding('2') }] } };
     if (queries.length === 2) return { results: { bindings: members } };
     return { boolean: true };
   } } as unknown as FusekiClient;
   const read = await readNextMainOutboxBatch(fuseki, epoch, '327');
+  expect(read?.graphSequence).toBe('1328');
+  expect(read?.sequence).toBe('328');
   expect(read?.eventIds).toEqual([structure, chapter]);
   expect(queries[1]).toContain('?event rv:ordinal ?ordinal');
 

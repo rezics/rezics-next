@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { FusekiClient, SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { resolveInterpretation } from '../../../services/main/src/modules/context/interpretation.ts';
 import { admitRelationCandidatePage, GraphQueryNotFound, queryRelationGraph }
@@ -42,31 +43,42 @@ test('SEARCH01/SEARCH10: one position-fenced Statement batch rejects missing and
     .rejects.toBeInstanceOf(StatementBatchBudgetExceeded);
 });
 
-test('SEARCH07/SEARCH16: Context selection returns its graph position and rejects a moved read', async () => {
+test('SEARCH07/SEARCH16: Context selection reports its graph position, survives unrelated writes and rejects changed selected dependencies', async () => {
   const request = { object: id(1), relation: id(2),
     explicit: { context: id(3), semanticRevision: id(4) }, speaker: { kind: 'realm' as const, realm: id(5) } };
-  const fixture = (move: boolean) => {
+  const fixture = (change: 'none' | 'unrelated' | 'entry' | 'profile') => {
     let positions = 0;
     const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
-      fuseki: { query: async (sparql: string): Promise<SparqlResult> => {
-        if (sparql.includes('SELECT ?epoch ?sequence')) {
-          positions++;
-          return { results: { bindings: [{ epoch: binding('epoch'),
-            sequence: binding(move && positions === 2 ? '8' : '7') }] } };
-        }
-        if (sparql.includes('rv:baseRevision*')) return { results: { bindings: [{
-          revision: binding(id(4)), depth: binding('0'), context: binding(id(3)),
-          disclosure: binding('https://rezics.com/vocab/Public'), entry: binding(id(6)),
-          state: binding('https://rezics.com/vocab/Defined'), definition: binding(id(7)),
-          relation: binding(id(2)),
-        }] } };
-        throw new Error('unexpected Context query');
-      } } as FusekiClient } as WorkActivationEnvironment;
+      fuseki: {
+        commandHealth: async () => ({ profiles: { 'context-v1': change === 'profile' && positions === 2
+          ? 'b'.repeat(64) : profileRegistry['context-v1'].sha256 } }),
+        query: async (sparql: string): Promise<SparqlResult> => {
+          if (sparql.includes('SELECT ?epoch ?sequence')) {
+            positions++;
+            return { results: { bindings: [{ epoch: binding('epoch'),
+              sequence: binding(change === 'unrelated' && positions === 2 ? '8' : '7') }] } };
+          }
+          if (sparql.includes('SELECT ?revision ?base ?depth')) return { results: { bindings: [{
+            revision: binding(id(4)), depth: binding('0'), context: binding(id(3)), contextHead: binding(id(4)),
+            disclosure: binding('https://rezics.com/vocab/Public'), entry: binding(id(6)),
+            state: binding('https://rezics.com/vocab/Defined'),
+            definition: binding(change === 'entry' && positions === 2 ? id(8) : id(7)),
+            relation: binding(id(2)),
+          }] } };
+          throw new Error('unexpected Context query');
+        },
+      } as FusekiClient } as WorkActivationEnvironment;
     return env;
   };
-  expect(await resolveInterpretation(fixture(false), request)).toMatchObject({ state: 'resolved',
-    definition: id(7), sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '7' } });
-  expect(await resolveInterpretation(fixture(true), request)).toEqual({ state: 'unavailable' });
+  for (const change of ['none', 'unrelated'] as const) {
+    const result = await resolveInterpretation(fixture(change), request);
+    expect(result).toMatchObject({ state: 'resolved', definition: id(7),
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '7' } });
+    expect(result.sourcePosition?.dependencyToken).toMatch(/^[0-9a-f]{64}$/);
+  }
+  for (const change of ['entry', 'profile'] as const) {
+    expect(await resolveInterpretation(fixture(change), request)).toEqual({ state: 'unavailable' });
+  }
 });
 
 test('SEARCH01/GRAPH04: an unreadable explicit relation participant is rejected before matching', async () => {

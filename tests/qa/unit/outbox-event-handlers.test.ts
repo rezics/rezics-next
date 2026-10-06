@@ -1,3 +1,4 @@
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -11,7 +12,7 @@ import { OutboxIncomplete, RelayEventBlocked, readMainOutboxEnvelope, relayMainO
 const kind = 'https://rezics.com/vocab/SyntheticChangedEvent';
 const eventId = 'urn:rezics:event:synthetic';
 const receiptId = 'urn:rezics:receipt:synthetic';
-const batch: MainOutboxBatch = { batchId: 'urn:rezics:outbox:synthetic', dataEpoch: 'epoch-1',
+const batch: MainOutboxBatch = { streamScope: MAIN_RELAY_STREAM_SCOPE, graphSequence: '1', batchId: 'urn:rezics:outbox:synthetic', dataEpoch: 'epoch-1',
   sequence: '1', routingEpoch: 'route-1', eventIds: [eventId] };
 const binding = (value: string) => ({ type: 'literal', value });
 
@@ -104,7 +105,7 @@ test('G-266: an unknown kind stops its ordered position with event identity and 
   const eventId = 'urn:rezics:event:unknown-kind';
   const batchId = 'urn:rezics:outbox:unknown-kind';
   const rows = [
-    { results: { bindings: [{ controlSequence: binding('1'), routing: binding('route-1'),
+    { results: { bindings: [{ controlSequence: binding('1'), graphSequence: binding('1'), routing: binding('route-1'),
       batch: binding(batchId), eventCount: binding('1') }] } },
     { results: { bindings: [{ event: binding(eventId), ordinal: binding('0') }] } },
     { boolean: true },
@@ -121,7 +122,7 @@ test('G-266: an unknown kind stops its ordered position with event identity and 
   const sql: string[] = [];
   const pool = { query: async (statement: string) => {
     sql.push(statement);
-    return { rows: [{ data_epoch: batch.dataEpoch, sequence: '0' }] };
+    return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: batch.dataEpoch, sequence: '0' }] };
   } } as unknown as Pool;
   const error = await relayMainOutboxOnce(fuseki, pool, 'test').catch(caught => caught);
   expect(error).toBeInstanceOf(RelayEventBlocked);

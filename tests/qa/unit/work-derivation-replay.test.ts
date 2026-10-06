@@ -1,3 +1,4 @@
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
@@ -42,7 +43,7 @@ function fixture(kind: WorkDerivationInput['kind'] = 'software-fork', corrects?:
         targetMainRevision: input.expectedTargetHead, sourceWork: input.sourceWork,
         sourceMainVersion: input.sourceMainVersion, sourceMainRevision: input.sourceMainRevision,
         derivationKind: input.kind, evidence: input.evidence, linkedBy: input.actingSubject } } };
-  const coverage: RelayCoverage = { consumer: 'work04-replay', dataEpoch: epoch,
+  const coverage: RelayCoverage = { streamScope: MAIN_RELAY_STREAM_SCOPE, consumer: 'work04-replay', dataEpoch: epoch,
     sequence: '1', batchCount: '1', batchDigest: '', eventCount: '1', eventDigest: '' };
   return { input, receiptId, eventId, batchId, envelope, coverage };
 }
@@ -103,7 +104,7 @@ function recovery(options: { corrects?: string; heldPrior?: string } = {}) {
   let changeBatchAfterScan = false;
   let laterBatchId = source.batchId;
   const relayQuery = async (sql: string) => {
-    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ data_epoch: epoch, sequence: '1' }] };
+    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: epoch, sequence: '1' }] };
     if (sql.includes('UNION ALL')) return { rows: [], rowCount: 0 };
     if (sql.includes('actual_count')) {
       const row = { sequence: '1', batch_id: source.batchId,

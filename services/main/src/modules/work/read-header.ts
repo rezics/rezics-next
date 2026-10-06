@@ -44,7 +44,9 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   const readHeads = async () => isPublic ? (await readMainLanguageHeads(session.deps.environment,
     row.main!.value, true)).sort((a, b) => a.language.localeCompare(b.language)) : [];
   const heads = await readHeads();
-  const languageToken = session.observeDependency(`language-heads:${row.main.value}`, heads, readHeads);
+  const languageToken = session.options.localBasis
+    ? session.observeDependency(`language-heads:${row.main.value}`, heads, readHeads)
+    : readDependencyToken(heads);
   const selected = isPublic ? chooseMainLanguage(heads, session.options.language) : null;
   const profiles = session.options.localBasis ? await session.dependency('work-profiles', async () => {
     const health = await session.deps.environment.fuseki.commandHealth();

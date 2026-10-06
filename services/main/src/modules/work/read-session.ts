@@ -330,21 +330,27 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
             }
           } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
-          const result = await withDisclosureViewer(session.viewer, () => operation(session));
-          const after = await position(deps, options.localBasis);
-          if (after.dataEpoch !== session.position.dataEpoch
-            || !options.localBasis && after.sequence !== session.position.sequence) {
-            if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
-              session.stale = true;
-            } else {
-              throw new WorkReadMoved('Graph changed during the read');
+          let result: T;
+          // Every completed attempt closes its authority check, including a
+          // failed consistency fence; retries cannot defer revocation.
+          try {
+            result = await withDisclosureViewer(session.viewer, () => operation(session));
+            const after = await position(deps, options.localBasis);
+            if (after.dataEpoch !== session.position.dataEpoch
+              || !options.localBasis && after.sequence !== session.position.sequence) {
+              if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {
+                session.stale = true;
+              } else {
+                throw new WorkReadMoved('Graph changed during the read');
+              }
             }
-          }
-          await session.fenceRealms();
-          await fenceAuthorNames(session);
-          if (options.localBasis) await session.fenceDependencies();
-          if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
-            throw new AccountAssertionDenied('Principal is inactive');
+            await session.fenceRealms();
+            await fenceAuthorNames(session);
+            if (options.localBasis) await session.fenceDependencies();
+          } finally {
+            if (session.principal && !await deps.access.activePrincipalId(session.principal)) {
+              throw new AccountAssertionDenied('Principal is inactive');
+            }
           }
           signal.throwIfAborted();
           return complete ? complete(result, session) : result;

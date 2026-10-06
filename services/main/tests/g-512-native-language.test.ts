@@ -29,6 +29,7 @@ import { spaceRoutes } from '../src/routes/spaces.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { RegisteredAdmission, AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { relayCoverage, type MainCloudEvent } from '../src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -308,7 +309,7 @@ test('G-512 Arabic Space creation retains its immutable language and API read di
 function retainedPool(envelope: MainCloudEvent): Pool {
   const body = JSON.stringify(envelope), data = envelope.data;
   const client = { release() {}, async query(sql: string) {
-    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ data_epoch: 'epoch', sequence: '1' }] };
+    if (sql.includes('FROM relay.checkpoint')) return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '1' }] };
     if (sql.includes('UNION ALL')) return { rows: [], rowCount: 0 };
     if (sql.includes('FROM relay.delivered_batch AS batch')) return { rows: [{ sequence: '1', batch_id: data.batchId,
       routing_epoch: data.routingEpoch, event_count: 1, actual_count: '1' }] };
