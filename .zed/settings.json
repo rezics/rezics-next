@@ -1,14 +1,4 @@
 {
-  "file_scan_exclusions": [
-    "**/.temp",
-    "**/.cache",
-    "**/node_modules",
-    "**/.vinext",
-    "**/.wrangler",
-    "**/dist",
-    "**/coverage",
-    "..."
-  ],
   "lsp": {
     "tailwindcss-language-server": {
       "settings": {
