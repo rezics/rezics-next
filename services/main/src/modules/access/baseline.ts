@@ -49,6 +49,13 @@ export type BaselineTarget = { kind: 'root' }
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
   | 'avatar' | 'submission-withdraw' | 'definition' | 'zone'; id: string };
 
+// Resource management belongs to a provisioned steward Agent of any kind.
+// Ordinary member creation remains bound to a provisioned Person Agent.
+function controllerProofFor(target: BaselineTarget) {
+  return ['maintainer', 'author-work', 'reply-draft', 'avatar', 'definition', 'zone', 'submission'].includes(target.kind)
+    ? maintainerControllerProof : baselineMemberProof;
+}
+
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
 export function baselineTarget(action: string, scope: string): BaselineTarget | null {
@@ -100,8 +107,8 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
   return native.test(id) ? { kind: definition.kind, id } : null;
 }
 
-/** The exact provision key and its original control mandate are the binding.
- * Merely representing somebody else's Agent cannot acquire their baseline.
+/** The exact provision key supplies provenance; its current direct controller
+ * supplies authority. An ordinary representation is insufficient.
  * Cost: five indexed single-row reads, independent of all other accounts. */
 export async function baselineMemberProof(client: PoolClient, principalId: string,
   actingSubject: string): Promise<BaselineProof | null> {
@@ -111,15 +118,15 @@ export async function baselineMemberProof(client: PoolClient, principalId: strin
       false AS collection_create, NULL::text AS related_work, NULL::text AS source_revision,
       NULL::text AS maintainer_generation
     FROM access.agent_provision a
-    JOIN access.principal p ON p.id = a.principal_id
-    JOIN access.representation r ON r.id = a.representation_id
+    JOIN access.representation r ON r.subject_id = a.agent_id AND r.principal_id = $1
+    JOIN access.principal p ON p.id = r.principal_id
     JOIN access.authority_subject s ON s.id = a.agent_id
     JOIN access.baseline_member_policy b ON b.id = $3
-    WHERE a.agent_id = $2 AND a.principal_id = $1 AND a.agent_kind = 'person' AND a.state = 'active'
+    WHERE a.agent_id = $2 AND a.agent_kind = 'person' AND a.state = 'active'
       AND p.active AND b.active AND s.active AND s.kind = 'agent'
       AND r.principal_id = p.id AND r.subject_id = s.id AND r.action = 'agent.control'
       AND r.active AND r.valid_until > clock_timestamp()
-    FOR SHARE OF p, r, s, b`, [principalId, actingSubject, BASELINE_MEMBER_POLICY]);
+    ORDER BY r.id LIMIT 1 FOR SHARE OF p, r, s, b`, [principalId, actingSubject, BASELINE_MEMBER_POLICY]);
   return result.rows[0] ?? null;
 }
 
@@ -269,7 +276,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   // An installed resource policy owns its stricter decision. Baseline never
   // overrides it, including when that resource happens to be publicly readable.
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
-  const proof = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, principalId, request.actingSubject);
+  const proof = await controllerProofFor(target)(client, principalId, request.actingSubject);
   if (!proof) return null;
   const avatarControl = target.kind === 'avatar'
     ? await avatarControllerProof(client, graph, principalId, target.id) : null;
@@ -314,7 +321,7 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   const target = baselineTarget(admission.action, admission.scope_id);
   if (!target) return false;
   if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [admission.scope_id])).rowCount) return false;
-  const current = await (target.kind === 'maintainer' ? maintainerControllerProof : baselineMemberProof)(client, admission.principal_id, admission.acting_subject);
+  const current = await controllerProofFor(target)(client, admission.principal_id, admission.acting_subject);
   if (!current || current.policy_generation !== saved.policy_generation
     || current.provision_id !== saved.provision_id || current.principal_epoch !== saved.principal_epoch
     || current.representation_id !== saved.representation_id

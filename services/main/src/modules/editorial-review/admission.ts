@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionDenied, type AdmissionRequest, type RegisteredAdmission } from '../access/admission.ts';
-import { withWorkEditAuthority } from '../access/work-edit-authority.ts';
+import { withWorkEditAuthorityInTransaction } from '../access/work-edit-authority.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { editorialController, editorialPrincipal, independenceKey, requireReview, reviewBasis, viewerFor } from './authority.ts';
@@ -74,7 +74,7 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
     // The permit narrows an ordinary owner admission; it never supplies its
     // authority. Ordinary proof, admission and permit attachment share this
     // transaction; registration needs no extra pooled connection or crash gap.
-    return withCommandOwnerAuthority(pool, request, graph, async () => {
+    return withCommandOwnerAuthority(client, request, graph, async () => {
       const admission = await registerOrdinary(client,{ ...request, editorialPermit: undefined });
       if (old && old.id !== admission.id) throw new AdmissionConflict('Editorial owner admission changed');
       if (!old) {
@@ -87,14 +87,14 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
   });
 }
 export async function checkEditorialAdmission(client: PoolClient, admission: string,
-  graph: Pick<FusekiClient,'query'> | undefined, pool: Pool, request: AdmissionRequest): Promise<boolean> {
+  graph: Pick<FusekiClient,'query'> | undefined, request: AdmissionRequest): Promise<boolean> {
   const binding = (await client.query<{ application: string }>(
     `SELECT application FROM access.editorial_owner_admission WHERE admission = $1
       UNION ALL SELECT application FROM access.editorial_command_admission WHERE admission = $1`, [admission])).rows[0];
   if (!binding) return false;
   const row = await permit(client,binding.application);
   await current(client,row,graph);
-  await withCommandOwnerAuthority(pool, request, graph, async () => {},row.kind === 'wiki-bundle' ? row.target.work : undefined);
+  await withCommandOwnerAuthority(client, request, graph, async () => {},row.kind === 'wiki-bundle' ? row.target.work : undefined);
   // Generic explicit owner grants have no pinned Work/baseline proof. Recheck
   // their live mandate at claim, as well as the independent review authority.
   const ordinary = await client.query(`SELECT 1 FROM access.admission a
@@ -111,7 +111,7 @@ export async function checkEditorialAdmission(client: PoolClient, admission: str
 
 /** An entity edit also belongs to each Work that owns its semantic record,
  * independently of the proposal's Work and its reviewing steward. */
-export async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionRequest,
+export async function withCommandOwnerAuthority<T>(client: PoolClient, request: AdmissionRequest,
   graph: Pick<FusekiClient,'query'> | undefined, operation: () => Promise<T>, publicationWork?: string | null): Promise<T> {
   const works = new Set(publicationWork ? [publicationWork] : []);
   if (request.scope.startsWith('semantic:edit:')) {
@@ -125,11 +125,11 @@ export async function withCommandOwnerAuthority<T>(pool: Pool, request: Admissio
     if (rows.length > 16) throw new AdmissionDenied('Owner authority exceeds its bound');
     for (const row of rows) works.add(row.work!.value);
   }
-  // Check sequentially: an entity shared by several Works must not consume one
-  // pooled connection per Work. Every check runs again at dispatch claim.
+  // Every owner proof shares the held admission transaction, including its
+  // locks. Every check runs again at dispatch claim.
   for (const work of works) {
     if (request.scope === `work:edit:${work}`) continue; // Ordinary admission owns this fence.
-    await withWorkEditAuthority(pool,request.principal,request.actingSubject,work,async () => {},graph);
+    await withWorkEditAuthorityInTransaction(client,request.principal,request.actingSubject,work,async () => {},graph);
   }
   return operation();
 }

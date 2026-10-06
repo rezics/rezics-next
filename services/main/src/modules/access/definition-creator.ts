@@ -5,8 +5,9 @@ import { GRAPHS, iri } from '../work/activate.ts';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Creation confers definition stewardship, never review authority. One exact
- * graph lookup (4 KiB, two rows) and one admission primary-key lookup. The caller
+/** Creation records the steward Agent, whose current controller may manage the
+ * definition, never review it by this proof. One exact
+ * graph lookup (4 KiB, two rows) and four indexed admission/controller lookups. The caller
  * also needs the live baseline controller proof; neither a readable definition
  * nor an unsealed dispatch establishes ownership. No permission-grant fan-out. */
 export async function definitionCreatorAllowed(
@@ -51,11 +52,16 @@ export async function definitionCreatorAllowed(
   return (
     (
       await client.query(
-        `SELECT id FROM access.admission
-    WHERE id = $1 AND principal_id = $2 AND acting_subject = $3
-      AND action = 'semantic.change' AND scope_id = 'semantic:create:root'
-      AND state = 'sealed' AND graph_outcome = 'succeeded'
-      AND graph_receipt = $4 AND request_digest = $5 FOR SHARE`,
+        `SELECT a.id FROM access.admission a
+    JOIN access.representation r ON r.subject_id = a.acting_subject AND r.principal_id = $2
+    JOIN access.principal p ON p.id = r.principal_id AND p.active
+    JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+    WHERE a.id = $1 AND a.acting_subject = $3
+      AND a.action = 'semantic.change' AND a.scope_id = 'semantic:create:root'
+      AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
+      AND a.graph_receipt = $4 AND a.request_digest = $5
+      AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+    ORDER BY r.id LIMIT 1 FOR SHARE OF a, r, p, s`,
         [row.admission.value, principal, actor, row.receipt.value, row.digest.value],
       )
     ).rowCount === 1

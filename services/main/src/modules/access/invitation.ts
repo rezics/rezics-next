@@ -1,3 +1,4 @@
+import { assertControllerContinuity, lockControllerContinuity } from './controller-continuity.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -475,6 +476,7 @@ export class AccessInvitations {
       const epoch = await lockGate(client, initial.scope_id, false);
       if (initial.offer !== 'manage') await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
+      await lockControllerContinuity(client, [initial.issuer_subject]);
       return receipted<InvitationView>(
         client,
         actor.id,
@@ -559,6 +561,7 @@ export class AccessInvitations {
                 ),
               );
           }
+          if (row.offer === 'control') await assertControllerContinuity(client, [row.issuer_subject]);
           await client.query(
             `INSERT INTO access.agent_invitation_revocation (invitation_id,revoked_by_principal) VALUES ($1,$2)`,
             [id, actor.id],

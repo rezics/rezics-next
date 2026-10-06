@@ -1,3 +1,4 @@
+import { assertControllerContinuity, lockControllerContinuity } from './controller-continuity.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -99,6 +100,7 @@ export async function applyAgentController(
     )
   ).rows[0];
   if (!row) throw new ControlDenied('controller acceptance is unavailable');
+  await lockControllerContinuity(client, [row.target_subject]);
   const policy = (
     await client.query<{ max: number }>(
       `SELECT coalesce((SELECT max_controllers FROM access.agent_control
@@ -185,10 +187,13 @@ export async function applyAgentRecovery(
     expected_control_generation: string; generation: string }>(`SELECT r.subject_id,
     r.replacement_principal, r.expected_control_generation, c.generation
     FROM access.agent_recovery r JOIN access.agent_control c ON c.subject_id = r.subject_id
-    WHERE r.proposal_id = $1 FOR UPDATE OF c`, [proposalId]);
+    WHERE r.proposal_id = $1`, [proposalId]);
   const row = recovery.rows[0];
   if (!row) throw new ControlDenied('recovery is unavailable');
-  if (row.generation !== row.expected_control_generation) {
+  await lockControllerContinuity(client, [row.subject_id]);
+  const current = (await client.query<{ generation: string }>(
+    'SELECT generation FROM access.agent_control WHERE subject_id = $1 FOR UPDATE', [row.subject_id])).rows[0];
+  if (current?.generation !== row.expected_control_generation) {
     throw new ControlStale('Agent control changed while recovery was pending');
   }
   const removed = await client.query<{ id: string; generation: string }>(
@@ -205,6 +210,7 @@ export async function applyAgentRecovery(
     valid_until, assigned_by_principal, protected_change_id)
     VALUES ($1,$2,$3,$4,'infinity',$5,$6)`, [randomUUID(), row.replacement_principal,
     row.subject_id, CONTROL_ACTION, activatedBy, proposalId]);
+  await assertControllerContinuity(client, [row.subject_id]);
   for (const mandate of removed.rows)
     await drainRevokedAuthority(
       client,
@@ -260,6 +266,7 @@ export class AccessAgentControl {
       await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
+      await lockControllerContinuity(client, [input.subjectId]);
       await requireMandate(client, actor.id, input.subjectId, CONTROL_ACTION);
       return receipted<ControlView>(client, actor.id, receipt, 'agent-control', 'configure',
         input.subjectId, subjectObjectId(input.subjectId), async () => {
@@ -309,6 +316,7 @@ export class AccessAgentControl {
       const workEpoch = await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
+      await lockControllerContinuity(client, [input.subjectId]);
       return receipted<ControlView>(
         client,
         actor.id,
@@ -325,7 +333,7 @@ export class AccessAgentControl {
           ) {
             throw new ControlStale('scope authority epoch changed');
           }
-          const control = await controlView(client, input.subjectId, true);
+          await controlView(client, input.subjectId, true);
           const target = await client.query<{ generation: string; active: boolean }>(`SELECT
             generation, active FROM access.representation WHERE id = $1 AND subject_id = $2
               AND action = $3 FOR UPDATE`, [input.representationId, input.subjectId, CONTROL_ACTION]);
@@ -334,13 +342,11 @@ export class AccessAgentControl {
             throw new ControlStale('controller generation changed');
           }
           if (!target.rows[0].active) throw new ControlDenied('controller is already removed');
-          if (control.liveControllers - 1 < control.minControllers) {
-            throw new ControlConflict('removal would break Agent control continuity');
-          }
           const removed = await client.query<{ generation: string }>(
             'UPDATE access.representation SET active = false WHERE id = $1 RETURNING generation',
             [input.representationId],
           );
+          await assertControllerContinuity(client, [input.subjectId]);
           const revocationId = await drainRevokedAuthority(
             client,
             actor.id,

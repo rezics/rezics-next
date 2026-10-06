@@ -1,3 +1,4 @@
+import { assertControllerContinuity, lockControllerContinuity } from './controller-continuity.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
@@ -133,6 +134,7 @@ export class AccessTopology {
       await client.query("SELECT id FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE");
       const epoch = await lockGate(client, TOPOLOGY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
+      await lockControllerContinuity(client, [change.representedSubject]);
       const mandate = await requireMandate(client, actor.id, change.representedSubject, MANAGE);
       return receipted<EdgeChangeResult>(client, actor.id, receipt, 'representation-edge',
         change.action, change.representedSubject, change.edgeId, async () => {
@@ -160,8 +162,8 @@ export class AccessTopology {
               mandate.generation, MANAGE, ceiling.id, ceiling.generation, WORK_SCOPE,
               `access.representation.assign.${change.edgeAction}`]);
           } else {
-            const edge = await client.query<{ active: boolean; generation: string }>(`SELECT
-              active, generation FROM access.representation_edge
+            const edge = await client.query<{ active: boolean; generation: string; action: string }>(`SELECT
+              active, generation, action FROM access.representation_edge
               WHERE id = $1 AND represented_subject = $2 FOR UPDATE`,
             [change.edgeId, change.representedSubject]);
             if (!edge.rows[0]) throw new ControlDenied('edge is unavailable to this subject');
@@ -173,6 +175,7 @@ export class AccessTopology {
               access.representation_edge SET active = false WHERE id = $1 RETURNING generation`,
             [change.edgeId]);
             generation = revoked.rows[0]!.generation;
+            if (edge.rows[0].action === 'agent.control') await assertControllerContinuity(client, [change.representedSubject]);
           }
           const topologyEpoch = await lockGate(client, TOPOLOGY_SCOPE, true);
           return { epoch: topologyEpoch, result: { edgeId: change.edgeId,

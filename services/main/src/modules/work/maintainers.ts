@@ -1,3 +1,5 @@
+import { assertControllerContinuity, lockControllerContinuity } from '../access/controller-continuity.ts';
+import { ControlConflict, ControlUnavailable } from '../access/topology-control.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable,
@@ -91,6 +93,8 @@ export class WorkMaintainers {
         await client.query('COMMIT');
         return { work: input.work, receipt: prior.id, generation: prior.generation, maintainers: prior.maintainers, replayed: true };
       }
+      await lockControllerContinuity(client, [input.target]);
+      await assertControllerContinuity(client, [input.target]);
       if (!await maintainerControllerProof(client, person.id, input.actingSubject)) throw new AdmissionDenied('Agent is not controlled by this member');
       const current = (await client.query<SetRow>(`SELECT main_version, generation::text
         FROM access.work_maintainer_set WHERE work = $1 FOR UPDATE`, [input.work])).rows[0]!;
@@ -125,7 +129,12 @@ export class WorkMaintainers {
         input.actingSubject, input.target, input.action, generation, JSON.stringify(maintainers)]);
       await client.query('COMMIT');
       return { work: input.work, receipt, generation, maintainers, replayed: false };
-    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error instanceof ControlConflict) throw new AdmissionConflict(error.message);
+      if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);
+      throw error;
+    }
     finally { client.release(); }
   }
 }

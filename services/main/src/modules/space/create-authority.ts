@@ -27,14 +27,15 @@ export async function zoneSpaceCreatorAllowed(client: Pick<PoolClient, 'query'>,
     || !row.receipt || !/^urn:rezics:receipt:[0-9a-f]{64}$/.test(row.receipt.value)
     || !row.digest || !/^[0-9a-f]{64}$/.test(row.digest.value)) return false;
   return (await client.query(`SELECT a.id FROM access.admission a
-    JOIN access.representation r ON r.principal_id = a.principal_id AND r.subject_id = a.acting_subject
+    JOIN access.representation r ON r.principal_id = $2 AND r.subject_id = a.acting_subject
+    JOIN access.principal p ON p.id = r.principal_id AND p.active
     JOIN access.authority_subject s ON s.id = r.subject_id
-    WHERE a.id = $1 AND a.principal_id = $2 AND a.acting_subject = $3
+    WHERE a.id = $1 AND a.acting_subject = $3
       AND a.action = 'space.create' AND a.scope_id = 'space:create:root'
       AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
       AND a.graph_receipt = $4 AND a.request_digest = $5
       AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
       AND s.kind = 'agent' AND s.active
-    ORDER BY r.id LIMIT 1 FOR SHARE OF a, r, s`,
+    ORDER BY r.id LIMIT 1 FOR SHARE OF a, r, p, s`,
   [row.admission.value, principal, actor, row.receipt.value, row.digest.value])).rowCount === 1;
 }

@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from './admission.ts';
@@ -26,6 +26,23 @@ export interface WorkEditAuthorityProof {
 export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPrincipal,
   actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
   graph?: Pick<FusekiClient, 'query'>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await withWorkEditAuthorityInTransaction(client, principal, actingSubject, work, commit, graph);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Reuses the caller's Access transaction and retains every authority lock
+ * until that caller commits. Never checks out another pooled connection. */
+export async function withWorkEditAuthorityInTransaction<T>(client: PoolClient, principal: VerifiedPrincipal,
+  actingSubject: string, work: string, commit: (proof: WorkEditAuthorityProof) => Promise<T>,
+  graph?: Pick<FusekiClient, 'query'>): Promise<T> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (!native.test(work) || !native.test(actingSubject) || !principal.issuer || !principal.subject) {
     throw new AdmissionDenied('invalid Work edit authority');
@@ -41,9 +58,7 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
       throw new AdmissionDenied('Account identity changed');
     }
   }
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
     // Statement/lock timeouts bound admission work; the idle lease starts afresh
@@ -82,7 +97,6 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
         grantId: null, grantGeneration: null, validUntil: lease.valid_until.toISOString(),
         baseline: { kind: 'author-baseline-v1', provisionId: baseline.provision_id,
           policyGeneration: baseline.policy_generation, workGeneration: baseline.author_generation } });
-      await client.query('COMMIT');
       return result;
     }
     const represented = await representedWorkProof(client, identity.id, actingSubject, 'work.edit', scope);
@@ -112,13 +126,11 @@ export async function withWorkEditAuthority<T>(pool: Pool, principal: VerifiedPr
       representationId: represented.representationId, representationGeneration: represented.representationGeneration,
       grantId: represented.grantId, grantGeneration: represented.grantGeneration,
       ...(role ? { role } : {}), validUntil: lease.valid_until.toISOString() });
-    await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
     if (['55P03', '57014', '25P03', '25P04'].includes((error as { code?: string }).code ?? '')) {
       throw new AdmissionUnavailable('Work edit authority or Source transaction exceeded its deadline');
     }
     throw error;
-  } finally { client.release(); }
+  }
 }

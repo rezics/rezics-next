@@ -5,11 +5,12 @@ import { unerased } from '../work/public-patterns.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
-/** The sealed Work or chapter creation receipt and live maintainer set must agree. The
+/** The sealed Work or chapter creation receipt establishes provenance; the live
+ * maintainer set and current controller establish authority. The
  * set lock orders this proof with transfers; a transfer back cannot revive a
  * saved generation. Referencing somebody else's Post in a composition never
  * confers editing rights over that Post.
- * Cost: three indexed singleton lookups and one 1 KiB ASK, independent of the
+ * Cost: six indexed singleton lookups and one 1 KiB ASK, independent of the
  * author's library size. No materialized per-resource permission grants. */
 export async function authorWorkGeneration(client: PoolClient,
   graph: Pick<FusekiClient, 'query'> | undefined, principal: string, actor: string,
@@ -21,11 +22,14 @@ export async function authorWorkGeneration(client: PoolClient,
     FROM access.work_maintainer_set s
     JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $3
     JOIN access.admission a ON a.id = s.creation_admission
-    WHERE s.work = $1 AND a.principal_id = $2 AND a.acting_subject = $3
+    JOIN access.representation r ON r.subject_id = m.agent AND r.principal_id = $2
+    JOIN access.principal p ON p.id = r.principal_id AND p.active
+    JOIN access.authority_subject agent ON agent.id = m.agent AND agent.active AND agent.kind = 'agent'
+    WHERE s.work = $1 AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
       AND ((a.action = 'work.create' AND a.scope_id = 'work:create:root')
         OR (a.action = 'work.edit' AND a.scope_id LIKE 'work:edit:https://rezics.com/id/%'))
       AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-    FOR SHARE OF s`, [work, principal, actor])).rows[0];
+    ORDER BY r.id LIMIT 1 FOR SHARE OF s, r, p, agent`, [work, principal, actor])).rows[0];
   if (!row) return null;
   const allowed = await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/> ASK {

@@ -1,3 +1,4 @@
+import { assertControllerContinuity, lockControllerContinuity, principalControllerSubjects } from './controller-continuity.ts';
 import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
   type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
 import { admissionAuthorityAction, admissionPolicyAllowed } from './policy-decisions.ts';
@@ -33,7 +34,7 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { controlTransaction,requirePrincipal,requireMandate,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -891,7 +892,7 @@ export class AccessAdmissionRegistry {
     try {
       await client.query('BEGIN');
       const probe = { ...request,idempotencyKey: `authority:${Bun.randomUUIDv7()}`,requestDigest: '0'.repeat(64) };
-      await withCommandOwnerAuthority(this.pool,probe,this.baselineGraph,
+      await withCommandOwnerAuthority(client,probe,this.baselineGraph,
         () => this.registerRequest(probe,client,true),publicationWork);
     } catch (error) {
       if (!(error instanceof AuthorityChecked)) throw error;
@@ -930,7 +931,7 @@ export class AccessAdmissionRegistry {
     try {
       await client.query('BEGIN');
       const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
-      const result = await withCommandOwnerAuthority(this.pool, probe, this.baselineGraph, async () => {
+      const result = await withCommandOwnerAuthority(client, probe, this.baselineGraph, async () => {
         try { await this.registerRequest(probe, client, true); }
         catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
         return operation(client);
@@ -1550,7 +1551,7 @@ export class AccessAdmissionRegistry {
         row.action, row.scope_id, rating)) {
         throw new AdmissionDenied('Realm rating authority changed before claim');
       }
-      await checkEditorialAdmission(client, row.id,this.baselineGraph,this.pool, {
+      await checkEditorialAdmission(client, row.id,this.baselineGraph, {
         principal: accountPrincipal ?? { issuer: principal.rows[0]!.account_issuer, subject: principal.rows[0]!.account_subject },
         actingSubject: row.acting_subject, action: row.action, scope: row.scope_id,
         idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
@@ -1725,11 +1726,14 @@ export class AccessAdmissionRegistry {
       if (!principal) throw new AdmissionUnavailable('principal is unavailable');
       let enforcementEpoch = principal.enforcement_epoch;
       if (principal.active) {
+        const controlled = await principalControllerSubjects(client, principalId);
+        await lockControllerContinuity(client, controlled);
         if (enforcementEpoch !== expectedEpoch) throw new AdmissionConflict('principal epoch changed');
         const changed = await client.query<{ enforcement_epoch: string }>(
           `UPDATE access.principal SET active = false,
              enforcement_epoch = enforcement_epoch + 1 WHERE id = $1
            RETURNING enforcement_epoch`, [principalId]);
+        await assertControllerContinuity(client, controlled);
         enforcementEpoch = changed.rows[0]!.enforcement_epoch;
         await client.query(
           `INSERT INTO access.outbox (id, kind, principal_id, authority_epoch)
@@ -1758,6 +1762,8 @@ export class AccessAdmissionRegistry {
         pending: Number(pending.rows[0]?.count ?? '0') + pendingReads, pendingReads };
     } catch (error) {
       await rollback(client);
+      if (error instanceof ControlConflict) throw new AdmissionConflict(error.message);
+      if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);
       throw error;
     } finally {
       client.release();

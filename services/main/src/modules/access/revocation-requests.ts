@@ -1,3 +1,5 @@
+import { assertControllerContinuity, lockControllerContinuity } from './controller-continuity.ts';
+import { ControlConflict } from './topology-control.ts';
 import { lockAccessKey } from './scope-gates.ts';
 // Source generations fence exactly their saved proofs. A strong request fixes
 // the admitted command and
@@ -74,6 +76,7 @@ export class AccessRevocations {
       const gate = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch
         FROM access.scope_gate WHERE id = $1 FOR SHARE`, [request.scopeId])).rows[0];
       if (!gate) throw new PolicyDenied('scope is unavailable');
+      if (request.target.kind === 'representation') await lockControllerContinuity(client, [request.issuerSubject]);
       await requireMandate(client, identity.id, request.issuerSubject, REVOKE_ACTION);
       await lockAccessKey(client, `revocation:${identity.id}:${receipt.idempotencyKey}`);
       const prior = (await client.query<RevocationReceiptRow>(`SELECT * FROM access.revocation_receipt
@@ -88,7 +91,7 @@ export class AccessRevocations {
       }
       if (gate.authority_epoch !== request.expectedAuthorityEpoch) throw new PolicyStale('scope authority changed');
       const target = (await client.query<{ active: boolean; generation: string; issuer: string;
-        scope: string | null }>(`SELECT active, generation, ${shape.issuer} AS issuer,
+        scope: string | null; action: string }>(`SELECT active, generation, action, ${shape.issuer} AS issuer,
           ${shape.scope ?? 'NULL::text'} AS scope FROM access.${shape.table} WHERE id = $1 FOR UPDATE`,
       [request.target.id])).rows[0];
       if (!target || target.issuer !== request.issuerSubject) throw new PolicyDenied('source is unavailable to issuer');
@@ -100,6 +103,13 @@ export class AccessRevocations {
       const generation = target.active ? (await client.query<{ generation: string }>(`UPDATE
         access.${shape.table} SET active = false WHERE id = $1 RETURNING generation`,
       [request.target.id])).rows[0]!.generation : target.generation;
+      if (request.target.kind === 'representation' && target.action === 'agent.control') {
+        try { await assertControllerContinuity(client, [request.issuerSubject]); }
+        catch (error) {
+          if (error instanceof ControlConflict) throw new PolicyConflict(error.message);
+          throw error;
+        }
+      }
       if (generation === '0') throw new PolicyStale('source was never admitted');
       const fence = gate.authority_epoch;
       await drainRevokedAuthority(client, identity.id, request.issuerSubject,
