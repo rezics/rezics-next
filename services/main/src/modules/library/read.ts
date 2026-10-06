@@ -1,7 +1,7 @@
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit,
   WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { readShelfPage, type ShelfOptions } from './shelf-page.ts';
+import { readShelfPage, ShelfCandidateBudget, type ShelfOptions } from './shelf-page.ts';
 import type { ReaderLibraryStatusStore, ReadingStatus } from './status.ts';
 
 const id = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -152,12 +152,12 @@ export async function readMyShelves(session: WorkReadSession, agent: string,
 }
 
 export async function readStatusShelf(session: WorkReadSession, agent: string,
-  statusStore: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions = {}) {
+  statusStore: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions = {}, budget = new ShelfCandidateBudget()) {
   if (!session.principal) throw new WorkReadInvalid('Authentication is required');
   const before = await session.deps.profiles?.agentFence(agent);
   if (!before) throw new WorkReadMissing('Reader Agent is unavailable');
   const fence = await statusStore.fence(agent, options.sort);
-  const result = await readShelfPage(session, agent, statusStore, status, options, fence, false);
+  const result = await readShelfPage(session, agent, statusStore, status, options, fence, false, budget);
   if (await statusStore.fence(agent, options.sort) !== fence || await session.deps.profiles?.agentFence(agent) !== before
     || !await session.deps.access.canReadAsBaselineMember?.(session.principal, agent)) {
     throw new WorkReadMoved('Status shelf changed');

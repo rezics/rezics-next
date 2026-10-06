@@ -3,6 +3,7 @@ import { problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
 import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
+import { ShelfCandidateBudget } from '../modules/library/shelf-page.ts';
 import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
@@ -99,11 +100,13 @@ const publicHeaders = { 'cache-control': 'public, max-age=60' };
 /** Two Access listing point reads fence the signals with the shelf read. The
  * shelf owner separately fences profile/library visibility and its inventory. */
 async function publicShelfResponse(work: MainWorkDependencies, request: Request,
-  options: Parameters<typeof workRead>[2], agent: string, read: (session: WorkReadSession) => Promise<object>) {
+  options: Parameters<typeof workRead>[2], agent: string,
+  read: (session: WorkReadSession, budget: ShelfCandidateBudget) => Promise<object>) {
+  const budget = new ShelfCandidateBudget();
   const result = await workRead(work, request, options, async session => {
     if (!work.profiles) throw new WorkReadUnavailable('Profile owner unavailable');
     const listing = await work.profiles.listing.read(agent);
-    const value = await read(session);
+    const value = await read(session, budget);
     if ((await work.profiles.listing.read(agent)).version !== listing.version) {
       throw new WorkReadMoved('Agent listing changed');
     }
@@ -247,8 +250,9 @@ export function libraryRoutes(work: MainWorkDependencies) {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library is unavailable');
       try {
         if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
+        const budget = new ShelfCandidateBudget();
         return Response.json(await workRead(work, request, query,
-          session => readStatusShelf(session, query.actingSubject, work.libraryStatus!, params.status, query)),
+          session => readStatusShelf(session, query.actingSubject, work.libraryStatus!, params.status, query, budget)),
         { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -260,7 +264,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         const agent = `https://rezics.com/id/${params.id}`;
         return await publicShelfResponse(work, request, query, agent,
-          session => readPublicShelves(session, agent, work.libraryStatus!));
+          (session, budget) => readPublicShelves(session, agent, work.libraryStatus!, budget));
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/import-reviews', {
@@ -353,7 +357,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         const agent = `https://rezics.com/id/${params.id}`;
         return await publicShelfResponse(work, request, query, agent,
-          session => readPublicStatusShelf(session, agent, work.libraryStatus!, params.status, query));
+          (session, budget) => readPublicStatusShelf(session, agent, work.libraryStatus!, params.status, query, budget));
       } catch (error) { return failure(error); }
     });
 }

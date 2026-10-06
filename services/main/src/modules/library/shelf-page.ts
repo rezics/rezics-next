@@ -1,11 +1,22 @@
 import { shelfWorks } from '../profiles/read.ts';
 import { iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid,
-  WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadLimit, WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
 import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus,
   type ShelfAfter, type ShelfOrder, type ShelfRow, type ShelfSort } from './status.ts';
 
 export interface ShelfOptions { sort?: ShelfSort; order?: ShelfOrder }
+
+/** Owned by the HTTP envelope, so retries spend the same per-shelf allowance. */
+export class ShelfCandidateBudget {
+  private readonly batches = new Map<ReadingStatus, number>();
+  take(status: ReadingStatus) {
+    const used = this.batches.get(status) ?? 0;
+    if (used === STATUS_SHELF_COST.candidateBatches) throw new WorkReadLimit('Shelf candidate budget exceeded');
+    this.batches.set(status, used + 1);
+    return STATUS_SHELF_COST.candidateBatches - used - 1;
+  }
+}
 
 /** Only published Work identities can leave a public shelf, including its count. */
 export async function publishedWorks(session: WorkReadSession, works: string[]) {
@@ -47,7 +58,7 @@ export function shelfPageBasis(session: WorkReadSession, agent: string,
  * than treating a bounded candidate window as the end of the shelf. */
 export async function readShelfPage(session: WorkReadSession, agent: string,
   store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions,
-  fence: string, publishedOnly: boolean) {
+  fence: string, publishedOnly: boolean, budget = new ShelfCandidateBudget()) {
   const basis = shelfPageBasis(session, agent, status, options, fence, publishedOnly);
   const { binding, sort, order } = basis;
   let after = basis.after;
@@ -60,6 +71,7 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
   let hasMore = false;
   for (let batch = 0; batch < STATUS_SHELF_COST.candidateBatches; batch++) {
     session.checkDeadline();
+    const remainingBatches = budget.take(status);
     const rows = await store.sortedPage(agent, status, STATUS_SHELF_COST.candidateBatch, sort, order, after);
     if (!rows.length) break;
     const published = publishedOnly ? await publishedWorks(session, rows.map(row => row.work)) : null;
@@ -77,7 +89,7 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
     after = { work: tail.work, value: tail.sortValue };
     // A full final candidate batch may have a successor, even when none of its
     // cards can be shown. The next bounded read resolves that uncertainty.
-    if (batch + 1 === STATUS_SHELF_COST.candidateBatches) hasMore = true;
+    if (remainingBatches === 0) { hasMore = true; break; }
   }
   const statusCount = (basis.statusCount ?? 0) + items.length;
   return { ...pageResult(session, items, hasMore

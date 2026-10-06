@@ -1,25 +1,29 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { libraryRoutes } from '../src/routes/library.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { readPublicShelves, readPublicStatusShelf, PUBLIC_SHELF_COST } from '../src/modules/library/public.ts';
 import { readShelfPage } from '../src/modules/library/shelf-page.ts';
 import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ShelfRow } from '../src/modules/library/status.ts';
-import { WorkReadInvalid, WorkReadMoved, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const agent = id(900_000);
 
 function fixture(size: number, visible: (index: number) => boolean = () => true,
-  published: (index: number) => boolean = visible) {
-  let revision = '0', visibility = 'public', graphCalls = 0, candidates = 0, batches = 0;
+  published: (index: number) => boolean = visible, allShelves = false) {
+  let revision = '0', disclosureRevision = '0', visibility = 'public', graphCalls = 0, candidates = 0, batches = 0;
+  const shelfCandidates = new Map<string, number>();
   const store = {
     fence: async () => revision,
     sortedPage: async (_agent: string, status: string, limit: number, _sort: string, _order: string,
       after?: { work: string }) => {
       batches++;
       const start = after ? Number(after.work.slice(-12)) + 1 : 1;
-      const rows = Array.from({ length: status === 'reading' ? Math.max(0, Math.min(limit, size - start + 1)) : 0 },
+      const rows = Array.from({ length: allShelves || status === 'reading' ? Math.max(0, Math.min(limit, size - start + 1)) : 0 },
         (_, index): ShelfRow => ({ work: id(start + index), status: 'reading', version: 1,
           startedOn: null, finishedOn: null, changedAt: '2026-01-01', sortValue: String(start + index) }));
       candidates += rows.length;
+      shelfCandidates.set(status, (shelfCandidates.get(status) ?? 0) + rows.length);
       return rows;
     },
   } as unknown as ReaderLibraryStatusStore;
@@ -28,7 +32,7 @@ function fixture(size: number, visible: (index: number) => boolean = () => true,
     principal: null, displayLanguages: ['en'], checkDeadline: () => {},
     viewer: { signedIn: false, age: 'unknown', country: null,
       optIns: { general: true, r15: false, sexual: false, grotesque: false } },
-    deps: { profiles: { agentFence: async () => 'agent-head',
+    deps: { profiles: { agentFence: async () => 'agent-head', disclosureFence: async () => disclosureRevision,
       visibility: { read: async () => ({ visibility, version: 1 }) },
       listing: { read: async () => ({ listing: 'listed', version: 1 }) } },
       personPreferences: { profileVisible: async () => true } },
@@ -46,8 +50,56 @@ function fixture(size: number, visible: (index: number) => boolean = () => true,
       : { status: 'unavailable' }),
   }) as unknown as WorkReadSession;
   return { store, session, measure: () => ({ graphCalls, candidates, batches }),
+    shelfCandidates, changeDisclosure: () => { disclosureRevision = '1'; },
     change: () => { revision = '1'; }, hide: () => { visibility = 'private'; } };
 }
+
+function httpFixture(home: ReturnType<typeof fixture>) {
+  const template = home.session();
+  const app = libraryRoutes({ ...template.deps, libraryStatus: home.store,
+    account: { verify: async () => ({ issuer: 'issuer', subject: 'subject' }) },
+    access: { activePrincipalId: async () => 'reader', canReadAsBaselineMember: async () => true },
+    personPreferences: { ...template.deps.personPreferences, languagesForReader: async () => [] },
+    environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
+      query: async (sql: string) => ({ results: { bindings: sql.includes('SELECT ?epoch ?sequence')
+        ? [{ epoch: { value: 'epoch' }, sequence: { value: '1' } }] : await template.query(sql, 64) } }),
+    } },
+  } as unknown as MainWorkDependencies);
+  const summaries = spyOn(WorkReadSession.prototype, 'summaries').mockImplementation(
+    async works => template.summaries(works));
+  return { app, summaries };
+}
+
+test.each(['public', 'summary', 'private'])('The HTTP retry wrapper shares the forty-candidate budget per shelf (%s)', async surface => {
+  const home = fixture(200, () => false, () => true, surface === 'summary');
+  let fenceReads = 0;
+  home.store.fence = async () => ++fenceReads === 1 ? 'before' : 'after';
+  const { app, summaries } = httpFixture(home);
+  try {
+    const path = surface === 'private' ? `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(agent)}`
+      : `/v1/agents/${agent.slice(-36)}/shelves` + (surface === 'summary' ? '' : '/status/reading/works');
+    const response = await app.handle(new Request(`http://main.local${path}`,
+      surface === 'private' ? { headers: { authorization: 'Bearer reader' } } : undefined));
+    expect(fenceReads).toBeGreaterThan(2); // The first attempt moved and entered the retry.
+    expect([...home.shelfCandidates.values()].every(rows => rows <= 40)).toBe(true);
+    expect(home.measure().candidates).toBeLessThanOrEqual(surface === 'summary' ? 120 : 40);
+    expect(response.status).toBe(422);
+  } finally { summaries.mockRestore(); }
+});
+
+test('An HTTP retry uses its remaining twenty candidates and returns a resumable page', async () => {
+  const home = fixture(200), { app, summaries } = httpFixture(home);
+  summaries.mockImplementationOnce(async () => { throw new WorkReadMoved('Disclosure changed during hydration'); });
+  try {
+    const response = await app.handle(new Request(`http://main.local/v1/agents/${agent.slice(-36)}/shelves/status/reading/works`));
+    expect(response.status).toBe(200);
+    expect(home.measure().candidates).toBe(40);
+    const page = await response.json();
+    expect(page.items).toHaveLength(20);
+    expect(page).toMatchObject({ statusCount: 20, statusCountKind: 'lower-bound' });
+    expect(page.nextCursor).toBeTruthy();
+  } finally { summaries.mockRestore(); }
+});
 
 test('Public first pages and summaries examine the same bounded neighbourhood at 1,000 and 20,000 rows', async () => {
   const measures = [];
