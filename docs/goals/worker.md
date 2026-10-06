@@ -66,8 +66,12 @@ conventions below come from the first backend Goal:
   stories that no longer match the contract in the same change. Web code that
   reads the changed field is the web owner's; list it under OWNER CHANGES.
 - Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
-  discovers it. Do not edit other profiles unless the brief claims them. A new
-  profile is that file plus `model/accepted/profiles/<profile-id>.json`.
+  discovers it. Do not edit other profiles unless the brief claims them. A
+  profile is its authored definition: review the authored and generated diffs
+  together, since accepted means the current reviewed basis. Optional
+  properties and relaxed constraints refine the same profile; a tightened
+  constraint needs a new constraint revision with admission coverage, and a
+  different meaning needs a new term.
 - Use only your reserved migration numbers. Content migration versions may have
   gaps; Access and relay files apply in file-name order. Register a new Content
   receipt action with `INSERT INTO content.receipt_action ... ON CONFLICT DO
