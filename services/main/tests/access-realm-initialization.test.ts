@@ -5,6 +5,7 @@ import { RealmAdminInvalid } from '../src/modules/realm-admin/contract.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { initialRealmPolicyFacts } from '../src/modules/access/realm-initialization.ts';
 import { reviewPolicy } from '../src/modules/space/policy.ts';
+import { spaceCreationReceiptIri } from '../src/modules/space/create.ts';
 
 const input: RealmInitializationInput = {
   realm: 'https://rezics.com/id/00000000-0000-8000-8000-000000000001',
@@ -35,13 +36,14 @@ test('Created Realm initialization rejects malformed bindings and uses the exist
   expect(calls).toBe(0);
 });
 
-test('Initial policy facts preserve creation settings, unified policy defaults and a stable receipt', () => {
+test('Initial policy facts preserve creation settings and bind the command receipt without emitting a receipt node', () => {
+  const receipt = spaceCreationReceiptIri('00000000-0000-8000-8000-000000000004');
   for (const visibility of ['public', 'restricted', 'private'] as const) {
     for (const reviewMode of ['open', 'trusted-members', 'mandatory'] as const) {
       for (const selfJoin of [false, true]) {
         const creation = { ...input, settings: { ...input.settings, visibility, reviewMode,
           reviewRequired: reviewMode === 'mandatory', selfJoin } };
-        const facts = initialRealmPolicyFacts(creation, input.actingSubject);
+        const facts = initialRealmPolicyFacts(creation, input.actingSubject, receipt);
         expect(facts.revision).toBe(`urn:rezics:realm-policy:${input.policyReceipt}`);
         expect(facts.current).toContain(`rv:realmPolicyHead <${facts.revision}>`);
         expect(facts.current).toContain(`rv:reviewPolicy <${reviewPolicy(reviewMode)}>`);
@@ -49,16 +51,17 @@ test('Initial policy facts preserve creation settings, unified policy defaults a
         expect(facts.current).toContain(`rv:disclosure rv:${visibility === 'private' ? 'Private' : 'Public'}`);
         expect(facts.current).toContain('rv:listing "listed"');
         expect(facts.current).toContain(`rv:historyVisibility "everything" ; rv:admissionMode "${selfJoin ? 'open' : 'invitation'}"`);
-        expect(facts.receipt).toContain(`<${facts.revision}> a rv:OperationReceipt ; rv:outcome rv:Succeeded`);
-        expect(facts.receipt).toContain(`rv:requestDigest "${input.creationDigest}"`);
-        expect(facts.receipt).toContain('rv:policyGeneration "1"');
-        expect(initialRealmPolicyFacts(creation, input.actingSubject)).toEqual(facts);
+        expect(facts.current).toContain(`<${facts.revision}> rv:receipt <${receipt}> .`);
+        expect(Object.keys(facts).sort()).toEqual(['current', 'revision']);
+        expect(facts.current).not.toContain('rv:OperationReceipt');
+        expect(facts.current).not.toContain('rv:outcome');
+        expect(initialRealmPolicyFacts(creation, input.actingSubject, receipt)).toEqual(facts);
       }
     }
   }
-  expect(initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewRequired: false } }, input.actingSubject)
+  expect(initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewRequired: false } }, input.actingSubject, receipt)
     .current).toContain('rv:reviewMode "open"');
-  expect(() => initialRealmPolicyFacts({ ...input, policyReceipt: '' }, input.actingSubject)).toThrow(RealmAdminInvalid);
-  expect(() => initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewMode: 'open' } }, input.actingSubject))
+  expect(() => initialRealmPolicyFacts({ ...input, policyReceipt: '' }, input.actingSubject, receipt)).toThrow(RealmAdminInvalid);
+  expect(() => initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewMode: 'open' } }, input.actingSubject, receipt))
     .toThrow('Review mode and reviewRequired disagree');
 });

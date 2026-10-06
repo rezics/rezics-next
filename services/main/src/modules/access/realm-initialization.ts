@@ -15,7 +15,8 @@ export interface RealmInitializationInput {
   actingSubject: string;
   creationKey: string;
   creationDigest: string;
-  /** Stable UUID derived by the creator from its creation identity, before the graph write. */
+  /** Stable creation-bound UUID for Access delivery and the policy head.
+   * The graph command's receipt IRI is supplied separately to the facts helper. */
   policyReceipt: string;
   settings: Omit<RealmSettings, 'rules'>;
   rules?: RealmSettings['rules'];
@@ -31,15 +32,15 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(va
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)).digest('hex');
 
-/** Embed current in the creation's current graph and receipt in its receipts
- * graph, with the rv prefix. These are facts for the graph owner to write in the
- * creation command, never a separate Access graph publication. They use the
- * same policy head, fields and defaults as an ordinary policy delivery. */
-export function initialRealmPolicyFacts(input: RealmInitializationInput, space: string) {
-  return initialPolicyFacts(input, iri(space));
+/** Embed current in the creation's current graph, with the rv prefix. The
+ * policy head refers to the creation command's own receipt; these facts never
+ * write a second receipt. The UUID keeps the ordinary policy revision shape. */
+export function initialRealmPolicyFacts(input: RealmInitializationInput, space: string,
+  creationReceiptIri: string): { revision: string; current: string } {
+  return initialPolicyFacts(input, iri(space), creationReceiptIri);
 }
 
-function initialPolicyFacts(input: RealmInitializationInput, spaceTerm: string) {
+function initialPolicyFacts(input: RealmInitializationInput, spaceTerm: string, creationReceiptIri: string) {
   if (!uuid.test(input.policyReceipt)) throw new RealmAdminInvalid('Invalid Realm policy receipt');
   const mode = input.settings.reviewMode ?? (input.settings.reviewRequired ? 'mandatory' : 'open');
   if (input.settings.reviewRequired !== (mode === 'mandatory')) throw new RealmAdminInvalid('Review mode and reviewRequired disagree');
@@ -47,11 +48,9 @@ function initialPolicyFacts(input: RealmInitializationInput, spaceTerm: string) 
   const current = `${spaceTerm} rv:disclosure rv:${input.settings.visibility === 'private' ? 'Private' : 'Public'} ; rv:listing "listed" .
     ${iri(input.realm)} rv:visibility ${lit(input.settings.visibility)} ; rv:reviewMode ${lit(mode)} ;
       rv:historyVisibility "everything" ; rv:admissionMode ${lit(input.settings.selfJoin ? 'open' : 'invitation')} ;
-      rv:realmPolicyHead ${iri(revision)} ; rv:reviewPolicy ${iri(reviewPolicy(mode))} .`;
-  const receipt = `${iri(revision)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
-    rv:requestDigest ${lit(input.creationDigest)} ; rv:realm ${iri(input.realm)} ; rv:space ${spaceTerm} ;
-    rv:visibility ${lit(input.settings.visibility)} ; rv:reviewMode ${lit(mode)} ; rv:policyGeneration "1" .`;
-  return { revision, current, receipt };
+      rv:realmPolicyHead ${iri(revision)} ; rv:reviewPolicy ${iri(reviewPolicy(mode))} .
+    ${iri(revision)} rv:receipt ${iri(creationReceiptIri)} .`;
+  return { revision, current };
 }
 
 /** Shared with the legacy initializer: enrollment never happens on a replay. */
@@ -128,8 +127,8 @@ export async function initializeCreatedRealm(pool: Pool, principal: VerifiedPrin
       await client.query('COMMIT');
       return { realm: prior.realm, accessRevision: prior.access_revision, replayed: true };
     }
-    const policy = initialPolicyFacts(input, '?space');
     const receipt = spaceCreationReceiptIri(admission.id);
+    const policy = initialPolicyFacts(input, '?space', receipt);
     if (admission.state !== 'claimed' && admission.state !== 'sealed'
       || admission.graph_outcome !== null && admission.graph_outcome !== 'succeeded'
       || admission.graph_receipt !== null && admission.graph_receipt !== receipt) {
@@ -144,8 +143,7 @@ export async function initializeCreatedRealm(pool: Pool, principal: VerifiedPrin
         ?space rv:owner ${iri(input.actingSubject)} ; rv:realmCapability ${iri(input.realm)} . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
         rv:realm ${iri(input.realm)} ; rv:space ?space ; rv:owner ${iri(input.actingSubject)} ;
-        rv:admissionId ${lit(admission.id)} ; rv:requestDigest ${lit(input.creationDigest)} .
-        ${policy.receipt} }
+        rv:admissionId ${lit(admission.id)} ; rv:requestDigest ${lit(input.creationDigest)} . }
     } LIMIT 2`, REALM_INITIALIZATION_COST.graphBytes)).results?.bindings ?? [];
     if (rows.length !== 1 || !rows[0]?.space) throw new RealmAdminDenied('Realm creation proof is unavailable');
     const representation = (await client.query<{ valid_until: string }>(`SELECT r.valid_until::text
@@ -181,6 +179,8 @@ export async function initializeCreatedRealm(pool: Pool, principal: VerifiedPrin
         CASE WHEN s.self_join THEN 'open' ELSE p.admission END,true
       FROM access.realm_admin_settings s JOIN access.membership_policy p
         ON p.kind = 'realm' AND p.owner_subject = s.realm WHERE s.realm = $1`, [input.realm, receiptId]);
+    // policy_receipt retains its migration name: it binds the Access delivery
+    // UUID whose graph policy head points to the creation command's receipt.
     await client.query(`INSERT INTO access.realm_creation_initialization
       (admission_id,realm,creation_digest,access_revision,policy_receipt) VALUES ($1,$2,$3,1,$4)`,
     [admission.id, input.realm, input.creationDigest, receiptId]);

@@ -90,7 +90,7 @@ test('Created open self-join Realms accept eligible member submissions immediate
     h.input.settings = { visibility: 'public', reviewRequired: mode === 'mandatory',
       reviewMode: mode, whoMaySubmit: 'members', selfJoin: true };
     await h.management.initializeCreated(h.principal, h.input, h.env);
-    const facts = initialRealmPolicyFacts(h.input, h.space);
+    const facts = initialRealmPolicyFacts(h.input, h.space, spaceCreationReceiptIri(h.admissionId));
     const memberPrincipal = { issuer: 'https://accounts.test', subject: randomUUID() };
     const memberId = randomUUID(), member = id(), scope = `submission:submit:${h.realm}`;
     await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
@@ -214,9 +214,11 @@ async function fixture(sealed = true) {
         expect(sql).toContain(`<${receipt}>`);
         expect(sql).toContain(`rv:requestDigest "${digest}"`);
         expect(sql).toContain(`rv:admissionId "${admissionId}"`);
-        const facts = initialRealmPolicyFacts(input, space);
+        const facts = initialRealmPolicyFacts(input, space, receipt);
         expect(sql).toContain(facts.current.replaceAll(`<${space}>`, '?space'));
-        expect(sql).toContain(facts.receipt.replaceAll(`<${space}>`, '?space'));
+        expect(sql).toContain(`<${facts.revision}> rv:receipt <${receipt}> .`);
+        expect(sql.match(/a rv:OperationReceipt/g)).toHaveLength(1);
+        expect(sql).not.toContain(`<${facts.revision}> a rv:OperationReceipt`);
       }
       expect(sql).toContain('rv:restoreHold true');
       expect(sql).toContain('LIMIT 2');
