@@ -67,6 +67,18 @@ test('the first slide is a real image in the server HTML once the server resolve
   expect(preload).toContain(candidate(portrait));
 });
 
+test('authored alt is exposed once on the framed copy, and art without it stays hidden from assistive technology', () => {
+  const images = Object.fromEntries([resolved(landscape.url), resolved(portrait.url)]);
+  const described = render(<Background art={{ ...art, landscape: { ...landscape, alt: 'A tide under stars' } }}
+    first />, images);
+  expect(described.match(/alt="A tide under stars"/g)).toHaveLength(1);
+  expect(described).not.toContain('class="showcase-background" aria-hidden');
+  expect(described).toContain('aria-hidden="true" class="showcase-image-frame showcase-ambient"');
+  const plain = render(<Background art={art} first />, images);
+  expect(plain).toContain('aria-hidden="true" class="showcase-background"');
+  expect(plain).not.toMatch(/alt="[^"]/);
+});
+
 test('unresolved art waits for metadata without fetching anything: no source, image or preload', () => {
   const html = render(<Background art={art} first />);
   expect(html).toContain('media-image-placeholder');

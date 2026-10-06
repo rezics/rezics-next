@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Carousel, CarouselContent, CarouselItem } from '@rezics/ui/carousel';
 import type { ZoneShowcaseArt, ZoneShowcaseSlide } from '@rezics/zone-sdk';
-import { bannerSlide } from '../features/realm/adapt.ts';
 import {
   focalPosition,
   imageSet,
@@ -74,13 +73,10 @@ test('logos match the reader language or a language-neutral alternative and the 
   expect(logoFor(logos, 'ja')?.language).toBe('ja');
   expect(logoFor(logos, 'en', 'dark')?.language).toBe('');
 });
-test('focal positions use the bounded centre; legacy banner uploads stay whole', () => {
+test('focal positions use the bounded centre', () => {
   expect(focalPosition({ ...image, focal: { x: 0.5, y: 0.3, width: 0.2, height: 0.4 } })).toBe(
     '60% 50%',
   );
-  const slide = bannerSlide({ id: 'banner', href: '/work', title, image });
-  expect(slide.art?.landscape?.framed).toBe(false);
-  expect(slide.art?.landscape?.url).toBe(image.url);
 });
 test('a slide uses its art before Work-owned art', () => {
   const slide = {

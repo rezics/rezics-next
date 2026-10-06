@@ -29,7 +29,8 @@ function Preview({
     | 'poster'
     | 'failed-logo'
     | 'wide-focal'
-    | 'pending-crop';
+    | 'pending-crop'
+    | 'described';
   effect: 'plain' | 'outline' | 'gradient' | 'glow';
 }) {
   const theme = zoneTheme(presetTokens.vibrant, { reader: 'dark', enabled: true });
@@ -58,6 +59,11 @@ function Preview({
           view: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
         },
       },
+    };
+  if (variant === 'described')
+    slides[0] = {
+      ...slides[0]!,
+      art: { ...fixtureArt, landscape: { ...fixtureArt.landscape!, alt: 'A tide rising under a field of stars' } },
     };
   if (variant === 'foreign-logo')
     slides[0] = {
@@ -193,6 +199,16 @@ export const NoPortrait: Story = {
 export const NoPortraitWideFocal: Story = {
   args: { variant: 'wide-focal' },
   globals: { viewport: { value: 'phone' } },
+};
+/** A screen reader hears the slide's heading once and its authored image description once, not the logo or the blurred copy. */
+export const AuthoredAlt: Story = {
+  args: { variant: 'described' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('img', { name: 'A tide rising under a field of stars' })).toHaveLength(1);
+    await expect(canvas.getAllByRole('heading', { name: 'Astral Tide' })).toHaveLength(1);
+    await expect(canvas.queryByRole('img', { name: 'Astral Tide' })).toBeNull();
+  },
 };
 export const ForeignLanguageLogo: Story = {
   args: { variant: 'foreign-logo' },

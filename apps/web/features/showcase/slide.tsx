@@ -90,10 +90,12 @@ export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolea
       }).map(([name, value]) => [`--${name}-${shape}`, value]);
     }),
   ) as CSSProperties;
-  // Both copies pass through the media policy, so a mask also removes the ambient backdrop.
+  // Both copies pass through the media policy, so a mask also removes the ambient backdrop. The ambient
+  // copy only blurs the same art behind the frame, so authored alt is exposed once, on the framed copy.
+  const alt = fallback.alt ?? '';
   return (
-    <div aria-hidden="true" className="showcase-background" style={geometry}>
-      <div className="showcase-image-frame showcase-ambient">
+    <div aria-hidden={alt ? undefined : 'true'} className="showcase-background" style={geometry}>
+      <div aria-hidden="true" className="showcase-image-frame showcase-ambient">
         <picture className="showcase-crop">
           {sources.map((source) => (
             <source
@@ -127,7 +129,7 @@ export function Background({ art, first }: { art: ZoneShowcaseArt; first: boolea
           ))}
           <WebMediaImage
             revealable={false}
-            alt=""
+            alt={alt}
             src={fallback.url}
             width={fallback.width}
             height={fallback.height}
@@ -216,7 +218,7 @@ export function ShowcaseSlide({
           srcSet={logo.candidates
             ?.map((candidate) => `${candidate.url} ${candidate.width}w`)
             .join(', ')}
-          alt={title}
+          alt=""
           sizes="min(58vw, 26rem)"
           width={logo.width}
           height={logo.height}

@@ -1,4 +1,4 @@
-import type { ZoneBanner, ZoneDecision, ZoneImage, ZonePerson, ZoneShowcaseArt, ZoneShowcaseImage, ZoneShowcaseSlide, ZoneText, ZoneWork } from '@rezics/zone-sdk';
+import type { ZoneDecision, ZoneImage, ZonePerson, ZoneShowcaseArt, ZoneShowcaseImage, ZoneShowcaseSlide, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import type { ShowcaseImage, WorkShowcase } from '../api/showcase.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
@@ -9,7 +9,7 @@ import { authorHref } from '../author/route.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
-import type { FallbackReason, MainExecution, PresentationBanner, PresentationSlide } from '../zones/presentation.ts';
+import type { FallbackReason, MainExecution, PresentationSlide } from '../zones/presentation.ts';
 import { decisionHref, realmWorkHref, scopedWorkHref } from './route.ts';
 import type {
   MainAvatar,
@@ -40,17 +40,6 @@ export function zoneImage(avatar: MainAvatar | null, avatarQuery = ''): ZoneImag
         width: avatar.width,
         height: avatar.height,
       }
-    : null;
-}
-
-/** Main verifies the exact public media Use and supplies its real dimensions. */
-export function bannerImage(
-  banner: PresentationBanner,
-  media: readonly { id: string; image: ZoneImage & { mediaType?: string } }[],
-): ZoneImage | null {
-  const image = media.find((item) => item.id === banner.id)?.image;
-  return image
-    ? { url: `${BFF_PREFIX}${image.url}`, width: image.width, height: image.height }
     : null;
 }
 
@@ -86,6 +75,7 @@ export function deliveredShowcaseImage(
     url: string;
     width: number;
     height: number;
+    alt?: string;
     focalArea?: string | null;
     crop?: string | null;
     cropWidth?: number;
@@ -113,6 +103,7 @@ export function deliveredShowcaseImage(
     width: image.cropWidth ?? image.width,
     height: image.cropHeight ?? image.height,
     framed: true,
+    ...(image.alt ? { alt: image.alt } : {}),
     focal: showcaseFocal(image.focalArea, image.crop),
     ...(!image.srcset.length && cropped
       ? {
@@ -174,13 +165,6 @@ export function presentationSlide(slide: PresentationSlide, work: ZoneWork | nul
     kicker: kicker !== undefined ? zoneContentText(kicker, context.locale)
       : slide.kicker ? zoneContentText(slide.kicker) : null,
     tagline: work?.tagline, art: campaignShowcaseArt(slide.id, media) };
-}
-
-/** Legacy uploads were not authored for a showcase frame, so the renderer must preserve the whole image. */
-export function bannerSlide(banner: ZoneBanner): ZoneShowcaseSlide {
-  return { id: banner.id, href: banner.href, title: banner.title, kicker: banner.kicker, work: banner.work,
-    art: banner.image ? { landscape: { ...banner.image, framed: false } } : null,
-    tagline: banner.work?.tagline };
 }
 
 export interface AdaptContext {
@@ -358,14 +342,6 @@ export function mainExecution(read: ZonePresentationRead): MainExecution {
     reason:
       read.execution.state === 'fallback' ? mainReasons[read.execution.reason] : 'none-approved',
   };
-}
-
-/** Banners whose schedule includes `now`. */
-export function liveBanners(
-  banners: readonly PresentationBanner[],
-  now: number,
-): PresentationBanner[] {
-  return liveSlides(banners, now);
 }
 
 export function liveSlides<Slide extends { startsAt?: string; endsAt?: string }>(slides: readonly Slide[], now: number): Slide[] {

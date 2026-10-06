@@ -1,8 +1,7 @@
 import { uuidToSid } from '@rezics/model/address';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import {
-  bannerImage,
-  liveBanners,
+  liveSlides,
   mainExecution,
   zoneDecision,
   zoneImage,
@@ -349,41 +348,24 @@ describe('Main reads as Zone data', () => {
     });
   });
 
-  test('banners show inside their schedule, their media through the BFF', () => {
-    const banner = (id: string, startsAt?: string, endsAt?: string) => ({
+  test('slides show inside their schedule', () => {
+    const slide = (id: string, startsAt?: string, endsAt?: string) => ({
       id,
-      title: id,
-      alt: '',
-      href: '/en/r/x',
-      image: iri(work),
       ...(startsAt ? { startsAt } : {}),
       ...(endsAt ? { endsAt } : {}),
     });
     const now = Date.parse('2026-09-28T00:00:00.000Z');
     expect(
-      liveBanners(
+      liveSlides(
         [
-          banner('always'),
-          banner('past', undefined, '2026-09-01T00:00:00.000Z'),
-          banner('future', '2026-10-01T00:00:00.000Z'),
-          banner('now', '2026-09-27T00:00:00.000Z', '2026-09-29T00:00:00.000Z'),
+          slide('always'),
+          slide('past', undefined, '2026-09-01T00:00:00.000Z'),
+          slide('future', '2026-10-01T00:00:00.000Z'),
+          slide('now', '2026-09-27T00:00:00.000Z', '2026-09-29T00:00:00.000Z'),
         ],
         now,
       ).map((item) => item.id),
     ).toEqual(['always', 'now']);
-    expect(
-      bannerImage(banner('b'), [
-        {
-          id: 'b',
-          image: {
-            url: `/v1/media/uses/${work}`,
-            width: 1440,
-            height: 540,
-            mediaType: 'image/webp',
-          },
-        },
-      ]),
-    ).toEqual({ url: `/api/main/v1/media/uses/${work}`, width: 1440, height: 540 });
   });
 });
 

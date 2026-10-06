@@ -1,11 +1,10 @@
-import { bannerSlide } from '../realm/adapt.ts';
 import { realmHref, siteHref, realmWorkHref } from '../realm/route.ts';
 import type {
   RankingInterval,
-  ZoneBanner,
   ZoneContext,
   ZoneDecision,
-  ZoneImage,
+  ZoneShowcaseImage,
+  ZoneShowcaseSlide,
   ZoneModule,
   ZoneModuleType,
   ZoneTokens,
@@ -19,7 +18,7 @@ import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
 // Story data: an invented web-fiction catalogue for the official Fiction
 // Zone and a small community Realm. Works carry no cover image, so they wear
-// the catalogue's generated covers; banners are generated art.
+// the catalogue's generated covers; slide art is generated.
 
 function hash(seed: string): number {
   let value = 0x811c9dc5;
@@ -49,12 +48,14 @@ function escape(text: string) {
   );
 }
 
-/** A wide art-directed banner, as an official Zone's editors would upload. */
-function bannerArt(seed: string, headline: string, sub: string): ZoneImage {
+/** A wide art-directed slide image, as an official Zone's editors would upload. */
+function slideArt(seed: string, headline: string, sub: string): ZoneShowcaseImage {
   const [top, glow] = skies[hash(seed) % skies.length]!;
   return {
     width: 1200,
     height: 630,
+    alt: `${headline} — ${sub}`,
+    framed: false,
     url: svg(
       `<defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${glow}"/></linearGradient></defs><rect width="1200" height="630" fill="url(#b)"/><circle cx="930" cy="250" r="190" fill="#fff" opacity=".12"/><circle cx="1010" cy="330" r="120" fill="#fff" opacity=".12"/><text x="90" y="300" font-family="Songti SC, Noto Serif CJK SC, Georgia, serif" font-weight="700" font-size="96" fill="#fff">${escape(headline)}</text><text x="94" y="380" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="38" fill="#fff" opacity=".85">${escape(sub)}</text>`,
       1200,
@@ -346,27 +347,27 @@ const rotations: Record<RankingInterval, string[]> = {
   month: ['tea', 'taoist', 'rain', 'shop', 'heron', 'light', 'moon', 'candy', 'salt', 'inn'],
 };
 
-export const banners: ZoneBanner[] = [
+export const slides: ZoneShowcaseSlide[] = [
   {
     id: 'contest',
     title: text('秋季连载征文 · 决选十强'),
     kicker: text('征文活动'),
     href: realmHref('en', 'fiction', 'about'),
-    image: bannerArt('contest', '秋季连载征文', '决选十强 · 抢先读'),
+    art: { landscape: slideArt('contest', '秋季连载征文', '决选十强 · 抢先读') },
   },
   {
     id: 'rain-launch',
     title: text('《雨夜书店》第二卷开更'),
     kicker: text('新卷上线'),
     href: byKey('rain').href,
-    image: bannerArt('rain', '雨夜书店 · 第二卷', '末班车之后，她终于读到那封信'),
+    art: { landscape: slideArt('rain', '雨夜书店 · 第二卷', '末班车之后，她终于读到那封信') },
   },
   {
     id: 'translations',
     title: text('Translations week: five serials, now in English', 'en'),
     kicker: text('Imprint', 'en'),
     href: siteHref('en', 'fiction', ['browse']),
-    image: bannerArt('tides', 'Translations', 'Five serials, now in English'),
+    art: { landscape: slideArt('tides', 'Translations', 'Five serials, now in English') },
   },
 ];
 
@@ -445,8 +446,8 @@ export function fictionModules(locale: UiLocale): PlacedModule[] {
     },
   }));
   return [
-    // Art-directed banners; a Zone without them gets picks instead (communityModules), never both.
-    place(module('hero', 'hero-carousel', t.picks), ready<'hero-carousel'>({ slides: banners.map(bannerSlide) })),
+    // Art-directed slides; a Zone without them gets picks instead (communityModules), never both.
+    place(module('hero', 'hero-carousel', t.picks), ready<'hero-carousel'>({ slides })),
     place(
       module('genres', 'chip-nav', t.genres),
       ready<'chip-nav'>({

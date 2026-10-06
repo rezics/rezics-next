@@ -27,13 +27,32 @@ function labels(slides: ZoneShowcaseSlide[]) {
   };
 }
 
-test('every slide indicator and slide group falls back to the untitled label', () => {
+test('an indicator names its slide, and a slide group only announces its position', () => {
   const { indicators, groups } = labels([slide('a', 'Astral Tide'), slide('b', ''), slide('c', '')]);
-  const expected = [
-    `Astral Tide · ${t.slide({ index: '1', count: '3' })}`,
-    `${messages.untitled} · ${t.slide({ index: '2', count: '3' })}`,
-    `${messages.untitled} · ${t.slide({ index: '3', count: '3' })}`,
-  ];
-  expect(groups).toEqual(expected);
-  expect(indicators).toEqual(expected);
+  const places = [1, 2, 3].map((index) => t.slide({ index: String(index), count: '3' }));
+  expect(groups).toEqual(places);
+  expect(indicators).toEqual([
+    `Astral Tide · ${places[0]}`,
+    `${messages.untitled} · ${places[1]}`,
+    `${messages.untitled} · ${places[2]}`,
+  ]);
+});
+
+test('a slide is named once: by its heading, not by its group, its logo or its art', () => {
+  const art = {
+    landscape: { url: '/hero.webp', width: 1600, height: 900, framed: true, alt: 'A tide under stars' },
+    logos: [{ url: '/logo.webp', width: 600, height: 200, tone: 'light' as const, anchor: 'center-top' as const,
+      language: '', alt: 'Astral Tide' }],
+  };
+  const html = renderToStaticMarkup(
+    <Showcase slides={[{ ...slide('a', 'Astral Tide'), art }, slide('b', 'Other')]} label="Featured" locale="en"
+      messages={messages} />,
+  );
+  const first = html.slice(html.indexOf('aria-roledescription="slide"'), html.indexOf('aria-roledescription="slide"', 1 + html.indexOf('aria-roledescription="slide"')));
+  expect(first.match(/Astral Tide/g)).toHaveLength(1);
+  expect(first.match(/<h2[^>]*>.*?<\/h2>/)?.[0]).toContain('Astral Tide');
+  // The authored description is exposed once; the ambient copy and the logo stay decorative.
+  expect(first.match(/alt="A tide under stars"/g)).toHaveLength(1);
+  expect(first).not.toContain('alt="Astral Tide"');
+  expect(first.match(/<img[^>]*src="\/logo\.webp"[^>]*>/)?.[0]).toContain('alt=""');
 });

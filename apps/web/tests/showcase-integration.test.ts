@@ -107,6 +107,7 @@ test('scheduled Work and href slides keep their localized copy and target, indep
           cropHeight: 900,
           mediaType: 'image/png',
           focalArea: image.focalArea!,
+          alt: 'The cover of a new story',
           srcset: image.srcset,
         },
         portrait: null,
@@ -120,6 +121,7 @@ test('scheduled Work and href slides keep their localized copy and target, indep
   expect(selected?.kicker?.value).toBe('新作');
   expect(selected?.art?.landscape?.url).toBe(`/api/main${image.url}`);
   expect(selected?.art?.landscape?.candidates).toHaveLength(1);
+  expect(selected?.art?.landscape?.alt).toBe('The cover of a new story');
   expect(selected?.art?.landscape?.focal).toEqual({ x: 0.6, y: 0.2, width: 0.2, height: 0.5 });
   expect(presentationSlide(slide, null, context, [])).toBeNull();
   expect(

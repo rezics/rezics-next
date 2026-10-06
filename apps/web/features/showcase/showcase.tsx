@@ -74,7 +74,8 @@ function StageContents({
   const t = materializeData(messages, { locale });
   const position = (index: number) =>
     t.slide({ index: String(index + 1), count: String(slides.length) });
-  const slideLabel = (slide: ZoneShowcaseSlide, index: number) =>
+  // An indicator names the slide it opens; the slide group only announces its place, since its heading names it.
+  const indicatorLabel = (slide: ZoneShowcaseSlide, index: number) =>
     `${slide.title.value || messages.untitled} · ${position(index)}`;
   function move(index: number) {
     // The grid and late artwork can change Ark's cached snap points after its initial layout.
@@ -112,7 +113,7 @@ function StageContents({
                   <CarouselIndicator
                     key={slide.id}
                     index={index}
-                    aria-label={slideLabel(slide, index)}
+                    aria-label={indicatorLabel(slide, index)}
                     aria-disabled={api.page === index}
                     className="showcase-progress-button"
                   >
@@ -201,7 +202,7 @@ function StageContents({
                 key={slide.id}
                 index={index}
                 coverImages={false}
-                aria-label={slideLabel(slide, index)}
+                aria-label={position(index)}
                 className="showcase-item"
               >
                 <ShowcaseSlide

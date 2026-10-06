@@ -122,21 +122,12 @@ export interface ZoneHubItem {
   testedModels: string[];
 }
 
-/** Legacy hero input. New hero consumers receive ZoneShowcaseSlide instead. */
-export interface ZoneBanner {
-  id: string;
-  title: ZoneText;
-  kicker?: ZoneText | null;
-  href: string;
-  image: ZoneImage | null;
-  /** A Work associated with this legacy record. */
-  work?: ZoneWork | null;
-}
-
 /** Coordinates are fractions of the original image, from 0 to 1. */
 export interface ZoneFocalArea { x: number; y: number; width: number; height: number }
 
 export interface ZoneShowcaseImage extends ZoneImage {
+  /** The description its author wrote; absent art is decorative, and only the shown copy ever carries it. */
+  alt?: string;
   candidates?: readonly { url: string; width: number }[];
   /** A complete AVIF ladder, selected by picture before the fallback codec. */
   avifCandidates?: readonly { url: string; width: number }[];
