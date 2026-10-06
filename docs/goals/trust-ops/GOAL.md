@@ -142,6 +142,9 @@ external conditions from the start.
     market gates for the US, Taiwan, Singapore, Japan, South Korea and the EU
     (`docs/operations/trust-and-safety.md`) are each decided within the
     zero-budget decision.
+  - **Launch workloads within budget.** At the launch catalogue's size, the
+    launch workloads meet `docs/storage/workload-budgets.md`, measured with
+    kernel's (K5) and launch's (L8) evidence.
 
 ## Cut lines
 
