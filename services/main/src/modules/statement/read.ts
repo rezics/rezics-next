@@ -9,6 +9,7 @@ import { decisionSlotIri, resolveAcceptance, type AcceptanceResolution, type Dec
   STATEMENT_LIMITS, type DecisionTarget, type SlotReading, type StatementValue } from './schema.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const PROV = 'http://www.w3.org/ns/prov#';
 export class StatementNotFound extends Error {}
 export class StatementBatchBudgetExceeded extends Error {}
 export class StatementBatchUnavailable extends Error {}
@@ -54,7 +55,7 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <${RDF}>
     SELECT ?epoch ?sequence ?subject ?predicate ?object ?relation ?definition ?applicability ?speaker ?key
-      ?state ?head ?headRevision ?pin ?context ?disclosure WHERE {
+      ?state ?head ?headRevision ?operation ?recordedBy ?pin ?context ?disclosure WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ; rdf:subject ?subject ;
@@ -64,7 +65,8 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
         OPTIONAL { ${iri(statement)} rv:applicability ?applicability }
       }
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision, rv:RevisionAnchor ;
-        rv:component ${iri(statement)} . BIND(?head AS ?headRevision) } }
+        rv:component ${iri(statement)} ; rv:operation ?operation ; rv:recordedBy ?recordedBy .
+        BIND(?head AS ?headRevision) } }
       OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin }
         OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?context }
           OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure } }
@@ -74,11 +76,19 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
   const row = rows[0];
   if (!row?.subject) throw new StatementNotFound('Statement is unavailable');
   const single = (key: string) => new Set(rows.map(item => item[key]?.value)).size === 1;
-  if (!['subject', 'predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'headRevision', 'pin', 'context',
+  if (!['subject', 'predicate', 'object', 'relation', 'speaker', 'key', 'state', 'head', 'headRevision',
+    'operation', 'recordedBy', 'pin', 'context',
     'disclosure'].every(single) || rows.length >= 100) {
     throw new ContextCommandUnavailable('Statement read is incomplete');
   }
   if (!row.headRevision) throw new ContextCommandUnavailable('Statement head revision is unavailable');
+  // Public provenance comes from the retained revision, never from Access's
+  // private admission principal. Reject malformed provenance rather than export it.
+  if (rows.flatMap(item => [item.speaker, item.head, item.operation, item.recordedBy])
+    .some(binding => binding?.type !== 'uri'
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/u.test(binding.value))) {
+    throw new ContextCommandUnavailable('Statement public provenance is unavailable');
+  }
   const definitions = [...new Set(rows.map(item => item.definition?.value).filter(Boolean) as string[])].sort();
   const applicability = [...new Set(rows.map(item => item.applicability?.value).filter(Boolean) as string[])].sort();
   const value = valueOf(row.object!);
@@ -98,6 +108,13 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
     [`${RDF}subject`]: [{ '@id': row.subject.value }], [`${RDF}predicate`]: [{ '@id': row.predicate!.value }],
     [`${RDF}object`]: [object], [`${RV}relationDefinition`]: [{ '@id': row.relation!.value }],
     [`${RV}speaker`]: [{ '@id': row.speaker!.value }], [`${RV}meaningKey`]: [{ '@id': row.key!.value }],
+    // PROV-O (https://www.w3.org/TR/prov-o/): attribution describes the speaker;
+    // association describes the public recorder of this exact revision's activity.
+    // These facts do not establish delegation between recorder and speaker.
+    [`${PROV}wasAttributedTo`]: [{ '@id': row.speaker!.value }],
+    [`${RV}head`]: [{ '@id': row.head!.value, '@type': [`${RV}StatementRevision`, `${PROV}Entity`],
+      [`${PROV}wasGeneratedBy`]: [{ '@id': row.operation!.value, '@type': [`${PROV}Activity`],
+        [`${PROV}wasAssociatedWith`]: [{ '@id': row.recordedBy!.value }] }] }],
     ...(meaningBasis.state === 'readable' ? {
       [`${RV}semanticContextRevision`]: [{ '@id': meaningBasis.semanticRevision }] } : {}),
     ...(meaningBasis.state !== 'unavailable' && definitions.length ? {

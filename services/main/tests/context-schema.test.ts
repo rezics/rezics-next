@@ -2,6 +2,9 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Value } from 'typebox/value';
+import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { ContextCommandUnavailable } from '../src/modules/context/command.ts';
+import { readStatement } from '../src/modules/statement/read.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../src/modules/classification/context.ts';
 import { CONTEXT_LIMITS, GLOBAL_SEMANTIC_CONTEXT, InvalidContextSchemaInput, canonicalContextEntries,
@@ -45,6 +48,49 @@ const check = (profile: string, shape: string, candidate: unknown) => {
 const anchor = (profile: string) => ({ 'rv:operation': [id()], 'rv:manifest': [`urn:rezics:sha256:${'a'.repeat(64)}`],
   'rv:modelRevision': [`https://rezics.com/definition/${profile}`],
   'rv:shapeRevision': [`https://rezics.com/definition/${profile}`], 'rv:dataEpoch': ['epoch'], 'rv:sequence': [1] });
+
+test('Statement export refuses missing, ambiguous or private provenance and preserves a hidden meaning basis', async () => {
+  const statement = id(), revision = id(), speaker = id(), operation = id(), recorder = id();
+  const uri = (value: string) => ({ type: 'uri', value });
+  const row: NonNullable<SparqlResult['results']>['bindings'][number] = {
+    subject: uri(id()), predicate: uri(`${RV}classifiedAs`), object: uri(id()), relation: uri(id()),
+    speaker: uri(speaker), key: uri(`urn:rezics:meaning:${'a'.repeat(64)}`),
+    state: uri(`${RV}Active`), head: uri(revision), headRevision: uri(revision),
+    operation: uri(operation), recordedBy: uri(recorder), epoch: { type: 'literal', value: 'epoch' },
+    sequence: { type: 'literal', value: '1' }, pin: uri(id()), context: uri(id()),
+    disclosure: uri(`${RV}Private`), definition: uri(id()),
+  };
+  let rows = [row];
+  const fuseki = new FusekiClient('http://unused.test');
+  fuseki.query = async text => text.includes('ASK') ? { boolean: true } : { results: { bindings: rows } };
+  const env = { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: '0' }, objectDirectory: directory };
+  const read = () => readStatement(env, statement, async () => false);
+  const result = await read();
+  expect(result.meaningBasis).toEqual({ state: 'unavailable' });
+  const exported = JSON.stringify(result.export);
+  expect(exported).toContain(operation);
+  expect(exported).toContain(recorder);
+  expect(exported).not.toContain(row.definition!.value);
+  expect(exported).not.toContain(row.pin!.value);
+  expect(exported).not.toContain('actedOnBehalfOf');
+  for (const missing of ['headRevision', 'operation', 'recordedBy']) {
+    const partial = { ...row };
+    delete partial[missing];
+    rows = [partial];
+    await expect(read()).rejects.toBeInstanceOf(ContextCommandUnavailable);
+  }
+  rows = [row, { ...row, operation: uri(id()) }];
+  await expect(read()).rejects.toBeInstanceOf(ContextCommandUnavailable);
+  rows = [row, { ...row, recordedBy: { type: 'literal', value: recorder } }];
+  await expect(read()).rejects.toBeInstanceOf(ContextCommandUnavailable);
+  for (const privateBinding of [{ type: 'literal', value: recorder }, uri('urn:rezics:principal:private'),
+    { type: 'literal', value: Bun.randomUUIDv7() }]) {
+    for (const field of ['speaker', 'operation', 'recordedBy']) {
+      rows = [{ ...row, [field]: privateBinding }];
+      await expect(read()).rejects.toBeInstanceOf(ContextCommandUnavailable);
+    }
+  }
+});
 
 test('MODEL13 schema foundation: profiles render and reuse rdf:Statement without a local Statement class', () => {
   for (const profile of profiles) expect(renderProfile(profile)).toContain(`<https://rezics.com/definition/${profile.id}/`);
