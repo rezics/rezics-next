@@ -6,7 +6,7 @@ import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing
   from '../../../content/src/comments.ts';
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from '../infrastructure/fuseki.ts';
-import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable }
+import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionUnavailable }
   from '../modules/access/admission.ts';
 import { GroupConflict, GroupDenied, GroupStale, GroupUnavailable }
   from '../modules/access/groups.ts';
@@ -365,6 +365,9 @@ export function commandError(error: unknown): Response {
     || error instanceof InvalidRatingObservationInput
     || error instanceof InvalidRatingAggregateQuery) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
+  }
+  if (error instanceof AdmissionControllerContinuity) {
+    return problem(409, 'controller_continuity', 'This change would leave a resource without a controller');
   }
   if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
     return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');

@@ -157,6 +157,8 @@ export interface GraphTerminalProof {
 export class AdmissionDenied extends Error {}
 export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
+/** A removal that would leave a resource with no controller. Distinct from an idempotency clash. */
+export class AdmissionControllerContinuity extends Error {}
 export class AdmissionExpired extends Error {}
 
 /** Admissions share the scope's policy/closure fence. Selected authority rows
@@ -851,7 +853,8 @@ export class AccessAdmissionRegistry {
       if (gate?.open && gate.dispatch_open && identity) {
         if (authorityPath === 'represented-agent'
           && !(await client.query("SELECT id FROM access.policy WHERE scope_id = 'work:create:root'")).rowCount
-          && await platformAdministratorProof(client, identity.id, actingSubject)) {
+          && await platformAdministratorProof(client, identity.id, actingSubject, true,
+            { action: 'work.create', scope: 'work:create:root' })) {
           allowed = true;
         } else
         if (authorityPath === 'direct-principal') {
@@ -1762,7 +1765,9 @@ export class AccessAdmissionRegistry {
         pending: Number(pending.rows[0]?.count ?? '0') + pendingReads, pendingReads };
     } catch (error) {
       await rollback(client);
-      if (error instanceof ControlConflict) throw new AdmissionConflict(error.message);
+      // Keep the continuity wording. commandError maps the class, so this refusal
+      // is not reported as an idempotency clash.
+      if (error instanceof ControlConflict) throw new AdmissionControllerContinuity(error.message);
       if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);
       throw error;
     } finally {

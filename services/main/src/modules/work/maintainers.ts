@@ -2,7 +2,7 @@ import { assertControllerContinuity, lockControllerContinuity } from '../access/
 import { ControlConflict, ControlUnavailable } from '../access/topology-control.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable,
+import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionUnavailable,
   type VerifiedPrincipal } from '../access/admission.ts';
 import { maintainerControllerProof } from './maintainer-proof.ts';
 import { hash, GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
@@ -131,7 +131,7 @@ export class WorkMaintainers {
       return { work: input.work, receipt, generation, maintainers, replayed: false };
     } catch (error) {
       await client.query('ROLLBACK');
-      if (error instanceof ControlConflict) throw new AdmissionConflict(error.message);
+      if (error instanceof ControlConflict) throw new AdmissionControllerContinuity(error.message);
       if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);
       throw error;
     }

@@ -11,7 +11,7 @@ import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import {
   AccessAdmissionRegistry,
-  AdmissionConflict,
+  AdmissionControllerContinuity,
   AdmissionDenied,
   type AdmissionRequest,
   type VerifiedPrincipal,
@@ -325,11 +325,11 @@ test('sole-controller deactivation and Account deletion are refused; handover pe
   const control = await agent([old]);
   const registry = new AccessAdmissionRegistry(pool);
   await expect(registry.strongDeactivatePrincipal(old.id, '0')).rejects.toBeInstanceOf(
-    AdmissionConflict,
+    AdmissionControllerContinuity,
   );
   await expect(
     registry.strongDeactivateAccountSubject(old.verified.issuer, old.verified.subject),
-  ).rejects.toBeInstanceOf(AdmissionConflict);
+  ).rejects.toBeInstanceOf(AdmissionControllerContinuity);
   expect(
     (
       await pool.query('SELECT active,enforcement_epoch FROM access.principal WHERE id = $1', [
@@ -474,7 +474,7 @@ test('stewardship transfer admits the current Work maintainer and refuses a targ
       },
       randomUUID(),
     ),
-  ).rejects.toBeInstanceOf(AdmissionConflict);
+  ).rejects.toBeInstanceOf(AdmissionControllerContinuity);
   expect(
     await maintainers.change(
       old.verified,
@@ -528,7 +528,7 @@ test('concurrent deactivations use the same floor and an installed policy retain
     [configured.actor, recovery],
   );
   await expect(registry.strongDeactivatePrincipal(third.id, '0')).rejects.toBeInstanceOf(
-    AdmissionConflict,
+    AdmissionControllerContinuity,
   );
   expect(
     (await pool.query('SELECT access.agent_controller_count($1) AS n', [configured.actor])).rows[0]!
