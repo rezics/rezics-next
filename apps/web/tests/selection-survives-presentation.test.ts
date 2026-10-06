@@ -2,10 +2,11 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { workAsyncStorage, type WorkStore } from 'next/dist/server/app-render/work-async-storage.external.js';
 import { workUnitAsyncStorage, type RequestStore } from 'next/dist/server/app-render/work-unit-async-storage.external.js';
 import { SERVER_DEADLINE_HEADER } from '../features/api/server-fetch.ts';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readingSelection, type ZoneData } from '../features/wiki/selection.ts';
+import { readingSelection } from '../features/wiki/selection.ts';
 import { type PackageSource, resolvePackage } from '../features/zones/package-source.ts';
+import { declaredData } from '../zones/official/declared.ts';
 import { declaringSlug, decideExecution } from '../features/zones/execution.ts';
 import type { ZonePackage } from '@rezics/zone-sdk';
 
@@ -60,10 +61,9 @@ async function signedInRender<T>(answer: (url: URL) => unknown, run: () => Promi
   try { return { result: await run(), asked }; } finally { work.mockRestore(); request.mockRestore(); }
 }
 
-const declarations: ZoneData = { positions: { mount: 'franchise' }, continuity: {} };
-const running = { slug: 'franchise-wiki', ...declarations } as unknown as ZonePackage;
+const running = { slug: 'franchise-wiki', positions: { mount: 'franchise' }, continuity: {} } as unknown as ZonePackage;
 
-/** A source that records what was asked of it; importing a package's code is a failure when the view runs none. */
+/** The real declarations of the official packages; importing a package's code is a failure when the view runs none. */
 function source(options: { code?: boolean } = {}) {
   const asked: string[] = [];
   const result: PackageSource = {
@@ -72,7 +72,7 @@ function source(options: { code?: boolean } = {}) {
       if (!options.code) throw new Error('package code imported for a view that does not run it');
       return running;
     },
-    async declarations(slug) { asked.push(`declarations ${slug}`); return declarations; },
+    async declarations(slug) { asked.push(`declarations ${slug}`); return declaredData(slug); },
   };
   return { asked, source: result };
 }
@@ -84,7 +84,7 @@ test('selection: safe mode and the standard look read the approved declarations 
     const resolved = await resolvePackage({ decided, approval, surface: 'site', source: read });
     expect(resolved.execution).toEqual(decided);
     expect(resolved.pkg).toBeNull();
-    expect(resolved.data).toEqual(declarations);
+    expect(resolved.data).toEqual({ positions: { mount: 'franchise' }, continuity: {} });
     expect(asked).toEqual(['declarations franchise-wiki']);
   }
 });
@@ -105,6 +105,24 @@ test('selection: a view that runs the package follows the package itself, and an
   expect(await resolvePackage({ decided: decideExecution({ ...approval, safeMode: false, lookEnabled: true }), approval,
     surface: 'community', source: community.source })).toMatchObject({ pkg: null, data: null });
   expect(community.asked).toEqual([]);
+});
+
+test('selection: package mode checks approval and digest again before running or following a package', async () => {
+  const decided = decideExecution({ ...approval, safeMode: false, lookEnabled: true });
+  expect(decided).toEqual({ mode: 'package', slug: 'franchise-wiki' });
+  for (const [other, reason] of [[{ ...approval, installedDigest: 'sha256:other' }, 'digest-mismatch'],
+    [{ ...approval, main: { approved: null, reason: 'revoked' as const } }, 'revoked'], [{ ...approval, slug: 'books' }, 'none-approved']] as const) {
+    const none = source({ code: true });
+    const resolved = await resolvePackage({ decided, approval: other, surface: 'site', source: none.source });
+    expect(resolved).toEqual({ execution: { mode: 'fallback', reason }, pkg: null, data: null });
+    expect(none.asked).toEqual([]);
+  }
+});
+
+test('selection: the declarations of the official franchise wiki are real data the production loader returns', async () => {
+  expect(await declaredData('franchise-wiki')).toEqual({ positions: { mount: 'franchise' }, continuity: {} });
+  expect(await declaredData('fiction')).toBeNull();
+  expect(await declaredData('constructor')).toBeNull();
 });
 
 test('selection: declarations that cannot be read leave the page without a position, not failing', async () => {
@@ -154,16 +172,24 @@ test('selection: the realm frame and the Zone site route follow the resolved dat
   }
 });
 
-test('selection: an official package declares its positions in a data file that imports no package code', () => {
+test('selection: an official package declares its positions as JSON data, never in code', async () => {
   const official = join(web, 'zones/official');
+  const declared: string[] = [];
   for (const slug of readdirSync(official, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)) {
     const index = readFileSync(join(official, slug, 'index.tsx'), 'utf8');
-    const file = join(official, slug, 'declarations.ts');
-    if (/\b(positions|continuity)\s*:/.test(index)) throw new Error(`${slug} declares positions or continuity inline; use declarations.ts`);
+    if (/\b(positions|continuity)\s*:/.test(index)) throw new Error(`${slug} declares positions or continuity in code; use declarations.json`);
+    if (existsSync(join(official, slug, 'declarations.ts'))) throw new Error(`${slug}: declarations are JSON, not a module`);
+    const file = join(official, slug, 'declarations.json');
     if (!existsSync(file)) continue;
-    expect(index).toContain("from './declarations.ts'");
-    for (const line of readFileSync(file, 'utf8').split('\n').filter(line => /^import\b/.test(line)))
-      expect(line).toMatch(/^import type /);
+    declared.push(slug);
+    expect(index).toContain("from './declarations.json'");
+    // The loader serves exactly the file the package spreads, so the two cannot differ.
+    expect(await declaredData(slug)).toEqual(JSON.parse(readFileSync(file, 'utf8')));
   }
-  expect(text('zones/official/index.ts')).toContain("import.meta.glob<Pick<ZonePackage, 'positions' | 'continuity'>>('./*/declarations.ts'");
+  expect(declared).toContain('franchise-wiki');
+  // Reading declarations imports no package code.
+  const imports = text('zones/official/declared.ts').split('\n').filter(line => /^import\b/.test(line));
+  expect(imports.length).toBeGreaterThan(0);
+  for (const line of imports) expect(line).toMatch(/^import type |\.json';$/);
+  expect(text('zones/official/declared.ts')).not.toMatch(/import\.meta\.glob|\bimport\(/);
 });

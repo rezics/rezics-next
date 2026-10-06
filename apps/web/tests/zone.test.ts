@@ -468,7 +468,7 @@ describe('Official Zone packages', () => {
       )) {
         for (const [, specifier] of source.matchAll(/(?:from|import)\s*\(?\s*'([^']+)'/g)) {
           expect(specifier, `${slug}/${path}`).toMatch(
-            /^(?:react|@rezics\/zone-sdk|@rezics\/ui\/[a-z-]+|lucide-react|\.\/[\w-]+\.(?:tsx?|css\?raw))$/,
+            /^(?:react|@rezics\/zone-sdk|@rezics\/ui\/[a-z-]+|lucide-react|\.\/[\w-]+\.(?:tsx?|json|css\?raw))$/,
           );
         }
       }

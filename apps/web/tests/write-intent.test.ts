@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { saveDisplayPreference } from '../features/api/preferences.ts';
 import type { ReadingStatus } from '../features/catalogue/reader-actions.tsx';
-import { createReaderStore, READ_BACK_DELAYS_MS, type ReaderSeed } from '../features/catalogue/reader-store.ts';
+import { createReaderStore, pause, READ_BACK_DELAYS_MS, type ReaderSeed } from '../features/catalogue/reader-store.ts';
 import type { MainClient } from '../features/discover/types.ts';
 
 const person = 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000aa';
@@ -436,4 +436,70 @@ test('write intent: a choice Main already holds after a conflict is not written 
   await Promise.all([older, newer]);
   expect(rating.ratingWrites.map(write => `${write.value}:${write.outcome}`)).toEqual(['3:409']);
   expect(rated.stateOf(work).rating).toBe(5);
+});
+
+test('write intent: a page connected again does not let a read of the old connection send its cancelled write', async () => {
+  const fake = fakeMain();
+  const slow = deferred<void>();
+  fake.readGates.push(slow.promise);
+  // No seed: the first choice must read the Work's state before it can write.
+  const store = createReaderStore({ actingSubject: person, seed: {}, ratingTarget: target, main: fake.main, wait: instant });
+  const stop = store.connect!();
+  const chosen = store.setStatus(work, 'reading');
+  await tick();
+  // The page is left and set up again (the replay React makes in development), then the read finishes.
+  stop();
+  store.connect!();
+  slow.resolve();
+  expect(await chosen).toBe(false);
+  await tick();
+  expect(fake.statusWrites).toEqual([]);
+  expect(fake.state.status).toBeNull();
+  // The new connection works as any other.
+  expect(await store.setStatus(work, 'read')).toBe(true);
+  expect(fake.state.status).toBe('read');
+});
+
+test('write intent: a choice found already held after a conflict clears the older choice\'s unsettled overlay', async () => {
+  const fake = fakeMain();
+  fake.control.applyAfterReads = -1;
+  const store = storeOver(fake);
+  await store.rate!(work, 3);
+  expect(store.stateOf(work)).toMatchObject({ rating: 3, ratingWrite: 'unsettled' });
+  // Another device rated 5 meanwhile, so the next write is refused as stale and Main already holds what was chosen.
+  fake.rateElsewhere(5);
+  expect(await store.rate!(work, 5)).toBe(true);
+  expect(fake.ratingWrites.map(write => write.outcome)).toEqual([202, 409]);
+  expect(store.stateOf(work)).toEqual({ status: null, rating: 5 });
+});
+
+test('write intent: a read that began before a rating settled cannot put the older rating back', async () => {
+  const fake = fakeMain({ rating: { value: 2, revision: 'r0' } });
+  const store = storeOver(fake, entry(null, { value: 2, revision: 'r0' }));
+  const old = deferred<void>();
+  fake.readGates.push(old.promise);
+  const stale = store.refresh!(work);
+  await tick();
+  // Rating 5 is admitted but unapplied; the read-back settles it, then the old read (which showed 2) arrives.
+  fake.control.applyAfterReads = 1;
+  expect(await store.rate!(work, 5)).toBe(true);
+  expect(store.stateOf(work)).toEqual({ status: null, rating: 5 });
+  old.resolve();
+  await stale;
+  expect(store.stateOf(work)).toEqual({ status: null, rating: 5 });
+});
+
+test('write intent: a read-back wait leaves no abort listener behind once it is over', async () => {
+  const controller = new AbortController();
+  const added: string[] = [];
+  const removed: string[] = [];
+  const add = controller.signal.addEventListener.bind(controller.signal);
+  const remove = controller.signal.removeEventListener.bind(controller.signal);
+  controller.signal.addEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, ...unknown[]]) => {
+    added.push(type); return add(type, ...rest as [EventListenerOrEventListenerObject]); }) as typeof add;
+  controller.signal.removeEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, ...unknown[]]) => {
+    removed.push(type); return remove(type, ...rest as [EventListenerOrEventListenerObject]); }) as typeof remove;
+  await pause(1, controller.signal);
+  expect(added).toEqual(['abort']);
+  expect(removed).toEqual(['abort']);
 });

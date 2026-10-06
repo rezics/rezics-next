@@ -1,6 +1,6 @@
 import type { ZonePackage } from '@rezics/zone-sdk';
 import type { ZoneData } from '../wiki/selection.ts';
-import { declaringSlug, type Execution } from './execution.ts';
+import { declaringSlug, type Execution, unapproved } from './execution.ts';
 
 /** Where an official package's code and its plain-data declarations come from. */
 export interface PackageSource {
@@ -25,6 +25,11 @@ export async function resolvePackage({ decided, approval, surface, source }: {
 }): Promise<{ execution: Execution; pkg: ZonePackage | null; data: ZoneData | null }> {
   if (surface !== 'site') return { execution: { mode: 'fallback', reason: 'none-approved' }, pkg: null, data: null };
   if (decided.mode === 'package') {
+    // Approval and digest are checked again here, so a decision made apart from them cannot run or follow a package.
+    const reason = unapproved(approval);
+    if (reason || approval.slug !== decided.slug) {
+      return { execution: { mode: 'fallback', reason: reason ?? 'none-approved' }, pkg: null, data: null };
+    }
     try {
       const pkg = await source.load(decided.slug);
       if (pkg) return { execution: decided, pkg, data: pkg };

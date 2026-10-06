@@ -1,5 +1,5 @@
 import { defineZonePackage } from '@rezics/zone-sdk';
-import declarations from './declarations.ts';
+import declarations from './declarations.json';
 import css from './franchise-wiki.css?raw';
 import { WikiEntity, WikiHome, WikiMemberIndex } from './slots.tsx';
 

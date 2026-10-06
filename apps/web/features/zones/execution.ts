@@ -25,7 +25,7 @@ interface Approval {
 }
 
 /** The reason the package may not run, or null when Main's approval names exactly the package this build carries. */
-function unapproved({ main, slug, installedDigest }: Approval): FallbackReason | null {
+export function unapproved({ main, slug, installedDigest }: Approval): FallbackReason | null {
   if (!main || !slug) return 'none-approved';
   if (!main.approved) return main.reason;
   if (!installedDigest) return 'not-installed';

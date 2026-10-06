@@ -72,10 +72,14 @@ export function shelfFollowing(tracking: TrackingApi, changed: (work: string) =>
 
 /** What a lane's write is told about the round it runs in. */
 interface Round {
+  /** The local sequence number of the choice being written; a newer one settles what an older one left behind. */
+  seq: number;
   /** True when a newer choice is waiting behind this one, so it should stop retrying. */
   superseded: () => boolean;
-  /** True when the previous round was superseded after reading what Main holds, so that reading is still fresh. */
-  afterSuperseded: boolean;
+  /** Says the round read what Main holds before it was superseded, so the next round may rely on that reading. */
+  confirm: () => void;
+  /** True when the previous round was superseded after reading what Main holds, and nothing has changed since. */
+  afterConfirmed: boolean;
 }
 
 /**
@@ -86,19 +90,20 @@ interface Round {
 function lane<T>(apply: (choice: T, round: Round) => Promise<boolean>) {
   let running = false;
   let cancelled = false;
-  let latest: { choice: T } | null = null;
+  let latest: { choice: T; seq: number } | null = null;
   let waiting: ((saved: boolean) => void)[] = [];
   async function run() {
     running = true;
-    let afterSuperseded = false;
+    let afterConfirmed = false;
     while (latest && !cancelled) {
-      const { choice } = latest;
+      const { choice, seq } = latest;
       const batch = waiting;
       latest = null;
       waiting = [];
-      const saved = await apply(choice, { superseded: () => latest !== null || cancelled, afterSuperseded })
-        .catch(() => false);
-      afterSuperseded = latest !== null;
+      let confirmed = false;
+      const saved = await apply(choice, { seq, afterConfirmed, confirm: () => { confirmed = true; },
+        superseded: () => latest !== null || cancelled }).catch(() => false);
+      afterConfirmed = confirmed && latest !== null;
       // A newer choice arrived meanwhile: these callers wait for it instead.
       if (latest && !cancelled) waiting = [...batch, ...waiting];
       else for (const resolve of batch) resolve(saved && !cancelled);
@@ -106,9 +111,9 @@ function lane<T>(apply: (choice: T, round: Round) => Promise<boolean>) {
     running = false;
   }
   return {
-    submit: (choice: T) => new Promise<boolean>(resolve => {
+    submit: (choice: T, seq: number) => new Promise<boolean>(resolve => {
       if (cancelled) { resolve(false); return; }
-      latest = { choice };
+      latest = { choice, seq };
       waiting.push(resolve);
       if (!running) void run();
     }),
@@ -120,58 +125,113 @@ function lane<T>(apply: (choice: T, round: Round) => Promise<boolean>) {
     },
   };
 }
+type Lane<T> = ReturnType<typeof lane<T>>;
 
-/** A rating write Access admitted but Main has not applied: the choice shown until it appears in Main's state. */
-interface Unapplied { value: number | null; baseRevision: string | null; state: 'pending' | 'unsettled' }
+/**
+ * A rating write Access admitted but Main has not applied, shown until Main's state shows its value. It belongs to
+ * the choice (`seq`) that made it: a newer choice that settles replaces it, and Main showing its value clears it.
+ */
+interface Overlay {
+  value: number | null; seq: number; baseRevision: string | null; state: 'pending' | 'unsettled';
+  /** The lifetime that made it; its disposal takes it away. */
+  life: Lifetime;
+}
 
 /** Reads back an admitted rating this many times, waiting longer each time, before saying it is still processing. */
 export const READ_BACK_DELAYS_MS = [400, 800, 1600, 3200] as const;
 
-type Field = 'status' | 'rating';
+/** Waits `milliseconds`, or until `signal` aborts; its listener is gone once the wait is over. */
+export function pause(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>(resolve => {
+    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, milliseconds);
+    signal.addEventListener('abort', done, { once: true });
+  });
+}
+
+/** One lifetime of the store: from a connection to its disposal. Whatever a lifetime started stops with it. */
+interface Lifetime {
+  signal: AbortSignal;
+  abort: () => void;
+  status: Map<string, Lane<ReadingStatus | null>>;
+  rating: Map<string, Lane<number | null>>;
+}
+function lifetime(): Lifetime {
+  const controller = new AbortController();
+  const lifetime: Lifetime = { signal: controller.signal, status: new Map(), rating: new Map(), abort() {
+    controller.abort();
+    for (const lanes of [lifetime.status, lifetime.rating]) for (const one of lanes.values()) one.cancel();
+  } };
+  return lifetime;
+}
 
 /**
  * Reader actions over Main, for a signed-in reader acting as `actingSubject`.
  * State starts from the server's seed; Works drawn later ("Show more") are
- * read in batches as they appear. Writes compare and set, one at a time per
- * Work and field: a choice made while one is being written replaces any
- * waiting behind it, and when another tab or device changed the value first
- * (409) the store reads it again and applies only the newest choice, only if it
- * still differs from what Main now holds. A rating Access has admitted but not
- * applied is shown as pending and read back a bounded number of times; it is
- * settled only when Main's state shows its value after the head moved. A read
- * never replaces a field a write of this store has settled since the read began.
- * `connect()` returns the disposal that cancels queued choices and read-back timers.
+ * read in batches as they appear. Three rules keep what the person chose:
+ *
+ * - Writes compare and set, one at a time per Work and field. A choice made while one is being written replaces any
+ *   waiting behind it; after a conflict (409) the store reads Main again and applies only the newest choice, and
+ *   only if Main does not already hold it.
+ * - A response never puts an older value back. A status is applied only at a newer version than the one held. A
+ *   rating has no order Main exposes, so a read counts only if it began after the rating the store holds was
+ *   established (by a write that took, or by a read that began later).
+ * - What an operation started belongs to the lifetime it started in (`connect()` begins one, its disposal ends it).
+ *   After that no write is sent and no read-back is waited for, even if the page is connected again.
+ *
+ * A rating Access admitted but has not applied is an overlay owned by its choice: shown as pending and read back a
+ * bounded number of times, cleared when Main shows its value on a moved head or when a newer choice settles.
  */
-export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main = browserMainApi,
-  wait = (milliseconds, signal) => new Promise<void>(resolve => {
-    const timer = setTimeout(resolve, milliseconds);
-    signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
-  }) }: {
+export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main = browserMainApi, wait = pause }: {
   actingSubject: string; seed?: ReaderSeed; ratingTarget?: RatingTarget | null; main?: () => MainClient;
   /** Waits between read-backs of a pending rating; tests pass one that returns at once. */
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }): Extract<ReaderActions, { kind: 'ready' }> {
   const entries = new Map(Object.entries(seed));
-  const unapplied = new Map<string, Unapplied>();
+  const overlays = new Map<string, Overlay>();
   const listeners = new Set<() => void>();
   let version = 0;
   const notify = () => { version += 1; for (const listener of listeners) listener(); };
   // Works already asked for, answered or not: a Work Main did not answer is not asked for again on every render.
   const requested = new Set<string>();
   let queued = new Set<string>();
-  let closing = new AbortController();
-  const alive = () => !closing.signal.aborted;
-  // Bumped whenever a write of this store settles a field, so an older read cannot put an older value back.
-  const settled: Record<Field, Map<string, number>> = { status: new Map(), rating: new Map() };
-  const settledAt = (field: Field, work: string) => settled[field].get(work) ?? 0;
-  const settle = (field: Field, work: string) => settled[field].set(work, settledAt(field, work) + 1);
+  let current = lifetime();
+  let clock = 0;
+  let sequence = 0;
+  // When the rating held for a Work was established: reads that began earlier cannot replace it.
+  const ratingKnown = new Map<string, number>();
 
   // Main denied this Agent a reader library: controls withdraw rather than fail on every press.
   let denied = false;
+
+  /** Applies what Main answered to a read that began at `started`, field by field, never putting older state back. */
+  function merge(work: string, server: ReaderEntry, started: number) {
+    const held = entries.get(work);
+    if (!held) { entries.set(work, server); ratingKnown.set(work, started); }
+    else {
+      const newerStatus = server.version > held.version;
+      const newerRating = started > (ratingKnown.get(work) ?? 0);
+      entries.set(work, { status: newerStatus ? server.status : held.status,
+        version: newerStatus ? server.version : held.version, rating: newerRating ? server.rating : held.rating });
+      if (newerRating) {
+        ratingKnown.set(work, started);
+        const overlay = overlays.get(work);
+        if (overlay && (server.rating?.value ?? null) === overlay.value
+          && (server.rating?.revision ?? null) !== overlay.baseRevision) overlays.delete(work);
+      }
+    }
+  }
+  /** A rating write that took, or was found already held, settles every older choice's overlay. */
+  function settleOlder(work: string, seq: number) {
+    const overlay = overlays.get(work);
+    if (overlay && overlay.seq < seq) overlays.delete(work);
+  }
+
   async function readAll(works: string[]) {
+    const started = ++clock;
     const read = await readReaderSeed(main(), actingSubject, works);
     if (read === null) denied = true;
-    for (const [work, entry] of Object.entries(read ?? {})) if (!entries.has(work)) entries.set(work, entry);
+    for (const [work, entry] of Object.entries(read ?? {})) merge(work, entry, started);
     notify();
   }
   function load(work: string) {
@@ -187,116 +247,106 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       if (works.length) void readAll(works);
     });
   }
-  /**
-   * Reads the Work's state and returns what Main answered. The store keeps it field by field: a field a write has
-   * settled since this read began, or whose status version is older than the one held, is left as it is.
-   */
+  /** Reads the Work's state and returns what Main answered; the store keeps it only where it is newer than what it holds. */
   async function refresh(work: string): Promise<ReaderEntry | null> {
-    const seenStatus = settledAt('status', work);
-    const seenRating = settledAt('rating', work);
+    const started = ++clock;
     const { data, error } = await main().v1.works({ id: work.slice(-36) })['reader-state'].get({ query: { actingSubject } });
     if (error?.status === 403) { denied = true; notify(); }
     if (!data) return null;
     const server = readerEntry(data);
-    const held = entries.get(work);
-    if (!held) entries.set(work, server);
-    else {
-      const status = settledAt('status', work) === seenStatus || server.version > held.version;
-      entries.set(work, { status: status ? server.status : held.status, version: status ? server.version : held.version,
-        rating: settledAt('rating', work) === seenRating ? server.rating : held.rating });
-    }
+    merge(work, server, started);
     notify();
     return server;
   }
 
-  async function writeStatus(work: string, status: ReadingStatus | null, { superseded, afterSuperseded }: Round) {
+  async function writeStatus(life: Lifetime, work: string, status: ReadingStatus | null, round: Round) {
     const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
     const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
       { headers: { 'idempotency-key': crypto.randomUUID() } });
     const base = entries.get(work) ?? await refresh(work);
-    if (!base || !alive()) return false;
+    if (!base || life.signal.aborted) return false;
     // The last round read what Main holds and was superseded by this choice: no write if Main already has it.
-    if (afterSuperseded && base.status === status) return true;
+    if (round.afterConfirmed && base.status === status) return true;
     let response = await put(base);
-    if (!alive()) return false;
+    if (life.signal.aborted) return false;
     if (response.error?.status === 409) {
       const fresh = await refresh(work);
-      if (!fresh || !alive()) return false;
+      if (!fresh || life.signal.aborted) return false;
       // A newer choice is waiting, or Main already holds this one: there is nothing of this choice left to write.
-      if (superseded() || fresh.status === status) return !superseded();
+      if (round.superseded()) { round.confirm(); return false; }
+      if (fresh.status === status) return true;
       response = await put(fresh);
-      if (!alive()) return false;
+      if (life.signal.aborted) return false;
     }
     if (!response.data) return false;
-    entries.set(work, { ...(entries.get(work) ?? base), status: response.data.status, version: response.data.version });
-    settle('status', work);
+    merge(work, { status: response.data.status, version: response.data.version, rating: entries.get(work)?.rating ?? base.rating },
+      ratingKnown.get(work) ?? 0);
     notify();
     relationshipsChanged();
     return true;
   }
 
-  /** Reads the Work's state again until its rating shows `value` on a head past `baseRevision`; false if it never does. */
-  async function readBack(work: string, baseRevision: string | null, value: number | null, superseded: () => boolean) {
+  /** Reads the Work's state again until the overlay of choice `seq` is gone; false if it never is. */
+  async function readBack(life: Lifetime, work: string, seq: number, superseded: () => boolean) {
     for (const delay of READ_BACK_DELAYS_MS) {
-      await wait(delay, closing.signal);
-      if (!alive()) return false;
+      await wait(delay, life.signal);
+      if (life.signal.aborted) return false;
       // A read that fails is no answer yet: the next one may.
-      const server = await refresh(work).catch(() => null);
-      if (!alive()) return false;
-      if (server && (server.rating?.revision ?? null) !== baseRevision && (server.rating?.value ?? null) === value)
-        return true;
+      await refresh(work).catch(() => null);
+      if (life.signal.aborted) return false;
+      if (overlays.get(work)?.seq !== seq) return true;
       if (superseded()) return false;
     }
     return false;
   }
 
-  async function writeRating(target: RatingTarget, value: number | null, { superseded, afterSuperseded }: Round) {
+  async function writeRating(life: Lifetime, target: RatingTarget, value: number | null, round: Round) {
     const { work } = target;
     const post = (entry: ReaderEntry) => main().v1['global-rating-observations'].post({
       profile: 'global-rating-standing-observation-v1', context: target.context, work,
       mainVersion: target.mainVersion, expectedRevisionHead: entry.rating?.revision ?? null, value,
       actingSubject }, { headers: { 'idempotency-key': crypto.randomUUID() } });
     const base = entries.get(work) ?? await refresh(work);
-    if (!base || !alive()) return false;
-    if (afterSuperseded && (base.rating?.value ?? null) === value && !unapplied.has(work)) return true;
+    if (!base || life.signal.aborted) return false;
+    if (round.afterConfirmed && (base.rating?.value ?? null) === value && !overlays.has(work)) { settleOlder(work, round.seq); return true; }
     let from = base;
     let response = await post(from);
-    if (!alive()) return false;
+    if (life.signal.aborted) return false;
     if (response.error?.status === 409) {
       const fresh = await refresh(work);
-      if (!fresh || !alive()) return false;
-      if (superseded() || (fresh.rating?.value ?? null) === value) return !superseded();
+      if (!fresh || life.signal.aborted) return false;
+      if (round.superseded()) { round.confirm(); return false; }
+      // Main already holds this value: the choice is settled by what Main shows, and so is any older one's overlay.
+      if ((fresh.rating?.value ?? null) === value) { settleOlder(work, round.seq); notify(); return true; }
       from = fresh;
       response = await post(from);
-      if (!alive()) return false;
+      if (life.signal.aborted) return false;
     }
     if (response.error || !response.data) return false;
     const revision = 'observationRevision' in response.data ? response.data.observationRevision : null;
     if (revision) {
       entries.set(work, { ...(entries.get(work) ?? from), rating: { value, revision } });
-      settle('rating', work);
-      // A newer write that took replaces whatever an older one left unapplied.
-      unapplied.delete(work);
+      ratingKnown.set(work, ++clock);
+      settleOlder(work, round.seq);
       notify();
       return true;
     }
-    // Admitted but not applied (202): pending until Main's state shows it, never settled by assumption.
-    const baseRevision = from.rating?.revision ?? null;
-    unapplied.set(work, { value, baseRevision, state: 'pending' });
+    // Admitted but not applied (202): an overlay of this choice until Main's state shows it, never settled by assumption.
+    overlays.set(work, { value, seq: round.seq, baseRevision: from.rating?.revision ?? null, state: 'pending', life });
     notify();
     let applied = false;
-    try { applied = await readBack(work, baseRevision, value, superseded); } finally {
-      if (!alive()) unapplied.delete(work);
-      else if (applied || superseded()) unapplied.delete(work);
-      else unapplied.set(work, { value, baseRevision, state: 'unsettled' });
+    try { applied = await readBack(life, work, round.seq, round.superseded); } finally {
+      const overlay = overlays.get(work);
+      if (overlay?.seq === round.seq) {
+        if (applied || life.signal.aborted || round.superseded()) overlays.delete(work);
+        else overlays.set(work, { ...overlay, state: 'unsettled' });
+      }
       notify();
     }
     return true;
   }
 
-  const statusLanes = new Map<string, ReturnType<typeof lane<ReadingStatus | null>>>();
-  const ratingLanes = new Map<string, ReturnType<typeof lane<number | null>>>();
-  const laneOf = <T>(lanes: Map<string, ReturnType<typeof lane<T>>>, work: string,
+  const laneOf = <T>(lanes: Map<string, Lane<T>>, work: string,
     apply: (choice: T, round: Round) => Promise<boolean>) => {
     let existing = lanes.get(work);
     if (!existing) lanes.set(work, existing = lane(apply));
@@ -309,9 +359,9 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     stateOf(work: string): ReaderWorkState {
       const entry = entries.get(work);
       if (!entry) load(work);
-      const waiting = unapplied.get(work);
-      return { status: entry?.status ?? null, rating: waiting ? waiting.value : entry?.rating?.value ?? null,
-        ...waiting ? { ratingWrite: waiting.state } : {} };
+      const overlay = overlays.get(work);
+      return { status: entry?.status ?? null, rating: overlay ? overlay.value : entry?.rating?.value ?? null,
+        ...overlay ? { ratingWrite: overlay.state } : {} };
     },
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -320,26 +370,30 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     snapshot: () => version,
     available: () => !denied,
     tracking: shelfFollowing(mainTrackingApi(actingSubject, main), work => void refresh(work).catch(() => null)),
-    setStatus: (work: string, status: ReadingStatus | null) =>
-      laneOf(statusLanes, work, (choice, round) => writeStatus(work, choice, round)).submit(status),
-    rate: ratingTarget ? (work: string, value: number | null) => work !== ratingTarget.work ? Promise.resolve(false)
-      : laneOf(ratingLanes, work, (choice, round) => writeRating(ratingTarget, choice, round)).submit(value) : null,
+    setStatus(work: string, status: ReadingStatus | null) {
+      const life = current;
+      if (life.signal.aborted) return Promise.resolve(false);
+      return laneOf(life.status, work, (choice, round) => writeStatus(life, work, choice, round))
+        .submit(status, ++sequence);
+    },
+    rate: ratingTarget ? (work: string, value: number | null) => {
+      const life = current;
+      if (work !== ratingTarget.work || life.signal.aborted) return Promise.resolve(false);
+      return laneOf(life.rating, work, (choice, round) => writeRating(life, ratingTarget, choice, round))
+        .submit(value, ++sequence);
+    } : null,
     async refresh(work: string) {
-      const server = await refresh(work).catch(() => null);
-      const waiting = unapplied.get(work);
-      if (waiting && server && (server.rating?.revision ?? null) !== waiting.baseRevision
-        && (server.rating?.value ?? null) === waiting.value) unapplied.delete(work);
+      await refresh(work).catch(() => null);
       notify();
     },
     connect() {
-      // Strict-mode effects run twice: a connection after a disconnection starts a fresh lifetime.
-      if (!alive()) closing = new AbortController();
+      // A connection after a disposal (strict-mode effects run twice) begins a new lifetime; the old one stays ended.
+      if (current.signal.aborted) current = lifetime();
+      const mine = current;
       return () => {
-        closing.abort();
-        for (const lanes of [statusLanes, ratingLanes]) for (const one of lanes.values()) one.cancel();
-        statusLanes.clear();
-        ratingLanes.clear();
-        unapplied.clear();
+        mine.abort();
+        for (const [work, overlay] of overlays) if (overlay.life === mine) overlays.delete(work);
+        notify();
       };
     },
   };
