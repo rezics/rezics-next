@@ -19,7 +19,7 @@ import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
-import { chooseMenuItem, chooseOption } from '../stories/choose-option.ts';
+import { chooseOption } from '../stories/choose-option.ts';
 
 // Home as each kind of visitor meets it, over an in-memory Main. The feed's
 // own rules are in Feed/Posts; these stories carry the frame: signed out,
@@ -413,9 +413,13 @@ export const SavedViewsReadOnly: Story = {
   args: props({ state: pinnedState(), operationGate: operation => operation === 'getV1MeSaved-filters' }),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Fantasy' })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Options for Fantasy' })).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'English & Japanese' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Options for English & Japanese' })).toBeNull();
     await expect(canvas.queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+    // A followed topic's tab still unfollows it, since following is its own open operation.
+    await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Unfollow Fantasy' })).toBeVisible());
+    await expect(screen.getAllByRole('menuitem')).toHaveLength(1);
   },
 };
 
@@ -426,7 +430,11 @@ export const SavedViewsRevokedAfterLoad: Story = {
     const api = args.filtersApi as ReturnType<typeof memorySavedFilters>;
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
-    await chooseMenuItem(screen, 'menuitem', 'Remove from Home');
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Remove from Home' })).toBeVisible());
+    for (let step = 0; step < 6 && !screen.getByRole('menuitem', { name: 'Remove from Home' }).hasAttribute('data-highlighted'); step++) {
+      await userEvent.keyboard('{ArrowDown}');
+    }
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(api.calls).toContain('update:01:{"pinned":false}'));
     await expect(canvas.queryByRole('status')).toBeNull();
     await expect(canvas.queryByText(/could not/i)).toBeNull();
