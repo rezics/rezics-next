@@ -3,12 +3,12 @@
 The manager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-07 03:40 CST) |
+| Field | State (2026-10-07 04:40 CST) |
 | --- | --- |
 | Manager | `rezics-next-9b` (ref `[e004e6]`; an idle session shares the name) in tmux `goal-trust-ops`, registered 02:50. |
-| Running | T1 G-1215 (`codex-1` xhigh, first half of C1); T3 G-1216 (`codex` xhigh). |
-| Queued | T6 G-1218 (`cursor` xhigh) and T7 G-1219 (`codex-1` high; leaves `media/summary.ts` to kernel's K4), briefed without the T1 dependency because their paths are disjoint. The cap is 8, and trust-ops keeps 2 live (program, after P2): each starts when T1 or T3 exits. |
-| Next | Launch matrix: a subagent drafts `.temp/trust-ops/launch-matrix-draft.md` from the 764-operation inventory (`.temp/trust-ops/operations-inventory.md`). Send it to launch for input, then to the program for approval. T5 needs it, because an operation without an exposure declaration is closed, so T5 must ship the approved `public` declarations in the same change. T2 after T1; T4 after T3. |
-| External conditions | 28 inventoried in `.temp/trust-ops/external-conditions.md` (16 block launch, 3 block only uploads, 1 blocks only sales). The maintainer has been asked about the long-lead ones: safety registrations, SMTP plus the hostname freeze, the backup responder, the Workers plan and the DMCA fee. |
-| Critical path | T1 → (kernel K5, K6, K8; launch L5, L8) and T1 → T5 (with the matrix) → launch L4, L7. |
-| Contracts | C1 open (board in the program's state.md). |
+| Running | T1 G-1215 (`codex-1` xhigh, first half of C1); T3 G-1216 (`codex` xhigh); overflow, backend-only: T6 G-1218 (`cursor` xhigh), T7 G-1219 (`codex-1` high; leaves `media/summary.ts` to kernel's K4). |
+| Briefed, waiting | T2 G-1220 (after T1; one file of launch's `space/` with launch's consent: tell launch before dispatch). T5 G-1235 (after T1; runs beside T2 on disjoint Access files). T4 G-1221 (after T3). |
+| Launch matrix | Approved by the program: 517 public and 247 closed of 764 Main operations (`.temp/trust-ops/launch-matrix-approved.md`, Appendix A plus "launch: answers", plus kernel's composition split). T5 applies it in the same change as the gate. Exposure summary shape sent to launch. |
+| Deployment wave | Bootstrap seeds `platform:grant` and the platform-admin grant for the maintainers' principals, and production refuses to start without them (program condition 4). External conditions: 28 in `.temp/trust-ops/external-conditions.md`; the maintainer has been asked about the long-lead ones. |
+| Merge notes | T5's route declarations are owner changes across `services/main/src/routes/*.ts`: merge with `--allow-scope`, then `task gen` and `task main:typecheck`, and tell kernel and launch that new routes need an `exposure`. Send C1 evidence to the program when T1 lands. |
+| Critical path | T1 → T5 → launch L4, L7 and the web hide-closed task; T1 → T2 → C1 complete (launch L6); T1 → kernel K5, K6, K8 and launch L5, L8. |
