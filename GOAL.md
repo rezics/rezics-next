@@ -12,7 +12,6 @@ The numbered product [decisions](docs/product/decisions.md) and the
 | [Kernel](docs/goals/kernel/GOAL.md) | Core contracts of the target architecture: one model source, local consistency, bounded template reads, one representation per meaning | tmux `goal-kernel` |
 | [Trust and operations](docs/goals/trust-ops/GOAL.md) | Common admission, platform gates for gradual opening, accounts, safety, erasure, deployment preparation | tmux `goal-trust-ops` |
 | [Launch](docs/goals/launch/GOAL.md) | The first public scope: book library, recipes, VNDB-like and Bangumi-like catalogues, most Realm and Zone capabilities | tmux `goal-launch` |
-| [Production readiness](docs/goals/production-readiness/GOAL.md) | Retiring: its items moved to the four Goals above on 2026-10-07; the program closes it | — |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
 
