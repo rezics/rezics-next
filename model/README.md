@@ -1,8 +1,7 @@
-# Fixed first profiles
+# Current reviewed profiles
 
-The authored `definitions/*-v1.ts` files are the SHACL subset for the first
-delivery. `task gen` renders their reviewed Turtle bytes into
-`generated/model/shapes/`, preserves the pinned profile SHA-256 digests, and
+The authored `definitions/*.ts` files are the current reviewed SHACL basis. `task gen` renders their reviewed Turtle bytes into
+`generated/model/shapes/`, computes profile SHA-256 digests, and
 publishes the profile registry with shape IRIs and focus roles used by Main and
 the Fuseki command module.
 `task gen:check` fails if any generated file has drifted.
@@ -22,7 +21,7 @@ The same run generates:
   constants from the authored predicates and fixed terms;
 - `packages/model/src/generated/arbitraries.ts`: fast-check candidates for each
   named shape, sampled with an explicit seed in tests;
-- `generated/model/manifest.json`: the unchanged profile shape digests and a
+- `generated/model/manifest.json`: the current profile shape digests and a
   SHA-256 entry for every other generated artifact except Facets;
 - `packages/model/src/generated/facets.ts`: the admitted
   [Facets](../docs/contracts/queries.md) from `definitions/facet-*.ts`, which Main
@@ -69,18 +68,25 @@ profiles. SHACL remains authoritative for the authored static constraints.
 
 The isolated and merged 0.4.0 command image reproduced all 66 recorded outcomes
 and every expected report path. The handwritten `definitions/*.ttl` profiles and
-Python validators are retired. Their SHA-256 digests, candidate payloads,
-conforming/rejected outcomes, and historical reports remain in the generated
-manifest and `tests/fixtures/native/` plus `tests/evidence/`. QA records the
+Python validators are retired. Their recorded SHA-256 digests, candidate payloads, conforming/rejected outcomes
+and historical reports remain in `tests/fixtures/native/` plus `tests/evidence/`.
+The generated manifest describes current bytes; native qualification reruns the
+recorded candidates against the installed current shapes. QA records the
 strict native matrix as a separate model tier.
 
 The profile set covers Work metadata, draft Contribution and publication,
 Main and Realm selection, Space/Realm creation, shared classification,
 Realm classification contexts and decisions, and standing rating contexts and
 observations. The rating revision profile is the only current `sh:or`: an
-available revision has a 1–10 value, while a withdrawn revision has none. New
-semantics require a new profile revision rather than silently changing the
-reviewed shape bytes.
+available revision has a 1–10 value, while a withdrawn revision has none. Optional properties and relaxed constraints refine the same profile or Facet.
+Tightened constraints need a new constraint revision and an admission coverage
+check; different meaning needs a new term. Block payload changes version only
+that block. Review covers both the authored and generated diffs; there is no
+append-only authored digest lock. Exact stored artifacts stay immutable through
+the [owner revision resolver](../docs/implementation/graph-records.md#revision-anchor-resolver),
+independently of current build shapes. See
+[profile validation practice](../docs/implementation/model-profile-validation.md#choose-the-revision-boundary)
+for the current custody limits.
 
 `content-publication-v1` adds a distinct Content-backed revision pin. Its
 `variant` focus is in the current graph and its `decision` focus is in revisions;

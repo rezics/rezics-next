@@ -51,10 +51,12 @@ OAuth grants and package/SPDX metadata cannot become live authority, legal
 validity, executable capability or a universal dependency solver by RDF typing.
 These wider mappings need their owning profiles and tests before admission.
 
-Profiles are versioned. The trusted owner chooses required validation from the
+Accepted profiles and Facets describe the current reviewed basis. Optional
+properties and relaxed constraints refine the same profile; tightened constraints
+need a new constraint revision and an admission coverage check. A different
+meaning needs a new term; a block payload change versions only that block. The trusted owner chooses required validation from the
 operation and affected state; deleting a type, marker or selector cannot disable
-it. A change in semantic meaning creates a new exact revision or an explicit
-conversion with declared losses. Existing authored interpretation stays
-resolvable. See [shared Context](context.md) for selection and
+it. Exact stored revision manifests and payloads stay immutable and resolvable through
+their owner; reviewing an authored edit does not rewrite those bytes. See [shared Context](context.md) for selection and
 [validation operations](../implementation/model-profile-validation.md) for profile
 activation and rejected-command inspection.

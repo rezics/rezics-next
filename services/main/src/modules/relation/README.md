@@ -20,9 +20,8 @@ migration 972 preserves all installed branches and widens that Work editor branc
 
 A participation may carry the name credited in that occurrence (`creditedName`, one
 language-tagged string; [decision 51](../../../../docs/contracts/semantic-model.md#identities-variants-and-projections)).
-New participations are written under `relation-occurrence-v2`, whose `rv:participationFormat`
-marker routes them to the v2 shape; participations written before it have no marker or name and
-keep their v1 shape. The name belongs to the occurrence and never renames the participant.
+Participations with and without a credited name use the current `relation-occurrence-v1`
+shape, with no format marker. The name belongs to the occurrence and never renames the participant.
 
 A definition may declare `star: { leaf, hub }` over two of its role keys. The relation command
 refuses (`star_violation`, sealed under the same receipt, so a retry returns it) an active

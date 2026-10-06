@@ -1,3 +1,5 @@
+import { renderProfile } from '../../../model/compiler/ir.ts';
+import { structureWorkCompositionProfile } from '../../../model/definitions/structure-work-composition-v1.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
@@ -10,7 +12,6 @@ import { readCompositionSeal } from '../src/modules/structure/seal-read.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
-import lock from '../../../model/accepted/profiles/structure-work-composition-v1.json';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -81,7 +82,7 @@ test('G-830: ancestry costs one bounded query, retains a transactional guard and
 });
 
 
-test('G-830: creation validates the owner Structure shape and pins the generated profile lock', async () => {
+test('G-830: creation validates the owner Structure shape and pins the current profile digest', async () => {
   const env = { fuseki: { commandHealth: async () => ({ profiles: Object.fromEntries(
     Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) }) } } as unknown as WorkActivationEnvironment;
   const structure = id();
@@ -89,7 +90,8 @@ test('G-830: creation validates the owner Structure shape and pins the generated
   expect(checks.find(check => check.focus.includes(structure))).toMatchObject({
     profile: 'structure-work-composition-v1',
     shape: 'https://rezics.com/definition/structure-work-composition-v1/structure-shape' });
-  expect(lock).toEqual({ sha256: profileRegistry['structure-work-composition-v1'].sha256 });
+  expect(String(profileRegistry['structure-work-composition-v1'].sha256))
+    .toBe(createHash('sha256').update(renderProfile(structureWorkCompositionProfile)).digest('hex'));
 });
 
 test('G-830: seals page disclosed pins only and reveal no private occurrence IDs or counts', async () => {

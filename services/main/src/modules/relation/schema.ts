@@ -19,12 +19,8 @@ export const RELATION_TERMS = {
   role: `${RV}role`,
   participant: `${RV}participant`,
   back: `${RV}occurrence`,
-  format: `${RV}participationFormat`,
   creditedName: `${RV}creditedName`,
 } as const;
-
-/** Marks a participation that routes to the `relation-occurrence-v2` shape. */
-export const PARTICIPATION_FORMAT_V2 = `${RV}CreditedNameV2`;
 
 export const RELATION_LIMITS = { participants: 64, applicability: 8, position: 1023, creditedName: 200 } as const;
 
@@ -38,7 +34,7 @@ export interface Participation {
   role: string;
   participant: Participant;
   position?: number;
-  /** Absent on v1 occurrences. */
+  /** Optional name credited in this occurrence. */
   creditedName?: CreditedName;
 }
 

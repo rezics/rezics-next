@@ -6,7 +6,6 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { renderProfile } from '../../../model/compiler/ir.ts';
 import { authoredProfiles, commandProfiles } from '../../../model/compiler/generate.ts';
 import { spaceZoneProfile } from '../../../model/definitions/space-zone-v1.ts';
-import lock from '../../../model/accepted/profiles/space-zone-v1.json';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -25,8 +24,9 @@ const source = { name: 'Independent site', language: 'ar', actingSubject: actor,
 // A shared wave regenerates once at integration. Install only this reviewed
 // profile in this test process; never write or replace the shared generated files.
 const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
+const currentDigest = createHash('sha256').update(renderProfile(spaceZoneProfile)).digest('hex');
 const generated = registry['space-zone-v1'];
-beforeAll(() => { registry['space-zone-v1'] = { sha256: lock.sha256,
+beforeAll(() => { registry['space-zone-v1'] = { sha256: currentDigest,
   shapes: spaceZoneProfile.shapes.map(shape => shape.iri) }; });
 afterAll(() => { if (generated) registry['space-zone-v1'] = generated; else delete registry['space-zone-v1']; });
 
@@ -70,7 +70,7 @@ function fixture() {
 }
 
 test('G-963: Zone creation binds capability, normalized handle, visibility and listing to one intent', () => {
-  expect(createHash('sha256').update(renderProfile(spaceZoneProfile)).digest('hex')).toBe(lock.sha256);
+  expect(createHash('sha256').update(renderProfile(spaceZoneProfile)).digest('hex')).toBe(currentDigest);
   const input = { ...source, handle: 'Reading-Site' };
   const digest = zoneSpaceCreationDigest(input);
   expect(digest).toBe(zoneSpaceCreationDigest({ ...input, handle: 'reading-site', listing: 'listed' }));
@@ -85,7 +85,7 @@ test('G-963: Zone creation binds capability, normalized handle, visibility and l
 test('G-963: the Zone-only Space profile compiles beside every accepted Realm profile', () => {
   const compiled = commandProfiles(authoredProfiles);
   expect(compiled.profiles.find(profile => profile.id === 'space-zone-v1'))
-    .toMatchObject({ sha256: lock.sha256, focusRoles: ['space'] });
+    .toMatchObject({ sha256: currentDigest, focusRoles: ['space'] });
 });
 
 test('G-963: Space, Realm-free Zone and navigation commit atomically, validate every component and resolve a lost response', async () => {

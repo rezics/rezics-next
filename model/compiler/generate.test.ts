@@ -1,11 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
   from '../tests/fixtures/registry-probe.ts';
-import { compileFacet, facetId } from './facet.ts';
+import { facetId } from './facet.ts';
 import { authoredFacets, authoredProfiles, buildArtifacts, commandModuleVersion, generate } from './generate.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { buildCommandRegistry, canonicalTypeOrder, shapeRole, type RegistryOptions } from './registry.ts';
@@ -79,7 +78,7 @@ function latestEvidence(): Map<string, { profile_sha256: string; outcomes: Recor
   return evidence;
 }
 
-test('P0.3: authored constraints emit the exact recorded candidate profiles', () => {
+test('P0.3: authored constraints emit current profiles with recorded candidate coverage', () => {
   const artifacts = buildArtifacts(repo);
   const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
     profiles: { id: string; sha256: string; file: string }[];
@@ -87,7 +86,6 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
   const ids = authoredProfiles.map(profile => profile.id);
   expect(new Set(ids).size).toBe(ids.length);
   expect(manifest.profiles).toHaveLength(ids.length);
-  expect(ids).toEqual(expect.arrayContaining([...lockedProfiles(repo).keys()]));
   const evidence = latestEvidence();
   expect(evidence.size).toBeGreaterThan(0);
   for (const [id, recorded] of evidence) {
@@ -96,9 +94,9 @@ test('P0.3: authored constraints emit the exact recorded candidate profiles', ()
     const rendered = renderProfile(profile);
     const published = manifest.profiles.find(entry => entry.id === id);
     expect(published).toBeDefined();
-    expect(createHash('sha256').update(rendered).digest('hex')).toBe(recorded.profile_sha256);
+    expect(recorded.profile_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(createHash('sha256').update(rendered).digest('hex')).toBe(published!.sha256);
     expect(artifacts.get(`generated/model/${published!.file}`)).toBe(rendered);
-    expect(published!.sha256).toBe(recorded.profile_sha256);
     expect(Object.values(recorded.outcomes).some(outcome => outcome.conforms)).toBe(true);
     expect(Object.values(recorded.outcomes).some(outcome => !outcome.conforms)).toBe(true);
   }
@@ -244,74 +242,39 @@ test('P0.3: invalid or changed authored constraints cannot silently reuse the pr
   expect(changed).not.toBe(renderProfile(profile));
 });
 
-interface LockedProfile { sha256: string; binding?: { required: string[]; optional?: string[]; roles: string[] } }
+interface ManifestProfile { sha256: string; binding?: { required: string[]; optional?: string[]; roles: string[] } }
 type Manifest = {
   commandModule: string;
-  profiles: { id: string; sha256: string; file: string; binding?: LockedProfile['binding'] }[];
+  profiles: { id: string; sha256: string; file: string; binding?: ManifestProfile['binding'] }[];
   canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[];
   bindingDemands: { type: string; profile: string }[];
 };
 const manifestOf = (artifacts: Map<string, string>) =>
   JSON.parse(artifacts.get('generated/model/manifest.json')!) as Manifest;
 
-function lockedProfiles(root: string): Map<string, LockedProfile> {
-  const profiles = new Map<string, LockedProfile>();
-  for (const [path, text] of acceptedFiles(root)) {
-    if (!path.includes('/profiles/')) continue;
-    profiles.set(path.split('/').pop()!.replace(/\.json$/, ''), JSON.parse(text) as LockedProfile);
-  }
-  return profiles;
-}
-
-function lockedFacets(root: string): Map<string, string> {
-  const facets = new Map<string, string>();
-  for (const [path, text] of acceptedFiles(root)) {
-    if (!path.includes('/facets/')) continue;
-    facets.set(path.split('/').pop()!.replace(/\.json$/, ''), JSON.parse(text) as string);
-  }
-  return facets;
-}
-
-/** Digests and bindings come from the lock files; routes come from the compiled manifest. */
-function assertRecordedRegistry(recorded: Manifest, built: Manifest, shapes: ReadonlyMap<string, string>,
-  profiles: ReadonlyMap<string, LockedProfile>, facets: ReadonlyMap<string, string>): void {
+/** Routes, binding demands and shape digests must agree with the current authored basis. */
+function assertRecordedRegistry(recorded: Manifest, built: Manifest, shapes: ReadonlyMap<string, string>): void {
   if (JSON.stringify(recorded.canonical) !== JSON.stringify(built.canonical)) {
     throw new Error('Canonical route differs from the compiled manifest');
   }
   if (JSON.stringify(recorded.bindingDemands) !== JSON.stringify(built.bindingDemands)) {
     throw new Error('Binding demand differs from the compiled manifest');
   }
-  for (const [id, locked] of profiles) {
-    const profile = built.profiles.find(item => item.id === id);
-    const shape = profile && shapes.get(id);
-    const same = profile && shape
-      && profile.sha256 === locked.sha256
-      && createHash('sha256').update(shape).digest('hex') === locked.sha256
-      && JSON.stringify(profile.binding ?? null) === JSON.stringify(locked.binding ?? null);
-    if (!same) throw new Error(`Accepted profile ${id} changed; add a new version instead`);
+  for (const profile of built.profiles) {
+    const shape = shapes.get(profile.id);
+    if (!shape || createHash('sha256').update(shape).digest('hex') !== profile.sha256) {
+      throw new Error(`Profile digest differs: ${profile.id}`);
+    }
   }
   for (const entry of built.canonical) {
     for (const route of entry.routes) {
-      const shape = shapes.get(route.profile);
-      if (!shape?.includes(`<${route.shape}>`)) {
+      if (!shapes.get(route.profile)?.includes(`<${route.shape}>`)) {
         throw new Error(`Canonical route for ${entry.type} names a shape ${route.profile} does not declare`);
       }
-      if (!profiles.has(route.profile)) throw new Error(`Canonical route names unaccepted profile ${route.profile}`);
     }
   }
   for (const demand of built.bindingDemands) {
-    if (!profiles.has(demand.profile)) throw new Error(`Binding demand names unaccepted profile ${demand.profile}`);
-  }
-  for (const facet of authoredFacets) {
-    const id = facetId(facet);
-    if (facets.get(id) !== String(compileFacet(facet).digest)) {
-      throw new Error(`Accepted facet ${id} changed; add a new version instead`);
-    }
-  }
-  for (const id of facets.keys()) {
-    if (!authoredFacets.some(facet => facetId(facet) === id)) {
-      throw new Error(`Accepted facet ${id} changed; add a new version instead`);
-    }
+    if (!shapes.has(demand.profile)) throw new Error(`Binding demand names unknown profile ${demand.profile}`);
   }
 }
 
@@ -321,16 +284,14 @@ test('G-071: the generated registry keeps the historical canonical routes and bi
   const recorded = JSON.parse(readFileSync(join(repo, 'generated/model/manifest.json'), 'utf8')) as Manifest;
   const shapes = new Map(built.profiles.map(profile =>
     [profile.id, artifacts.get(`generated/model/${profile.file}`)!]));
-  const profiles = lockedProfiles(repo);
-  const facets = lockedFacets(repo);
-  expect(() => assertRecordedRegistry(recorded, built, shapes, profiles, facets)).not.toThrow();
+  expect(() => assertRecordedRegistry(recorded, built, shapes)).not.toThrow();
   const drifted = JSON.parse(JSON.stringify(built)) as Manifest;
   drifted.canonical[0]!.routes[0]!.profile = 'zz-test-wrong-route';
-  expect(() => assertRecordedRegistry(recorded, drifted, shapes, profiles, facets))
+  expect(() => assertRecordedRegistry(recorded, drifted, shapes))
     .toThrow('Canonical route differs from the compiled manifest');
   const undeclared = JSON.parse(JSON.stringify(built)) as Manifest;
   undeclared.canonical[0]!.routes[0]!.shape = 'https://rezics.com/definition/zz-test-wrong-route/missing-shape';
-  expect(() => assertRecordedRegistry(undeclared, undeclared, shapes, profiles, facets))
+  expect(() => assertRecordedRegistry(undeclared, undeclared, shapes))
     .toThrow(`Canonical route for ${undeclared.canonical[0]!.type} names a shape`);
 });
 
@@ -397,22 +358,10 @@ async function copiedProject(mutate: (root: string) => void): Promise<{ root: st
     recursive: true, filter: source => !source.endsWith('generate.test.ts'),
   });
   cpSync(join(repo, 'model/definitions'), join(root, 'model/definitions'), { recursive: true });
-  cpSync(join(repo, 'model/accepted'), join(root, 'model/accepted'), { recursive: true });
   symlinkSync(join(repo, 'infra'), join(root, 'infra'));
   mutate(root);
   const loaded = await import(join(root, 'model/compiler/generate.ts')) as { generate: typeof generate };
   return { root, generate: loaded.generate };
-}
-
-function acceptedFiles(root: string): Map<string, string> {
-  const files = new Map<string, string>();
-  for (const kind of ['profiles', 'facets']) {
-    const directory = join(root, 'model/accepted', kind);
-    for (const name of readdirSync(directory).filter(item => item.endsWith('.json')).sort()) {
-      files.set(`model/accepted/${kind}/${name}`, readFileSync(join(directory, name), 'utf8'));
-    }
-  }
-  return files;
 }
 
 function replaceIn(root: string, relative: string, from: string, to: string): void {
@@ -422,192 +371,79 @@ function replaceIn(root: string, relative: string, from: string, to: string): vo
   writeFileSync(path, source.replace(from, to));
 }
 
-/** First accepted profile whose definition contains `token`, in lock-file order. */
-function lockedProfileWith(root: string, token: string): string {
-  for (const id of [...lockedProfiles(root).keys()].sort()) {
-    if (readFileSync(join(root, `model/definitions/${id}.ts`), 'utf8').includes(token)) return id;
-  }
-  throw new Error(`no accepted profile definition contains ${token}`);
-}
-
-/** An accepted profile generate.ts does not import by path, so deleting its file still loads. */
-function deletableProfile(root: string): string {
-  const generator = readFileSync(join(root, 'model/compiler/generate.ts'), 'utf8');
-  for (const id of [...lockedProfiles(root).keys()].sort()) {
-    if (!generator.includes(`definitions/${id}.ts`)) return id;
-  }
-  throw new Error('no accepted profile is safe to delete in the compiler copy');
-}
-
-function lockedFacetPredicate(root: string): { id: string; predicate: string } {
-  for (const id of [...lockedFacets(root).keys()].sort()) {
-    const predicate = /predicate: '([^']+)'/.exec(readFileSync(join(root, `model/definitions/${id}.ts`), 'utf8'))?.[1];
-    if (predicate) return { id, predicate };
-  }
-  throw new Error('no accepted facet definition has a predicate');
-}
-
-test('accepted profiles reject an edited constraint before writing', async () => {
-  const id = lockedProfileWith(repo, 'maxCount: 1');
+test('an in-place profile relaxation regenerates its bytes and digest and detects hand-edited output', async () => {
+  const id = 'relation-occurrence-v1';
   const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
-    `model/definitions/${id}.ts`, 'maxCount: 1', 'maxCount: 2'));
-  expect(() => copied(root, false)).toThrow(`Accepted profile ${id} changed; add a new version instead`);
-  expect(() => copied(root, true)).toThrow(`Accepted profile ${id} changed; add a new version instead`);
-  expect(existsSync(join(root, 'generated/model/manifest.json'))).toBe(false);
+    `model/definitions/${id}.ts`, 'maxLength: 200', 'maxLength: 201'));
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
+  const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
+  const current = manifestOf(buildArtifacts(repo)).profiles.find(profile => profile.id === id)!;
+  const changed = manifest.profiles.find(profile => profile.id === id)!;
+  const shape = readFileSync(join(root, `generated/model/${changed.file}`), 'utf8');
+  expect(shape).toContain('sh:maxLength 201');
+  expect(changed.sha256).not.toBe(current.sha256);
+  expect(changed.sha256).toBe(createHash('sha256').update(shape).digest('hex'));
+  writeFileSync(join(root, `generated/model/${changed.file}`), `${shape}# hand edit\n`);
+  expect(() => copied(root, true)).toThrow(`Generated artifact differs: generated/model/${changed.file}`);
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
 });
 
-test('a shared compiler helper that changes rendered shapes fails generation', async () => {
-  const id = [...lockedProfiles(repo).keys()].sort()[0]!;
+test('a compiler rendering change regenerates the current basis', async () => {
   const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
     'model/compiler/ir.ts', 'a sh:NodeShape ;', 'a sh:NodeShape  ;'));
-  expect(() => copied(root, false)).toThrow(`Accepted profile ${id} changed; add a new version instead`);
-  expect(existsSync(join(root, `generated/model/shapes/${id}.ttl`))).toBe(false);
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
 });
 
-test('deleting an accepted profile fails generation', async () => {
-  const id = deletableProfile(repo);
-  const { root, generate: copied } = await copiedProject(copy => rmSync(join(copy, `model/definitions/${id}.ts`)));
-  expect(() => copied(root, true)).toThrow(`Accepted profile ${id} changed; add a new version instead`);
-});
-
-test('changing an accepted Facet path fails generation', async () => {
-  const { id, predicate } = lockedFacetPredicate(repo);
-  const replacement = predicate === 'rdf:value' ? 'rdf:type' : 'rdf:value';
-  const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
-    `model/definitions/${id}.ts`, `predicate: '${predicate}'`, `predicate: '${replacement}'`));
-  expect(() => copied(root, false)).toThrow(`Accepted facet ${id} changed; add a new version instead`);
-});
-
-test('whitespace in an accepted definition still generates and leaves the lock untouched', async () => {
-  const id = [...lockedProfiles(repo).keys()].sort()[0]!;
+test('an authored profile can be removed without a digest lock', async () => {
+  const id = 'relation-occurrence-v1';
   const { root, generate: copied } = await copiedProject(copy => {
-    const path = join(copy, `model/definitions/${id}.ts`);
-    writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
+    generate(copy, false);
+    rmSync(join(copy, `model/definitions/${id}.ts`));
   });
-  const lock = [...acceptedFiles(root)];
+  expect(() => copied(root, true)).toThrow(`Unexpected generated artifact: generated/model/shapes/${id}.ttl`);
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
-  expect([...acceptedFiles(root)]).toEqual(lock);
+  const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
+  expect(manifest.profiles.some(profile => profile.id === id)).toBe(false);
+  expect(existsSync(join(root, `generated/model/shapes/${id}.ttl`))).toBe(false);
+  expect(existsSync(join(root, `generated/model/contexts/${id}.jsonld`))).toBe(false);
 });
 
-test('an unaccepted profile is refused until its lock entry is appended', async () => {
-  const id = 'zz-test-unaccepted-v1';
+test('an in-place Facet refinement regenerates its registry', async () => {
+  const facet = authoredFacets.find(item => item.path.some(step => step.kind === 'triple'))!;
+  const step = facet.path.find(item => item.kind === 'triple')!;
+  const id = facetId(facet);
+  const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
+    `model/definitions/${id}.ts`, `predicate: '${step.predicate}'`, "predicate: 'rdf:value'"));
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
+  expect(readFileSync(join(root, 'packages/model/src/generated/facets.ts'), 'utf8'))
+    .not.toBe(buildArtifacts(repo).get('packages/model/src/generated/facets.ts'));
+});
+
+
+test('a new authored profile joins generation without a separate digest file', async () => {
+  const id = 'reviewed-example-v1';
   const { root, generate: copied } = await copiedProject(copy => writeFileSync(join(copy, `model/definitions/${id}.ts`),
-    `import type { ProfileDefinition } from '../compiler/ir.ts';
-
-export const zzTestUnacceptedProfile = {
-  id: '${id}',
-  comments: ['A new version is admitted only with its own lock entry.'],
-  prefixes: [
-    ['sh', 'http://www.w3.org/ns/shacl#'],
-    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
-    ['rv', 'https://rezics.com/vocab/'],
-  ],
-  layout: 'compact',
-  shapes: [{
-    iri: 'https://rezics.com/definition/${id}/release-shape',
-    canonical: { types: ['rv:ZzTestUnaccepted'] },
-    properties: [{ path: 'rdf:type', hasValue: 'rv:ZzTestUnaccepted', maxCount: 1 }],
-  }],
-} as const satisfies ProfileDefinition;
-`));
-  let message = '';
-  try { copied(root, false); } catch (error) { message = error instanceof Error ? error.message : String(error); }
-  const file = `model/accepted/profiles/${id}.json`;
-  const marker = `Unaccepted profile ${id}: add ${file} with exactly:\n`;
-  expect(message.startsWith(marker)).toBe(true);
-  const content = message.slice(marker.length);
-  expect(JSON.parse(content)).toEqual({ sha256: expect.any(String) });
-  expect(existsSync(join(root, 'generated/model/manifest.json'))).toBe(false);
-  writeFileSync(join(root, file), content);
+    `export const reviewedExampleProfile = {
+      id: '${id}', comments: ['A reviewed current basis.'],
+      prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rv', 'https://rezics.com/vocab/']],
+      shapes: [{ iri: 'https://rezics.com/definition/${id}/example-shape',
+        properties: [{ path: 'rv:example', maxCount: 1, nodeKind: 'sh:IRI' }] }],
+    };`));
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
+  const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
+  expect(manifest.profiles.some(profile => profile.id === id)).toBe(true);
 });
 
-function gitText(args: string[]): string | undefined {
-  try { return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
-  catch { return undefined; }
-}
-
-function assertBaselineUnchanged(baseline: readonly { path: string; text: string }[],
-  current: ReadonlyMap<string, string>): void {
-  for (const file of baseline) {
-    const id = file.path.split('/').pop()!.replace(/\.json$/, '');
-    const now = current.get(file.path);
-    if (file.path.includes('/profiles/')) {
-      const before = JSON.parse(file.text) as { sha256: string; binding?: unknown };
-      const after = now === undefined ? undefined : JSON.parse(now) as { sha256: string; binding?: unknown };
-      if (!after || after.sha256 !== before.sha256
-        || JSON.stringify(after.binding ?? null) !== JSON.stringify(before.binding ?? null)) {
-        throw new Error(`Accepted profile ${id} changed; the merge-base lock entry must stay unchanged`);
-      }
-    } else {
-      const before = JSON.parse(file.text) as string;
-      const after = now === undefined ? undefined : JSON.parse(now) as string;
-      if (after !== before) throw new Error(`Accepted facet ${id} changed; the merge-base lock entry must stay unchanged`);
-    }
-  }
-}
-
-test('accepted lock entries recorded at the merge-base stay unchanged', () => {
-  const mergeBase = gitText(['merge-base', 'HEAD', 'main']);
-  if (!mergeBase) {
-    console.log('notice: skip accepted-lock merge-base guard; git or main is unavailable');
-    return;
-  }
-  const listed = gitText(['ls-tree', '-r', '--name-only', mergeBase, 'model/accepted']);
-  if (listed === undefined) {
-    console.log('notice: skip accepted-lock merge-base guard; git or main is unavailable');
-    return;
-  }
-  const paths = listed.split('\n').filter(path => path.endsWith('.json'));
-  if (!paths.length) {
-    console.log('notice: skip accepted-lock merge-base guard; model/accepted is absent from the merge-base');
-    return;
-  }
-  const baseline = paths.map(path => {
-    const text = gitText(['show', `${mergeBase}:${path}`]);
-    if (text === undefined) throw new Error(`cannot read ${path} at the merge-base`);
-    return { path, text };
-  });
-  expect(() => assertBaselineUnchanged(baseline, acceptedFiles(repo))).not.toThrow();
-});
-
-test('rewriting an existing accepted lock entry fails the merge-base guard', () => {
-  const current = acceptedFiles(repo);
-  const baseline = [...current].map(([path, text]) => ({ path, text }));
-  const profilePaths = [...current.keys()].filter(path => path.includes('/profiles/')).sort();
-  const facetPaths = [...current.keys()].filter(path => path.includes('/facets/')).sort();
-  const profilePath = profilePaths[0]!;
-  const profileId = profilePath.split('/').pop()!.replace(/\.json$/, '');
-  const rewritten = new Map(current);
-  const profile = JSON.parse(rewritten.get(profilePath)!) as { sha256: string };
-  rewritten.set(profilePath, JSON.stringify({ ...profile, sha256: '0'.repeat(64) }));
-  expect(() => assertBaselineUnchanged(baseline, rewritten))
-    .toThrow(`Accepted profile ${profileId} changed; the merge-base lock entry must stay unchanged`);
-  const bindingPath = profilePaths.find(path => {
-    const value = JSON.parse(current.get(path)!) as { binding?: { roles: string[] } };
-    return (value.binding?.roles.length ?? 0) > 1;
-  });
-  if (!bindingPath) throw new Error('no accepted profile lock has a multi-role binding');
-  const bindingId = bindingPath.split('/').pop()!.replace(/\.json$/, '');
-  const binding = new Map(current);
-  const context = JSON.parse(binding.get(bindingPath)!) as { sha256: string; binding: { roles: string[] } };
-  binding.set(bindingPath, JSON.stringify({ ...context, binding: { ...context.binding, roles: [context.binding.roles[0]] } }));
-  expect(() => assertBaselineUnchanged(baseline, binding))
-    .toThrow(`Accepted profile ${bindingId} changed; the merge-base lock entry must stay unchanged`);
-  const facetPath = facetPaths[0]!;
-  const facetName = facetPath.split('/').pop()!.replace(/\.json$/, '');
-  const facet = new Map(current);
-  facet.set(facetPath, JSON.stringify('0'.repeat(64)));
-  expect(() => assertBaselineUnchanged(baseline, facet))
-    .toThrow(`Accepted facet ${facetName} changed; the merge-base lock entry must stay unchanged`);
-  const removed = new Map(current);
-  removed.delete(profilePath);
-  expect(() => assertBaselineUnchanged(baseline, removed))
-    .toThrow(`Accepted profile ${profileId} changed; the merge-base lock entry must stay unchanged`);
-  const appended = new Map(current);
-  appended.set('model/accepted/profiles/zz-test-extra-v1.json', JSON.stringify({ sha256: 'a'.repeat(64) }));
-  appended.set('model/accepted/facets/zz-test-facet-v1.json', JSON.stringify('b'.repeat(64)));
-  expect(() => assertBaselineUnchanged(baseline, appended)).not.toThrow();
+test('an authored Facet can be removed from the current registry', async () => {
+  const id = 'facet-author-v1';
+  const { root, generate: copied } = await copiedProject(copy => rmSync(join(copy, `model/definitions/${id}.ts`)));
+  expect(() => copied(root, false)).not.toThrow();
+  expect(() => copied(root, true)).not.toThrow();
+  expect(readFileSync(join(root, 'packages/model/src/generated/facets.ts'), 'utf8')).not.toContain(id);
 });

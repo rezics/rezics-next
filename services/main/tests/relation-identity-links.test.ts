@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { relationLexiconSeed, variantKindConcepts } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { canonicalRelation, relationChangeDigest, type ExactDefinition } from '../src/modules/relation/change.ts';
-import { PARTICIPATION_FORMAT_V2, checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
+import { checkedParticipations, type RelationRoleDefinition } from '../src/modules/relation/schema.ts';
 import { semanticReaderOnly } from '../src/modules/target/disclosed-references.ts';
 import { semanticWriteReferences } from '../src/modules/semantic/admitted.ts';
 import { checkedComponentState, referencedResources } from '../src/modules/semantic/change.ts';
@@ -78,13 +78,12 @@ test('lexicon seed: identity definitions carry the star, no Work authority and e
   expect(variantKindConcepts.every(kind => kind.labels.length === 8)).toBe(true);
 });
 
-test('canonical routing: participations with the v2 format take the v2 shape, others keep v1', () => {
+test('canonical routing: named and unnamed participations use one current occurrence shape', () => {
   const manifest = JSON.parse(readFileSync(join(import.meta.dir, '../../../generated/model/manifest.json'), 'utf8')) as {
-    canonical: { type: string; routes: { profile: string; when: { path: string; value: string }[] }[] }[] };
+    canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[] };
   const routes = manifest.canonical.find(entry => entry.type === 'https://rezics.com/vocab/RelationParticipation')!.routes;
-  expect(routes.map(route => route.profile)).toEqual(['relation-occurrence-v2', 'relation-occurrence-v1']);
-  expect(routes[0]!.when).toEqual([{ path: 'https://rezics.com/vocab/participationFormat', value: PARTICIPATION_FORMAT_V2 }]);
-  expect(routes[1]!.when).toEqual([]);
+  expect(routes).toEqual([{ profile: 'relation-occurrence-v1',
+    shape: 'https://rezics.com/definition/relation-occurrence-v1/participation-shape', when: [] }]);
 });
 
 const native = (n: number) => `https://rezics.com/id/01990000-0000-7000-8000-${String(n).padStart(12, '0')}`;

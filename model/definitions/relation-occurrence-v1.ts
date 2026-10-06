@@ -8,6 +8,7 @@ export const relationOccurrenceProfile = {
     'An identified relation occurrence under an exact relation DefinitionRef, with its immutable revisions.',
     'Each immutable revision lists participations; each binds one role and one participant to exactly one',
     'occurrence. Repeated participants in another association are another occurrence.',
+    'An optional language-tagged credited name belongs to the participation and never renames its participant.',
   ],
   prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
     ['xsd', 'http://www.w3.org/2001/XMLSchema#'], ['owl', 'http://www.w3.org/2002/07/owl#'],
@@ -29,6 +30,7 @@ export const relationOccurrenceProfile = {
       { path: 'rv:role', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'rv:participant', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
       { path: 'schema:position', maxCount: 1, datatype: 'xsd:integer', minInclusive: 0, maxInclusive: 1023 },
+      { path: 'rv:creditedName', maxCount: 1, datatype: 'rdf:langString', maxLength: 200 },
     ] },
     { iri: 'https://rezics.com/definition/relation-occurrence-v1/revision-shape',
       canonical: { types: ['rv:RelationOccurrenceRevision'] }, closed: true, properties: [

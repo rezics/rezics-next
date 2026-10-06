@@ -13,7 +13,8 @@ cross-owner exchange mappings are still broader designs, not compiler features.
 
 1. Add `model/definitions/<name>-v1.ts` with shapes and, for native command
    routing, `canonical` and `binding` metadata. Pin source terms and exact
-   candidate meaning; never edit an already referenced definition in place.
+   candidate meaning. Accepted is the current reviewed basis: definition and generated
+   diffs are reviewed together; authored profiles and Facets may be edited or removed.
 2. Run `task gen`; review the generated shape, context, schema and manifest diff.
    Add positive and denied candidate fixtures and a registry route assertion.
 3. Validate against the pinned native command module. Stage affected data and
@@ -22,6 +23,31 @@ cross-owner exchange mappings are still broader designs, not compiler features.
 4. Change native module code and bump its version only when generic registry
    routing cannot express a required rule. The module must load the matching
    manifest and shape digests at startup.
+
+## Choose the revision boundary
+
+| Change | Boundary |
+| --- | --- |
+| Optional property or relaxed constraint | Refine the same profile or Facet. |
+| Tightened constraint | New constraint revision, with an admission coverage check. |
+| Different meaning | New term. |
+| Block payload change | Version only that block. |
+
+The manifest retains artifact digests, `task gen:check` detects generated drift,
+and the registry rejects ambiguous routing. These checks protect the current
+build; they do not lock authored definitions to previous bytes.
+
+Exact stored manifests and payloads remain immutable. The
+[revision resolver](graph-records.md#revision-anchor-resolver) reads sealed
+`rezics-manifest-v1` objects by digest and checks their component, profile IRI,
+payload digest and byte size. Semantic revisions also retain the model-generation
+IRI. Its sealed state records the build manifest digest, module version and
+entailment posture, rather than a historical copy of every shape. Current exact
+read paths do not load old generated SHACL or compiler manifests; the native
+registry verifies only the installed build's shape bytes at startup. Removing
+the authored digest lock changes neither the object custody path nor these
+checks. Historical native revalidation against old generated shapes has no
+implemented custody/resolution path today.
 
 ## Inspect a rejected command
 

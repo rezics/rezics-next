@@ -12,7 +12,7 @@ import { checkedStoredState, term, type RelationRole, type RelationStar } from '
 import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
 import { checkedApplicability, checkedParticipations, checkedRevealedAt, InvalidRelationOccurrence,
-  PARTICIPATION_FORMAT_V2, RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition,
+  RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition,
   type RevealedAt } from './schema.ts';
 import { RevelationConflict, type ReadingPositionStore } from '../reading-position/store.ts';
 import { targetRead, targetSummaries } from '../target/resolve.ts';
@@ -414,9 +414,8 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
   const conflict = active && definition.star ? starConflict(definition, occurrence, exact) : '';
   const validations = [
     ...await validationsFor(env, 'relation-occurrence-v1', [{ role: 'occurrence', focus: [occurrence] },
-      { role: 'revision', focus: [revision] }]),
-    ...await validationsFor(env, 'relation-occurrence-v2',
-      [{ role: 'participation', focus: participations.map(item => item.iri) }]),
+      { role: 'revision', focus: [revision] },
+      { role: 'participation', focus: participations.map(item => item.iri) }]),
     ...nodes.length ? await validationsFor(env, 'value-exact-v1',
       [{ role: 'external-reference', focus: nodes.map(node => node[0]!) }]) : [],
   ];
@@ -434,8 +433,7 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
           rv:modelRevision ${iri(PROFILES.relation)} ; rv:shapeRevision ${iri(PROFILES.relation)} ;
           rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${participations.map(item => `${iri(item.iri)} a rv:RelationParticipation ; rv:occurrence ${iri(occurrence)} ;
-          rv:role ${iri(item.role)} ; rv:participant ${item.object} ;
-          <${RELATION_TERMS.format}> <${PARTICIPATION_FORMAT_V2}>
+          rv:role ${iri(item.role)} ; rv:participant ${item.object}
           ${item.position === undefined ? '' : `; <https://schema.org/position> ${item.position}`}
           ${item.creditedName ? `; <${RELATION_TERMS.creditedName}> ${semanticValueRdf({ kind: 'language-string',
             ...item.creditedName }, () => '').object}` : ''} .`).join('\n')}

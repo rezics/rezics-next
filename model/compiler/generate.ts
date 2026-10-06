@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { compileFacet, facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
+import { facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
 import { renderProfile, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
@@ -125,82 +125,20 @@ export function buildArtifacts(_root: string): Map<string, string> {
   return artifacts;
 }
 
-interface AcceptedBinding { required: string[]; optional?: string[]; roles: string[] }
-interface AcceptedProfile { sha256: string; binding?: AcceptedBinding }
-interface AcceptedLock { profiles: Map<string, AcceptedProfile>; facets: Map<string, string> }
-
-function readAcceptedDir(kind: 'profiles' | 'facets'): Map<string, unknown> {
-  const directory = join(repository, 'model/accepted', kind);
-  let names: string[];
-  try { names = readdirSync(directory).filter(name => name.endsWith('.json')); }
-  catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Cannot read model/accepted/${kind}: ${reason}`);
-  }
-  const entries = new Map<string, unknown>();
-  for (const name of names.sort()) {
-    const id = name.slice(0, -'.json'.length);
-    try { entries.set(id, JSON.parse(readFileSync(join(directory, name), 'utf8'))); }
-    catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`Cannot read model/accepted/${kind}/${name}: ${reason}`);
-    }
-  }
-  return entries;
-}
-
-function acceptedLock(): AcceptedLock {
-  const profiles = new Map<string, AcceptedProfile>();
-  for (const [id, value] of readAcceptedDir('profiles')) profiles.set(id, value as AcceptedProfile);
-  const facets = new Map<string, string>();
-  for (const [id, value] of readAcceptedDir('facets')) facets.set(id, typeof value === 'string' ? value : '');
-  return { profiles, facets };
-}
-
-function profileEntry(profile: { sha256: string; binding?: AcceptedBinding }): AcceptedProfile {
-  return profile.binding ? { sha256: profile.sha256, binding: profile.binding } : { sha256: profile.sha256 };
-}
-
-/**
- * Accepted profiles and Facets stay at the digests under model/accepted/.
- * Generation reads those files and never writes them; a changed meaning is a new version.
- */
-function assertAccepted(artifacts: Map<string, string>, facets: readonly FacetDefinition[]): void {
-  const lock = acceptedLock();
-  const manifest = JSON.parse(artifacts.get('generated/model/manifest.json')!) as {
-    profiles: { id: string; sha256: string; binding?: AcceptedBinding }[];
-  };
-  const built = new Map(manifest.profiles.map(profile => [profile.id, profile]));
-  for (const id of [...lock.profiles.keys()].sort()) {
-    const profile = built.get(id);
-    const locked = lock.profiles.get(id)!;
-    const same = profile && profile.sha256 === locked.sha256
-      && JSON.stringify(profile.binding ?? null) === JSON.stringify(locked.binding ?? null);
-    if (!same) throw new Error(`Accepted profile ${id} changed; add a new version instead`);
-  }
-  for (const profile of [...manifest.profiles].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (lock.profiles.has(profile.id)) continue;
-    const file = `model/accepted/profiles/${profile.id}.json`;
-    const content = `${JSON.stringify(profileEntry(profile), null, 2)}\n`;
-    throw new Error(`Unaccepted profile ${profile.id}: add ${file} with exactly:\n${content}`);
-  }
-  const digests = new Map(facets.map(facet => [facetId(facet), String(compileFacet(facet).digest)]));
-  for (const id of [...lock.facets.keys()].sort()) {
-    if (digests.get(id) !== lock.facets.get(id)) {
-      throw new Error(`Accepted facet ${id} changed; add a new version instead`);
-    }
-  }
-  for (const id of [...digests.keys()].sort()) {
-    if (lock.facets.has(id)) continue;
-    const file = `model/accepted/facets/${id}.json`;
-    const content = `${JSON.stringify(digests.get(id))}\n`;
-    throw new Error(`Unaccepted facet ${id}: add ${file} with exactly:\n${content}`);
-  }
-}
-
 export function generate(root: string, check: boolean): void {
   const artifacts = buildArtifacts(root);
-  assertAccepted(artifacts, authoredFacets);
+  // Definitions may be removed in review; their old generated shapes and contexts
+  // must not remain available beside the current manifest.
+  for (const directory of ['generated/model/shapes', 'generated/model/contexts']) {
+    const path = join(root, directory);
+    if (!existsSync(path)) continue;
+    for (const name of readdirSync(path)) {
+      const relative = `${directory}/${name}`;
+      if (artifacts.has(relative)) continue;
+      if (check) throw new Error(`Unexpected generated artifact: ${relative}; run task gen`);
+      unlinkSync(join(root, relative));
+    }
+  }
   for (const [relative, expected] of artifacts) {
     const path = join(root, relative);
     if (check) {

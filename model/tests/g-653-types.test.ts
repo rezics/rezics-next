@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { profileRegistry } from '../../packages/model/src/generated/profiles.ts';
 import { createHash } from 'node:crypto';
 import { renderProfile } from '../compiler/ir.ts';
 import { workKindProfile } from '../definitions/work-kind-v1.ts';
@@ -18,10 +18,7 @@ test('G653: v3 opens descriptive IRIs while retaining the Work base and revision
     expect(shape).toContain('sh:maxCount 4');
     expect(shape).toContain('sh:nodeKind sh:IRI');
     expect(profile.shapes[0].properties[1]).toEqual(workKindV2Profile.shapes[0].properties[1]);
-    const lock = JSON.parse(
-      readFileSync(new URL(`../accepted/profiles/${profile.id}.json`, import.meta.url), 'utf8'),
-    );
-    expect(lock.sha256).toBe(createHash('sha256').update(shape).digest('hex'));
+    expect(profileRegistry[profile.id].sha256).toBe(createHash('sha256').update(shape).digest('hex'));
   }
   expect(workTypeV3Profile.shapes[1].properties).toEqual(workTypeV2Profile.shapes[1].properties);
   for (const profile of [workKindProfile, workKindV2Profile, workTypeProfile, workTypeV2Profile])

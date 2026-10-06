@@ -1,8 +1,0 @@
-{
-  "sha256": "184e1f90ec69b630b535f247359218e80b7f27fa004884277ed68f58bfae2543",
-  "binding": {
-    "required": ["realm", "context", "target", "slot", "observation", "revision", "availability"],
-    "optional": ["value", "predecessor"],
-    "roles": ["realm", "context", "observation", "revision"]
-  }
-}

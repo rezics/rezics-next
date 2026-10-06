@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { facetRegistry } from '../../packages/model/src/generated/facets.ts';
 import { authoredFacets } from '../compiler/generate.ts';
 import { compileFacet, facetId, facetLocales, renderFacetRegistry, type FacetDefinition } from '../compiler/facet.ts';
 import { releaseFacet } from '../definitions/facet-release-v1.ts';
@@ -11,8 +11,7 @@ test('G851: related-node release facets pin their path, child placement, meaning
   expect(releaseFacets).toHaveLength(6);
   for (const facet of releaseFacets) {
     const compiled = compileFacet(facet);
-    expect(compiled.digest).toBe(JSON.parse(readFileSync(new URL(`../accepted/facets/${facetId(facet)}.json`,
-      import.meta.url), 'utf8')));
+    expect(facetRegistry[`https://rezics.com/definition/${facetId(facet)}` as keyof typeof facetRegistry].digest).toBe(compiled.digest);
     expect(Object.keys(compiled.labels as object)).toEqual([...facetLocales]);
     if (facet.name !== 'release') expect(compiled).toMatchObject({ appliesTo: 'participant',
       within: 'https://rezics.com/definition/facet-release-v1', subject: 'https://rezics.com/vocab/Release' });

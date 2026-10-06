@@ -62,7 +62,7 @@ interface FacetParameter {
   value: FacetValueDomain;
 }
 
-/** Admission bounds, refined in place; a changed meaning is a new version instead. */
+/** Admission bounds may be relaxed in place; tightened bounds need coverage review. */
 interface FacetCost {
   /** Values, or range bounds, one Condition may name. */
   maxValues: number;
@@ -75,7 +75,7 @@ interface FacetCost {
 export interface FacetDefinition {
   /** The camelCase name Conditions use; stable across versions. */
   name: string;
-  /** A new meaning is a new version; older versions stay admitted for exact DefinitionRefs. */
+  /** Optional fields and relaxed bounds refine this basis; a different meaning needs a new term. */
   version: number;
   labels: Readonly<Record<FacetLocale, string>>;
   /** Where a Condition starts: the queried Resource, or within an occurrence group, the bound

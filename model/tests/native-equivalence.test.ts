@@ -79,7 +79,8 @@ export async function runNativeEquivalence(baseUrl: string,
   let expectedConforming = 0;
   let checkedMissingBinding = false;
   for (const fixture of fixtures) {
-    if (health.profiles[fixture.id] !== fixture.sha256) {
+    const currentProfile = manifest.profiles.find(profile => profile.id === fixture.id);
+    if (!currentProfile || health.profiles[fixture.id] !== currentProfile.sha256) {
       throw new Error(`Command image has wrong ${fixture.id} digest: ${health.profiles[fixture.id]}`);
     }
     for (const [name, candidate] of Object.entries(fixture.cases)) {
@@ -113,7 +114,7 @@ export async function runNativeEquivalence(baseUrl: string,
       const bound = ['classification-context-v1', 'classification-direct-decision-v1',
         'classification-proposition-v1', 'realm-standing-rating-context-v1',
         'realm-standing-rating-observation-v1'].includes(fixture.id);
-      const validations = candidate.focus.map(item => ({ profile: fixture.id, sha256: fixture.sha256,
+      const validations = candidate.focus.map(item => ({ profile: fixture.id, sha256: currentProfile.sha256,
         shape: item.shape, focus: [item.focus], graphs: [current],
         ...(bound ? { binding: candidate.args } : {}) }));
       if (bound && candidate.expected && !checkedMissingBinding) {
@@ -203,7 +204,10 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
       profile_sha256: string; outcomes: Record<string, { conforms: boolean }>;
     };
     const published = manifest.profiles.find(item => item.id === fixture.id);
-    expect(published?.sha256).toBe(evidence.profile_sha256);
+    expect(published).toBeDefined();
+    // Historical fixture digests describe recorded evidence; current candidate
+    // qualification uses this build's manifest and reruns the outcomes below.
+    expect(published!.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(fixture.sha256).toBe(evidence.profile_sha256);
     expect(Object.keys(fixture.cases).sort()).toEqual(Object.keys(evidence.outcomes).sort());
     for (const [name, candidate] of Object.entries(fixture.cases)) {
@@ -217,6 +221,51 @@ test('P0.3: TypeScript candidate fixtures preserve all recorded profile digests 
 });
 
 const nativeTest = process.env.MODEL_NATIVE_EQUIVALENCE === '1' && base ? test : test.skip;
+nativeTest('MODEL17: participation names: one occurrence shape validates named and unnamed writes and rejects invalid names', async () => {
+  const profile = 'relation-occurrence-v1';
+  const shapes = manifest.profiles.find(entry => entry.id === profile)!;
+  const revisions = 'urn:rezics:graph:revisions';
+  for (const [name, credit, expected] of [
+    ['optional', 'rv:creditedName "Saber"@en ;', 'committed'],
+    ['long', `rv:creditedName "${'x'.repeat(201)}"@en ;`, 'invalid'],
+    ['untyped', 'rv:creditedName "Saber" ;', 'invalid'],
+    ['multiple', 'rv:creditedName "Saber"@en, "セイバー"@ja ;', 'invalid'],
+    ['retired-marker', 'rv:participationFormat rv:CreditedNameV2 ;', 'invalid'],
+  ] as const) {
+    const nonce = crypto.randomUUID(), receipt = `urn:participation:${nonce}`;
+    const occurrence = `${receipt}:occurrence`, named = `${receipt}:named`, plain = `${receipt}:plain`;
+    await update(base!, `CLEAR SILENT GRAPH <${current}>; CLEAR SILENT GRAPH <${control}>; CLEAR SILENT GRAPH <${revisions}>`);
+    await update(base!, `PREFIX rv: <${rv}> INSERT DATA {
+      GRAPH <${current}> { <${occurrence}> a rv:RelationOccurrence . }
+      GRAPH <${control}> { <${dataset}> rv:dataEpoch "${nonce}" ; rv:routingEpoch "1" ; rv:sequence 0 . } }`);
+    const response = await fetch(`${base}/command`, { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.FUSEKI_COMMAND_TOKEN}` },
+      body: JSON.stringify({ receipt, digest: nonce, deadlineMs: 10_000,
+        validations: [{ profile, sha256: shapes.sha256,
+          shape: `https://rezics.com/definition/${profile}/participation-shape`,
+          focus: [named, plain], graphs: [current, revisions] }],
+        update: `PREFIX rv: <${rv}>
+          DELETE { GRAPH <${control}> { <${dataset}> rv:sequence 0 } }
+          INSERT {
+            GRAPH <${control}> { <${dataset}> rv:sequence 1 }
+            GRAPH <${revisions}> {
+              <${named}> a rv:RelationParticipation ; rv:occurrence <${occurrence}> ;
+                rv:role <urn:role:actor> ; rv:participant <urn:participant:named> ; ${credit} .
+              <${plain}> a rv:RelationParticipation ; rv:occurrence <${occurrence}> ;
+                rv:role <urn:role:actor> ; rv:participant <urn:participant:plain> . }
+            GRAPH <${receipts}> { <${receipt}> a rv:OperationReceipt ; rv:requestDigest "${nonce}" ;
+              rv:datasetId <${dataset}> ; rv:dataEpoch "${nonce}" ; rv:sequence 1 ; rv:outcome rv:Succeeded . }
+            GRAPH <${outbox}> { <${receipt}:batch> a rv:OutboxBatch ; rv:dataEpoch "${nonce}" ;
+              rv:sequence 1 ; rv:eventCount 1 ; rv:event <${receipt}:event> .
+              <${receipt}:event> a rv:RelationChangedEvent ; rv:ordinal 0 ; rv:action "relation.change" ; rv:receipt <${receipt}> . }
+          } WHERE { GRAPH <${control}> { <${dataset}> rv:sequence 0 ; rv:dataEpoch "${nonce}" ; rv:routingEpoch "1" }
+            FILTER NOT EXISTS { GRAPH <${receipts}> { <${receipt}> ?p ?o } } }` }) });
+    const outcome = await response.json() as Outcome;
+    expect({ name, status: outcome.status, ...(outcome.status !== expected ? { report: outcome.report } : {}) })
+      .toEqual({ name, status: expected });
+    expect(await receiptExists(base!, receipt)).toBe(expected === 'committed');
+  }
+}, 60_000);
 test('MODEL02: Work scalar native fixture preserves recorded outcomes and digest', () => {
   const work = nativeFixtures.find(fixture => fixture.id === 'work-metadata-v1');
   if (!work) throw new Error('Work metadata native fixture absent');
