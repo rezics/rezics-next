@@ -58,7 +58,7 @@ the last active permanent holder cannot be removed or deactivated. Assign
 backup also needs administrator operations. A governance grant alone supplies
 assignment authority, not resource authority.
 
-Before opening production, run:
+Before opening production and lifting the registration pause, run:
 
 ```sh
 task ops:platform-governance -- .temp/production.env
@@ -66,10 +66,13 @@ task ops:platform-governance -- .temp/production.env
 
 This checks Access directly and fails unless an active principal holds a
 permanent direct `platform:grant`; it warns until two distinct principals hold
-it. Finite grants do not satisfy the gate. Main starts without governance so the
-first operator can sign in, but production `/health/ready` returns `503` until
-that permanent holder exists. `ops:env-check` validates configuration and states
-this opening rule; it does not establish governance readiness. Run catalogue
+it. Finite grants do not satisfy the gate. Keep registration paused if the check
+fails. Main remains available without governance so the first operator can sign
+in and provision the Agent that receives designation. Production `/health/ready`
+checks whether Main is safe to serve, including recorded migrations and the
+absence of payment provider rows; governance is the separate opening gate.
+`ops:env-check` validates configuration and states
+this opening rule; it does not establish governance verification. Run catalogue
 bootstrap verification separately after designation.
 
 Account ownership and Main grants are separate. The platform administrator's

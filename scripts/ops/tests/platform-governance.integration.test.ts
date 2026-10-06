@@ -30,7 +30,7 @@ import {
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()) });
 
-test('first governance designation is atomic, replay is inert, ordinary grants add backups and production requires a permanent active holder', async () => {
+test('first governance designation is atomic, ordinary grants add backups and opening requires a permanent holder while Main stays ready', async () => {
   const state = join(repositoryRoot, '.temp', `platform-governance-${randomUUID()}`);
   const data = join(state, 'pgdata');
   mkdirSync(state, { recursive: true, mode: 0o700 });
@@ -125,7 +125,7 @@ test('first governance designation is atomic, replay is inert, ordinary grants a
     await expect(checkPlatformGovernance(url('postgres'))).rejects.toThrow(
       'permanent platform:grant',
     );
-    await expect(mainSchemaReady()).rejects.toThrow('permanent platform:grant');
+    await expect(mainSchemaReady()).resolves.toBeUndefined();
     class ReadyGraph extends FusekiClient {
       override async query() {
         return { boolean: true };
@@ -133,7 +133,7 @@ test('first governance designation is atomic, replay is inert, ordinary grants a
     }
     const app = healthRoutes(new ReadyGraph('http://unused.invalid'));
     expect((await app.handle(new Request('http://main.test/health/live'))).status).toBe(200);
-    expect((await app.handle(new Request('http://main.test/health/ready'))).status).toBe(503);
+    expect((await app.handle(new Request('http://main.test/health/ready'))).status).toBe(200);
 
     // Simulate failure on the first audit write: no seed grant may escape rollback.
     await owner.query(`CREATE FUNCTION access.reject_seed_audit() RETURNS trigger LANGUAGE plpgsql AS $$

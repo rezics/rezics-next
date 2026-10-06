@@ -1,5 +1,4 @@
 import { Pool } from 'pg';
-import { assertPlatformGovernance } from './modules/access/platform-governance.ts';
 import {
   migrationRecords,
   repositoryRoot,
@@ -60,7 +59,6 @@ export async function mainSchemaReady(
     const pool = storage(url);
     await assertSchemaReady(pool, owner);
     if (owner === 'access') {
-      await assertPlatformGovernance(pool);
       const provider = await pool.query(
         'SELECT EXISTS(SELECT 1 FROM commerce.payment_provider) AS present',
       );

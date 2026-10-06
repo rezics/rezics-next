@@ -17,9 +17,10 @@ Assign a second permanent `platform:grant` holder through the ordinary Access
 grant API within the issuer's assignment ceiling. The last permanent holder
 cannot be removed. Before opening production, run
 `task ops:platform-governance -- .temp/production.env`: zero active permanent
-holders fails, and one warns that a backup is needed. Main still starts without
-a holder for first sign-in; production readiness stays unavailable until one
-exists. Configuration checks and catalogue bootstrap verification are separate
+holders fails, and one warns that a backup is needed. Run this opening gate
+before lifting the registration pause. Main remains available without a holder
+for first sign-in and Agent provisioning; readiness checks whether it is safe
+to serve, independently of governance. Configuration checks and catalogue bootstrap verification are separate
 checks and do not replace this governance gate.
 Follow [first installation and launch intake](production-install.md#operator-and-authority)
 for Account ownership, Agent provisioning, scoped credentials and bootstrap.
