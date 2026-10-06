@@ -3,17 +3,20 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { captureAuthorityWitness, type AuthorityWitness } from './authority-witness.ts';
+import { groupWorkCreateProof } from './groups.ts';
+import { representedWorkProof } from './represented-work-proof.ts';
 import { publicDecisionResult } from './decision-snapshot-schema.ts';
 import {
   FrameInputs, insertFrame, requireSameInputs, DECISION_AUDIENCE,
 } from './decision-snapshot-store.ts';
 import { loadHeadRules } from './policy-changes.ts';
 import {
-  agentPattern, PolicyDenied, PolicyInvalid, PolicyNotFound, ProofHandleMismatch, ProofHandleStale,
+  agentPattern, PolicyDenied, PolicyInvalid, PolicyNotFound, PolicyUnavailable, ProofHandleMismatch, ProofHandleStale,
   uuidPattern,
 } from './policy-errors.ts';
-import { decidePolicy, EvaluationBudget, type PolicyFacts, type Truth } from './policy-evaluator.ts';
-import type { MembershipBasis } from './policy-schema.ts';
+import { BudgetExhausted, decidePolicy, EvaluationBudget, type PolicyFacts, type Truth } from './policy-evaluator.ts';
+import { POLICY_LIMITS, type MembershipBasis } from './policy-schema.ts';
 import { findPrincipal, inAccessTransaction, requireRecoveryOpen } from './policy-transaction.ts';
 
 /** Decision actions and the Account scope each one needs before evaluation. */
@@ -21,7 +24,6 @@ export const POLICY_DECISION_ACTIONS = {
   'work.read': 'work:read', 'work.edit': 'work:edit', 'work.create': 'work:create',
 } as const;
 export type PolicyDecisionAction = keyof typeof POLICY_DECISION_ACTIONS;
-const MAX_GRANT_PROOFS = 8;
 
 export interface PolicyDecisionRequest {
   principal: VerifiedPrincipal; scopeId: string; action: PolicyDecisionAction;
@@ -31,20 +33,119 @@ export interface PolicyDecision {
   decisionId: string | null; result: 'allow' | 'deny' | 'unavailable';
   policyId: string; policyRevision: string; authorityEpoch: string;
   expiresAt: string | null; reusable: boolean;
-  /** Independent sources that completed an allow, in stable order. */
+  /** The single complete source selected for this judgement. */
   sources: { kind: 'permission_grant' | 'role_binding'; id: string; generation: string }[];
 }
 
 type GateRow = { authority_epoch: string; group_generation: string; open: boolean };
 
+interface PublishedPolicy {
+  id: string; head_revision: string; max_states: number; max_input_rows: number;
+  deadline_ms: number; now: Date;
+}
+
+/** One indexed head and its immutable revision. A broken head is unavailable,
+ * never indistinguishable from a scope without a published policy. */
+async function publishedPolicy(client: PoolClient, scope: string): Promise<PublishedPolicy | null> {
+  try {
+    const policy = (await client.query<PublishedPolicy>(`SELECT p.id, p.head_revision, r.max_states,
+      r.max_input_rows, r.deadline_ms, clock_timestamp() AS now
+      FROM access.policy p LEFT JOIN access.policy_revision r
+        ON r.policy_id = p.id AND r.revision = p.head_revision
+      WHERE p.scope_id = $1 AND p.ended_at IS NULL`, [scope])).rows[0];
+    if (policy && policy.max_states == null) throw new PolicyUnavailable('published policy head is unavailable');
+    return policy ?? null;
+  } catch { throw new PolicyUnavailable('published policy head could not be read'); }
+}
+
+/** Capability aliases keep the owner action while using its existing mandate. */
+export function admissionAuthorityAction(action: string, scope: string): string {
+  return action === 'media.campaign' && scope.startsWith('zone:edit:') ? 'zone.edit'
+    : action === 'package.recommendation.set'
+      || ['relation.change', 'work.derive'].includes(action) && scope.startsWith('work:edit:')
+      ? 'work.edit' : action;
+}
+
+interface SelectedPolicyAuthority {
+  witness: readonly AuthorityWitness[];
+  /** Eligibility has already been checked by the capability's owner proof. */
+  eligible: boolean;
+}
+
+interface GrantFact {
+  kind: 'permission_grant' | 'role_binding'; id: string; generation: string;
+  membership_id: string | null; membership_generation: string | null;
+  membership_kind: 'org' | 'realm' | null; membership_owner: string | null;
+}
+
+interface PolicyMembershipFact {
+  id: string; generation: string; live: boolean; basis: MembershipBasis;
+  set_kind: 'org' | 'realm'; set_owner_subject: string;
+  member_id: string | null; member_generation: string | null; member_state: string | null;
+}
+
+/** Policy cost is independent of inventory size: one head, <=80 rules and
+ * <=2048 states. Admission facts use the selected path only; membership facts
+ * use one admitted set ID and one unique principal/actor membership key.
+ * No cache survives a transaction or an authority generation. */
+export async function admissionPolicyAllowed(client: PoolClient, principalId: string,
+  actingSubject: string, scope: string, action: string,
+  authority: SelectedPolicyAuthority): Promise<boolean> {
+  try {
+    const policy = await publishedPolicy(client, scope);
+    if (!policy) return true;
+    const { decided } = await policyJudgement(client, policy, { id: principalId, active: true },
+      actingSubject, true, scope, action, authority);
+    if (decided.outcome === 'indeterminate') throw new PolicyUnavailable('published policy evidence is unavailable');
+    return decided.outcome === 'allow';
+  } catch { throw new PolicyUnavailable('published policy could not be judged'); }
+}
+
+async function policyJudgement(client: PoolClient, policy: PublishedPolicy,
+  principal: { id: string; active: boolean }, actingSubject: string | null,
+  actorActive: boolean, scope: string, action: string, selected?: SelectedPolicyAuthority, scopeClosed = false) {
+  const budget = new EvaluationBudget({ maxStates: policy.max_states,
+    maxInputRows: policy.max_input_rows, deadlineMs: policy.deadline_ms });
+  const facts = new SnapshotFacts(client, budget, principal, actingSubject,
+    actorActive, scope, action, policy.now, selected);
+  if (scopeClosed) return { facts, budget,
+    decided: { outcome: 'deny' as const, reason: 'scope-closed' as const, deciding: null, trace: [] } };
+  const rules = await loadHeadRules(client, policy.id, policy.head_revision);
+  // Admission can be nested in an owner's READ COMMITTED transaction. Read all
+  // exact policy memberships in one statement so atomic set switches cannot
+  // stitch individually true absences into an invalid allow.
+  if (selected) await facts.prepareMemberships(policy.id, policy.head_revision);
+  let decided = await decidePolicy(rules,
+    action, facts, budget, () => facts.unavailableSets);
+  // Published allows can restrict eligible authority, but cannot manufacture a
+  // missing mandate or capability grant. Preview uses the same hard ceiling.
+  if (decided.outcome === 'allow') {
+    try {
+      const eligible = selected ? selected.eligible && await facts.hasGrant(action)
+        && (!selected.witness.some(row => row.table === 'representation') || await facts.represents())
+        : await facts.authenticated() && await facts.represents() && await facts.hasGrant(action);
+      if (!eligible) decided = { outcome: 'not-applicable', reason: 'no-applicable-rule',
+        deciding: null, trace: decided.trace };
+    } catch (error) {
+      if (!(error instanceof BudgetExhausted)) throw error;
+      decided = { outcome: 'indeterminate', reason: 'budget-exhausted', deciding: null, trace: decided.trace };
+    }
+  }
+  return { decided, facts, budget };
+}
+
 class SnapshotFacts implements PolicyFacts {
   readonly inputs = new FrameInputs();
   readonly sources: PolicyDecision['sources'] = [];
+  reusableAuthority = true;
   unavailableSets = 0;
+  private readonly memberships = new Map<string, PolicyMembershipFact>();
+  private readonly observations = new Map<string, { generations: string; value: boolean }>();
   constructor(private readonly client: PoolClient, private readonly budget: EvaluationBudget,
     private readonly principal: { id: string; active: boolean }, readonly actingSubject: string | null,
     private readonly actorActive: boolean, private readonly scopeId: string,
-    private readonly action: string, readonly now: Date) {}
+    private readonly action: string, readonly now: Date,
+    private readonly selected?: SelectedPolicyAuthority) {}
 
   private async rows<T extends object>(sql: string, params: unknown[]): Promise<T[]> {
     const result = await this.client.query<T>(sql, params);
@@ -54,13 +155,72 @@ class SnapshotFacts implements PolicyFacts {
 
   async authenticated(): Promise<boolean> { return this.principal.active; }
 
+  private authorityGenerations(representation: boolean): string {
+    const rows = this.selected ? this.selected.witness
+      : this.inputs.list.filter(row => representation ? row.kind === 'representation' : row.role === 'proof');
+    return rows.filter(row => !this.selected || (('table' in row ? row.table : row.kind) === 'representation') === representation)
+      .map(row => `${'table' in row ? row.table : row.kind}:${row.id}:${row.generation}`).join('|');
+  }
+
+  private async observe(name: string, representation: boolean, read: () => Promise<boolean>): Promise<boolean> {
+    const saved = this.observations.get(name);
+    if (saved && saved.generations === this.authorityGenerations(representation)) return saved.value;
+    const value = await read();
+    // Only positive facts have exact authority generations. Their memo dies
+    // with this transaction and never survives a changed selected path.
+    if (value) this.observations.set(name, { generations: this.authorityGenerations(representation), value });
+    return value;
+  }
+
+  async prepareMemberships(policyId: string, revision: string): Promise<void> {
+    const { rows } = await this.client.query<PolicyMembershipFact>(`
+      SELECT DISTINCT a.id,a.generation,a.basis,a.set_kind,a.set_owner_subject,
+        a.active AND a.valid_until > $3 AND a.referencing_scope_id = $4 AS live,
+        coalesce(m.id,pm.id) AS member_id,coalesce(m.generation,pm.generation) AS member_generation,
+        coalesce(m.state,pm.state) AS member_state
+      FROM access.policy_rule_set_reference ref
+      JOIN access.policy_rule rule ON rule.policy_id=ref.policy_id AND rule.revision=ref.revision
+        AND rule.rule_id=ref.rule_id
+      JOIN access.policy_set_admission a ON a.id=ref.set_admission_id
+      LEFT JOIN access.membership m ON a.basis='acting_subject'
+        AND m.kind=a.set_kind AND m.owner_subject=a.set_owner_subject AND m.member_subject=$5
+      LEFT JOIN access.private_membership pm ON a.basis='authenticated_principal'
+        AND pm.kind=a.set_kind AND pm.owner_subject=a.set_owner_subject AND pm.principal_id=$6
+      WHERE ref.policy_id=$1 AND ref.revision=$2 AND $7=ANY(rule.actions) LIMIT 17`,
+    [policyId, revision, this.now, this.scopeId, this.actingSubject, this.principal.id, this.action]);
+    if (rows.length > POLICY_LIMITS.setReferences) throw new BudgetExhausted('policy set budget is exhausted');
+    for (const row of rows) this.memberships.set(row.id, row);
+  }
+
   async represents(): Promise<boolean> {
+    return this.observe('represents', true, () => this.readRepresentation());
+  }
+
+  private async readRepresentation(): Promise<boolean> {
     if (!this.actingSubject || !this.actorActive || !this.principal.active) return false;
+    if (this.selected) {
+      const present = this.selected.eligible && this.selected.witness.some(row => row.table === 'representation');
+      this.budget.spendRows(present ? 1 : 0);
+      return present;
+    }
     const [mandate] = await this.rows<{ id: string; generation: string }>(`SELECT id, generation
-      FROM access.representation WHERE principal_id = $1 AND subject_id = $2 AND action = $3
-        AND active AND valid_until > $4 ORDER BY id LIMIT 1`,
+      FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+        AND action = ANY(CASE WHEN $3 IN ('work.create','work.edit')
+          THEN ARRAY[$3,'agent.control'] ELSE ARRAY[$3] END)
+        AND active AND valid_until > $4 ORDER BY action, valid_until LIMIT 1`,
     [this.principal.id, this.actingSubject, this.action, this.now]);
-    if (!mandate) return false;
+    if (!mandate) {
+      if (this.action !== 'work.create' || this.scopeId !== 'work:create:root') return false;
+      const proof = await representedWorkProof(this.client, this.principal.id, this.actingSubject);
+      if (!proof?.path) return false;
+      this.budget.spendRows(1);
+      // The existing decision-input schema cannot persist an invitation edge.
+      // It can preview the live path but must not issue a reusable handle.
+      this.reusableAuthority = false;
+      this.inputs.add({ role: 'guard', kind: 'representation', observed: 'present',
+        id: proof.representationId, generation: proof.representationGeneration });
+      return true;
+    }
     this.inputs.add({ role: 'guard', kind: 'representation', observed: 'present',
       id: mandate.id, generation: mandate.generation });
     return true;
@@ -69,39 +229,106 @@ class SnapshotFacts implements PolicyFacts {
   /** Direct Agent grants and pinned role bindings are separate complete sources;
    * a membership-dependent source also needs its exact current episode. */
   async hasGrant(action: string): Promise<boolean> {
+    return this.observe(`has-grant:${action}`, false, () => this.readGrant(action));
+  }
+
+  private async readGrant(action: string): Promise<boolean> {
     if (!this.actingSubject || !this.actorActive) return false;
-    const found = await this.rows<{ kind: 'permission_grant' | 'role_binding'; id: string;
-      generation: string; membership_id: string | null; membership_generation: string | null;
-      membership_kind: 'org' | 'realm' | null; membership_owner: string | null }>(`
+    const authorityAction = admissionAuthorityAction(this.action, this.scopeId);
+    if (action !== authorityAction) {
+      if (!await this.hasGrant(authorityAction)) return false;
+      const role = this.selected
+        ? this.selected.witness.find(row => row.table === 'role_binding' || row.table === 'private_role_binding')
+        : this.sources[0]?.kind === 'role_binding' ? this.sources[0] : undefined;
+      if (!role) return false;
+      // A pinned role can carry several permissions. Read that exact revision,
+      // rather than borrowing a second grant to complete the selected path.
+      const table = 'table' in role ? role.table : 'role_binding';
+      return (await this.rows(`SELECT b.id FROM access.${table} b
+        JOIN access.role_revision r ON r.family_id=b.family_id AND r.revision=b.role_revision
+        WHERE b.id=$1 AND b.generation=$2 AND $3=ANY(r.permissions)`, [role.id,role.generation,action])).length === 1;
+    }
+    if (this.selected) {
+      this.budget.spendRows(this.selected.eligible ? 1 : 0);
+      return this.selected.eligible;
+    }
+    const direct = await this.rows<GrantFact>(`
       SELECT 'permission_grant' AS kind, g.id, g.generation, g.membership_id,
         m.generation AS membership_generation, m.kind AS membership_kind, m.owner_subject AS membership_owner
-      FROM access.permission_grant g LEFT JOIN access.membership m ON m.id = g.membership_id
-      WHERE g.recipient_subject = $1 AND g.scope_id = $2 AND g.action = $3 AND g.active
-        AND g.valid_until > $4 AND (g.membership_id IS NULL
-          OR (m.state = 'joined' AND m.generation = g.membership_generation))
-      UNION ALL
-      SELECT 'role_binding', b.id, b.generation, b.membership_id, m.generation, m.kind, m.owner_subject
-      FROM access.role_binding b JOIN access.role_family f ON f.id = b.family_id
+      FROM (SELECT * FROM access.permission_grant
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
+          AND valid_until > $4 ORDER BY valid_until LIMIT 1) g
+      LEFT JOIN access.membership m ON m.id = g.membership_id
+      WHERE (g.membership_id IS NULL
+          OR (m.state = 'joined' AND m.generation = g.membership_generation))`,
+    [this.actingSubject, this.scopeId, action, this.now]);
+    if (direct.length) { this.recordGrant(direct[0]!); return true; }
+    // Work creation selects direct, group, then role, exactly as admission.
+    if (action === 'work.create' && this.scopeId === 'work:create:root'
+      && await this.groupGrant()) return true;
+    const roles = await this.rows<GrantFact>(`
+      SELECT 'role_binding' AS kind, b.id, b.generation, b.membership_id,
+        m.generation AS membership_generation,m.kind AS membership_kind,m.owner_subject AS membership_owner
+      FROM (SELECT * FROM access.role_binding WHERE recipient_subject = $1 AND active
+        AND valid_until > $4 ORDER BY valid_until,id LIMIT 17) b
+      JOIN access.role_family f ON f.id = b.family_id
       JOIN access.role_revision r ON r.family_id = b.family_id AND r.revision = b.role_revision
       LEFT JOIN access.membership m ON m.id = b.membership_id
-      WHERE b.recipient_subject = $1 AND f.scope_id = $2 AND $3 = ANY(r.permissions) AND b.active
-        AND b.valid_until > $4 AND (b.membership_id IS NULL
+      WHERE f.scope_id = $2 AND $3 = ANY(r.permissions) AND (b.membership_id IS NULL
           OR (m.state = 'joined' AND m.generation = b.membership_generation))
-      ORDER BY 1, 2 LIMIT ${MAX_GRANT_PROOFS}`, [this.actingSubject, this.scopeId, action, this.now]);
-    for (const source of found) {
-      this.inputs.add({ role: 'proof', kind: source.kind, observed: 'present',
-        id: source.id, generation: source.generation });
-      if (source.membership_id) {
-        this.inputs.add({ role: 'proof', kind: 'membership', observed: 'present',
-          id: source.membership_id, generation: source.membership_generation,
-          setKind: source.membership_kind!, setOwner: source.membership_owner! });
-      }
+      ORDER BY b.id LIMIT 1`, [this.actingSubject, this.scopeId, action, this.now]);
+    if (roles.length) { this.recordGrant(roles[0]!); return true; }
+    return action === 'work.create' && this.scopeId !== 'work:create:root' && await this.groupGrant();
+  }
+
+  private recordGrant(source: GrantFact): void {
+    this.inputs.add({ role: 'proof', kind: source.kind, observed: 'present',
+      id: source.id, generation: source.generation });
+    if (source.membership_id) {
+      this.inputs.add({ role: 'proof', kind: 'membership', observed: 'present',
+        id: source.membership_id, generation: source.membership_generation,
+        setKind: source.membership_kind!, setOwner: source.membership_owner! });
+    }
+    if (!this.sources.some(saved => saved.kind === source.kind && saved.id === source.id)) {
       this.sources.push({ kind: source.kind, id: source.id, generation: source.generation });
     }
-    return found.length > 0;
+  }
+
+  private async groupGrant(): Promise<boolean> {
+    const group = await groupWorkCreateProof(this.client, this.actingSubject!, this.scopeId);
+    if (!group) return false;
+    this.budget.spendRows(1);
+    const witness = await captureAuthorityWitness(this.client, [
+      { table: 'group_member', id: group.memberId },
+      { table: 'group_permission_grant', id: group.grantId },
+    ]);
+    // Group ancestry is exact in the admission witness, but is absent from the
+    // older decision frame. A preview cannot promise later handle reuse.
+    this.reusableAuthority = false;
+    for (const source of witness) {
+      if (source.table === 'group_member' || source.table === 'group_permission_grant') {
+        this.inputs.add({ role: 'proof', kind: source.table, observed: 'present',
+          id: source.id, generation: source.generation });
+      }
+    }
+    return true;
   }
 
   async memberOf(admissionId: string, basis: MembershipBasis): Promise<Truth> {
+    if (this.selected) {
+      const admission = this.memberships.get(admissionId);
+      // Prefetch keeps the physical read bounded and atomic; charge the same
+      // consumed set and member facts as the REPEATABLE READ preview.
+      this.budget.spendRows(admission ? 1 : 0);
+      if (!admission?.live || admission.basis !== basis) {
+        this.unavailableSets++;
+        return 'unknown';
+      }
+      // This observation belongs to the one membership statement above, keyed
+      // by its exact set and membership generations, never an inventory cache.
+      this.budget.spendRows(admission.member_id ? 1 : 0);
+      return admission.member_state === 'joined';
+    }
     const [admission] = await this.rows<{ id: string; generation: string; live: boolean;
       set_kind: 'org' | 'realm'; set_owner_subject: string }>(`SELECT id, generation,
         active AND valid_until > $2 AND referencing_scope_id = $3 AND basis = $4 AS live,
@@ -147,15 +374,11 @@ export class AccessPolicyDecisions {
     }
     return inAccessTransaction(this.pool, 'repeatable read', async client => {
       const recoveryGeneration = await requireRecoveryOpen(client, false);
-      const now = (await client.query<{ now: Date }>('SELECT clock_timestamp() AS now')).rows[0]!.now;
       const gate = (await client.query<GateRow>(`SELECT authority_epoch, group_generation, open
         FROM access.scope_gate WHERE id = $1`, [request.scopeId])).rows[0];
-      const policy = gate && (await client.query<{ id: string; head_revision: string; max_states: number;
-        max_input_rows: number; deadline_ms: number }>(`SELECT p.id, p.head_revision, r.max_states,
-          r.max_input_rows, r.deadline_ms FROM access.policy p JOIN access.policy_revision r
-          ON r.policy_id = p.id AND r.revision = p.head_revision WHERE p.scope_id = $1 AND p.ended_at IS NULL`,
-      [request.scopeId])).rows[0];
+      const policy = gate && await publishedPolicy(client, request.scopeId);
       if (!gate || !policy) throw new PolicyNotFound('scope has no policy');
+      const now = policy.now;
       const base = { policyId: policy.id, policyRevision: policy.head_revision,
         authorityEpoch: gate.authority_epoch };
       const principal = await findPrincipal(client, request.principal);
@@ -167,15 +390,11 @@ export class AccessPolicyDecisions {
         : (await client.query<{ generation: string; active: boolean }>(`SELECT generation, active
           FROM access.authority_subject WHERE id = $1`, [request.actingSubject])).rows[0];
       if (request.actingSubject !== null && !actor) throw new PolicyDenied('acting subject is unavailable');
-      const budget = new EvaluationBudget({ maxStates: policy.max_states,
-        maxInputRows: policy.max_input_rows, deadlineMs: policy.deadline_ms });
-      const facts = new SnapshotFacts(client, budget, principal, request.actingSubject,
-        actor?.active ?? false, request.scopeId, request.action, now);
-      const decided = gate.open
-        ? await decidePolicy(await loadHeadRules(client, policy.id, policy.head_revision),
-          request.action, facts, budget, () => facts.unavailableSets)
-        : { outcome: 'deny' as const, reason: 'scope-closed' as const, deciding: null, trace: [] };
-      const reusable = request.reusable && decided.outcome === 'allow';
+      const judgement = await policyJudgement(client, policy, principal, request.actingSubject,
+        actor?.active ?? false, request.scopeId, request.action, undefined, !gate.open);
+      const { facts, budget } = judgement;
+      const decided = judgement.decided;
+      const reusable = request.reusable && decided.outcome === 'allow' && facts.reusableAuthority;
       const decisionId = randomUUID();
       const expiresAt = new Date(now.getTime() + request.validitySeconds * 1000);
       await insertFrame(client, { id: decisionId, kind: 'policy', principalId: principal.id,

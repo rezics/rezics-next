@@ -35,14 +35,16 @@ export async function roleWorkProof(client: PoolClient,
   }
   const rows = await client.query<RoleRow>(`SELECT b.id, b.recipient_subject,
     b.generation, b.family_id, b.role_revision, r.permissions
-    FROM access.role_binding b JOIN access.role_revision r
+    FROM (SELECT * FROM access.role_binding
+      WHERE recipient_subject = $1 AND active AND valid_until > statement_timestamp()
+      ORDER BY valid_until,id LIMIT $2 FOR SHARE) b JOIN access.role_revision r
       ON r.family_id = b.family_id AND r.revision = b.role_revision
     WHERE b.recipient_subject = $1 AND b.active
-      AND b.valid_until > clock_timestamp()
+      AND b.valid_until > statement_timestamp()
       AND (b.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
         WHERE dep.id = b.membership_id AND dep.member_subject = b.recipient_subject
           AND dep.state = 'joined' AND dep.generation = b.membership_generation))
-    ORDER BY b.id LIMIT $2 FOR SHARE OF b`,
+    ORDER BY b.id LIMIT $2`,
   [subject, MAX_BINDINGS_PER_AGENT + 1]);
   if (rows.rows.length > MAX_BINDINGS_PER_AGENT) {
     throw new RoleUnavailable('Agent role bindings exceed supported profile');
@@ -90,7 +92,11 @@ export async function roleWorkCreateSubjects(client: PoolClient,
 /** Claim checks only the saved binding and exact immutable role revision. */
 export async function selectedRoleWorkProof(client: PoolClient, subject: string,
   proof: RoleWorkProof, permission: 'work.create' | 'work.edit' = 'work.create'): Promise<boolean> {
-  if (!await roleWorkProof(client, subject, permission)) return false;
+  if (permission === 'work.edit') {
+    const gate = (await client.query<{ open: boolean; dispatch_open: boolean }>(`
+      SELECT open, dispatch_open FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE`)).rows[0];
+    if (!gate?.open || !gate.dispatch_open) return false;
+  }
   const row = await client.query(`SELECT b.id FROM access.role_binding b
     JOIN access.role_revision r ON r.family_id = b.family_id
       AND r.revision = b.role_revision

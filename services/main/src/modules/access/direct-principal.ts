@@ -13,14 +13,16 @@ export async function directWorkCreateProof(client: PoolClient, principalId: str
     subjectGeneration: string;
   } | null> {
   const granted = await client.query<{ id: string; generation: string }>(`
-    SELECT id, generation FROM access.principal_permission_grant
-    WHERE principal_id = $1 AND scope_id = 'work:create:root'
-      AND action = 'work.create' AND active AND valid_until > clock_timestamp()
-      AND (private_membership_id IS NULL OR EXISTS (
-        SELECT 1 FROM access.private_membership m
-        WHERE m.id = private_membership_id AND m.principal_id = $1
-          AND m.state = 'joined' AND m.generation = private_membership_generation))
-    LIMIT 1 FOR SHARE`, [principalId]);
+    SELECT g.id, g.generation FROM (
+      SELECT * FROM access.principal_permission_grant
+      WHERE principal_id = $1 AND scope_id = 'work:create:root'
+        AND action = 'work.create' AND active AND valid_until > statement_timestamp()
+      ORDER BY valid_until LIMIT 1
+    ) g WHERE g.private_membership_id IS NULL OR EXISTS (
+      SELECT 1 FROM access.private_membership m
+      WHERE m.id = g.private_membership_id AND m.principal_id = $1
+        AND m.state = 'joined' AND m.generation = g.private_membership_generation)
+    FOR SHARE`, [principalId]);
   const attributed = await client.query<{
     id: string; generation: string; subject_generation: string;
   }>(`
@@ -28,7 +30,7 @@ export async function directWorkCreateProof(client: PoolClient, principalId: str
     FROM access.principal_agent_attribution a
     JOIN access.authority_subject s ON s.id = a.agent_subject
     WHERE a.principal_id = $1 AND a.agent_subject = $2
-      AND a.action = 'work.create' AND a.active AND a.valid_until > clock_timestamp()
+      AND a.action = 'work.create' AND a.active AND a.valid_until > statement_timestamp()
       AND s.kind = 'agent' AND s.active
     LIMIT 1 FOR SHARE OF a, s`, [principalId, actingSubject]);
   if (!attributed.rows[0]) return null;

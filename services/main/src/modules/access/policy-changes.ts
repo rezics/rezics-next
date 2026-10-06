@@ -8,7 +8,7 @@ import type { VerifiedPrincipal } from './admission.ts';
 import { semanticPolicyAuthority } from './semantic-disclosure.ts';
 import {
   agentPattern, generationPattern, PolicyConflict, PolicyDenied, PolicyInvalid, PolicyNotFound,
-  PolicyReferenceNotAdmitted, PolicyStale, uuidPattern,
+  PolicyReferenceNotAdmitted, PolicyStale, PolicyUnavailable, uuidPattern,
 } from './policy-errors.ts';
 import {
   compilePolicyRules, DEFAULT_POLICY_LIMITS, type PolicyLimits, type PolicyRule, type RuleInput,
@@ -297,7 +297,17 @@ export async function loadHeadRules(client: PoolClient, policyId: string, revisi
   Promise<PolicyRule[]> {
   const rows = (await client.query<PolicyRuleRow>(`SELECT * FROM access.policy_rule
     WHERE policy_id = $1 AND revision = $2
-    ORDER BY tier = 'ordered', position`, [policyId, revision])).rows;
+    ORDER BY tier = 'ordered', position LIMIT 81`, [policyId, revision])).rows;
+  if (rows.length > POLICY_LIMITS.mandatoryRules + POLICY_LIMITS.orderedRules) {
+    throw new PolicyUnavailable('published policy exceeds its rule bound');
+  }
+  // The SQL registry checks only the root op. Reuse the compiler's depth and
+  // node limits when consuming a persisted condition as well.
+  compilePolicyRules(rows.filter(row => row.tier === 'mandatory').map(row => ({
+    ruleId: row.rule_id, actions: row.actions, condition: row.condition,
+  })), rows.filter(row => row.tier === 'ordered').map(row => ({
+    ruleId: row.rule_id, actions: row.actions, effect: row.effect as 'allow' | 'deny', condition: row.condition,
+  })));
   return rows.map(row => ({ tier: row.tier, position: row.position, ruleId: row.rule_id,
     effect: row.effect, actions: row.actions, condition: row.condition as unknown as PolicyRule['condition'] }));
 }

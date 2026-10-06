@@ -59,13 +59,14 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
     )
     SELECT p.member_id, gr.id AS grant_id, p.depth, p.parent_id, p.cycle
     FROM path p LEFT JOIN LATERAL (
-      SELECT gr.id FROM access.group_permission_grant gr
-      WHERE gr.group_id = p.group_id AND gr.scope_id = $2 AND gr.action = 'work.create'
-        AND active AND valid_until > clock_timestamp()
-        AND (gr.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
+      SELECT gr.id FROM (
+        SELECT * FROM access.group_permission_grant
+        WHERE group_id = p.group_id AND scope_id = $2 AND action = 'work.create'
+          AND active AND valid_until > statement_timestamp()
+        ORDER BY valid_until LIMIT 1
+      ) gr WHERE (gr.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
           WHERE dep.id = gr.membership_id AND dep.member_subject = $4
             AND dep.state = 'joined' AND dep.generation = gr.membership_generation))
-      ORDER BY id LIMIT 1
     ) gr ON true ORDER BY p.member_id, p.depth, gr.id`,
   [members.rows.map(row => row.id), scope, groupDepth, subject]);
   if (result.rows.some(row => row.cycle || (row.depth >= groupDepth && row.parent_id))) {
@@ -132,7 +133,6 @@ export async function groupWorkCreateSubjects(client: PoolClient,
 export async function selectedGroupWorkProof(client: PoolClient, subject: string,
   memberId: string, grantId: string): Promise<boolean> {
   const bounds = await groupBounds(client);
-  await groupWorkCreateProof(client, subject, GROUP_SCOPE, bounds); // enforce the same work budget
   // A second independent path must not replace this saved proof at claim.
   const found = await client.query(`WITH RECURSIVE path(id, parent_id, depth, visited) AS (
     SELECT g.id, g.parent_id, 0, ARRAY[g.id]

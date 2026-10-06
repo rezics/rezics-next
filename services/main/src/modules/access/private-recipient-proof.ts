@@ -57,10 +57,12 @@ export async function privateGroupWorkProof(client: PoolClient,
     SELECT p.member_id, p.member_generation, gr.id AS grant_id,
       gr.generation AS grant_generation, p.depth, p.parent_id, p.cycle
     FROM path p LEFT JOIN LATERAL (
-      SELECT gr.id, gr.generation FROM access.group_permission_grant gr
-      WHERE gr.group_id = p.group_id AND gr.scope_id = $2 AND gr.action = 'work.create'
-        AND gr.active AND gr.valid_until > clock_timestamp() AND gr.membership_id IS NULL
-      ORDER BY gr.id LIMIT 1
+      SELECT gr.id, gr.generation FROM (
+        SELECT * FROM access.group_permission_grant
+        WHERE group_id = p.group_id AND scope_id = $2 AND action = 'work.create'
+          AND active AND valid_until > statement_timestamp()
+        ORDER BY valid_until LIMIT 1
+      ) gr WHERE gr.membership_id IS NULL
     ) gr ON true ORDER BY p.member_id, p.depth, gr.id`,
   [members.rows.map(row => row.id), SCOPE, groupDepth]);
   if (paths.rows.some(row => row.cycle || row.depth >= groupDepth && row.parent_id)) {
@@ -77,7 +79,6 @@ export async function privateGroupWorkProof(client: PoolClient,
 export async function selectedPrivateGroupWorkProof(client: PoolClient,
   principalId: string, proof: PrivateGroupProof): Promise<boolean> {
   const bounds = await groupBounds(client);
-  await privateGroupWorkProof(client, principalId, bounds); // enforce the same complete budget
   const gate = await client.query<{ group_generation: string }>(
     'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
   if (!proof.exactWitness && gate.rows[0]?.group_generation !== proof.groupGeneration) return false;
@@ -112,7 +113,7 @@ export async function privateRoleWorkProof(client: PoolClient,
     FROM access.private_role_binding b
     JOIN access.private_membership dep ON dep.id = b.private_membership_id
     JOIN access.role_revision r ON r.family_id = b.family_id AND r.revision = b.role_revision
-    WHERE b.principal_id = $1 AND b.active AND b.valid_until > clock_timestamp()
+    WHERE b.principal_id = $1 AND b.active AND b.valid_until > statement_timestamp()
       AND dep.principal_id = $1 AND dep.state = 'joined'
       AND dep.generation = b.private_membership_generation
     ORDER BY b.id LIMIT $2 FOR SHARE OF b, dep`,
@@ -127,7 +128,6 @@ export async function privateRoleWorkProof(client: PoolClient,
 
 export async function selectedPrivateRoleWorkProof(client: PoolClient,
   principalId: string, proof: PrivateRoleProof): Promise<boolean> {
-  await privateRoleWorkProof(client, principalId); // enforce the same complete budget
   const row = await client.query(`SELECT b.id FROM access.private_role_binding b
     JOIN access.private_membership dep ON dep.id = b.private_membership_id
     JOIN access.role_revision r ON r.family_id = b.family_id AND r.revision = b.role_revision

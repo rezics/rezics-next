@@ -1,4 +1,7 @@
-import { captureAuthorityWitness, authorityWitnessCurrent, type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
+import { captureAuthorityWitness, authorityWitnessCurrent, authorityWitnessDeadline,
+  type AuthoritySource, type AuthorityWitness } from './authority-witness.ts';
+import { admissionAuthorityAction, admissionPolicyAllowed } from './policy-decisions.ts';
+import { PolicyUnavailable } from './policy-errors.ts';
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { requirePlatformParticipation } from '../safety-queue/participation.ts';
 import { requireRealmParticipation } from './realm-management-settings.ts';
@@ -249,6 +252,23 @@ interface AdmissionRow {
 
 async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
+}
+
+function admissionError(error: unknown): unknown {
+  if (error instanceof GroupUnavailable || error instanceof PolicyUnavailable) {
+    return new AdmissionUnavailable(error.message);
+  }
+  // A failed indexed authority read, including a PostgreSQL timeout or a
+  // connection failure, cannot become evidence that authority is absent.
+  if (error && typeof error === 'object' && 'code' in error) {
+    return new AdmissionUnavailable('Access admission could not complete');
+  }
+  return error;
+}
+
+async function admissionClient(pool: Pool): Promise<PoolClient> {
+  try { return await pool.connect(); }
+  catch { throw new AdmissionUnavailable('Access admission store could not be reached'); }
 }
 
 /** Reads whose only writes are FOR SHARE locks commit asynchronously; see controlRead. */
@@ -940,7 +960,7 @@ export class AccessAdmissionRegistry {
         && (request.action !== 'work.create' || request.scope !== 'work:create:root'))) {
       throw new AdmissionDenied('invalid admission request');
     }
-    const client = transaction ?? await this.pool.connect();
+    const client = transaction ?? await admissionClient(this.pool);
     try {
       if (!transaction) await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -987,6 +1007,11 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+      if (existing && (existing.request_digest !== request.requestDigest
+        || existing.acting_subject !== request.actingSubject
+        || existing.authority_path !== authorityPath || existing.scope_id !== request.scope)) {
+        throw new AdmissionConflict('idempotency key belongs to a different intent');
+      }
       let participationSources: AuthoritySource[] = [];
       let participationDenied: AdmissionDenied | null = null;
       // Fence Realm policy before selecting membership rows, as Realm managers
@@ -997,8 +1022,11 @@ export class AccessAdmissionRegistry {
         if (!(error instanceof AdmissionDenied) || !existing) throw error;
         participationDenied = error;
       }
-      const witnessCurrent = !existing?.authority_witness
+      const selectedCurrent = !existing?.authority_witness
         || await authorityWitnessCurrent(client, existing.authority_witness);
+      const policyAllowed = !existing || await admissionPolicyAllowed(client, principalId, request.actingSubject,
+        request.scope, request.action, { witness: existing.authority_witness ?? [], eligible: selectedCurrent });
+      const witnessCurrent = !participationDenied && selectedCurrent && policyAllowed;
 
       const ratingConfiguration = ratingConfigurationAction(request.action);
       const savedRating = existing && ratingConfiguration ? await savedRealmRatingProof(client, existing.id) : null;
@@ -1113,6 +1141,20 @@ export class AccessAdmissionRegistry {
           state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
       }
 
+      if (existing?.authority_witness) {
+        // Recover the original receipt even after its selected sources were
+        // revoked. A new alternative grant never repairs this admission.
+        if (!transaction) await client.query('COMMIT');
+        return { id: existing.id, principalId, actingSubject: existing.acting_subject,
+          authorityPath: existing.authority_path, scope: existing.scope_id, action: existing.action,
+          idempotencyKey: existing.idempotency_key, requestDigest: existing.request_digest,
+          authorityEpoch: existing.authority_epoch, registeredAt: existing.registered_at.toISOString(),
+          expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
+          dispatchEligible: witnessCurrent && gate.open && gate.dispatch_open && existing.eligible
+            && existing.state !== 'sealed' && existing.authority_epoch === gate.authority_epoch,
+          replayed: true };
+      }
+
       const subject = await client.query<{ active: boolean; kind: string }>(
         'SELECT active, kind FROM access.authority_subject WHERE id = $1 FOR SHARE', [request.actingSubject]);
       if (subject.rows[0]?.active !== true) throw new AdmissionDenied('acting subject is not active');
@@ -1192,10 +1234,7 @@ export class AccessAdmissionRegistry {
       } else {
         // Recommendation edits have their own durable action and receipt, while
         // inheriting the exact Work editor mandate and grant boundary.
-        const authorityAction = request.action === 'media.campaign' && request.scope.startsWith('zone:edit:')
-          ? 'zone.edit' : request.action === 'package.recommendation.set'
-          || ['relation.change', 'work.derive'].includes(request.action) && request.scope.startsWith('work:edit:')
-          ? 'work.edit' : request.action;
+        const authorityAction = admissionAuthorityAction(request.action, request.scope);
         if (request.action === 'work.create' && request.scope === 'work:create:root'
           || ['work.edit', 'work.derive', 'relation.change'].includes(request.action)
             && /^work:edit:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(request.scope)) {
@@ -1241,16 +1280,17 @@ export class AccessAdmissionRegistry {
           const represented = await client.query<{ id: string; generation: string }>(
             `SELECT id, generation FROM access.representation
              WHERE principal_id = $1 AND subject_id = $2
-               AND (action = $3 OR action = 'agent.control' AND $3 IN ('review.decide','publication.adopt'))
-               AND active AND valid_until > clock_timestamp()
-             ORDER BY id LIMIT 1 FOR SHARE`,
+               AND action = ANY(CASE WHEN $3 IN ('review.decide','publication.adopt')
+                 THEN ARRAY[$3,'agent.control'] ELSE ARRAY[$3] END)
+               AND active AND valid_until > statement_timestamp()
+             ORDER BY action, valid_until LIMIT 1 FOR SHARE`,
             [principalId, request.actingSubject, authorityAction]);
           if (represented.rowCount !== 1) throw new AdmissionDenied('representation is not admitted');
           const granted = await client.query<{ id: string; generation: string }>(
             `SELECT id, generation FROM access.permission_grant
              WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3
-               AND active AND valid_until > clock_timestamp()
-             ORDER BY id LIMIT 1 FOR SHARE`,
+               AND active AND valid_until > statement_timestamp()
+             ORDER BY valid_until LIMIT 1 FOR SHARE`,
             [request.actingSubject, request.scope, authorityAction]);
           if (granted.rowCount !== 1) throw new AdmissionDenied('permission is not granted');
           authoritySources.push(
@@ -1282,10 +1322,6 @@ export class AccessAdmissionRegistry {
         };
       }
       if (!gate.open) throw new AdmissionDenied('scope is closed');
-      if (authorityOnly) {
-        if (!gate.dispatch_open) throw new AdmissionDenied('scope dispatch is closed');
-        throw new AuthorityChecked();
-      }
 
       // 'open' is policy authority without a membership row. Claim still
       // rechecks that policy through baselineProofCurrent and participation.
@@ -1306,12 +1342,22 @@ export class AccessAdmissionRegistry {
         { table: 'permission_grant', id: representedGrantId, generation: representedGrantGeneration },
         { table: 'role_binding', id: roleBindingId, generation: roleBindingGeneration },
         { table: 'authority_subject', id: publishingProof?.path?.origin ?? null },
+        { table: 'representation_edge', id: publishingProof?.path?.edgeId ?? null,
+          generation: publishingProof?.path?.edgeGeneration },
         { table: 'representation', id: baseline?.representation_id ?? administrator?.representation_id
           ?? rating?.representation_id ?? null, generation: baseline?.representation_generation
           ?? administrator?.representation_generation ?? rating?.representation_generation },
         { table: 'representation', id: baseline?.avatar_control_id ?? null, generation: baseline?.avatar_control_generation },
         { table: 'permission_grant', id: rating?.grant_id ?? null, generation: rating?.grant_generation },
       ]);
+      if (!await admissionPolicyAllowed(client, principalId, request.actingSubject,
+        request.scope, request.action, { witness, eligible: true })) {
+        throw new AdmissionDenied('published policy denies admission');
+      }
+      if (authorityOnly) {
+        if (!gate.dispatch_open) throw new AdmissionDenied('scope dispatch is closed');
+        throw new AuthorityChecked();
+      }
       const id = Bun.randomUUIDv7();
       const inserted = await client.query<{ expires_at: Date; registered_at: Date }>(
         `INSERT INTO access.admission
@@ -1328,11 +1374,12 @@ export class AccessAdmissionRegistry {
             represented_subject_generation, represented_principal_epoch,
             role_binding_id, role_binding_generation, role_family_id, role_revision,
             scope_id, action, idempotency_key, request_digest, authority_epoch, expires_at, state, authority_witness)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
            $11, $12, $13, $14, $15, $16, $17, $18, $19,
            $20, $21, $22, $23, $24, $25, $26, $27, $28,
            $29, $30, $31, $32, $33, $34, $35, $36, $37,
-           clock_timestamp() + interval '30 seconds', 'registered', $38::jsonb)
+           LEAST(clock_timestamp() + interval '30 seconds', $39::timestamptz), 'registered', $38::jsonb
+         WHERE $39::timestamptz IS NULL OR $39::timestamptz > clock_timestamp()
          RETURNING expires_at, registered_at`,
         [id, principalId, request.actingSubject, authorityPath, directGrantId, attributionId,
           directGrantGeneration, attributionGeneration, directSubjectGeneration,
@@ -1347,7 +1394,8 @@ export class AccessAdmissionRegistry {
           representedSubjectGeneration, representedPrincipalEpoch,
           roleBindingId, roleBindingGeneration, roleFamilyId, roleRevision,
           request.scope, request.action, request.idempotencyKey,
-          request.requestDigest, gate.authority_epoch, JSON.stringify(witness)]);
+          request.requestDigest, gate.authority_epoch, JSON.stringify(witness), authorityWitnessDeadline(witness)]);
+      if (!inserted.rows[0]) throw new AdmissionDenied('selected authority expired during registration');
       if (baseline) {
         await saveBaselineProof(client, id, baseline);
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
@@ -1377,8 +1425,7 @@ export class AccessAdmissionRegistry {
       };
     } catch (error) {
       if (!transaction) await rollback(client);
-      if (error instanceof GroupUnavailable) throw new AdmissionUnavailable(error.message);
-      throw error;
+      throw admissionError(error);
     } finally {
       if (!transaction) client.release();
     }
@@ -1435,7 +1482,7 @@ export class AccessAdmissionRegistry {
   /** Gate-first claim linearizes dispatch against a strong scope closure. */
   async claim(admissionId: string, requestDigest: string,
     accountPrincipal?: VerifiedPrincipal): Promise<ClaimedAdmission> {
-    const client = await this.pool.connect();
+    const client = await admissionClient(this.pool);
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -1460,7 +1507,7 @@ export class AccessAdmissionRegistry {
         "SELECT 1 FROM access.scope_gate WHERE id = 'access:representation-topology' AND open AND dispatch_open FOR SHARE")).rowCount) {
         throw new AdmissionDenied('representation topology is closed');
       }
-      if (cut?.eligible && cut.authority_witness && !await authorityWitnessCurrent(client, cut.authority_witness)) {
+      if (cut?.authority_witness && !await authorityWitnessCurrent(client, cut.authority_witness)) {
         throw new AdmissionDenied('selected authority changed before dispatch');
       }
       const result = await client.query<AdmissionRow & { claimed_at: Date | null }>(
@@ -1572,15 +1619,25 @@ export class AccessAdmissionRegistry {
           principal.rows[0]!.enforcement_epoch, this.baselineGraph)) {
         throw new AdmissionDenied('represented authority changed before claim');
       }
+      if (!await admissionPolicyAllowed(client, row.principal_id, row.acting_subject,
+        row.scope_id, row.action, { witness: row.authority_witness ?? [], eligible: true })) {
+        throw new AdmissionDenied('published policy denies dispatch');
+      }
       if (row.authority_witness && !await authorityWitnessCurrent(client, row.authority_witness)) {
         throw new AdmissionDenied('selected authority changed before dispatch');
       }
       if (row.request_digest !== requestDigest) throw new AdmissionConflict('claim digest differs');
+      if (!(await client.query(`SELECT id FROM access.admission
+        WHERE id = $1 AND expires_at > clock_timestamp()`, [row.id])).rowCount) {
+        throw new AdmissionExpired('admission expired during claim verification');
+      }
       let claimedAt = row.claimed_at;
       if (row.state === 'registered') {
         const updated = await client.query<{ claimed_at: Date }>(
-          "UPDATE access.admission SET state = 'claimed', claimed_at = clock_timestamp() WHERE id = $1 RETURNING claimed_at",
+          `UPDATE access.admission SET state = 'claimed', claimed_at = clock_timestamp()
+           WHERE id = $1 AND expires_at > clock_timestamp() RETURNING claimed_at`,
           [admissionId]);
+        if (!updated.rows[0]) throw new AdmissionExpired('admission expired before dispatch');
         claimedAt = updated.rows[0]!.claimed_at;
         await client.query(
           `INSERT INTO access.outbox (id, kind, admission_id, scope_id, authority_epoch)
@@ -1597,8 +1654,7 @@ export class AccessAdmissionRegistry {
         claimedAt: claimedAt!.toISOString() };
     } catch (error) {
       await rollback(client);
-      if (error instanceof GroupUnavailable) throw new AdmissionUnavailable(error.message);
-      throw error;
+      throw admissionError(error);
     } finally {
       client.release();
     }

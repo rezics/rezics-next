@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { AdmissionDenied } from './admission.ts';
+import { AdmissionDenied, AdmissionUnavailable } from './admission.ts';
 import { groupBounds } from './groups.ts';
 
 const tables = {
@@ -8,6 +8,7 @@ const tables = {
   membership: { generation: 'generation', predicate: "state = 'joined'" },
   private_membership: { generation: 'generation', predicate: "state = 'joined'" },
   representation: { generation: 'generation', predicate: 'active AND valid_until > clock_timestamp()' },
+  representation_edge: { generation: 'generation', predicate: 'active AND valid_until > clock_timestamp()' },
   permission_grant: { generation: 'generation', predicate: 'active AND valid_until > clock_timestamp()' },
   principal_permission_grant: { generation: 'generation', predicate: 'active AND valid_until > clock_timestamp()' },
   principal_agent_attribution: { generation: 'generation', predicate: 'active AND valid_until > clock_timestamp()' },
@@ -19,7 +20,11 @@ const tables = {
   recipient_group: { generation: 'generation', predicate: 'true' },
 } as const;
 export type AuthorityTable = keyof typeof tables;
-export interface AuthorityWitness { table: AuthorityTable; id: string; generation: string }
+export interface AuthorityWitness {
+  table: AuthorityTable; id: string; generation: string;
+  /** Exact selected row's deadline; older witnesses are still checked live. */
+  validUntil?: string;
+}
 export interface AuthoritySource { table: AuthorityTable; id: string | null; generation?: string | null }
 
 /** At most one selected authority path and its bounded group ancestry. Adding
@@ -28,8 +33,17 @@ export interface AuthoritySource { table: AuthorityTable; id: string | null; gen
  * FOR SHARE keeps every selected generation stable through the owner commit.
  * https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-ROWS */
 export const AUTHORITY_WITNESS_COST = { sourceRows: 16, ancestorRows: 'groupDepth + 1',
-  captureStatements: 18, checkStatements: 15 } as const;
+  captureStatements: 18, checkStatements: 16 } as const;
 export async function captureAuthorityWitness(client: PoolClient,
+  sources: readonly AuthoritySource[]): Promise<AuthorityWitness[]> {
+  try { return await captureWitness(client, sources); }
+  catch (error) {
+    if (error instanceof AdmissionDenied) throw error;
+    throw new AdmissionUnavailable('selected authority could not be read');
+  }
+}
+
+async function captureWitness(client: PoolClient,
   sources: readonly AuthoritySource[]): Promise<AuthorityWitness[]> {
   const queue = sources.filter(source => source.id !== null);
   const bounds = queue.some(source => ['group_member', 'private_group_member'].includes(source.table))
@@ -49,10 +63,11 @@ export async function captureAuthorityWitness(client: PoolClient,
     const config = tables[source.table];
     const row = (await client.query<{ id: string; generation: string; membership_id?: string;
       membership_generation?: string; private_membership_id?: string; private_membership_generation?: string;
-      group_id?: string; subject_id?: string }>(`SELECT *, ${config.generation}::text AS generation
+      group_id?: string; subject_id?: string; valid_until?: Date | number }>(`SELECT *, ${config.generation}::text AS generation
       FROM access.${source.table} WHERE id = $1 AND ${config.predicate} FOR SHARE`, [source.id])).rows[0];
     if (!row || source.generation != null && row.generation !== source.generation) throw new AdmissionDenied('selected authority changed');
-    witness.set(key, { table: source.table, id: row.id, generation: row.generation });
+    witness.set(key, { table: source.table, id: row.id, generation: row.generation,
+      ...(row.valid_until instanceof Date ? { validUntil: row.valid_until.toISOString() } : {}) });
     if (source.table === 'representation' && row.subject_id) queue.push({ table: 'authority_subject', id: row.subject_id });
     if (row.membership_id) queue.push({ table: 'membership', id: row.membership_id, generation: row.membership_generation });
     if (row.private_membership_id) queue.push({ table: 'private_membership', id: row.private_membership_id,
@@ -85,6 +100,12 @@ export async function captureAuthorityWitness(client: PoolClient,
 /** Exact saved rows only: another valid grant cannot repair this proof. */
 export async function authorityWitnessCurrent(client: PoolClient,
   witness: readonly AuthorityWitness[]): Promise<boolean> {
+  try { return await witnessCurrent(client, witness); }
+  catch { throw new AdmissionUnavailable('selected authority could not be read'); }
+}
+
+async function witnessCurrent(client: PoolClient,
+  witness: readonly AuthorityWitness[]): Promise<boolean> {
   const ancestors = witness.filter(row => row.table === 'recipient_group').length;
   if (!witness.length || witness.length - ancestors > AUTHORITY_WITNESS_COST.sourceRows
     || ancestors && ancestors > (await groupBounds(client)).groupDepth + 1) return false;
@@ -99,4 +120,10 @@ export async function authorityWitnessCurrent(client: PoolClient,
     if (rows.length !== selected.length || rows.some(row => selected.find(saved => saved.id === row.id)?.generation !== row.generation)) return false;
   }
   return witness.every(row => Object.hasOwn(tables, row.table));
+}
+
+/** No extra reads: capture already locked every selected row through commit. */
+export function authorityWitnessDeadline(witness: readonly AuthorityWitness[]): string | null {
+  const deadlines = witness.flatMap(row => row.validUntil ? [row.validUntil] : []);
+  return deadlines.length ? new Date(Math.min(...deadlines.map(Date.parse))).toISOString() : null;
 }

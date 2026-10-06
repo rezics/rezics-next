@@ -297,7 +297,7 @@ test('IAM33: a proof handle is revalidated after revoke, expiry, leave/rejoin, r
         action: 'work.create', actingSubject: actor });
     const handle = await decide(a);
     expect([handle.result, handle.reusable, handle.sources.map(source => source.id).sort()])
-      .toEqual(['allow', true, [direct, binding].sort()]);
+      .toEqual(['allow', true, [direct]]);
     expect((await revalidate(handle.decisionId, a)).status).toBe(200);
     // Historical frame metadata is not an authority source. Exact decision
     // inputs still fence this handle after an unrelated inventory revision.

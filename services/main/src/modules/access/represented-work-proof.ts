@@ -41,7 +41,10 @@ export interface SavedRepresentedWorkProof {
 /** Select one indexed mandate and one direct grant. A live controller is
  * sufficient representation of its Agent, but grants no Work
  * permission: a separate grant, group or role is still required. Reusing that
- * mandate keeps revocation pinned without issuing a duplicate representation. */
+ * mandate keeps revocation pinned without issuing a duplicate representation.
+ * Statement time permits an indexed expiry range; capture and claim use wall
+ * time again on the exact selected rows. PostgreSQL 18 time semantics:
+ * https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT */
 export async function representedWorkProof(client: PoolClient, principalId: string,
   actingSubject: string, action: 'work.create' | 'work.edit' = 'work.create',
   scope = 'work:create:root'): Promise<RepresentedWorkProof | null> {
@@ -52,17 +55,17 @@ export async function representedWorkProof(client: PoolClient, principalId: stri
     JOIN access.authority_subject s ON s.id = r.subject_id
     WHERE r.principal_id = $1 AND r.subject_id = $2
       AND r.action IN ($3,'agent.control')
-      AND r.active AND r.valid_until > clock_timestamp()
+      AND r.active AND r.valid_until > statement_timestamp()
       AND s.kind = 'agent' AND s.active
-    ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, actingSubject, action]);
+    ORDER BY r.action, r.valid_until LIMIT 1 FOR SHARE OF r, s`, [principalId, actingSubject, action]);
   const selected = representation.rows[0];
   if (!selected) return action === 'work.create' && scope === 'work:create:root'
     ? invitedWorkProof(client, principalId, actingSubject) : null;
   const grant = await client.query<{ id: string; generation: string }>(`
     SELECT id, generation FROM access.permission_grant
     WHERE recipient_subject = $1 AND scope_id = $2
-      AND action = $3 AND active AND valid_until > clock_timestamp()
-    ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
+      AND action = $3 AND active AND valid_until > statement_timestamp()
+    ORDER BY valid_until LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
   return { representationId: selected.id,
     representationGeneration: selected.generation,
     subjectGeneration: selected.subject_generation,
