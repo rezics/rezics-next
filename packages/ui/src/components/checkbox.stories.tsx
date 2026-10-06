@@ -55,6 +55,19 @@ export const Default: Story = {
   },
 };
 
+/** Pointer-driven tools click the native input where the control is drawn; a label's text reaches it too. */
+export const PointerReachesInput: Story = {
+  render: () => <Checkbox className="flex items-center gap-3 px-2">Include Korean</Checkbox>,
+  async play({ canvasElement }) {
+    const checkbox = within(canvasElement).getByRole('checkbox', { name: 'Include Korean' });
+    const control = canvasElement.querySelector('[data-slot="checkbox-control"]')!.getBoundingClientRect();
+    const at = { x: control.x + control.width / 2, y: control.y + control.height / 2 };
+    await expect(canvasElement.ownerDocument.elementFromPoint(at.x, at.y)).toBe(checkbox);
+    await userEvent.click(within(canvasElement).getByText('Include Korean'));
+    await expect(checkbox).toBeChecked();
+  },
+};
+
 export const CallerRole: Story = {
   render: () => (
     <Field orientation="horizontal">

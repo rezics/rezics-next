@@ -33,6 +33,8 @@ export const checkboxVariants = tv({
     'rounded-[6px] border-2 border-muted-foreground/75 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]',
     'transition-[border-color,background-color,box-shadow]',
     'hover:border-primary/50 hover:bg-accent/40',
+    // The native input lies over the control, so the pointer is never over the control itself.
+    'group-hover/checkbox:border-primary/50 group-hover/checkbox:bg-accent/40',
     'data-focus-visible:ring-2 data-focus-visible:ring-ring data-focus-visible:ring-offset-2 data-focus-visible:ring-offset-background',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
     'data-[state=checked]:border-primary data-[state=checked]:shadow-[0_2px_8px_-2px] data-[state=checked]:shadow-primary/30',
@@ -99,8 +101,24 @@ const CheckboxHiddenInput = (props: React.ComponentProps<typeof ArkCheckbox.Hidd
     }
   }, [indeterminate]);
 
-  return <ArkCheckbox.HiddenInput ref={ref} {...props} />;
+  return <ArkCheckbox.HiddenInput ref={ref} style={nativeControl} {...props} />;
 };
+
+// The native input is what pointers and automation reach: unpainted and the size of the control, at the
+// control's place (the first item of the root, or the root itself). A clipped, 1px input could only be
+// activated through its label, which pointer-driven tools such as Playwright's `check()` refuse to do.
+// It is not made transparent with opacity, so it still counts as visible to testing-library.
+const nativeControl = {
+  appearance: 'none',
+  background: 'transparent',
+  outline: 'none',
+  clip: 'auto',
+  margin: 0,
+  width: '1.25rem',
+  height: '1.25rem',
+  overflow: 'visible',
+  cursor: 'inherit',
+} satisfies React.CSSProperties;
 
 export const CheckboxIndicator = (props: React.ComponentProps<typeof ArkCheckbox.Indicator>) => {
   const { className, indeterminate, ...rest } = props;

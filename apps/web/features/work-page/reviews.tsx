@@ -399,6 +399,9 @@ export function ReviewsSection(props: ReviewsProps) {
   const t = materializeData(messages, { locale });
   const [chosen, setChosen] = useState<{ option: ReviewTarget; read: GrainRead | null } | null>(null);
   const latest = useRef<string | null>(null);
+  // The server-rendered choices do nothing until the page hydrates; tests and scripts wait for the marker.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const actingSubject = viewer.kind === 'reader' ? viewer.actingSubject : null;
 
   async function choose(option: ReviewTarget) {
@@ -411,7 +414,8 @@ export function ReviewsSection(props: ReviewsProps) {
   }
   const selected = chosen?.option.target ?? props.target;
   const chooser = targets && targets.length > 1
-    ? <GrainChooser targets={targets} selected={selected} onSelect={option => void choose(option)} t={t} /> : null;
+    ? <GrainChooser targets={targets} selected={selected} hydrated={hydrated} onSelect={option => void choose(option)} t={t} />
+    : null;
 
   if (!chosen) return <ReviewsPanel {...props} aggregate={aggregate} controls={chooser} />;
   const { option, read } = chosen;

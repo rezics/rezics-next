@@ -61,8 +61,9 @@ const groups: { grain: ReviewGrain; label: (t: Translation) => string }[] = [
  * What the reviews are of: the story, each edition, each translation and each related Work. Which is shown is the
  * reader's choice and stays visible, since an edition's reviews are not the story's.
  */
-export function GrainChooser({ targets, selected, onSelect, t }: {
-  targets: readonly ReviewTarget[]; selected: string; onSelect: (target: ReviewTarget) => void; t: Translation;
+export function GrainChooser({ targets, selected, hydrated, onSelect, t }: {
+  targets: readonly ReviewTarget[]; selected: string; hydrated: boolean; onSelect: (target: ReviewTarget) => void;
+  t: Translation;
 }) {
   return <nav aria-label={t.reviewGrains} data-review-grains className="grid gap-2 text-sm">
     {groups.map(({ grain, label }) => {
@@ -72,7 +73,8 @@ export function GrainChooser({ targets, selected, onSelect, t }: {
         className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-muted-foreground text-xs">{label(t)}</span>
         {options.map(option => <button key={option.target} type="button" aria-pressed={option.target === selected}
-          lang={option.language} onClick={() => onSelect(option)} data-review-target={idOf(option.target)}
+          disabled={!hydrated} data-hydrated={hydrated ? 'true' : undefined} lang={option.language}
+          onClick={() => onSelect(option)} data-review-target={idOf(option.target)}
           className={cn('h-8 max-w-full truncate rounded-full border border-border/70 px-3 font-medium',
             'text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2',
             'focus-visible:ring-ring aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background')}>
