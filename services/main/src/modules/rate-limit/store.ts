@@ -21,7 +21,7 @@ export interface RateLimitOptions {
 
 export const RATE_LIMIT_COST_V1 = {
   principalRows: 1, representations: 64, roleRowsPerRepresentation: 64,
-  classificationQueries: 66, counterQueries: 1, expirySweepRows: 1000, expirySweepIntervalMs: 1000,
+  classificationQueries: 1, counterQueries: 1, expirySweepRows: 1000, expirySweepIntervalMs: 1000,
 } as const;
 
 /** A proxy must replace this header and be explicitly trusted by peer address.
@@ -46,10 +46,92 @@ export function anonymousIdentity(request: Request, peer: string | undefined, op
   return `anonymous:${address}`;
 }
 
-/** Cost: one indexed principal lookup, <=65 represented Agents and <=65
- * role candidates per Agent; overflow is unavailable, never a trust upgrade.
- * Classification is cached for the verified token's lifetime by the hook.
- * Consume uses one atomic PK upsert; an expired key resets lazily. */
+interface ClassificationRow {
+  found: boolean;
+  active: boolean;
+  newcomer: boolean;
+  platform_administrator: boolean;
+  agent_count: number;
+  max_role_rows: number;
+  trusted: boolean;
+}
+
+/** The extra row past each cap is how overflow stays a refusal. Platform
+ * administrators skip the representation walk; an inactive principal does too. */
+const CLASSIFICATION_SQL = `WITH principal AS (
+  SELECT p.id, p.active,
+    p.first_seen_at > now() - interval '7 days' AS newcomer,
+    EXISTS (
+      SELECT 1 FROM access.platform_administrator administrator
+      WHERE administrator.singleton AND administrator.principal_id = p.id
+    ) AS platform_administrator
+  FROM access.principal p
+  WHERE p.account_issuer = $1 AND p.account_subject = $2
+),
+agents AS (
+  SELECT DISTINCT representation.subject_id, representation.action
+  FROM access.representation representation
+  JOIN access.authority_subject authority
+    ON authority.id = representation.subject_id AND authority.active
+  JOIN principal ON principal.id = representation.principal_id
+  WHERE principal.active AND NOT principal.platform_administrator
+    AND representation.active AND representation.valid_until > now()
+    AND representation.action IN ('work.create', 'work.edit', 'governance.moderate')
+  LIMIT $3
+),
+role_rows AS (
+  SELECT agent.subject_id, agent.action, role.trusted
+  FROM agents agent
+  JOIN LATERAL (
+    SELECT trusted FROM (
+      SELECT agent.action = ANY(revision.permissions) AS trusted
+      FROM access.role_binding binding
+      JOIN access.role_revision revision
+        ON revision.family_id = binding.family_id AND revision.revision = binding.role_revision
+      JOIN access.role_family family ON family.id = binding.family_id
+      JOIN access.scope_gate gate ON gate.id = family.scope_id AND gate.open AND gate.dispatch_open
+      LEFT JOIN access.membership membership ON membership.id = binding.membership_id
+      WHERE binding.recipient_subject = agent.subject_id
+        AND agent.action IN ('work.create', 'work.edit')
+        AND binding.active AND binding.valid_until > now()
+        AND family.scope_id = 'work:create:root'
+        AND (binding.membership_id IS NULL OR (
+          membership.state = 'joined' AND membership.member_subject = binding.recipient_subject
+          AND membership.generation = binding.membership_generation))
+      UNION ALL
+      SELECT true AS trusted
+      FROM access.realm_admin_assignment assignment
+      JOIN access.realm_admin_role_grant grant_row
+        ON grant_row.realm = assignment.realm AND grant_row.role_id = assignment.role_id
+        AND grant_row.member = assignment.member
+      JOIN access.permission_grant permission
+        ON permission.id = grant_row.grant_id AND permission.active AND permission.valid_until > now()
+      JOIN access.scope_gate permission_gate
+        ON permission_gate.id = permission.scope_id AND permission_gate.open
+      WHERE assignment.member = agent.subject_id
+        AND agent.action = 'governance.moderate'
+        AND assignment.valid_until > now()
+        AND permission.action = 'governance.moderate'
+    ) candidate
+    LIMIT $4
+  ) role ON true
+)
+SELECT
+  EXISTS (SELECT 1 FROM principal) AS found,
+  COALESCE((SELECT active FROM principal), false) AS active,
+  COALESCE((SELECT newcomer FROM principal), false) AS newcomer,
+  COALESCE((SELECT platform_administrator FROM principal), false) AS platform_administrator,
+  (SELECT count(*)::int FROM agents) AS agent_count,
+  COALESCE((SELECT max(counted.role_count)::int FROM (
+    SELECT count(*) AS role_count FROM role_rows GROUP BY subject_id, action
+  ) counted), 0) AS max_role_rows,
+  COALESCE((SELECT bool_or(trusted) FROM role_rows), false) AS trusted`;
+
+/** One statement classifies a token: the principal by its unique account key,
+ * then at most 65 represented Agents and 65 role rows for each. Overflow is
+ * unavailable, never a trust upgrade. The hook caches the result for at most
+ * the verified token's lifetime. Consume uses one atomic PK upsert; an expired
+ * key resets lazily. */
 export class PostgresRateLimitStore implements RateLimitStore {
   private expiryTimer?: ReturnType<typeof setInterval>;
   private expiryPending?: Promise<void>;
@@ -87,48 +169,35 @@ export class PostgresRateLimitStore implements RateLimitStore {
   }
 
   async classify(principal: VerifiedAccountAssertion): Promise<PrincipalClass> {
-    // Only operator-installed clients in the deployment allowlist get this
-    // class. User tokens retain their Account subject even across clients.
-    if (principal.accountClientId
-      && this.options.serviceClientIds.has(principal.accountClientId)) return 'service';
-    const row = (await this.pool.query<{ id: string; active: boolean; newcomer: boolean; platform_administrator: boolean }>(`SELECT id, active,
-      first_seen_at > now() - interval '7 days' AS newcomer,
-      EXISTS (SELECT 1 FROM access.platform_administrator a WHERE a.singleton AND a.principal_id = p.id) AS platform_administrator
-      FROM access.principal p
-      WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0];
+    // Account marks a client-credentials token workload and sets its subject to
+    // the client. A person's token keeps that person's class even when the
+    // client is on the deployment allowlist.
+    const clientId = principal.accountClientId;
+    if (principal.accountAuthMode === 'workload'
+      && typeof clientId === 'string' && clientId.length > 0
+      && principal.subject === clientId
+      && this.options.serviceClientIds.has(clientId)) return 'service';
+    const result = await this.pool.query<ClassificationRow>(CLASSIFICATION_SQL, [
+      principal.issuer, principal.subject,
+      RATE_LIMIT_COST_V1.representations + 1,
+      RATE_LIMIT_COST_V1.roleRowsPerRepresentation + 1,
+    ]);
+    const row = result.rows[0];
+    if (!row) throw new Error('Rate limit classification unavailable');
     // The handler remains responsible for authorization, including allowing a
     // suspended principal to use safety intake. Unknown principals are new.
-    if (!row || !row.active) return 'new-account';
-    // Platform moderation/catalogue role uses the existing trusted class;
-    // startup configuration never changes budgets or installs a service client.
-    if (row.platform_administrator) return 'trusted';
-    const agents = (await this.pool.query<{ subject_id: string; action: string }>(`SELECT DISTINCT r.subject_id, r.action
-      FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
-      WHERE r.principal_id = $1 AND r.active AND r.valid_until > now()
-        AND r.action IN ('work.create', 'work.edit', 'governance.moderate') LIMIT $2`, [row.id, RATE_LIMIT_COST_V1.representations + 1])).rows;
-    if (agents.length > RATE_LIMIT_COST_V1.representations) throw new Error('Rate limit representation budget exceeded');
-    let trusted = false;
-    for (const agent of agents) {
-      const roles = (await this.pool.query<{ trusted: boolean }>(`SELECT $2 = ANY(v.permissions) AS trusted
-        FROM access.role_binding b JOIN access.role_revision v ON v.family_id = b.family_id AND v.revision = b.role_revision
-        JOIN access.role_family f ON f.id = b.family_id
-        JOIN access.scope_gate g ON g.id = f.scope_id AND g.open AND g.dispatch_open
-        LEFT JOIN access.membership m ON m.id = b.membership_id
-        WHERE b.recipient_subject = $1 AND $2 IN ('work.create', 'work.edit') AND b.active AND b.valid_until > now()
-          AND f.scope_id = 'work:create:root'
-          AND (b.membership_id IS NULL OR (m.state = 'joined' AND m.member_subject = b.recipient_subject
-            AND m.generation = b.membership_generation))
-        UNION ALL
-        SELECT true AS trusted FROM access.realm_admin_assignment a
-        JOIN access.realm_admin_role_grant rg ON rg.realm = a.realm AND rg.role_id = a.role_id AND rg.member = a.member
-        JOIN access.permission_grant pg ON pg.id = rg.grant_id AND pg.active AND pg.valid_until > now()
-        JOIN access.scope_gate g ON g.id = pg.scope_id AND g.open
-        WHERE a.member = $1 AND $2 = 'governance.moderate' AND a.valid_until > now() AND pg.action = 'governance.moderate'
-        LIMIT $3`, [agent.subject_id, agent.action, RATE_LIMIT_COST_V1.roleRowsPerRepresentation + 1])).rows;
-      if (roles.length > RATE_LIMIT_COST_V1.roleRowsPerRepresentation) throw new Error('Rate limit role budget exceeded');
-      trusted ||= roles.some(role => role.trusted);
+    if (row.found !== true || row.active !== true) return 'new-account';
+    // Platform moderation uses the existing trusted class. Startup configuration
+    // never changes budgets or installs a service client.
+    if (row.platform_administrator === true) return 'trusted';
+    const agents = Number(row.agent_count);
+    const roleRows = Number(row.max_role_rows);
+    if (!Number.isInteger(agents) || !Number.isInteger(roleRows)) {
+      throw new Error('Rate limit classification unavailable');
     }
-    return trusted ? 'trusted' : row.newcomer ? 'new-account' : 'member';
+    if (agents > RATE_LIMIT_COST_V1.representations) throw new Error('Rate limit representation budget exceeded');
+    if (roleRows > RATE_LIMIT_COST_V1.roleRowsPerRepresentation) throw new Error('Rate limit role budget exceeded');
+    return row.trusted === true ? 'trusted' : row.newcomer === true ? 'new-account' : 'member';
   }
 
   async consume(identity: string, family: RateLimitFamily, budget: Budget): Promise<LimitDecision> {

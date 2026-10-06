@@ -230,10 +230,10 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
     .post('/v1/queries', () => 'results').post('/v1/query', () => 'results');
   expect((await searches.handle(new Request('http://localhost/v1/query', { method: 'POST' }))).status).toBe(429);
   expect((await searches.handle(new Request('http://localhost/v1/query', { method: 'POST',
-    headers: { authorization: 'Bearer verified' } }))).status).toBe(200);
+    headers: { authorization: 'Bearer verified' } }))).status).toBe(429);
   expect((await searches.handle(new Request('http://localhost/v1/queries', { method: 'POST' }))).status).toBe(429);
   expect((await searches.handle(new Request('http://localhost/v1/queries', { method: 'POST',
-    headers: { authorization: 'Bearer verified' } }))).status).toBe(200);
+    headers: { authorization: 'Bearer verified' } }))).status).toBe(429);
   limit.store.consume = async () => { throw new Error('counter outage'); };
   const outage = await harness.handle(new Request('http://localhost/v1/works', { method: 'POST' }));
   expect(outage.status).toBe(503);
@@ -264,7 +264,9 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     const issuer = 'https://account.rezics.test';
     const principals = new Map<string, VerifiedAccountAssertion>();
     for (const subject of ['new-account', 'member', 'trusted', 'service']) {
-      principals.set(subject, { issuer, subject, accountClientId: subject === 'service' ? 'installed-importer' : 'reader' });
+      principals.set(subject, subject === 'service'
+        ? { issuer, subject: 'installed-importer', accountClientId: 'installed-importer', accountAuthMode: 'workload' }
+        : { issuer, subject, accountClientId: 'reader' });
       await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject, first_seen_at)
         VALUES ($1, $2, $3, now() - $4 * interval '1 day')`, [Bun.randomUUIDv7(), issuer, subject, subject === 'new-account' ? 0 : 8]);
     }
@@ -288,6 +290,7 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     for (const [subject, principal] of principals) expect(String(await store.classify(principal))).toBe(subject);
     expect(await store.classify({ issuer, subject: 'unseen' })).toBe('new-account');
     expect(await store.classify({ issuer, subject: 'unseen', accountClientId: 'spoofed-importer' })).toBe('new-account');
+    expect(await store.classify({ issuer, subject: 'member', accountClientId: 'installed-importer', accountAuthMode: 'consent' })).toBe('member');
     const budgets = rateLimitBudgets(JSON.stringify(Object.fromEntries(principalClasses.map(principal => [principal,
       { write: { maximum: 2, seconds: 60 } }]))));
     const account = { async verify(request: Request) {

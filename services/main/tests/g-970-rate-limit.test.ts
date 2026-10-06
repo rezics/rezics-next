@@ -41,7 +41,7 @@ test('G-970: discovery, rating, reading, joining, membership and name reads surv
   expect({ verifications, classifications, counters }).toEqual({ verifications: 0, classifications: 0, counters: 0 });
 });
 
-test('G-970: topic search uses anonymous search capacity and the verified reader exemption', async () => {
+test('G-970: topic search charges anonymous peers and the verified reader class budget', async () => {
   const seen: { identity: string; family: string; maximum: number }[] = [];
   let verifications = 0, classifications = 0;
   const app = new Elysia().use(rateLimitHook({ async verify(request) {
@@ -50,7 +50,7 @@ test('G-970: topic search uses anonymous search capacity and the verified reader
     return { issuer: 'account', subject: 'reader', accountExpiresAt: Date.now() / 1000 + 300 };
   } }, {
     options, budgets: rateLimitBudgets(), store: {
-      async classify() { classifications++; throw new Error('Access unavailable'); },
+      async classify() { classifications++; return 'member' as const; },
       async consume(identity, family, budget) {
         seen.push({ identity, family, maximum: budget.maximum });
         return { allowed: false, retryAfter: 17 };
@@ -61,19 +61,28 @@ test('G-970: topic search uses anonymous search capacity and the verified reader
   expect(anonymous.status).toBe(429);
   expect(anonymous.headers.get('retry-after')).toBe('17');
   expect((await anonymous.json()).family).toBe('search');
-  expect(seen).toEqual([{ identity: 'anonymous:unknown', family: 'search', maximum: 30 }]);
   const signed = await app.handle(new Request('http://localhost/v1/discovery/concepts?q=topic', {
     headers: { authorization: 'Bearer reader' },
   }));
-  expect(signed.status).toBe(200);
+  expect(signed.status).toBe(429);
+  expect((await signed.json()).family).toBe('search');
+  const again = await app.handle(new Request('http://localhost/v1/discovery/concepts?q=topic', {
+    headers: { authorization: 'Bearer reader' },
+  }));
+  expect(again.status).toBe(429);
+  expect(seen).toEqual([
+    { identity: 'anonymous:unknown', family: 'search', maximum: 30 },
+    { identity: JSON.stringify(['account', 'reader']), family: 'search', maximum: 120 },
+    { identity: JSON.stringify(['account', 'reader']), family: 'search', maximum: 120 },
+  ]);
   expect(verifications).toBe(1);
-  expect(classifications).toBe(0);
-  expect(seen).toHaveLength(1);
+  expect(classifications).toBe(1);
   const invalid = await app.handle(new Request('http://localhost/v1/discovery/concepts?q=topic', {
     headers: { authorization: 'Bearer invalid' },
   }));
   expect(invalid.status).toBe(401);
-  expect(seen).toHaveLength(1);
+  expect(seen).toHaveLength(3);
+  expect(classifications).toBe(1);
 });
 
 test('G-970: recent commands charge the verified principal write budget before an owner effect', async () => {

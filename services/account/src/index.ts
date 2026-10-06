@@ -15,9 +15,10 @@ const config = accountConfig();
 const { ACCOUNT_BASE_URL: baseURL, ACCOUNT_SECRET: secret, ACCOUNT_MAIN_RESOURCE: resource,
   ACCOUNT_DATABASE_URL: databaseURL, ACCOUNT_PORT: port } = config;
 
-// A remote or partitioned database fails a connection wait after five seconds
-// instead of holding the request; the caller sees Account as unavailable.
-const pool = boundedPool({ connectionString: databaseURL, connectionTimeoutMillis: 5_000 });
+// Every Account request pool fails a checkout after the shared wait (the same
+// 5 s as lock_timeout) instead of holding the request when a database is
+// remote, partitioned, or out of connections.
+const pool = boundedPool({ connectionString: databaseURL });
 const accessDatabaseURL = config.ACCOUNT_ACCESS_DATABASE_URL;
 const relayDatabaseURL = config.ACCOUNT_RELAY_DATABASE_URL;
 const accessPool = accessDatabaseURL ? boundedPool({ connectionString: accessDatabaseURL }) : null;

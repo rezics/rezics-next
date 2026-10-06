@@ -42,14 +42,6 @@ export function rateLimitHook(
       const independent =
         family === 'report' || family === 'correspondence' || family === 'provider';
       if (!anonymous && !independent) {
-        if (family === 'search') {
-          // Only a verified reader escapes anonymous search capacity. Reads
-          // need no Access role lookup or counter store.
-          await cache.verified(request.headers.get('authorization')!, () =>
-            account.verify(request, []),
-          );
-          return;
-        }
         const attribution = await cache.resolve(
           request.headers.get('authorization')!,
           () => account.verify(request, []),

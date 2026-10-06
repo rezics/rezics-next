@@ -35,10 +35,6 @@ export class PrincipalBudgetCache {
     return entry;
   }
 
-  verified(token: string, verify: () => Promise<VerifiedAccountAssertion>): Promise<VerifiedAccountAssertion> {
-    return this.entry(token, verify).principal;
-  }
-
   async resolve(token: string, verify: () => Promise<VerifiedAccountAssertion>,
     classify: (principal: VerifiedAccountAssertion) => Promise<PrincipalClass>): Promise<Attribution> {
     const entry = this.entry(token, verify);

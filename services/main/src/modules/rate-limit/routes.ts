@@ -177,8 +177,8 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/corrections/{proposalRevision}', 'read'],
   ['GET', '/v1/deliveries/{delivery}', 'read'],
   ['GET', '/v1/discovery/generations/{generation}', 'read'],
-  // Topic phrase lookup shares anonymous search capacity; verified readers
-  // retain the same exemption as the catalogue search operations.
+  // Topic phrase lookup is catalogue search. Anonymous callers share the peer
+  // search budget; a verified reader pays that reader's class search budget.
   ['GET', '/v1/discovery/concepts', 'search'],
   ['GET', '/v1/discovery/sections', 'read'],
   ['GET', '/v1/discovery/popular-terms', 'read'],
@@ -407,6 +407,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/zones', 'read'],
   ['GET', '/v1/zones/{id}', 'read'],
   ['GET', '/v1/zones/{id}/configuration', 'read'],
+  ['GET', '/v1/zones/{id}/showcase-editor', 'read'],
   ['GET', '/v1/zones/{id}/presentation', 'read'],
   ['GET', '/v1/zones/{id}/query-blocks', 'read'],
   ['GET', '/v1/zones/{id}/revisions/{revision}', 'read'],
