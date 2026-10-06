@@ -106,3 +106,7 @@ export function operationsRoutes(work: MainWorkDependencies,
     }, async () => Response.json(await backpressure.read(),
       { headers: { 'cache-control': 'no-store' } }));
 }
+
+export const openApiOperations = {
+  '/v1/operations/backpressure': { get: { exposure: 'public' } },
+} as const;

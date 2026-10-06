@@ -35,9 +35,9 @@ const releaseView = t.Object({ profile: t.Literal('release-v2'), id: readId, rev
   snapshots: t.Array(snapshot, { maxItems: 20 }) });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 export const openApiOperations = {
-  '/v1/releases': { get: { bearer: false } },
-  '/v1/works/{id}/releases': { get: { bearer: false } },
-  '/v1/works/{id}/releases/{release}': { get: { bearer: false }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/releases': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/releases': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/releases/{release}': { get: { exposure: 'public', bearer: false }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function releaseError(error: unknown) {

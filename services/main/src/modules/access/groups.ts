@@ -276,7 +276,7 @@ export class AccessGroups {
         membership_generation: string | null;
       }>(`SELECT id, group_id, issuer_subject, valid_until, generation,
           membership_id, membership_generation
-        FROM access.group_permission_grant WHERE scope_id = $1 AND active
+        FROM access.group_permission_grant WHERE scope_id = $1 AND action = 'work.create' AND active
           AND valid_until > clock_timestamp() ORDER BY id LIMIT $2`,
       [GROUP_SCOPE, limits.groupsPerScope + 1]);
       if (groups.rows.length > limits.groupsPerScope
@@ -478,7 +478,7 @@ export class AccessGroups {
         throw new GroupDenied('membership dependency is stale');
       }
       const total = await client.query<{ count: string }>(`SELECT count(*) AS count
-        FROM access.group_permission_grant WHERE scope_id = $1 AND active`, [GROUP_SCOPE]);
+        FROM access.group_permission_grant WHERE scope_id = $1 AND action = 'work.create' AND active`, [GROUP_SCOPE]);
       if (Number(total.rows[0]?.count) >= bounds.groupsPerScope) {
         throw new GroupUnavailable('group grants exceed supported profile');
       }
@@ -514,7 +514,7 @@ export class AccessGroups {
     return this.mutate(context, false, 'revoke-grant', receipt, async client => {
       const row = await client.query<{ generation: string; active: boolean }>(`
         SELECT generation, active FROM access.group_permission_grant
-        WHERE id = $1 AND scope_id = $2 FOR UPDATE`, [grantId, GROUP_SCOPE]);
+        WHERE id = $1 AND scope_id = $2 AND action = 'work.create' FOR UPDATE`, [grantId, GROUP_SCOPE]);
       if (!row.rows[0]) throw new GroupDenied('grant does not exist in scope');
       if (row.rows[0].generation !== expectedGeneration) throw new GroupStale('grant generation changed');
       if (row.rows[0].active) await client.query(`UPDATE access.group_permission_grant

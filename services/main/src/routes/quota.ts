@@ -73,3 +73,7 @@ export function quotaRoutes(work: MainWorkDependencies & { quota?: QuotaStore })
       } catch (error) { return quotaError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/realms/{realm}/quota-reservations': { get: { exposure: 'platform:commerce' }, post: { exposure: 'platform:commerce' } },
+} as const;

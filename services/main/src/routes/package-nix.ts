@@ -59,9 +59,9 @@ const resolutionSchema = t.Object({ profile: t.Literal('nix-flake-native-receipt
 const writeSchema = t.Object({ resolution: resolutionSchema, replayed: t.Boolean() });
 
 export const openApiOperations = {
-  '/v1/package-resolutions/nix': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/package-resolutions/nix/{resolution}': { get: { bearer: true } },
-};
+  '/v1/package-resolutions/nix': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/package-resolutions/nix/{resolution}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+} as const;
 
 function nixError(error: unknown): Response {
   if (error instanceof NixResolutionInvalid) return problem(422, 'nix_resolution_invalid', error.message);

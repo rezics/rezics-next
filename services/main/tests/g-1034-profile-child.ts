@@ -125,6 +125,8 @@ try {
       },
     })
   ).agent;
+  await stack.accessPool.query(`SELECT access.seed_platform_grants(principal_id,receipt)
+    FROM access.platform_administrator WHERE singleton`);
   const reader = await home.provision('Rank reader', home.reader.token);
   const realm = (
     await api.command<{ realm: string }>('g1034:realm', {

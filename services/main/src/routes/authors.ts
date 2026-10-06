@@ -23,8 +23,8 @@ function readError(error: unknown) {
 
 // Public reads: a bearer is optional and, with `actingSubject`, reads as that Agent.
 export const openApiOperations = {
-  '/v1/authors/open-library/{author}': { get: { bearer: false } },
-  '/v1/authors/open-library/{author}/works': { get: { bearer: false } },
+  '/v1/authors/open-library/{author}': { get: { exposure: 'public', bearer: false } },
+  '/v1/authors/open-library/{author}/works': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 /** Author pages for Open Library authors credited on REZICS Works (`modules/author-page`). */

@@ -28,8 +28,8 @@ const link = t.Object({ work: readId, mainVersion: readId, structure: readId, oc
 const query = { actingSubject: t.Optional(readId), language: t.Optional(readLanguage) };
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
-  '/v1/posts/{id}/identifications': { post: { bearer: true, idempotencyKey: true }, get: { bearer: false } },
-  '/v1/post-identifications/{id}': { get: { bearer: false } },
+  '/v1/posts/{id}/identifications': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: false } },
+  '/v1/post-identifications/{id}': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function postIdentificationRoutes(deps: MainWorkDependencies) {

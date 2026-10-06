@@ -28,6 +28,12 @@ const content = 'services/content/migrations/';
 const main = 'services/main/src/';
 export const serializationAllowlist: SerializationAllowance[] = [
   {
+    key: 'platform-grant-continuity',
+    class: 'per-object management revision',
+    reason: 'The platform grant authority is one governance unit; simultaneous removals must retain its permanent holder.',
+    writers: [access + '1290_platform_grants.sql'],
+  },
+  {
     relation: 'pkg.go_sumdb_head',
     class: 'external log head',
     reason:
@@ -228,9 +234,10 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'access.platform_administrator',
     class: 'operator/startup',
-    reason: 'Startup designates the immutable platform administrator with its receipt.',
+    reason: 'Startup retains the first designation for the legacy rate-limit reader; Access authority comes from grants.',
     writers: [
       access + '983_platform_administrator.sql',
+      access + '1290_platform_grants.sql',
       main + 'modules/access/platform-administrator.ts',
     ],
   },

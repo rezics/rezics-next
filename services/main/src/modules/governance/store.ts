@@ -284,7 +284,7 @@ export class GovernanceStore {
     const gate = basis;
     if (scopeId === 'governance:platform'
       && ['governance.moderate', 'governance.rights.decide', 'governance.safety.evidence', 'governance.appeal'].includes(action)) {
-      const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject, lock);
+      const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject, lock,{ action,scope: scopeId });
       if (administrator) return { principalId: actor.principalId, authorityEpoch: gate.authority_epoch,
         proofDigest: sha256(canonical({ principalId: actor.principalId, actingSubject, scopeId, action,
           authorityEpoch: gate.authority_epoch, administrator })) };

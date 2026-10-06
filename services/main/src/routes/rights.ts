@@ -15,14 +15,14 @@ export const RIGHTS_DECIDE_SCOPE = 'rights:decide';
 export const RIGHTS_OFFER_SCOPE = 'rights:offer';
 
 export const openApiOperations = {
-  '/v1/rights/offerings': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/rights/offerings/{offering}/changes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/rights/offerings/{offering}': { get: { bearer: true } },
-  '/v1/rights/offerings/{offering}/revisions/{revision}': { get: { bearer: true } },
-  '/v1/rights/use-assessments': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/rights/use-evaluations': { post: { bearer: true } },
-  '/v1/rights/complaints': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/rights/restrictions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings': { post: { exposure: 'platform:commerce', bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}/changes': { post: { exposure: 'platform:commerce', bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}': { get: { exposure: 'platform:commerce', bearer: true } },
+  '/v1/rights/offerings/{offering}/revisions/{revision}': { get: { exposure: 'platform:commerce', bearer: true } },
+  '/v1/rights/use-assessments': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/rights/use-evaluations': { post: { exposure: 'public', bearer: true } },
+  '/v1/rights/complaints': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/rights/restrictions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 export interface RightsRouteDependencies { rights?: { store: RightsStore } }

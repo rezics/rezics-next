@@ -4,6 +4,8 @@ import { openapi } from '@elysia/openapi';
 import { createMainApp, type MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { attachCapabilities, operationTools, type CapabilityDeclarations } from '../../services/main/src/modules/mcp/capabilities.ts';
+import { assertRouteExposures, exposureSdkSource, platformClosedResponse } from './exposure.ts';
+import { type Exposure, validExposure } from '../../services/main/src/modules/access/exposure.ts';
 
 const artifact = 'generated/openapi/main/public.json';
 const commands = [
@@ -117,10 +119,11 @@ const packageWrites = ['/v1/package-resolutions',
   '/v1/package-resolutions/from-captures', '/v1/package-sources/go'] as const;
 
 interface Operation {
+  'x-rezics-exposure'?: Exposure;
   'x-rezics-capability'?: import('../../services/main/src/modules/mcp/capabilities.ts').Capability;
   parameters?: unknown[];
   security?: { bearerAuth: never[] }[];
-  responses?: Record<string, { content?: Record<string, unknown> }>;
+  responses?: Record<string, { description?: string; content?: Record<string, unknown> }>;
 }
 interface Document {
   openapi?: string;
@@ -160,7 +163,7 @@ export function jsonSchema2020Tuples(value: unknown): unknown {
 /** Build the public contract from the live Elysia routes without starting services. */
 export async function buildMainOpenApi(): Promise<string> {
   const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),
-    {} as MainWorkDependencies).use(openapi({
+    { mcp: { issuer: 'https://account.rezics.test', resource: 'https://rezics.test/mcp' } } as MainWorkDependencies).use(openapi({
       documentation: { info: { title: 'REZICS Main Public API', version: '1.0.0' } },
       // `work.create` looks like a file extension to the static-file heuristic; Main serves no static files.
       exclude: { paths: /^\/health\//, staticFile: false },
@@ -168,6 +171,7 @@ export async function buildMainOpenApi(): Promise<string> {
   const response = await app.handle(new Request('http://localhost/openapi/json'));
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
+  assertRouteExposures(app.routes.filter(route => !route.path.startsWith('/openapi')));
   const paths = Object.entries(document.paths ?? {});
   // Every installed versioned route must appear in the document (no fixed count to edit per route).
   const installed = new Set(app.routes.map(route => route.path).filter(path => /^\/v[12]\//.test(path))
@@ -248,12 +252,19 @@ export async function buildMainOpenApi(): Promise<string> {
   const routeDirectory = join(import.meta.dir, '../../services/main/src/routes');
   for (const file of [...new Bun.Glob('*.ts').scanSync({ cwd: routeDirectory })].sort()) {
     const module = await import(join(routeDirectory, file)) as { openApiOperations?: Record<string,
-      Record<string, { bearer?: boolean; idempotencyKey?: boolean }>>; capabilities?: CapabilityDeclarations };
+      Record<string, { bearer?: boolean; idempotencyKey?: boolean; exposure: Exposure }>>; capabilities?: CapabilityDeclarations };
     for (const [path, methods] of Object.entries(module.openApiOperations ?? {})) {
       for (const [method, declared] of Object.entries(methods)) {
         const operation = document.paths?.[path]?.[method as 'get'];
+        // Hidden adapters still have declarations and are checked against the
+        // installed route input above; OpenAPI has no ALL or WS operation key.
+        if (method === 'all' || method === 'ws' || path.startsWith('/health/') || path.startsWith('/.well-known/')) continue;
         if (!operation) throw new Error(`routes/${file} declares a missing OpenAPI operation: ${method} ${path}`);
-        if (declared.bearer) operation.security = [{ bearerAuth: [] }];
+        if (!validExposure(declared.exposure)) throw new Error(`routes/${file} lacks exposure: ${method} ${path}`);
+        operation['x-rezics-exposure'] = declared.exposure;
+        if (declared.exposure !== 'public') operation.responses = { ...operation.responses,
+          '403': platformClosedResponse(operation.responses?.['403']) };
+        if (declared.bearer || declared.exposure !== 'public') operation.security = [{ bearerAuth: [] }];
         if (declared.idempotencyKey) operation.parameters = [...(operation.parameters ?? []), {
           name: 'Idempotency-Key', in: 'header', required: true,
           schema: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9:_./-]{1,128}$' },
@@ -264,6 +275,9 @@ export async function buildMainOpenApi(): Promise<string> {
       module.capabilities ?? {}, `routes/${file}`);
   }
   operationTools(document as import('../../services/main/src/modules/mcp/capabilities.ts').CapabilityDocument);
+  for (const [path, methods] of paths) for (const [method, operation] of Object.entries(methods)) {
+    if (!validExposure(operation['x-rezics-exposure'])) throw new Error(`OpenAPI operation lacks exposure: ${method} ${path}`);
+  }
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };
   for (const [, methods] of paths) for (const operation of Object.values(methods)) {
@@ -288,4 +302,11 @@ export async function generateMainOpenApi(root: string, check: boolean): Promise
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, expected);
   }
+  const sdkPath = join(root, 'generated/openapi/main/exposure.ts');
+  const sdkApp = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'),
+    { mcp: { issuer: 'https://account.rezics.test', resource: 'https://rezics.test/mcp' } } as MainWorkDependencies);
+  const sdk = exposureSdkSource(sdkApp.routes);
+  if (check) {
+    if (readFileSync(sdkPath, 'utf8') !== sdk) throw new Error('Generated exposure SDK differs; run task gen');
+  } else writeFileSync(sdkPath, sdk);
 }

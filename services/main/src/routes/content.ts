@@ -376,3 +376,14 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       }
     });
 }
+
+export const openApiOperations = {
+  '/v1/content-revisions/{revision}': { get: { exposure: 'public' } },
+  '/v1/content-edits': { post: { exposure: 'public' } },
+  '/v1/content-search-eligibility': { post: { exposure: 'public' } },
+  '/v1/content-publications': { post: { exposure: 'public' } },
+  '/v1/content-revisions/{revision}/comments': { get: { exposure: 'public' } },
+  '/v1/content-comments/{comment}': { get: { exposure: 'public' } },
+  '/v1/content-comments': { post: { exposure: 'public' } },
+  '/v1/content-drafts': { post: { exposure: 'public' } },
+} as const;

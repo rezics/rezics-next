@@ -12,11 +12,11 @@ import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/works/{id}/also-enjoyed': { get: { bearer: false } },
-  '/v1/also-enjoyed/generation-builds': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/also-enjoyed/generations/{generation}': { get: { bearer: true } },
-  '/v1/also-enjoyed/generations/{generation}/advance': { post: { bearer: true } },
-  '/v1/also-enjoyed/generation-activations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/also-enjoyed': { get: { exposure: 'public', bearer: false } },
+  '/v1/also-enjoyed/generation-builds': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/also-enjoyed/generations/{generation}': { get: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/also-enjoyed/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/also-enjoyed/generation-activations': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
 } as const;
 
 const noStore = { headers: { 'cache-control': 'private, no-store' } };

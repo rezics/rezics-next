@@ -7,7 +7,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 const grain = t.Union([t.Literal('series'), t.Literal('parts')]);
 export const openApiOperations = {
-  '/v1/collections/{id}/works': { get: { bearer: false } },
+  '/v1/collections/{id}/works': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function collectionGrainRoutes(work: MainWorkDependencies) {

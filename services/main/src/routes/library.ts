@@ -106,17 +106,17 @@ async function publicShelfResponse(work: MainWorkDependencies, request: Request,
 }
 
 export const openApiOperations = {
-  '/v1/works/{id}/reader-state': { get: { bearer: false } },
-  '/v1/me/work-states': { get: { bearer: false } },
-  '/v1/works/{id}/reader-status': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/shelves': { get: { bearer: true } },
-  '/v1/me/shelves/status/{status}/works': { get: { bearer: true } },
-  '/v1/agents/{id}/shelves': { get: { bearer: false } },
-  '/v1/agents/{id}/shelves/status/{status}/works': { get: { bearer: false } },
-  '/v1/me/reading-goal': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/reading-stats': { get: { bearer: true } },
-  '/v1/me/import-reviews': { get: { bearer: true } },
-  '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/reader-state': { get: { exposure: 'public', bearer: false } },
+  '/v1/me/work-states': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/reader-status': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/shelves': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/shelves/status/{status}/works': { get: { exposure: 'public', bearer: true } },
+  '/v1/agents/{id}/shelves': { get: { exposure: 'public', bearer: false } },
+  '/v1/agents/{id}/shelves/status/{status}/works': { get: { exposure: 'public', bearer: false } },
+  '/v1/me/reading-goal': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/reading-stats': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/import-reviews': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/import-reviews/{id}': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown) {

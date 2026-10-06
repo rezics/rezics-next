@@ -28,8 +28,14 @@ import { tagProposalInput, tagProposalResult, tagProposalRequest, recordTagPropo
   tagProposalBudget } from '../modules/classification/tag-proposal.ts';
 
 export const openApiOperations = {
-  '/v1/tag-proposals': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/classification-vocabulary': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/tag-proposals': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/classification-vocabulary': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/classification-context': { get: { exposure: 'public' } },
+  '/v1/classification-contexts': { post: { exposure: 'public' } },
+  '/v1/classification-propositions/{sense}': { get: { exposure: 'public' } },
+  '/v1/classification-propositions': { post: { exposure: 'public' } },
+  '/v1/classification-decisions': { post: { exposure: 'public' } },
+  '/v1/classification-resolutions': { post: { exposure: 'public' } },
 } as const;
 
 const vocabularyLabel = t.Object({ language: t.String({ minLength: 2, maxLength: 40 }),

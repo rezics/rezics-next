@@ -8,7 +8,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/private-content-queries': { post: { bearer: true } },
+  '/v1/private-content-queries': { post: { exposure: 'public', bearer: true } , ws: { exposure: 'public' } },
 } as const;
 
 export function contentPrivateSearchRoutes(work: MainWorkDependencies) {

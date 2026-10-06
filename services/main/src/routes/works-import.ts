@@ -51,7 +51,7 @@ export function catalogueImportRoutes(work: MainWorkDependencies) {
     });
 }
 export const openApiOperations = {
-  '/v1/work-imports': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/work-imports': { post: { exposure: 'platform:catalogue-import', bearer: true, idempotencyKey: true } },
   // Item keys are independent of batching and stable across regrouped retries.
-  '/v1/work-imports/bulk': { post: { bearer: true } },
+  '/v1/work-imports/bulk': { post: { exposure: 'platform:catalogue-import', bearer: true } },
 } as const;

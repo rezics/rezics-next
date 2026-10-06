@@ -10,8 +10,8 @@ import { writeProblems } from '../api-responses.ts';
 import { workReadError } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/catalogue/candidates': { post: { bearer: true } },
-  '/v1/works/{id}/catalogue-verifications': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/catalogue/candidates': { post: { exposure: 'public', bearer: true } },
+  '/v1/works/{id}/catalogue-verifications': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 const candidate = t.Object({ work: readId, mainVersion: readId, revision: readId,
   attributes: t.Array(t.Object({ field: t.String(), value: t.String(), language: t.Nullable(t.String()) })) });

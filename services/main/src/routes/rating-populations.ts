@@ -8,7 +8,7 @@ import { publicWorkRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
-export const openApiOperations = { '/v1/rating-populations': { get: { bearer: false } } } as const;
+export const openApiOperations = { '/v1/rating-populations': { get: { exposure: 'public', bearer: false } } } as const;
 export function ratingPopulationRoutes(work: MainWorkDependencies) {
   return new Elysia().get(
     '/v1/rating-populations',

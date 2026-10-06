@@ -80,7 +80,7 @@ async function pathGrants(client: PoolClient, groupId: string | null):
       UNION SELECT g.id, g.parent_id, u.depth + 1 FROM access.recipient_group g
         JOIN up u ON g.id = u.parent_id WHERE u.depth < 33
     ) SELECT gg.id, gg.valid_until FROM access.group_permission_grant gg
-    JOIN up ON up.id = gg.group_id WHERE gg.active AND gg.valid_until > clock_timestamp()
+    JOIN up ON up.id = gg.group_id WHERE gg.action = 'work.create' AND gg.active AND gg.valid_until > clock_timestamp()
     ORDER BY gg.id LIMIT 257`, [groupId]);
   if (rows.rows.length > 256) throw new ControlDenied('group grant path exceeds its bound');
   return rows.rows;

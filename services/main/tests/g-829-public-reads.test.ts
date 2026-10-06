@@ -81,6 +81,7 @@ test('G-829 class guard: every resource/composition/Collection GET has an explic
   const gets = app.routes.filter(route => route.method === 'GET'
     && /^\/v1\/(resources\/:resource\/|compositions\/|collections\/)/.test(route.path)).map(route => route.path);
   expect(gets.sort()).toEqual([...publicGetRoutes,
+    '/v1/resources/:resource/continuities',
     '/v1/compositions/:id/stages/:stage',
     '/v1/compositions/:id/occurrences/:occurrence/progress',
   ].sort());
@@ -95,5 +96,5 @@ test('G-829 class guard: the complete lexicon GET inventory permits optional bea
     .map(route => route.path.replace(/:([a-z]+)/g, '{$1}')).sort();
   expect(gets).toEqual(Object.keys(lexiconOperations).sort());
   for (const operation of Object.values(lexiconOperations)) expect(operation.get.bearer).toBe(false);
-  expect(lexiconOperations['/v1/lexicon/presentations'].post).toEqual({ bearer: true, idempotencyKey: true });
+  expect(lexiconOperations['/v1/lexicon/presentations'].post).toEqual({ exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true });
 });

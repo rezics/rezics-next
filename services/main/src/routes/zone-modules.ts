@@ -20,15 +20,15 @@ const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const headers = { 'cache-control': 'no-store' };
 export const openApiOperations = {
-  '/v1/realms/{realm}/modules/new-adoptions': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/recently-completed': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/recent-decisions': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/latest-chapters': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/discussions': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/reader-quotes': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/genres/{context}': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/editor-lists': { get: { bearer: false } },
-  '/v1/realms/{realm}/modules/browse': { get: { bearer: false } },
+  '/v1/realms/{realm}/modules/new-adoptions': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/recently-completed': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/recent-decisions': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/latest-chapters': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/discussions': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/reader-quotes': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/genres/{context}': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/editor-lists': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/browse': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 /** Zone modules are public publications; a stray bearer token cannot widen them. */

@@ -547,3 +547,17 @@ export function packageRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/package-resolutions/npm/{resolution}': { get: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions/npm': { post: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions/cargo/{resolution}': { get: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions/cargo': { post: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions/{resolution}': { get: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions': { post: { exposure: 'platform:developer-extras' } },
+  '/v1/package-resolutions/from-captures': { post: { exposure: 'platform:developer-extras' } },
+  '/v1/package-sources/go-verifications/{verification}': { get: { exposure: 'platform:developer-extras' } },
+  '/v1/package-sources/go/{capture}/verify': { post: { exposure: 'platform:developer-extras' } },
+  '/v1/package-sources/go/{capture}': { get: { exposure: 'platform:developer-extras' } },
+  '/v1/package-sources/go': { post: { exposure: 'platform:developer-extras' } },
+} as const;

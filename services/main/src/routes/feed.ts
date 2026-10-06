@@ -16,15 +16,15 @@ import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/feed': { get: { bearer: false } },
-  '/v1/feed/head': { get: { bearer: false } },
-  '/v1/feed/{id}/vote': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-preferences': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-feedback': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/mutes': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-watermarks/{scope}': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-watermarks': { get: { bearer: true } },
-  '/v1/trending': { get: { bearer: false } },
+  '/v1/feed': { get: { exposure: 'public', bearer: false } },
+  '/v1/feed/head': { get: { exposure: 'public', bearer: false } },
+  '/v1/feed/{id}/vote': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-preferences': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-feedback': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/mutes': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-watermarks/{scope}': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-watermarks': { get: { exposure: 'public', bearer: true } },
+  '/v1/trending': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 const privateQuery = t.Object({ actingSubject: readId }, { additionalProperties: false });

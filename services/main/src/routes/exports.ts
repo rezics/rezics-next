@@ -18,9 +18,9 @@ import { scopedSelectionSchemas } from '../modules/export/scoped.ts';
 import { WikiRevisionSetSchema } from '../modules/wiki/delta.ts';
 
 export const openApiOperations = {
-  '/v1/exports': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/exports/{export}': { get: { bearer: true } },
-};
+  '/v1/exports': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/exports/{export}': { get: { exposure: 'public', bearer: true } },
+} as const;
 
 const position = t.Object({ dataEpoch: t.String({ minLength: 1, maxLength: 100 }),
   sequence: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) }, { additionalProperties: false });

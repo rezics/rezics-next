@@ -198,3 +198,13 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
     .use(quotaRoutes(work))
     .use(fixedSiteRoutes(fuseki, work));
 }
+
+export const openApiOperations = {
+  '/v1/subscriptions/{subscriptionId}': { get: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/benefits': { get: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/gifts': { post: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/reconciliations': { post: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/settlements': { post: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/changes': { post: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/quotes': { post: { exposure: 'platform:commerce' } },
+} as const;

@@ -281,3 +281,15 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/access/revocations/{revocationId}': { get: { exposure: 'public' } },
+  '/v1/access/revocations': { post: { exposure: 'public' } },
+  '/v1/access/interaction-decisions': { post: { exposure: 'public' } },
+  '/v1/access/interaction-blocks': { post: { exposure: 'public' } },
+  '/v1/me/interaction-mutes': { get: { exposure: 'public' }, put: { exposure: 'public' } },
+  '/v1/access/policy-decision-revalidations': { post: { exposure: 'public' } },
+  '/v1/access/policy-decisions': { post: { exposure: 'public' } },
+  '/v1/access/policies/{policyId}/revisions/{revision}': { get: { exposure: 'public' } },
+  '/v1/access/policy-changes': { post: { exposure: 'public' } },
+} as const;

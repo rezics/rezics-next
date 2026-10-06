@@ -20,10 +20,10 @@ const params = t.Object({ id: readUuid });
 const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 export const openApiOperations = {
-  '/v1/works/{id}/metadata': { get: { bearer: false }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/works/{id}/type': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/works/{id}/editions': { get: { bearer: false } },
-  '/v1/works/{id}/editions/{edition}': { get: { bearer: false } },
+  '/v1/works/{id}/metadata': { get: { exposure: 'public', bearer: false }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/type': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/editions': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/editions/{edition}': { get: { exposure: 'public', bearer: false } },
 } as const;
 function metadataError(error: unknown) {
   if (error instanceof InvalidWorkMetadata) return problem(400, 'invalid_work_metadata', error.message);

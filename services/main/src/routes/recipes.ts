@@ -102,15 +102,15 @@ const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingS
   { additionalProperties: false });
 
 export const openApiOperations = {
-  '/v1/recipes/works/{id}': { get: { bearer: false } },
-  '/v1/recipes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/recipes/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/recipes/{id}/measures': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
-  '/v1/recipes/{id}': { get: { bearer: true } },
-  '/v1/recipes/{id}/scalings': { post: { bearer: true } },
-  '/v1/recipes/{id}/imports': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/recipes/{id}/exports/schema-org': { get: { bearer: true } },
-  '/v1/recipes/nutrition': { post: { bearer: true } },
+  '/v1/recipes/works/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/recipes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/measures': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: true } },
+  '/v1/recipes/{id}': { get: { exposure: 'public', bearer: true } },
+  '/v1/recipes/{id}/scalings': { post: { exposure: 'public', bearer: true } },
+  '/v1/recipes/{id}/imports': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/recipes/{id}/exports/schema-org': { get: { exposure: 'public', bearer: true } },
+  '/v1/recipes/nutrition': { post: { exposure: 'public', bearer: true } },
 } as const;
 
 function key(request: Request): string | null {

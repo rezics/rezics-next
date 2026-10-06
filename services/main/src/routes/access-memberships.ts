@@ -636,3 +636,24 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/access/private-role-binding-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/private-group-member-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/private-membership-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/me/private-memberships': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/me/private-membership-consent-revocations': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/me/private-membership-consents': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/me/selected-org-membership-changes': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/access/selected-org-membership-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/eligible-org-member-set-grants/{grantId}': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/access/eligible-org-member-set-grant-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/represented-org-membership-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/represented-org-grant-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/represented-org-mandate-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/represented-org-membership-requests/{requestId}': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/me/represented-org-membership-requests': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/membership-changes': { post: { exposure: 'public' } },
+  '/v1/me/membership-consent-revocations': { post: { exposure: 'public' } },
+  '/v1/me/membership-consents': { post: { exposure: 'public' } },
+} as const;

@@ -13,12 +13,12 @@ export const REPORT_SCOPE = 'governance:report';
 export const MODERATION_SCOPE = 'governance:decide';
 
 export const openApiOperations = {
-  '/v1/governance/rules': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/governance/rule-queries': { post: { bearer: true } },
-  '/v1/reports': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/reports/{report}': { get: { bearer: true } },
-  '/v1/moderation/decisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/governance/process-steps': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/governance/rules': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/governance/rule-queries': { post: { exposure: 'public', bearer: true } },
+  '/v1/reports': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/reports/{report}': { get: { exposure: 'public', bearer: true } },
+  '/v1/moderation/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/governance/process-steps': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 export function requireGovernanceKey(request: Request, key: string): Response | null {

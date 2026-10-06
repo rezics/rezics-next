@@ -12,22 +12,22 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/claims': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}': { get: { bearer: true } },
-  '/v1/source-reliability-assessments': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/assessments': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/assessments/{assessment}': { get: { bearer: true } },
-  '/v1/claims/{claim}/evidence': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/evidence/{revision}': { get: { bearer: true } },
-  '/v1/claims/{claim}/challenges': { post: { bearer: true, idempotencyKey: true }, get: { bearer: true } },
-  '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/corrections': { get: { bearer: true } },
-  '/v1/claims/{claim}/correction-subscriptions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/verification/origins': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/lineage': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/disposition': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/verification/lineage/{edge}/retraction': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/derivation': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/claims': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/source-reliability-assessments': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments/{assessment}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/evidence': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/evidence/{revision}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/challenges': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true }, get: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/corrections': { get: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/correction-subscriptions': { post: { exposure: 'platform:update-subscriptions', bearer: true, idempotencyKey: true } },
+  '/v1/verification/origins': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/lineage': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/disposition': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/verification/lineage/{edge}/retraction': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/derivation': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
 } as const;
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });

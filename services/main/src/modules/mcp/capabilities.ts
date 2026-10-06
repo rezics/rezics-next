@@ -6,6 +6,8 @@ export interface Capability {
 }
 
 export interface HttpOperation {
+  operationId?: string;
+  'x-rezics-exposure'?: import('../access/exposure.ts').Exposure;
   parameters?: Array<{ name: string; in: string; required?: boolean; schema?: Record<string, unknown>;
     style?: string; explode?: boolean }>;
   requestBody?: { required?: boolean; content?: Record<string, { schema?: Record<string, unknown> }> };

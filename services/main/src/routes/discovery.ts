@@ -13,15 +13,15 @@ import { RecommendationMissing, RecommendationRestart, RecommendationUnavailable
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/discovery/concepts': { get: { bearer: false } },
-  '/v1/discovery/sections': { get: { bearer: false } },
-  '/v1/works': { get: { bearer: false } },
-  '/v1/discovery/popular-terms': { get: { bearer: false } },
-  '/v1/discovery/generation-builds': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/discovery/generations/{generation}': { get: { bearer: true } },
-  '/v1/discovery/generations/{generation}/advance': { post: { bearer: true } },
-  '/v1/discovery/generations/{generation}/cancel': { post: { bearer: true } },
-  '/v1/discovery/generation-activations': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/discovery/concepts': { get: { exposure: 'public', bearer: false } },
+  '/v1/discovery/sections': { get: { exposure: 'public', bearer: false } },
+  '/v1/works': { get: { exposure: 'public', bearer: false } },
+  '/v1/discovery/popular-terms': { get: { exposure: 'public', bearer: false } },
+  '/v1/discovery/generation-builds': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/discovery/generations/{generation}': { get: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/discovery/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/discovery/generations/{generation}/cancel': { post: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/discovery/generation-activations': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
 } as const;
 
 /** Phrase-free discovery over a separately built, admitted population. */

@@ -164,6 +164,8 @@ async function measure(dimension: string, scale: string, operation: string, path
     (principal_id,role,receipt,request_digest,idempotency_key)
     VALUES ($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
   [home.author.principalId,`urn:rezics:access-receipt:${administratorDigest}`,administratorDigest]);
+  await stack.accessPool.query(`SELECT access.seed_platform_grants(principal_id,receipt)
+    FROM access.platform_administrator WHERE singleton`);
   const community = await createRealm('g1026:community');
   await join(community.realm, 'g1026:community:join');
   const root = `/v1/realms/${community.realm.slice(-36)}` as const;

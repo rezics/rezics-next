@@ -12,18 +12,18 @@ import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
 export const openApiOperations = {
-  '/v1/package-locks': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/package-locks/{lock}': { get: { bearer: true } },
-  '/v1/package-locks/{lock}/replays': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/package-lock-replays/{replay}': { get: { bearer: true } },
-  '/v1/package-artifacts/revocations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/package-installations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/package-installations/{installation}': { get: { bearer: true } },
+  '/v1/package-locks': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/package-locks/{lock}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+  '/v1/package-locks/{lock}/replays': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/package-lock-replays/{replay}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+  '/v1/package-artifacts/revocations': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/package-installations': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/package-installations/{installation}': { get: { exposure: 'platform:developer-extras', bearer: true } },
   '/v1/package-installations/{installation}/generations': {
-    post: { bearer: true, idempotencyKey: true },
+    post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true },
   },
-  '/v1/package-installations/{installation}/generations/{generation}': { get: { bearer: true } },
-  '/v1/package-installations/{installation}/generations/{generation}/apply': { post: { bearer: true } },
+  '/v1/package-installations/{installation}/generations/{generation}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+  '/v1/package-installations/{installation}/generations/{generation}/apply': { post: { exposure: 'platform:developer-extras', bearer: true } },
 } as const;
 
 const sha256 = t.String({ pattern: '^[0-9a-f]{64}$' });

@@ -74,7 +74,8 @@ export class CatalogueIntakeStore {
         WHERE id = 'catalogue:verify:root' AND open AND dispatch_open FOR SHARE`)).rowCount === 1;
       const qualified = administratorGate
         && !(await client.query("SELECT id FROM access.policy WHERE scope_id = 'catalogue:verify:root'")).rowCount
-        && !!await platformAdministratorProof(client, admission.principalId, admission.actingSubject)
+        && !!await platformAdministratorProof(client, admission.principalId, admission.actingSubject,true,
+          { action: 'catalogue.verify',scope: 'catalogue:verify:root' })
         || (await client.query(`SELECT g.id FROM access.permission_grant g
         JOIN access.scope_gate s ON s.id = g.scope_id AND s.open AND s.dispatch_open
         JOIN access.authority_subject a ON a.id = g.recipient_subject AND a.active

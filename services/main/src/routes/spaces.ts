@@ -13,7 +13,8 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/spaces': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/spaces': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/spaces/{space}': { get: { exposure: 'public' } },
 } as const;
 
 const spaceCreateFields = {

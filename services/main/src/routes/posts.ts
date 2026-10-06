@@ -7,7 +7,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 const label = t.Object({ value: t.String(), language: t.String() });
 const placement = t.Object({ book: readId, occurrence: readId });
-export const openApiOperations = { '/v1/posts/{id}': { get: { bearer: true } } } as const;
+export const openApiOperations = { '/v1/posts/{id}': { get: { exposure: 'public', bearer: true } } } as const;
 
 export function postRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/posts/:id', {

@@ -39,7 +39,7 @@ const pageSchema = t.Object({
   nextCursor: t.Nullable(t.String()),
   complete: t.Boolean(),
 });
-export const openApiOperations = { '/v1/me/memberships': { get: { bearer: true } } } as const;
+export const openApiOperations = { '/v1/me/memberships': { get: { exposure: 'public', bearer: true } } } as const;
 export function membershipsRoutes(work: MainWorkDependencies) {
   return new Elysia().get(
     '/v1/me/memberships',

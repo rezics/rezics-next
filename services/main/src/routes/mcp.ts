@@ -6,6 +6,8 @@ import { operationTools, type CapabilityDeclarations, type CapabilityDocument } 
 import { dispatchTool, type HttpDispatch } from '../modules/mcp/dispatch.ts';
 import { mcpBody } from '../modules/mcp/body.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
+import { anonymousPlatformAccess, exposureAllows } from '../modules/access/exposure.ts';
+import { exposureOperationId } from '../modules/access/exposure-routes.ts';
 
 /** Initial toolkit bindings live here while their route owners are concurrently claimed.
  * Discovery still checks the operation exists and uses its generated runtime schema. */
@@ -29,7 +31,7 @@ export interface McpConfig { issuer: string; resource: string }
 const installedContract = () => JSON.parse(readFileSync(new URL('../../../../generated/openapi/main/public.json',
   import.meta.url), 'utf8')) as CapabilityDocument;
 
-export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, dispatch: HttpDispatch,
+export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp' | 'platformAccess'>, dispatch: HttpDispatch,
   contract: () => CapabilityDocument = installedContract) {
   const config = work.mcp;
   if (!config) return new Elysia();
@@ -42,9 +44,13 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, d
     scopes_supported: scopes(), bearer_methods_supported: ['header'] }, { headers: { 'cache-control': 'no-store' } });
   const handler = createMcpHandler(({ requestInfo }) => {
     const server = new Server({ name: 'rezics', version: '1.0.0' }, { capabilities: { tools: {} } });
-    server.setRequestHandler('tools/list', ({ params }) => {
+    server.setRequestHandler('tools/list', async ({ params }) => {
       if (params?.cursor) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Tool inventory has no continuation');
-      return { tools: tools().map(({ name, title, description, inputSchema }) =>
+      const principal = await work.account.verify(requestInfo!, []);
+      const viewer = work.platformAccess ? await work.platformAccess.summary(principal) : anonymousPlatformAccess();
+      return { tools: tools().filter(tool => exposureAllows(tool.operation['x-rezics-exposure'],
+        tool.operation.operationId ?? exposureOperationId(tool.method, tool.path), viewer))
+        .map(({ name, title, description, inputSchema }) =>
         ({ name, title, description, inputSchema: inputSchema as Tool['inputSchema'] })) };
     });
     server.setRequestHandler('tools/call', async ({ params }) => {
@@ -83,3 +89,9 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, d
     .get('/.well-known/oauth-protected-resource/mcp', { detail: { hide: true } }, metadata)
     .get('/.well-known/oauth-protected-resource', { detail: { hide: true } }, metadata);
 }
+
+export const openApiOperations = {
+  '/.well-known/oauth-protected-resource': { get: { exposure: 'public' } },
+  '/.well-known/oauth-protected-resource/mcp': { get: { exposure: 'public' } },
+  '/mcp': { all: { exposure: 'public' } },
+} as const;

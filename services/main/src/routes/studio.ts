@@ -15,11 +15,11 @@ import { compositionError } from './compositions.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/me/agents/{agent}/works': { get: { bearer: true } },
-  '/v1/me/agents/{agent}/works/{id}': { get: { bearer: true } },
-  '/v1/me/agents/{agent}/works/{id}/chapters': { get: { bearer: true } },
-  '/v1/works/{id}/content-variants': { get: { bearer: true } },
-  '/v1/works/{id}/chapters': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/agents/{agent}/works': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/agents/{agent}/works/{id}': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/agents/{agent}/works/{id}/chapters': { get: { exposure: 'public', bearer: true } },
+  '/v1/works/{id}/content-variants': { get: { exposure: 'public', bearer: true } },
+  '/v1/works/{id}/chapters': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 const text = t.Object({ contribution: readId, language: t.String(), draftHead: readId,

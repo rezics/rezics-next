@@ -18,6 +18,50 @@ response rather than disclosing hidden existence. Exact Content revision reads
 are covered by the route schema and owner tests, including current disclosure,
 verified historical bytes and private uncached responses.
 
+## Platform exposure
+
+Every Main operation declares `exposure` in its route module's
+`openApiOperations`: `public` or `platform:<group>`. A missing declaration
+fails generation and is closed at runtime, including health, OAuth discovery,
+MCP transport and WebSocket upgrades. Public exposure leaves authentication,
+resource authority and recovery checks in place.
+
+A closed operation requires an ordinary Access grant `platform:use:<group>`
+or `platform:use:<operationId>`. The platform gate runs before its handler;
+the resource authority check must also pass. Refusals use a 403 Problem Details
+response with code `platform_closed`. Opening a group is a reviewed change to
+its route declarations, without changing a code path or a feature flag.
+
+Generic operations bind exposure after the server resolves a template, profile,
+command, export source, owner kind or block type. Their owners call
+`requireSelectedPlatformCapability` with that selection; a caller's declared
+field cannot open the selected capability. This includes closed query templates,
+historical exports, generic semantic/content/relation edits, adoptable
+Person-owned contexts and third-party Zone blocks.
+
+`GET /v1/me/platform-access` works without a bearer and returns
+`{ groups: string[], operations: string[], generation: string }` with
+`cache-control: private, no-store`. Anonymous viewers receive empty lists;
+individual operation grants are bounded to 64. Generated OpenAPI carries
+`x-rezics-exposure`, and the generated TypeScript exposure SDK carries the same
+declarations. An operation is open when it is public, its group appears in the
+viewer summary, or its operation ID appears there. MCP discovery omits closed
+tools; calls still dispatch through the gated HTTP operation.
+
+Platform grants use the existing direct-principal and group grant tables with
+immutable episodes, expiry and receipts. The existing grant routes accept
+`platform-grant-change-v1` for changes and `platform-grants-v1` or
+`platform-grant-v1` for reads. `platform:grant` permits assignment and revocation
+within the issuer's `access.grant.assign.platform` ceiling. At least one
+permanent direct holder remains, so expiry or principal deactivation cannot
+remove the final governance authority. Administrator resource permissions are
+separate `platform:resource:<action>` grants with exact scopes or scoped resource
+families. Their assignment also needs the corresponding ordinary resource
+assignment ceiling; platform access alone grants no resource authority.
+
+Account routes are the identity foundation and stay open. A non-foundation
+Account capability needs a platform gate before it ships.
+
 ## Contracts still requiring profiles and tests
 
 - Preserve omitted, null and empty values separately, plus exact numeric strings,

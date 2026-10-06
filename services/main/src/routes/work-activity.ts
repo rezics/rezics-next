@@ -12,8 +12,8 @@ const detail: { security: Record<string, string[]>[] } = { security: [{}, { bear
 const headers = { 'cache-control': 'private, no-store' };
 
 export const openApiOperations = {
-  '/v1/resources/{resource}/discussion': { get: { bearer: false } },
-  '/v1/works/{id}/history': { get: { bearer: false } },
+  '/v1/resources/{resource}/discussion': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/history': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function workActivityRoutes(work: MainWorkDependencies) {

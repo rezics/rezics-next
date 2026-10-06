@@ -11,11 +11,11 @@ import { workRead } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/hub/works/{id}': { get: { bearer: false } },
-  '/v1/hub/imports': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/hub/imports/{import}': { get: { bearer: true } },
-  '/v1/prompts/revisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/prompts/revisions/{revision}': { get: { bearer: true } },
+  '/v1/hub/works/{id}': { get: { exposure: 'platform:developer-extras', bearer: false } },
+  '/v1/hub/imports': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/hub/imports/{import}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+  '/v1/prompts/revisions': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/prompts/revisions/{revision}': { get: { exposure: 'platform:developer-extras', bearer: true } },
 } as const;
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });

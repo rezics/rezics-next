@@ -39,8 +39,10 @@ const semanticBulkWrite = t.Object({ profile: t.Literal(STAGE_PROFILE), stageId:
   items: t.Array(t.Object({ component: native, revision: native })), replayed: t.Boolean() });
 
 export const openApiOperations = {
-  '/v1/semantic/changes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/semantic/changes/bulk': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/semantic/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/semantic/changes/bulk': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/semantic/resources/{id}/revisions/{revision}': { get: { exposure: 'public' } },
+  '/v1/semantic/resources/{id}': { get: { exposure: 'public' } },
 } as const;
 
 /** Typed semantic outcomes; everything else uses the shared command problem map. */

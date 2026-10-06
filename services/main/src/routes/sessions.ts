@@ -18,8 +18,8 @@ const conflict = t.Object({ ...problemResult(409).properties,
   submitted: t.Optional(t.Object({ expectedVersion: command.expectedVersion, ...sessionChanges })) });
 const errors = { ...workReadProblems, 409: conflict };
 export const openApiOperations = {
-  '/v1/me/sessions': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/sessions/{id}': { patch: { bearer: true, idempotencyKey: true } },
+  '/v1/me/sessions': { get: { exposure: 'public', bearer: true }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/sessions/{id}': { patch: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown): Response {

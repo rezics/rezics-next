@@ -158,14 +158,14 @@ export const relationRenderingSchema = t.Object({
 });
 
 export const openApiOperations = {
-  '/v1/lexicon/definitions': { get: { bearer: false } },
-  '/v1/lexicon/definitions/{key}': { get: { bearer: false } },
+  '/v1/lexicon/definitions': { get: { exposure: 'public', bearer: false } },
+  '/v1/lexicon/definitions/{key}': { get: { exposure: 'public', bearer: false } },
   '/v1/lexicon/presentations': {
-    get: { bearer: false },
-    post: { bearer: true, idempotencyKey: true },
+    get: { exposure: 'public', bearer: false },
+    post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true },
   },
-  '/v1/lexicon/presentations/{id}': { get: { bearer: false } },
-  '/v1/lexicon/presentations/{id}/revisions/{revision}': { get: { bearer: false } },
+  '/v1/lexicon/presentations/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/lexicon/presentations/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {

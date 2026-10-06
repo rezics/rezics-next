@@ -15,20 +15,20 @@ import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPa
   ownJoinRequestQuery, ownJoinRequestPage } from '../modules/realm-admin/join-requests.ts';
 
 export const openApiOperations = {
-  '/v1/realms/{realm}/join-requests/mine': { get: { bearer: true } },
-  '/v1/realms/{realm}/join-requests/{request}/withdraw': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/join-requests/{request}/decisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/join-requests/basis': { get: { bearer: true } },
-  '/v1/realms/{realm}/join-requests': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/spaces/{space}/settings': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/management': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/members': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations': { get: { bearer: true } },
-  '/v1/realms/{realm}/roles': { get: { bearer: true } },
-  '/v1/realms/{realm}/role-impact': { post: { bearer: true } },
-  '/v1/realms/{realm}/role-changes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/escalations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/settings': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/join-requests/mine': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/join-requests/{request}/withdraw': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/join-requests/{request}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/join-requests/basis': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/join-requests': { get: { exposure: 'public', bearer: true }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/spaces/{space}/settings': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/management': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/members': { get: { exposure: 'public', bearer: true }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/roles': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/role-impact': { post: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/role-changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/escalations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/settings': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 const params = t.Object({ realm: readUuid });
 const query = t.Object({ actingSubject: readId }, { additionalProperties: false });

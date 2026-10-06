@@ -12,10 +12,10 @@ import { problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/public-reports': { post: { bearer: false, idempotencyKey: true } },
-  '/v1/public-reports/mine': { get: { bearer: true } },
-  '/v1/public-reports/{caseId}': { get: { bearer: false } },
-  '/v1/public-reports/{caseId}/correspondence': { post: { bearer: false, idempotencyKey: true } },
+  '/v1/public-reports': { post: { exposure: 'public', bearer: false, idempotencyKey: true } },
+  '/v1/public-reports/mine': { get: { exposure: 'public', bearer: true } },
+  '/v1/public-reports/{caseId}': { get: { exposure: 'public', bearer: false } },
+  '/v1/public-reports/{caseId}/correspondence': { post: { exposure: 'public', bearer: false, idempotencyKey: true } },
 } as const;
 const caseParams = t.Object({ caseId: t.String({ format: 'uuid' }) });
 const cursorQuery = t.Object({ cursor: t.Optional(t.String({ format: 'uuid' })) }, { additionalProperties: false });

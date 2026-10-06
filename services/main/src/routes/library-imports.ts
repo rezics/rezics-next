@@ -21,12 +21,12 @@ const closed = { additionalProperties: false };
 const errors = Object.fromEntries([400,401,403,404,409,422,503].map(status => [status,problemResult(status)]));
 const base = '/v1/me/library-imports';
 export const openApiOperations = {
-  '/v1/me/library-imports': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}': { delete: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}/rows': { get: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}/rows/{row}': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}/apply': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}': { delete: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}/rows': { get: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}/rows/{row}': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}/apply': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 export const capabilities = {
   '/v1/me/library-imports/{id}': { delete: { disposition: 'supported', mcp: { tool: 'library_import_delete', title: 'Delete an uploaded library file',

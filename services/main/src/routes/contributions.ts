@@ -174,3 +174,11 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/contributions/{contribution}/drafts/{revision}': { get: { exposure: 'public' } },
+  '/v1/contributions': { post: { exposure: 'public' } },
+  '/v1/contribution-edits': { post: { exposure: 'public' } },
+  '/v1/contribution-publications': { post: { exposure: 'public' } },
+  '/v1/contributions/{contribution}': { get: { exposure: 'public' } },
+} as const;

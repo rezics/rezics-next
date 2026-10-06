@@ -14,8 +14,8 @@ import { wikiRead } from '../modules/wiki/read.ts';
 import { WikiRejected } from '../modules/wiki/errors.ts';
 
 export const openApiOperations = {
-  '/v1/wiki/candidates': { post: { bearer: true } },
-  '/v1/wiki/validations': { post: { bearer: true } },
+  '/v1/wiki/candidates': { post: { exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/wiki/validations': { post: { exposure: 'platform:wiki-agents', bearer: true } },
 } as const;
 export const capabilities = {
   '/v1/wiki/candidates': { post: { disposition: 'supported', mcp: { tool: 'wiki_candidates',

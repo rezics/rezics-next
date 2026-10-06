@@ -323,7 +323,7 @@ export async function readReferenceDisclosure(
       works = eligible('work:read:');
     if (!semantic.length && !works.length) return allowed;
     const administrator = semantic.length
-      ? !!(await platformAdministratorProof(access, identity.id, actor))
+      ? !!(await platformAdministratorProof(access, identity.id, actor,true,{ action: 'semantic.read',scope: 'semantic:read:*' }))
       : false;
     const member =
       principal.emailVerified === true && !!(await baselineMemberProof(access, identity.id, actor));

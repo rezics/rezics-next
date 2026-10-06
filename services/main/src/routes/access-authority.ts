@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { PlatformGrantDenied, PlatformGrantStale, PlatformGrantConflict, PlatformGrantUnavailable }
+  from '../modules/access/platform-grants.ts';
 import { GROUP_SCOPE } from '../modules/access/groups.ts';
 import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
 import { OrgRealmUnavailable } from '../modules/access/org-realm-authority.ts';
@@ -89,7 +91,7 @@ const grantReadResult = t.Object({ profile: t.Literal('work-create-agent-grant-v
 const grantChangeCommon = { profile: t.Literal('work-create-agent-grant-change-v1'),
   issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration };
 
-const grantChangeBody = t.Union([
+const workGrantChangeBody = t.Union([
   t.Object({ ...grantChangeCommon, action: t.Literal('create'),
     grantId: groupUuid, recipientSubject: groupAgent,
     validUntil: t.String({ format: 'date-time' }),
@@ -105,6 +107,37 @@ const grantChangeResult = t.Object({ profile: t.Literal('work-create-agent-grant
   action: t.Union([t.Literal('create'), t.Literal('revoke')]),
   authorityEpoch: groupGeneration });
 
+const platformRecipient = t.Union([
+  t.Object({ principalId: groupUuid }, { additionalProperties: false }),
+  t.Object({ groupId: groupUuid }, { additionalProperties: false }),
+]);
+const platformGrant = t.Object({ id: groupUuid, issuerSubject: groupAgent,
+  permission: t.String({ minLength: 1, maxLength: 128 }), scopeId: t.String({ minLength: 1, maxLength: 256 }),
+  recipient: platformRecipient, validUntil: t.Nullable(t.String({ format: 'date-time' })),
+  active: t.Boolean(), generation: groupGeneration, receipt: t.String() });
+const platformGrantChangeCommon = { profile: t.Literal('platform-grant-change-v1'),
+  issuerSubject: groupAgent, expectedAuthorityEpoch: groupGeneration, grantId: groupUuid };
+const platformGrantChangeBody = t.Union([
+  t.Object({ ...platformGrantChangeCommon, action: t.Literal('create'), permission: t.String({ minLength: 1, maxLength: 128 }),
+    recipient: platformRecipient, validUntil: t.Nullable(t.String({ format: 'date-time' })),
+    scopeId: t.Optional(t.String({ minLength: 1, maxLength: 256 })) }, { additionalProperties: false }),
+  t.Object({ ...platformGrantChangeCommon, action: t.Literal('revoke'), expectedObjectGeneration: groupGeneration },
+    { additionalProperties: false }),
+]);
+const grantChangeBody = t.Union([workGrantChangeBody, platformGrantChangeBody]);
+const platformGrantResult = t.Object({ profile: t.Literal('platform-grant-v1'), authorityEpoch: groupGeneration, grant: platformGrant });
+const platformGrantPage = t.Object({ profile: t.Literal('platform-grants-v1'), authorityEpoch: groupGeneration,
+  grants: t.Array(platformGrant, { maxItems: 50 }), nextCursor: t.Nullable(groupUuid) });
+const platformGrantChangeResult = t.Object({ profile: t.Literal('platform-grant-change-v1'),
+  authorityEpoch: groupGeneration, grant: platformGrant });
+const grantError = (error: unknown) => {
+  if (error instanceof PlatformGrantDenied) return problem(403, 'grant_denied', error.message);
+  if (error instanceof PlatformGrantStale) return problem(409, 'grant_stale', error.message);
+  if (error instanceof PlatformGrantConflict) return problem(409, 'idempotency_conflict', error.message);
+  if (error instanceof PlatformGrantUnavailable) return problem(503, 'grant_unavailable', error.message);
+  return commandError(error);
+};
+
 const orgContentDraftGrantBody = t.Object({
   profile: t.Literal('access-organization-content-draft-grant-change-v1'),
   organizationSubject: groupAgent, recipientSubject: groupAgent, grantId: groupUuid,
@@ -118,7 +151,23 @@ const orgContentDraftGrantResult = t.Object({
 });
 
 export const openApiOperations = {
-  '/v1/access/organization-content-draft-grants': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/access/organization-content-draft-grants': { post: { exposure: 'platform:organization-authority', bearer: true, idempotencyKey: true } },
+  '/v1/access/org-realm-participation': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/access/org-realm-moves': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/org-realm-changes': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/org-realm-proposals': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/organization-roster-policy': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/managed-organization-grants': { post: { exposure: 'platform:organization-authority' } },
+  '/v1/access/managed-organization-grants/{grantId}': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/access/organization-management': { get: { exposure: 'platform:organization-authority' } },
+  '/v1/access/grant-changes': { post: { exposure: 'public' } },
+  '/v1/access/grants/{grantId}': { get: { exposure: 'public' } },
+  '/v1/access/grants': { get: { exposure: 'public' } },
+  '/v1/access/group-impact-approvals': { post: { exposure: 'public' } },
+  '/v1/access/group-impact-proposals/{proposalId}': { get: { exposure: 'public' } },
+  '/v1/access/group-impact-proposals': { post: { exposure: 'public' } },
+  '/v1/access/group-changes': { post: { exposure: 'public' } },
+  '/v1/access/group-scope': { get: { exposure: 'public' } },
 } as const;
 
 const orgRealmTuple = { realm: groupAgent, organizationSubject: groupAgent };
@@ -288,34 +337,40 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     })
     .get('/v1/access/grants', {
-      query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid) },
+      query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid), profile: t.Optional(t.Literal('platform-grants-v1')) },
         { additionalProperties: false }),
-      response: { 200: grantPageResult, ...authorizedReadProblems },
+      response: { 200: t.Union([grantPageResult,platformGrantPage]), ...authorizedReadProblems },
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
         if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        if (query.profile === 'platform-grants-v1') return Response.json({ profile: query.profile,
+          ...await work.grants.platform.readPage(principal,query.issuerSubject,query.after) },
+          { headers: { 'cache-control': 'private, no-store' } });
         const page = await work.grants.readPage(principal, query.issuerSubject, query.after);
         return Response.json({ profile: 'work-create-agent-grants-v1', ...page },
         { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return grantError(error); }
     })
     .get('/v1/access/grants/:grantId', {
       params: t.Object({ grantId: groupUuid }),
-      query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: grantReadResult, ...authorizedReadProblems },
+      query: t.Object({ issuerSubject: groupAgent, profile: t.Optional(t.Literal('platform-grant-v1')) }, { additionalProperties: false }),
+      response: { 200: t.Union([grantReadResult,platformGrantResult]), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
         if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
+        if (query.profile === 'platform-grant-v1') return Response.json({ profile: query.profile,
+          ...await work.grants.platform.readOne(principal,query.issuerSubject,params.grantId) },
+          { headers: { 'cache-control': 'private, no-store' } });
         const grant = await work.grants.readOne(principal, query.issuerSubject, params.grantId);
         return Response.json({ profile: 'work-create-agent-grant-v1', ...grant },
         { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return grantError(error); }
     })
     .post('/v1/access/grant-changes', {
       body: grantChangeBody,
-      response: { 200: grantChangeResult, ...writeProblems },
+      response: { 200: t.Union([grantChangeResult,platformGrantChangeResult]), ...writeProblems },
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -327,6 +382,13 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
         const context = { principal, issuerSubject: body.issuerSubject,
           expectedAuthorityEpoch: body.expectedAuthorityEpoch };
         const receipt = { idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) };
+        if (body.profile === 'platform-grant-change-v1') {
+          const result = body.action === 'create'
+            ? await work.grants.platform.create(context,body.grantId,body.permission,body.recipient,
+              body.validUntil === null ? null : new Date(body.validUntil),receipt,body.scopeId)
+            : await work.grants.platform.revoke(context,body.grantId,body.expectedObjectGeneration,receipt);
+          return Response.json({ profile: body.profile, ...result }, { headers: { 'cache-control': 'private, no-store' } });
+        }
         const authorityEpoch = body.action === 'create'
           ? await work.grants.create(context, body.grantId, body.recipientSubject,
             new Date(body.validUntil), receipt, body.membershipDependency)
@@ -335,7 +397,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
         return Response.json({ profile: 'work-create-agent-grant-change-v1',
           action: body.action, authorityEpoch },
         { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return grantError(error); }
     })
     .post('/v1/access/organization-content-draft-grants', {
       body: orgContentDraftGrantBody,

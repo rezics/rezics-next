@@ -9,7 +9,7 @@ import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
 export const openApiOperations = {
-  '/v1/hub/revisions/{revision}/dependencies': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/hub/revisions/{revision}/dependencies': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
 } as const;
 
 const segment = t.Object({ ecosystem: t.Union([t.Literal('npm'), t.Literal('cargo'), t.Literal('go')]),

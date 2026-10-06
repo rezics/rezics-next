@@ -96,7 +96,8 @@ export class SuitabilityStore {
         try {
           const owner = await requirePrincipal(client, reader.principal);
           await lockGate(client, PLATFORM_SCOPE, false);
-          if (!await platformAdministratorProof(client, owner.id, reader.actingSubject)) {
+          if (!await platformAdministratorProof(client, owner.id, reader.actingSubject,true,
+            { action: PLATFORM_ACTION,scope: PLATFORM_SCOPE })) {
             await requireMandate(client, owner.id, reader.actingSubject, PLATFORM_ACTION);
             await requireCeiling(client, reader.actingSubject, PLATFORM_ACTION, undefined, PLATFORM_SCOPE);
           }
@@ -199,7 +200,8 @@ export class SuitabilityStore {
     return controlTransaction(this.pool, async (client) => {
       const owner = await requirePrincipal(client, principal);
       const authorityEpoch = await lockGate(client, PLATFORM_SCOPE, false);
-      const administrator = await platformAdministratorProof(client, owner.id, input.actingSubject);
+      const administrator = await platformAdministratorProof(client, owner.id, input.actingSubject,true,
+        { action: PLATFORM_ACTION,scope: PLATFORM_SCOPE });
       if (administrator) {
         const target = await resolve();
         const lease = (await client.query<{ valid_until: Date }>(

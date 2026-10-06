@@ -1,3 +1,4 @@
+import { AccessExposure } from './modules/access/exposure.ts';
 import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { RequiredMediaMatchWorker } from './modules/media-screen/required-match-worker.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from './modules/media-screen/required-matcher.ts';
@@ -501,6 +502,7 @@ const app = createMainApp(fuseki, {
   sessionAgents: new AccessSessionAgents(pool, actingContextDiscovery),
   groups: new AccessGroups(pool),
   grants: new AccessGrants(pool),
+  platformAccess: new AccessExposure(pool),
   memberships: new AccessMemberships(pool),
   membershipConsents: new AccessMembershipConsents(pool),
   orgRealmParticipation: new AccessOrgRealmParticipation(pool),

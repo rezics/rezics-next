@@ -281,3 +281,15 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/access/role-bindings': { post: { exposure: 'public' }, get: { exposure: 'public' } },
+  '/v1/access/role-bindings/{bindingId}': { get: { exposure: 'public' } },
+  '/v1/access/roles/{familyId}': { get: { exposure: 'public' } },
+  '/v1/access/role-revisions': { post: { exposure: 'public' } },
+  '/v1/access/roles': { post: { exposure: 'public' } },
+  '/v1/access/representation-changes': { post: { exposure: 'public' } },
+  '/v1/access/representations/{representationId}': { get: { exposure: 'public' } },
+  '/v1/access/representation-requests/{requestId}': { get: { exposure: 'public' } },
+  '/v1/me/representation-requests': { post: { exposure: 'public' } },
+} as const;

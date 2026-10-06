@@ -1,3 +1,6 @@
+import { bindPlatformExposure } from './modules/access/exposure-routes.ts';
+import { exposureDeclarations } from './modules/access/exposure-declarations.ts';
+import { platformAccessRoutes } from './routes/platform-access.ts';
 import { safetyCaseRoutes } from './routes/safety-cases.ts';
 import { membershipsRoutes } from './routes/memberships.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
@@ -177,6 +180,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(platformAccessRoutes(work))
     .use(new Elysia()
     .use(libraryImportsRoutes(work))
     .use(libraryExportRoutes(work))
@@ -359,7 +363,8 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(extraRoutes5(fuseki, work))
       .use(extraRoutes6(fuseki, work))
       .use(extraRoutes7(fuseki, work))
-      .use(extraRoutes8(fuseki, work));
+      .use(extraRoutes8(fuseki, work))
+      .use(bindPlatformExposure(work, exposureDeclarations));
   }
   return app;
 }

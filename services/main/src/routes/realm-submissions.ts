@@ -28,11 +28,12 @@ function errorResponse(error: unknown) {
   return commandError(error);
 }
 export const openApiOperations = {
-  '/v1/realms/{realm}/submissions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/submissions/{submission}': { get: { bearer: true } },
-  '/v1/realms/{realm}/submissions/{submission}/decisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/submissions/{submission}/withdrawals': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/my/submissions': { get: { bearer: true } },
+  '/v1/realms/{realm}/submissions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/submissions/{submission}': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/submissions/{submission}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/submissions/{submission}/withdrawals': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/my/submissions': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/submitted-publications': { get: { exposure: 'public' } },
 } as const;
 
 export function realmSubmissionRoutes(work: MainWorkDependencies) {

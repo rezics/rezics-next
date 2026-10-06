@@ -21,9 +21,9 @@ const key = (request: Request) => {
 };
 
 export const openApiOperations = {
-  '/v1/realms/{realm}/profile': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/profile': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/moderators/{agent}/public-choice': {
-    put: { bearer: true, idempotencyKey: true },
+    put: { exposure: 'public', bearer: true, idempotencyKey: true },
   },
 } as const;
 

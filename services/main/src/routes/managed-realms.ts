@@ -11,16 +11,16 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/me/managed-realms': { get: { bearer: true } },
-  '/v1/me/realm-invitations': { get: { bearer: true } },
-  '/v1/realms/{realm}/joining': { get: { bearer: true } },
-  '/v1/realms/{realm}/join': { post: { bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations': { post: { bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations/{invitation}/response': { post: { bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations/{invitation}/revoke': { post: { bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/roster': { get: { bearer: false } },
-  '/v1/realms/{realm}/roster/listing': { put: { bearer: true } },
-  '/v1/realms/{realm}/roster/featured': { put: { bearer: true } },
+  '/v1/me/managed-realms': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/realm-invitations': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/joining': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/join': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations/{invitation}/response': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations/{invitation}/revoke': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/roster': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/roster/listing': { put: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/roster/featured': { put: { exposure: 'public', bearer: true } },
 } as const;
 const params = t.Object({ realm: readUuid });
 const actor = t.Object({ actingSubject: readId },{ additionalProperties: false });

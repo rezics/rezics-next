@@ -104,3 +104,12 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       }
     });
 }
+
+export const openApiOperations = {
+  '/health/search-ready': { get: { exposure: 'public' } },
+  '/health/feed-ready': { get: { exposure: 'public' } },
+  '/health/discovery-ready': { get: { exposure: 'public' } },
+  '/health/rating-ready': { get: { exposure: 'public' } },
+  '/health/ready': { get: { exposure: 'public' } },
+  '/health/live': { get: { exposure: 'public' } },
+} as const;

@@ -29,3 +29,7 @@ export function ratingRollupRoutes(work: MainWorkDependencies) {
     }
   });
 }
+
+export const openApiOperations = {
+  '/v1/rating-rollups': { post: { exposure: 'public' } },
+} as const;

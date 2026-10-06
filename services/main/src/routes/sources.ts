@@ -16,14 +16,27 @@ import { requireSourceImportAuthority } from './source-runs.ts';
 
 export const openApiOperations = {
   '/v1/sources/open-library/authors/{author}/name': {
-    get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/identity-changes': { post: { bearer: true } },
-  '/v1/sources/identity-changes/{change}': { get: { bearer: true } },
-  '/v1/sources/identity-corrections': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/identity-corrections/{proposal}': { get: { bearer: true } },
-  '/v1/sources/statistics': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/sources/statistics/{statistic}': { get: { bearer: true } },
-};
+    get: { exposure: 'platform:catalogue-import', bearer: true }, post: { exposure: 'platform:catalogue-import', bearer: true, idempotencyKey: true } },
+  '/v1/sources/identity-changes': { post: { exposure: 'platform:catalogue-import', bearer: true } },
+  '/v1/sources/identity-changes/{change}': { get: { exposure: 'platform:catalogue-import', bearer: true } },
+  '/v1/sources/identity-corrections': { post: { exposure: 'platform:catalogue-import', bearer: true, idempotencyKey: true } },
+  '/v1/sources/identity-corrections/{proposal}': { get: { exposure: 'platform:catalogue-import', bearer: true } },
+  '/v1/sources/statistics': { post: { exposure: 'platform:catalogue-import', bearer: true, idempotencyKey: true } },
+  '/v1/sources/statistics/{statistic}': { get: { exposure: 'platform:catalogue-import', bearer: true } },
+  '/v1/sources/observations/{observation}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/intakes': { post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/acquisitions/open-library/works': { post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/proposals/{proposal}/adoption/native-work': { get: { exposure: 'platform:catalogue-import' }, post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/proposals/{proposal}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/conversions/{conversion}/proposals/native-work': { post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/conversions/{conversion}/source-graph': { get: { exposure: 'platform:catalogue-import' }, post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/correspondences/{correspondence}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/correspondences': { post: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/conversions/{base}/child-correspondences/{candidate}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/conversions/{base}/drift/{candidate}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/conversions/{conversion}': { get: { exposure: 'platform:catalogue-import' } },
+  '/v1/sources/observations/{observation}/conversions/open-library-work': { post: { exposure: 'platform:catalogue-import' } },
+} as const;
 
 const providerIdentityChange = t.Object({ profile: t.Literal('source-record-identity-change-v1'),
   state: t.Literal('recorded'), change: t.String(), kind: t.Union([t.Literal('redirect'), t.Literal('merge')]),

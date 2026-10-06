@@ -15,10 +15,10 @@ import { problem } from './problems.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/me/saved-filters': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/saved-filters/order': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/saved-filters/{id}': { patch: { bearer: true, idempotencyKey: true },
-    delete: { bearer: true, idempotencyKey: true } },
+  '/v1/me/saved-filters': { get: { exposure: 'platform:saved-views', bearer: true }, post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/me/saved-filters/order': { put: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/me/saved-filters/{id}': { patch: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true },
+    delete: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
 } as const;
 
 /** Typed refusals first; everything else is Home's owner error mapping. */

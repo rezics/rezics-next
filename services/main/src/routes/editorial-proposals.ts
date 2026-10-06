@@ -13,14 +13,14 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/editorial/proposals': { post: { bearer: true, idempotencyKey: true }, get: { bearer: false } },
-  '/v1/editorial/proposals/{proposal}': { get: { bearer: false } },
-  '/v1/editorial/proposals/{proposal}/revisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/reviews': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/decisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/withdrawal': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/reversal': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/recovery': { post: { bearer: false } },
+  '/v1/editorial/proposals': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: false } },
+  '/v1/editorial/proposals/{proposal}': { get: { exposure: 'public', bearer: false } },
+  '/v1/editorial/proposals/{proposal}/revisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/reviews': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/withdrawal': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/reversal': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/recovery': { post: { exposure: 'public', bearer: false } },
 } as const;
 
 const uuid = t.String({ format: 'uuid' });

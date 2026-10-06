@@ -13,8 +13,8 @@ import { commandError, problem } from './problems.ts';
 import { problemResult } from '../api-contract.ts';
 
 export const openApiOperations = {
-  '/v1/events/observations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/events/queries': { post: { bearer: true } },
+  '/v1/events/observations': { post: { exposure: 'platform:events', bearer: true, idempotencyKey: true } },
+  '/v1/events/queries': { post: { exposure: 'platform:events', bearer: true } },
 } as const;
 
 export interface EventRouteDependencies { eventQueries?: { query(input: EventQueryInput): Promise<unknown> } }

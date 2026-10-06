@@ -33,12 +33,12 @@ function realmReadError(error: unknown): Response {
 
 // Anonymous public reads; private Realms require a live approved membership.
 export const openApiOperations = {
-  '/v1/realms/{realm}/join-page': { get: { bearer: false } },
-  '/v1/realms/{realm}': { get: { bearer: false } },
-  '/v1/realms/{realm}/works': { get: { bearer: false } },
-  '/v1/realms/{realm}/decisions': { get: { bearer: false } },
-  '/v1/realms/{realm}/decisions/{decision}': { get: { bearer: false } },
-  '/v1/realms/{realm}/zone': { get: { bearer: false } },
+  '/v1/realms/{realm}/join-page': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/works': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/decisions': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/decisions/{decision}': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/zone': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function realmReadRoutes(work: MainWorkDependencies) {

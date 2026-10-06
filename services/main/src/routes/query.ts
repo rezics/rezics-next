@@ -77,7 +77,7 @@ function selection(input: AdmittedQuery, compiled: CompiledQuery, resolvedRevisi
       : compiled.template === 'search' && compiled.concept?.revision ? [compiled.concept.revision] : []) };
 }
 
-export const openApiOperations = { '/v1/query': { post: { bearer: false } } } as const;
+export const openApiOperations = { '/v1/query': { post: { exposure: 'public', bearer: false } } } as const;
 
 async function presentationDigest(work: MainWorkDependencies, request: Request): Promise<string> {
   if (!request.headers.has('authorization')) return createHash('sha256').update('public').digest('hex');

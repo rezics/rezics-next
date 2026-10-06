@@ -21,18 +21,19 @@ import { homeError } from './follows.ts';
 export const NOTIFICATION_SCOPE = 'notification:manage';
 
 export const openApiOperations = {
-  '/v1/me/notifications': { get: { bearer: true } },
-  '/v1/me/notifications/unread-count': { get: { bearer: true } },
-  '/v1/me/notifications/{item}/read': { put: { bearer: true } },
-  '/v1/me/notifications/{item}/triage': { put: { bearer: true } },
-  '/v1/me/proposal-subscriptions/{proposal}': { get: { bearer: true }, put: { bearer: true } },
-  '/v1/me/watches': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/notifications/hint': { get: { bearer: true } },
-  '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
-  '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
-  '/v1/me/notification-preferences': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/notification-endpoints/push': { put: { bearer: true } },
-  '/v1/deliveries/{delivery}': { get: { bearer: true } },
+  '/v1/me/notifications': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/notifications/unread-count': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/notifications/{item}/read': { put: { exposure: 'public', bearer: true } },
+  '/v1/me/notifications/{item}/triage': { put: { exposure: 'public', bearer: true } },
+  '/v1/me/proposal-subscriptions/{proposal}': { get: { exposure: 'platform:update-subscriptions', bearer: true }, put: { exposure: 'platform:update-subscriptions', bearer: true } },
+  '/v1/me/watches': { get: { exposure: 'public', bearer: true }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/notifications/hint': { get: { exposure: 'public', bearer: true } , ws: { exposure: 'public' } },
+  '/v1/me/notification-read-watermarks/inbox': { put: { exposure: 'public', bearer: true } },
+  '/v1/me/notification-streams/inbox/resets': { post: { exposure: 'public', bearer: true } },
+  '/v1/me/notification-preferences': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/notification-endpoints/push': { put: { exposure: 'public', bearer: true } },
+  '/v1/deliveries/{delivery}': { get: { exposure: 'public', bearer: true } },
+  '/v1/notification-providers/{provider}/events': { post: { exposure: 'public' } },
 } as const;
 
 export interface NotificationRouteDependencies {

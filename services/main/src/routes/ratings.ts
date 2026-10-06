@@ -587,3 +587,13 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/rating-contexts/{id}': { get: { exposure: 'public' } },
+  '/v1/rating-contexts/{id}/policy-revisions/{revision}': { get: { exposure: 'public' } },
+  '/v1/rating-contexts/{id}/policy-revisions': { post: { exposure: 'public' } },
+  '/v1/rating-contexts': { post: { exposure: 'public' } },
+  '/v1/rating-observations/{observation}/revisions/{revision}': { get: { exposure: 'public' } },
+  '/v1/rating-observations': { post: { exposure: 'public' } },
+  '/v1/rating-aggregates': { post: { exposure: 'public' } },
+} as const;

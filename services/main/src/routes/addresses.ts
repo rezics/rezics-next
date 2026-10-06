@@ -117,14 +117,14 @@ const receipt = t.Object({
 });
 
 export const openApiOperations = {
-  '/v1/addresses/current': { get: { bearer: true } },
-  '/v1/addresses/claims': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/addresses/renames': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/addresses/dispositions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/addresses/resolve': { get: { bearer: false } },
-  '/v1/addresses/resolutions': { post: { bearer: false } },
-  '/v1/addresses/availability': { get: { bearer: false } },
-  '/v1/addresses/revisions/{revision}': { get: { bearer: false } },
+  '/v1/addresses/current': { get: { exposure: 'public', bearer: true } },
+  '/v1/addresses/claims': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/renames': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/dispositions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/resolve': { get: { exposure: 'public', bearer: false } },
+  '/v1/addresses/resolutions': { post: { exposure: 'public', bearer: false } },
+  '/v1/addresses/availability': { get: { exposure: 'public', bearer: false } },
+  '/v1/addresses/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function addressError(error: unknown): Response {

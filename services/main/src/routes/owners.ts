@@ -9,11 +9,11 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/owners/reconciliations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/owners/reconciliations/{id}': { get: { bearer: true } },
-  '/v1/owners/relocations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/owners/relocations/{id}': { get: { bearer: true } },
-};
+  '/v1/owners/reconciliations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/owners/reconciliations/{id}': { get: { exposure: 'public', bearer: true } },
+  '/v1/owners/relocations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/owners/relocations/{id}': { get: { exposure: 'public', bearer: true } },
+} as const;
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const revision = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$', maxLength: 300 });

@@ -50,11 +50,11 @@ const read = t.Object({
 });
 export const openApiOperations = {
   '/v1/rating-question-presentations': {
-    post: { bearer: true, idempotencyKey: true },
-    get: { bearer: false },
+    post: { exposure: 'public', bearer: true, idempotencyKey: true },
+    get: { exposure: 'public', bearer: false },
   },
-  '/v1/rating-question-presentations/{id}': { get: { bearer: false } },
-  '/v1/rating-question-presentations/{id}/revisions/{revision}': { get: { bearer: false } },
+  '/v1/rating-question-presentations/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/rating-question-presentations/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
 } as const;
 
 export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {

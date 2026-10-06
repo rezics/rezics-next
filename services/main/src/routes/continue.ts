@@ -10,9 +10,9 @@ import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/me/continue/{work}': { get: { bearer: true } },
-  '/v1/me/continue': { get: { bearer: true } },
-  '/v1/me/continue/{work}/hidden': { put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/continue/{work}': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/continue': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/continue/{work}/hidden': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 export function continueRoutes(work: MainWorkDependencies) {

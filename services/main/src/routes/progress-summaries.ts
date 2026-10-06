@@ -19,8 +19,8 @@ import { problem } from './problems.ts';
 
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
-  '/v1/me/progress-summaries/{resource}': { get: { bearer: true } },
-  '/v1/me/edition-preferences/{work}': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
+  '/v1/me/progress-summaries/{resource}': { get: { exposure: 'public', bearer: true } },
+  '/v1/me/edition-preferences/{work}': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 function failure(error: unknown) {
   if (error instanceof SessionDenied) return problem(403, 'progress_denied', error.message);

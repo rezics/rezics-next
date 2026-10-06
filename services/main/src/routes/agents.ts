@@ -10,9 +10,9 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/agents': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/agents/{id}/profile': { put: { bearer: true, idempotencyKey: true } },
-};
+  '/v1/agents': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/agents/{id}/profile': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+} as const;
 
 const bodySchema = t.Object({ profile: t.Literal('agent-provision-v1'),
   kind: t.Union([t.Literal('person'), t.Literal('organization'), t.Literal('service')]),

@@ -19,6 +19,7 @@ const rpc = (method: string, params: Record<string, unknown> = {}, token = 'read
   body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: meta } }) });
 
 const fixture: CapabilityDocument = { paths: { '/v1/works': { post: {
+  'x-rezics-exposure': 'public',
   parameters: [{ in: 'header', name: 'Idempotency-Key', required: true, schema: { type: 'string' } }],
   requestBody: { required: true, content: { 'application/json': { schema: { type: 'object',
     properties: { actingSubject: { type: 'string' }, value: { anyOf: [{ type: 'null' }, { type: 'string' }] } },

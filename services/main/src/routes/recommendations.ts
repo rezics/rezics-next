@@ -14,11 +14,11 @@ import { commandError, problem } from './problems.ts';
 export interface RecommendationDependencies { recommendations?: RankingGenerations }
 
 export const openApiOperations = {
-  '/v1/recommendations/generation-builds': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/recommendations/generations/{generation}': { get: { bearer: true } },
-  '/v1/recommendations/generation-activations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/recommendations/queries': { post: { bearer: true } },
-  '/v1/recommendations/pages': { post: { bearer: true } },
+  '/v1/recommendations/generation-builds': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/recommendations/generations/{generation}': { get: { exposure: 'platform:platform-admin', bearer: true } },
+  '/v1/recommendations/generation-activations': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/recommendations/queries': { post: { exposure: 'platform:recommendations', bearer: true } },
+  '/v1/recommendations/pages': { post: { exposure: 'platform:recommendations', bearer: true } },
 } as const;
 
 const iri = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });

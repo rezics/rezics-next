@@ -8,7 +8,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 export { readingPositionQuery } from '../modules/reading-position/contract.ts';
-export const openApiOperations = { '/v1/reading-positions/{work}': { get: { bearer: false } } } as const;
+export const openApiOperations = { '/v1/reading-positions/{work}': { get: { exposure: 'public', bearer: false } } } as const;
 export function readingPositionsRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/reading-positions/:work', { params: t.Object({ work: readUuid }),
     query: t.Object({ ...readQuery, position: readingPositionQuery,

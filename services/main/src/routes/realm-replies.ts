@@ -68,11 +68,11 @@ function key(request: Request): string | null {
 }
 
 export const openApiOperations = {
-  '/v1/realm-replies': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realm-reply-reviews': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realm-reply-placements': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/realms/{realm}/replies/{reply}': { get: { bearer: true } },
-  '/v1/realms/{realm}/reply-roots/{rootTarget}/count': { get: { bearer: true } },
+  '/v1/realm-replies': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realm-reply-reviews': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realm-reply-placements': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/replies/{reply}': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/reply-roots/{rootTarget}/count': { get: { exposure: 'public', bearer: true } },
 } as const;
 
 export function realmReplyRoutes(work: MainWorkDependencies) {

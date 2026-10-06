@@ -53,9 +53,9 @@ const noStore = { 'cache-control': 'no-store' };
 
 export const openApiOperations = {
   '/v1/statements/{id}/judgments': {
-    post: { bearer: true, idempotencyKey: true }, get: { bearer: true },
+    post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: true },
   },
-  '/v1/concepts/{id}/spoiler-hints': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/concepts/{id}/spoiler-hints': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function judgmentError(error: unknown): Response {

@@ -109,7 +109,7 @@ test('any admitted Person creates a projection under one root scope and its rece
   const handlers = [...(await discoverOutboxEventHandlers()).values()].filter(handler => handler.action === 'projection.create');
   expect(handlers.map(handler => handler.type).sort()).toEqual(['com.rezics.projection.create-cancelled.v1',
     'com.rezics.projection.create-stale.v1', 'com.rezics.projection.created.v1']);
-  expect(openApiOperations['/v1/projections']).toEqual({ post: { bearer: true, idempotencyKey: true }, get: { bearer: false } });
+  expect(openApiOperations['/v1/projections']).toEqual({ post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: false } });
 });
 
 test('the cost contract holds for the largest page, whatever exists about the subject', () => {

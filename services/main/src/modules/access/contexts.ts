@@ -12,6 +12,7 @@ import { RoleUnavailable } from './roles.ts';
 import { roleWorkCreateProof, roleWorkCreateSubjects } from './role-proof.ts';
 import { baselineMemberProof, newBaselineProof } from './baseline.ts';
 import { platformAdministratorProof } from './platform-administrator.ts';
+import { platformPermissionProof } from './platform-permissions.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { invitedWorkAgents, representedWorkProof } from './represented-work-proof.ts';
 import { AccessTopology } from './topology.ts';
@@ -199,7 +200,8 @@ async function activePrincipal(client: PoolClient, principal: VerifiedPrincipal)
 export async function eligibleSubject(client: PoolClient, principalId: string,
   actingSubject: string, emailVerified = false): Promise<boolean> {
   if (!(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [WORK_CREATE_CONTEXT.scope])).rowCount
-    && await platformAdministratorProof(client, principalId, actingSubject)) return true;
+    && await platformAdministratorProof(client, principalId, actingSubject,true,
+      { action: WORK_CREATE_CONTEXT.action,scope: WORK_CREATE_CONTEXT.scope })) return true;
   if (emailVerified
     && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [WORK_CREATE_CONTEXT.scope])).rowCount
     && await baselineMemberProof(client, principalId, actingSubject)) return true;
@@ -389,7 +391,7 @@ export class AccessActingContexts {
       let representedSubjects = candidateSubjects
         .filter(subject => directGranted.has(subject) || groupGranted.has(subject)
           || roleGranted.has(subject));
-      if ((await client.query('SELECT receipt FROM access.platform_administrator WHERE singleton AND principal_id = $1', [principalId])).rowCount) {
+      if (await platformPermissionProof(client,principalId,'platform:use:platform-admin')) {
         for (const actor of candidateSubjects) {
           if (await eligibleSubject(client, principalId, actor)) representedSubjects.push(actor);
         }

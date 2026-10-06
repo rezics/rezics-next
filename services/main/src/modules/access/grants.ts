@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { AccessPlatformGrants } from './platform-grants.ts';
 import { lockAccessKey } from './scope-gates.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { AccessAgentControl } from './agent-control.ts';
@@ -89,11 +90,13 @@ type GrantRow = {
  * authenticated operator is recorded privately; the issuer Agent owns the
  * durable grant. Role revisions and protected grant families have other gates. */
 export class AccessGrants {
+  readonly platform: AccessPlatformGrants;
   /** Authority-control owners (G-047) sharing this Access pool, so every Main
    * that composes the grant owner also serves their routes. */
   readonly control: AuthorityControl;
 
   constructor(private readonly pool: Pool) {
+    this.platform = new AccessPlatformGrants(pool);
     this.control = { topology: new AccessTopology(pool),
       policies: new AccessRepresentativePolicies(pool),
       protectedChanges: new AccessProtectedChanges(pool),

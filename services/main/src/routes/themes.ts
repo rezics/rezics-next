@@ -21,16 +21,16 @@ const capabilities = t.Object({ data: t.Literal('public-only'), secrets: t.Liter
 const noStore = { headers: { 'cache-control': 'no-store' } };
 
 export const openApiOperations = {
-  '/v1/themes': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/execution-control': { get: { bearer: true },
-    put: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}/revisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}/revisions/{revision}/reviews': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}/first-party-activations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}/revocations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}/first-party': { get: { bearer: true } },
-  '/v1/themes/{theme}/activations': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/themes/{theme}': { get: { bearer: true } },
+  '/v1/themes': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/execution-control': { get: { exposure: 'platform:executable-themes', bearer: true },
+    put: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revisions': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revisions/{revision}/reviews': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/first-party-activations': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/revocations': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}/first-party': { get: { exposure: 'platform:executable-themes', bearer: true } },
+  '/v1/themes/{theme}/activations': { post: { exposure: 'platform:executable-themes', bearer: true, idempotencyKey: true } },
+  '/v1/themes/{theme}': { get: { exposure: 'platform:executable-themes', bearer: true } },
 } as const;
 
 const activationFields = { theme: t.String(), revision: t.String(), predecessor: t.Nullable(t.String()),

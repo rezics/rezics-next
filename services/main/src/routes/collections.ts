@@ -74,19 +74,19 @@ interface CaptureBody { definitionRevision: string; collection: string; name: st
   disclosure: 'public' | 'private'; actingSubject: string }
 
 export const openApiOperations = {
-  '/v1/collections': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}/name': { get: { bearer: false },
-    put: { bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}/changes': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/collections': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}/name': { get: { exposure: 'public', bearer: false },
+    put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/collections/{id}/display-groups/{group}/moves': {
-    post: { bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}': { get: { bearer: false } },
-  '/v1/collections/{id}/revisions/{revision}': { get: { bearer: false } },
-  '/v1/collection-definitions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/collection-definitions/{id}': { get: { bearer: true } },
-  '/v1/collection-definitions/{id}/revisions': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/collection-definitions/{id}/queries': { post: { bearer: true } },
-  '/v1/collection-definitions/{id}/captures': { post: { bearer: true, idempotencyKey: true } },
+    post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/collections/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
+  '/v1/collection-definitions': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/collection-definitions/{id}': { get: { exposure: 'platform:saved-views', bearer: true } },
+  '/v1/collection-definitions/{id}/revisions': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/collection-definitions/{id}/queries': { post: { exposure: 'platform:saved-views', bearer: true } },
+  '/v1/collection-definitions/{id}/captures': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
 } as const;
 
 function key(request: Request) {

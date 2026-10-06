@@ -102,3 +102,11 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     });
 }
+
+export const openApiOperations = {
+  '/v1/rating-syntheses': { post: { exposure: 'public' } },
+  '/v1/global-rating-aggregates': { post: { exposure: 'public' } },
+  '/v1/global-rating-observations': { post: { exposure: 'public' } },
+  '/v1/global-rating-contexts/{id}': { get: { exposure: 'public' } },
+  '/v1/global-rating-contexts': { post: { exposure: 'public' } },
+} as const;
