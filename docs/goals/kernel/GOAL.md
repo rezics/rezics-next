@@ -95,7 +95,12 @@ from `task goal -- new`, and paths narrow to the files before dispatch.
 | K8 | Collection as `schema:ItemList`; Recipe create/change/read on the existing Composition owner; bounded Structure membership effects instead of conservative Discover rebuilds | `codex-1` high; K1, K2 |
 
 After the first wave: every profile migrated and the DSL deleted; the
-classification capability (record §6, B3) with trust-ops' admission; the rest of
+classification capability (record §6, B3) with trust-ops' admission, where the
+Person-owned adoptable scheme variant ships behind
+`requireSelectedPlatformCapability(..., { exposure: 'platform:person-schemes' })`
+bound to the server-resolved owner kind, with a test that an ungranted Person
+is refused (a new variant of a public operation escapes the closed-by-default
+declaration); the rest of
 the population-scale queries; external search documents; receipt custody; cold
 history export; Jena stats and CLI in Task and CI (with the program); a
 qualification harness that imports through the API in batches.
