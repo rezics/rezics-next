@@ -17,7 +17,7 @@ import { stableId } from '../seed/state.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
-  imagePresent: true, storageChanged: false, pendingMigrations: [], modelCurrent: true, statementCurrent: true,
+  imagePresent: true, storageChanged: false, pendingMigrations: [], modelCurrent: true, statementCurrent: true, membershipCurrent: true,
   unhealthyResources: [], environmentChanges: [], appHostChanged: false, lostResources: [], zoneApprovals: [] };
 
 describe('shared stack refresh planning', () => {
@@ -83,6 +83,17 @@ describe('shared stack refresh planning', () => {
       ]);
     });
   }
+
+  test('legacy ordered membership requires stopped-writer owner preparation even at the recorded revision', async () => {
+    const plan = refreshPlan({ ...current, membershipCurrent: false });
+    expect(plan.steps).toEqual(['stop-writers', 'prepare-storage', 'align-model',
+      'restart-resources', 'wait-ready', 'approve-zones', 'record-success']);
+    const events: string[] = [];
+    await expect(executeRefresh(plan, actions(events, 'prepareStorage'))).rejects.toThrow('failed prepareStorage');
+    expect(events).toEqual(['stopWriters', 'prepareStorage']);
+    await executeRefresh(plan, actions([]));
+    expect(refreshPlan(current).steps).toEqual([]);
+  });
 
   test('a stale model generation is aligned without unnecessary storage work', () => {
     expect(refreshPlan({ ...current, modelCurrent: false }).steps).toEqual([

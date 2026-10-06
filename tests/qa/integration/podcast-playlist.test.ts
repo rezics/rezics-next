@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
@@ -8,13 +8,15 @@ import {
 } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import {
   CommandRejected,
+  FusekiClient,
   type CommandEnvelope,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
+import { hasUnnormalizedMembership, normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
+import { assertOwnerMigrationsComplete, migrateOwnerData } from '../../../scripts/fixture/migrate.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 
-test('a podcast playlist creates, reorders and reads episode membership through Collection', async () => {
+test('a podcast playlist survives automatic owner upgrade, interruption, reads and new writes', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(
     Bun.env as Record<string, string>,
@@ -147,12 +149,33 @@ test('a podcast playlist creates, reorders and reads episode membership through 
       page.occurrences.map((item) => item.occurrence),
     );
     expect(projected.every((row) => row.position!.type === 'literal')).toBe(true);
+    // More than one transaction is required so interrupted preparation must resume.
+    const extraCollection = nativeId();
+    await f.grant(`collection:edit:${extraCollection}`, 'collection.edit');
+    await f.grant(`semantic:read:${extraCollection}`, 'semantic.read');
+    const extra = await f.json<{ structure: string; revision: string }>(
+      await f.call('POST', '/v1/collections', { collection: extraCollection,
+        name: 'Populated upgrade copy', disclosure: 'public', actingSubject: f.actor }), 201);
+    const extraPath = `/v1/collections/${shortId(extraCollection)}`;
+    let extraHead = extra.revision;
+    const extraOccurrences: string[] = [];
+    for (const size of [16, 9]) {
+      const change = await f.json<{ revision: string; occurrences: string[] }>(
+        await f.call('POST', `${extraPath}/changes`, { expectedHead: extraHead,
+          actingSubject: f.actor, operations: Array.from({ length: size }, (_, index) => ({
+            op: 'insert', role: 'member', parent: extra.structure, position: 'last',
+            target: episodes[index % 2],
+          })) }), 200);
+      extraHead = change.revision;
+      extraOccurrences.push(...change.occurrences);
+    }
     // The disposable populated dataset models a pre-normalization stored copy.
     await f.nativeFuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       DELETE { GRAPH ${iri(GRAPHS.current)} { ?placement a schema:ListItem ;
         schema:item ?item ; schema:position ?position . ?list ?p ?o . } }
       INSERT { GRAPH ${iri(GRAPHS.current)} { ?placement rv:target ?item . } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:selectedGeneration ?generation .
+      WHERE { GRAPH ${iri(GRAPHS.current)} { VALUES ?structure { ${iri(created.structure)} ${iri(extra.structure)} }
+        ?structure rv:selectedGeneration ?generation .
         ?placement rv:generation ?generation ; schema:item ?item ; schema:position ?position .
         ?list rv:generation ?generation ; a schema:ItemList ; ?p ?o . } }`);
     expect(await membership()).toHaveLength(0);
@@ -174,19 +197,40 @@ test('a podcast playlist creates, reorders and reads episode membership through 
       CommandRejected,
     );
     expect(await membership()).toHaveLength(0);
-    const normalized = await normalizeStoredMembership(f.env);
-    expect(normalized).toMatchObject({ complete: true, placements: 3 });
-    expect(normalized.receipts).toHaveLength(1);
-    expect(await membership()).toEqual(projected);
-    expect(await normalizeStoredMembership(f.env)).toEqual({
-      complete: true,
-      placements: 0,
-      receipts: [],
+    expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(true);
+    const apps = Bun.env as Record<string, string>;
+    // Run the real preparation hook used by dev:refresh and installRelease.
+    // Lose preparation after a committed 24-placement batch, before batch two.
+    const command = FusekiClient.prototype.commandWithReceipt;
+    let batches = 0;
+    let receipt = '';
+    const interrupted = spyOn(FusekiClient.prototype, 'commandWithReceipt').mockImplementation(
+      async function(this: FusekiClient, envelope: CommandEnvelope) {
+        if (envelope.receipt.startsWith('urn:rezics:receipt:bootstrap:ordered-membership:')) {
+          if (++batches === 2) throw new Error('interrupted owner preparation');
+          receipt = envelope.receipt;
+        }
+        return command.call(this, envelope);
+      });
+    try {
+      await expect(migrateOwnerData(apps)).rejects.toThrow('interrupted owner preparation');
+    } finally { interrupted.mockRestore(); }
+    expect(batches).toBe(2);
+    expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(true);
+    const upgraded = await migrateOwnerData(apps);
+    assertOwnerMigrationsComplete(upgraded);
+    expect(upgraded.find(row => row.owner === 'ordered-membership')).toMatchObject({
+      status: 'complete', placements: 4, receipts: [expect.any(String)],
     });
-    const receipt = normalized.receipts[0]!;
+    expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(false);
+    expect(await membership()).toEqual(projected);
+    const extraPage = await f.json<{ occurrences: Array<{ occurrence: string }> }>(
+      await f.call('GET', extraPath + query), 200);
+    expect(extraPage.occurrences.map(row => row.occurrence)).toEqual(extraOccurrences);
+    expect(new Set(extraOccurrences).size).toBe(25);
     const position = (
-      await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:dataEpoch ?epoch ; rv:sequence ?sequence } }`)
+      await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?count WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ; rv:placementCount ?count } }`)
     ).results!.bindings[0]!;
     expect(
       await readMainOutboxEnvelope(
@@ -202,14 +246,39 @@ test('a podcast playlist creates, reorders and reads episode membership through 
       ),
     ).toMatchObject({
       data: {
-        receipt: { systemProof: { kind: 'ordered-membership-normalization', placements: 3 } },
+        receipt: { systemProof: { kind: 'ordered-membership-normalization', placements: 24 } },
       },
     });
     expect(await f.json(await f.call('GET', path + query), 200)).toMatchObject({
       revision: moved.revision,
       occurrences: page.occurrences,
     });
+    expect(Number(position.count?.value)).toBe(24);
+    const written = await f.json<{ revision: string; occurrences: string[] }>(
+      await f.call('POST', `${path}/changes`, { expectedHead: moved.revision,
+        actingSubject: f.actor, operations: [{ op: 'insert', role: 'member',
+          parent: created.structure, position: 'last', target: episodes[0] }] }), 200);
+    const after = await f.json<{ occurrences: Array<{ occurrence: string; target: string }> }>(
+      await f.call('GET', path + query), 200);
+    expect(after.occurrences.map(row => row.occurrence)).toEqual([
+      ...page.occurrences.map(row => row.occurrence), ...written.occurrences,
+    ]);
+    expect(new Set(after.occurrences.map(row => row.occurrence)).size).toBe(4);
+    expect(after.occurrences.at(-1)?.target).toBe(episodes[0]);
+    const datasetPosition = async () => (await f.env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?sequence WHERE { GRAPH ${iri(GRAPHS.control)} { ?dataset rv:sequence ?sequence } }`))
+      .results?.bindings;
+    const beforeRepeat = await datasetPosition();
+    const repeated = await migrateOwnerData(apps);
+    assertOwnerMigrationsComplete(repeated);
+    expect(repeated.find(row => row.owner === 'ordered-membership')).toMatchObject({
+      status: 'complete', placements: 0, receipts: [],
+    });
+    expect(await datasetPosition()).toEqual(beforeRepeat);
+    expect(await f.json(await f.call('GET', path + query), 200)).toMatchObject(after);
+    expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(false);
+
   } finally {
     await f.close();
   }
-}, 120_000);
+}, 180_000);

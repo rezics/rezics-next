@@ -12,24 +12,8 @@ import {
 import { CompositionCorrupt, itemListIri, itemPosition, structureIri } from './graph.ts';
 import { structureProfileForGraph } from './profiles.ts';
 
-/** Privileged representation repair, never exposed through a product route.
- * One transaction covers at most 24 placements and their parent lists. Each
- * exact basis has a durable receipt; interruption resumes from unconverted rows.
- * Heads, retained manifests, selection pins and parent-local keys do not change.
- */
-export async function normalizeStoredMembership(
-  env: WorkActivationEnvironment,
-  maxBatches = 256,
-): Promise<{ complete: boolean; placements: number; receipts: string[] }> {
-  if (!Number.isInteger(maxBatches) || maxBatches < 1 || maxBatches > 256) {
-    throw new Error('membership normalization requires 1-256 bounded batches');
-  }
-  const receipts: string[] = [];
-  let placements = 0;
-  const deadline = Date.now() + 540_000;
-  for (let batch = 0; batch < maxBatches && Date.now() < deadline; batch++) {
-    const result = await env.fuseki.query(
-      `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+function membershipCandidateQuery(limit: number): string {
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT DISTINCT ?placement ?type ?generation ?profile ?parent ?segmentKey ?orderKey
         ?item ?legacyTarget ?occurrence ?qualifier ?removed WHERE { GRAPH ${iri(GRAPHS.current)} {
         VALUES ?type { rv:OccurrencePlacement rv:RemovedPlacement }
@@ -47,9 +31,53 @@ export async function normalizeStoredMembership(
             FILTER(?position = CONCAT(?segmentKey, "-", ?orderKey)) }
           || !BOUND(?removed) && NOT EXISTS { ?list a schema:ItemList ;
             rv:generation ?generation ; rv:parent ?parent ; schema:itemListElement ?placement }))
-      } } ORDER BY ?placement LIMIT 24`,
-      128 * 1024,
-    );
+      } } ORDER BY ?placement LIMIT ${limit}`;
+}
+
+/** Refresh inspects the same candidates as the upgrader without writing data. */
+export async function hasUnnormalizedMembership(
+  fuseki: Pick<FusekiClient, 'query'>,
+): Promise<boolean> {
+  const result = await fuseki.query(membershipCandidateQuery(1), 128 * 1024);
+  return Boolean(result.results?.bindings?.length);
+}
+
+/** Owner preparation must finish conversion before product processes start.
+ * Batches share one wall deadline. Receipts let a failed preparation resume
+ * from the remaining rows without replaying already converted membership.
+ */
+export async function upgradeStoredMembership(env: WorkActivationEnvironment) {
+  const deadline = Date.now() + 540_000;
+  let placements = 0;
+  const receipts: string[] = [];
+  while (Date.now() < deadline) {
+    const result = await normalizeStoredMembership(env, 256, deadline);
+    placements += result.placements;
+    receipts.push(...result.receipts);
+    if (result.complete) return { complete: true as const, placements, receipts };
+  }
+  throw new Error(
+    'Ordered membership upgrade exceeded its preparation budget; product processes must remain stopped',
+  );
+}
+
+/** Privileged representation repair, never exposed through a product route.
+ * One transaction covers at most 24 placements and their parent lists. Each
+ * exact basis has a durable receipt; interruption resumes from unconverted rows.
+ * Heads, retained manifests, selection pins and parent-local keys do not change.
+ */
+export async function normalizeStoredMembership(
+  env: WorkActivationEnvironment,
+  maxBatches = 256,
+  deadline = Date.now() + 540_000,
+): Promise<{ complete: boolean; placements: number; receipts: string[] }> {
+  if (!Number.isInteger(maxBatches) || maxBatches < 1 || maxBatches > 256) {
+    throw new Error('membership normalization requires 1-256 bounded batches');
+  }
+  const receipts: string[] = [];
+  let placements = 0;
+  for (let batch = 0; batch < maxBatches && Date.now() < deadline; batch++) {
+    const result = await env.fuseki.query(membershipCandidateQuery(24), 128 * 1024);
     const rows = result.results?.bindings ?? [];
     if (!rows.length) return { complete: true, placements, receipts };
     if (new Set(rows.map((row) => row.placement?.value)).size !== rows.length) {
@@ -81,8 +109,8 @@ export async function normalizeStoredMembership(
       if (!placement || !generation || !profile || !type) {
         throw new CompositionCorrupt('membership normalization found an incomplete placement');
       }
-      const target = row.item?.value ?? row.legacyTarget?.value
-        ?? row.qualifier?.value ?? row.occurrence?.value;
+      const target =
+        row.item?.value ?? row.legacyTarget?.value ?? row.qualifier?.value ?? row.occurrence?.value;
       if (row.item && row.legacyTarget && row.item.value !== row.legacyTarget.value) {
         throw new CompositionCorrupt(
           'membership normalization refuses conflicting item predicates',
@@ -91,12 +119,16 @@ export async function normalizeStoredMembership(
       guards.push(`${iri(placement)} a ${structureIri(type)} ; rv:generation ${iri(generation)} ;
         rv:occurrence ${iri(row.occurrence!.value)} .`);
       // A writer can change a qualifier without changing its order keys.
-      guards.push(row.item
-        ? `${iri(placement)} schema:item ${structureIri(row.item.value)} .`
-        : `FILTER NOT EXISTS { ${iri(placement)} schema:item ?item${index} }`);
-      guards.push(row.qualifier
-        ? `${iri(placement)} rv:qualifier ${iri(row.qualifier.value)} .`
-        : `FILTER NOT EXISTS { ${iri(placement)} rv:qualifier ?qualifier${index} }`);
+      guards.push(
+        row.item
+          ? `${iri(placement)} schema:item ${structureIri(row.item.value)} .`
+          : `FILTER NOT EXISTS { ${iri(placement)} schema:item ?item${index} }`,
+      );
+      guards.push(
+        row.qualifier
+          ? `${iri(placement)} rv:qualifier ${iri(row.qualifier.value)} .`
+          : `FILTER NOT EXISTS { ${iri(placement)} rv:qualifier ?qualifier${index} }`,
+      );
       if (row.legacyTarget) {
         const triple = `${iri(placement)} rv:target ${structureIri(row.legacyTarget.value)} .`;
         deletes.push(triple);

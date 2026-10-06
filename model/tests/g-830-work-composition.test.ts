@@ -16,7 +16,7 @@ test('G-830: Work membership has a qualified occurrence and never a top-level ex
   expect(owner).toContain('rv:PartRole');
   expect(kernel).not.toContain('rv:WorkComposition');
   expect(kernel).not.toContain('rv:PartRole');
-  expect(createHash('sha256').update(kernel).digest('hex')).toBe('0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746');
+  expect(createHash('sha256').update(kernel).digest('hex')).toBe('d6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0');
   expect(commandProfiles([structureWorkCompositionProfile], { established: {}, canonicalOrder: [], demandOrder: [] })
     .profiles[0]!.sha256).toBe(createHash('sha256').update(owner).digest('hex'));
   expect(owner).not.toContain('sh:path schema:isPartOf');

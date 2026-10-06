@@ -21,6 +21,7 @@ export interface RefreshInputs {
   pendingMigrations: readonly string[];
   modelCurrent: boolean;
   statementCurrent: boolean;
+  membershipCurrent: boolean;
   unhealthyResources: readonly string[];
   environmentChanges: readonly string[];
   appHostChanged: boolean;
@@ -42,7 +43,7 @@ export function refreshPlan(input: RefreshInputs): { steps: RefreshStep[]; block
     `AppHost restart required for lost resources: ${input.lostResources.join(', ')}. ${appHostRestartInstruction}`,
   );
   const prepare = input.previousRevision !== input.revision || !input.imagePresent
-    || input.storageChanged || input.pendingMigrations.length > 0 || !input.statementCurrent;
+    || input.storageChanged || input.pendingMigrations.length > 0 || !input.statementCurrent || !input.membershipCurrent;
   const restart = prepare || !input.modelCurrent || input.unhealthyResources.length > 0;
   const steps: RefreshStep[] = [];
   if (!input.imagePresent) steps.push('build-image');

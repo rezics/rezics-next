@@ -10,6 +10,7 @@ import { fusekiImageFromCompose } from '../load/image.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
 import { ensureStatementSeekCurrent, statementUpgradeCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
+import { hasUnnormalizedMembership } from '../../services/main/src/modules/structure/membership-normalize.ts';
 import { mainSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { appEnvironment, composeProcessEnvironment, readEnv, stackDirectory } from './config.ts';
@@ -303,6 +304,8 @@ export async function inspectRefresh(root: string, stackRoot = root) {
       slug => officialSourceDigest(slug, join(root, 'apps/web/zones/official')));
   const input = { revision, previousRevision: checkpoint?.revision, imagePresent, storageChanged, pendingMigrations,
     modelCurrent: active.generation === targetGeneration, statementCurrent,
+    membershipCurrent: serviceReady('fuseki') && !await hasUnnormalizedMembership(
+      new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN)),
     unhealthyResources: refreshResources.filter(name => resources[name].state !== 'Running'
       || resources[name].healthStatus !== 'Healthy'),
     environmentChanges: [...new Set(environmentChanges)].sort(),
@@ -325,6 +328,7 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
   console.log(`  Pending SQL migrations: ${snapshot.input.pendingMigrations.join(', ') || 'none'}`);
   console.log(`  Model generation: ${snapshot.active.generation} -> ${snapshot.targetGeneration}`);
   console.log(`  Catalogue Statement upgrade: ${snapshot.input.statementCurrent ? 'current' : 'prepare-storage required'}`);
+  console.log(`  Ordered membership: ${snapshot.input.membershipCurrent ? 'current' : 'owner preparation required'}`);
   console.log(`  Resources requiring AppHost restart: ${snapshot.input.lostResources.join(', ') || 'none'}`);
   console.log(`  Official Zones to re-approve: ${snapshot.input.zoneApprovals.map(zone =>
     `${zone.slug} (${zone.approvedDigest ?? 'no active approval'} -> ${zone.digest})`).join(', ')
@@ -428,7 +432,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
         const checked = await inspectRefresh(root);
         if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])
           || checked.input.revision !== snapshot.input.revision || checked.input.storageChanged
-          || checked.input.pendingMigrations.length || !checked.input.modelCurrent || !checked.input.statementCurrent
+          || checked.input.pendingMigrations.length || !checked.input.modelCurrent || !checked.input.statementCurrent || !checked.input.membershipCurrent
           || checked.input.unhealthyResources.length || checked.input.zoneApprovals.length || checked.plan.blockers.length) {
           throw new Error('Shared stack changed or is not current after refresh; no success checkpoint recorded');
         }

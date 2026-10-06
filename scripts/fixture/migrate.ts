@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { AliasRegistry } from '../../services/main/src/modules/address/registry.ts';
 import { migrateGraphAliases } from '../../services/main/src/modules/address/migrate.ts';
+import { upgradeStoredMembership } from '../../services/main/src/modules/structure/membership-normalize.ts';
 import { migrateOwners } from '../ops/migrate.ts';
 import { S3ImmutableObjects } from '../../services/main/src/infrastructure/immutable-objects.ts';
 import { upgradeStoredStatements } from '../../services/main/src/modules/statement/upgrade.ts';
@@ -16,12 +17,14 @@ export async function migrateFixtureOwners(apps: Record<string, string>): Promis
 }
 
 export interface OwnerMigrationEvidence {
-  owner: 'graph-aliases' | 'catalogue-statements';
+  owner: 'graph-aliases' | 'catalogue-statements' | 'ordered-membership';
   status: 'complete' | 'deferred';
   reason?: string;
   converted?: number;
   replayed?: number;
   noop?: boolean;
+  placements?: number;
+  receipts?: string[];
 }
 
 /** Data migrations run after SQL and graph initialization in both entrypoints.
@@ -58,9 +61,18 @@ export async function migrateOwnerData(
       ...(workObjects ? { workObjects } : {}),
     };
     const statements = await upgradeStoredStatements(environment,pool);
+    // Development refresh and release installation await this before serving.
+    // An unfinished conversion throws rather than recording a ready install.
+    const membership = await upgradeStoredMembership(environment);
     const result = await migrateGraphAliases(environment);
     return [
       { owner: 'catalogue-statements', ...statements },
+      {
+        owner: 'ordered-membership',
+        status: 'complete',
+        placements: membership.placements,
+        receipts: membership.receipts,
+      },
       {
         owner: 'graph-aliases',
         status: result.status,
