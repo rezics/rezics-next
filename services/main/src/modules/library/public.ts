@@ -1,11 +1,11 @@
 import { WorkReadMoved, WorkReadMissing, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { readAgent, shelfWorks } from '../profiles/read.ts';
-import { publishedWorks, readShelfPage, shelfPageBasis, type ShelfOptions } from './shelf-page.ts';
+import { readAgent } from '../profiles/read.ts';
+import { readShelfPage, type ShelfOptions } from './shelf-page.ts';
 import { STATUS_SHELF_COST, type ReaderLibraryStatusStore, type ReadingStatus, type ShelfSort } from './status.ts';
 
 export const PUBLIC_SHELF_COST = { candidateBatch: STATUS_SHELF_COST.candidateBatch,
-  countBatch: STATUS_SHELF_COST.countBatch, pageSize: STATUS_SHELF_COST.pageSize,
-  countScan: 'first page only, all candidates within the shared read deadline' } as const;
+  candidateBatches: STATUS_SHELF_COST.candidateBatches, pageSize: STATUS_SHELF_COST.pageSize,
+  summaryShelves: 3, countScan: 'delivered cards only; resumable with the page cursor' } as const;
 
 async function projection(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore, sort: ShelfSort = 'added') {
   await readAgent(session, agent);
@@ -27,30 +27,18 @@ async function fenceProjection(session: WorkReadSession, agent: string, store: R
   }
 }
 
-/** No SQL-only count may disclose unpublished Works. Scan bounded keyset batches
- * to completion, or fail explicitly on the shared deadline; there is no row cap. */
-async function publishedCount(session: WorkReadSession, agent: string,
-  store: ReaderLibraryStatusStore, status: ReadingStatus) {
-  let after, count = 0, changedAt: string | null = null;
-  while (true) {
-    session.checkDeadline();
-    const rows = await store.sortedPage(agent, status, PUBLIC_SHELF_COST.countBatch, 'added', 'desc', after);
-    if (!rows.length) break;
-    const published = await publishedWorks(session, rows.map(row => row.work));
-    const cards = await shelfWorks(session, rows.filter(row => published.has(row.work)).map(row => row.work));
-    for (const row of rows) if (cards.has(row.work)) { count++; changedAt ??= row.changedAt; }
-    if (rows.length < PUBLIC_SHELF_COST.countBatch) break;
-    const tail = rows.at(-1)!;
-    after = { work: tail.work, value: tail.sortValue };
-  }
-  return { status, count, changedAt };
-}
+const projectionFence = (before: Awaited<ReturnType<typeof projection>>) =>
+  `${before.statusFence}:${before.visibilityVersion}:${before.agentFence}`;
 
 export async function readPublicShelves(session: WorkReadSession, agent: string, store: ReaderLibraryStatusStore) {
   const before = await projection(session, agent, store);
   const statusShelves = [];
+  // Reuse the visible traversal instead of introducing a count projection that
+  // would need invalidation for publication, names and audience policy changes.
   for (const status of ['want-to-read', 'reading', 'read'] as const) {
-    statusShelves.push(await publishedCount(session, agent, store, status));
+    const page = await readShelfPage(session, agent, store, status, {}, projectionFence(before), true);
+    statusShelves.push({ status, count: page.statusCount!, countKind: page.statusCountKind!,
+      changedAt: page.items[0]?.changedAt ?? null, nextCursor: page.nextCursor });
   }
   await fenceProjection(session, agent, store, before);
   return { profile: 'agent-status-shelves-v1' as const, agent, statusShelves, sourcePosition: session.position };
@@ -63,12 +51,10 @@ export async function readPublicStatusShelf(session: WorkReadSession, agent: str
     throw new WorkReadInvalid('This sort is private to the reader');
   }
   const before = await projection(session, agent, store, options.sort);
-  const fence = `${before.statusFence}:${before.visibilityVersion}:${before.agentFence}`;
-  const basis = shelfPageBasis(session, agent, status, options, fence, true);
-  const statusCount = basis.statusCount ?? (await publishedCount(session, agent, store, status)).count;
+  const fence = projectionFence(before);
   const page = await readShelfPage(session, agent, store, status, options,
-    fence, true, statusCount);
+    fence, true);
   await fenceProjection(session, agent, store, before);
-  return { profile: 'agent-status-shelf-v1' as const, agent, status, statusCount,
+  return { profile: 'agent-status-shelf-v1' as const, agent, status,
     ...page, items: page.items.map(item => ({ work: item.work, card: item.card! })) };
 }

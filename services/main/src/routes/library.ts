@@ -60,11 +60,18 @@ const statusShelf = t.Object({ profile: t.Literal('reader-status-shelf-v1'),
 const publicShelves = t.Object({ profile: t.Literal('agent-status-shelves-v1'), agent: readId,
   listing: resourceListing, discovery: pageDiscovery,
   statusShelves: t.Array(t.Object({ status: t.Exclude(status, t.Null()),
-    count: t.Integer({ minimum: 0 }), changedAt: t.Nullable(t.String()) }), { maxItems: 3 }),
+    count: t.Integer({ minimum: 0, description: 'Visible Works counted in the bounded prefix.' }),
+    countKind: t.Union([t.Literal('exact'), t.Literal('lower-bound')], {
+      description: 'A lower bound does not promise additional visible Works; show N+ until traversal finishes.' }),
+    changedAt: t.Nullable(t.String()), nextCursor: t.Nullable(t.String({
+      description: 'Continue this count through the public status shelf Works endpoint using default sort and order.' })) }), { maxItems: 3 }),
   sourcePosition: readPosition });
 const publicStatusShelf = t.Object({ profile: t.Literal('agent-status-shelf-v1'), agent: readId,
   listing: resourceListing, discovery: pageDiscovery,
-  status: t.Exclude(status, t.Null()), statusCount: t.Integer({ minimum: 0 }),
+  status: t.Exclude(status, t.Null()), statusCount: t.Integer({ minimum: 0,
+    description: 'Cumulative visible Works delivered in this traversal; the cursor resumes counting.' }),
+  statusCountKind: t.Union([t.Literal('exact'), t.Literal('lower-bound')], {
+    description: 'Show lower bounds as N+. Empty pages can continue; only a null nextCursor finishes the count.' }),
   items: t.Array(t.Object({ work: readId, card: shelfWork }), { maxItems: 20 }),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });

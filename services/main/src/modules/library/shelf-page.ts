@@ -16,14 +16,15 @@ export async function publishedWorks(session: WorkReadSession, works: string[]) 
   return new Set(rows.map(row => row.id!.value));
 }
 
-/** The public total is authenticated with the keyset and its source fences;
- * continuations reuse it rather than scanning the whole public shelf again. */
+/** The public lower bound counts only delivered cards. Its encrypted continuation
+ * binds that count to the candidate keyset and the graph/owner source fences. */
 export function shelfPageBasis(session: WorkReadSession, agent: string,
   status: ReadingStatus, options: ShelfOptions,
   fence: string, publishedOnly: boolean) {
   const sort = options.sort ?? 'added', order = options.order ?? (sort === 'title' ? 'asc' : 'desc');
   if (sort === 'finished' && status !== 'read') throw new WorkReadInvalid('Finished sort requires the read shelf');
-  const binding = [publishedOnly ? 'agent-status-shelf-v3' : 'reader-status-shelf-v2', agent, status, sort, order];
+  const binding = [publishedOnly ? 'agent-status-shelf-v4' : 'reader-status-shelf-v3', agent, status, sort, order,
+    publishedOnly ? session.viewer : null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: ShelfAfter | undefined;
   let statusCount: number | undefined;
@@ -40,18 +41,15 @@ export function shelfPageBasis(session: WorkReadSession, agent: string,
   return { binding, sort, order, after, statusCount };
 }
 
-/** Owner pages retain every status row, using null cards as placeholders.
- * Public pages skip unavailable cards while advancing the candidate keyset;
- * exhausting the read budget fails the whole request. */
+/** Public refill examines at most two batches, advancing over invisible rows.
+ * An empty page can have a continuation: callers must follow the cursor, rather
+ * than treating a bounded candidate window as the end of the shelf. */
 export async function readShelfPage(session: WorkReadSession, agent: string,
   store: ReaderLibraryStatusStore, status: ReadingStatus, options: ShelfOptions,
-  fence: string, publishedOnly: boolean, statusCount?: number) {
+  fence: string, publishedOnly: boolean) {
   const basis = shelfPageBasis(session, agent, status, options, fence, publishedOnly);
   const { binding, sort, order } = basis;
   let after = basis.after;
-  if (publishedOnly && (!Number.isSafeInteger(statusCount) || statusCount! < 0)) {
-    throw new WorkReadInvalid('Invalid public shelf count');
-  }
   const limit = session.options.limit ?? STATUS_SHELF_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > STATUS_SHELF_COST.pageSize) {
     throw new WorkReadInvalid('Invalid shelf page size');
@@ -59,7 +57,7 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
   const items: Array<Omit<ShelfRow, 'sortValue'> & { card: (Awaited<ReturnType<typeof shelfWorks>> extends Map<string, infer T> ? T : never) | null }> = [];
   let last: ShelfAfter | undefined;
   let hasMore = false;
-  while (true) {
+  for (let batch = 0; batch < STATUS_SHELF_COST.candidateBatches; batch++) {
     session.checkDeadline();
     const rows = await store.sortedPage(agent, status, STATUS_SHELF_COST.candidateBatch, sort, order, after);
     if (!rows.length) break;
@@ -67,7 +65,7 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
     const cards = await shelfWorks(session, rows.filter(row => !published || published.has(row.work)).map(row => row.work));
     for (const row of rows) {
       const card = cards.get(row.work) ?? null;
-      if (publishedOnly && !card) continue;
+      if (publishedOnly && !card) { last = { work: row.work, value: row.sortValue }; continue; }
       if (items.length === limit) { hasMore = true; break; }
       const { sortValue, ...state } = row;
       items.push({ ...state, card });
@@ -76,8 +74,13 @@ export async function readShelfPage(session: WorkReadSession, agent: string,
     if (hasMore || rows.length < STATUS_SHELF_COST.candidateBatch) break;
     const tail = rows.at(-1)!;
     after = { work: tail.work, value: tail.sortValue };
+    // A full final candidate batch may have a successor, even when none of its
+    // cards can be shown. The next bounded read resolves that uncertainty.
+    if (batch + 1 === STATUS_SHELF_COST.candidateBatches) hasMore = true;
   }
-  return pageResult(session, items, hasMore
+  const statusCount = (basis.statusCount ?? 0) + items.length;
+  return { ...pageResult(session, items, hasMore
     ? encodeReadCursor(binding, session.position, last!.work,
-      JSON.stringify(publishedOnly ? [fence, last!.value, statusCount] : [fence, last!.value])) : null);
+      JSON.stringify(publishedOnly ? [fence, last!.value, statusCount] : [fence, last!.value])) : null),
+    ...(publishedOnly ? { statusCount, statusCountKind: hasMore ? 'lower-bound' as const : 'exact' as const } : {}) };
 }

@@ -224,14 +224,16 @@ test.each(['initial context', 'retained context'])(
     const firstPublic = await app.handle(new Request(`http://main.local${publicPagePath}`));
     expect(firstPublic.status).toBe(200);
     const firstPublicBody = await firstPublic.json() as { items: { work: string; card: { title: unknown } }[];
-      nextCursor: string; statusCount: number };
-    expect(firstPublicBody.statusCount).toBe(2);
+      nextCursor: string; statusCount: number; statusCountKind: string };
+    expect(firstPublicBody.statusCount).toBe(1);
+    expect(firstPublicBody.statusCountKind).toBe('lower-bound');
     expect(firstPublicBody.items).toHaveLength(1);
     expect(firstPublicBody.items[0]?.card.title).toBeTruthy();
     const secondPublicPage = await app.handle(new Request(`http://main.local${publicPagePath}`
       + `&cursor=${encodeURIComponent(firstPublicBody.nextCursor)}`));
     expect(secondPublicPage.status).toBe(200);
     const secondPublicBody = await secondPublicPage.json() as { items: { work: string }[] };
+    expect(secondPublicBody).toMatchObject({ statusCount: 2, statusCountKind: 'exact' });
     expect(new Set([firstPublicBody.items[0]?.work, secondPublicBody.items[0]?.work]))
       .toEqual(new Set([publicWork.work, secondPublic.work]));
     await status.write({ agent: person.agent, work: secondPublic.work, status: 'read',

@@ -141,9 +141,10 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       }
       await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
         { visibility: 'public', expectedVersion: 0 }, home.reader.token));
-      const publicCounts = await home.json<{ statusShelves: { status: string; count: number }[] }>(
+      const publicCounts = await home.json<{ statusShelves: { status: string; count: number; countKind: string; nextCursor: string | null }[] }>(
         await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves`));
-      expect(publicCounts.statusShelves.reduce((sum, shelf) => sum + shelf.count, 0)).toBe(1_000);
+      expect(publicCounts.statusShelves.reduce((sum, shelf) => sum + shelf.count, 0)).toBe(60);
+      expect(publicCounts.statusShelves.every(shelf => shelf.countKind === 'lower-bound' && shelf.nextCursor)).toBe(true);
       const publicPage = await home.json<Page & { statusCount: number }>(await home.call('GET',
         `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=title&order=asc&limit=20`));
       expect(publicPage.items).toHaveLength(20);
@@ -151,12 +152,13 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
         expect((await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=${sort}`)).status)
           .toBe(400);
       }
-      expect(publicPage.statusCount).toBe(counts.find(shelf => shelf.status === 'read')!.count);
+      expect(publicPage).toMatchObject({ statusCount: 20, statusCountKind: 'lower-bound' });
       const sharedBase = `/v1/agents/${agent.slice(-36)}/shelves/status/read/works?sort=title&order=asc&limit=20`;
       const scans = spyOn(home.deps.libraryStatus, 'sortedPage');
       try {
         const sharedWorks = publicPage.items.map(item => item.work);
-        const recordPage = fixturePages('G-824 public read/title/asc', publicPage.statusCount);
+        const expectedPublicCount = counts.find(shelf => shelf.status === 'read')!.count;
+        const recordPage = fixturePages('G-824 public read/title/asc', expectedPublicCount);
         recordPage(sharedWorks, publicPage.nextCursor);
         let sharedCursor = publicPage.nextCursor;
         while (sharedCursor) {
@@ -165,7 +167,7 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           const page = await fixtureDeadline(home.call('GET', `${sharedBase}&cursor=${encodeURIComponent(sharedCursor)}`)
             .then(response => home.json<Page & { statusCount: number }>(response)), 'G-824 public read/title/asc');
           recordPage(page.items.map(item => item.work), page.nextCursor);
-          expect(page.statusCount).toBe(publicPage.statusCount);
+          expect(page.statusCount).toBe(sharedWorks.length + page.items.length);
           // Two candidate batches at most (including lookahead); no count scan.
           expect(scans.mock.calls.length).toBeLessThanOrEqual(2);
           expect(scans.mock.calls.every(call => call[2] === STATUS_SHELF_COST.candidateBatch)).toBe(true);
@@ -173,8 +175,8 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
           sharedWorks.push(...page.items.map(item => item.work));
           sharedCursor = page.nextCursor;
         }
-        expect(new Set(sharedWorks).size).toBe(publicPage.statusCount);
-        expect(sharedWorks).toHaveLength(publicPage.statusCount);
+        expect(new Set(sharedWorks).size).toBe(expectedPublicCount);
+        expect(sharedWorks).toHaveLength(expectedPublicCount);
       } finally { scans.mockRestore(); }
       const tampered = `${publicPage.nextCursor!.startsWith('A') ? 'B' : 'A'}${publicPage.nextCursor!.slice(1)}`;
       expect((await home.call('GET', `${sharedBase}&cursor=${tampered}`)).status).toBe(400);
@@ -253,14 +255,34 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
     await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
       { visibility: 'public', expectedVersion: 0 }, home.reader.token));
     const publicBase = `/v1/agents/${agent.slice(-36)}/shelves/status/reading/works?limit=1`;
-    const shared = await home.json<Page & { statusCount: number }>(await home.call('GET', publicBase));
+    // Invisible prefixes advance in bounded empty pages. Count only delivered
+    // cards and follow the cursor until the total is exact.
+    const publicTraversal = async () => {
+      const works: Page['items'] = [];
+      let cursor: string | null = null, pages = 0;
+      let page: Page & { statusCount: number; statusCountKind: string };
+      do {
+        const scans = spyOn(home.deps.libraryStatus, 'sortedPage');
+        try {
+          page = await home.json<typeof page>(await home.call('GET', publicBase
+            + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '')));
+          expect(scans.mock.calls.length).toBeLessThanOrEqual(STATUS_SHELF_COST.candidateBatches);
+        } finally { scans.mockRestore(); }
+        works.push(...page.items);
+        expect(page.statusCount).toBe(works.length);
+        cursor = page.nextCursor;
+        expect(++pages).toBeLessThanOrEqual(8);
+      } while (cursor);
+      return { ...page, items: works };
+    };
+    const shared = await publicTraversal();
     expect(shared.items.map(item => item.work)).toEqual([parent.work]);
-    expect(shared).toMatchObject({ statusCount: 1, nextCursor: null });
+    expect(shared).toMatchObject({ statusCount: 1, statusCountKind: 'exact', nextCursor: null });
     // A publication pointer alone is insufficient: a missing display name also
     // makes the card unavailable, and the public total must agree with its page.
     await home.stack.fuseki.update(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(parent.work)} rdfs:label ?label } }`);
-    const nameless = await home.json<Page & { statusCount: number }>(await home.call('GET', publicBase));
+    const nameless = await publicTraversal();
     expect(nameless).toMatchObject({ items: [], statusCount: 0, nextCursor: null });
     const namelessCounts = await home.json<{ statusShelves: { status: string; count: number }[] }>(
       await home.call('GET', `/v1/agents/${agent.slice(-36)}/shelves`));

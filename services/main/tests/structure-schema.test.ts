@@ -1,5 +1,5 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -7,7 +7,8 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
+import { ReaderLibraryStatusStore } from '../src/modules/library/status.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, checkOccurrenceRecord, checkStructureManifest,
   checkStructurePage, type OccurrenceRecord, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -297,6 +298,153 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
   // never rekeys this private state away from the stable occurrence ID.
   expect(await store.read(principal, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
 });
+
+test('Populated libraries migrate to point revisions without rewriting saved state; mutation, rollback and concurrent writes fence cursors', async () => {
+  const pool = await database('library_revision_upgrade');
+  await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
+    (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {
+    await pool.query(readFileSync(join(migrations, name), 'utf8'));
+    await pool.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [migrationVersion(name)]);
+  }
+  const agent = id(), work = id(), structure = id(), occurrence = id();
+  await pool.query(`INSERT INTO reader.library_status(agent,work,status,version,title_key)
+    VALUES ($1,$2,'reading',7,'saved title')`, [agent, work]);
+  await pool.query(`INSERT INTO structure.progress(principal_issuer,principal_subject,structure,occurrence,completed,version)
+    VALUES ('issuer','subject',$1,$2,true,4)`, [structure, occurrence]);
+  await migrateContent(pool);
+  await migrateContent(pool);
+  const store = new ReaderLibraryStatusStore(pool);
+  expect(await store.fence(agent)).toBe('0:0');
+  expect((await store.batch(agent, [work]))[0]).toMatchObject({ status: 'reading', version: 7 });
+  expect((await store.progress({ issuer: 'issuer', subject: 'subject' }, [structure])).get(structure))
+    .toMatchObject({ occurrence, completed: true, version: 4 });
+  await pool.query(`UPDATE reader.library_status SET title_key='new title' WHERE agent=$1`, [agent]);
+  expect(await store.fence(agent)).toBe('0:0');
+  expect(await store.fence(agent, 'title')).toBe('0:1');
+  const transaction = await pool.connect();
+  try {
+    await transaction.query('BEGIN');
+    await transaction.query('UPDATE reader.library_status SET status=NULL, version=version+1 WHERE agent=$1', [agent]);
+    await transaction.query('ROLLBACK');
+  } finally { transaction.release(); }
+  expect(await store.fence(agent)).toBe('0:0');
+  await Promise.all(Array.from({ length: 4 }, () => store.write({ agent, work: id(), status: 'reading',
+    expectedVersion: 0, idempotencyKey: randomUUID() })));
+  expect(await store.fence(agent)).toBe('4:0');
+  await pool.query('UPDATE reader.library_status SET own_rating=5, last_read_at=now() WHERE agent=$1 AND work=$2', [agent, work]);
+  expect(await store.fence(agent)).toBe('4:0');
+  expect(await store.fence(agent, 'rating')).toBe('4:1');
+  expect(await store.fence(agent, 'last-read')).toBe('4:1');
+  await pool.query('UPDATE reader.library_status SET own_rating=own_rating WHERE agent=$1', [agent]);
+  expect(await store.fence(agent, 'rating')).toBe('4:1');
+  const successor = id();
+  await pool.query('UPDATE reader.library_status SET agent=$3 WHERE agent=$1 AND work=$2', [agent, work, successor]);
+  expect(await store.fence(agent)).toBe('5:0');
+  expect(await store.fence(successor)).toBe('1:0');
+  await pool.query('DELETE FROM reader.library_status WHERE agent=$1', [successor]);
+  expect(await store.fence(successor)).toBe('2:0');
+});
+
+interface SeekPlan { 'Node Type': string; 'Index Name'?: string; 'Actual Rows': number;
+  'Actual Loops': number; 'Rows Removed by Filter'?: number; Plans?: SeekPlan[] }
+function planNodes(plan: SeekPlan): SeekPlan[] { return [plan, ...(plan.Plans ?? []).flatMap(planNodes)]; }
+
+test('Progress write, replay, batch latest and shelf revision plans examine bounded rows at 1,000 and 20,000 entries', async () => {
+  const pool = await database('progress_latest_bounds');
+  await migrateContent(pool);
+  const principal = { issuer: 'https://account.example', subject: randomUUID() }, structure = id(), agent = id(), work = id();
+  const library = new ReaderLibraryStatusStore(pool), progress = new StructureProgressStore(pool);
+  const requested = [structure, ...Array.from({ length: 23 }, id)];
+  await library.write({ agent, work, status: 'reading', expectedVersion: 0, idempotencyKey: randomUUID() });
+  const measurements = [];
+  for (const size of [1_000, 20_000]) {
+    await pool.query(`INSERT INTO structure.progress
+      (principal_issuer,principal_subject,structure,occurrence,completed,version,updated_at)
+      SELECT $1,$2,$3,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),false,1,
+        '2026-01-01'::timestamptz + n * interval '1 second' FROM generate_series($4::int,$5::int) n`,
+    [principal.issuer, principal.subject, structure, size === 1_000 ? 1 : 1_001, size]);
+    await pool.query(`INSERT INTO reader.library_status(agent,work,status,version)
+      SELECT $1,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),'reading',1
+      FROM generate_series($2::int,$3::int) n`, [agent, size === 1_000 ? 1 : 1_001, size]);
+    await pool.query('ANALYZE structure.progress; ANALYZE reader.library_status; ANALYZE reader.library_status_revision');
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const original = Client.prototype.query;
+    const capture = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+      if (typeof args[0] === 'string' && (args[0].includes('CROSS JOIN LATERAL')
+        || args[0].includes('WITH latest AS MATERIALIZED') || args[0].includes('FROM reader.library_status_revision')
+        || args[0].includes('AS sort_value FROM reader.library_status'))) {
+        statements.push({ sql: args[0], values: args[1] as unknown[] });
+      }
+      return Reflect.apply(original, this, args);
+    } as typeof original);
+    const command = { principal, structure, occurrence: id(), completed: false, position: 'line-1',
+      expectedVersion: 0, idempotencyKey: randomUUID(), library: { agent, work } };
+    try {
+      const saved = await progress.write(command);
+      const latestFence = await library.fence(agent, 'last-read');
+      const latest = await library.progress(principal, requested);
+      expect(latest.size).toBe(1);
+      expect(latest.get(structure)?.occurrence).toBe(command.occurrence);
+      expect(await progress.write(command)).toEqual({ ...saved, replayed: true });
+      expect(await library.fence(agent, 'last-read')).toBe(latestFence);
+      const firstPage = await library.sortedPage(agent, 'reading', 20);
+      const tail = firstPage.at(-1)!;
+      expect(await library.sortedPage(agent, 'reading', 20, 'added', 'desc', { work: tail.work, value: tail.sortValue }))
+        .toHaveLength(20);
+      await expect(progress.write({ ...command, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(StaleStructureProgress);
+      expect(await library.fence(agent, 'last-read')).toBe(latestFence);
+    } finally { capture.mockRestore(); }
+    const examined = [];
+    for (const statement of statements.filter(statement => statement.sql.includes('structure.progress'))) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query<{ 'QUERY PLAN': { Plan: SeekPlan }[] }>(
+          `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`, statement.values);
+        const nodes = planNodes(result.rows[0]!['QUERY PLAN'][0]!.Plan);
+        const scans = nodes.filter(node => node['Index Name'] === 'progress_latest');
+        expect(scans).toHaveLength(1);
+        expect(nodes.some(node => node['Node Type'] === 'Sort' || node['Node Type'] === 'Seq Scan')).toBe(false);
+        const rows = scans.reduce((sum, node) => sum + (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops'], 0);
+        expect(rows).toBeLessThanOrEqual(24);
+        examined.push(rows);
+      } finally { await client.query('ROLLBACK'); client.release(); }
+    }
+    expect(examined).toHaveLength(3); // one latest batch, one write and one replay projection
+    const shelfStatements = statements.filter(statement => statement.sql.includes('AS sort_value FROM reader.library_status'));
+    expect(shelfStatements).toHaveLength(2);
+    for (const statement of shelfStatements) {
+      const result = await pool.query<{ 'QUERY PLAN': { Plan: SeekPlan }[] }>(
+        `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`, statement.values);
+      const nodes = planNodes(result.rows[0]!['QUERY PLAN'][0]!.Plan);
+      const scans = nodes.filter(node => node['Index Name'] === 'library_status_shelf');
+      expect(scans).toHaveLength(1);
+      expect(scans[0]!['Actual Rows'] + (scans[0]!['Rows Removed by Filter'] ?? 0)).toBe(20);
+      expect(nodes.some(node => node['Node Type'] === 'Sort' || node['Node Type'] === 'Seq Scan')).toBe(false);
+    }
+    const fenceQuery = statements.find(statement => statement.sql.includes('library_status_revision'))!;
+    // Populate unrelated people so the optimizer must use the revision PK too.
+    await pool.query(`INSERT INTO reader.library_status_revision(agent)
+      SELECT 'https://rezics.com/id/00000000-0000-4000-8001-' || lpad(n::text,12,'0')
+      FROM generate_series(1,1000) n ON CONFLICT DO NOTHING`);
+    await pool.query('ANALYZE reader.library_status_revision');
+    const fencePlan = await pool.query<{ 'QUERY PLAN': { Plan: SeekPlan }[] }>(
+      `EXPLAIN (ANALYZE, FORMAT JSON) ${fenceQuery.sql}`, fenceQuery.values);
+    expect(planNodes(fencePlan.rows[0]!['QUERY PLAN'][0]!.Plan).filter(node => node['Index Name'] === 'library_status_revision_pkey'))
+      .toMatchObject([{ 'Actual Rows': 1 }]);
+    measurements.push(examined);
+  }
+  expect(measurements[0]).toEqual(measurements[1]);
+  const occurrence = id();
+  const selections = [`urn:rezics:content:revision:${randomUUID()}`, `urn:rezics:content:revision:${randomUUID()}`].sort();
+  await pool.query(`INSERT INTO structure.progress
+    (principal_issuer,principal_subject,structure,occurrence,selection_key,completed,version,updated_at)
+    SELECT $1,$2,$3,$4,selection,false,1,'2099-01-01' FROM unnest($5::text[]) selection`,
+  [principal.issuer, principal.subject, structure, occurrence, selections]);
+  expect((await library.progress(principal, [structure])).get(structure)?.selectedRevision).toBe(selections[0]);
+  expect((await library.progress({ ...principal, subject: randomUUID() }, [structure])).size).toBe(0);
+}, 60_000);
 
 interface JobSeed { kind?: string; structure?: string; key?: string; principal?: string;
   sourceRef?: string | null; sourceRevision?: string | null; mappingPolicy?: string | null;

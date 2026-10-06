@@ -9,8 +9,9 @@ export type ShelfOrder = 'asc' | 'desc';
 export interface ShelfAfter { work: string; value: string | null }
 export interface ShelfRow extends StatusState { sortValue: string | null }
 export const STATUS_SHELF_COST = { candidateBatch: 20, countBatch: 64, pageSize: 20, countStatements: 1,
-  // Candidate keysets are O(log N + P); the consistency fence is O(N) in SQL.
-  ordering: 'SQL keyset', fence: 'SQL aggregate O(N)', nulls: 'last' } as const;
+  candidateBatches: 2, progressStructures: 24,
+  ordering: 'SQL keyset O(log N + P)', fence: 'per-person revision point read',
+  progress: 'one indexed top-one seek per Structure', nulls: 'last' } as const;
 export type ShelfMetadata = { titleKey: string | null; ownRating: number | null; lastReadAt: string | null };
 const metadataReaders = new WeakMap<Pool, (agent: string, work: string, transaction: PoolClient) => Promise<ShelfMetadata>>();
 const followWriters = new WeakMap<Pool, (agent: string, work: string) => Promise<void>>();
@@ -283,17 +284,21 @@ export class ReaderLibraryStatusStore {
   }
 
   async progress(principal: VerifiedPrincipal, structures: string[]): Promise<Map<string, WorkProgress>> {
-    if (structures.length > 24 || structures.some(structure => !ID.test(structure))) {
+    if (structures.length > STATUS_SHELF_COST.progressStructures || structures.some(structure => !ID.test(structure))) {
       throw new InvalidLibraryStatus('invalid progress batch');
     }
     if (!structures.length) return new Map();
     const rows = await this.pool.query<{ structure: string; occurrence: string; selection_key: string;
       completed: boolean; position: string | null; version: string; changed_at: string }>(`
-      SELECT DISTINCT ON (structure) structure, occurrence, selection_key, completed, position,
+      SELECT latest.structure, occurrence, selection_key, completed, position,
         version::text AS version, updated_at::text AS changed_at
-      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
-        AND structure = ANY($3::text[])
-      ORDER BY structure, updated_at DESC, occurrence DESC LIMIT 24`,
+      FROM unnest($3::text[]) AS requested(structure)
+      CROSS JOIN LATERAL (
+        SELECT structure, occurrence, selection_key, completed, position, version, updated_at
+        FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
+          AND structure = requested.structure
+        ORDER BY updated_at DESC, occurrence DESC, selection_key ASC LIMIT 1
+      ) AS latest`,
     [principal.issuer, principal.subject, structures]);
     return new Map(rows.rows.map(row => [row.structure, { structure: row.structure,
       occurrence: row.occurrence, selectedRevision: row.selection_key || null,
@@ -303,15 +308,14 @@ export class ReaderLibraryStatusStore {
 
   async fence(agent: string, sort: ShelfSort = 'added'): Promise<string> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
-    const keys = { added: 'NULL::text', finished: 'NULL::text', title: 'title_key',
-      rating: 'own_rating', 'last-read': 'last_read_at' };
+    const keys = { added: '0', finished: '0', title: 'title_revision',
+      rating: 'rating_revision', 'last-read': 'progress_revision' };
     if (!Object.hasOwn(keys, sort)) throw new InvalidLibraryStatus('invalid shelf sort');
     const key = keys[sort];
-    const rows = await this.pool.query<{ count: string; versions: string; keys: string }>(`
-      SELECT count(*)::text AS count, coalesce(sum(version), 0)::text AS versions,
-        coalesce(sum(hashtextextended(jsonb_build_array(work, ${key})::text, 0)::numeric), 0)::text AS keys
-      FROM reader.library_status WHERE agent = $1`, [agent]);
-    return `${rows.rows[0]!.count}:${rows.rows[0]!.versions}:${rows.rows[0]!.keys}`;
+    const rows = await this.pool.query<{ revision: string; sort_revision: string }>(`
+      SELECT revision::text AS revision, (${key})::text AS sort_revision
+      FROM reader.library_status_revision WHERE agent = $1`, [agent]);
+    return `${rows.rows[0]?.revision ?? '0'}:${rows.rows[0]?.sort_revision ?? '0'}`;
   }
 
   /** Every sort uses an explicit NULLS LAST and a unique Work tiebreaker.

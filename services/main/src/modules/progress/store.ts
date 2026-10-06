@@ -10,6 +10,8 @@ const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 export class InvalidStructureProgress extends Error {}
 export class StaleStructureProgress extends Error {}
 export class StructureProgressConflict extends Error {}
+export const STRUCTURE_PROGRESS_COST = { latestRows: 1,
+  libraryProjection: 'indexed top-one seek, independent of occurrence inventory' } as const;
 
 export interface StructureProgress {
   structure: string;
@@ -65,10 +67,13 @@ export class StructureProgressStore {
 
   private async projectLibrary(client: PoolClient, input: ProgressWrite) {
     if (!input.library) return;
-    await client.query(`UPDATE reader.library_status SET last_read_at = greatest(last_read_at,
-      (SELECT max(updated_at) FROM structure.progress WHERE principal_issuer = $3
-        AND principal_subject = $4 AND structure = $5))
-      WHERE agent = $1 AND work = $2`, [input.library.agent, input.library.work,
+    await client.query(`WITH latest AS MATERIALIZED (
+      SELECT updated_at FROM structure.progress WHERE principal_issuer = $3
+        AND principal_subject = $4 AND structure = $5
+      ORDER BY updated_at DESC, occurrence DESC, selection_key ASC LIMIT 1
+    ) UPDATE reader.library_status SET last_read_at = greatest(last_read_at, latest.updated_at)
+      FROM latest WHERE agent = $1 AND work = $2
+        AND last_read_at IS DISTINCT FROM greatest(last_read_at, latest.updated_at)`, [input.library.agent, input.library.work,
       input.principal.issuer, input.principal.subject, input.structure]);
   }
 
