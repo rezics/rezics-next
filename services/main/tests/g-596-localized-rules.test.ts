@@ -34,6 +34,11 @@ function storage(initial?: unknown) {
   let revisionWrites = 0;
   const query = async (sql: string, values: unknown[] = []) => {
     const rows = (items: unknown[]) => ({ rows: items, rowCount: items.length });
+    // Rules publication reads the current admission so an omitted self-join does not reset it.
+    if (sql.includes('LEFT JOIN access.realm_admin_settings')) return rows(settingsRow ? [{
+      visibility: settingsRow.visibility, listing: 'listed', history: 'everything',
+      self_join: settingsRow.self_join, admission: 'invitation' }] : []);
+    if (sql.includes('UPDATE access.membership_policy')) return rows([]);
     if (sql.includes('FROM access.realm_admin_settings')) return rows(settingsRow ? [settingsRow] : []);
     if (sql.includes('FROM access.recovery_fence f')) return rows([{ open: true, document: head?.document }]);
     if (sql.includes('JOIN access.governance_rule_revision')) return rows(head ? [head] : []);

@@ -4,6 +4,8 @@ export class PolicyDenied extends Error {}
 export class PolicyNotFound extends Error {}
 export class PolicyStale extends Error {}
 export class PolicyConflict extends Error {}
+/** A removal that would leave a resource with no controller. Distinct from an idempotency clash. */
+export class PolicyControllerContinuity extends Error {}
 export class PolicyUnavailable extends Error {}
 /** One generic answer for every unusable set reference, so it is no roster oracle. */
 export class PolicyReferenceNotAdmitted extends Error {}

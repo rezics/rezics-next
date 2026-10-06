@@ -2,8 +2,8 @@ import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
 import {
-  PolicyConflict, PolicyDenied, PolicyInvalid, PolicyNotFound, PolicyReferenceNotAdmitted,
-  PolicyStale, PolicyUnavailable, ProofHandleMismatch, ProofHandleStale,
+  PolicyConflict, PolicyControllerContinuity, PolicyDenied, PolicyInvalid, PolicyNotFound,
+  PolicyReferenceNotAdmitted, PolicyStale, PolicyUnavailable, ProofHandleMismatch, ProofHandleStale,
 } from '../modules/access/policy-errors.ts';
 import { POLICY_DECISION_ACTIONS } from '../modules/access/policy-decisions.ts';
 import type { AccessPolicyOwner } from '../modules/access/policy-owner.ts';
@@ -125,6 +125,9 @@ function policyError(error: unknown): Response {
   if (error instanceof ProofHandleMismatch) return problem(403, 'proof_handle_mismatch', 'Proof handle is bound to another context');
   if (error instanceof PolicyNotFound) return problem(404, 'policy_not_found', 'No policy governs this scope');
   if (error instanceof PolicyStale) return problem(409, 'policy_stale', 'Access authority changed');
+  if (error instanceof PolicyControllerContinuity) {
+    return problem(409, 'controller_continuity', 'This change would leave a resource without a controller');
+  }
   if (error instanceof PolicyConflict) return problem(409, 'policy_key_conflict', 'Idempotency key binds another intent');
   if (error instanceof PolicyReferenceNotAdmitted) {
     return problem(409, 'policy_reference_not_admitted', 'A referenced set is not admitted for this policy');

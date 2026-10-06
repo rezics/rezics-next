@@ -81,12 +81,24 @@ class CapturingFuseki extends FusekiClient {
       namePredicate: uri('http://www.w3.org/2000/01/rdf-schema#label'),
     }, { work: uri(work), name: { ...lit('Original name'), 'xml:lang': 'en' },
       namePredicate: uri('https://schema.org/name') }] } };
+    // Catalogue projection drops the replaced label in SPARQL. This double does not execute SPARQL,
+    // so it applies that same filter before returning the surviving names.
+    if (query.includes('SELECT ?work ?name ?state') && query.includes('schema:alternateName')) {
+      const filter = /FILTER\(\?namePredicate != rdfs:label \|\| \?name != ("(?:[^"\\]|\\.)*")@([A-Za-z0-9-]+)\)/.exec(query);
+      const bindings: Binding[] = [];
+      const dropsPriorLabel = filter !== null && JSON.parse(filter[1]!) === '元の名前' && filter[2] === this.language;
+      if (!dropsPriorLabel) bindings.push({ work: uri(work), name: { ...lit('元の名前'), 'xml:lang': this.language } });
+      bindings.push({ work: uri(work), name: { ...lit('Original name'), 'xml:lang': 'en' } });
+      return { results: { bindings } };
+    }
     if (query.includes('SELECT ?main WHERE')) return { results: { bindings: [{ main: uri(main) }] } };
     if (query.includes('SELECT ?admission WHERE')) return { results: { bindings: [{ admission: lit('proposal-admission') }] } };
     if (query.includes('SELECT ?main ?manifest')) return { results: { bindings: [{ main: uri(main), manifest: uri(this.priorManifest) }] } };
     if (query.includes('SELECT ?head ?protection')) return { results: { bindings: [{ head: uri(head) }] } };
     if (query.includes('SELECT ?head ?count')) return { results: { bindings: [{}] } };
     if (query.includes('SELECT ?work ?head ?protection')) return { results: { bindings: this.proposal ? [this.proposal] : [] } };
+    // A Realm read is reached only after the Zone probe finds no Zone-only Space.
+    if (query.includes('SELECT ?zone ?owner ?name')) return { results: { bindings: [] } };
     if (query.includes('SELECT ?realm ?owner ?name')) return { results: { bindings: this.name ? [{
       realm: uri(ids[4]!), owner: uri(actor), name: { ...lit(this.name.value), 'xml:lang': this.name.language },
       spaceRevision: uri(ids[5]!), realmRevision: uri(ids[6]!), selectionPolicy: uri(ids[7]!),

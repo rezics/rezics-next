@@ -60,14 +60,16 @@ function fixture(controlled = true) {
 
 test('G-963: a controlled member leaves a closed Realm after its terms change, with one ended episode', async () => {
   const f = fixture();
-  expect(await f.owner.change(input)).toMatchObject({ state: 'left', generation: '2', policyRevision: '2', replayed: false });
+  // Leave records the scope epoch it observed. It does not advance the shared fence.
+  expect(await f.owner.change(input)).toMatchObject({ state: 'left', generation: '2', policyRevision: '2',
+    authorityEpoch: '4', replayed: false });
   expect(f.historyWrites).toBe(1);
   expect(f.history.get('1')).toMatchObject({ state: 'joined', terms_revision: 'terms-1' });
   expect(f.queries.some(sql => sql.includes('FROM access.membership_ban'))).toBe(false);
   expect(f.queries.some(sql => sql.includes('DELETE FROM access.membership'))).toBe(false);
   expect(await f.owner.change(input)).toMatchObject({ state: 'left', generation: '2', replayed: true });
   expect(await f.owner.change({ ...input, expectedGeneration: '2', idempotencyKey: 'leave-again',
-    requestDigest: 'b'.repeat(64) })).toMatchObject({ state: 'left', generation: '2', authorityEpoch: '5' });
+    requestDigest: 'b'.repeat(64) })).toMatchObject({ state: 'left', generation: '2', authorityEpoch: '4' });
   expect(f.historyWrites).toBe(1);
 });
 

@@ -42,8 +42,9 @@ test('G-964: the private recipient can leave closed/changed admission and retry 
   const f = fixture();
   expect(await f.owner.change(input)).toMatchObject({ state: 'left', generation: '2', policyRevision: '2', replayed: false });
   expect(await f.owner.change(input)).toMatchObject({ state: 'left', generation: '2', replayed: true });
+  // A later leave of the ended episode records the same unbumped scope epoch.
   expect(await f.owner.change({ ...input, expectedGeneration: '2', idempotencyKey: 'again', requestDigest: 'b'.repeat(64) }))
-    .toMatchObject({ state: 'left', generation: '2', authorityEpoch: '5' });
+    .toMatchObject({ state: 'left', generation: '2', authorityEpoch: '4' });
   expect(f.history.size).toBe(2);
   expect(f.queries.some(sql => sql.includes('private_membership_ban'))).toBe(false);
   expect(PRIVATE_MEMBERSHIP_LEAVE_COST.dependentAuthorityRows).toBe(256);

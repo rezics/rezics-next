@@ -22,7 +22,7 @@ test('G-964: joining basis separates private visibility from open admission and 
       } };
       const pool = { connect: async () => client } as unknown as Pool;
       const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'route' }, fuseki: { query: async () => {
-        expect(locked).toBe(true);
+        // The graph read is prepared before any Access lock. Disclosure still waits for the gate.
         const binding = (value: string) => ({ type: 'literal', value });
         return { results: { bindings: [{ space: binding(id), disclosure: binding(RV + (visibility === 'public' ? 'Public' : 'Private')),
           admission: binding(admission) }] } };
@@ -31,5 +31,6 @@ test('G-964: joining basis separates private visibility from open admission and 
       if (visibility === 'private' && !(admission === 'open' && policyOpen)) {
         await expect(reading).rejects.toBeInstanceOf(RealmAdminDenied);
       } else expect(await reading).toMatchObject({ open: policyOpen, selfJoin: admission === 'open' && policyOpen });
+      expect(locked).toBe(true);
     }
 });

@@ -7,8 +7,8 @@ import { lockAccessKey } from './scope-gates.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import {
-  agentPattern, generationPattern, PolicyConflict, PolicyDenied, PolicyInvalid, PolicyStale,
-  uuidPattern,
+  agentPattern, generationPattern, PolicyConflict, PolicyControllerContinuity, PolicyDenied,
+  PolicyInvalid, PolicyStale, uuidPattern,
 } from './policy-errors.ts';
 import {
   drainRevokedAuthority, inAccessTransaction, requireActivePrincipal, requireMandate,
@@ -106,7 +106,9 @@ export class AccessRevocations {
       if (request.target.kind === 'representation' && target.action === 'agent.control') {
         try { await assertControllerContinuity(client, [request.issuerSubject]); }
         catch (error) {
-          if (error instanceof ControlConflict) throw new PolicyConflict(error.message);
+          // Keep the continuity wording on the error. The route maps the class to its own problem,
+          // so a last-controller refusal is not reported as an idempotency clash.
+          if (error instanceof ControlConflict) throw new PolicyControllerContinuity(error.message);
           throw error;
         }
       }

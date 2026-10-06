@@ -50,7 +50,8 @@ function fixture(
 test('G-1005: fixture repair supplies a missing consent grant once, without replacing active or revoked grants', async () => {
   const missing = fixture();
   expect(await repairJoiningFixtureConsent(missing.pool, 'principal', 'agent')).toBe(true);
-  expect(missing.statements.length).toBeLessThanOrEqual(9);
+  // One advisory lock serializes the repair beside the fence, gate, controller, grant and write.
+  expect(missing.statements.length).toBeLessThanOrEqual(10);
   expect(await repairJoiningFixtureConsent(missing.pool, 'principal', 'agent')).toBe(false);
   expect(missing.inserted()).toBe(1);
   expect(missing.released()).toBe(2);
