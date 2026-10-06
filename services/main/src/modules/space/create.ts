@@ -20,7 +20,8 @@ export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-review
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const COMMUNITY_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
 export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 2, handleChecks: 2,
-  graphCommandCalls: 1, initialRulesBytes: 16_384, deadlineMs: 10_000 } as const;
+  profileValidationCalls: 2, policyHeads: 1, graphCommandCalls: 1,
+  initialRulesBytes: 16_384, deadlineMs: 10_000 } as const;
 
 export class InvalidSpaceInput extends Error {}
 
@@ -173,12 +174,17 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, space: string, realm: string,
-  input: CreateRealmSpaceInput): Promise<CommandValidation[]> {
+  input: CreateRealmSpaceInput, policyRevision: string): Promise<CommandValidation[]> {
   iri(space); iri(realm); spaceCreationDigest(input);
-  return profileValidations(env.fuseki, 'space-realm-v3', [
+  const components = await profileValidations(env.fuseki, 'space-realm-v3', [
     { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
   ]);
+  const policy = await profileValidations(env.fuseki, 'realm-policy-head-v1', [
+    { shape: 'https://rezics.com/definition/realm-policy-head-v1/head-shape',
+      focus: [policyRevision], graphs: [GRAPHS.current] },
+  ]);
+  return [...components, ...policy];
 }
 
 /** Create the intended Space and Realm policy in one graph position. */
@@ -206,8 +212,9 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const { rules, ...accessSettings } = settings;
   const policyFacts = initialRealmPolicyFacts({ realm, actingSubject: input.actingSubject,
     creationKey: admission.idempotencyKey, creationDigest: digest,
-    policyReceipt: realmCreationPolicyReceipt(admission), settings: accessSettings, rules }, space);
-  const validations = await validateCandidate(env, space, realm, input);
+    policyReceipt: realmCreationPolicyReceipt(admission), settings: accessSettings, rules },
+  space, spaceCreationReceiptIri(admission.id));
+  const validations = await validateCandidate(env, space, realm, input, policyFacts.revision);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
       capabilities: ['realm'], disclosure }, SPACE_REALM_PROFILE);
@@ -241,6 +248,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ; rv:head ${iri(realmRevision)} .
         ${policyFacts.current}
+        ${iri(policyFacts.revision)} a rv:RealmPolicyHead ; rv:realm ${iri(realm)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
@@ -253,9 +261,6 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
-        ${policyFacts.receipt}
-        ${iri(policyFacts.revision)} rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
           rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ;
           rv:authorityEpoch ${lit(admission.authorityEpoch)} ;

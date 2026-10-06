@@ -12,7 +12,7 @@ import { readRealmPolicy } from '../../../services/main/src/modules/space/policy
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { withRealmPermit } from '../../../services/main/src/modules/access/realm-management-policy.ts';
-import { realmCreationPolicyReceipt } from '../../../services/main/src/modules/space/create.ts';
+import { realmCreationPolicyReceipt, spaceCreationReceiptIri } from '../../../services/main/src/modules/space/create.ts';
 
 test('Private creation never exposes a public shell through failures, concurrent retries or lost responses', async () => {
   const s = await startMediaStack('realm-create-intent');
@@ -83,6 +83,7 @@ test('Private creation never exposes a public shell through failures, concurrent
       graphFailure = error instanceof Error ? error.message : String(error);
       throw error;
     });
+    if (result.status !== 'committed') { graphFailure = JSON.stringify(result); return result; }
     const row = (await realms(currentName))[0]!;
     expect(row.disclosure?.value).toBe('https://rezics.com/vocab/Private');
     // Probe between graph commit and the first Access initialization attempt.
@@ -118,6 +119,13 @@ test('Private creation never exposes a public shell through failures, concurrent
       const initialPolicyRevision = `urn:rezics:realm-policy:${realmCreationPolicyReceipt({
         principalId: creator.principalId, idempotencyKey: key })}`;
       expect((await readRealmPolicy(s.env, created.realm))?.revision).toBe(initialPolicyRevision);
+      const creationReceipt = spaceCreationReceiptIri(created.space.slice(-36));
+      expect((await s.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(initialPolicyRevision)} a rv:RealmPolicyHead ;
+          rv:realm ${iri(created.realm)} ; rv:receipt ${iri(creationReceipt)} }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(creationReceipt)} a rv:OperationReceipt ; rv:realm ${iri(created.realm)} }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(initialPolicyRevision)} ?p ?o } }
+      }`, 1024)).boolean).toBe(true);
       const view = await call('GET', `/v1/realms/${created.realm.slice(-36)}/settings?actingSubject=${encodeURIComponent(creator.actor)}`);
       expect(view.status, await view.clone().text()).toBe(200);
       expect(await view.json()).toMatchObject({ generation: '1', settings, ruleBasis: { revision: '1' } });
