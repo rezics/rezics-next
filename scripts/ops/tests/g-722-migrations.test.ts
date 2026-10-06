@@ -127,6 +127,12 @@ test('G-722 actual owner migrations serialize, rerun empty, check migration reco
       join(repositoryRoot, 'services/account/package.json'),
       join(artifact, 'services/account/package.json'),
     );
+    // The release image ships the shared migration order beside Account (release-images.ts).
+    mkdirSync(join(artifact, 'scripts/lib'), { recursive: true });
+    cpSync(
+      join(repositoryRoot, 'scripts/lib/migration-order.ts'),
+      join(artifact, 'scripts/lib/migration-order.ts'),
+    );
     // The copied fence resolves SQL relative to the artifact, and its supporting imports use this checkout.
     const fence = readFileSync(
       join(repositoryRoot, 'services/account/src/consent-fence.ts'),
