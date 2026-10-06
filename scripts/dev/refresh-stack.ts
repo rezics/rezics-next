@@ -329,7 +329,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
   if (args.length > 1 || args.some(arg => !['--dry-run', '--wait'].includes(arg))) {
     throw new Error('Usage: task dev:refresh -- [--dry-run | --wait]');
   }
-  // With several Goals the heavy lock is rarely free and unqueued; --wait joins its queue like any heavy run.
+  // With several Goals the heavy lock is rarely free and unqueued; --wait takes the next turn before ordinary waiters, without interrupting its holder.
   const wait = args.includes('--wait');
   const gitDir = command(root, 'git', ['rev-parse', '--path-format=absolute', '--git-dir']);
   const common = command(root, 'git', ['rev-parse', '--path-format=absolute', '--git-common-dir']);

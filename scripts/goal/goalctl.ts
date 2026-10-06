@@ -6,6 +6,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
   renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
@@ -52,7 +53,7 @@ export interface UsageSample { at: number; used: number; resets: number; week?: 
 export type UsageLevel = 'unknown' | 'normal' | 'restricted' | 'critical';
 export interface UsageReport {
   level: UsageLevel; used?: number; ageSeconds?: number; resetInMinutes?: number;
-  ratePerHour?: number; projected?: number; weekUsed?: number; weekProjected?: number;
+  ratePerHour?: number; projected?: number; weekUsed?: number; weekProjected?: number; weekProjectedHigh?: number;
   weekResetInHours?: number; weekAdvice?: string; reason?: string;
 }
 export interface AccountUsage {
@@ -405,16 +406,23 @@ export function burnRate(used: number, now: number, resets: number, windowSecond
   return used / Math.max(900, now - (resets - windowSeconds));
 }
 
-// The same for the 7d window: the slope over goalctl's samples from the last six hours once one is at
-// least an hour old, otherwise the window average over at least six hours.
-export function weekBurnRate(used: number, now: number, resets: number, history: UsageSample[] = []): number {
+// Whole-point readings leave one point of uncertainty in a difference. Use its low end for
+// admission and retain its high end for status; a one-point tick alone must not halt dispatch.
+function weekBurnRange(used: number, now: number, resets: number, history: UsageSample[]): [number, number] {
   const recent = history.filter(s => s.weekResets === resets && typeof s.week === 'number'
     && s.at >= now - 6 * 3600 && s.at <= now - 3600);
   if (recent.length) {
     const first = recent.reduce((a, b) => (a.at <= b.at ? a : b));
-    return Math.max(0, used - first.week!) / (now - first.at);
+    const difference = used - first.week!;
+    const elapsed = now - first.at;
+    return [Math.max(0, difference - 1) / elapsed, Math.max(0, difference + 1) / elapsed];
   }
-  return used / Math.max(6 * 3600, now - (resets - SEVEN_DAYS));
+  const elapsed = Math.max(6 * 3600, now - (resets - SEVEN_DAYS));
+  return [Math.max(0, used - 0.5) / elapsed, (used + 0.5) / elapsed];
+}
+
+export function weekBurnRate(used: number, now: number, resets: number, history: UsageSample[] = []): number {
+  return weekBurnRange(used, now, resets, history)[0];
 }
 
 export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
@@ -431,9 +439,12 @@ export function usageLevel(snapshot: UsageSnapshot | undefined, nowMs: number,
   if (typeof week?.used_percentage === 'number' && weekResets !== undefined && weekResets > now) {
     report.weekUsed = week.used_percentage;
     report.weekResetInHours = Math.round((weekResets - now) / 360) / 10;
-    report.weekProjected = Math.round(week.used_percentage
-      + weekBurnRate(week.used_percentage, now, weekResets, history) * (weekResets - now));
-    report.weekAdvice = report.weekProjected < WEEK_TARGET
+    const [low, high] = weekBurnRange(week.used_percentage, now, weekResets, history);
+    report.weekProjected = Math.round(week.used_percentage + low * (weekResets - now));
+    report.weekProjectedHigh = Math.round(week.used_percentage + high * (weekResets - now));
+    report.weekAdvice = report.weekProjectedHigh >= WEEK_PROJECTED_LIMIT
+      ? `warning: the week's high projection reaches ${report.weekProjectedHigh}%; watch Claude usage`
+      : report.weekProjected < WEEK_TARGET
       ? `widen: the week lands at ${report.weekProjected}%; add Claude width or effort`
       : 'on target';
   }
@@ -1423,6 +1434,79 @@ export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>
   return before;
 }
 
+/** Select only backend unit files from the public affected plan; whole-unit widening uses its registered defaults. */
+export function mergeUnitFiles(worktree: string, plan: string): string[] {
+  if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
+  const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
+  const selected = new Set<string>();
+  const collect = (file: string) => {
+    const path = resolve(worktree, file);
+    if (relative(worktree, path).startsWith('..') || isAbsolute(file)) throw new Error(`Unit file outside worktree: ${file}`);
+    if (!existsSync(path)) throw new Error(`Affected unit file is missing: ${file}`);
+    if (statSync(path).isDirectory()) {
+      for (const entry of readdirSync(path, { withFileTypes: true })) {
+        if (entry.isDirectory() || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(entry.name)) collect(join(file, entry.name));
+      }
+    } else selected.add(file);
+  };
+  for (const entry of entries) {
+    if (entry.startsWith('whole tier (')) {
+      for (const file of [...testArgs('unit'), ...unitHarnessFiles]) collect(file);
+    } else collect(entry);
+  }
+  return [...selected].sort();
+}
+
+/** A branch failure is blocking only when that file passes at main's committed boundary. */
+function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean): string | undefined {
+  if (skip) {
+    console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
+    return;
+  }
+  const plan = spawnSync('task', ['test', '--', '--affected', before, '--list'],
+    { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
+  const files = mergeUnitFiles(worktree, plan.stdout);
+  console.log(`Pre-merge unit gate: ${files.length} affected file(s) against main ${before.slice(0, 12)}`);
+  const run = (cwd: string, file: string) => {
+    const result = spawnSync('task', ['test', '--', `./${file}`], {
+      cwd, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 64 * 1024 * 1024, timeout: 300_000,
+    });
+    if (result.status === null) throw new Error(`Unit gate could not run ${file}: ${result.error?.message ?? result.signal}`);
+    if (result.status !== 0) console.log(`${cwd}: ${file} failed:\n${result.stdout}\n${result.stderr}`);
+    return result.status === 0;
+  };
+  let directory: string | undefined;
+  let baseline: string | undefined;
+  const introduced: string[] = [];
+  try {
+    for (const file of files) {
+      if (run(worktree, file)) continue;
+      if (spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0) {
+        introduced.push(file);
+        continue;
+      }
+      if (!baseline) {
+        // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
+        mkdirSync(join(mainRoot, '.temp'), { recursive: true });
+        directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
+        baseline = directory;
+        git(mainRoot, ['worktree', 'add', '--detach', baseline, before]);
+        // Own workspace links keep the baseline on HEAD even when main has local source edits.
+        const install = spawnSync('task', ['install'], { cwd: baseline, encoding: 'utf8', timeout: 120_000 });
+        if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+      }
+      if (existsSync(join(baseline, file)) && !run(baseline, file)) {
+        console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
+      } else introduced.push(file);
+    }
+  } finally {
+    if (baseline) git(mainRoot, ['worktree', 'remove', '--force', baseline]);
+    if (directory) rmSync(directory, { recursive: true, force: true });
+  }
+  return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.join('\n  ')}` : undefined;
+}
+
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
@@ -1528,6 +1612,12 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     }
     const before = git(root, ['rev-parse', 'HEAD']);
     const after = git(root, ['rev-parse', task.branch]);
+    const unitFailure = preMergeUnitGate(task.worktree, root, before, flags.has('--skip-unit-gate'));
+    if (unitFailure) {
+      task.state = 'conflict';
+      return `${task.id} ${unitFailure}`;
+    }
+    if (git(root, ['rev-parse', 'HEAD']) !== before) throw new Error('Main moved during the unit gate; retry the merge');
     const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
     recordMerged(after, before);
@@ -1732,7 +1822,7 @@ async function status(): Promise<void> {
     + (usage.projected !== undefined ? `, projected ${usage.projected}% at reset in ${usage.resetInMinutes}m` : '')
     + (usage.ageSeconds !== undefined ? ` (${usage.ageSeconds}s old)` : ''));
   if (usage.weekUsed !== undefined) {
-    console.log(`Claude 7d ${usage.weekUsed}%, projected ${usage.weekProjected}% at reset in ${usage.weekResetInHours}h: `
+    console.log(`Claude 7d ${usage.weekUsed}%, projected ${usage.weekProjected}–${usage.weekProjectedHigh}% at reset in ${usage.weekResetInHours}h: `
       + `${usage.weekAdvice}`);
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
@@ -1798,7 +1888,7 @@ function heavyQueueDir(lockDir: string): string {
   return join(dirname(lockDir), `${basename(lockDir)}-queue`);
 }
 
-/** Live tickets, oldest arrival first. Tickets whose pid is gone, and tickets that cannot be ordered, are removed by whoever reads them. */
+/** Live tickets, shared refresh first, then oldest arrival. Tickets whose pid is gone, and tickets that cannot be ordered, are removed by whoever reads them. */
 function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path: string; ticket: HeavyTicket }[] {
   let names: string[];
   try { names = readdirSync(queueDir); } catch { return []; }
@@ -1815,7 +1905,9 @@ function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path
       live.push({ path, ticket });
     } catch { rmSync(path, { force: true }); }
   }
-  live.sort((a, b) => a.ticket.arrivedAt - b.ticket.arrivedAt
+  // Refresh repairs the shared stack for every Goal. It gets the next turn, never the holder’s turn.
+  const priority = (ticket: HeavyTicket) => ticket.command === 'task dev:refresh' ? 0 : 1;
+  live.sort((a, b) => priority(a.ticket) - priority(b.ticket) || a.ticket.arrivedAt - b.ticket.arrivedAt
     || (a.ticket.seq ?? '').localeCompare(b.ticket.seq ?? '')
     || a.ticket.pid - b.ticket.pid
     || (a.path < b.path ? -1 : 1));
@@ -1877,7 +1969,7 @@ export interface HeavyWaitOptions {
  * run still takes an ordinary slot, so the host carries at most one heavy run and two light ones, as with one manager.
  * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it.
  * Waiters poll, so a run that starts at the moment the lock frees would otherwise cut in front of one that has been
- * waiting. The ticket is written before the first poll; only the oldest ticket whose pid is still alive may take a free lock. */
+ * waiting. The ticket is written before the first poll; only the first live ticket may take a free lock (refresh before ordinary FIFO waiters). */
 export async function acquireHeavy(command: readonly string[], options: HeavyWaitOptions = {}): Promise<() => void> {
   const lockDir = options.lockDir ?? heavyLock;
   const queueDir = heavyQueueDir(lockDir);
@@ -1924,7 +2016,7 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
       if (!announced) {
         const holder = heavyHolder(lockDir, alive);
         console.error(ahead > 0
-          ? `waiting for heavy QA; ${ahead} earlier waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
+          ? `waiting for heavy QA; ${ahead} waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
           : `waiting for heavy QA held by ${holder ?? 'a starting run'}`);
         announced = true;
       }
@@ -2076,7 +2168,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
-        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed]'
+        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy] -- <command>');

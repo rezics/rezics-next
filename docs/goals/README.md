@@ -24,7 +24,7 @@ run by a manager from the main checkout with `GOAL_ID` set to its Goal:
 | `task goal -- reclaim G-NNN <brief>` | Replaces an open, exited task's claims from an updated brief after the dispatch conflict checks. |
 | `task goal -- stop G-NNN` | Terminates the worker's process group and its task-marked detached children. Preserves other live sharers and shared resources; after the last live worker stops, also sweeps worktree processes and removes its stack. Claims and worktree remain. |
 | `task goal -- scope G-NNN` / `task goal -- owner <path>` | Lists commits ahead, dirty files and files outside the claim / which open task claims a path. |
-| `task goal -- merge G-NNN [--allow-scope] [--allow-ids] [--landed]` | Requires all open sharers to have exited, a clean worktree, files within their combined claims and no new task names in the tree ([convergence](#convergence)); rebases onto `main` and fast-forwards `main`. Records every open sharer and a merge event with both commit boundaries; `--landed` records manually landed work. A repeated merge with nothing new succeeds. A conflict marks the named task `conflict` for the worker to resolve. |
+| `task goal -- merge G-NNN [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]` | Requires all open sharers to have exited, a clean worktree, files within their combined claims and no new task names in the tree ([convergence](#convergence)); rebases onto `main`, runs affected unit files, and fast-forwards only if no file introduces a failure. Failing files are rerun at main’s HEAD; inherited failures are reported. `--skip-unit-gate` prints the explicit bypass reason. Model, integration and browser tiers remain outside this gate. Records every open sharer and a merge event with both commit boundaries; `--landed` records manually landed work. A repeated merge with nothing new succeeds. A conflict marks the named task `conflict` for the worker to resolve. |
 | `task goal -- close G-NNN... verified\|cancelled` | Removes the worktrees and releases the claims, then moves the briefs and handoffs to `archive/goals` and removes the briefs from the tree in one commit. |
 | `task goal -- tidy [--legacy <dir>]` / `task goal -- goal close <goal> [--dry-run]` | Archives closed briefs still in the tree / ends a Goal once nothing of it remains ([convergence](#convergence)). |
 | `task goal -- status` / `task goal -- usage` | Running Goals and their managers, live workers, unacknowledged regression counts, the heavy QA holder and the usage of every account. |
@@ -91,7 +91,7 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - **Shared host.** Claims, QA slots, the heavy QA lock, the live-worker limit,
   usage gates and host memory are one pool for all Goals. Writing code in
   parallel is cheap; heavy QA is not, and the lock keeps it to one run at a time.
-  After merges, bring the shared stack to committed main with `task dev:refresh` in the main checkout (`-- --dry-run` previews it); it preserves data and refuses a held heavy QA lock unless `-- --wait` queues it like any heavy run. The manager whose merge needs it (model artifacts, migrations, official Zone packages) runs it right after that merge; exit 201 only means `main` moved meanwhile.
+  After merges, bring the shared stack to committed main with `task dev:refresh` in the main checkout (`-- --dry-run` previews it); it preserves data and refuses a held heavy QA lock unless `-- --wait` queues it ahead of ordinary heavy waiters, after the current holder. The manager whose merge needs it (model artifacts, migrations, official Zone packages) runs it right after that merge; exit 201 only means `main` moved meanwhile.
 - **One main branch.** Each manager merges its own tasks and runs its wave QA
   from a worktree pinned at its wave commit, so another Goal's merges cannot
   change a run under way. A failure in another Goal's area goes to its manager.
@@ -183,11 +183,14 @@ runs the integration tiers, Storybook and browser journeys once.
   throughput, not the slot count, sets the useful width.
 - The interactive status line writes `~/.claude/usage/latest.json`. goalctl
   keeps six hours of samples and projects both Claude windows at their resets
-  from the recent burn rate. `claude` dispatch is refused while the 5-hour
-  projection reaches 95%, at 95% used, when the 7-day window would run out
-  before its reset, or at 97% of it used. Below a 95% weekly projection, `status`
-  advises widening Claude work. A snapshot older than 30 minutes is unknown;
-  a manager turn refreshes it.
+  from the recent burn rate. The weekly projection is a low–high range because
+  readouts are rounded to whole points: a sampled change uses one point less
+  for its low rate (at least zero), and one point more for its high rate.
+  Claude dispatch uses the low end against the weekly cap’s five-point margin;
+  `status` warns when the high end reaches that margin. New Claude work also stops at the weekly used margin,
+  at 95% of the 5-hour allowance used, or a 5-hour projection of 95%. Below the weekly target
+  (the cap minus ten points), `status` advises widening Claude work. A snapshot
+  older than 30 minutes is unknown; a manager turn refreshes it.
 - Codex accounts report their weekly window in their session rollouts, which
   goalctl reads from `~/.codex` (`codex`, `luna`) and `~/.codex-1` (`codex-1`). An
   exhausted account refuses dispatch for its engines.

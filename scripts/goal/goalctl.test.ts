@@ -3,7 +3,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas,
+import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
   type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
@@ -170,9 +171,23 @@ describe('goalctl runtime policy', () => {
     // 24% after six days lands near 28%: spend more.
     expect(usageLevel(snap(24), now * 1000)).toMatchObject({ level: 'normal', weekProjected: 28 });
     expect(usageLevel(snap(24), now * 1000).weekAdvice).toContain('widen');
-    // A recent slope of 3.5%/h over the last two hours lands at 24 + 84 = 108%: stop new Claude work.
+    // A recent slope of 3.5%/h over the last two hours has a low projection of 24 + 72 = 96%: stop new Claude work.
     const history = [{ at: now - 7200, used: 5, resets: now + 4 * 3600, week: 17, weekResets }];
-    expect(usageLevel(snap(24), now * 1000, history)).toMatchObject({ level: 'restricted', weekProjected: 108 });
+    expect(usageLevel(snap(24), now * 1000, history)).toMatchObject({ level: 'restricted', weekProjected: 96 });
+  });
+
+  test('rounded weekly readings use the low projection for dispatch and warn on the high projection', () => {
+    const now = 1_800_000_000;
+    const weekResets = now + 160 * 3600;
+    const history = [{ at: now - 3600, used: 5, resets: now + 3600, week: 6, weekResets }];
+    const snap = (week: number) => ({ at: now, rate_limits: {
+      five_hour: { used_percentage: 10, resets_at: now + 3600 },
+      seven_day: { used_percentage: week, resets_at: weekResets } } });
+    expect(usageLevel(snap(7), now * 1000, history)).toMatchObject({
+      level: 'normal', weekProjected: 7, weekProjectedHigh: 327,
+    });
+    expect(usageLevel(snap(7), now * 1000, history).weekAdvice).toContain('warning');
+    expect(usageLevel(snap(12), now * 1000, history).level).toBe('restricted');
   });
 
   test('reads a Codex account usage from its newest rollout line', () => {
@@ -520,6 +535,28 @@ describe('goalctl reclaim', () => {
   });
 });
 
+describe('pre-merge unit selection', () => {
+  test('whole-unit widening expands registered defaults and excludes heavier tiers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'unit-selection-'));
+    try {
+      const defaults = [...testArgs('unit').slice(1), ...unitHarnessFiles];
+      for (const file of [...defaults, 'tests/qa/unit/nested/behavior.test.ts', 'extra.test.ts']) {
+        mkdirSync(join(dir, file, '..'), { recursive: true });
+        writeFileSync(join(dir, file), '');
+      }
+      writeFileSync(join(dir, 'tests/qa/unit/notes.ts'), '');
+      expect(mergeUnitFiles(dir, [
+        'Affected since HEAD: fixture', '  unit: whole tier (dependency changed)',
+        '  unit: extra.test.ts', '  unit: extra.test.ts',
+        '  integration: never.test.ts', '  model: never.test.ts',
+        '  fault/recovery: never.test.ts', '  not run: browser.test.ts',
+      ].join('\n'))).toEqual([...defaults, 'tests/qa/unit/nested/behavior.test.ts', 'extra.test.ts'].sort());
+      expect(() => mergeUnitFiles(dir, 'unavailable')).toThrow('not produced');
+      expect(() => mergeUnitFiles(dir, 'Affected since HEAD: fixture\n  unit: ../outside.test.ts')).toThrow('outside worktree');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
 describe('goalctl shared lifecycle and launch gates', () => {
   function repo() {
     const dir = mkdtempSync(join(tmpdir(), 'goalctl-lifecycle-'));
@@ -548,6 +585,20 @@ describe('goalctl shared lifecycle and launch gates', () => {
     }
     writeFileSync(join(dir, '.temp/bin/corepack'), '#!/bin/sh\nexit 0\n');
     for (const binary of ['grok', 'corepack']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
+    writeFileSync(join(dir, '.temp/bin/task'), `#!/usr/bin/env bun
+import { appendFileSync, readFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === 'install') process.exit(0);
+if (args.includes('--list')) {
+  console.log('Affected since HEAD: fixture');
+  if (process.env.GOAL_TEST_PLAN) console.log(readFileSync(process.env.GOAL_TEST_PLAN, 'utf8'));
+  process.exit(0);
+}
+if (process.env.GOAL_TEST_LOG) appendFileSync(process.env.GOAL_TEST_LOG, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');
+const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
+process.exit(await child.exited);
+`);
+    chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
     mkdirSync(ready);
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25',
@@ -685,6 +736,61 @@ describe('goalctl shared lifecycle and launch gates', () => {
       expect(events()).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 30_000);
+
+  for (const outcome of ['introduced', 'inherited', 'skipped', 'dirty-main', 'new-file'] as const) {
+    test(`pre-merge unit gate handles ${outcome} failures before fast-forward`, async () => {
+      const r = repo();
+      try {
+        const file = 'operation.test.ts';
+        const source = (fails: boolean) => `import { test, expect } from 'bun:test';\ntest('operation stays valid', () => expect(${fails}).toBe(false));\n`;
+        if (outcome !== 'new-file') {
+          writeFileSync(join(r.dir, file), source(outcome === 'inherited'));
+          r.git('add', file); r.git('commit', '-qm', 'Baseline unit');
+        }
+        const task = await r.start('G-001');
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file); r.save(ledger);
+        writeFileSync(join(task.worktree, file), source(true));
+        // Inherited failures still need a task commit to exercise a real merge.
+        r.commit(task);
+        expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+        expect(spawnSync('git', ['-C', task.worktree, 'commit', '--allow-empty', '-qm', 'Change operation']).status).toBe(0);
+        await r.stopFixture(task.id);
+        const plan = join(r.dir, '.temp/unit-plan');
+        writeFileSync(plan, `  unit: ${file}\n  integration: tests/qa/integration/never.test.ts\n  model: model/tests/never.test.ts\n`);
+        const log = join(r.dir, '.temp/unit-log');
+        const before = r.git('rev-parse', 'main');
+        if (outcome === 'dirty-main') writeFileSync(join(r.dir, file), source(true));
+        const blocked = ['introduced', 'dirty-main', 'new-file'].includes(outcome);
+        const result = r.run(['merge', task.id, ...(outcome === 'skipped' ? ['--skip-unit-gate'] : [])],
+          { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log });
+        expect(result.status).toBe(blocked ? 1 : 0);
+        if (blocked) {
+          expect(r.git('rev-parse', 'main')).toBe(before);
+          expect(result.stderr).toContain('introduced unit failures');
+          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+        } else {
+          expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
+          expect(result.stdout).toContain(outcome === 'skipped' ? '--skip-unit-gate' : 'also fails on main');
+        }
+        if (outcome === 'skipped') expect(existsSync(log)).toBe(false);
+        else {
+          const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+          expect(runs).toHaveLength(outcome === 'new-file' ? 1 : 2);
+          expect(runs[0].cwd).toBe(task.worktree);
+          if (outcome !== 'new-file') expect(runs[1].cwd).not.toBe(task.worktree);
+          expect(runs.every(run => run.args.includes(`./${file}`))).toBe(true);
+          expect(runs.every(run => !run.args.some((arg: string) => arg.includes('never.test')))).toBe(true);
+          expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
+        }
+        if (outcome === 'introduced') {
+          writeFileSync(join(task.worktree, file), source(false));
+          expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Restore operation']).status).toBe(0);
+          expect(r.run(['merge', task.id], { GOAL_TEST_PLAN: plan }).status).toBe(0);
+          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+        }
+      } finally { r.cleanup(); }
+    }, 30_000);
+  }
 
   test('a manually landed cherry-pick records its boundary and preserves intervening maintainer commits', async () => {
     const r = repo();
@@ -836,6 +942,32 @@ describe('goalctl shared lifecycle and launch gates', () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('Unknown dependency G-999');
       expect(result.stderr).toContain('docs/goals/program/state.md');
+    } finally { r.cleanup(); }
+  });
+
+  test('status shows the rounded weekly range while Claude dispatch uses its low end', () => {
+    const r = repo();
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const resets = now + 3600;
+      const weekResets = now + 160 * 3600;
+      const snapshot = (week: number) => JSON.stringify({ at: now, rate_limits: {
+        five_hour: { used_percentage: 10, resets_at: resets },
+        seven_day: { used_percentage: week, resets_at: weekResets } } });
+      writeFileSync(r.env.GOAL_USAGE_FILE!, snapshot(7));
+      writeFileSync(join(r.dir, '.temp/goal-orchestration/usage-history.json'), JSON.stringify([
+        { at: now - 3600, used: 5, resets, week: 6, weekResets },
+      ]));
+      const status = r.run(['status']);
+      expect(status.status).toBe(0);
+      expect(status.stdout).toContain('projected 7–327%');
+      expect(status.stdout).toContain('warning');
+      const brief = r.brief('G-001', { engine: 'claude' });
+      expect(r.run(['dispatch', brief, '--dry-run']).status).toBe(0);
+      writeFileSync(r.env.GOAL_USAGE_FILE!, snapshot(12));
+      const dispatch = r.run(['dispatch', brief, '--dry-run']);
+      expect(dispatch.status).toBe(1);
+      expect(dispatch.stderr).toContain('7d projected');
     } finally { r.cleanup(); }
   });
 

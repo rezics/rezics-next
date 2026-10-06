@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
+import { acquireHeavy } from '../../goal/goalctl.ts';
 import { readEnv } from '../config.ts';
 import { AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
@@ -20,6 +21,42 @@ const current: RefreshInputs = { revision: 'committed-main', previousRevision: '
   unhealthyResources: [], environmentChanges: [], appHostChanged: false, lostResources: [], zoneApprovals: [] };
 
 describe('shared stack refresh planning', () => {
+  test('shared refresh takes the next heavy turn without preempting the holder', async () => {
+    const dir = mkdtempSync(join(root, '.temp/refresh-priority-'));
+    const lockDir = join(dir, 'heavy');
+    mkdirSync(lockDir);
+    writeFileSync(join(lockDir, 'pid'), String(process.pid));
+    writeFileSync(join(lockDir, 'marker'), 'current holder');
+    const resumes: Array<() => void> = [];
+    const sleep = () => new Promise<void>(resolve => { resumes.push(resolve); });
+    const options = { lockDir, bindExit: false, sleep };
+    let ordinaryServed = false;
+    let refreshServed = false;
+    const ordinary = acquireHeavy(['task', 'qa'], options).then(release => { ordinaryServed = true; return release; });
+    const refresh = acquireHeavy(['task', 'dev:refresh'], options).then(release => { refreshServed = true; return release; });
+    try {
+      expect(resumes).toHaveLength(2);
+      expect(ordinaryServed).toBe(false);
+      expect(refreshServed).toBe(false);
+      expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('current holder');
+      rmSync(lockDir, { recursive: true });
+      // The older ordinary waiter polls first, but leaves the free lock for refresh.
+      resumes.shift()!();
+      await Bun.sleep(0);
+      expect(ordinaryServed).toBe(false);
+      resumes.shift()!();
+      const releaseRefresh = await refresh;
+      expect(refreshServed).toBe(true);
+      expect(ordinaryServed).toBe(false);
+      releaseRefresh();
+      resumes.shift()!();
+      (await ordinary)();
+      expect(ordinaryServed).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 5000);
+
   test('a second successful run has no mutating steps', () => {
     expect(refreshPlan(current)).toEqual({ steps: [], blockers: [] });
   });
