@@ -24,7 +24,8 @@ export function shelfPageBasis(session: WorkReadSession, agent: string,
   const sort = options.sort ?? 'added', order = options.order ?? (sort === 'title' ? 'asc' : 'desc');
   if (sort === 'finished' && status !== 'read') throw new WorkReadInvalid('Finished sort requires the read shelf');
   const binding = [publishedOnly ? 'agent-status-shelf-v4' : 'reader-status-shelf-v3', agent, status, sort, order,
-    publishedOnly ? session.viewer : null];
+    publishedOnly ? [session.principal?.issuer ?? null, session.principal?.subject ?? null,
+      session.options.actingSubject ?? null, session.viewer] : null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   let after: ShelfAfter | undefined;
   let statusCount: number | undefined;

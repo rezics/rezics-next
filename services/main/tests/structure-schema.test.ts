@@ -364,8 +364,10 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
       SELECT $1,$2,$3,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),false,1,
         '2026-01-01'::timestamptz + n * interval '1 second' FROM generate_series($4::int,$5::int) n`,
     [principal.issuer, principal.subject, structure, size === 1_000 ? 1 : 1_001, size]);
-    await pool.query(`INSERT INTO reader.library_status(agent,work,status,version)
-      SELECT $1,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),'reading',1
+    await pool.query(`INSERT INTO reader.library_status(agent,work,status,version,finished_on)
+      SELECT $1,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),
+        CASE WHEN n % 2 = 0 THEN 'reading' ELSE 'read' END,1,
+        CASE WHEN n % 2 != 0 THEN '2026-02-01'::date + n % 30 END
       FROM generate_series($2::int,$3::int) n`, [agent, size === 1_000 ? 1 : 1_001, size]);
     await pool.query('ANALYZE structure.progress; ANALYZE reader.library_status; ANALYZE reader.library_status_revision');
     const statements: Array<{ sql: string; values: unknown[] }> = [];
@@ -392,6 +394,9 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
       const tail = firstPage.at(-1)!;
       expect(await library.sortedPage(agent, 'reading', 20, 'added', 'desc', { work: tail.work, value: tail.sortValue }))
         .toHaveLength(20);
+      for (const order of ['asc', 'desc'] as const) {
+        expect(await library.sortedPage(agent, 'read', 20, 'finished', order)).toHaveLength(20);
+      }
       await expect(progress.write({ ...command, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(StaleStructureProgress);
       expect(await library.fence(agent, 'last-read')).toBe(latestFence);
     } finally { capture.mockRestore(); }
@@ -413,13 +418,14 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
     }
     expect(examined).toHaveLength(3); // one latest batch, one write and one replay projection
     const shelfStatements = statements.filter(statement => statement.sql.includes('AS sort_value FROM reader.library_status'));
-    expect(shelfStatements).toHaveLength(2);
+    expect(shelfStatements).toHaveLength(4);
     for (const statement of shelfStatements) {
       const result = await pool.query<{ 'QUERY PLAN': { Plan: SeekPlan }[] }>(
         `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`, statement.values);
       const nodes = planNodes(result.rows[0]!['QUERY PLAN'][0]!.Plan);
-      const scans = nodes.filter(node => node['Index Name'] === 'library_status_shelf');
-      expect(scans).toHaveLength(1);
+      const index = statement.sql.includes('shelf.finished_on') ? 'library_status_finished_shelf' : 'library_status_shelf';
+      const scans = nodes.filter(node => node['Index Name'] === index);
+      expect(scans, JSON.stringify(nodes)).toHaveLength(1);
       expect(scans[0]!['Actual Rows'] + (scans[0]!['Rows Removed by Filter'] ?? 0)).toBe(20);
       expect(nodes.some(node => node['Node Type'] === 'Sort' || node['Node Type'] === 'Seq Scan')).toBe(false);
     }

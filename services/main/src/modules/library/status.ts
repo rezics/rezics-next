@@ -323,9 +323,12 @@ export class ReaderLibraryStatusStore {
   async sortedPage(agent: string, status: ReadingStatus, limit: number,
     sort: ShelfSort = 'added', order: ShelfOrder = sort === 'title' ? 'asc' : 'desc',
     after?: ShelfAfter): Promise<ShelfRow[]> {
-    const keys = { added: ['changed_at', 'timestamptz'], title: ['title_key COLLATE "C"', 'text'],
-      rating: ['own_rating', 'integer'], 'last-read': ['last_read_at', 'timestamptz'],
-      finished: ['finished_on', 'date'] } as const;
+    // Qualify database columns: changed_at/finished_on in the output are text
+    // aliases, and ORDER BY would otherwise sort those aliases across the shelf.
+    // https://www.postgresql.org/docs/18/queries-order.html
+    const keys = { added: ['shelf.changed_at', 'timestamptz'], title: ['shelf.title_key COLLATE "C"', 'text'],
+      rating: ['shelf.own_rating', 'integer'], 'last-read': ['shelf.last_read_at', 'timestamptz'],
+      finished: ['shelf.finished_on', 'date'] } as const;
     if (!ID.test(agent) || !['want-to-read', 'reading', 'read'].includes(status)
       || !Number.isInteger(limit) || limit < 1 || limit > STATUS_SHELF_COST.countBatch || !Object.hasOwn(keys, sort)
       || !['asc', 'desc'].includes(order) || sort === 'finished' && status !== 'read'
@@ -341,7 +344,7 @@ export class ReaderLibraryStatusStore {
     if (!after || after.value !== null) {
       const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
       const rows = await this.pool.query<Row & { sort_value: string | null }>(`
-        SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status
+        SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status AS shelf
         WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
         ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
       [agent, status, limit, ...(after ? [after.value, after.work] : [])]);
@@ -350,7 +353,7 @@ export class ReaderLibraryStatusStore {
     if (found.length < limit && sort !== 'added') {
       const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
       const rows = await this.pool.query<Row & { sort_value: string | null }>(`
-        SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status
+        SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status AS shelf
         WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
         ORDER BY work ${direction} LIMIT $3`,
       [agent, status, limit - found.length, ...(after?.value === null ? [after.work] : [])]);

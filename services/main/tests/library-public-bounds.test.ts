@@ -120,6 +120,9 @@ test('Public continuation rejects changed membership, privacy, sort and tampered
   const differentAudience = home.session(page.nextCursor!);
   Object.assign(differentAudience, { viewer: { ...differentAudience.viewer, signedIn: true } });
   await expect(readPublicStatusShelf(differentAudience, agent, home.store, 'reading')).rejects.toBeInstanceOf(WorkReadInvalid);
+  const differentReader = home.session(page.nextCursor!);
+  differentReader.principal = { issuer: 'https://account.example', subject: 'another-reader' };
+  await expect(readPublicStatusShelf(differentReader, agent, home.store, 'reading')).rejects.toBeInstanceOf(WorkReadInvalid);
   const differentGraph = home.session(page.nextCursor!);
   differentGraph.position.sequence = '2';
   await expect(readPublicStatusShelf(differentGraph, agent, home.store, 'reading')).rejects.toBeInstanceOf(WorkReadMoved);
