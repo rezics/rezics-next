@@ -7,7 +7,13 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessRealmManagement, type RealmInitializationInput } from '../src/modules/access/realm-management.ts';
-import { REALM_INITIALIZATION_COST } from '../src/modules/access/realm-initialization.ts';
+import { initialRealmPolicyFacts, REALM_INITIALIZATION_COST } from '../src/modules/access/realm-initialization.ts';
+import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { RealmSubmissionStore } from '../src/modules/realm-submission/store.ts';
+import { realmSelectionSlotIri } from '../src/modules/work/select-realm.ts';
+import { RV } from '../src/modules/work/activate.ts';
+import { receiptFamilyFor } from '../src/modules/access/receipt-families.ts';
+import { withRealmPermit } from '../src/modules/access/realm-management-policy.ts';
 import { readRealmAccessSettings } from '../src/modules/access/realm-management-settings.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale, RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
 import { realmRulesRef } from '../src/modules/governance/rules.ts';
@@ -75,6 +81,86 @@ beforeAll(async () => {
   }
 }, 60_000);
 
+test('Created open self-join Realms accept eligible member submissions immediately; review and mismatched revisions stay pending', async () => {
+  for (const [mode, sameRevision, expected] of [
+    ['open', true, 'accepted'], ['trusted-members', true, 'accepted'],
+    ['mandatory', true, 'pending'], ['open', false, 'pending'],
+  ] as const) {
+    const h = await fixture();
+    h.input.settings = { visibility: 'public', reviewRequired: mode === 'mandatory',
+      reviewMode: mode, whoMaySubmit: 'members', selfJoin: true };
+    await h.management.initializeCreated(h.principal, h.input, h.env);
+    const facts = initialRealmPolicyFacts(h.input, h.space);
+    const memberPrincipal = { issuer: 'https://accounts.test', subject: randomUUID() };
+    const memberId = randomUUID(), member = id(), scope = `submission:submit:${h.realm}`;
+    await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+      [memberId, memberPrincipal.issuer, memberPrincipal.subject]);
+    await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [member]);
+    // A separate, already joined member carries no founder/owner authority.
+    await pool.query(`INSERT INTO access.membership
+      (id,kind,owner_subject,member_subject,state,generation,policy_revision,terms_revision,consent_reference)
+      SELECT gen_random_uuid(),'realm',$1,$2,'joined',1,revision,terms_revision,'member-consent'
+      FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`, [h.realm, member]);
+    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+    await pool.query(`INSERT INTO access.permission_grant
+      (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES (gen_random_uuid(),$1,$1,$2,'submission.submit',clock_timestamp()+interval '1 hour')`, [member, scope]);
+    await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES (gen_random_uuid(),$1,$2,'submission.submit',clock_timestamp()+interval '1 hour')`, [memberId, member]);
+    expect(await withRealmPermit(pool, memberPrincipal, member, h.realm, 'submission', async permit => permit))
+      .toMatchObject({ revision: facts.revision, reviewMode: mode, member: true });
+    const client = await pool.connect();
+    try { expect((await readRealmAccessSettings(client, h.realm)).admission).toBe('open'); }
+    finally { client.release(); }
+
+    const candidate = { actingSubject: member, kind: 'contribution' as const, work: id(), mainVersion: id(),
+      contribution: id(), publicationDecision: id(), selectedDraft: id(), correctionOf: null };
+    const key = randomUUID(), selection = id();
+    let adoptionReads = 0;
+    const bindings = (values: Record<string, string>) => ({ results: { bindings: [Object.fromEntries(
+      Object.entries(values).map(([name, value]) => [name, { type: value.startsWith('http') ? 'uri' : 'literal', value }]))] } });
+    // Access and submission SQL are real. The graph-owner boundary supplies
+    // launch's initial revision and successful selection/acknowledgement proofs.
+    const env = { ...h.env, fuseki: { query: async (sql: string) => {
+      if (sql.includes('ASK') && sql.includes('rv:restoreHold')) return { boolean: true };
+      if (sql.includes('SELECT ?draft WHERE')) return bindings({ draft: candidate.selectedDraft });
+      if (sql.includes('SELECT ?space ?realmRevision')) return bindings({ space: h.space,
+        disclosure: `${RV}Public`, visibility: 'public', mode,
+        head: sameRevision ? facts.revision : `urn:rezics:realm-policy:${randomUUID()}`,
+        listing: 'listed', history: 'everything', admission: 'open' });
+      if (sql.includes('SELECT ?head WHERE')) return { results: { bindings: [] } };
+      if (sql.includes('?outcome') && sql.includes('?digest')) {
+        const ticket = (await pool.query(`SELECT id,request_digest,authority_epoch::text FROM access.admission
+          WHERE principal_id=$1 AND action='submission.submit' AND idempotency_key=$2`, [memberId, key])).rows[0]!;
+        const receipt = `urn:rezics:receipt:${hash(`${ticket.id}\0${receiptFamilyFor('submission.submit')}`)}`;
+        expect(sql).toContain(`<${receipt}>`);
+        const terminal = { outcome: `${RV}Succeeded`, digest: ticket.request_digest, id: ticket.id,
+          epoch: ticket.authority_epoch, scope, dataEpoch: h.env.lineage.dataEpoch, sequence: '2' };
+        if (sql.includes('?reason')) {
+          adoptionReads++;
+          const operation = (await pool.query('SELECT adoption FROM access.realm_submission_operation WHERE admission_id=$1',
+            [ticket.id])).rows[0]!;
+          expect(operation.adoption.input.policy).toEqual({ revision: facts.revision, mode });
+          return bindings({ ...terminal, work: candidate.work, main: candidate.mainVersion, realm: h.realm,
+            slot: realmSelectionSlotIri(h.realm, candidate.mainVersion), contribution: candidate.contribution,
+            decision: candidate.publicationDecision, draft: candidate.selectedDraft, selection, unit: id(), language: 'en' });
+        }
+        return bindings(terminal);
+      }
+      throw new Error(`Unexpected graph boundary read: ${sql}`);
+    } } } as unknown as WorkActivationEnvironment;
+    const access = new AccessAdmissionRegistry(pool);
+    const submissions = new RealmSubmissionStore(pool, access, env);
+    const result = await submissions.submit(memberPrincipal, h.realm, candidate, key);
+    expect(result.submission).toMatchObject({ state: expected,
+      selection: expected === 'accepted' ? selection : null });
+    expect(adoptionReads).toBe(expected === 'accepted' ? 1 : 0);
+    expect((await pool.query('SELECT state,graph_outcome FROM access.admission WHERE principal_id=$1 AND idempotency_key=$2',
+      [memberId, key])).rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded' });
+    expect(await submissions.submit(memberPrincipal, h.realm, candidate, key)).toEqual({ ...result, replayed: true });
+  }
+}, 60_000);
+
 afterAll(async () => {
   await pool?.end();
   if (started)
@@ -116,7 +202,7 @@ async function fixture(sealed = true) {
       return result;
     }, release: () => client.release() };
   } } as unknown as Pool;
-  let graphReads = 0, proofAvailable = true;
+  let graphReads = 0, proofAvailable = true, policyAvailable = true;
   const env = { lineage: { dataEpoch: 'test-epoch', routingEpoch: 'test-routing' }, fuseki: {
     query: async (sql: string, bytes: number) => {
       graphReads++;
@@ -128,16 +214,19 @@ async function fixture(sealed = true) {
         expect(sql).toContain(`<${receipt}>`);
         expect(sql).toContain(`rv:requestDigest "${digest}"`);
         expect(sql).toContain(`rv:admissionId "${admissionId}"`);
+        const facts = initialRealmPolicyFacts(input, space);
+        expect(sql).toContain(facts.current.replaceAll(`<${space}>`, '?space'));
+        expect(sql).toContain(facts.receipt.replaceAll(`<${space}>`, '?space'));
       }
       expect(sql).toContain('rv:restoreHold true');
       expect(sql).toContain('LIMIT 2');
       expect(bytes).toBe(REALM_INITIALIZATION_COST.graphBytes);
-      return { results: { bindings: proofAvailable ? [{ space: { type: 'uri', value: space },
+      return { results: { bindings: proofAvailable && (policyAvailable || sql.includes('SELECT ?receipt ?admission')) ? [{ space: { type: 'uri', value: space },
         receipt: { type: 'uri', value: receipt }, admission: { type: 'literal', value: admissionId } }] : [] } };
     },
   } } as unknown as WorkActivationEnvironment;
   const input: RealmInitializationInput = { realm, actingSubject: actor, creationKey: key,
-    creationDigest: digest, settings: { visibility: 'private', reviewRequired: false,
+    creationDigest: digest, policyReceipt: randomUUID(), settings: { visibility: 'private', reviewRequired: false,
       reviewMode: 'trusted-members', whoMaySubmit: 'members', selfJoin: true }, rules: [rule] };
   const management = new AccessRealmManagement(observedPool);
   const snapshot = async () => (await pool.query(`SELECT
@@ -151,11 +240,13 @@ async function fixture(sealed = true) {
     (SELECT to_jsonb(h) FROM access.governance_rule_head h WHERE ref=$2) head,
     (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.revision) FROM access.governance_rule_revision r WHERE ref=$2) rules,
     (SELECT to_jsonb(i) FROM access.realm_creation_initialization i WHERE realm=$1) initialization,
+    (SELECT to_jsonb(d) FROM access.realm_policy_delivery d WHERE realm=$1) delivery,
     (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM access.representation r WHERE principal_id=$3) representations,
     (SELECT to_jsonb(s) FROM access.authority_subject s WHERE id=$1) subject`,
   [realm, realmRulesRef(realm), principalId])).rows[0];
-  return { principal, principalId, actor, realm, admissionId, input, env, management, statements,
-    snapshot, graphReads: () => graphReads, hideProof: () => { proofAvailable = false; } };
+  return { principal, principalId, actor, realm, space, admissionId, input, env, management, statements,
+    snapshot, graphReads: () => graphReads, hideProof: () => { proofAvailable = false; },
+    hidePolicy: () => { policyAvailable = false; } };
 }
 
 test('Created Realm initialization is atomic, creation-bound, replayable and bounded on host PostgreSQL', async () => {
@@ -171,6 +262,10 @@ test('Created Realm initialization is atomic, creation-bound, replayable and bou
   const initialized = await h.snapshot();
   expect(initialized.grants).toHaveLength(REALM_INITIALIZATION_COST.founderGrants);
   expect(initialized.bootstrap).toMatchObject({ admission_id: h.admissionId, owner_subject: h.actor });
+  expect(initialized.initialization.policy_receipt).toBe(h.input.policyReceipt);
+  expect(initialized.delivery).toMatchObject({ receipt_id: h.input.policyReceipt, generation: 1,
+    visibility: 'private', review_mode: 'trusted-members', listing: 'listed', history: 'everything',
+    admission: 'open', delivered: true });
   expect(initialized.rules[0].document).toMatchObject({ public: false, rules: [rule] });
   h.statements.length = 0;
   const graphReads = h.graphReads();
@@ -195,6 +290,8 @@ test('Created Realm initialization is atomic, creation-bound, replayable and bou
   expect((await pool.query(`SELECT active FROM access.permission_grant WHERE scope_id=$1 AND action='realm.owner'`,
     [`governance:realm:${h.realm}`])).rows).toEqual([{ active: false }]);
   await expect(h.management.initializeCreated(h.principal, { ...h.input, creationDigest: hash('different') }, h.env))
+    .rejects.toBeInstanceOf(RealmAdminConflict);
+  await expect(h.management.initializeCreated(h.principal, { ...h.input, policyReceipt: randomUUID() }, h.env))
     .rejects.toBeInstanceOf(RealmAdminConflict);
   expect(await h.management.initializeCreated(h.principal, { ...h.input,
     settings: { ...h.input.settings, whoMaySubmit: 'closed' } }, h.env)).toEqual({ ...first, replayed: true });
@@ -231,6 +328,12 @@ test('Created Realm initialization is atomic, creation-bound, replayable and bou
   await expect(denied.management.initializeCreated(denied.principal, denied.input, denied.env)).rejects.toBeInstanceOf(RealmAdminDenied);
   expect(await denied.snapshot()).toEqual(absent);
   await expect(denied.management.initializeCreated(h.principal, denied.input, denied.env)).rejects.toBeInstanceOf(RealmAdminDenied);
+  const missingPolicy = await fixture();
+  const withoutPolicy = await missingPolicy.snapshot();
+  missingPolicy.hidePolicy();
+  await expect(missingPolicy.management.initializeCreated(missingPolicy.principal, missingPolicy.input, missingPolicy.env))
+    .rejects.toBeInstanceOf(RealmAdminDenied);
+  expect(await missingPolicy.snapshot()).toEqual(withoutPolicy);
 
   // Failure at the final record, after grants/settings/rules have been written,
   // rolls every row back. Retrying then completes from the same creation key.
