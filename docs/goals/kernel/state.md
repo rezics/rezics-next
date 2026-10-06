@@ -6,10 +6,10 @@ The manager's checkpoint for [this Goal](GOAL.md); live tasks:
 | Field | State (2026-10-07 ~03:40 CST) |
 | --- | --- |
 | Manager | `rezics-next-7e` in tmux `goal-kernel`, registered. |
-| Contracts | C0 landed: G-1217 at e75dda7b4 (regen 4bc72dab2); acceptance on the program's board. C2–C6 open. |
-| Live | K4 G-1228 (C3 first path), K3 G-1229 (projections), G-1237 (document recovery proof, `grok`), K2 G-1226 attempt 2 (fix 4 compiler regressions its merge 7adef77bc caused; C2 not landed until they pass). |
+| Contracts | Landed: C0 (G-1217, e75dda7b4), C2 first slice (G-1226, 7adef77bc + fac97ab59), C3 first path (G-1228, d27907918/bf6503e96/02542960b). Open: C4, C5, C6. |
+| Live | K3 G-1229 attempt 2 (now claims CommandService.java), K6 G-1243 (C4 + Context platform gate), K8a G-1245 attempt 2 (wire membership normalization into dev:refresh). |
 | After merges | Regenerating or migration merges: `task gen`, typechecks, regeneration commit, then `task dev:refresh -- --wait` (program, 2026-10-07). Pending one-liner for trust-ops T7: `disclosureViewer(principal, this.options.actingSubject)` in `work/read-session.ts`. |
-| Next briefs | From `.temp/kernel/scouts/`: K6 after trust-ops T1 (G-1215, C1); K7 after K4 (reuse its dependency tokens; then the followed-Concept feed template for launch's Home, C5); K8a ItemList + Recipe on Composition after K2; document-recovery proof test (Grok) now, reply restore after K2. K8b: the Discover rebuild finding no longer reproduces statically; re-measure, and the slim chapter seek goes into K5's qualification. |
+| Queued | G-1249 platform gates on generic ops (T5 on main), G-1244 nested pool checkouts. Next briefs: K7 templates (+ followed-Concept feed for launch), K5 slim Jena command + chapter seek qualification, K8b Discover re-measure; reply restore after recovery proof. |
 | Pre-release | Custody of each activated model generation's manifest and shapes (C6): revisions pin `rv:manifest`, which nothing stores. |
-| Regression | K1's wave: 42 unit failures, all present before K1 (`.temp/kernel/k1-failing-files.txt`), sent to the program for routing. |
+| Gate | Before every merge: `.temp/kernel/affected-unit.sh <id>`; briefs require the same unit run before handoff (program, after K2/K4 left main red). |
 | Share | 2 live (cap 8; backend-only overflow to 10 while MemAvailable ≥ 12 GiB). |
