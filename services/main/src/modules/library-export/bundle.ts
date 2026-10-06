@@ -8,9 +8,12 @@ import { WORK_READ_COST } from '../work/read-contract.ts';
 import { readPersonalProjectionResources, ratingAnnotation } from '../export/scoped.ts';
 import { readPersonalRatingEvidence } from '../export/personal-evidence.ts';
 import type { SessionState } from '../session/contract.ts';
+import type { CopyState } from '../library/copies.ts';
+import type { LoanState } from '../library/loans.ts';
+import { ownershipJsonLd, loanJsonLd } from './ownership.ts';
 
 export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 20, graphPerPage: WORK_READ_COST.graphCalls,
-  phases: 8, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
+  phases: 10, scopedRatingsPerPage: 20, responseBytes: FILE_IMPORT_COST.bytes } as const;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
@@ -160,6 +163,22 @@ export class LibraryBundleExporter {
         row: { ...row(member ? 'entry' : 'shelf',(member ? s.placement : s.id)!.value,member ? s.work!.value : null,
           { shelfId: s.id!.value,disclosure: s.disclosure!.value === `${RV}Public` ? 'public' : 'private' }),
           title: s.name!.value,shelves: [s.name!.value] } }));
+    }
+    if (phase === 8) {
+      const result = await this.content.query<{ id: string; state: CopyState }>(`SELECT id,state FROM reader.library_copy
+        WHERE agent=$1 AND id>$2 ORDER BY id LIMIT $3`, [agent,after,limit]);
+      return result.rows.map(copy => ({ key: copy.id,
+        row: { ...row('retained',`copy:${copy.id}`,copy.state.work,
+          { libraryCopy: copy.state,jsonLd: ownershipJsonLd(copy.state) }),target: copy.state.release } }));
+    }
+    if (phase === 9) {
+      const result = await this.content.query<{ id: string; state: LoanState; work: string; release: string }>(`
+        SELECT l.id,l.state,c.work,c.release FROM reader.library_loan l
+        JOIN reader.library_copy c ON c.agent=l.agent AND c.id=l.copy
+        WHERE l.agent=$1 AND l.id>$2 ORDER BY l.id LIMIT $3`, [agent,after,limit]);
+      return result.rows.map(loan => ({ key: loan.id,
+        row: { ...row('retained',`loan:${loan.id}`,loan.work,
+          { libraryLoan: loan.state,jsonLd: loanJsonLd(loan.state,agent) }),target: loan.release } }));
     }
     const principalId = await session.deps.access.activePrincipalId(principal);
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');

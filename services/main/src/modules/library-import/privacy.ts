@@ -64,6 +64,10 @@ export async function eraseLibraryImportsForPrincipals(content: Pool, access: Po
           'library_import_step','library_import_row_outcome','library_import_batch','library_import_placement','library_import_daily_budget']) {
           await client.query(`DELETE FROM reader.${table} WHERE agent=$1`,[agent]);
         }
+        // Copy deletion cascades its loans. Remove receipts too: they contain
+        // private counterparties and must not resurrect records after restore.
+        await client.query('DELETE FROM reader.library_copy WHERE agent=$1', [agent]);
+        await client.query('DELETE FROM reader.library_copy_loan_command WHERE agent=$1', [agent]);
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
       after = agent;

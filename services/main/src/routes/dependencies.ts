@@ -136,6 +136,8 @@ export interface MainWorkDependencies {
   profiles?: ProfilesAccess;
   studioAccess?: import('../modules/studio/access.ts').StudioAccess;
   libraryStatus?: ReaderLibraryStatusStore;
+  libraryCopies?: import('../modules/library/copies.ts').LibraryCopyStore;
+  libraryLoans?: import('../modules/library/loans.ts').LibraryLoanStore;
   libraryImport?: import('../modules/library-import/reader-import.ts').ReaderLibraryImportStore;
   authorReaders?: import('../modules/author-page/readers.ts').AuthorReaders;
   workStats?: import('../modules/work/read-stats.ts').WorkReaderStats;
