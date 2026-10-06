@@ -264,6 +264,7 @@ export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
   const canonicalOrder = (options.canonicalOrder ?? canonicalTypeOrder).map(term => expand(term, noPrefixes));
   const demandOrder = (options.demandOrder ?? bindingDemandOrder).map(term => expand(term, noPrefixes));
   const ids = new Set(profiles.map(profile => profile.id));
+  if (ids.size !== profiles.length) throw new Error('Duplicate profile ID in command registry');
   for (const id of Object.keys(established)) {
     if (!ids.has(id)) throw new Error(`Established registry declaration names unknown profile ${id}`);
   }

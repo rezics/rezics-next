@@ -16,6 +16,7 @@ import {
   withDocumentIds,
   type DocumentNode,
   type DocumentSnapshot,
+  type JsonValue,
 } from '../src/index.ts';
 
 const paragraph = (id: string, text: string): DocumentNode => ({
@@ -382,3 +383,25 @@ test('the runtime node checker accepts exactly what the published schema accepts
   expect(compared).toBeGreaterThan(300);
   // The reference resolves the published schema's references for every node, which is the cost the runtime checker avoids.
 }, 180_000);
+
+test('Work-reference payloads validate only their exact definition and version; retained unknown versions stay opaque', async () => {
+  const { Value } = await import('typebox/value');
+  const { DocumentSnapshotSchema } = await import('../src/schema.ts');
+  const payload = { 'rv:work': ['https://rezics.com/id/11111111-1111-4111-8111-111111111111'],
+    'schema:name': [{ '@value': '雨夜書店', '@language': 'zh-Hant' }] };
+  const block = (value: JsonValue, version = '1', definition = 'https://rezics.com/definition/work-reference-block-v1') =>
+    snapshot([{ type: 'extensionBlock', attrs: { id: 'reference', definition, version, payload: value, fallback: '雨夜書店' } }]);
+  const valid = block(payload);
+  expect(parseStoredDocument(serializeDocument(valid))).toEqual(normalizeDocument(valid));
+  for (const value of [null, {}, { ...payload, extra: true }, { ...payload, 'rv:work': ['relative'] },
+    { ...payload, 'rv:work': [payload['rv:work'][0], payload['rv:work'][0]] },
+    { ...payload, 'schema:name': [{ '@value': 'Missing language' }] },
+    { ...payload, 'schema:name': [{ '@value': '', '@language': 'en' }] }]) {
+    expect(checkDocument(block(value))).toBe(false);
+    expect(Value.Check(DocumentSnapshotSchema, block(value))).toBe(false);
+    for (const retained of [block(value, '2'), block(value, '0'), block(value, '1', 'https://example.test/work-reference')]) {
+      expect(Value.Check(DocumentSnapshotSchema, retained)).toBe(true);
+      expect(parseStoredDocument(serializeDocument(retained))).toEqual(normalizeDocument(retained));
+    }
+  }
+});

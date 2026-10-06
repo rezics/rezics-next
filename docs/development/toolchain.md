@@ -49,6 +49,16 @@ workspace `.env.example` files show variables. Personal overrides belong in
 the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
 unrelated processes.
 
+## Turtle model compilation
+
+The model compiler uses [N3.js](https://github.com/rdfjs/N3.js) (MIT) to parse
+Turtle into RDF terms. Its bounded converter accepts only the SHACL constructs
+needed by the Post and Work-reference payload; unsupported constructs fail
+generation by name. This preserves literal versus IRI meaning without maintaining
+a Turtle parser. The exact `n3` and `@types/n3` pins are in the inventory below;
+[converter tests](../../model/compiler/shacl.test.ts) cover the supported subset
+and rejection boundary against [SHACL](https://www.w3.org/TR/shacl/).
+
 ## Offline wiki conversion
 
 `@rezics/wiki-toolkit` distributes TypeScript source and requires Bun 1.4.2+,
@@ -218,6 +228,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tiptap/suggestion | 3.31.4 | packages/ui |
 | @types/bun | 1.4.2 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
 | @types/markdown-it | 14.2.0 | packages/document |
+| @types/n3 | 1.26.4 | . |
 | @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
@@ -248,6 +259,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | lucide-react | 1.47.0 | apps/about, apps/accounts, apps/web, packages/ui |
 | markdown-it | 14.3.2 | packages/document |
 | motion | 13.4.4 | apps/about |
+| n3 | 2.13.8 | . |
 | nanostores | 1.5.3 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
 | next | 16.3.6 | apps/accounts, apps/web |

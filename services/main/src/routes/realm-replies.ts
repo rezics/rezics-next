@@ -16,13 +16,13 @@ const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
 const optionalNative = t.Nullable(native);
 const optionalUuid = t.Nullable(uuid);
-const replyBody = t.Object({ profile: t.Literal('realm-reply-identity-v1'), reply: native,
+const replyBody = t.Object({ profile: t.Literal('realm-reply-identity-v1'), reply: native, spoiler: t.Optional(t.Boolean()),
   variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }), revisionId: uuid,
   author: native, rootTarget: native, rootRevision: t.String({ minLength: 1, maxLength: 300 }),
   parentReply: optionalNative, parentRevision: optionalUuid, contextRevision: optionalNative,
 }, { additionalProperties: false });
 const replyResult = t.Object({ profile: t.Literal('realm-reply-identity-v1'),
-  reply: native, variantId: t.String(), revisionId: uuid, author: native,
+  reply: native, variantId: t.String(), revisionId: uuid, author: native, spoiler: t.Optional(t.Boolean()),
   rootTarget: native, rootRevision: t.String(), parentReply: optionalNative,
   parentRevision: optionalUuid, contextRevision: optionalNative, replayed: t.Boolean() });
 const reviewBody = t.Object({ profile: t.Literal('realm-reply-review-v1'),

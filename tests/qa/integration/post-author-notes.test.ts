@@ -13,6 +13,7 @@ import { relayContentProjectionOnce } from '../../../services/main/src/modules/c
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { readFixedRelease } from '../../../services/main/src/modules/work/fixed-release.ts';
 import type { PostNotesInput, PostNotes } from '../../../services/content/src/document-body.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 
 const short = (value: string) => value.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -70,7 +71,7 @@ test('Post notes stay language-local on exact chapter reads and outside length, 
         language: { kind: 'tag', tag: item.language, originalTag: item.language }, direction: 'ltr',
         expectedHead: null, document: fromPlainText(item.body), notes: item.notes, actingSubject: author.actor };
       const key = randomUUID();
-      const draft = await json<Draft>(await author.send('POST', '/v1/content-drafts', request, key), 201);
+      const draft: Draft = await json<Draft>(await author.send('POST', '/v1/content-drafts', request, key), 201);
       expect(await json(await author.send('POST', '/v1/content-drafts', request, key)))
         .toMatchObject({ revisionId: draft.revisionId, replayed: true });
       const publicationInput = { profile: 'content-publication-v1', preparationId: `notes-${randomUUID()}`,
@@ -157,3 +158,114 @@ test('Post notes stay language-local on exact chapter reads and outside length, 
     expect(release).not.toHaveProperty('notes');
   } finally { await stack.stop(); }
 }, 240_000);
+
+test('Post spoiler publication and reply draft declarations survive exact storage, omission, explicit false and reads', async () => {
+  const { createMainApp } = await import('../../../services/main/src/app.ts');
+  const { RealmReplyContentStore } = await import('../../../services/main/src/modules/realm-reply/content-store.ts');
+  const { RealmReplyStore } = await import('../../../services/main/src/modules/realm-reply/store.ts');
+  const stack = await startMediaStack('post-spoiler');
+  try {
+    const author = await stack.member('spoiler-author');
+    const title = `Spoiler Book ${randomUUID()}`;
+    const types = ['https://schema.org/Book'];
+    const root = await activateMetadataWork(stack.env, { title, language: 'en', semanticTypes: types,
+      admission: stack.admission(author.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types, 'en')) });
+    const contribution = await stack.contribution(root.work, author.actor, 'en', 'Public Book words');
+    const selection = { context: { kind: 'main-version-default' as const, id: root.mainVersion },
+      work: root.work, contribution: contribution.contribution, publicationDecision: contribution.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: author.actor };
+    await selectMainDefault(stack.env, stack.admission(author.actor, `publication:select:${root.mainVersion}`,
+      'publication.select', mainSelectionDigest(selection)), selection);
+    const replies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      content: stack.content, contentAuthoring: stack.content, realmReplies: replies,
+      account: { verify: async () => author.principal } });
+    const call = (method: string, path: string, body?: object, key = randomUUID()) => app.handle(new Request(`http://main.local${path}`, {
+      method, headers: { authorization: 'Bearer fixture', 'idempotency-key': key,
+        ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
+    await author.grant(`reply:create:${root.work}`, 'reply.create');
+    const payload = { 'rv:work': [root.work], 'schema:name': [{ '@value': 'A linked Work', '@language': 'en' }] };
+    for (const spoiler of [undefined, false, true]) {
+      const reply = `https://rezics.com/id/${randomUUID()}`;
+      const variantId = `urn:rezics:variant:${randomUUID()}`;
+      await author.grant(`content:draft:${reply}`, 'content.draft');
+      const document = structuredClone(fromPlainText('Reply words', 'blocks'));
+      document.doc.content!.push({ type: 'extensionBlock', attrs: { id: 'reference',
+        lang: null, dir: null,
+        definition: 'https://rezics.com/definition/work-reference-block-v1', version: spoiler === false ? '2' : '1',
+        payload: spoiler === false ? { unknown: [null, { preserved: true }] } : payload,
+        fallback: 'A linked Work' } });
+      const request = { profile: 'member-reply-draft-v1', reply, variantId, rootTarget: root.work,
+        rootRevision: root.workRevision, expectedHead: null, language: 'en', direction: 'ltr',
+        document, actingSubject: author.actor, ...(spoiler !== undefined ? { spoiler } : {}) };
+      const key = randomUUID();
+      const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', request, key), 201);
+      expect(await json(await call('POST', '/v1/member-reply-drafts', request, key)))
+        .toMatchObject({ revisionId: draft.revisionId, replayed: true });
+      const identity = { profile: 'realm-reply-identity-v1', reply, variantId, revisionId: draft.revisionId,
+        author: author.actor, rootTarget: root.work, rootRevision: root.workRevision,
+        parentReply: null, parentRevision: null, contextRevision: null, ...(spoiler !== undefined ? { spoiler } : {}) };
+      const published = await json<{ spoiler?: boolean }>(await call('POST', '/v1/realm-replies', identity), 201);
+      expect(published.spoiler).toBe(spoiler);
+      const read = await json<{ spoiler?: boolean; document: unknown }>(await call('GET', `/v1/member-replies/${short(reply)}`));
+      expect(read.spoiler).toBe(spoiler);
+      expect(Object.hasOwn(read, 'spoiler')).toBe(spoiler !== undefined);
+      expect(read.document).toEqual(document);
+      const edits = [{ ...request, document: undefined, body: 'A simple edit', expectedHead: draft.revisionId, spoiler: undefined },
+        { ...request, document: undefined, body: 'Explicitly safe', expectedHead: '', spoiler: false }];
+      for (const edit of edits) {
+        const saved = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', edit), 201);
+        const current = await json<{ spoiler?: boolean }>(await call('GET', `/v1/member-replies/${short(reply)}`));
+        expect(current.spoiler).toBe(edit.spoiler === undefined ? spoiler : false);
+        edits[1]!.expectedHead = saved.revisionId;
+      }
+    }
+    const page = await json<{ items: { spoiler?: boolean }[] }>(await call('GET',
+      `/v1/member-replies?rootTarget=${encodeURIComponent(root.work)}&rootRevision=${encodeURIComponent(root.workRevision)}`));
+    expect(page.items).toHaveLength(3);
+    expect(page.items.every(item => item.spoiler === false)).toBe(true);
+
+    // The same Post profile changes in place; publishing another language with
+    // an omitted declaration must preserve the author's existing choice.
+    await author.grant(`work:edit:${root.work}`, 'work.edit');
+    const objects = stack.objects('semantic/structure/');
+    await objects.initialize();
+    Object.assign(stack.env, { structureObjects: objects });
+    const composition = await json<{ structure: string; revision: string }>(await author.send('POST', '/v1/compositions', {
+      profile: 'book-composition', work: root.work, mainVersion: root.mainVersion, actingSubject: author.actor }), 201);
+    const chapter = await json<{ post: string; variantId: string }>(await author.send('POST', `/v1/works/${short(root.work)}/chapters`, {
+      profile: 'book-chapter-create-v1', title: 'Spoiler chapter', language: 'en', direction: 'ltr', parent: composition.structure,
+      position: 'last', expectedCompositionHead: composition.revision, actingSubject: author.actor }));
+    await author.grant(`work:read:${chapter.post}`, 'work.read');
+    await author.grant(`content:draft:${chapter.post}`, 'content.draft');
+    await author.grant(`content:publish:${chapter.post}`, 'content.publish');
+    let head: string | null = null;
+    let publicationHead: string | null = null;
+    for (const spoiler of [true, undefined, false]) {
+      const draft: Draft = await json<Draft>(await author.send('POST', '/v1/content-drafts', { profile: 'content-text-v1',
+        resourceId: chapter.post, variantId: chapter.variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+        direction: 'ltr', expectedHead: head, body: 'Chapter words', actingSubject: author.actor }), 201);
+      const published: { status: string; decision: string } = await json<{ status: string; decision: string }>(await author.send('POST', '/v1/content-publications', {
+        profile: 'content-publication-v1', preparationId: randomUUID(), revisionId: draft.revisionId,
+        expectedDigest: draft.byteDigest, expectedContentEpoch: draft.sourcePosition.dataEpoch, resourceId: chapter.post,
+        variantId: chapter.variantId, expectedPublicationHead: publicationHead, actingSubject: author.actor,
+        ...(spoiler !== undefined ? { spoiler } : {}) }), 201);
+      expect(published.status).toBe('active');
+      expect(await json(await author.read(`/v1/posts/${short(chapter.post)}`))).toMatchObject({ spoiler: spoiler ?? true });
+      head = draft.revisionId;
+      publicationHead = published.decision;
+    }
+    const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
+    const receipt = `urn:rezics:receipt:${randomUUID()}`;
+    await expect(command.command({ receipt, digest: 'a'.repeat(64),
+      update: `PREFIX rv: <${RV}> INSERT {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(chapter.post)} rv:spoiler true }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest "${'a'.repeat(64)}" }
+      } WHERE { FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }`,
+      validations: [{ profile: 'post-v1', sha256: profileRegistry['post-v1'].sha256,
+        shape: 'https://rezics.com/definition/post-v1/post-shape', focus: [], graphs: [GRAPHS.current],
+        binding: { post: chapter.post, publisher: author.actor, revision: root.workRevision } }], deadlineMs: 10_000 }))
+      .rejects.toThrow('invalid IRI list');
+    expect(await json(await author.read(`/v1/posts/${short(chapter.post)}`))).toMatchObject({ spoiler: false });
+  } finally { await stack.stop(); }
+}, 180_000);

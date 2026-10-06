@@ -1,6 +1,7 @@
 import type { ContentCore, ExactContentReference, PublicationPreparation } from '../../../../content/src/core.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
+import { profileValidations } from '../../infrastructure/profile.ts';
 import { RevisionNotFound } from '../work/history.ts';
 import { hasDocumentContent } from '@rezics/document';
 import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL } from '../../../../content/src/document-body.ts';
@@ -21,7 +22,12 @@ export class StaleContentOwnerEpoch extends Error {}
 export class StaleGraphReceiptEpoch extends Error {}
 export class ContentPublicationProfileUnavailable extends Error {}
 
+/** Added to the existing publication path only when changing a Post declaration. */
+export const POST_SPOILER_PUBLICATION_COST = { graphCalls: 4, identityRows: 2, validationFocus: 1 } as const;
+
 export interface PublishPinnedContentInput {
+  /** Omission preserves the Post declaration; false explicitly clears it. */
+  spoiler?: boolean;
   targetProfile?: 'work' | 'catalog-description';
   preparationId: string;
   revisionId: string;
@@ -61,6 +67,9 @@ interface GraphReceipt {
 }
 
 function checkedInput(input: PublishPinnedContentInput): void {
+  if (input.spoiler !== undefined && typeof input.spoiler !== 'boolean') {
+    throw new InvalidContentPublication('invalid Post spoiler declaration');
+  }
   if (input.targetProfile !== undefined
     && input.targetProfile !== 'work' && input.targetProfile !== 'catalog-description') {
     throw new InvalidContentPublication('unknown Content publication target profile');
@@ -88,6 +97,14 @@ export async function assertContentPublicationBody(content: Pick<ContentCore, 'r
     || exact.reference.resourceId !== input.resourceId || exact.reference.variantId !== input.variantId
     || exact.reference.byteDigest !== input.expectedDigest) {
     throw new ContentPublicationConflict('Content revision differs from publication intent');
+  }
+  if (input.spoiler !== undefined) {
+    if (typeof input.spoiler !== 'boolean' || input.targetProfile === 'catalog-description' || !env) {
+      throw new ContentPublicationConflict('spoiler requires a Post target');
+    }
+    const post = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a rv:Post } }`);
+    if (post.boolean !== true) throw new ContentPublicationConflict('spoiler requires a Post target');
   }
   if (exact.body.notes !== undefined || exact.reference.model === POST_CONTENT_MODEL) {
     try { retainedPostNotes(exact.body.notes); }
@@ -170,10 +187,12 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
+      ${input.spoiler !== undefined ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} rv:spoiler ?priorSpoiler }` : ''}
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
+        ${input.spoiler !== undefined ? `${iri(input.resourceId)} rv:spoiler ${input.spoiler} .` : ''}
         ${iri(input.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.resourceId)} ;
           rv:contentPublicationHead ${iri(decision)} .
       }
@@ -210,6 +229,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(input.resourceId)} a ${targetKind} .
+        ${input.spoiler !== undefined ? `${iri(input.resourceId)} a rv:Post . OPTIONAL { ${iri(input.resourceId)} rv:spoiler ?priorSpoiler }` : ''}
         OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
@@ -391,7 +411,7 @@ export async function reconcilePinnedContentPublication(env: WorkActivationEnvir
 }
 
 async function candidateValidations(env: WorkActivationEnvironment, admissionId: string,
-  variantId: string): Promise<CommandValidation[]> {
+  variantId: string, post?: string): Promise<CommandValidation[]> {
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
   const profile = registry['content-publication-v1'];
   const decisionShape = 'https://rezics.com/definition/content-publication-v1/decision-shape';
@@ -403,7 +423,19 @@ async function candidateValidations(env: WorkActivationEnvironment, admissionId:
   if (health.profiles['content-publication-v1'] !== profile.sha256) {
     throw new ContentPublicationProfileUnavailable('Fuseki Content publication profile differs');
   }
-  return [{ profile: 'content-publication-v1', sha256: profile.sha256,
+  const postChecks: CommandValidation[] = [];
+  if (post) {
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?publisher ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(post)} a rv:Post ; rv:publisher ?publisher ; rv:head ?head }
+    } LIMIT ${POST_SPOILER_PUBLICATION_COST.identityRows}`)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]!.publisher || !rows[0]!.head) {
+      throw new ContentPublicationConflict('Post publication identity is unavailable');
+    }
+    postChecks.push(...await profileValidations(env.fuseki, 'post-v1', [{
+      shape: 'https://rezics.com/definition/post-v1/post-shape', focus: [post], graphs: [GRAPHS.current],
+    }], { post, publisher: rows[0]!.publisher.value, revision: rows[0]!.head.value }));
+  }
+  return [...postChecks, { profile: 'content-publication-v1', sha256: profile.sha256,
     shape: variantShape, focus: [variantId], graphs: [GRAPHS.current] },
   { profile: 'content-publication-v1', sha256: profile.sha256,
     shape: decisionShape, focus: [contentPublicationDecisionIri(admissionId)],
@@ -417,7 +449,8 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
   await assertContentPublicationBody(content, input, env);
   // The existing graph writer rejects unknown current types and unvalidated
   // product writes. Do not create a pin until both reviewed shape bindings exist.
-  const validations = await candidateValidations(env, admission.id, input.variantId);
+  const validations = await candidateValidations(env, admission.id, input.variantId,
+    input.spoiler !== undefined ? input.resourceId : undefined);
   const receipt = contentPublicationReceiptIri(admission.id);
   // A fresh preparation must not pin an exact revision whose dependency closure
   // is already undisclosed. A replay first checks its durable graph receipt.

@@ -20,6 +20,7 @@ const digest = /^[0-9a-f]{64}$/;
 const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
 
 export interface ReplyIdentityInput {
+  spoiler?: boolean;
   originRealm?: string | null;
   reply: string; variantId: string; revisionId: string; author: string;
   rootTarget: string; rootRevision: string; parentReply: string | null;
@@ -60,6 +61,7 @@ function assertText(value: string | null, max = 300): void {
   }
 }
 function assertIdentity(input: ReplyIdentityInput): void {
+  if (input.spoiler !== undefined && typeof input.spoiler !== 'boolean') throw new RealmReplyInvalid('invalid reply spoiler');
   if (![input.reply, input.author, input.rootTarget].every(value => native.test(value))
     || !uuid.test(input.revisionId) || !input.variantId || input.variantId.length > 300
     || (input.parentReply !== null && !native.test(input.parentReply))
@@ -193,7 +195,11 @@ export class RealmReplyContentStore {
       throw new RealmReplyDenied('reply admission differs from author and target');
     }
     return this.transaction(async client => {
-      if (await this.prior(client, admission, 'reply.create')) return { ...input, replayed: true };
+      if (await this.prior(client, admission, 'reply.create')) {
+        const row = (await client.query<{ spoiler: unknown }>(`SELECT body->'spoiler' AS spoiler
+          FROM content.revision WHERE variant_id = $1 AND id = $2`, [input.variantId, input.revisionId])).rows[0];
+        return { ...input, ...(typeof row?.spoiler === 'boolean' ? { spoiler: row.spoiler } : {}), replayed: true };
+      }
       const variant = await client.query<{ resource_id: string; draft_head: string }>(`
         SELECT resource_id, draft_head::text FROM content.variant WHERE id = $1 FOR UPDATE`, [input.variantId]);
       if (variant.rows[0]?.resource_id !== input.reply
@@ -207,10 +213,13 @@ export class RealmReplyContentStore {
       if (input.originRealm !== undefined && input.originRealm !== author.rows[0]!.origin_realm) {
         throw new RealmReplyDenied('reply origin differs from its first draft');
       }
-      const revision = await client.query(`SELECT 1 FROM content.revision WHERE variant_id = $1
+      const revision = await client.query<{ spoiler: unknown }>(`SELECT body->'spoiler' AS spoiler FROM content.revision WHERE variant_id = $1
         AND id = $2 AND availability = 'available' AND model = 'member-reply-v1'
         AND provenance->>'author' = $3 AND body->>'deleted' = 'false'`, [input.variantId, input.revisionId, input.author]);
       if (!revision.rowCount) throw new RealmReplyStale('reply revision is unavailable');
+      const spoiler = revision.rows[0]!.spoiler;
+      if (spoiler != null && typeof spoiler !== 'boolean') throw new RealmReplyUnavailable('reply spoiler is corrupt');
+      if (input.spoiler !== undefined && input.spoiler !== spoiler) throw new RealmReplyInvalid('reply spoiler differs from the exact draft');
       if (input.parentReply) {
         const parent = await client.query<{ root_target: string; root_revision: string; origin_realm: string | null }>(`
           SELECT p.root_target, p.root_revision, p.origin_realm FROM content.reply p
@@ -234,7 +243,7 @@ export class RealmReplyContentStore {
           (SELECT variant_id FROM content.reply WHERE id = $6), $7, $8, $9, $10)`,
       [input.reply, input.variantId, input.author, input.rootTarget, input.rootRevision,
         input.parentReply, input.parentRevision, input.contextRevision, admission.id, author.rows[0]!.origin_realm]);
-      return { ...input, replayed: false };
+      return { ...input, ...(typeof spoiler === 'boolean' ? { spoiler } : {}), replayed: false };
     });
   }
 
@@ -379,14 +388,18 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
       p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
       p.parent_reply AS "parentReply", p.parent_revision AS "parentRevision",
       p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
-      r.byte_digest AS "revisionDigest", r.body->'document' AS document,
+      r.byte_digest AS "revisionDigest", r.body->'document' AS document, r.body->'spoiler' AS spoiler,
       (r.availability = 'available' AND r.body->>'deleted' = 'false') AS visible
       FROM candidates p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
       ORDER BY p.id`, [rootTarget, rootRevision, after ?? '', realm]);
     const candidates = rows.rows.slice(0, 32);
-    const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, document, ...row }) => {
-      try { return { ...row, ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) }; }
+    const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, document, spoiler, ...row }) => {
+      try {
+        if (spoiler != null && typeof spoiler !== 'boolean') throw new Error('invalid spoiler');
+        return { ...row, ...(typeof spoiler === 'boolean' ? { spoiler } : {}),
+          ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) };
+      }
       catch { throw new RealmReplyUnavailable('reply document projection is corrupt'); }
     });
     return { items, next: rows.rows.length > 32 ? candidates.at(-1)!.reply as string : null };
@@ -395,17 +408,21 @@ SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
   async readCurrent(reply: string) {
     if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply');
     const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
-      rootRevision: string; variantId: string; revisionId: string; body: string; document: DocumentSnapshot | null;
+      rootRevision: string; variantId: string; revisionId: string; body: string; document: DocumentSnapshot | null; spoiler: unknown;
       revisionDigest: string; originRealm: string | null }>(`
       SELECT p.id AS reply, p.author, p.origin_realm AS "originRealm", p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
         p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
-        r.body->'document' AS document, r.byte_digest AS "revisionDigest"
+        r.body->'document' AS document, r.body->'spoiler' AS spoiler, r.byte_digest AS "revisionDigest"
       FROM content.reply p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
       WHERE p.id = $1 AND r.availability = 'available' AND r.body->>'deleted' = 'false'`, [reply])).rows[0];
     if (!row) return null;
-    const { document, ...result } = row;
-    try { return { ...result, ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) }; }
+    const { document, spoiler, ...result } = row;
+    try {
+      if (spoiler != null && typeof spoiler !== 'boolean') throw new Error('invalid spoiler');
+      return { ...result, ...(typeof spoiler === 'boolean' ? { spoiler } : {}),
+        ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) };
+    }
     catch { throw new RealmReplyUnavailable('reply document projection is corrupt'); }
   }
 

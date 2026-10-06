@@ -21,9 +21,11 @@
   "devDependencies": {
     "@ast-grep/cli": "0.45.3",
     "@playwright/test": "1.63.0",
+    "@types/n3": "1.26.4",
     "dependency-cruiser": "18.4.0",
     "fflate": "0.8.3",
     "knip": "6.38.0",
+    "n3": "2.13.8",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2003"

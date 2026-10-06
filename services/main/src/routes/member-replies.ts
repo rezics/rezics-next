@@ -11,7 +11,7 @@ import type { DocumentSnapshot } from '@rezics/document';
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f-]{36}$' });
 const reply = t.Object({ reply: native, author: native, rootTarget: native, rootRevision: native,
-  originRealm: t.Optional(t.Nullable(native)),
+  originRealm: t.Optional(t.Nullable(native)), spoiler: t.Optional(t.Boolean()),
   variantId: t.String(), revisionId: uuid, body: t.String(), document: t.Optional(documentSnapshotSchema), revisionDigest: t.String(),
   parentReply: t.Optional(t.Nullable(native)), parentRevision: t.Optional(t.Nullable(uuid)) });
 export const openApiOperations = {
@@ -20,7 +20,7 @@ export const openApiOperations = {
 const draftFields = { profile: t.Literal('member-reply-draft-v1'), reply: native,
   variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
   rootTarget: native, rootRevision: native, language: t.String({ minLength: 2, maxLength: 35 }),
-  originRealm: t.Optional(t.Nullable(native)),
+  originRealm: t.Optional(t.Nullable(native)), spoiler: t.Optional(t.Boolean()),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
   expectedHead: t.Nullable(uuid), actingSubject: native };
 

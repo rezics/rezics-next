@@ -30,6 +30,22 @@ const align = Type.Optional(
 );
 const commonAttrs = { id: { default: null }, lang: { default: null }, dir: { default: null } };
 
+const workReferenceIdentity = {
+  definition: Type.Literal('https://rezics.com/definition/work-reference-block-v1'),
+  version: Type.Literal('1'),
+};
+// The portable payload mirrors the Turtle predicates, without inventing an RDF
+// identity for a document-local block. No graph lookup is needed to retain it.
+export const WorkReferencePayloadSchema = Type.Object({
+  'rv:work': Type.Array(Type.String({ format: 'iri' }), { minItems: 1, maxItems: 1, uniqueItems: true }),
+  'schema:name': Type.Array(Type.Object({
+    '@value': Type.String({ minLength: 1, maxLength: 200 }),
+    // This independent wire contract cannot depend on Main's display-language policy.
+    // ast-grep-ignore: one-language-parser
+    '@language': Type.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' }),
+  }, closed), { minItems: 1, maxItems: 1, uniqueItems: true }),
+}, closed);
+
 /** Attributes are shared by wire validation and the reference ProseMirror schema. */
 export const nodeAttributes: Record<string, Record<string, TSchema>> = {
   paragraph: { ...common, textAlign: align },
@@ -447,6 +463,14 @@ function wireRules(profile: DocumentProfile): WireRules {
   for (const name of names) {
     const fields: Record<string, TSchema> = { type: Type.Literal(name) };
     if (nodeAttributes[name]) fields.attrs = Type.Object(nodeAttributes[name], closed);
+    if (name === 'extensionBlock') {
+      const attrs = nodeAttributes.extensionBlock!;
+      fields.attrs = Type.Union([
+        Type.Object({ ...attrs, ...workReferenceIdentity, payload: WorkReferencePayloadSchema }, closed),
+        // Other definitions and versions retain the original opaque contract.
+        Type.Object(attrs, { ...closed, not: Type.Object(workReferenceIdentity) }),
+      ]);
+    }
     if (name === 'text') fields.text = Type.String({ minLength: 1 });
     if (inlineNames.includes(name)) fields.marks = Type.Optional(Type.Array(mark));
     shells[name] = fields;

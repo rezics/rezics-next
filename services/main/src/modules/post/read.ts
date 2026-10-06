@@ -41,25 +41,34 @@ export async function readPost(session: WorkReadSession, post: string) {
   const allowed = async () => !!session.principal && !!session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, post);
   const privateAdmission = await allowed();
-  const rows = await session.query(`SELECT ?head ?publisher ?label ?public WHERE {
+  const rows = await session.query(`SELECT ?head ?publisher ?label ?public ?spoiler WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(post)} a rv:Post ; rv:head ?head ;
-      rv:publisher ?publisher ; rdfs:label ?label . }
+      rv:publisher ?publisher ; rdfs:label ?label .
+      OPTIONAL { ${iri(post)} rv:spoiler ?spoiler } }
     ${unerased(iri(post))}
     BIND(EXISTS { ${publicPost(iri(post))} } AS ?public)
   } LIMIT ${POST_READ_COST.graphRows}`, POST_READ_COST.graphRows);
   if (!rows.length) throw new WorkReadMissing('Post is unavailable');
   if (rows.length > POST_READ_COST.labels || rows.some(row => !row.head || !row.publisher || !row.label
-    || row.head.value !== rows[0]!.head!.value || row.publisher.value !== rows[0]!.publisher!.value)) {
+    || row.head.value !== rows[0]!.head!.value || row.publisher.value !== rows[0]!.publisher!.value
+    || row.spoiler?.value !== rows[0]!.spoiler?.value)) {
     throw new WorkReadUnavailable('Post labels or head exceed the read contract');
   }
   const isPublic = rows[0]!.public?.value === 'true';
   if (!isPublic && !privateAdmission) throw new WorkReadMissing('Post is unavailable');
+  const declaration = rows[0]!.spoiler;
+  if (declaration && (declaration.type !== 'literal'
+    || declaration.datatype !== 'http://www.w3.org/2001/XMLSchema#boolean'
+    || !['true', 'false', '1', '0'].includes(declaration.value))) {
+    throw new WorkReadUnavailable('Post spoiler declaration is invalid');
+  }
   const labels = rows.map(row => ({ value: row.label!.value, language: row.label!['xml:lang'] ?? 'und' }));
   const title = labels.find(label => label.language.toLowerCase() === session.options.language?.toLowerCase())
     ?? labels.find(label => label.language === 'en') ?? labels[0]!;
   const { placements, truncated } = await readPlacements(session, post);
   if (!isPublic && !await allowed()) throw new WorkReadMoved('Post custody changed');
   return { profile: 'post-read-v2' as const, id: post, revision: rows[0]!.head!.value,
+    ...(declaration ? { spoiler: ['true', '1'].includes(declaration.value) } : {}),
     publisher: rows[0]!.publisher!.value, title, labels, placements, placementsTruncated: truncated,
     disclosure: isPublic ? 'public' as const : 'restricted' as const, sourcePosition: session.position };
 }

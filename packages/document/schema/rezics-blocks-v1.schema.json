@@ -2160,70 +2160,201 @@
           "const": "extensionBlock"
         },
         "attrs": {
-          "type": "object",
-          "required": [
-            "id",
-            "definition",
-            "version",
-            "payload",
-            "fallback"
-          ],
-          "properties": {
-            "id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256
-            },
-            "lang": {
-              "anyOf": [
-                {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "definition",
+                "version",
+                "payload",
+                "fallback"
+              ],
+              "properties": {
+                "id": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 256,
-                  "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                  "maxLength": 256
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "dir": {
-              "anyOf": [
-                {
+                "lang": {
                   "anyOf": [
                     {
                       "type": "string",
-                      "const": "ltr"
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
                     },
                     {
-                      "type": "string",
-                      "const": "rtl"
-                    },
-                    {
-                      "type": "string",
-                      "const": "auto"
+                      "type": "null"
                     }
                   ]
                 },
-                {
-                  "type": "null"
+                "dir": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "ltr"
+                        },
+                        {
+                          "type": "string",
+                          "const": "rtl"
+                        },
+                        {
+                          "type": "string",
+                          "const": "auto"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "definition": {
+                  "type": "string",
+                  "const": "https://rezics.com/definition/work-reference-block-v1"
+                },
+                "version": {
+                  "type": "string",
+                  "const": "1"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "rv:work",
+                    "schema:name"
+                  ],
+                  "properties": {
+                    "rv:work": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "iri"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    },
+                    "schema:name": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "@value",
+                          "@language"
+                        ],
+                        "properties": {
+                          "@value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "@language": {
+                            "type": "string",
+                            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "uniqueItems": true
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "fallback": {
+                  "type": "string"
                 }
-              ]
+              },
+              "additionalProperties": false
             },
-            "definition": {
-              "type": "string",
-              "minLength": 1
-            },
-            "version": {
-              "type": "string",
-              "minLength": 1
-            },
-            "payload": {},
-            "fallback": {
-              "type": "string"
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "definition",
+                "version",
+                "payload",
+                "fallback"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "lang": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dir": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "ltr"
+                        },
+                        {
+                          "type": "string",
+                          "const": "rtl"
+                        },
+                        {
+                          "type": "string",
+                          "const": "auto"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "definition": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "payload": {},
+                "fallback": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "not": {
+                "type": "object",
+                "required": [
+                  "definition",
+                  "version"
+                ],
+                "properties": {
+                  "definition": {
+                    "type": "string",
+                    "const": "https://rezics.com/definition/work-reference-block-v1"
+                  },
+                  "version": {
+                    "type": "string",
+                    "const": "1"
+                  }
+                }
+              }
             }
-          },
-          "additionalProperties": false
+          ]
         }
       },
       "additionalProperties": false

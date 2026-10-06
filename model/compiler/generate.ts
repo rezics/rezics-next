@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { facetId, renderFacetRegistry, type FacetDefinition } from './facet.ts';
-import { renderProfile, type ProfileDefinition } from './ir.ts';
+import { type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
 import { renderTypeRegistry } from './type.ts';
+import { parseTurtleProfile, profileSource, type TurtleDeclaration } from './shacl.ts';
 import { typesV1 } from '../definitions/types-v1.ts';
 import { workKindV2Profile } from '../definitions/work-kind-v2.ts';
 import { workTypeV2Profile } from '../definitions/work-type-v2.ts';
@@ -32,25 +33,43 @@ const authored = <T>(suffix: string) => definitionModules.flatMap(([file, module
     name.endsWith(suffix) && value && typeof value === 'object' ? [[file, value as T] as const] : []));
 
 /**
- * Source of truth for the authored profiles: every `model/definitions/*.ts` module's exported
- * `*Profile` definitions, discovered so parallel profile work never edits one shared list.
+ * Discover `*.ttl` constraints and TS `*Profile` definitions in one namespace.
+ * Turtle's optional companion `*Declaration` exports carry only command metadata.
  */
-export const authoredProfiles: readonly ProfileDefinition[] = authored<ProfileDefinition>('Profile')
-  .map(([, profile]) => profile);
+export function discoverProfiles(directory: string,
+  modules: readonly (readonly [string, Record<string, unknown>])[]): ProfileDefinition[] {
+  const profiles = modules.flatMap(([, module]) => Object.entries(module)
+    .filter(([name, value]) => name.endsWith('Profile') && value && typeof value === 'object')
+    .map(([, value]) => value as ProfileDefinition));
+  const declarations = new Map<string, TurtleDeclaration>();
+  for (const [file, module] of modules) for (const [name, value] of Object.entries(module)) {
+    if (!name.endsWith('Declaration') || !value || typeof value !== 'object') continue;
+    const declaration = value as TurtleDeclaration;
+    if (file !== `${declaration.id}.ts` || declarations.has(declaration.id)) {
+      throw new Error(`Duplicate or misplaced Turtle declaration ${declaration.id}`);
+    }
+    declarations.set(declaration.id, declaration);
+  }
+  for (const file of [...new Bun.Glob('*.ttl').scanSync({ cwd: directory })].sort()) {
+    const id = file.slice(0, -4);
+    if (profiles.some(profile => profile.id === id)) throw new Error(`Duplicate profile ID ${id}`);
+    profiles.push(parseTurtleProfile(id, readFileSync(join(directory, file), 'utf8'), declarations.get(id)));
+    declarations.delete(id);
+  }
+  if (declarations.size) throw new Error(`Turtle source is missing for ${[...declarations.keys()].join(', ')}`);
+  if (new Set(profiles.map(profile => profile.id)).size !== profiles.length) throw new Error('Duplicate profile ID');
+  // Source language does not change output order or canonical precedence.
+  return profiles.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export const authoredProfiles: readonly ProfileDefinition[] = discoverProfiles(
+  join(import.meta.dir, '../definitions'), definitionModules);
 
 /** Exported `*Facet` definitions, one version per `definitions/facet-<name>-v<version>.ts`. */
 export const authoredFacets: readonly FacetDefinition[] = authored<FacetDefinition>('Facet').map(([file, facet]) => {
   if (file !== `${facetId(facet)}.ts`) throw new Error(`definitions/${file} must hold only ${facetId(facet)}`);
   return facet;
 });
-
-function profileShapes(source: string, id: string): string[] {
-  const shapes = [...source.matchAll(/^<([^>]+)>\s+a\s+sh:NodeShape\s*;/gm)].map(match => match[1]!);
-  if (!shapes.length || new Set(shapes).size !== shapes.length) {
-    throw new Error(`${id} must declare distinct named NodeShapes`);
-  }
-  return shapes;
-}
 
 // Definitions and the command module live in this repository, whatever the output root.
 const repository = resolve(import.meta.dir, '../..');
@@ -76,14 +95,14 @@ export function commandProfiles(definitions: readonly ProfileDefinition[], optio
   const registry = buildCommandRegistry(sorted.map(([, profile]) => profile), options);
   const shapes = new Map<string, string>();
   const profiles: ProfileArtifact[] = sorted.map(([id, profile]) => {
-    const source = renderProfile(profile);
+    const source = profileSource(profile);
     const shapeFile = `shapes/${id}.ttl`;
     shapes.set(shapeFile, source);
     return {
       id,
       sha256: createHash('sha256').update(source).digest('hex'),
       file: shapeFile,
-      shapes: profileShapes(source, id),
+      shapes: profile.shapes.map(shape => shape.iri),
       focusRoles: profile.shapes.map(shape => shapeRole(id, shape.iri)),
     };
   });
@@ -108,7 +127,7 @@ export function buildArtifacts(_root: string): Map<string, string> {
   const registry = Object.fromEntries(command.profiles.map(({ id, sha256, file, shapes, focusRoles }) =>
     [id, { sha256, file, shapes, focusRoles }]));
   artifacts.set('packages/model/src/generated/profiles.ts',
-    `// Generated by task gen from authored TypeScript profiles.\n` +
+    `// Generated by task gen from authored profiles.\n` +
     `export const profileRegistry = ${JSON.stringify(registry, null, 2)} as const;\n` +
     `export type ProfileId = keyof typeof profileRegistry;\n`);
   for (const [path, content] of buildModelOutputs(authoredProfiles)) artifacts.set(path, content);

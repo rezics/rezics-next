@@ -16,9 +16,10 @@ import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 /** Direct root probes run before and after admission; Access baseline and
  * delegated target authority retain their owners' separate cost contracts. */
 export const MEMBER_REPLY_COST = { bodyBytes: 8192, pageSize: 32,
-  graphQueries: 11, graphResponseBytes: 262_144, ownerRowLocks: 12 } as const;
+  graphQueries: 11, graphResponseBytes: 262_144, ownerRowLocks: 12, priorRevisionReads: 1 } as const;
 export interface MemberReplyDraft {
   originRealm?: string | null;
+  spoiler?: boolean;
   reply: string; variantId: string; rootTarget: string; rootRevision: string;
   language: string; direction: 'ltr' | 'rtl' | 'none'; expectedHead: string | null;
   body?: string | null; document?: DocumentSnapshot; actingSubject: string;
@@ -35,6 +36,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     reply: string; variantId: string; revisionId: string; revisionDigest: string; predecessor: string | null; deleted: boolean;
     sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+  if (input.spoiler !== undefined && typeof input.spoiler !== 'boolean') throw new ContentConflict('invalid reply spoiler');
   const deleted = input.body === null && input.document === undefined;
   let body;
   try { body = deleted ? { body: '' } : authoredDocumentBody({
@@ -70,11 +72,24 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     }
   };
   await proveRoot(false);
+  let spoiler = input.spoiler;
+  // A plain text edit must retain an author declaration it did not address.
+  // Bind the one exact read to this reply and variant before using its value.
+  if (spoiler === undefined && input.expectedHead !== null) {
+    const prior = (await content.readExactBatch([input.expectedHead], async ids => new Set(ids)))[0];
+    if (prior?.status !== 'available' || prior.reference.resourceId !== input.reply
+      || prior.reference.variantId !== input.variantId || prior.reference.model !== 'member-reply-v1'
+      || prior.body.spoiler !== undefined && typeof prior.body.spoiler !== 'boolean') {
+      throw new ContentConflict('prior reply declaration is unavailable');
+    }
+    spoiler = prior.body.spoiler as boolean | undefined;
+  }
   const command: SaveDraftCommand = { operationId: '', variant: { id: input.variantId,
     resourceId: input.reply, language: { kind: 'tag', tag: input.language, originalTag: input.language },
     direction: input.direction }, expectedHead: input.expectedHead, model: 'member-reply-v1',
     sourceRevision: input.rootRevision, provenance: {}, serializedJson: JSON.stringify({ ...body,
       deleted, rootTarget: input.rootTarget, rootRevision: input.rootRevision,
+      ...(spoiler !== undefined ? { spoiler } : {}),
       ...(input.originRealm ? { originRealm: input.originRealm } : {}) }) };
   const digest = contentDraftIntentDigest(command, input.actingSubject);
   const scope = `content:draft:${input.reply}`;

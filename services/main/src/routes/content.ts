@@ -246,6 +246,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .post('/v1/content-publications', {
       body: t.Object({ profile: t.Literal('content-publication-v1'),
+        spoiler: t.Optional(t.Boolean()),
         targetProfile: t.Optional(t.Literal('catalog-description-v1')),
         preparationId: t.String({ minLength: 1, maxLength: 200 }),
         revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
