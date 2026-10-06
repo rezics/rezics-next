@@ -282,7 +282,7 @@ tasks:
     dir: '{{.ROOT_DIR}}'
     silent: true
     cmds:
-      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-6}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
+      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-8}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
 
   # Checks and tests
 
