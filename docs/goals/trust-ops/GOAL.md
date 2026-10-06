@@ -126,6 +126,22 @@ external conditions from the start.
   old binaries).
 - Salvage: `goal/g-435` moderation and authority work (review against the
   current Access model; launch reviews its admin UI).
+- production-readiness (assigned by the program, 2026-10-07; audit in
+  `.temp/goal-program/pr-retire-audit.md`):
+  - **Private names stay private.** A name marked private never becomes public
+    through any reader, projection, search index, export or `creditedName`
+    occurrence. The disclosure contract is ours; launch verifies the UI.
+  - **Reporting.** A report goes from intake through triage, enforcement, notice
+    and appeal, with evidence at each step. Launch keeps the Realm moderation UX.
+  - **Legal cases.** A rights notice reaches a real outcome: counter-notice,
+    restoration or removal, recorded and visible to the parties.
+  - **Privacy-preserving measurement.** Operational measurement collects no
+    personal data the privacy policy does not name. In-app telemetry stays
+    closed.
+  - **Qualification exit.** No open High security finding. The registration and
+    market gates for the US, Taiwan, Singapore, Japan, South Korea and the EU
+    (`docs/operations/trust-and-safety.md`) are each decided within the
+    zero-budget decision.
 
 ## Cut lines
 

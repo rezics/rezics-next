@@ -1,8 +1,7 @@
 # Production deployment
 
-Deployment follows the production-readiness [Goal](../../GOAL.md); that Goal
-delivers what this page lists as [ready to deploy](#ready-to-deploy) and does not
-deploy. The maintainer has prepared the hosts and the Cloudflare side.
+Deployment starts once everything under [ready to deploy](#ready-to-deploy)
+is in place; preparing it does not deploy. The maintainer has prepared the hosts and the Cloudflare side.
 
 Boot Main with `PLATFORM_FIRST_ADMIN_ACCOUNT` unset. Have the first real
 operator sign in through Account and provision its Agent through Main. Then set
@@ -84,7 +83,7 @@ Settle this when the deployment phase starts. Planning view of 2026-09-29:
 
 ## Ready to deploy
 
-The production-readiness Goal leaves deployment as operations work:
+With these in place, deployment is operations work:
 
 - OCI images with pinned digests for Main, its relay and initialization job,
   Account, the migration job and the Fuseki bundle; Content runs in Main, not
