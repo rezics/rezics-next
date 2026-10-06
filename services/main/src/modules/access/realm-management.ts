@@ -6,6 +6,8 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   RealmAdminLimit, RealmAdminStale, RealmAdminUnavailable, escalationCommand, roleCommand,
   realmPermissions, type EscalationCommand, type RealmPermission, type RoleCommand,
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
+import { enrollRealmFounder, initializeCreatedRealm, type RealmInitializationInput, type RealmInitializationResult } from './realm-initialization.ts';
+export type { RealmInitializationInput, RealmInitializationResult } from './realm-initialization.ts';
 import { changeRealmMember } from './realm-management-members.ts';
 import { prepareRealmHistoryAdmission } from '../realm-admin/history.ts';
 import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
@@ -103,25 +105,7 @@ export class AccessRealmManagement {
       if (prior) return { receiptId: prior.receipt_id, generation: '0', replayed: true };
       if (generation !== '0') throw new RealmAdminStale('Realm already has management state');
       const receiptId = randomUUID();
-      await client.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING`, [realm]);
-      await client.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
-        VALUES ('realm',$1,0,'realm-membership-v1') ON CONFLICT DO NOTHING`, [realm]);
-      await client.query(`INSERT INTO access.scope_gate (id) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-        [[`review:decide:${realm}`, `publication:adopt:${realm}`,
-          `realm:profile:${realm}`, `media:avatar:${realm}`]]);
-      await client.query(`INSERT INTO access.permission_grant
-        (id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
-        SELECT gen_random_uuid(),$1,$1,scope,action,$3,$4 FROM unnest($2::text[],$5::text[]) AS p(scope,action)`,
-      [actor, [...realmPermissions, 'realm.owner'].map(action => realmPermissionScope(realm, action))
-        .concat(`realm:profile:${realm}`, `media:avatar:${realm}`), identity.valid_until, identity.id,
-        [...realmPermissions, 'realm.owner', 'realm.profile.publish', 'media.avatar']]);
-      await client.query(`INSERT INTO access.representation
-        (id,principal_id,subject_id,action,valid_until)
-        SELECT gen_random_uuid(),$1,$2,action,$3 FROM unnest($4::text[]) AS p(action)`,
-      [identity.id, actor, identity.valid_until, ['realm.profile.publish', 'media.avatar']]);
-      await client.query(`INSERT INTO access.realm_admin_owner_bootstrap
-        (realm,owner_subject,admission_id,receipt_id,principal_id) VALUES ($1,$2,$3,$4,$5)`,
-      [realm, actor, proof.admission!.value, receiptId, identity.id]);
+      await enrollRealmFounder(client, realm, actor, identity, proof.admission!.value, receiptId);
       const result = { receiptId, generation: '0', replayed: false };
       await client.query(`INSERT INTO access.realm_admin_receipt
         (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
@@ -129,6 +113,12 @@ export class AccessRealmManagement {
       [receiptId, realm, identity.id, actor, `realm-init:${realm.slice(-36)}`, digest({ realm, actor }), result]);
       return result;
     }, true);
+  }
+
+  /** Server-side completion of a successful Space creation; one Access commit. */
+  initializeCreated(principal: VerifiedPrincipal, input: RealmInitializationInput,
+    env: WorkActivationEnvironment): Promise<RealmInitializationResult> {
+    return initializeCreatedRealm(this.pool, principal, input, env);
   }
 
   private async authorize(client: PoolClient, principal: VerifiedPrincipal, realm: string,
