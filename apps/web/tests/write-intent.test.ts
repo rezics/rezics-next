@@ -17,16 +17,23 @@ function deferred<T>() {
 }
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-type Gate = { before?: Promise<unknown> };
+type Gate = { before?: Promise<unknown>; after?: Promise<unknown> };
+const position = (sequence: string, dataEpoch = 'epoch-1') => ({ datasetId: 'product' as const, dataEpoch, sequence });
+type TestRating = { value: number | null; revision: string; sourcePosition?: ReturnType<typeof position> };
 
 /**
  * A Main holding one Work's shelf status (with its version) and global rating (with its head). Writes compare and set
  * as Main does; `gates` hold a write's answer until a test releases it, `applyAfterReads` keeps an admitted rating
  * unapplied (a 202) for that many reads of the reader state.
  */
-function fakeMain(initial: { status?: ReadingStatus | null; rating?: { value: number; revision: string } | null } = {}) {
-  const state: { status: ReadingStatus | null; version: number; rating: { value: number; revision: string } | null } =
-    { status: initial.status ?? null, version: 1, rating: initial.rating ?? null };
+function fakeMain(initial: { status?: ReadingStatus | null; rating?: TestRating | null } = {}) {
+  const state: { status: ReadingStatus | null; version: number; rating: NonNullable<ReaderSeed[string]['rating']> | null } =
+    { status: initial.status ?? null, version: 1,
+      rating: initial.rating ? { ...initial.rating, sourcePosition: initial.rating.sourcePosition ?? position('1') } : null };
+  let ratingSequence = BigInt(state.rating?.sourcePosition.sequence ?? '0');
+  const commit = (value: number | null, revision: string) => {
+    state.rating = { value, revision, sourcePosition: position(String(++ratingSequence)) };
+  };
   const statusWrites: { status: ReadingStatus | null; expectedVersion: number; outcome: number }[] = [];
   const ratingWrites: { value: number | null; head: string | null; outcome: number }[] = [];
   let writing = 0;
@@ -34,33 +41,40 @@ function fakeMain(initial: { status?: ReadingStatus | null; rating?: { value: nu
   const gates: Gate[] = [];
   let admitted: { value: number | null; revision: string; after: number } | null = null;
   let reads = 0;
-  const control = { applyAfterReads: 0, reads: () => reads, failReads: false };
+  const control = { applyAfterReads: 0, reads: () => reads, failReads: false, denied: false };
   const readGates: Promise<unknown>[] = [];
   const readerState = () => ({
     status: { status: state.status, version: state.version },
-    rating: { global: state.rating ? { availability: 'available', value: state.rating.value, revision: state.rating.revision } : null },
+    rating: { global: state.rating ? { availability: state.rating.value === null ? 'withdrawn' : 'available',
+      value: state.rating.value, revision: state.rating.revision, sourcePosition: state.rating.sourcePosition } : null },
   });
   const enter = async () => {
     writing += 1;
     if (writing > 1) overlapped = true;
     const gate = gates.shift();
     if (gate?.before) await gate.before;
+    return gate;
+  };
+  const read = async () => {
+    reads += 1;
+    if (admitted && reads > admitted.after) {
+      commit(admitted.value, admitted.revision);
+      admitted = null;
+    }
+    // What Main answers is decided when the read arrives; a gate delays only the delivery.
+    const snapshot = readerState(), denied = control.denied;
+    const gate = readGates.shift();
+    if (gate) await gate;
+    if (control.failReads) throw new Error('truncated body');
+    return denied ? { data: null, error: { status: 403 } } : { data: snapshot, error: null };
   };
   const main = { v1: {
+    me: { 'work-states': { get: async () => {
+      const result = await read();
+      return { ...result, data: result.data ? { items: [{ work, ...result.data }] } : null };
+    } } },
     works: () => ({
-      'reader-state': { get: async () => {
-        reads += 1;
-        if (admitted && reads > admitted.after) {
-          state.rating = admitted.value === null ? null : { value: admitted.value, revision: admitted.revision };
-          admitted = null;
-        }
-        // What Main answers is decided when the read arrives; a gate delays only the delivery.
-        const snapshot = readerState();
-        const gate = readGates.shift();
-        if (gate) await gate;
-        if (control.failReads) throw new Error('truncated body');
-        return { data: snapshot, error: null };
-      } },
+      'reader-state': { get: read },
       'reader-status': { put: async (body: { status: ReadingStatus | null; expectedVersion: number }) => {
         await enter();
         try {
@@ -74,7 +88,7 @@ function fakeMain(initial: { status?: ReadingStatus | null; rating?: { value: nu
       } },
     }),
     'global-rating-observations': { post: async (body: { value: number | null; expectedRevisionHead: string | null }) => {
-      await enter();
+      const gate = await enter();
       try {
         const conflict = body.expectedRevisionHead !== (state.rating?.revision ?? null);
         const outcome = conflict ? 409 : control.applyAfterReads > 0 || control.applyAfterReads === -1 ? 202 : 200;
@@ -85,8 +99,10 @@ function fakeMain(initial: { status?: ReadingStatus | null; rating?: { value: nu
           admitted = { value: body.value, revision, after: control.applyAfterReads === -1 ? Infinity : reads + control.applyAfterReads };
           return { data: { retry: { afterMs: 0 } }, error: null };
         }
-        state.rating = body.value === null ? null : { value: body.value, revision };
-        return { data: { observationRevision: revision }, error: null };
+        commit(body.value, revision);
+        const response = { data: { observationRevision: revision, sourcePosition: state.rating!.sourcePosition }, error: null };
+        if (gate?.after) await gate.after;
+        return response;
       } finally { writing -= 1; }
     } },
   } } as unknown as MainClient;
@@ -94,13 +110,13 @@ function fakeMain(initial: { status?: ReadingStatus | null; rating?: { value: nu
     /** Another device sets the status first. */
     elsewhere(status: ReadingStatus | null) { state.status = status; state.version += 1; },
     /** Another device rates first. */
-    rateElsewhere(value: number) { state.rating = { value, revision: `other${state.version}` }; },
+    rateElsewhere(value: number | null) { commit(value, `other${ratingSequence + 1n}`); },
     /** Main applies a rating it had admitted. */
-    apply() { if (admitted) { state.rating = admitted.value === null ? null : { value: admitted.value, revision: admitted.revision }; admitted = null; } } };
+    apply() { if (admitted) { commit(admitted.value, admitted.revision); admitted = null; } } };
 }
 
-const entry = (status: ReadingStatus | null, rating: { value: number; revision: string } | null = null): ReaderSeed =>
-  ({ [work]: { status, version: 1, rating } });
+const entry = (status: ReadingStatus | null, rating: TestRating | null = null): ReaderSeed =>
+  ({ [work]: { status, version: 1, rating: rating ? { ...rating, sourcePosition: rating.sourcePosition ?? position('1') } : null } });
 const instant = () => Promise.resolve();
 const storeOver = (fake: ReturnType<typeof fakeMain>, seed: ReaderSeed = entry(null)) =>
   createReaderStore({ actingSubject: person, seed, ratingTarget: target, main: fake.main, wait: instant });
@@ -502,4 +518,104 @@ test('write intent: a read-back wait leaves no abort listener behind once it is 
   await pause(1, controller.signal);
   expect(added).toEqual(['abort']);
   expect(removed).toEqual(['abort']);
+});
+
+test('rating order: a delayed successful write cannot replace a newer revision read from another device', async () => {
+  const fake = fakeMain();
+  const delivery = deferred<void>();
+  fake.gates.push({ after: delivery.promise });
+  const store = storeOver(fake);
+  const written = store.rate!(work, 3);
+  await tick();
+  expect(fake.state.rating?.value).toBe(3);
+  fake.rateElsewhere(5);
+  await store.refresh!(work);
+  expect(store.stateOf(work).rating).toBe(5);
+  delivery.resolve();
+  expect(await written).toBe(true);
+  expect(store.stateOf(work).rating).toBe(5);
+  // The next write uses the newer revision's CAS token, too.
+  expect(await store.rate!(work, 4)).toBe(true);
+  expect(fake.ratingWrites.at(-1)?.outcome).toBe(200);
+});
+
+test('rating order: overlapping reads follow revision order even when the later request reads a lagging inventory', async () => {
+  const fake = fakeMain({ rating: { value: 2, revision: 'r0' } });
+  const store = storeOver(fake, entry(null, { value: 2, revision: 'r0' }));
+  const oldInventory = structuredClone(fake.state.rating);
+  fake.rateElsewhere(5);
+  const firstDelivery = deferred<void>(), secondDelivery = deferred<void>();
+  fake.readGates.push(firstDelivery.promise, secondDelivery.promise);
+  const first = store.refresh!(work);
+  await tick();
+  fake.state.rating = oldInventory;
+  const second = store.refresh!(work);
+  await tick();
+  firstDelivery.resolve();
+  await first;
+  expect(store.stateOf(work).rating).toBe(5);
+  secondDelivery.resolve();
+  await second;
+  expect(store.stateOf(work).rating).toBe(5);
+});
+
+test.each(['direct', 'batch'] as const)('reader lifetime: a %s read delivering 403 after reconnect cannot withdraw controls', async kind => {
+  const fake = fakeMain();
+  const delivery = deferred<void>();
+  fake.readGates.push(delivery.promise);
+  fake.control.denied = true;
+  const store = createReaderStore({ actingSubject: person, seed: {}, ratingTarget: target, main: fake.main });
+  const stop = store.connect!();
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  try {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
+    let old = Promise.resolve();
+    if (kind === 'direct') old = store.refresh!(work);
+    else store.stateOf(work);
+    await tick();
+    expect(fake.control.reads()).toBe(1);
+    stop();
+    store.connect!();
+    fake.control.denied = false;
+    fake.rateElsewhere(5);
+    await store.refresh!(work);
+    const snapshot = store.snapshot!();
+    delivery.resolve();
+    await old;
+    await tick();
+    expect(store.available!()).toBe(true);
+    expect(store.stateOf(work).rating).toBe(5);
+    expect(store.snapshot!()).toBe(snapshot);
+  } finally {
+    if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('reader lifetime: a successful old read cannot seed a reconnected store or notify it', async () => {
+  const fake = fakeMain({ status: 'read', rating: { value: 5, revision: 'r0' } });
+  const delivery = deferred<void>();
+  fake.readGates.push(delivery.promise);
+  const store = createReaderStore({ actingSubject: person, seed: {}, main: fake.main });
+  const stop = store.connect!();
+  const old = store.refresh!(work);
+  await tick();
+  stop();
+  store.connect!();
+  const snapshot = store.snapshot!();
+  delivery.resolve();
+  await old;
+  expect(store.stateOf(work)).toEqual({ status: null, rating: null });
+  expect(store.snapshot!()).toBe(snapshot);
+});
+
+test('rating order: withdrawal carries its revision and positions retain precision beyond Number.MAX_SAFE_INTEGER', async () => {
+  const rating = { value: 5, revision: 'r0', sourcePosition: position('9007199254740992') };
+  const fake = fakeMain({ rating });
+  const store = storeOver(fake, entry(null, rating));
+  fake.rateElsewhere(null);
+  await store.refresh!(work);
+  expect(store.stateOf(work).rating).toBeNull();
+  expect(await store.rate!(work, 4)).toBe(true);
+  expect(fake.ratingWrites.at(-1)).toMatchObject({ head: 'other9007199254740993', outcome: 200 });
 });

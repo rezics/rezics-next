@@ -7,7 +7,9 @@ import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
 export interface OwnRating { context: string; value: number | null;
-  availability: 'available' | 'withdrawn'; revision: string; stale: boolean }
+  availability: 'available' | 'withdrawn'; revision: string; stale: boolean;
+  /** Immutable commit position of this revision, not the read's snapshot position. */
+  sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } }
 interface RatingHead { context: string; work: string; main_version: string; observation: string;
   revision: string; slot: string; receipt: string; digest: string; valid: boolean }
 
@@ -75,7 +77,7 @@ export class ReaderLibraryRatings {
       if (head.main_version !== currentMain.get(head.work)) continue;
       const kind = head.context === global ? 'global' : head.context === selectedRealm ? 'realm' : null;
       if (!kind) throw new WorkReadUnavailable('Rating inventory context changed');
-      const rows = await session.query(`SELECT ?availability ?value ?manifest ?currentHead WHERE {
+      const rows = await session.query(`SELECT ?availability ?value ?manifest ?currentHead ?dataEpoch ?sequence WHERE {
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(head.observation)} a rv:${kind === 'global' ? 'GlobalRatingObservation' : 'RatingObservation'} ;
             rv:ratingContext ${iri(head.context)} ; rv:targetMainVersion ${iri(head.main_version)} ;
@@ -83,18 +85,23 @@ export class ReaderLibraryRatings {
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(head.revision)} a rv:${kind === 'global' ? 'GlobalRatingObservationRevision' : 'RatingObservationRevision'} ;
-            rv:component ${iri(head.observation)} ; rv:ratingAvailability ?availability ; rv:manifest ?manifest .
+            rv:component ${iri(head.observation)} ; rv:ratingAvailability ?availability ; rv:manifest ?manifest ;
+            rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
           OPTIONAL { ${iri(head.revision)} rv:ratingValue ?value }
           FILTER NOT EXISTS { ${iri(head.revision)} a rv:ErasedRevision }
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?currentHead a rv:ErasedRevision } }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(head.receipt)} rv:outcome rv:Succeeded ; rv:ratingObservation ${iri(head.observation)} ;
-            rv:observationRevision ${iri(head.revision)} ; rv:requestDigest ${lit(head.digest)} .
+            rv:observationRevision ${iri(head.revision)} ; rv:requestDigest ${lit(head.digest)} ;
+            rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
         }
       } LIMIT 2`, 2);
       if (rows.length !== 1) throw new WorkReadUnavailable('Rating graph differs from inventory');
       const row = rows[0]!;
+      if (!row.dataEpoch?.value || !/^[0-9]+$/.test(row.sequence?.value ?? '')) {
+        throw new WorkReadUnavailable('Rating revision position is unavailable');
+      }
       const availability = row.availability?.value === `${RV}Available` ? 'available'
         : row.availability?.value === `${RV}Withdrawn` ? 'withdrawn' : null;
       const value = row.value ? Number(row.value.value) : null;
@@ -120,6 +127,7 @@ export class ReaderLibraryRatings {
       // Its immutable revision and receipt remain a consistent owned value;
       // require live authority and erasure checks, and report that it is stale.
       owned[kind] = { context: head.context, value, availability, revision: head.revision,
+        sourcePosition: { datasetId: 'product', dataEpoch: row.dataEpoch.value, sequence: row.sequence!.value },
         stale: row.currentHead?.value !== head.revision };
       result.set(head.work, owned);
     }

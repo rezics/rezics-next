@@ -11,11 +11,12 @@ import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-act
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 export type ReaderStateItem = Ok<MainClient['v1']['me']['work-states']['get']>['items'][number];
 
-/** One Work's reader state as Main last answered: the status with its version, and the global rating's head. */
+/** One Work's reader state as Main last answered, with each field's committed order. */
 export interface ReaderEntry {
   status: ReadingStatus | null;
   version: number;
-  rating: { value: number | null; revision: string } | null;
+  rating: { value: number | null; revision: string;
+    sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } } | null;
 }
 
 /** Reader state read on the server for the Works a page renders, by Work IRI; it crosses to the browser as JSON. */
@@ -30,7 +31,8 @@ export const READER_BATCH = 24;
 export function readerEntry(item: Pick<ReaderStateItem, 'status' | 'rating'>): ReaderEntry {
   const own = item.rating.global;
   return { status: item.status.status, version: item.status.version,
-    rating: own ? { value: own.availability === 'available' ? own.value : null, revision: own.revision } : null };
+    rating: own ? { value: own.availability === 'available' ? own.value : null, revision: own.revision,
+      sourcePosition: own.sourcePosition } : null };
 }
 
 /**
@@ -174,8 +176,8 @@ function lifetime(): Lifetime {
  *   waiting behind it; after a conflict (409) the store reads Main again and applies only the newest choice, and
  *   only if Main does not already hold it.
  * - A response never puts an older value back. A status is applied only at a newer version than the one held. A
- *   rating has no order Main exposes, so a read counts only if it began after the rating the store holds was
- *   established (by a write that took, or by a read that began later).
+ *   rating is applied only at a newer committed revision position in the same dataset epoch. A restore changes
+ *   epochs; positions across that boundary cannot be ordered, so a new server seed starts a new store.
  * - What an operation started belongs to the lifetime it started in (`connect()` begins one, its disposal ends it).
  *   After that no write is sent and no read-back is waited for, even if the page is connected again.
  *
@@ -196,30 +198,28 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
   const requested = new Set<string>();
   let queued = new Set<string>();
   let current = lifetime();
-  let clock = 0;
   let sequence = 0;
-  // When the rating held for a Work was established: reads that began earlier cannot replace it.
-  const ratingKnown = new Map<string, number>();
 
   // Main denied this Agent a reader library: controls withdraw rather than fail on every press.
   let denied = false;
 
-  /** Applies what Main answered to a read that began at `started`, field by field, never putting older state back. */
-  function merge(work: string, server: ReaderEntry, started: number) {
+  /** Applies Main's committed order field by field, independent of request or response timing. */
+  function merge(work: string, server: ReaderEntry) {
     const held = entries.get(work);
-    if (!held) { entries.set(work, server); ratingKnown.set(work, started); }
+    if (!held) entries.set(work, server);
     else {
       const newerStatus = server.version > held.version;
-      const newerRating = started > (ratingKnown.get(work) ?? 0);
+      const incoming = server.rating?.sourcePosition, previous = held.rating?.sourcePosition;
+      // Null means no sealed observation, not a withdrawal. A withdrawal carries its own revision and position.
+      const newerRating = incoming && (!previous || incoming.dataEpoch === previous.dataEpoch
+        && BigInt(incoming.sequence) > BigInt(previous.sequence));
       entries.set(work, { status: newerStatus ? server.status : held.status,
         version: newerStatus ? server.version : held.version, rating: newerRating ? server.rating : held.rating });
-      if (newerRating) {
-        ratingKnown.set(work, started);
-        const overlay = overlays.get(work);
-        if (overlay && (server.rating?.value ?? null) === overlay.value
-          && (server.rating?.revision ?? null) !== overlay.baseRevision) overlays.delete(work);
-      }
     }
+    const accepted = entries.get(work)!.rating;
+    const overlay = overlays.get(work);
+    if (overlay && accepted && accepted.value === overlay.value
+      && accepted.revision !== overlay.baseRevision) overlays.delete(work);
   }
   /** A rating write that took, or was found already held, settles every older choice's overlay. */
   function settleOlder(work: string, seq: number) {
@@ -227,50 +227,55 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     if (overlay && overlay.seq < seq) overlays.delete(work);
   }
 
-  async function readAll(works: string[]) {
-    const started = ++clock;
+  async function readAll(life: Lifetime, works: string[]) {
+    if (life.signal.aborted) return;
     const read = await readReaderSeed(main(), actingSubject, works);
+    if (life.signal.aborted) return;
     if (read === null) denied = true;
-    for (const [work, entry] of Object.entries(read ?? {})) merge(work, entry, started);
+    for (const [work, entry] of Object.entries(read ?? {})) merge(work, entry);
     notify();
   }
   function load(work: string) {
     // The server render shows the seed; reads for other Works start in the browser.
     if (typeof window === 'undefined' || entries.has(work) || requested.has(work)) return;
+    const life = current;
+    if (life.signal.aborted) return;
     requested.add(work);
     queued.add(work);
     if (queued.size > 1) return;
     // One batch for every card drawn in the same render.
     queueMicrotask(() => {
+      if (life.signal.aborted) return;
       const works = [...queued].filter(item => !entries.has(item));
       queued = new Set();
-      if (works.length) void readAll(works);
+      if (works.length) void readAll(life, works);
     });
   }
   /** Reads the Work's state and returns what Main answered; the store keeps it only where it is newer than what it holds. */
-  async function refresh(work: string): Promise<ReaderEntry | null> {
-    const started = ++clock;
+  async function refresh(work: string, life = current): Promise<ReaderEntry | null> {
+    if (life.signal.aborted) return null;
     const { data, error } = await main().v1.works({ id: work.slice(-36) })['reader-state'].get({ query: { actingSubject } });
+    if (life.signal.aborted) return null;
     if (error?.status === 403) { denied = true; notify(); }
     if (!data) return null;
     const server = readerEntry(data);
-    merge(work, server, started);
+    merge(work, server);
     notify();
-    return server;
+    return entries.get(work)!;
   }
 
   async function writeStatus(life: Lifetime, work: string, status: ReadingStatus | null, round: Round) {
     const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
     const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
       { headers: { 'idempotency-key': crypto.randomUUID() } });
-    const base = entries.get(work) ?? await refresh(work);
+    const base = entries.get(work) ?? await refresh(work, life);
     if (!base || life.signal.aborted) return false;
     // The last round read what Main holds and was superseded by this choice: no write if Main already has it.
     if (round.afterConfirmed && base.status === status) return true;
     let response = await put(base);
     if (life.signal.aborted) return false;
     if (response.error?.status === 409) {
-      const fresh = await refresh(work);
+      const fresh = await refresh(work, life);
       if (!fresh || life.signal.aborted) return false;
       // A newer choice is waiting, or Main already holds this one: there is nothing of this choice left to write.
       if (round.superseded()) { round.confirm(); return false; }
@@ -279,8 +284,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       if (life.signal.aborted) return false;
     }
     if (!response.data) return false;
-    merge(work, { status: response.data.status, version: response.data.version, rating: entries.get(work)?.rating ?? base.rating },
-      ratingKnown.get(work) ?? 0);
+    merge(work, { status: response.data.status, version: response.data.version, rating: entries.get(work)?.rating ?? base.rating });
     notify();
     relationshipsChanged();
     return true;
@@ -292,7 +296,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       await wait(delay, life.signal);
       if (life.signal.aborted) return false;
       // A read that fails is no answer yet: the next one may.
-      await refresh(work).catch(() => null);
+      await refresh(work, life).catch(() => null);
       if (life.signal.aborted) return false;
       if (overlays.get(work)?.seq !== seq) return true;
       if (superseded()) return false;
@@ -306,14 +310,14 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       profile: 'global-rating-standing-observation-v1', context: target.context, work,
       mainVersion: target.mainVersion, expectedRevisionHead: entry.rating?.revision ?? null, value,
       actingSubject }, { headers: { 'idempotency-key': crypto.randomUUID() } });
-    const base = entries.get(work) ?? await refresh(work);
+    const base = entries.get(work) ?? await refresh(work, life);
     if (!base || life.signal.aborted) return false;
     if (round.afterConfirmed && (base.rating?.value ?? null) === value && !overlays.has(work)) { settleOlder(work, round.seq); return true; }
     let from = base;
     let response = await post(from);
     if (life.signal.aborted) return false;
     if (response.error?.status === 409) {
-      const fresh = await refresh(work);
+      const fresh = await refresh(work, life);
       if (!fresh || life.signal.aborted) return false;
       if (round.superseded()) { round.confirm(); return false; }
       // Main already holds this value: the choice is settled by what Main shows, and so is any older one's overlay.
@@ -323,10 +327,9 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       if (life.signal.aborted) return false;
     }
     if (response.error || !response.data) return false;
-    const revision = 'observationRevision' in response.data ? response.data.observationRevision : null;
-    if (revision) {
-      entries.set(work, { ...(entries.get(work) ?? from), rating: { value, revision } });
-      ratingKnown.set(work, ++clock);
+    if ('observationRevision' in response.data) {
+      merge(work, { ...(entries.get(work) ?? from), rating: { value,
+        revision: response.data.observationRevision, sourcePosition: response.data.sourcePosition } });
       settleOlder(work, round.seq);
       notify();
       return true;
@@ -384,7 +387,6 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     } : null,
     async refresh(work: string) {
       await refresh(work).catch(() => null);
-      notify();
     },
     connect() {
       // A connection after a disposal (strict-mode effects run twice) begins a new lifetime; the old one stays ended.
@@ -392,6 +394,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       const mine = current;
       return () => {
         mine.abort();
+        if (mine === current) { requested.clear(); queued = new Set(); }
         for (const [work, overlay] of overlays) if (overlay.life === mine) overlays.delete(work);
         notify();
       };
