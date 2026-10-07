@@ -341,11 +341,17 @@ background notifications and no cross-session messages, so:
 - Work in a loop: handle what is ready, then run
   `scripts/goal/next-event.sh <goal>` in the foreground; it returns when one of
   the Goal's tasks changes state, the Goal's inbox grows, or after 20 minutes.
-- The inbox is `.temp/goal-orchestration/messages/<goal>.md`. Other managers
-  append to it (`## <time> from <goal>` and the text); read what is new there.
-- To reach another manager, append to its inbox the same way. A Claude manager
-  keeps `scripts/goal/next-event.sh <goal>` running as a background command and
-  re-arms it each time it returns. Without it, a Codex manager's messages go
-  unread: on 2026-10-07 kernel's loan requests to launch waited over an hour.
+- Managers message each other through durable Goal mail:
+  `task goal -- mail send <goal> --file <path> --key <unique-key>`. The same key
+  never sends twice. Read with `task goal -- mail inbox <goal>` and acknowledge
+  each message after acting on it with `task goal -- mail ack <id>`. The old
+  `messages/<goal>.md` files are read-only history and still appear in the
+  inbox view.
+- `scripts/goal/next-event.sh <goal>` returns on new unacknowledged mail, on a
+  task state change, or after 20 minutes. A Claude manager keeps it running as
+  a background command and re-arms it each time it returns. A manager enrolled
+  in the coordinator (`task goal -- coordinator status`) loops on nothing: the
+  coordinator starts a turn when mail or a task exit arrives, so it ends each
+  turn once nothing is ready.
 - Keep the same reserve as any manager: if the account the manager runs on
   nears its limit, move workers to the other account first.
