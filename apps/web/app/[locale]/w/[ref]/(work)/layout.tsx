@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { workTitle } from '../../../../../features/seo/work.ts';
-import { loadWork, resolveWork } from '../../../../../features/work-page/read.ts';
+import { resolveWork } from '../../../../../features/work-page/read.ts';
 import { WorkFrameView } from '../../../../../features/work-page/work-views.tsx';
 import { WorkUnavailable } from '../../../../../features/work-page/work-states.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../../i18n/server.ts';
@@ -15,12 +15,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     : work.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle };
 }
 
-// Reuse the proxy's admission before rendering the Work frame or its loading view.
+// A missing Work, a renamed slug or a chapter Post (read in its Book) is left to the view, which throws notFound()
+// or redirects: vinext renders not-found boundaries for pages, not layouts.
 export default async function WorkLayout({ params, children }: Params & { children: ReactNode }) {
   const { ref } = await params;
   const locale = await requestLocale();
-  const [work, messages] = await Promise.all([loadWork(ref, locale), getMessages('workPage', locale)]);
-  if (!work.ok) return <WorkUnavailable messages={messages} />;
+  const [work, messages] = await Promise.all([resolveWork(ref, locale), getMessages('workPage', locale)]);
+  if (work.kind === 'unavailable') return <WorkUnavailable messages={messages} />;
+  if (work.kind !== 'work') return children;
   return <WorkFrameView workRef={ref} id={work.id} work={work.header} locale={locale} messages={messages}>
     {children}</WorkFrameView>;
 }
