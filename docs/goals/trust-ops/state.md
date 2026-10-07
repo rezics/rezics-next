@@ -50,10 +50,39 @@ above for the inherited verification gaps.
 
 | Task | State / next action |
 | --- | --- |
-| G-1321 | Resumed for the qualified bounded implementation: synchronous drain rejected (107 sessions/239 queries). Minimal session-only generation/cleanup fields approved; Account migrations 1750–1751 reserved. Preserve unrelated third-party offline consent; each HTTP and maintenance invocation has fixed work and retryable durable cleanup. Earlier drain is unmerged. |
-| G-1325 | Image-smoke contract landed `e140c7c42385`. Exclusive live qualification is queued from that pinned SHA in its worktree; session result/log `.temp/image-smoke-manager-result.json` / `.temp/image-smoke-manager.log`. It builds the five roles twice itself. Program approved the window; launch browser checks currently precede it. Judge by exit code and per-role evidence, then close. |
-| G-1327 | Sol: reference-disclosure Work author path reuses current-maintainer/controller batch evaluator, removing the creation-principal restriction. |
-| G-1329 | Sol: cancelled safety answers can be replaced; preserve due steps and immutable confirmed effects. Access migrations 1750–1751 reserved only if needed. |
+| G-1321 | Sol: immediate session-only fence and bounded cleanup; Account1750–1751 reserved. The earlier synchronous drain remains unmerged. Native/embedded reads, code/consent and first-party refresh must deny immediately while unrelated offline consent survives. |
+| G-1333 | Sol: actual checkout detector/caller lifecycle. Purge's helpers already share the client; real max1 pool regressions passed, but live startup pool.query and independent scheduler failures remain to reproduce/fix. Captured hold context/release scheduling are under investigation; no disabled detector/larger pool. |
+| G-1342 | Sol: last two inherited raw projection faults; kernel lends exact sites in content-projection-worker and rankings/projection, existing safe logger only. |
+
+Completed since the previous checkpoint:
+
+- H4 fully accepted at pinned `f4724506c`: eighteen personal-record mutations
+  require `library:write`, fifteen reads keep `work:read`, web/MCP request the
+  scope. Owner and integration exit0; H1–H4 findings are now fixed/verified.
+- Image qualification at `e140c7c42385` passed three live tests/fifty-five
+  assertions in112seconds; five backend roles built twice, startup/denial/
+  recovery/native-decoder evidence preserved in
+  `.temp/trust-ops/image-qualification-e140c7c42385`. No push/deploy/external
+  enrollment or mail; future release-changing commits need targeted checks.
+- Cancelled-answer recovery/latest seek `3ec0fa18c9be`, policy receipt
+  unification `5b7dca27d132`, Studio authority/provenance separation
+  `2138207d147a`, and definition controller parity `2d8f4d8d7d86` landed.
+  Safety history bounds stay fixed after4000cancelled attempts. Realm legacy
+  pins/digest replay stay exact. Access1750/1751/1760 are applied by successful
+  peer refresh; model `a5a753efec22` aligned, retained volumes and all six
+  resources Healthy. Pinned safety/Realm integration checks passed.
+- Work reference parity `ab432a2cb174` uses current maintainer/controller proof.
+  Launch owns the remaining transferred-Work inventory discovery and chapter UI
+  acting-identity parity; writer provenance must not be overwritten. Launch
+  G-1335 owns bounded library-import JSON intake (M1 class follow-up).
+
+C6 remains the prerequisite for suppression/restore custody and populated
+compaction/restore qualification; kernel found and is repairing its PostgreSQL
+outbox delivery handoff before acceptance. C5 first slice landed `35c3fe3c5`
+with Access1761–1764 and model/native changes; exactly one kernel refresh is
+queued. Coalesce peer inputs before acquisition and hold material landings
+through its checkpoint. Program accepts batches about every30minutes; urgent
+blockers/approvals go immediately with `URGENT` first.
 
 Additional completed contracts:
 
@@ -70,8 +99,7 @@ Additional completed contracts:
   owner proofs passed, including the inherited G917 recovery-fence fixture fix;
   manager's portable-validation/G917 follow-up now passes.
 - H3 `c037159f4364` rejects all backchannel metadata writes, suppresses legacy
-  outbound dispatch and marks discovery unsupported. H1–H3 are closed; H4 waits
-  launch route/client enforcement, whose Account contract is already available.
+  outbound dispatch and marks discovery unsupported. H1–H4 are closed with pinned owner/route integration acceptance.
 - Private connection/alias logs `f332b53ecdc9`; email DNS/TLS/event preparation
   `7d28e5ea15d7`; portable default About/Accounts tooling `db6b3c64ffb3` (59
   recovery/consent stories); numeric MCP IPv6 policy `76614ce7e924` (165 tests).
