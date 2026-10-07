@@ -564,3 +564,10 @@ Olddirtycopies and oldrunJSONs are not treated as current. One actual100k retry
 is live at goalctl2914045/tmuxmedium-campaign-stdin, log/exit/resultunderG1344
 .temp/goal campaign-medium-stdin-2328*. Freeze that source; no campaignpass yet.
 Priorchildcleanup120s failure remains separate and retained.
+
+## 2026-10-07 23:37 UTC
+Library-import GET apply status approved to Launch (85c1c368); f67 mail acknowledged. Public/read/bearer/work:read retains exact own admission and reads server job status only; inventory update is Launch-owned.
+G1351 gate TERMINAL201: types pass,151/162 files pass, native union first and automatic retry both720s inconclusive. No landing. Program blocker df8ad45d sent; retry normal sequentially after current competing native/medium jobs terminal, no budget/skip changes. G1401 gate2784929 still live; after eventual1775 merge explicit/coalesced refresh mandatory. Medium manager2914045 heavy QA live in frozenG1344; no mutations/resume until terminal. Kernel2834331 sole lifecycle still active, refresh.json priorcb244/25ce.
+G1409 Cursor1 pid2953712 dispatched bounded counter-notice QA credential API-input repair; original assertions and guard frozen. G1408 Cursor1 remains live.
+Verification opaque Content-bound selector gap classified to Kernel757f/Program968e, f702 ACKED; explicit source quote fields follow exact erasure, unknown historical JSON remains unresolved C6 policy. No G1408 scope expansion.
+Watcher tmuxgoal-trust-ops:manager-job-notify sends durable self-mail on G1401 gate/medium campaign terminal or missingPID, script.temp/trust-ops/notify-manager-jobs-2338.sh. Coordinator mode: end finite turns when nothing ready; do not start next-event loop. All current received mail acknowledged.
