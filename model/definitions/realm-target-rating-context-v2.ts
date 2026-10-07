@@ -1,5 +1,11 @@
 import type { ProfileDefinition } from '../compiler/ir.ts';
-import { realmTargetRatingContextProfile } from './realm-target-rating-context-v1.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+import { realmTargetRatingContextDeclaration } from './realm-target-rating-context-v1.ts';
+
+const realmTargetRatingContextProfile = parseTurtleProfile('realm-target-rating-context-v1',
+  readFileSync(new URL('./realm-target-rating-context-v1.ttl', import.meta.url), 'utf8'),
+  realmTargetRatingContextDeclaration);
 
 /** The additional type selects the language-aware shape and binding without
  * rewriting v1's accepted canonical routing or historical Contexts. */

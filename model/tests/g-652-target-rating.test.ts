@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
-import { realmTargetRatingContextProfile } from '../definitions/realm-target-rating-context-v1.ts';
-import { realmTargetRatingObservationProfile } from '../definitions/realm-target-rating-observation-v1.ts';
 import { authoredProfiles } from '../compiler/generate.ts';
 
-const realmStandingRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-standing-rating-context-v1')!;
-import { realmReleaseRatingContextProfile } from '../definitions/realm-release-rating-context-v1.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
+
+const realmStandingRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-standing-rating-context-v1')!;
+const realmTargetRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-context-v1')!;
+const realmTargetRatingObservationProfile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-observation-v1')!;
+const realmReleaseRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-release-rating-context-v1')!;
 
 test('G-652: one registry-only pair covers four owner grains without a target class assertion', () => {
   const context = realmTargetRatingContextProfile.shapes.find(shape => shape.iri.endsWith('/context-shape'))!;
@@ -22,7 +23,7 @@ test('G-652: one registry-only pair covers four owner grains without a target cl
   expect(JSON.stringify(registry)).toContain('realm-target-rating-observation-v1');
   expect(registry.canonical.find(entry => entry.type === 'https://rezics.com/vocab/TargetRatingContext'))
     .toMatchObject({ routes: [{ profile: 'realm-target-rating-context-v1' }] });
-  expect(realmTargetRatingObservationProfile.binding.roles).not.toContain('target');
+  expect(realmTargetRatingObservationProfile.binding!.roles).not.toContain('target');
 });
 
 test('G-652: old Context grains remain fixed and cannot select generic target observations', () => {

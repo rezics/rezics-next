@@ -1,6 +1,12 @@
-import type { ProfileDefinition } from '../compiler/ir.ts';
-import { realmTargetRatingObservationProfile } from './realm-target-rating-observation-v1.ts';
+import type { ProfileDefinition, Term } from '../compiler/ir.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+import { realmTargetRatingObservationDeclaration } from './realm-target-rating-observation-v1.ts';
 import { realmTargetRatingContextV4Profile } from './realm-target-rating-context-v4.ts';
+
+const realmTargetRatingObservationProfile = parseTurtleProfile('realm-target-rating-observation-v1',
+  readFileSync(new URL('./realm-target-rating-observation-v1.ttl', import.meta.url), 'utf8'),
+  realmTargetRatingObservationDeclaration);
 
 export const realmTargetRatingObservationV4Profile = {
   ...realmTargetRatingObservationProfile,
@@ -18,7 +24,7 @@ export const realmTargetRatingObservationV4Profile = {
           shape.iri.endsWith('/observation-shape') || shape.iri.endsWith('/revision-shape'),
       )
       .map((shape) => {
-        const type = shape.iri.endsWith('/observation-shape')
+        const type: Term = shape.iri.endsWith('/observation-shape')
           ? 'rv:AcceptedTargetRatingObservation'
           : 'rv:AcceptedTargetRatingObservationRevision';
         return {
@@ -30,7 +36,7 @@ export const realmTargetRatingObservationV4Profile = {
       }),
   ],
   binding: {
-    ...realmTargetRatingObservationProfile.binding,
+    ...realmTargetRatingObservationDeclaration.binding,
     demandedBy: [
       'rv:AcceptedTargetRatingObservation',
       'rv:AcceptedTargetRatingObservationRevision',

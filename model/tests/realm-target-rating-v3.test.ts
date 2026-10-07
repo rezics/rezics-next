@@ -2,10 +2,11 @@ import { expect, test } from 'bun:test';
 import { renderProfile } from '../compiler/ir.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 import { authoredProfiles } from '../compiler/generate.ts';
-import { realmTargetRatingContextProfile } from '../definitions/realm-target-rating-context-v1.ts';
 import { realmTargetRatingContextV2Profile } from '../definitions/realm-target-rating-context-v2.ts';
 import { realmTargetRatingContextV3Profile } from '../definitions/realm-target-rating-context-v3.ts';
 import { realmTargetRatingObservationV3Profile } from '../definitions/realm-target-rating-observation-v3.ts';
+
+const realmTargetRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-context-v1')!;
 
 const contextShape = (profile: typeof realmTargetRatingContextV3Profile) => renderProfile(profile);
 

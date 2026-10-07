@@ -11,6 +11,10 @@ import { establishedDeclarations } from '../compiler/registry.ts';
 import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as globalContext from '../definitions/global-rating-standing-context-v1.ts';
 import * as globalObservation from '../definitions/global-rating-standing-observation-v1.ts';
+import * as targetContextDeclaration from '../definitions/realm-target-rating-context-v1.ts';
+import * as targetObservationDeclaration from '../definitions/realm-target-rating-observation-v1.ts';
+import * as releaseContextDeclaration from '../definitions/realm-release-rating-context-v1.ts';
+import * as releaseObservationDeclaration from '../definitions/realm-release-rating-observation-v1.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const rv = 'https://rezics.com/vocab/';
@@ -432,5 +436,431 @@ test('rating contexts map fixed numbers, language literals and availability IRIs
       // coercion unset; the available branch's JSON schema requires integers.
       expect(context['rv:ratingValue']).toEqual({ '@id': `${rv}ratingValue` });
     }
+  }
+});
+
+const derivedIds = Object.keys(derived).sort();
+const derivedProfiles = authoredProfiles.filter((profile) => derivedIds.includes(profile.id));
+const derivedModules = [
+  ['realm-target-rating-context-v1.ts', targetContextDeclaration],
+  ['realm-target-rating-observation-v1.ts', targetObservationDeclaration],
+  ['realm-release-rating-context-v1.ts', releaseContextDeclaration],
+  ['realm-release-rating-observation-v1.ts', releaseObservationDeclaration],
+] as const;
+const derivedOptions = {
+  established: Object.fromEntries(
+    Object.entries(establishedDeclarations).filter(([id]) => derivedIds.includes(id)),
+  ),
+  canonicalOrder: [],
+  demandOrder: [],
+};
+const derivedAuthorComment = '\n# Authored SHACL constraints for derived rating evidence.\n';
+// Captured after the base rating authors landed, before the derived conversion.
+const derivedPins = {
+  'realm-target-rating-context-v1': [
+    '8ac2f366d615a08d072e4bca245ced3fa445ee88e38a946029649e32937e175f',
+    '1d7f61054afb9b0ed54ac48cd1f2fcbca621ab681618e2b0b85c1e410f0c519c',
+  ],
+  'realm-target-rating-observation-v1': [
+    'e8b4e47013cd5429e0aba55192e0587e918a3f6c136d7eb363cff6fb1df69b3a',
+    '7848690ecff8fb2bf37ea3b397b94da4b0e23a1599af85f6f4731ced8ad6ac18',
+  ],
+  'realm-release-rating-context-v1': [
+    '93e0ec9620304d11ec112f7edbf2f4b73f81325a3fe0205b37728ced114840f1',
+    'fbdf2271def28af1122d7c1e151a47652e4f5c5636eab26cd9c0eaebdd24b2ef',
+  ],
+  'realm-release-rating-observation-v1': [
+    '833450c3651be8850f268b122e3ce016c0458961dfdf1377c75f4233927a1086',
+    '8342fd072bfcb11860fd58b34745d4dc9d766a8a9da14936d0641708e9038cbe',
+  ],
+  'realm-experience-rating-context-v1': [
+    '61fdb372946dbf322cae0df072e56cfed72826e89746f4856fe4f33c4035dc48',
+    '9fe38755fa951cd3e4d746c43504c04122c2b46e6d679fce86292fd9012ae3c9',
+  ],
+  'realm-experience-rating-observation-v1': [
+    'bc1075b4e362349ffeeb01138015284f02226995ea3b210436497f86f5685bc8',
+    'dc77fc5fe2d747753718ded8d069e7f3b0eb651209c952539d5f5581c4ec4ca2',
+  ],
+} as const;
+const targetDescendants = {
+  'realm-target-rating-context-v2': [
+    '5e92a747d8207e6775f73ae73eb553a233f48202076040d8e2984127ab8e7235',
+    'e16db9db1c9b451c40b70b11d3cc5fa739f89fe137dd555acb35bbc88885ce3d',
+  ],
+  'realm-target-rating-observation-v2': [
+    '67148d04e208fc9c71636fbdaa928af421d7340536f76dec0dbf3297bc120f4a',
+    '3ff46878dd301ab65cda5a2587d63631be5d4f09e644ac5ff708c2eafce900e3',
+  ],
+  'realm-target-rating-context-v3': [
+    '27c88e9f8b8cf3961e3c8c3c2180e117bae1a333a7bcd9e219d03b96a69fd1da',
+    '71e8d89f02314ad2e0f9e15df3f99899a44f37ca27a6ebb1e9143ac756a2d349',
+  ],
+  'realm-target-rating-observation-v3': [
+    '308be3241e9978cc242ae489258d296b13b7abf4a094a12d3d49ade763ad7900',
+    '53525d3b685094c932e5cd6ed122816ff40a58ff78e1a35ec90ebb6295e01eee',
+  ],
+  'realm-target-rating-context-v4': [
+    '2a91f1504c082047d42d720f188946db5a95658b77652287aa2eac955f728ab3',
+    '61b2044caf428ef8978aec640a51273d4db30ecc3d47f1344d1fbef7c68829cd',
+  ],
+  'realm-target-rating-observation-v4': [
+    'b7ca4e8be9b26293a74a4b118d1b4d21336d9c82fee4f03f4bf93c3664a9d26d',
+    '491d445eb078e00efc6424347039491f1d4b16b4fd9686e2c3b039780a42d61f',
+  ],
+} as const;
+const targetDescendantPins = {
+  'realm-target-rating-context-v2':
+    'f772578c222dd5b628c9f933c5e94b54dcd7afd098639f68b97397f95aabaf22',
+  'realm-target-rating-observation-v2':
+    '84c2c5890fefa3b205a924aa2a847c005fb343e5fd8120dc103f8ca8a63bc9bd',
+  'realm-target-rating-context-v3':
+    '27f3fad26fee3ece32933f50432f6de7df89aa2ff63bc0278855b79d46178bf3',
+  'realm-target-rating-observation-v3':
+    '91992a81764f366b64c2dce1aef37952329b09c9a56a33121669c0bdbf5f48ae',
+  'realm-target-rating-context-v4':
+    '68ffb3005c6f57794341630ccb9db0c38d9ddaaeb0705d989aac5618ed6b2cce',
+  'realm-target-rating-observation-v4':
+    '6932dc8df4e44fcda7f741cbad9b8d4cb1d53efebbec90a6086b1f0f8ca63f22',
+} as const;
+function ownMetadata(profile: ProfileDefinition) {
+  const canonical = Object.fromEntries(
+    profile.shapes
+      .filter((shape) => shape.canonical)
+      .map((shape) => [shape.iri.split('/').at(-1)!.slice(0, -6), shape.canonical!]),
+  );
+  return {
+    ...(Object.keys(canonical).length ? { canonical } : {}),
+    ...(profile.binding ? { binding: profile.binding } : {}),
+  };
+}
+function metadataDigest(profile: ProfileDefinition): string {
+  return digest(
+    JSON.stringify({
+      commandMetadata: ownMetadata(profile),
+      establishedCommandMetadata: establishedDeclarations[profile.id] ?? {},
+    }),
+  );
+}
+function derivedRoles(id: string): string[] {
+  if (id.endsWith('context-v1')) return ['realm', 'context'];
+  if (id.includes('-target-')) return ['realm', 'context', 'observation', 'revision'];
+  return [
+    'realm',
+    'context',
+    'work',
+    'main',
+    ...(id.includes('-release-') ? ['release'] : []),
+    'observation',
+    'revision',
+  ];
+}
+const derivedOutputs = buildModelOutputs(derivedProfiles);
+let derivedSchemaPromise: Promise<Record<string, TSchema>> | undefined;
+async function acceptsDerived(
+  id: string,
+  role: string,
+  node: Record<string, unknown>,
+): Promise<boolean> {
+  if (!derivedSchemaPromise) {
+    const path = join(directory(), 'derived-schemas.ts');
+    writeFileSync(path, derivedOutputs.get('packages/model/src/generated/schemas.ts')!);
+    derivedSchemaPromise = import(path).then(
+      (module) => module.shapeSchemas as Record<string, TSchema>,
+    );
+  }
+  return Value.Check((await derivedSchemaPromise)[`${definition}${id}/${role}-shape`]!, node);
+}
+function derivedContext(id: string): Record<string, unknown> {
+  const experience = id.includes('-experience-');
+  return {
+    ...context('realm-standing-rating-context-v1'),
+    'rdf:type': experience
+      ? [`${rv}RatingContext`, `${rv}ExperienceRatingContext`]
+      : [`${rv}${id.includes('-target-') ? 'Target' : 'Release'}RatingContext`],
+    'rv:targetGrain': [
+      `${rv}${experience ? 'MainVersion' : id.includes('-target-') ? 'Release' : 'FixedRelease'}`,
+    ],
+    'rv:ratingCadence': [`${definition}rating-${experience ? 'experience' : 'standing'}-v1`],
+  };
+}
+const occasion = `urn:rezics:rating-occasion:${'a'.repeat(64)}`;
+function derivedObservation(id: string): Record<string, unknown> {
+  const experience = id.includes('-experience-');
+  return {
+    '@id': 'urn:rating:observation',
+    'rdf:type': experience
+      ? [`${rv}RatingObservation`, `${rv}ExperienceRatingObservation`]
+      : [`${rv}${id.includes('-target-') ? 'Target' : 'Release'}RatingObservation`],
+    'rv:ratingContext': ['urn:rating:context'],
+    'rv:ratingSlot': ['urn:rating:slot'],
+    'rv:observationHead': ['urn:rating:head'],
+    [experience
+      ? 'rv:targetMainVersion'
+      : id.includes('-target-')
+        ? 'rv:target'
+        : 'rv:targetRelease']: ['urn:rating:target'],
+    ...(experience ? { 'rv:ratingOccasion': [occasion] } : {}),
+  };
+}
+function derivedRevision(id: string): Record<string, unknown> {
+  const experience = id.includes('-experience-');
+  return {
+    ...revision('realm-standing-rating-observation-v1'),
+    'rdf:type': experience
+      ? [`${rv}RatingObservationRevision`, `${rv}ExperienceRatingObservationRevision`]
+      : [`${rv}${id.includes('-target-') ? 'Target' : 'Release'}RatingObservationRevision`],
+    ...(experience ? { 'rv:ratingOccasion': [occasion] } : {}),
+  };
+}
+
+test('derived rating Turtle discovery preserves six v1 constraints, focus roles and command metadata', () => {
+  const path = directory();
+  for (const id of derivedIds)
+    writeFileSync(
+      join(path, `${id}.ttl`),
+      readFileSync(join(root, `model/definitions/${id}.ttl`), 'utf8'),
+    );
+  const discovered = discoverProfiles(path, derivedModules);
+  expect(discovered.map((profile) => profile.id)).toEqual(derivedIds);
+  expect(derivedProfiles.map((profile) => profile.id)).toEqual(derivedIds);
+  const published = commandProfiles(discovered, derivedOptions);
+  expect(published.manifest).toEqual(commandProfiles(derivedProfiles, derivedOptions).manifest);
+  for (const profile of discovered) {
+    expect(digest(constraints(profile))).toBe(derived[profile.id as keyof typeof derived]);
+    expect(metadataDigest(profile)).toBe(derivedPins[profile.id as keyof typeof derivedPins][1]);
+    expect(profile.shapes.map((shape) => shape.iri)).toEqual(
+      derivedRoles(profile.id).map((role) => `${definition}${profile.id}/${role}-shape`),
+    );
+    const entry = published.profiles.find((item) => item.id === profile.id)!;
+    expect(entry.focusRoles).toEqual(derivedRoles(profile.id));
+    expect(entry.sha256).toBe(digest(profileSource(profile)));
+    expect(entry.sha256).not.toBe(derivedPins[profile.id as keyof typeof derivedPins][0]);
+    expect(published.shapes.get(entry.file)).toBe(profileSource(profile));
+  }
+  for (const [, module] of derivedModules) {
+    expect(Object.keys(module)).toHaveLength(1);
+    for (const [name, declaration] of Object.entries(module)) {
+      expect(name.endsWith('Declaration')).toBe(true);
+      expect(Object.keys(declaration).sort()).toEqual(['binding', 'canonical', 'id']);
+    }
+  }
+});
+
+test('derived author reload preserves exact historical pinned bytes, metadata and revision references', () => {
+  const path = directory();
+  const historicalProfiles = derivedProfiles.map((profile) => {
+    const source = profileSource(profile);
+    expect(source.endsWith(derivedAuthorComment)).toBe(true);
+    const pinnedBytes = source.slice(0, -derivedAuthorComment.length);
+    expect(digest(pinnedBytes)).toBe(derivedPins[profile.id as keyof typeof derivedPins][0]);
+    return parseTurtleProfile(profile.id, pinnedBytes, { id: profile.id, ...ownMetadata(profile) });
+  });
+  const historical = commandProfiles(historicalProfiles, derivedOptions);
+  const records = historical.profiles.map((profile) => ({
+    profile: profile.id,
+    shapeSha256: profile.sha256,
+    revision: 'urn:rating:retained-derived-revision',
+  }));
+  const retained = structuredClone({
+    manifest: historical.manifest,
+    profiles: historical.profiles,
+    shapes: [...historical.shapes],
+    records,
+  });
+  const before = commandProfiles(derivedProfiles, derivedOptions);
+  for (const profile of derivedProfiles)
+    writeFileSync(
+      join(path, `${profile.id}.ttl`),
+      `${profileSource(profile)}\n# Author byte reload.\n`,
+    );
+  const reloaded = discoverProfiles(path, derivedModules);
+  const after = commandProfiles(reloaded, derivedOptions);
+  for (const [index, profile] of derivedProfiles.entries()) {
+    expect(after.profiles[index]!.sha256).not.toBe(before.profiles[index]!.sha256);
+    expect(after.profiles[index]!.sha256).toBe(digest(profileSource(reloaded[index]!)));
+    expect(constraints(reloaded[index]!)).toBe(constraints(profile));
+    expect(metadataDigest(reloaded[index]!)).toBe(metadataDigest(profile));
+    expect(historical.profiles[index]!.sha256).toBe(
+      derivedPins[profile.id as keyof typeof derivedPins][0],
+    );
+    expect(digest(historical.shapes.get(historical.profiles[index]!.file)!)).toBe(
+      historical.profiles[index]!.sha256,
+    );
+  }
+  const preserved = commandProfiles(historicalProfiles, derivedOptions);
+  expect(preserved.manifest).toEqual(retained.manifest);
+  expect(preserved.profiles).toEqual(retained.profiles);
+  expect([...preserved.shapes]).toEqual(retained.shapes);
+  expect({
+    manifest: historical.manifest,
+    profiles: historical.profiles,
+    shapes: [...historical.shapes],
+    records,
+  }).toEqual(retained);
+});
+
+test('target rating v2-v4 descendants preserve accepted constraints, focus roles and command metadata', () => {
+  for (const [id, [constraintHash, metadataHash]] of Object.entries(targetDescendants)) {
+    const profile = authoredProfiles.find((item) => item.id === id)!;
+    expect(digest(constraints(profile))).toBe(constraintHash);
+    expect(metadataDigest(profile)).toBe(metadataHash);
+    expect(digest(profileSource(profile))).toBe(
+      targetDescendantPins[id as keyof typeof targetDescendantPins],
+    );
+    const expectedRoles = derivedRoles(id.replace(/-v[234]$/, '-v1'));
+    expect(profile.shapes.map((shape) => shape.iri)).toEqual(
+      expectedRoles.map((role) => `${definition}${id}/${role}-shape`),
+    );
+  }
+});
+
+test('derived rating contexts retain exact target grains, English language and fixed integer scales', async () => {
+  for (const id of derivedIds) {
+    const valid = derivedContext(id);
+    expect(await acceptsDerived(id, 'context', valid)).toBe(true);
+    const grains = id.includes('-target-')
+      ? ['Release', 'Realization', 'Occurrence', 'Resource']
+      : [id.includes('-release-') ? 'FixedRelease' : 'MainVersion'];
+    for (const grain of grains)
+      expect(
+        await acceptsDerived(id, 'context', { ...valid, 'rv:targetGrain': [`${rv}${grain}`] }),
+      ).toBe(true);
+    for (const grain of [
+      'Projection',
+      'Work',
+      ...(id.includes('-target-')
+        ? ['MainVersion', 'FixedRelease']
+        : id.includes('-release-')
+          ? ['MainVersion', 'Release']
+          : ['Release']),
+    ])
+      expect(
+        await acceptsDerived(id, 'context', { ...valid, 'rv:targetGrain': [`${rv}${grain}`] }),
+      ).toBe(false);
+    expect(await acceptsDerived(id, 'context', { ...valid, 'rv:targetGrain': [grains[0]] })).toBe(
+      false,
+    );
+    expect(
+      await acceptsDerived(id, 'context', {
+        ...valid,
+        'rv:targetGrain': [`${rv}${grains[0]}`, `${rv}${grains[0]}`],
+      }),
+    ).toBe(false);
+    for (const [path, value] of [
+      ['rv:ratingScaleMin', '1'],
+      ['rv:ratingScaleMin', 0],
+      ['rv:ratingScaleMax', '10'],
+      ['rv:ratingScaleMax', 5],
+      ['rv:ratingScaleMax', null],
+    ] as const)
+      expect(await acceptsDerived(id, 'context', { ...valid, [path]: [value] })).toBe(false);
+    if (id.endsWith('context-v1') || id.includes('-target-')) {
+      for (const question of [
+        ['How was it?'],
+        [{ '@value': 'How was it?', '@language': 'fr' }],
+        [{ '@value': 'How was it?', '@language': 'EN' }],
+        [{ '@value': 'No', '@language': 'en' }],
+        null,
+      ])
+        expect(await acceptsDerived(id, 'context', { ...valid, 'rv:question': question })).toBe(
+          false,
+        );
+    }
+  }
+});
+
+test('release ratings exclude MainVersion targets and foreign cadence; experience requires an exact occasion', async () => {
+  const dailyFields = [
+    'rv:ratingDay',
+    'rv:ratingTimeZone',
+    'rv:ratingCalendar',
+    'rv:periodStart',
+    'rv:periodEnd',
+  ];
+  for (const id of [
+    'realm-release-rating-observation-v1',
+    'realm-experience-rating-observation-v1',
+  ]) {
+    const observed = derivedObservation(id);
+    const revised = derivedRevision(id);
+    expect(await acceptsDerived(id, 'observation', observed)).toBe(true);
+    expect(await acceptsDerived(id, 'revision', revised)).toBe(true);
+    for (const path of [
+      ...dailyFields,
+      ...(id.includes('-release-') ? ['rv:ratingOccasion'] : []),
+    ]) {
+      expect(
+        await acceptsDerived(id, 'observation', { ...observed, [path]: ['urn:foreign:cadence'] }),
+      ).toBe(false);
+      expect(
+        await acceptsDerived(id, 'revision', { ...revised, [path]: ['urn:foreign:cadence'] }),
+      ).toBe(false);
+    }
+    if (id.includes('-release-'))
+      expect(
+        await acceptsDerived(id, 'observation', {
+          ...observed,
+          'rv:targetMainVersion': ['urn:rating:main'],
+        }),
+      ).toBe(false);
+    else {
+      for (const value of [
+        [],
+        [occasion.toUpperCase()],
+        [`urn:rezics:rating-occasion:${'a'.repeat(63)}`],
+        [`https://rezics.com/rating-occasion/${'a'.repeat(64)}`],
+        [null],
+        null,
+        occasion,
+      ]) {
+        expect(
+          await acceptsDerived(id, 'observation', { ...observed, 'rv:ratingOccasion': value }),
+        ).toBe(false);
+        expect(
+          await acceptsDerived(id, 'revision', { ...revised, 'rv:ratingOccasion': value }),
+        ).toBe(false);
+      }
+      const { 'rv:ratingOccasion': omitted, ...withoutOccasion } = revised;
+      expect(omitted).toEqual([occasion]);
+      expect(await acceptsDerived(id, 'revision', withoutOccasion)).toBe(false);
+    }
+  }
+  const target = 'realm-target-rating-observation-v1';
+  const observed = derivedObservation(target);
+  expect(await acceptsDerived(target, 'observation', observed)).toBe(true);
+  for (const path of ['rv:targetMainVersion', 'rv:targetRelease'])
+    expect(
+      await acceptsDerived(target, 'observation', {
+        ...observed,
+        [path]: ['urn:rating:other-target'],
+      }),
+    ).toBe(false);
+});
+
+test('derived revisions admit Available integer 1-10 and require Withdrawn value omission', async () => {
+  for (const id of derivedIds.filter((value) => value.endsWith('observation-v1'))) {
+    const valid = derivedRevision(id);
+    for (const value of [1, 10])
+      expect(await acceptsDerived(id, 'revision', { ...valid, 'rv:ratingValue': [value] })).toBe(
+        true,
+      );
+    const { 'rv:ratingValue': omitted, ...withoutValue } = valid;
+    expect(omitted).toEqual([10]);
+    expect(await acceptsDerived(id, 'revision', withoutValue)).toBe(false);
+    for (const value of [[], [0], [11], [1.5], ['10'], [null], [1, 2], null, 10])
+      expect(await acceptsDerived(id, 'revision', { ...valid, 'rv:ratingValue': value })).toBe(
+        false,
+      );
+    const withdrawn = { ...withoutValue, 'rv:ratingAvailability': [`${rv}Withdrawn`] };
+    expect(await acceptsDerived(id, 'revision', withdrawn)).toBe(true);
+    expect(await acceptsDerived(id, 'revision', { ...withdrawn, 'rv:ratingValue': [] })).toBe(true);
+    for (const value of [[1], [null], null])
+      expect(await acceptsDerived(id, 'revision', { ...withdrawn, 'rv:ratingValue': value })).toBe(
+        false,
+      );
+    for (const value of [[], ['Withdrawn'], [`${rv}Available`, `${rv}Withdrawn`], [null], null])
+      expect(
+        await acceptsDerived(id, 'revision', { ...valid, 'rv:ratingAvailability': value }),
+      ).toBe(false);
   }
 });
