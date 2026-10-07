@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { Client } from 'pg';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 
@@ -152,6 +153,20 @@ test('bulk revocation commits bounded pages, rolls back a failed page and finish
     expect(await r.opaqueActive(r.sessions.at(-1)!.opaque)).toMatchObject({ active: false });
     expect((await r.f.pool.query('SELECT 1 FROM "session" WHERE "userId" = $1', [r.member.id])).rowCount).toBe(0);
   } finally { await r.f.close(); }
+}, 120_000);
+
+test('one bulk HTTP invocation has a fixed query budget with a large retained inventory', async () => {
+  const r = await revocationFixture(107);
+  let queries = 0;
+  const query = Client.prototype.query;
+  const querySpy = spyOn(Client.prototype, 'query').mockImplementation(function(this: Client, ...args: unknown[]) {
+    queries++;
+    return Reflect.apply(query, this, args);
+  });
+  try {
+    expect((await r.f.request('/api/auth/revoke-sessions', {}, r.member.cookie)).status).toBe(200);
+    expect(queries).toBeLessThanOrEqual(64);
+  } finally { querySpy.mockRestore(); await r.f.close(); }
 }, 120_000);
 
 test('concurrent authorization-code issuance and refresh cannot resurrect a revoked session family', async () => {
