@@ -352,7 +352,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
   await editor.fill('');
   await expect.poll(revision, { timeout: 30_000 }).not.toBe(written);
   await expect(status).toHaveText(/^Saved · /, { timeout: 30_000 });
-  await expect(editor).toHaveText('');
+  await expect(editor).toHaveJSProperty('textContent', '');
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
   const emptied = revision()!;
   await shot(page, info, 'chapter-emptied-phone');
@@ -372,7 +372,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     const reopened = other.page.getByRole('textbox', { name: 'Chapter text' });
     await expect(reopened).toBeVisible();
     await other.page.waitForLoadState('networkidle');
-    await expect(reopened).toHaveText('');
+    await expect(reopened).toHaveJSProperty('textContent', '');
     await expect(other.page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
     await shot(other.page, info, 'chapter-reopened-desktop');
   } finally {

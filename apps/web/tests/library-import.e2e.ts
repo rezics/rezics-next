@@ -56,8 +56,6 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
   test.setTimeout(600_000);
   await signInAtAccounts(page, '/en/library', member);
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
-  // The heading is server-rendered; file selection needs the Library's client handlers loaded.
-  await page.waitForLoadState('networkidle');
   // Catalogue import is closed at launch. The exposure gate answers before authentication,
   // so an ungranted caller is refused with platform_closed and is not given the importer group.
   const directSource = await page.request.post('/api/main/v1/sources/acquisitions/open-library/works', {
@@ -70,7 +68,9 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
   expect(readerState.status()).toBe(200);
   expect(await readerState.json()).toMatchObject({ work: seed.works[0], status: { status: null } });
   await page.getByRole('heading', { name: t.importTitle }).click();
-  await page.locator('#library-import-file').setInputFiles({ name: 'goodreads.csv', mimeType: 'text/csv', buffer: sample });
+  const importFile = page.getByLabel(t.importFile, { exact: true });
+  await expect(importFile).toBeEnabled();
+  await importFile.setInputFiles({ name: 'goodreads.csv', mimeType: 'text/csv', buffer: sample });
   const group = (label: string) => page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) });
   await expect(group(t.importGroupMatched)).toBeVisible({ timeout: 120_000 });
   await page.screenshot({ path: info.outputPath('import-review-desktop.png') });
@@ -87,7 +87,8 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
   await page.screenshot({ path: info.outputPath('import-result-desktop.png') });
 
   await page.getByRole('button', { name: t.importClose }).click();
-  await page.locator('#library-import-file').setInputFiles({ name: 'goodreads-200.csv', mimeType: 'text/csv', buffer: Buffer.from(synthetic) });
+  await expect(importFile).toBeEnabled();
+  await importFile.setInputFiles({ name: 'goodreads-200.csv', mimeType: 'text/csv', buffer: Buffer.from(synthetic) });
   await expect(page.getByText(/Checking matches: \d+ of 200/)).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/Checking matches:/)).toHaveCount(0, { timeout: 240_000 });
   await expect(page.getByText(/Page 1 of \d+/).first()).toBeVisible();
