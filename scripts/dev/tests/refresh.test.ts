@@ -20,7 +20,7 @@ import { activeBackend,
 import { inspectRefresh, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
   refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
-import { refreshSharedStack } from '../refresh-stack.ts';
+import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -48,6 +48,15 @@ appendFileSync('.temp/build-admission', process.argv.slice(2).join(' ') + '\\n')
 const split = process.argv.indexOf('--');
 process.exit(Bun.spawnSync(process.argv.slice(split + 1), { stdout: 'inherit', stderr: 'inherit' }).exitCode);
 `);
+    mkdirSync(join(dir, 'scripts/dev/seed'), { recursive: true });
+    writeFileSync(join(dir, 'scripts/dev/seed/stack-probe.ts'), `
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const stack = process.env.REZICS_SEED_STACK_DIRECTORY;
+if (!stack) throw new Error('Isolated dev backend is absent');
+writeFileSync('.temp/seed-result', JSON.stringify({ stack,
+  environment: readFileSync(join(stack, 'dev.env'), 'utf8'), args: process.argv.slice(2) }));
+`);
     writeFileSync(join(dir, 'scripts/dev/inspection.ts'), `export const inspection = 'original';`);
     writeFileSync(join(dir, 'scripts/dev/refresh-stack.ts'), `
 import { writeFileSync } from 'node:fs';
@@ -74,6 +83,12 @@ tasks:
     cmds:
       - mkdir -p generated
       - git rev-parse HEAD > generated/revision
+  dev:seed:
+    cmds:
+      - bun scripts/dev/seed/stack-probe.ts {{.CLI_ARGS}}
+  dev:prepare:
+    cmds:
+      - touch .temp/storage-prepared
 `,
     );
     writeFileSync(join(dir, 'services/main/src/telemetry.ts'), 'export {};');
@@ -207,6 +222,85 @@ if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(proces
       expect(status).toBe(0);
       expect(existsSync(lock)).toBe(false);
       expect(existsSync(join(stack, 'backend-revisions', revision, '.temp/inspection-result'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('Zone approval from the staged worktree targets shared storage and completes its checkpoint', async () => {
+    const { dir, stack, revision } = repository();
+    const events: string[] = [];
+    try {
+      const candidate = stageBackend(dir, stack, revision);
+      expect(backendCommand(candidate, 'git', ['rev-parse', '--git-dir']))
+        .not.toBe(backendCommand(candidate, 'git', ['rev-parse', '--git-common-dir']));
+      writeFileSync(join(stack, 'dev.env'), 'shared-stack-environment');
+      const zone = { slug: 'franchise-wiki', digest: 'new', approvedDigest: 'old' };
+      const operations = actions(events);
+      operations.beforeMutation = async () => { events.push('beforeMutation'); };
+      operations.approveZones = async (beforeMutation) => {
+        await beforeMutation();
+        seedRefreshZones(candidate, stack, [zone.slug]);
+      };
+      await executeRefresh(refreshPlan({ ...current, zoneApprovals: [zone] }), operations);
+      expect(JSON.parse(readFileSync(join(candidate, '.temp/seed-result'), 'utf8'))).toEqual({
+        stack, environment: 'shared-stack-environment',
+        args: ['--themes-only', '--packages=franchise-wiki'],
+      });
+      expect(events).toEqual(['waitReady', 'beforeMutation', 'recordSuccess']);
+      expect(readFileSync(join(candidate, '.temp/build-admission'), 'utf8'))
+        .toContain('--gib 4 -- task dev:seed -- --themes-only --packages=franchise-wiki');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('storage preparation admits possible implicit image builds after fencing writers', async () => {
+    const { dir, stack, revision } = repository();
+    const events: string[] = [];
+    try {
+      const candidate = stageBackend(dir, stack, revision);
+      const operations = actions(events);
+      operations.beforeMutation = async () => { events.push('beforeMutation'); };
+      operations.prepareStorage = async () => {
+        expect(events).toEqual(['stopWriters', 'beforeMutation']);
+        prepareRefreshStorage(candidate);
+        events.push('prepareStorage');
+      };
+      await executeRefresh(refreshPlan({ ...current, storageChanged: true }), operations);
+      expect(existsSync(join(candidate, '.temp/storage-prepared'))).toBe(true);
+      expect(readFileSync(join(candidate, '.temp/build-admission'), 'utf8'))
+        .toContain('--gib 4 -- task dev:prepare');
+      expect(events.at(-1)).toBe('recordSuccess');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('recovery startup admits installation and generation when its pinned revision needs staging', () => {
+    const { dir, stack, revision } = repository();
+    try {
+      ensureBackend(dir, stack);
+      const previous = activeBackend(stack)!;
+      expect(previous).toBe(join(stack, 'backend-revisions', revision));
+      const firstAdmission = readFileSync(join(previous, '.temp/build-admission'), 'utf8');
+      expect(firstAdmission).toContain('--gib 4 -- task install');
+      expect(firstAdmission).toContain('--gib 4 -- task gen');
+      writeFileSync(join(dir, 'yarn.lock'), 'recovery-dependencies');
+      backendCommand(dir, 'git', ['add', 'yarn.lock']);
+      backendCommand(dir, 'git', ['commit', '-m', 'Recovery dependency change']);
+      const target = backendCommand(dir, 'git', ['rev-parse', 'HEAD']);
+      writeFileSync(join(stack, 'refresh-pending'), JSON.stringify({
+        revision: target, backend: previous, storage: previous, pid: 2147483647,
+        refreshId: 'incomplete-maintenance', mutatingStep: 'align-model',
+      }));
+      ensureBackend(dir, stack);
+      const candidate = activeBackend(stack)!;
+      expect(candidate).toBe(join(stack, 'backend-revisions', target));
+      const recoveryAdmission = readFileSync(join(candidate, '.temp/build-admission'), 'utf8');
+      expect(recoveryAdmission).toContain('--gib 4 -- task install');
+      expect(recoveryAdmission).toContain('--gib 4 -- task gen');
+      expect(readPendingRefresh(stack)?.mutatingStep).toBe('align-model');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

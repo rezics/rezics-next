@@ -458,6 +458,26 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
   for (const blocker of snapshot.plan.blockers) console.log(`  BLOCKED: ${blocker}`);
 }
 
+function refreshBuildTask(candidate: string, args: string[], env = process.env): void {
+  command(candidate, 'bun', [join(candidate, 'scripts/qa/host-admission.ts'),
+    '--gib', '4', '--', 'task', ...args,
+  ], env, 600_000);
+}
+
+/** Storage up may build an absent image, including during maintenance retry
+ * before inspection can select an explicit image-build step. */
+export function prepareRefreshStorage(candidate: string): void {
+  refreshBuildTask(candidate, ['dev:prepare']);
+}
+
+/** A staged revision is a Git worktree, so the seed CLI needs an explicit
+ * shared-stack target. Theme approval may build the web app as well. */
+export function seedRefreshZones(candidate: string, stack: string, packages: readonly string[]): void {
+  refreshBuildTask(candidate, [
+    'dev:seed', '--', '--themes-only', `--packages=${packages.join(',')}`,
+  ], { ...process.env, REZICS_SEED_STACK_DIRECTORY: stack });
+}
+
 export async function refreshSharedStack(root: string, args: string[]): Promise<void> {
   if (args.length > 1 || args.some((arg) => !['--dry-run', '--wait'].includes(arg)))
     throw new Error('Usage: task dev:refresh -- [--dry-run | --wait]');
@@ -603,7 +623,7 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
     // its idempotent turn before inspection reads the generated private files.
     try {
       activateBackend(dir, candidate, 'storage-backend');
-      backendCommand(candidate, 'task', ['dev:prepare']);
+      prepareRefreshStorage(candidate);
       pending.mutatingStep = 'align-model';
       pending.revision = revision;
       pending.pid = process.pid;
@@ -694,7 +714,7 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
         // Track the attempted storage topology before up/migration can partially
         // commit, so inspection and restart use those same Compose bind paths.
         activateBackend(dir, candidate, 'storage-backend');
-        backendCommand(candidate, 'task', ['dev:prepare']);
+        prepareRefreshStorage(candidate);
         const changes = changedEnvironment(before, readEnv(join(dir, 'dev.env')));
         if (changes.length)
           throw new Error(
@@ -729,18 +749,7 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
         );
         if (zones.length) {
           await beforeMutation();
-          command(
-            candidate,
-            'task',
-            [
-              'dev:seed',
-              '--',
-              '--themes-only',
-              `--packages=${zones.map((zone) => zone.slug).join(',')}`,
-            ],
-            process.env,
-            600_000,
-          );
+          seedRefreshZones(candidate, dir, zones.map((zone) => zone.slug));
         }
       },
       stopAppHost: async () => {

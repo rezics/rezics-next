@@ -197,7 +197,7 @@ export function readPendingRefresh(stack: string): PendingRefresh | undefined {
 export function ensureBackend(
   root: string,
   stack: string,
-  command: BackendCommand = backendCommand,
+  command: BackendCommand = backendBuildCommand,
 ): string {
   const pending = readPendingRefresh(stack);
   const checkpointPath = join(stack, 'refresh.json');
