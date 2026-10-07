@@ -7,6 +7,7 @@ import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
 import { authorCreditTriples } from '../src/modules/work/author-credit.ts';
 import { AccessJudgments } from '../src/modules/judgment/access.ts';
 import { DiscoveryProjection } from '../src/modules/discovery/store.ts';
+import { AccessExposure } from '../src/modules/access/exposure.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../src/modules/recommendation/derived-generation.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -34,8 +35,14 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     // Discovery now consumes an explicitly built projection. Keep this template
     // exercising the integrated route; discovery's owner tests qualify its index.
     await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
+    const platformAccess = new AccessExposure(stack.accessPool);
+    platformAccess.require = async (principal, exposure) => {
+      expect(principal).toEqual(a.principal);
+      expect(exposure).toBe('platform:platform-admin');
+    };
     const discoveryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       discovery: new DiscoveryProjection(stack.accessPool), judgments: new AccessJudgments(stack.accessPool),
+      platformAccess,
       account: { verify: async () => a.principal } });
     const get = (path: string) => path === '/v1/works' || path.startsWith('/v1/works?')
       ? discoveryApp.handle(new Request(`http://main.local${path}`)) : stack.call('GET', path);

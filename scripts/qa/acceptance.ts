@@ -132,6 +132,8 @@ export { integrationGateFiles };
 export const testExclusions: readonly { file: string; reason: string }[] = [
   ...legacyHostJenaGateFiles.map(file => ({ file,
     reason: 'Legacy host Jena harness needs separately installed REZICS_JAVA_HOME, REZICS_JENA_HOME and REZICS_FUSEKI_HOME.' })),
+  { file: 'apps/web/tests/g-944-shared-browser.test.ts',
+    reason: 'Live shared-stack Playwright fixture requires running web, Accounts and Main services; run it explicitly through goalctl rather than the isolated Bun unit tier.' },
   { file: 'apps/about/tests/build.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/catalogs.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/g-736-legal.test.ts', reason: 'The about site runs its tests through task about:check.' },

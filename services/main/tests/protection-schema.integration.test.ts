@@ -7,6 +7,7 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { ContentCore, migrateContent, type VariantIdentity } from '../../content/src/index.ts';
+import { seedRetainedContentDraft } from './retained-content-fixture.ts';
 import { PROTECTION_RULE } from '../src/modules/protection/schema.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -73,8 +74,7 @@ async function upgradedOwner(name: string) {
   }
   const content = new ContentCore(pool);
   const variant = variantIdentity();
-  const first = await content.saveDraft({ operationId: `save-${randomUUID()}`, variant, expectedHead: null,
-    model: 'content-shape-v1', sourceRevision: null, provenance: { editor: 'test' }, serializedJson: '{"body":"one"}' });
+  const first = await seedRetainedContentDraft(pool, variant, '{"body":"one"}', { editor: 'test' });
   const before = await actions(pool);
   await migrateContent(pool);
   await migrateContent(pool);

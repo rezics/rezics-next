@@ -17,6 +17,7 @@ import {
   validateImageInference,
 } from '../src/modules/media/presentation.ts';
 import { SCREEN_POLICY } from '../src/modules/media-screen/policy.ts';
+import { seedRetainedContentDraft } from './retained-content-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -464,8 +465,10 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
           defaulted: column.hasDefault,
         }));
       })
-      .sort((a, b) => a.table.localeCompare(b.table));
-    expect(declared).toEqual(columns.rows);
+      .sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
+    // ALTER migrations and typed declarations need not share physical column order.
+    expect(declared).toEqual(columns.rows.sort((a, b) =>
+      a.table.localeCompare(b.table) || a.column.localeCompare(b.column)));
   } finally {
     await empty.end();
   }
@@ -483,20 +486,12 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     }
     const content = new ContentCore(upgraded);
     const resource = iri(randomUUID());
-    const saved = await content.saveDraft({
-      operationId: `seed:${randomUUID()}`,
-      variant: {
-        id: `urn:rezics:variant:${randomUUID()}`,
-        resourceId: resource,
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' },
-        direction: 'ltr',
-      },
-      expectedHead: null,
-      model: 'content-shape-v1',
-      sourceRevision: null,
-      provenance: {},
-      serializedJson: JSON.stringify({ body: 'retained before media' }),
-    });
+    const saved = await seedRetainedContentDraft(upgraded, {
+      id: `urn:rezics:variant:${randomUUID()}`,
+      resourceId: resource,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+      direction: 'ltr',
+    }, JSON.stringify({ body: 'retained before media' }));
     expect(saved.outcome).toBe('succeeded');
     const before = await upgraded.query<{ action: string }>(
       'SELECT action FROM content.receipt_action ORDER BY action',

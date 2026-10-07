@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import type { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import {
@@ -62,7 +63,7 @@ export async function authorCreditFixture(
   objectDirectory: string,
   scopes = 'openid work:create work:edit work:read work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read',
   deletionFence?: (issuer: string, subject: string) => Promise<void>,
-  options: { readingPositions?: boolean } = {},
+  options: { readingPositions?: boolean; platformAccess?: AccessExposure } = {},
 ) {
   const account = await ratingAccount(apps, scopes, deletionFence);
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -266,6 +267,7 @@ export async function authorCreditFixture(
   const catalogueIntake = new CatalogueIntakeStore(accessPool, env);
   const app = createMainApp(fuseki, {
     environment: env,
+    platformAccess: options.platformAccess,
     account: account.verifier,
     access,
     ...(options.readingPositions ? { readingPositions: new ReadingPositionStore(pool) } : {}),

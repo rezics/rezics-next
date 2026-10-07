@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { authorCreditFixture, author } from '../../../tests/qa/fixtures/author-credit.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { createMainApp } from '../src/app.ts';
+import { AccessExposure } from '../src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { AuthorReaders } from '../src/modules/author-page/readers.ts';
 import { SourceAuthorNameStore } from '../src/modules/source/author-name.ts';
@@ -27,7 +28,15 @@ test('G-382 Open Library author pages list public credited Works with projected 
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the integration tier');
   const stack = await startMediaStack('author-page');
   const directory = join(resolve('.temp'), `author-page-${randomUUID()}`);
-  const fixture = await authorCreditFixture(Bun.env as Record<string, string>, directory);
+  const platformAccess = new AccessExposure(stack.accessPool);
+  platformAccess.require = async (principal, exposure) => {
+    expect(principal?.issuer).toBe(fixture.account.issuer);
+    expect(principal?.subject).toBe(fixture.account.a.id);
+    expect(['platform:catalogue-import', 'platform:catalogue-editing']).toContain(exposure ?? '');
+  };
+  const fixture = await authorCreditFixture(Bun.env as Record<string, string>, directory, undefined, undefined, {
+    platformAccess,
+  });
   try {
     const writer = await stack.member('writer');
     const base = Number(String(Date.now()).slice(-9));
