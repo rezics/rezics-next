@@ -223,7 +223,7 @@ export default {
   scaleByTaste: "Diese Menge bleibt unverändert. Salz, Gewürze und Triebmittel solltest du abschmecken, wenn sich die Menge um mehr als das Doppelte ändert.",
   scaleUnparsed: "Diese Zeile enthält keine lesbare Mengenangabe und bleibt unverändert.",
   scaleHeld: "Diese Menge bleibt unverändert.",
-  unitSystem: "Einheiten",
+  unitSystem: "Einheiten", unitWritten: "Wie geschrieben",
   unitUs: "US",
   unitMetric: "Metrisch",
   cookThis: "Jetzt kochen",

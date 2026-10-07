@@ -222,7 +222,7 @@ export default {
   scaleByTaste: "Esta cantidad se mantiene igual. Prueba y ajusta la sal, las especias y la levadura si cambias la receta a más del doble.",
   scaleUnparsed: "Esta línea no tiene una cantidad legible, así que se mantiene igual.",
   scaleHeld: "Esta cantidad se mantiene igual.",
-  unitSystem: "Unidades",
+  unitSystem: "Unidades", unitWritten: "Como está escrito",
   unitUs: "EE. UU.",
   unitMetric: "Métrico",
   cookThis: "Preparar esta receta",

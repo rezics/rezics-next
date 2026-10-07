@@ -213,7 +213,7 @@ export default {
   scaleFailed: '분량을 환산하지 못했습니다. 다시 시도해 주세요.',
   scaleByTaste: '이 양은 그대로 유지됩니다. 분량을 두 배 넘게 바꿀 때는 소금, 향신료와 팽창제를 맛을 보며 조절하세요.',
   scaleUnparsed: '양을 읽을 수 없어 이 항목은 그대로 유지됩니다.', scaleHeld: '이 양은 그대로 유지됩니다.',
-  unitSystem: '단위', unitUs: '미국식', unitMetric: '미터법', cookThis: '요리 시작', cookMode: '요리 모드',
+  unitSystem: '단위', unitWritten: '작성된 그대로', unitUs: '미국식', unitMetric: '미터법', cookThis: '요리 시작', cookMode: '요리 모드',
   closeCookMode: '요리 모드 닫기', startTimer: '타이머 시작', pauseTimer: '타이머 일시 정지',
   restartTimer: '타이머 다시 시작', recipeNotes: '메모',
   recipeUnstructured: '아직 환산할 수 있는 재료 분량이 없는 레시피예요.',

@@ -222,7 +222,7 @@ export default {
   scaleByTaste: "Cette quantité reste telle quelle. Goûtez et ajustez le sel, les épices et la levure si la quantité de la recette varie de plus du double.",
   scaleUnparsed: "Cette ligne ne contient aucune quantité lisible ; elle reste telle quelle.",
   scaleHeld: "Cette quantité reste telle quelle.",
-  unitSystem: "Unités",
+  unitSystem: "Unités", unitWritten: "Tel qu’écrit",
   unitUs: "États-Unis",
   unitMetric: "Métrique",
   cookThis: "Cuisiner cette recette",

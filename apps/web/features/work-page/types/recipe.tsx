@@ -3,7 +3,7 @@
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
-import { Clock3Icon, CookingPotIcon, PencilIcon, XIcon } from 'lucide-react';
+import { Clock3Icon, PencilIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
@@ -46,8 +46,11 @@ function StepTimer({ seconds, messages: t }: { seconds: number; messages: WorkPa
   </div>;
 }
 
-function shownLine(item: Ingredient, system: 'us' | 'metric'): string {
-  if (item.alternateSystem === system && item.alternateLine) return item.alternateLine;
+/** The units a reader sees: each line as its cook wrote it, or all of them converted to one system. */
+type Units = 'written' | 'us' | 'metric';
+
+function shownLine(item: Ingredient, units: Units): string {
+  if (units !== 'written' && item.alternateSystem === units && item.alternateLine) return item.alternateLine;
   return item.line ?? item.originalText;
 }
 
@@ -66,14 +69,14 @@ function sectioned(page: RecipeWorkPage): { key: string; heading: string | null;
   return blocks.sort((a, b) => Number(a.key !== '') - Number(b.key !== ''));
 }
 
-function IngredientList({ page, system, written, messages: t }: {
-  page: RecipeWorkPage; system: 'us' | 'metric'; written: 'us' | 'metric'; messages: WorkPageMessages;
+function IngredientList({ page, units, messages: t }: {
+  page: RecipeWorkPage; units: Units; messages: WorkPageMessages;
 }) {
   return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
     {block.heading ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
     <ul className="grid gap-2">{block.items.map(item => {
-      const text = shownLine(item, system);
-      const quiet = text !== item.originalText && (system !== written || item.hint) ? item.originalText : null;
+      const text = shownLine(item, units);
+      const quiet = text !== item.originalText && (units !== 'written' || item.hint) ? item.originalText : null;
       const note = item.judgment ? t.scaleByTaste
         : item.reason === 'unparsed' ? t.scaleUnparsed
           : item.reason ? t.scaleHeld : null;
@@ -87,14 +90,14 @@ function IngredientList({ page, system, written, messages: t }: {
 }
 
 function UnitToggle({ value, onChange, messages: t }: {
-  value: 'us' | 'metric'; onChange: (value: 'us' | 'metric') => void; messages: WorkPageMessages;
+  value: Units; onChange: (value: Units) => void; messages: WorkPageMessages;
 }) {
   return <div role="radiogroup" aria-label={t.unitSystem} className="flex rounded-full border border-border/60 p-0.5">
-    {(['us', 'metric'] as const).map(option => <button key={option} type="button" role="radio"
+    {(['written', 'us', 'metric'] as const).map(option => <button key={option} type="button" role="radio"
       aria-checked={value === option} onClick={() => onChange(option)}
       className={cn('rounded-full px-3 py-1 text-sm', value === option
         ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>
-      {option === 'us' ? t.unitUs : t.unitMetric}</button>)}
+      {option === 'written' ? t.unitWritten : option === 'us' ? t.unitUs : t.unitMetric}</button>)}
   </div>;
 }
 
@@ -113,8 +116,8 @@ function Steps({ items, messages: t }: { items: Occurrence[]; messages: WorkPage
 }
 
 /** A focused recipe task keeps the display awake while its steps are open. */
-function CookMode({ page, messages: t, system, written, onClose }: {
-  page: RecipeWorkPage; messages: WorkPageMessages; system: 'us' | 'metric'; written: 'us' | 'metric';
+function CookMode({ page, messages: t, units, onClose }: {
+  page: RecipeWorkPage; messages: WorkPageMessages; units: Units;
   onClose: () => void;
 }) {
   const close = useRef<HTMLButtonElement>(null);
@@ -166,7 +169,7 @@ function CookMode({ page, messages: t, system, written, onClose }: {
       </div>
       <div className="grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
-          <IngredientList page={page} system={system} written={written} messages={t} /></section>
+          <IngredientList page={page} units={units} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
@@ -184,10 +187,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     const value = initial?.measures.find(item => item.kind === 'servings')?.value;
     return value ? value.numerator / value.denominator : 1;
   });
-  const writtenOf = (items: Ingredient[] | undefined): 'us' | 'metric' =>
-    items?.some(item => item.alternateSystem === 'us') && !items.some(item => item.alternateSystem === 'metric')
-      ? 'metric' : 'us';
-  const [system, setSystem] = useState<'us' | 'metric'>(() => writtenOf(initial?.ingredients));
+  // Quantities show as the cook wrote them; converting is the reader's choice.
+  const [units, setUnits] = useState<Units>('written');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [cooking, setCooking] = useState(false);
@@ -196,7 +197,6 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     window.addEventListener('rezics-cook', open);
     return () => window.removeEventListener('rezics-cook', open);
   }, []);
-  const written = writtenOf(page?.ingredients);
   const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
   const measures = page?.measures ?? [];
@@ -234,25 +234,23 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
               || servings < 1 || servings > 100}>
               {busy ? t.scaling : t.scaleRecipe}</Button>
           </form> : null}
-          {convertible ? <UnitToggle value={system} onChange={setSystem} messages={t} /> : null}
+          {convertible ? <UnitToggle value={units} onChange={setUnits} messages={t} /> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
             <PencilIcon aria-hidden="true" />{edit.label}</Link> : null}
-          <Button type="button" onClick={() => setCooking(true)}><CookingPotIcon aria-hidden="true" />
-            {t.cookThis}</Button>
         </div>
       </div>
       {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
-          <IngredientList page={page} system={system} written={written} messages={t} /></section>
+          <IngredientList page={page} units={units} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
       {text ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
         <p className="whitespace-pre-wrap leading-7">{text}</p></section> : null}
-      {cooking ? <CookMode page={page} messages={t} system={system} written={written}
+      {cooking ? <CookMode page={page} messages={t} units={units}
         onClose={() => setCooking(false)} /> : null}
     </> : <>
       <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>

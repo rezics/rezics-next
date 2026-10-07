@@ -212,7 +212,7 @@ export default {
   scaleFailed: '分量を換算できませんでした。もう一度お試しください。',
   scaleByTaste: 'この分量は記載どおりです。仕上がり量を倍以上変える場合は、塩、香辛料、膨張剤を味見して調整してください。',
   scaleUnparsed: '分量を読み取れないため、この行は記載どおりです。', scaleHeld: 'この分量は記載どおりです。',
-  unitSystem: '単位', unitUs: '米国式', unitMetric: 'メートル法', cookThis: '調理する', cookMode: '調理モード',
+  unitSystem: '単位', unitWritten: '記載のまま', unitUs: '米国式', unitMetric: 'メートル法', cookThis: '調理する', cookMode: '調理モード',
   closeCookMode: '調理モードを閉じる', startTimer: 'タイマーを開始', pauseTimer: 'タイマーを一時停止',
   restartTimer: 'タイマーをリセット', recipeNotes: 'メモ',
   recipeUnstructured: 'このレシピには、換算できる材料の分量がまだありません。',

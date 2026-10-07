@@ -26,7 +26,7 @@ const en = {
   scaleByTaste: 'This amount stays as written. Salt, spices and leavening need a taste check when the batch changes by more than double.',
   scaleUnparsed: 'This line has no readable amount, so it stays as written.',
   scaleHeld: 'This amount stays as written.',
-  unitSystem: 'Units', unitUs: 'US', unitMetric: 'Metric',
+  unitSystem: 'Units', unitWritten: 'As written', unitUs: 'US', unitMetric: 'Metric',
   cookThis: 'Cook this', cookMode: 'Cooking mode', closeCookMode: 'Close cooking mode',
   startTimer: 'Start timer', pauseTimer: 'Pause timer', restartTimer: 'Restart timer',
   recipeNotes: 'Notes', recipeUnstructured: 'Measured ingredients have not been added to this recipe yet.',

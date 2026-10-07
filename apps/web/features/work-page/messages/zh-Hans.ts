@@ -19,7 +19,7 @@ export default {
   scaleByTaste: '份数变化超过一倍时，盐、香料和发酵剂不宜按比例照加。此用量保持原文，请试味。',
   scaleUnparsed: '这一行读不出用量，因此保持原文。',
   scaleHeld: '此用量保持原文。',
-  unitSystem: '单位', unitUs: '美制', unitMetric: '公制',
+  unitSystem: '单位', unitWritten: '照原写法', unitUs: '美制', unitMetric: '公制',
   cookThis: '开始烹饪', cookMode: '烹饪模式', closeCookMode: '退出烹饪模式',
   startTimer: '开始计时', pauseTimer: '暂停计时', restartTimer: '重新计时',
   recipeNotes: '备注', recipeUnstructured: '此食谱尚未添加可换算的食材用量。',

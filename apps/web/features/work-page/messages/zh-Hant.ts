@@ -212,7 +212,7 @@ export default {
   scaleFailed: '無法換算用量，請再試一次。',
   scaleByTaste: '此用量維持原樣。份量變動超過一倍時，鹽、香料和膨鬆劑需試味調整。',
   scaleUnparsed: '這一行沒有可辨識的用量，因此維持原樣。', scaleHeld: '此用量維持原樣。',
-  unitSystem: '單位', unitUs: '美制', unitMetric: '公制', cookThis: '開始烹調', cookMode: '烹調模式',
+  unitSystem: '單位', unitWritten: '照原寫法', unitUs: '美制', unitMetric: '公制', cookThis: '開始烹調', cookMode: '烹調模式',
   closeCookMode: '結束烹調模式', startTimer: '開始計時', pauseTimer: '暫停計時', restartTimer: '重新計時',
   recipeNotes: '備註', recipeUnstructured: '這份食譜尚未提供可換算的食材用量。',
   promptText: '已發布的提示詞', skillText: '已發布的 SKILL.md',

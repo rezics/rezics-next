@@ -205,6 +205,19 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   }).toPass({ timeout: 120_000 });
   mark('work page loaded');
   const recipe = page.getByRole('region', { name: 'Recipe', exact: true });
+  // The description reads under the title, ahead of the method; one Cook this; units as the cook wrote them.
+  const description = page.getByText('Bright and tender, with a little crunch.');
+  await expect(description).toBeVisible();
+  expect((await description.boundingBox())!.y).toBeLessThan((await recipe.boundingBox())!.y);
+  await expect(page.getByRole('button', { name: 'Cook this' })).toHaveCount(1);
+  await expect(recipe.getByRole('radio', { name: 'As written' })).toBeChecked();
+  await expect(recipe).toContainText('200 g butter, softened');
+  await expect(recipe).toContainText('1 ½ cups flour, sifted');
+  await expect(recipe).toContainText('120 g butter');
+  await recipe.getByRole('radio', { name: 'US' }).click();
+  await expect(recipe).toContainText('ounces butter');
+  await recipe.getByRole('radio', { name: 'As written' }).click();
+  await expect(recipe).toContainText('200 g butter, softened');
   await expect(recipe.getByRole('heading', { name: 'Cake' })).toBeVisible();
   await expect(recipe.getByRole('heading', { name: 'Icing' })).toBeVisible();
   await expect(recipe).toContainText('Yield 12 muffins');

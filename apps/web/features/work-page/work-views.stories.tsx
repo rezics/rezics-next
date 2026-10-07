@@ -226,8 +226,9 @@ export const RecipeCooking: Story = {
     await expect(canvas.getByRole('spinbutton', { name: 'Servings' })).toHaveValue(4);
     await expect(canvas.getByText(/Recipe · English/)).toBeVisible();
     await expect(canvas.getByText('2 cups flour')).toBeVisible();
-    await expect(canvas.getAllByRole('button', { name: 'Cook this' })).toHaveLength(2);
-    await userEvent.click(canvas.getAllByRole('button', { name: 'Cook this' })[1]!);
+    // One primary action per view: the header's.
+    await expect(canvas.getAllByRole('button', { name: 'Cook this' })).toHaveLength(1);
+    await userEvent.click(canvas.getByRole('button', { name: 'Cook this' }));
     const dialog = screen.getByRole('dialog', { name: 'Cooking mode' });
     await expect(within(dialog).getByText('Cook for 5 minutes until golden.')).toBeVisible();
     await expect(within(dialog).getByRole('timer')).toHaveTextContent('5:00');
@@ -291,9 +292,65 @@ export const ScaledIngredients: Story = {
     await expect(canvas.getByText('1 1/2 cups flour')).toBeVisible();
     await expect(canvas.getByText('2 eggs')).toBeVisible();
     await expect(canvas.getByText(/Salt, spices and leavening/)).toBeVisible();
+    // Lines show as written until the reader converts them.
+    await expect(canvas.getByRole('radio', { name: 'As written' })).toBeChecked();
+    await expect(canvas.queryByText('720 ml flour')).toBeNull();
     await userEvent.click(canvas.getByRole('radio', { name: 'Metric' }));
     await expect(canvas.getByText('720 ml flour')).toBeVisible();
     await expect(canvas.getByText('2 eggs')).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: 'As written' }));
+    await expect(canvas.getByText('3 cups flour')).toBeVisible();
+  },
+};
+
+const metricRecipe: RecipeWorkPage = {
+  ...recipeStory,
+  ingredients: [
+    {
+      occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000091',
+      originalText: '200 g butter, softened',
+      line: '200 g butter, softened',
+      alternateLine: '7 ⅛ ounces butter, softened',
+      alternateSystem: 'us',
+      unitText: 'g',
+      amount: { numerator: 200, denominator: 1 },
+      scaled: false,
+    },
+    {
+      occurrence: 'https://rezics.com/id/00000000-0000-0000-0000-000000000093',
+      originalText: '1½ cups flour',
+      line: '1 ½ cups flour',
+      alternateLine: '360 ml flour',
+      alternateSystem: 'metric',
+      unitText: 'cups',
+      amount: { numerator: 3, denominator: 2 },
+      scaled: false,
+    },
+  ],
+};
+
+/** A recipe written partly in grams stays in grams by default; US and metric are the reader's choice. */
+export const UnitsAsWritten: Story = {
+  parameters: at('overview'),
+  render: () => (
+    <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')}>
+      <RecipeExperience initial={metricRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+        text={null} locale="en" messages={messages.en} />
+    </Framed>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('200 g butter, softened')).toBeVisible();
+    await expect(canvas.getByText('1 ½ cups flour')).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: 'US' }));
+    await expect(canvas.getByText('7 ⅛ ounces butter, softened')).toBeVisible();
+    await expect(canvas.getByText('1 ½ cups flour')).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: 'Metric' }));
+    await expect(canvas.getByText('360 ml flour')).toBeVisible();
+    await expect(canvas.getByText('200 g butter, softened')).toBeVisible();
+    await userEvent.click(canvas.getByRole('radio', { name: 'As written' }));
+    await expect(canvas.getByText('200 g butter, softened')).toBeVisible();
+    await expect(canvas.getByText('1 ½ cups flour')).toBeVisible();
   },
 };
 
