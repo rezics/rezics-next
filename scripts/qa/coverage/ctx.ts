@@ -8,7 +8,7 @@ const schema = 'services/main/tests/context-schema.test.ts';
 export const ctxCases: CaseDeclarations = {
   CTX02: [
     { tier: 'integration', file: statement,
-      name: 'CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer' },
+      name: 'CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek' },
     { tier: 'integration', file: statement,
       name: 'CTX02/CTX03: exact Statement decisions inherit Global, suppress on local reject and fail closed' },
     { tier: 'unit', file: schema,
@@ -48,7 +48,7 @@ export const ctxCases: CaseDeclarations = {
     { tier: 'integration', file: advanced,
       name: 'CTX09: retirement preserves exact Statement meaning and receipts, blocks new adoption, and restores by CAS' },
     { tier: 'integration', file: statement,
-      name: 'CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer' },
+      name: 'CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek' },
   ],
   CTX10: [
     { tier: 'integration', file: advanced,
