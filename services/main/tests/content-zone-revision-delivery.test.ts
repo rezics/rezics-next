@@ -189,6 +189,7 @@ test('native Post exact reads remain private and retain their original Work auth
 
 test('public Zone exact bytes accept optional bearer; an unpublished Zone never gains anonymous preview', async () => {
   const published = fixture();
+  published.state.authority = false;
   expect((await published.read(true)).status).toBe(200);
   expect(published.probes.authority).toBe(0);
   const draft = fixture({ published: false });

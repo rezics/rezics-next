@@ -149,6 +149,8 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
         const body = await refused.text();
         expect(body).not.toContain('Selected exact site document');
         expect(body).not.toContain('serializedJson');
+        // Editor withdrawal does not withdraw the distinct live public bundle.
+        expect((await f.read(f.later)).status).toBe(200);
       } finally {
         if (revokedIds.length) await f.accessPool.query(`UPDATE access.representation
           SET active = true WHERE id = ANY($1::uuid[])`, [revokedIds]);
@@ -159,8 +161,6 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
       }
       expect(await json<Exact>(await f.read(f.first, true))).toEqual(privateExact);
       expect((await f.read(f.first)).status).toBe(404);
-      // Controller withdrawal changes editor custody, not the live public bundle.
-      expect((await f.read(f.later)).status).toBe(200);
     }
     await f.publish(f.first);
     expect(await json<Exact>(await f.read(f.first))).toEqual(privateExact);
