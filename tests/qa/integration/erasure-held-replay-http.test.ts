@@ -100,6 +100,10 @@ test('OPS10: real held native HTTP replay authenticates exact bytes, preserves t
   );
   const name = `rezics-held-http-${randomUUID().slice(0, 12)}`;
   const volume = `${name}-state`;
+  writeFileSync(
+    join(evidence, 'resources.json'),
+    JSON.stringify({ name, copy: `${name}-copy`, volume }),
+  );
   const databases = await cloneQaAccountAccessDatabases(runId);
   const access = new Pool({ connectionString: databases.urls.access, max: 1 });
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 1 });
@@ -215,6 +219,7 @@ exec 9>>"$state/owner.lock"
 flock -n 9
 cat > /fuseki/databases/held-http-cursor.nq <<'NQ'
 <urn:rezics:restore:${next.dataEpoch}> <${RV}reconciledPriorSequence> "5"^^<http://www.w3.org/2001/XMLSchema#integer> <${CONTROL}> .
+<urn:rezics:restore:${next.dataEpoch}> <${RV}reconciledPriorMainSequence> "3"^^<http://www.w3.org/2001/XMLSchema#integer> <${CONTROL}> .
 NQ
 java -Xmx512m -cp "$FUSEKI_HOME/fuseki-server.jar" tdb2.tdbloader --loader=phased --loc="$state/tdb2" /fuseki/databases/held-http-cursor.nq`);
     await restored.runner.start();
@@ -249,6 +254,18 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
       expect.objectContaining({
         p: { type: 'uri', value: `${RV}reconciledPriorSequence` },
         o: { type: 'literal', datatype: 'http://www.w3.org/2001/XMLSchema#integer', value: '5' },
+      }),
+    );
+    expect(beforeControl).toContainEqual(
+      expect.objectContaining({
+        p: { type: 'uri', value: `${RV}priorMainSequence` },
+        o: { type: 'literal', datatype: 'http://www.w3.org/2001/XMLSchema#integer', value: '0' },
+      }),
+    );
+    expect(beforeControl).toContainEqual(
+      expect.objectContaining({
+        p: { type: 'uri', value: `${RV}reconciledPriorMainSequence` },
+        o: { type: 'literal', datatype: 'http://www.w3.org/2001/XMLSchema#integer', value: '3' },
       }),
     );
     expect(beforeControl).toContainEqual(
@@ -363,6 +380,8 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
     }
     let authorizations = 0,
       transportCalls = 0;
+    let interruptedSnapshot: Awaited<ReturnType<typeof snapshot>> | undefined;
+    let sentCommand: CommandEnvelope | undefined;
     const assertCurrent = async (authorization: HeldGraphErasureAuthorization) => {
       authorizations++;
       const current = await readErasure(relay, entry.erasureId);
@@ -420,12 +439,12 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
       async fetch(request) {
         transportCalls++;
         if (transportCalls === 1) {
-          expect(await snapshot()).toEqual(baseline);
+          interruptedSnapshot = await snapshot();
           return new Response('interrupted before forwarding', { status: 502 });
         }
         const body = await request.text();
         writeFileSync(join(evidence, 'sent-command.json'), body);
-        expect(JSON.parse(JSON.parse(body).titleAdmission.payload)).toHaveLength(17);
+        sentCommand = JSON.parse(body) as CommandEnvelope;
         const upstream = await fetch(new URL('command', restored!.url), {
           method: 'POST',
           headers: request.headers,
@@ -437,10 +456,13 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
           status: upstream.status,
           body: result,
         });
-        expect(result).toMatchObject({
-          status: 'committed',
-          position: { dataEpoch: next.dataEpoch, sequence: '0' },
-        });
+        // Forward an actual refusal so assertions run in the awaited test flow
+        // and its finally retains evidence and closes the isolated resources.
+        if (result.status !== 'committed')
+          return new Response(JSON.stringify(result), {
+            status: upstream.status,
+            headers: { 'content-type': 'application/json' },
+          });
         return new Response('interrupted after native commit', { status: 502 });
       },
     });
@@ -463,6 +485,14 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
       ),
     ).toEqual(original);
     expect(transportCalls).toBe(2);
+    expect(interruptedSnapshot).toEqual(baseline);
+    expect(JSON.parse(sentCommand!.titleAdmission!.payload)).toHaveLength(17);
+    expect(
+      responses.find((response) => response.label === 'actual-native-commit-response-discarded'),
+    ).toMatchObject({
+      status: 200,
+      body: { status: 'committed', position: { dataEpoch: next.dataEpoch, sequence: '0' } },
+    });
     expect(authorizations).toBeGreaterThanOrEqual(6);
     expect(await controls()).toEqual(beforeControl);
     expect(
