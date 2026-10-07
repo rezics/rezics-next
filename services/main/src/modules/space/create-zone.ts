@@ -4,7 +4,7 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
-import { derivedId, COMPOSITION_PROFILE } from '../structure/graph.ts';
+import { derivedId, itemListIri, COMPOSITION_PROFILE } from '../structure/graph.ts';
 import { recordTree, orderTree, structureObjects, structureCreationValidations } from '../structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, checkStructureManifest } from '../structure/format.ts';
 import { newCost } from '../structure/tree.ts';
@@ -131,6 +131,8 @@ export async function createZoneSpace(env: WorkActivationEnvironment,
           ${iri(navigation)} a rv:Structure ; rv:structureOf ${iri(zone)} ;
             rv:structureProfile <${structureProfileFor('zone-navigation').graphProfile}> ;
             rv:structureHead ${iri(navigationRevision)} ; rv:selectedGeneration ${iri(generation)} .
+          ${iri(itemListIri(generation, navigation))} a <https://schema.org/ItemList> ;
+            rv:generation ${iri(generation)} ; rv:parent ${iri(navigation)} .
           ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(navigation)} ;
             rv:generationState rv:Active ; rv:stagedBy ${iri(operation)} ; rv:placementCount 0 .
         }
