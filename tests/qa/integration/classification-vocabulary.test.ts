@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { VOCABULARY_COST } from '../../../services/main/src/modules/classification/vocabulary.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -110,26 +112,92 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
       200,
     );
     expect(fallback.name).toMatchObject({ value: 'Urban', language: 'en', basis: 'fallback' });
-    await author.grant('classification:decide:global', 'classification.decision.set');
+    await author.grant('context:create:root', 'context.create');
+    await author.grant(`statement:speak:${author.actor}`, 'statement.record');
+    await author.grant('classification:decide:global', 'statement.decide');
     const work = await stack.publicWork(author.actor, ['en'], 'Bilingual classification');
-    await home.json(
+    const interpretation = await home.json<{ context: string; semanticRevision: string }>(
       await call(
-        '/v1/classification-decisions',
+        '/v1/contexts',
         {
-          profile: 'classification-direct-decision-v1',
-          context: { kind: 'global' },
-          work: work.work,
-          mainVersion: work.mainVersion,
-          sense: child.sense,
-          expectedDecisionHead: null,
-          outcome: 'accepted',
+          profile: 'context-v1',
+          role: 'shared',
+          disclosure: 'public',
+          base: null,
+          entries: [
+            {
+              target: child.concept,
+              relation: CLASSIFIED_AS,
+              state: 'defined',
+              definition: child.definitionRevision,
+              applicability: [],
+            },
+          ],
           actingSubject: author.actor,
         },
-        'vocabulary-decision',
+        'vocabulary-interpretation',
         author.token,
       ),
       201,
     );
+    const statementBody = {
+      profile: 'statement-v1',
+      speaker: { kind: 'personal' },
+      subject: work.mainVersion,
+      predicate: CLASSIFIED_AS,
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+      value: { kind: 'resource', iri: child.concept },
+      applicability: [],
+      interpretation: {
+        kind: 'explicit',
+        context: interpretation.context,
+        semanticRevision: interpretation.semanticRevision,
+      },
+      evidence: [],
+      actingSubject: author.actor,
+    };
+    const statement = await home.json<{
+      statement: string;
+      meaningKey: string;
+      revision: string;
+      replayed: boolean;
+    }>(await call('/v1/statements', statementBody, 'vocabulary-statement', author.token), 201);
+    expect(
+      await home.json<typeof statement>(
+        await call('/v1/statements', statementBody, 'vocabulary-statement', author.token),
+        200,
+      ),
+    ).toMatchObject({ ...statement, replayed: true });
+    const decisionBody = {
+      profile: 'statement-decision-v1',
+      target: {
+        kind: 'qualified-fact',
+        meaningKey: statement.meaningKey,
+        support: [statement.statement],
+      },
+      acceptance: { kind: 'global' },
+      expectedDecisionHead: null,
+      outcome: 'accepted',
+      actingSubject: author.actor,
+    };
+    expect(
+      (await call('/v1/statement-decisions', decisionBody, 'vocabulary-decision-denied')).status,
+    ).toBe(401);
+    const decision = await home.json<{
+      decision: string;
+      slot: string;
+      revision: string;
+      replayed: boolean;
+    }>(
+      await call('/v1/statement-decisions', decisionBody, 'vocabulary-decision', author.token),
+      201,
+    );
+    expect(
+      await home.json<typeof decision>(
+        await call('/v1/statement-decisions', decisionBody, 'vocabulary-decision', author.token),
+        200,
+      ),
+    ).toMatchObject({ ...decision, replayed: true });
     const chips = await home.json<{ items: { concept: string; name: { value: string } }[] }>(
       await call(`/v1/works/${short(work.work)}/classifications?language=zh-Hans`),
       200,
