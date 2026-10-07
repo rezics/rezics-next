@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { CATALOGUE_IMPORT_SCOPE } from '../../../services/main/src/modules/work/catalogue-import.ts';
@@ -13,6 +15,9 @@ if (!Array.isArray(records) || !records.length || records.some(record => !Array.
   || record.length !== 2 || record.some(value => typeof value !== 'string' || !value))) {
   throw new Error('Library import seed needs title and author pairs');
 }
+const readerPath = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
+if (!readerPath) throw new Error('Library import seed needs the isolated QA reader');
+const reader = JSON.parse(readFileSync(readerPath, 'utf8')) as { principalId: string; actingSubject: string };
 const stack = await startMediaStack('library-import-seed', { agents: true });
 try {
   const workObjects = stack.objects('semantic/work/');
@@ -60,6 +65,12 @@ try {
     const work = item.receipt?.work;
     const mainVersion = item.receipt?.mainVersion;
     if (!work || !mainVersion) throw new Error('Catalogue seed omitted the Work receipt');
+    const readScope = `work:read:${work}`;
+    await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [readScope]);
+    await stack.accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'work.read',now() + interval '8 hours')`, [randomUUID(), reader.principalId, reader.actingSubject]);
+    await stack.accessPool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'work.read',now() + interval '8 hours')`, [randomUUID(), reader.actingSubject, readScope]);
     await editor.grant(`contribution:create:${work}`, 'contribution.create');
     await editor.grant(`publication:select:${mainVersion}`, 'publication.select');
     const draft = await post<{ contribution: string; draftRevision: string }>('/v1/contributions', {
@@ -79,6 +90,7 @@ try {
       expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: editor.actor,
     }, `library-import-selection:${index}`);
   }
+  console.log(JSON.stringify({ actingSubject: reader.actingSubject, works: result.items.map(item => item.receipt!.work) }));
 } finally {
   await stack.stop();
 }

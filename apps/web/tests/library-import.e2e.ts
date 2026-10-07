@@ -9,6 +9,7 @@ import { signInAtAccounts } from './account-sign-in.ts';
 // The QA reader imports the committed Goodreads file, then a 200-row file whose rows Main matches
 // and reports a page at a time. Only the seed editor holds catalogue-import authority.
 let member: { email: string; password: string };
+let seed: { actingSubject: string; works: string[] };
 const t = materializeData(messages, { locale: 'en' });
 const sample = readFileSync(resolve('tests/fixtures/library-exports/goodreads.csv'));
 const known = [['Pride and Prejudice', 'Jane Austen'], ['Jane Eyre', 'Charlotte Brontë'], ['Frankenstein', 'Mary Shelley'],
@@ -32,6 +33,7 @@ test.beforeAll(async () => {
   if (result.status !== 0 || result.error) {
     throw new Error(`Library import seed failed: ${result.stderr || result.error?.message || result.status}`);
   }
+  seed = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as typeof seed;
   // Search delivery is asynchronous; all title and author matches must be ready before the upload.
   await expect.poll(async () => {
     return Promise.all(records.map(async ([title, author]) => {
@@ -63,6 +65,10 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
     headers: { 'idempotency-key': 'g428-reader-direct-source-denied' } });
   expect(directSource.status()).toBe(403);
   expect(await directSource.json()).toMatchObject({ status: 403, code: 'platform_closed' });
+  const readerState = await page.request.get(`/api/main/v1/works/${seed.works[0]!.slice(-36)}/reader-state`
+    + `?actingSubject=${encodeURIComponent(seed.actingSubject)}`);
+  expect(readerState.status()).toBe(200);
+  expect(await readerState.json()).toMatchObject({ work: seed.works[0], status: { status: null } });
   await page.getByRole('heading', { name: t.importTitle }).click();
   await page.locator('#library-import-file').setInputFiles({ name: 'goodreads.csv', mimeType: 'text/csv', buffer: sample });
   const group = (label: string) => page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) });
