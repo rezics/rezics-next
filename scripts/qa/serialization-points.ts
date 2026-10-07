@@ -224,6 +224,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
       main + 'modules/access/admission.ts',
       main + 'modules/access/platform-administrator.ts',
       main + 'modules/work/restore-lineage.ts',
+      main + 'modules/erasure/reconcile.ts',
     ],
   },
   {
