@@ -233,7 +233,7 @@ final class TemplateIndexService {
             && checkpoint.version()==tdb.getTxnSystem().getThreadTransaction().getDataVersion();
     }
     /** Semantic proof survives physical storage changes. Only the exhaustive
-     * preparer creates it; native primary deltas preserve it and raw mutation
+     * preparer or a verified delta from empty membership creates it; raw mutation
      * admission removes it. Restore cutover makes its old epoch ineligible. */
     static boolean membershipCompleted(DatasetGraph data) {
         var control=CommandInvariant.readControl(data);
@@ -262,6 +262,23 @@ final class TemplateIndexService {
         if(!data.isInTransaction() || data.transactionMode()!=ReadWrite.WRITE)
             throw new IllegalStateException("unsafe membership mutation must be fenced inside its write transaction");
         data.deleteAny(uri(STATE),uri(PREPARATION),uri(COMPLETED),Node.ANY);
+    }
+    /** Four indexed absence witnesses cover the preparer's named populations;
+     * no cursor, list adjacency or unrelated entity population is visited. */
+    static boolean emptyMembership(DatasetGraph data) {
+        if(unsupportedMembershipStorage(data)) return false;
+        for(String type:List.of(RV+"OccurrencePlacement",RV+"RemovedPlacement",SCHEMA+"ItemList"))
+            if(data.contains(uri(CURRENT),Node.ANY,RDF.type.asNode(),uri(type))) return false;
+        return !data.contains(uri(CURRENT),Node.ANY,uri(SCHEMA+"itemListElement"),Node.ANY);
+    }
+    static void completeEmptyMembership(DatasetGraph data) {
+        if(!data.isInTransaction() || data.transactionMode()!=ReadWrite.WRITE)
+            throw new IllegalStateException("membership completion requires the admitted write transaction");
+        var control=CommandInvariant.readControl(data);
+        if(control==null || control.held() || unsupportedMembershipStorage(data)) return;
+        invalidateMembershipCompletion(data);
+        data.add(uri(STATE),uri(PREPARATION),uri(COMPLETED),NodeFactory.createLiteralString(
+            CommandService.jsonObject(Map.of("revision",NORMAL_FORM,"dataEpoch",control.epoch().getLiteralLexicalForm())).toString()));
     }
     private static Map<String,Object> membershipStatus(DatasetGraph data) {
         data.begin(ReadWrite.READ);

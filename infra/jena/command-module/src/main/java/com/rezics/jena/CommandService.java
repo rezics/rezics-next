@@ -935,6 +935,7 @@ final class CommandService extends ActionService {
             }
         String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
+        MembershipNormalFormPolicy.applied(dataset, membership);
         return result;
     }
 
@@ -986,6 +987,7 @@ final class CommandService extends ActionService {
             MetadataRestorePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(MetadataRestorePolicy.templateDigest(update)));
         if (delta != null) SearchDeltaJournal.append(physical, delta, publicSearchWriteEpoch.get() + 1);
         // The dataset remains held at zero; owner custody retains the old event and both source positions.
+        MembershipNormalFormPolicy.applied(physical, membership);
         return committed(physical, receipt);
     }
 
@@ -1129,6 +1131,7 @@ final class CommandService extends ActionService {
         }
         // Upgrade conversion leaves both positions unchanged; restore stamps only
         // the exact retained batch while the new dataset position remains zero.
+        MembershipNormalFormPolicy.applied(dataset, membership);
         return committed(dataset, receipt);
     }
 
