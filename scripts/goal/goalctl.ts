@@ -546,8 +546,9 @@ export function launchCommand(options: { id: string; effort: string; session: st
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
-    return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
-      : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
+    // `--` ends options: a prompt may start with `---` (brief frontmatter) or `-`.
+    return ['codex', resume ? ['exec', 'resume', session, ...common, '--', prompt]
+      : ['exec', ...common, '-C', options.worktree ?? '.', '--', prompt]];
   }
   return ['claude', ['-p', prompt, '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),

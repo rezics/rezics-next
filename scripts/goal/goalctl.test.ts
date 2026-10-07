@@ -575,6 +575,14 @@ describe('goalctl runtime policy', () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
+  test('a prompt that starts like an option stays a prompt (brief frontmatter)', () => {
+    for (const resume of [false, true]) {
+      const [, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt: '---\nid: G-041\n---', engine: 'codex', resume });
+      expect(args.at(-2)).toBe('--');
+      expect(args.at(-1)).toBe('---\nid: G-041\n---');
+    }
+  });
+
   test('pins the Opus model, effort and bypass permission mode without inbound session messages', () => {
     const [program, args] = launchCommand({ id: 'G-040', effort: 'medium', session: 's', prompt: 'p', resume: false });
     expect(program).toBe('claude');
@@ -2711,7 +2719,7 @@ describe('Goal mail CLI', () => {
         expect(args).toContain(engine === 'luna' ? 'gpt-6-luna' : 'gpt-6.1-sol');
         expect(args).toContain('model_reasoning_effort=high');
         expect(args).toContain('service_tier="default"');
-        expect(args.slice(-3)).toEqual(['-o','/manager/last.md','mail prompt']);
+        expect(args.slice(-4)).toEqual(['-o','/manager/last.md','--','mail prompt']);
       }
     } finally { if (prior === undefined) delete process.env.GOAL_CODEX_SERVICE_TIER; else process.env.GOAL_CODEX_SERVICE_TIER = prior; }
   });
