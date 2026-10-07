@@ -90,16 +90,17 @@ tasks:
     cmds:
       - bun scripts/dev/seed/cli.ts {{.CLI_ARGS}}
 
+  # *:typecheck --gib values are measured tsc resident peaks plus 0.25 GiB, rounded up to 0.5 GiB.
   dev:typecheck:
     desc: Type-check the development scripts.
     cmds:
-      - bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 2.5 -- bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
 
   apphost:typecheck:
     desc: Type-check the AppHost and its configuration imports with Node types.
     deps: [aspire:restore]
     cmds:
-      - bun node_modules/typescript/bin/tsc --project apphost/tsconfig.apphost.json
+      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project apphost/tsconfig.apphost.json
 
   aspire:
     desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
@@ -176,7 +177,7 @@ tasks:
     desc: Type-check the web workspace.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 7 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 
   storybook:
     desc: Run Storybook on port 6006 with its MCP endpoint at /mcp.
@@ -221,7 +222,7 @@ tasks:
     desc: Type-check the Accounts workspace.
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 2 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 
   accounts:storybook:
     desc: Run the Accounts Storybook on port 6007.
@@ -281,13 +282,13 @@ tasks:
     desc: Type-check Rezics UI.
     dir: packages/ui
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 1.5 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 
   document:typecheck:
     desc: Type-check the independent document protocol.
     dir: packages/document
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 
   document:gen:
     desc: Generate the standalone Document Core, Text and Blocks JSON Schemas.
@@ -316,8 +317,8 @@ tasks:
   observability:typecheck:
     desc: Type-check the shared telemetry runtime and probes.
     cmds:
-      - bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
-      - bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
 
   observability:aspire-smoke:
     desc: Verify real server spans, structured logs and OTLP authentication against the running backend AppHost.
@@ -435,7 +436,7 @@ tasks:
   dataset:typecheck:
     desc: Type-check the independent local dataset tools.
     cmds:
-      - node_modules/.bin/tsc --noEmit -p scripts/datasets/tsconfig.json
+      - bun scripts/qa/host-admission.ts --gib 2 -- node_modules/.bin/tsc --noEmit -p scripts/datasets/tsconfig.json
 
   dataset:check:
     desc: Check the dataset tools types, lint and formatting without capturing or importing data.
@@ -592,7 +593,7 @@ tasks:
     desc: Type-check Account.
     dir: services/account
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 2.5 -- ../../node_modules/.bin/tsc --noEmit
 
   account:mail-report:
     desc: Report uncertain Account mail and optional-mail suppression counts; never resend.
@@ -603,7 +604,7 @@ tasks:
     desc: Type-check Content.
     dir: services/content
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 2 -- ../../node_modules/.bin/tsc --noEmit
 
   content:test:
     desc: Run Content unit tests.
@@ -630,7 +631,7 @@ tasks:
     desc: Type-check Main.
     dir: services/main
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 4.5 -- ../../node_modules/.bin/tsc --noEmit
 
   main:test:
     desc: Run Main unit tests.
@@ -641,7 +642,7 @@ tasks:
     desc: Type-check the model package.
     dir: packages/model
     cmds:
-      - ../../node_modules/.bin/tsc --noEmit
+      - bun ../../scripts/qa/host-admission.ts --gib 1 -- ../../node_modules/.bin/tsc --noEmit
 
   model:test:
     desc: Run model package tests.

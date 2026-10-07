@@ -53,7 +53,7 @@ wider:
 
 ```sh
 task goal -- test <your test files>        # one QA slot; never --heavy for your own files
-bun node_modules/typescript/bin/tsc --project <owner tsconfig>
+task <workspace>:typecheck                 # waits for host memory on a local Goal run
 node_modules/.bin/oxlint --type-aware <changed directories>
 task ast-grep -- scan <changed files>
 task goal -- test --affected --list        # lists what else your change reaches; do not run it
