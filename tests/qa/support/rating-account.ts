@@ -35,7 +35,7 @@ export async function ratingAccount(apps: Record<string, string>,
       callback?.();
       return Promise.resolve();
     }
-    return endPool(callback);
+    return callback ? endPool(callback) : endPool();
   }) as typeof pool.end;
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
