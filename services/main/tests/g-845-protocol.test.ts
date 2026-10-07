@@ -13,6 +13,7 @@ import { wikiLabel, candidateItems, wikiCandidates, readCandidateNameRecords } f
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { PlatformClosed } from '../src/modules/access/exposure.ts';
 import { wikiRead, type WikiRead } from '../src/modules/wiki/read.ts';
 import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 
@@ -164,10 +165,13 @@ test('G-845: 200 Unicode code points pass; direct and fallback overflow receive 
 test('G-845: Main framework validation preserves passage problems and missing OAuth scope fails before graph reads', async () => {
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async () => { throw new Error('Denied/invalid intake must not query'); };
+  // Wiki intake is platform:wiki-agents. The OAuth scope check runs after that gate opens.
   const deps = { account: { verify: async (_request: Request, scopes: string[]) => {
     expect(scopes).toEqual(['wiki:propose']);
     throw new AccountAssertionDenied('wiki:propose required');
-  } }, environment: { fuseki: graph } } as unknown as MainWorkDependencies;
+  } }, environment: { fuseki: graph }, platformAccess: { require: async (_principal: unknown, exposure: string) => {
+    if (exposure !== 'platform:wiki-agents') throw new PlatformClosed();
+  } } } as unknown as MainWorkDependencies;
   const app = createMainApp(graph, deps);
   const call = (path: string, body: object) => app.handle(new Request(`http://main.local${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));

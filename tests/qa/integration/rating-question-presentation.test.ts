@@ -81,8 +81,12 @@ test('Rating question presentations preserve meaning across locales, permission 
     // designation receipt just to make this fixture the first administrator.
     const designated = (
       await s.accessPool.query<{ id: string; issuer: string; subject: string }>(`
-      SELECT p.id,p.account_issuer AS issuer,p.account_subject AS subject FROM access.platform_administrator a
-      JOIN access.principal p ON p.id=a.principal_id AND p.active WHERE a.singleton`)
+      SELECT p.id,p.account_issuer AS issuer,p.account_subject AS subject
+      FROM access.platform_grant_episode e
+      JOIN access.principal_permission_grant g ON g.id = e.principal_grant_id
+      JOIN access.principal p ON p.id = g.principal_id AND p.active
+      WHERE e.permission = 'platform:grant' AND g.active AND g.valid_until = 'infinity'
+      ORDER BY e.created_at,e.id LIMIT 1`)
     ).rows[0];
     if (designated) {
       owner.principal = { issuer: designated.issuer, subject: designated.subject };

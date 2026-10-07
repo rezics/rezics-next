@@ -8,6 +8,7 @@ import { YAML } from 'bun';
 import { startAccount, freePort, qaEnvironment } from './account-boundary-fixture.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import {
   readExportPlan,
@@ -50,7 +51,12 @@ test('G-724: first administrator is granted once, replay/other configuration is 
   try {
     await migrateContent(contentPool);
     expect(
-      (await accessPool.query('SELECT receipt FROM access.platform_administrator')).rowCount,
+      (
+        await accessPool.query(
+          `SELECT e.receipt FROM access.platform_grant_episode e
+        WHERE e.permission = 'platform:grant'`,
+        )
+      ).rowCount,
     ).toBe(0);
     const administrators = new AccessPlatformAdministrators(accessPool);
     const principalsBefore = (await accessPool.query('SELECT id FROM access.principal')).rowCount;
@@ -69,7 +75,12 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       ).rowCount,
     ).toBe(0);
     expect(
-      (await accessPool.query('SELECT receipt FROM access.platform_administrator')).rowCount,
+      (
+        await accessPool.query(
+          `SELECT e.receipt FROM access.platform_grant_episode e
+        WHERE e.permission = 'platform:grant'`,
+        )
+      ).rowCount,
     ).toBe(0);
     // Account fixture stands in for completed email verification, not Access authority.
     await account.pool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [
@@ -128,6 +139,8 @@ test('G-724: first administrator is granted once, replay/other configuration is 
         environment: env,
         account: verifier,
         access,
+        // Non-public routes stay closed until this owner reads the designated grants.
+        platformAccess: new AccessExposure(accessPool),
         agentProvisioning: new AgentProvisioning(accessPool, env),
         actingContexts: new AccessActingContexts(accessPool, env),
         structureObjects,
@@ -180,14 +193,17 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     expect(ignored).toEqual(replay);
     expect(logs.filter((message) => message.includes('ignored'))).toHaveLength(2);
     const designation = (
-      await accessPool.query<{ receipt: string; account_subject: string; role: string }>(`
-      SELECT a.receipt,p.account_subject,a.role FROM access.platform_administrator a
-      JOIN access.principal p ON p.id = a.principal_id`)
+      await accessPool.query<{ receipt: string; account_subject: string; action: string }>(`
+      SELECT e.receipt,p.account_subject,g.action
+      FROM access.platform_grant_episode e
+      JOIN access.principal_permission_grant g ON g.id = e.principal_grant_id
+      JOIN access.principal p ON p.id = g.principal_id
+      WHERE g.action = 'platform:grant' AND g.active AND g.valid_until = 'infinity'`)
     ).rows;
     expect(designation).toHaveLength(1);
     expect(designation[0]).toMatchObject({
       account_subject: account.operator.id,
-      role: 'platform.administrator',
+      action: 'platform:grant',
     });
     expect(designation[0]!.receipt).toMatch(/^urn:rezics:access-receipt:[0-9a-f]{64}$/);
 
@@ -330,8 +346,12 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       Object.keys(saved.result.zones.find((zone) => zone.id === 'franchise-wiki')!.collections),
     ).toEqual(['franchise', 'characters', 'places', 'events', 'chapters']);
     expect(
-      (await accessPool.query('SELECT count(*)::int AS n FROM access.platform_administrator'))
-        .rows[0]!.n,
+      (
+        await accessPool.query(`SELECT count(*)::int AS n
+      FROM access.principal_permission_grant g
+      JOIN access.platform_grant_episode e ON e.principal_grant_id = g.id
+      WHERE g.action = 'platform:grant' AND g.active AND g.valid_until = 'infinity'`)
+      ).rows[0]!.n,
     ).toBe(1);
     expect((await account.pool.query('SELECT count(*)::int AS n FROM "user"')).rows[0]!.n).toBe(1);
     expect(

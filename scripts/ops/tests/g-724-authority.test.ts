@@ -59,7 +59,9 @@ function fixture() {
   const client = {
     query: async (query: string, values: unknown[]) => {
       if (query.includes('FROM access.policy')) return { rows: [], rowCount: state.policy ? 1 : 0 };
-      if (query.includes('FROM access.agent_provision'))
+      // Definition edits use the steward controller proof, which joins the
+      // provision from the authority subject rather than reading it first.
+      if (query.includes('access.agent_provision'))
         return {
           rows: state.active ? [{ ...proof, representation_generation: state.generation }] : [],
         };

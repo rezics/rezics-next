@@ -17,9 +17,9 @@ test('G571: HTTP image evidence, independent labels and protected occurrence con
   const staff=await s.member('image-administrator');
   for (const action of ['media.inference','media.labels','media.conceal']) await owner.grant(`media:owner:${owner.actor}`,action);
   await staff.grant('agent:controller','agent.control');
-  await s.accessPool.query(`INSERT INTO access.platform_administrator(principal_id,role,receipt,request_digest,idempotency_key)
-    VALUES ($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
-    [staff.principalId,`urn:rezics:access-receipt:${sha(staff.actor)}`,sha(staff.actor)]);
+  await s.accessPool.query('SELECT access.seed_platform_grants($1,$2)', [
+    staff.principalId, `urn:rezics:access-receipt:${sha(staff.actor)}`,
+  ]);
   const work=await s.publicWork(owner.actor);await owner.grant(`content:publish:${work.work}`,'media.use');
   const bytes=png(48,48);const image=await owner.upload(bytes);
   const path=`/v1/media/representations/${image.representation}`;

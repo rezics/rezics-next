@@ -40,12 +40,10 @@ export async function referenceDisclosureFixture(
     VALUES ($1::uuid,$2,$1::text,$3,$4,'person','Disclosure member',0,'active',$5,0,$6)`,
     [randomUUID(), principal, '0'.repeat(64), actor, env.lineage.dataEpoch, control],
   );
-  await pool.query(
-    `INSERT INTO access.platform_administrator
-    (principal_id,role,receipt,request_digest,idempotency_key)
-    VALUES ($1,'platform.administrator',$2,$3,'platform-first-administrator-v1')`,
-    [principal, `urn:rezics:access-receipt:${'a'.repeat(64)}`, 'a'.repeat(64)],
-  );
+  await pool.query('SELECT access.seed_platform_grants($1,$2)', [
+    principal,
+    `urn:rezics:access-receipt:${'a'.repeat(64)}`,
+  ]);
   const current: string[] = [],
     revisions: string[] = [],
     receipts: string[] = [];

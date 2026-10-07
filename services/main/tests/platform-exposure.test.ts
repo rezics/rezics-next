@@ -152,7 +152,23 @@ test('every served Main route, including transports, has a reviewed exposure', (
       entry.method !== 'ws' &&
       entry.path !== '/v1/me/platform-access',
   );
-  expect(matrix.filter((entry) => entry.exposure === 'public')).toHaveLength(517);
+  const publicOperations = matrix
+    .filter((entry) => entry.exposure === 'public')
+    .map((entry) => exposureOperationId(entry.method, entry.path));
+  const libraryCopiesAndLoans = [
+    'deleteV1MeLibrary-copiesById',
+    'getV1MeLibrary-loans',
+    'getV1WorksByIdCopies',
+    'patchV1MeLibrary-copiesById',
+    'postV1MeLibrary-copies',
+    'postV1MeLibrary-loans',
+    'postV1MeLibrary-loansByIdExtend',
+    'postV1MeLibrary-loansByIdReturn',
+  ];
+  expect(publicOperations).toHaveLength(525);
+  expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
+    libraryCopiesAndLoans,
+  );
   expect(matrix.filter((entry) => entry.exposure !== 'public')).toHaveLength(247);
   expect(entries.filter((entry) => entry.method === 'ws')).toHaveLength(3);
   const sdk = exposureSdkSource(app.routes);
