@@ -67,7 +67,6 @@ const privateReads = [
   '/v1/contributions/{contribution}/drafts/{revision}',
   '/v1/main-versions/{mainVersion}/revisions/{revision}',
   '/v1/revisions/{revision}',
-  '/v1/content-revisions/{revision}',
   '/v1/content-revisions/{revision}/comments',
   '/v1/content-comments/{comment}',
   '/v1/access/group-scope', '/v1/access/group-impact-proposals/{proposalId}',
@@ -139,7 +138,7 @@ interface Operation {
   'x-rezics-exposure'?: Exposure;
   'x-rezics-capability'?: import('../../services/main/src/modules/mcp/capabilities.ts').Capability;
   parameters?: unknown[];
-  security?: { bearerAuth: never[] }[];
+  security?: (Record<string, never> | { bearerAuth: never[] })[];
   responses?: Record<string, { description?: string; content?: Record<string, unknown> }>;
 }
 interface Document {
@@ -275,7 +274,7 @@ export async function buildMainOpenApi(): Promise<string> {
   const routeDirectory = join(import.meta.dir, '../../services/main/src/routes');
   for (const file of [...new Bun.Glob('*.ts').scanSync({ cwd: routeDirectory })].sort()) {
     const module = await import(join(routeDirectory, file)) as { openApiOperations?: Record<string,
-      Record<string, { bearer?: boolean; idempotencyKey?: boolean; exposure: Exposure }>>; capabilities?: CapabilityDeclarations };
+      Record<string, { bearer?: boolean | 'optional'; idempotencyKey?: boolean; exposure: Exposure }>>; capabilities?: CapabilityDeclarations };
     for (const [path, methods] of Object.entries(module.openApiOperations ?? {})) {
       for (const [method, declared] of Object.entries(methods)) {
         const operation = document.paths?.[path]?.[method as 'get'];
@@ -287,7 +286,11 @@ export async function buildMainOpenApi(): Promise<string> {
         operation['x-rezics-exposure'] = declared.exposure;
         if (declared.exposure !== 'public') operation.responses = { ...operation.responses,
           '403': platformClosedResponse(operation.responses?.['403']) };
-        if (declared.bearer || declared.exposure !== 'public') operation.security = [{ bearerAuth: [] }];
+        if (declared.exposure !== 'public' || declared.bearer === true) {
+          operation.security = [{ bearerAuth: [] }];
+        } else if (declared.bearer === 'optional') {
+          operation.security = [{}, { bearerAuth: [] }];
+        }
         if (declared.idempotencyKey) operation.parameters = [...(operation.parameters ?? []), {
           name: 'Idempotency-Key', in: 'header', required: true,
           schema: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9:_./-]{1,128}$' },

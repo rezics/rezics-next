@@ -18,7 +18,7 @@ export interface ExposureSummary {
 export interface ExposureDeclaration {
   exposure: Exposure;
   rateLimitFamily?: RateLimitFamily | 'read';
-  bearer?: boolean;
+  bearer?: boolean | 'optional';
   idempotencyKey?: boolean;
 }
 export type ExposureDeclarations = Record<string, Record<string, ExposureDeclaration>>;

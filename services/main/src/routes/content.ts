@@ -429,7 +429,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
 }
 
 export const openApiOperations = {
-  '/v1/content-revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/content-revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: 'optional' } },
   '/v1/content-edits': { post: { exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/content-search-eligibility': { post: { exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/content-publications': { post: { exposure: 'public', rateLimitFamily: 'write' } },

@@ -276,8 +276,8 @@ describe('Main typed route contracts', () => {
     const spec = JSON.parse(readFileSync(resolve(import.meta.dir,
       '../../../generated/openapi/main/public.json'), 'utf8')) as {
       paths: Record<string, Record<string, { responses: Record<string,
-        { content: Record<string, { schema: unknown }> }>; security?: unknown;
-        parameters?: { name: string; in: string }[] }>>;
+        { content: Record<string, { schema: unknown }> }>; security?: Record<string, unknown>[];
+        parameters?: { name: string; in: string; required?: boolean }[] }>>;
       components: { securitySchemes: Record<string, unknown> };
     };
     // New owner profiles add paths; verify the retained contract below without freezing their count.
@@ -327,14 +327,33 @@ describe('Main typed route contracts', () => {
       && parameter.in === 'header')).toBe(true);
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/queries/page']!.post!.security).toBeUndefined();
-    expect(spec.paths['/v1/content-revisions/{revision}']!.get!.security)
-      .toEqual([{ bearerAuth: [] }]);
+    const exactContentRevision = spec.paths['/v1/content-revisions/{revision}']!.get!;
+    expect(exactContentRevision.security).toEqual([{}, { bearerAuth: [] }]);
+    expect(exactContentRevision.parameters?.find(parameter => parameter.name === 'actingSubject'
+      && parameter.in === 'query')?.required).toBe(false);
     expect(spec.paths['/v1/content-revisions/{revision}/comments']!.get!.security)
+      .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/revisions/{revision}']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
     expect(spec.paths['/v1/content-comments/{comment}']!.get!.security)
       .toEqual([{ bearerAuth: [] }]);
     expect(spec.paths['/v1/content-comments']!.post!.security)
       .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/content-publications']!.post!.security)
+      .toEqual([{ bearerAuth: [] }]);
+    expect(spec.paths['/v1/collections/{id}']!.get!.security).toBeUndefined();
+    expect(spec.paths['/v1/main-versions/{mainVersion}/native-variants']!.get!.security)
+      .toBeUndefined();
+    expect(spec.paths['/v1/access/org-realm-participation']!.get!.security)
+      .toEqual([{ bearerAuth: [] }]);
+    const contentOptionalBearerOperations = Object.entries(spec.paths)
+      .filter(([path]) => path.startsWith('/v1/content-'))
+      .flatMap(([path, methods]) =>
+      Object.entries(methods).flatMap(([method, operation]) =>
+        operation.security?.some(requirement => Object.keys(requirement).length === 0)
+          && operation.security?.some(requirement => 'bearerAuth' in requirement)
+          ? [`${method.toUpperCase()} ${path}`] : []));
+    expect(contentOptionalBearerOperations).toEqual(['GET /v1/content-revisions/{revision}']);
     const draft = spec.paths['/v1/content-drafts']!.post!;
     expect(draft.security).toEqual([{ bearerAuth: [] }]);
     expect(draft.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
