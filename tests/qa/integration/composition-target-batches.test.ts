@@ -334,6 +334,8 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
       expect(page.occurrences.map(item => item.target)).toEqual(expected.filter(target => target !== raceTarget.work));
       expect(JSON.stringify(page)).not.toContain(raceTarget.work);
     } finally { DisclosureStore.prototype.read = originalDisclosure; }
+    await Bun.write(resolve('.temp', 'goal', `composition-target-batch-costs-${Bun.env.REZICS_QA_RUN_ID}.json`),
+      JSON.stringify({ runId: Bun.env.REZICS_QA_RUN_ID, costs: evidence }, null, 2));
     console.log('Composition target batch costs', JSON.stringify(evidence));
   } finally {
     globalThis.fetch = originalFetch;
