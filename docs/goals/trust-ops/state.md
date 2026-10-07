@@ -473,3 +473,13 @@ build: fixed300s is shorter than retained497/656.479native evidence. Program
 SonnetG1404 owns the sole image-budget/private-diagnostic repair; unusedduplicate
 G1405brief was removed without dispatch. No data-prep/restore budgets change.
 CLI argv16c7ba4bf is landed; plain-text workaround is no longer required.
+
+G-1343 first corrected merge gate is inconclusive: Main types passed and121of162
+unit/guard files passed, while the41-file native-readiness shard hit720023ms.
+Nothing merged and no check was skipped. Original evidence is retained. After
+Kernel's concurrent full image prebuild ended, a single same-budget retry runs
+in tmuxgoal-trust-ops:g1343-gate-retry; logg1343-corrected-merge-retry-2203.log,
+terminal codeg1343-corrected-merge-retry-2203.exit under.temp/trust-ops. Do not
+restart it on observation timeout or mutateG-1343 while it is live. Kernel's full
+package failed1090.4s/346tests with2failures+3errors in two known fixture/config
+classes, so no new image/activation is accepted. Priorcb244/native25ce healthy.
