@@ -8,29 +8,39 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 16:42 UTC. Kernel's required native recovery refresh
+Checkpoint 2026-10-07 17:31 UTC. Kernel's required native recovery refresh
 completed at `c9b53e93dbbc`, image `906d1f549ffc`, unchanged model `ab6d394`.
 All six shared applications are healthy; retained volumes, membership and
 catalogue are current. The Main code hold is released and Trust has no queued
 refresh. G-1330's mixed retained repair/cutover is active; positive restore
 release and the remaining Claim/source-projection unions are unqualified.
 
-G-1343 borrowed reconciliation/release component `b642d98fa` passed independent
-review, twelve real integration cases, forty-seven owner cases and a102.1second
-populated original-proof restore. Its exact source/hash contract is frozen for
-kernel composition. This does not qualify held HTTP mutation, stopped-source
-operator release or erasure of private historical command payloads. G-1343 now
-adopts the explicit retained-native-event proof reader. G-1351 now composes
-actual operator release using corrected current native metadata restoration,
-paired borrowed Access/relay clients and pure relay coverage scans. The narrow
-kernel loan is approved; caller transaction lifecycle and allocator locks stay
-owned by the outer restore.
+G-1343 borrowed reconciliation and retained-native-event component landed at
+`f83b0b599b06`. Forty-seven owner cases, fifty-five actual integration cases and
+a167.7second single-cut restore with152assertions passed. The source reader
+uses real retained native events, distinct diagnostic/Main positions and the
+caller's transactions. The merge gate passed after narrowly registering this
+offline recovery-fence writer in the existing maintenance allowance; no guard
+or runtime fence was bypassed. G-1351 uses the exact reviewed source for actual
+operator release. Retry after committed graph release but failed Access release
+still needs a real full-helper proof; existing unit coverage uses a callback.
+Private historical command payload erasure remains a separate open contract.
 
-The compatible small fixture `fx-small-95570bd9906b`, built in70.8seconds at
-`683697792`, remains intact. Its real campaign run `20261007t131339-9d4d64`
-failed sampled disk-evidence validation after107seconds. G-1344 owns the strict
-measurement correction and actual held HTTP qualification; no100k compaction,
-peak-space, backup or populated600second restore completion is claimed.
+The compatible small fixture `fx-small-95570bd9906b` remains frozen at application
+`683697792`. Repaired campaign run `20261007t172124-39499f` passed in237.9seconds:
+two restored copies, native compaction/indexing, activation, rollback and explicit
+old graph/Lucene fileset retirement. Evidence records sampled disk peaks as lower
+bounds; it does not qualify the current medium100k workload, all historical roots,
+media/backups destruction or the final populated600second restore. The run used
+current scheduling and the committed measurement repair with older runtime pins.
+G-1344 attempt7 checks the current repository image and builds a compatible
+medium baseline; manager-exclusive qualification remains required.
+
+Program has enrolled the manager in the supervised coordinator for native session
+`01a114cb-4d63-7f23-bf70-1610b4db2b2b`. The coordinator waits for the interactive
+owner to exit, then resumes this session on mail/task exits. Live workers and QA
+processes continue. Read durable Goal mail, act and acknowledge; when enrolled,
+end an idle turn instead of restarting the foreground event loop.
 
 Original legacy model custody remains accepted: fifteen generations/1976
 artifacts backfilled in9seconds and fifteen generations/1961shapes independently
@@ -76,7 +86,7 @@ above for the inherited verification gaps.
 | G-1321 | Closed/verified `793d7b2e813e`: immediate session-only generation fence, bounded fair cleanup, same transaction adapter client; real max1 signup/sign-in and 21 integration tests/1329 assertions. Pinned manager integration `20261007t094427-7d5212` passed; Account1750/1751 refreshed. Offline third-party consent remains independent. |
 | G-1333 | Closed/verified `3b12289689e1` after launch accepted its listener ownership fix. Plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. |
 | G-1342 | Closed/verified `98e679a8edc0`: two lent projection faults use the existing safe logger. |
-| G-1343 | Reviewed borrowed helpers `b642d98fa` frozen for kernel composition; twelve actual integration/forty-seven owner cases and102.1s proof restore pass. Attempt5 adopts exact retained-native-event source and corruption/current-evidence tests. Full release/private-root retirement remain open. |
+| G-1343 | Component landed `f83b0b599b06`: borrowed clients, exact historical roots and retained native-event proof. 47owner/55integration/152restore assertions pass; merge gate green after explicit maintenance-writer registration. Keep task open for any helper change needed by actual partial-release retry and the separate private-custody erasure contract. |
 | G-1344 | Held caller and measurement repair landed `dda9c5361193`; all160 affected unit/guard files pass. Actual native HTTP proof passed53.6s/136assertions; measurement3cases/40assertions pass. Attempt7 checks the current repository image and prepares a compatible medium baseline. Real campaign/time/peak qualification remains open. |
 | G-1351 | Safe seam/lock order landed. Actual composition `152d95e17` has78 focused passes; old metadata default-alias defect blocked native proof and is fixed upstream. Attempt5 composes paired borrowed clients/pure scans and actual retained-source proof before both releases. |
 | G-1353 | Closed/verified. Queue `85a01f3c`, exact reply `d9ad2ba574cb` and fixture `fe7fb82d4922` landed. Actual report/notice and governance integration passed; affected units and guards green. |
