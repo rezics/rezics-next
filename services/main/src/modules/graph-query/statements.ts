@@ -1,7 +1,7 @@
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-readiness.ts';
+import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-limits.ts';
 import { GraphQueryContinuationStale, GraphQueryNotFound, GraphQueryUnavailable,
   withGraphReadBudget, type GraphReadAuthority } from './query.ts';
 import { checkedStatementGraphQuery, GRAPH_QUERY_COST, GRAPH_QUERY_LIMITS,

@@ -1,3 +1,6 @@
+// First import: the limits must be initialized before the imports below can
+// cycle back through classification and read them.
+import './search-limits.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   TEXT_INDEX_PROFILE, TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_TITLE,
   TEXT_INDEX_PROBE_GRAPH, textIndexProbePattern, type GraphLineage } from './activate.ts';
@@ -7,11 +10,8 @@ import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget,
   type FusekiClient, type SearchDeltaProof, type SparqlResult } from '../../infrastructure/fuseki.ts';
 
-// Kept for old fixture guards; this is no longer a population admission limit.
-export const MAX_PUBLIC_UNITS = 20_000;
-export const MAX_PHRASE_CANDIDATES = 512;
-export const PHRASE_HIT_PROBE = MAX_PHRASE_CANDIDATES + 1;
-export const MAX_SEARCH_RESPONSE_BYTES = 1_048_576;
+// MAX_PUBLIC_UNITS is kept for old fixture guards; it is no longer a population admission limit.
+export { MAX_PUBLIC_UNITS, MAX_PHRASE_CANDIDATES, PHRASE_HIT_PROBE, MAX_SEARCH_RESPONSE_BYTES } from './search-limits.ts';
 const MAX_PROOF_RESPONSE_BYTES = 65_536;
 
 export class SearchIndexUnavailable extends Error {}

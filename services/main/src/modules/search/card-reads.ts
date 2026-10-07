@@ -1,7 +1,7 @@
 import type { FusekiClient, SparqlResult } from '../../infrastructure/fuseki.ts';
 import { FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-readiness.ts';
+import { MAX_SEARCH_RESPONSE_BYTES } from '../work/search-limits.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { knownSearchPosition, searchGraphSnapshot } from './snapshot-state.ts';
 
