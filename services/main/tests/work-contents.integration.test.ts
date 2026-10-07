@@ -84,6 +84,7 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect(stack.fuseki.queries - beforePage).toBeLessThanOrEqual(64);
     expect(first).toMatchObject({ version: book.mainVersion, compositionRevision: changed.revision,
       items: [{ occurrence: changed.occurrences[0], availability: 'available', target: chapterTarget.work }] });
+    await stack.privateWork(a.actor, 'Unrelated contents cursor growth');
     const second = await json<{ items: Array<{ availability: string; target: string | null }>;
       nextCursor: string }>(await get(`${root}?limit=1&cursor=${first.nextCursor}`));
     expect(second.items).toMatchObject([{ availability: 'available', target: chapterTarget.work }]);
@@ -121,7 +122,10 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect(secondChapter.next).toBeNull();
     expect(secondChapter.ordinal).toBe(2);
     expect(secondChapter.label.value).toBe('Chapter two');
-    let baselineActive = true;
+    let privateReadActive = true;
+    // Progress reads also disclose the placed Work's own summary. Public
+    // Content eligibility alone does not publish that Work's Main selection.
+    await b.grant(`work:read:${chapterTarget.work}`, 'work.read');
     const progressApp = createMainApp(stack.fuseki, { environment: stack.env,
       account: { verify: async request => {
         const token = request.headers.get('authorization')?.slice(7);
@@ -130,9 +134,10 @@ test('Reader: public and private composition pages, current Content, cursor and 
         throw new Error('unknown bearer');
       } },
       access: { assertRecoveryOpen: stack.access.assertRecoveryOpen.bind(stack.access),
-        canReadWork: stack.access.canReadWork.bind(stack.access),
+        canReadWork: async (principal: VerifiedPrincipal, actor: string, target: string) => privateReadActive
+          && stack.access.canReadWork(principal, actor, target),
         activePrincipalId: stack.access.activePrincipalId.bind(stack.access),
-        canReadAsBaselineMember: async (principal: VerifiedPrincipal, actor: string) => baselineActive
+        canReadAsBaselineMember: async (principal: VerifiedPrincipal, actor: string) => privateReadActive
           && principal.subject === b.principal.subject && actor === b.actor } as never,
       progress: new StructureProgressStore(stack.contentPool) });
     const progressPath = `/v1/compositions/${short(made.structure)}/occurrences/${short(changed.occurrences[0]!)}/progress`;
@@ -148,9 +153,9 @@ test('Reader: public and private composition pages, current Content, cursor and 
       b.token, b.actor, { actingSubject: b.actor, selectedRevision: chapter.selectedRevision,
         expectedVersion: 0, completed: true, position: null }));
     expect(savedProgress).toMatchObject({ completed: true, version: 1 });
-    baselineActive = false;
+    privateReadActive = false;
     expect((await progressCall('GET', b.token, b.actor)).status).toBe(404);
-    baselineActive = true;
+    privateReadActive = true;
     expect((await progressCall('GET', b.token, a.actor)).status).toBe(404);
     expect((await get(`${chapterPath}?language=ja`)).status).toBe(404);
     expect((await get(`${chapterPath}?revision=${encodeURIComponent(made.revision)}`)).status).toBe(409);

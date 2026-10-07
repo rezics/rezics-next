@@ -1,7 +1,9 @@
 import { CompositionCorrupt, CompositionUnavailable, compositionForMainVersion,
-  readCompositionHeader } from '../structure/graph.ts';
-import { readCompositionPage, type CompositionPage } from '../structure/read.ts';
-import { divisionOf as divisionFromIri } from '../structure/book-group.ts';
+  readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
+import { readCompositionPage, readCompositionSnapshot, type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
+import { orderTree, structureObjects } from '../structure/change.ts';
+import { seekChapter } from '../structure/reading-order.ts';
+import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
 import type { OccurrenceRecord } from '../structure/format.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
@@ -9,7 +11,7 @@ import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { readWorkBasis, fenceWorkBasis } from '../work/read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadExpired, WorkReadInvalid,
   unerased, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
-  type WorkReadSession } from '../work/read-session.ts';
+  readDependencyToken, type WorkReadSession } from '../work/read-session.ts';
 import { WORK_CONTENTS_COST } from './read-contract.ts';
 
 const contentPrefix = 'urn:rezics:content:revision:';
@@ -24,7 +26,7 @@ const missingTitle = (label: { value: string; language: string } | null) =>
 /** Legacy imports put a chapter heading in the body but saved a placeholder label. */
 export function firstChapterHeading(body: Record<string, unknown>): string | null {
   if (typeof body.body !== 'string') return null;
-  for (const line of body.body.split(/\r?\n/u).slice(0, 12)) {
+  for (const line of body.body.split(/\r?\n/u, 12)) {
     const text = line.trim();
     if (!text) continue;
     const heading = /^(?:#{1,6}\s+(.+)|((?:第[一二三四五六七八九十百千万零〇两0-9]+[章节回卷部]|Chapter\s+[0-9IVXLCDM]+\b).*))$/iu.exec(text);
@@ -134,31 +136,44 @@ const recordDivision = (record: Pick<OccurrenceRecord, 'role' | 'qualifier'>): D
   record.role !== 'group' ? null : record.qualifier?.type === 'book-group' ? record.qualifier.division : 'part';
 const position = (segment: string, key: string) => `${segment}\u0001${key}`;
 
-/**
- * The Book's top-level groups in reading order, with their divisions and
- * chapter counts (from their order segments' member counts): enough to number
- * volumes and chapters without reading any chapter. One bounded query; a Book
- * with more groups than the budget gets no numbers.
- */
-async function topGroups(session: WorkReadSession, header: { structure: string; generation: string }) {
-  const rows = await session.query(`SELECT ?occurrence ?segment ?key ?division (SUM(?members) AS ?chapters) WHERE {
-    GRAPH ${iri(GRAPHS.current)} {
-      ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
-        rv:occurrence ?occurrence ; rv:occurrenceRole rv:GroupRole ;
-        rv:orderSegment ?part ; rv:orderKey ?key .
-      ?part rv:parent ${iri(header.structure)} ; rv:segmentKey ?segment .
-      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-      OPTIONAL { ?placement rv:qualifier ?qualifier . ?qualifier a rv:BookGroup ; rv:bookDivision ?division . }
-      OPTIONAL { ?children a rv:OrderSegment ; rv:generation ${iri(header.generation)} ;
-        rv:parent ?occurrence ; rv:memberCount ?members . }
-    } } GROUP BY ?occurrence ?segment ?key ?division LIMIT ${WORK_CONTENTS_COST.topGroups + 1}`,
-  WORK_CONTENTS_COST.topGroups + 1);
-  if (rows.length > WORK_CONTENTS_COST.topGroups) return null;
-  return rows.map(row => ({ occurrence: row.occurrence!.value,
-    position: position(row.segment!.value, row.key!.value),
-    division: divisionFromIri(row.division?.value) ?? 'part' as Division,
-    chapters: Number(row.chapters?.value ?? 0) }))
-    .sort((a, b) => a.position < b.position ? -1 : 1);
+/** One selected root, with request-local immutable page custody and a local head fence. */
+async function neighbourhood(session: WorkReadSession, header: CompositionHeader) {
+  session.checkDeadline();
+  session.observeDependency(`composition:${header.structure}`, header,
+    () => readCompositionHeader(session.deps.environment, header.structure));
+  const cache = new ReadingOrderIndex(session, structureObjects(session.deps.environment));
+  const snapshot = await readCompositionSnapshot(session.deps.environment, {
+    structure: header.structure, header, objects: cache.objects });
+  if (snapshot.sourcePosition.dataEpoch !== session.position.dataEpoch) {
+    throw new WorkReadMoved('Composition belongs to another data epoch');
+  }
+  return snapshot;
+}
+
+/** Numbering admits a bounded top-level placement neighbourhood. Counts reject
+ * an oversized root before its records are hydrated; child totals use subtree
+ * counts, so a small outline can number thousands of chapters exactly. */
+async function topGroups(session: WorkReadSession, header: CompositionHeader, selected?: CompositionSnapshot) {
+  const snapshot = selected ?? await neighbourhood(session, header);
+  const tree = orderTree(snapshot.objects);
+  const count = await tree.countBefore(snapshot.manifest.order, `${header.structure}\u0002`, snapshot.cost)
+    - await tree.countBefore(snapshot.manifest.order, `${header.structure}\u0001`, snapshot.cost);
+  if (count > WORK_CONTENTS_COST.numberingPlacements) return null;
+  const groups: Array<{ occurrence: string; position: string; division: Division; chapters: number }> = [];
+  let after: string | undefined;
+  do {
+    session.checkDeadline();
+    const page = await readCompositionPage(session.deps.environment, { structure: header.structure,
+      header, snapshot, limit: 100, ...(after ? { after } : {}), outline: true,
+      canReadTarget: async () => true });
+    for (const record of page.occurrences) {
+      if (record.role !== 'group') continue;
+      groups.push({ occurrence: record.occurrence, position: position(record.segmentKey!, record.orderKey!),
+        division: recordDivision(record)!, chapters: page.childCounts![record.occurrence]! });
+    }
+    after = page.next ?? undefined;
+  } while (after);
+  return groups;
 }
 type TopGroups = NonNullable<Awaited<ReturnType<typeof topGroups>>>;
 
@@ -195,9 +210,10 @@ function chapterNumber(groups: TopGroups | null, structure: string, record: Occu
 }
 
 /** The story number of an exact chapter read elsewhere (a feed card), at one bounded query. */
-export async function chapterStoryNumber(session: WorkReadSession, header: { structure: string; generation: string },
-  record: OccurrenceRecord, context: NonNullable<CompositionPage['occurrenceContext']>): Promise<number | null> {
-  return chapterNumber(await topGroups(session, header), header.structure, record, context);
+export async function chapterStoryNumber(session: WorkReadSession, header: CompositionHeader,
+  record: OccurrenceRecord, context: NonNullable<CompositionPage['occurrenceContext']>,
+  snapshot?: CompositionSnapshot): Promise<number | null> {
+  return chapterNumber(await topGroups(session, header, snapshot), header.structure, record, context);
 }
 
 function contentLanguage(requested: string | undefined, selected: string | null): string {
@@ -209,21 +225,25 @@ function contentLanguage(requested: string | undefined, selected: string | null)
 export async function readContents(session: WorkReadSession, work: string,
   options: { version?: string; language?: string; parent?: string }) {
   try {
+    session.options.localBasis = true;
     const { basis, header } = await composition(session, work, options.version);
+    const snapshot = await neighbourhood(session, header);
+    const cursorPosition = { ...session.position, dependencyToken: readDependencyToken([
+      basis.dependencyToken, header.head, header.generation, header.manifest]) };
     const language = options.language ? contentLanguage(options.language, null)
       : basis.selectedLanguage?.toLowerCase() ?? null;
     const parent = options.parent ?? header.structure;
     const binding = ['contents', work, header.component, parent, language,
       session.options.actingSubject ?? null];
-    const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+    const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
     if (cursor && cursor.order !== header.head) throw new WorkReadMoved('Composition changed');
     const page = await readCompositionPage(session.deps.environment, {
-      structure: header.structure, header, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
+      structure: header.structure, header, snapshot, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
       ...(cursor ? { after: cursor.after } : {}), outline: true,
       canReadTarget: target => canReadTarget(session, target),
     });
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
-    const groups = await topGroups(session, header);
+    const groups = await topGroups(session, header, snapshot);
     const group = parent === header.structure ? null : groups?.find(item => item.occurrence === parent);
     const numbered = new Map<string, number | null>();
     for (const [index, record] of page.occurrences.entries()) {
@@ -271,52 +291,36 @@ export async function readContents(session: WorkReadSession, work: string,
     return { profile: 'work-contents-v1' as const, work, version: header.component,
       composition: header.structure, compositionRevision: header.head, language,
       ...pageResult(session, visibleItems, page.next
-        ? encodeReadCursor(binding, session.position, page.next, header.head) : null) };
+        ? encodeReadCursor(binding, cursorPosition, page.next, header.head) : null) };
   } catch (error) { structureError(error); }
 }
 
-/**
- * A chapter's place in reading order across the whole Book: a top-level
- * chapter's own position, or its group's position followed by its own, so a
- * volume's chapters sort where the volume stands. A Book nests one group level.
- */
-const readingPosition = (row: { segment: string; key: string; groupSegment?: string; groupKey?: string },
-  occurrence: string) => row.groupSegment !== undefined && row.groupKey !== undefined
-  ? `${row.groupSegment}\u0001${row.groupKey}\u0003${row.segment}\u0001${row.key}\u0002${occurrence}`
-  : `${row.segment}\u0001${row.key}\u0002${occurrence}`;
-const readingPositionSparql = `IF(BOUND(?groupKey),
-  CONCAT(STR(?groupSegment), "\\u0001", STR(?groupKey), "\\u0003", STR(?segment), "\\u0001", STR(?key),
-    "\\u0002", STR(?occurrence)),
-  CONCAT(STR(?segment), "\\u0001", STR(?key), "\\u0002", STR(?occurrence)))`;
-/** The group placement, when a chapter's parent is a group of the same generation. */
-const groupPosition = (generation: string) => `OPTIONAL {
-    ?groupPlacement a rv:OccurrencePlacement ; rv:generation ${iri(generation)} ; rv:occurrence ?parent ;
-      rv:occurrenceRole rv:GroupRole ; rv:orderSegment ?groupPart ; rv:orderKey ?groupKey .
-    ?groupPart rv:segmentKey ?groupSegment .
-    FILTER NOT EXISTS { ?groupPlacement rv:removedBy ?groupRemoval } }`;
-
-async function neighbor(session: WorkReadSession, header: { structure: string; generation: string },
-  current: string, direction: 'previous' | 'next', language: string): Promise<string | null> {
-  const rows = await session.query(`SELECT ?occurrence ?target ?pinned WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
-      rv:occurrence ?occurrence ; rv:occurrenceRole rv:ChapterRole ;
-      rv:orderSegment ?part ; rv:orderKey ?key ; schema:item ?target .
-    ?part rv:parent ?parent ; rv:segmentKey ?segment .
-    FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-    ${groupPosition(header.generation)}
-    OPTIONAL { ?placement rv:selectionMode rv:FixedRevision ; rv:pinnedRevision ?pinned }
-    BIND(${readingPositionSparql} AS ?position)
-    FILTER(?position ${direction === 'previous' ? '<' : '>'} ${lit(current)})
-  } } ORDER BY ${direction === 'previous' ? 'DESC' : 'ASC'}(?position) LIMIT ${WORK_CONTENTS_COST.navigationCandidates + 1}`,
-  WORK_CONTENTS_COST.navigationCandidates + 1);
-  for (const row of rows.slice(0, WORK_CONTENTS_COST.navigationCandidates)) {
-    if (row.target && await canReadTarget(session, row.target.value)
-      && await selectedContent(session, row.target.value, language, row.pinned?.value ?? null)) {
-      return row.occurrence!.value;
-    }
-  }
-  if (rows.length > WORK_CONTENTS_COST.navigationCandidates) throw new WorkReadLimit('Navigation exceeds its candidate budget');
-  return null;
+async function neighbor(session: WorkReadSession, header: CompositionHeader,
+  snapshot: CompositionSnapshot, current: OccurrenceRecord,
+  direction: 'previous' | 'next', language: string): Promise<string | null> {
+  let candidates = 0;
+  const selected = await seekChapter(session.deps.environment, {
+    structure: header.structure, header, snapshot, from: current, direction,
+    maxSteps: WORK_CONTENTS_COST.navigationSteps, checkDeadline: () => session.checkDeadline(),
+    canReadTarget: async target => {
+      if (++candidates > WORK_CONTENTS_COST.navigationCandidates) {
+        throw new WorkReadLimit('Navigation exceeds its candidate budget');
+      }
+      return canReadTarget(session, target);
+    },
+    accept: async record => {
+      if (!record.target || !record.selection) return false;
+      const publication = await selectedContent(session, record.target, language,
+        record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
+      if (!publication) return false;
+      const decisions = await session.disclosure([
+        { owner: 'graph', resource: record.target, component: 'name', work: header.work },
+        { owner: 'content', resource: record.target, component: 'body', revision: publication.revision, work: header.work },
+      ], 'read');
+      return decisions.every(decision => decision === 'visible');
+    },
+  });
+  return selected?.record.occurrence ?? null;
 }
 
 /** A feed already disclosed the Book. Resolve only its resume link, without
@@ -331,9 +335,10 @@ export async function readChapterContinuation(session: WorkReadSession, work: st
   try {
     const header = await readCompositionHeader(session.deps.environment, structure).catch(structureError);
     if (!header || header.profile !== 'book-composition' || header.work !== work) throw missing();
+    const snapshot = await neighbourhood(session, header);
     language = contentLanguage(language, null);
     const read = async (id: string) => {
-      const page = await readCompositionPage(session.deps.environment, { structure, header,
+      const page = await readCompositionPage(session.deps.environment, { structure, header, snapshot,
         occurrence: id, limit: 1, canReadTarget: target => canReadTarget(session, target) });
       if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
       const record = page.occurrences[0];
@@ -352,21 +357,7 @@ export async function readChapterContinuation(session: WorkReadSession, work: st
     const current = await read(occurrence);
     let next: string | null = occurrence;
     if (completed) {
-      const placed = await session.query(`SELECT ?segment ?key ?groupSegment ?groupKey WHERE {
-        GRAPH ${iri(GRAPHS.current)} {
-          ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
-            rv:occurrence ${iri(occurrence)} ; rv:orderSegment ?part ; rv:orderKey ?key .
-          ?part rv:parent ${iri(current.parent)} ; rv:segmentKey ?segment .
-          FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-          ${groupPosition(header.generation)} } } LIMIT 2`, 2);
-      const key = placed[0];
-      if (placed.length !== 1 || !key?.segment || !key.key
-        || current.parent !== structure && (!key.groupSegment || !key.groupKey)) {
-        throw new WorkReadUnavailable('Chapter order is ambiguous');
-      }
-      next = await neighbor(session, header, readingPosition({ segment: key.segment.value, key: key.key.value,
-        ...(key.groupSegment && key.groupKey ? { groupSegment: key.groupSegment.value,
-          groupKey: key.groupKey.value } : {}) }, occurrence), 'next', language);
+      next = await neighbor(session, header, snapshot, current, 'next', language);
       if (next) await read(next);
     }
     const after = await readCompositionHeader(session.deps.environment, structure).catch(structureError);
@@ -378,6 +369,7 @@ export async function readChapterContinuation(session: WorkReadSession, work: st
 export async function readChapter(session: WorkReadSession, occurrence: string,
   options: { revision?: string; language?: string }) {
   try {
+    session.options.localBasis = true;
     const links = await session.query(`SELECT ?structure WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(occurrence)} rv:structure ?structure . } } LIMIT 2`, 2);
     if (!links.length) throw missing();
@@ -391,7 +383,8 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     // A pinned revision that is no longer the head will not come back on a retry.
     if (options.revision && options.revision !== header.head) throw new WorkReadExpired('Composition revision changed');
     const language = contentLanguage(options.language, basis.selectedLanguage);
-    const page = await readCompositionPage(session.deps.environment, { structure: header.structure, header,
+    const snapshot = await neighbourhood(session, header);
+    const page = await readCompositionPage(session.deps.environment, { structure: header.structure, header, snapshot,
       occurrence, limit: 1, canReadTarget: target => canReadTarget(session, target) });
     const record = page.occurrences[0];
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
@@ -419,25 +412,10 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
       || Buffer.byteLength(exact.serializedJson) > WORK_CONTENTS_COST.bodyBytes) {
       throw new WorkReadLimit('Chapter body exceeds its byte budget');
     }
-    const placed = await session.query(`SELECT ?segment ?key ?groupSegment ?groupKey WHERE {
-      GRAPH ${iri(GRAPHS.current)} {
-        ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
-          rv:occurrence ${iri(occurrence)} ; rv:orderSegment ?part ; rv:orderKey ?key .
-        ?part rv:parent ?parent ; rv:segmentKey ?segment .
-        FILTER(?parent = ${iri(record.parent)})
-        ${groupPosition(header.generation)} } } LIMIT 2`, 2);
-    const key = placed[0];
-    if (placed.length !== 1 || !key?.segment || !key.key
-      || record.parent !== header.structure && (!key.groupSegment || !key.groupKey)) {
-      throw new WorkReadUnavailable('Chapter order is ambiguous');
-    }
-    const reading = readingPosition({ segment: key.segment.value, key: key.key.value,
-      ...(key.groupSegment && key.groupKey ? { groupSegment: key.groupSegment.value,
-        groupKey: key.groupKey.value } : {}) }, occurrence);
-    const previous = await neighbor(session, header, reading, 'previous', language);
-    const next = await neighbor(session, header, reading, 'next', language);
+    const previous = await neighbor(session, header, snapshot, record, 'previous', language);
+    const next = await neighbor(session, header, snapshot, record, 'next', language);
     // "Volume 2 · Chapter 3": volumes count among the Book's volumes, chapters through the Book.
-    const groups = await topGroups(session, header);
+    const groups = await topGroups(session, header, snapshot);
     const number = chapterNumber(groups, header.structure, record, page.occurrenceContext);
     await fenceWorkBasis(session, basis);
     const again = await selectedContent(session, record.target, language,

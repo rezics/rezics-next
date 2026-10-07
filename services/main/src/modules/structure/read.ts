@@ -1,12 +1,12 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
-  type OccurrenceRecord, type RecipeMeasure } from './format.ts';
+  type OccurrenceRecord, type RecipeMeasure, type StructureManifest } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
   readCompositionHeader, type CompositionHeader } from './graph.ts';
 import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
-import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { encodeReadCursor, decodeReadCursor } from '../work/read-session.ts';
 
 export interface CompositionPage {
@@ -33,8 +33,75 @@ export interface CompositionPage {
    * Two order-tree descents each, never a sibling scan.
    */
   offset?: number;
+  /** Total active siblings, including groups, at this exact revision. */
+  siblingCount?: number;
   childCounts?: Record<string, number>;
   parentOrdinal?: number;
+}
+
+/** One exact immutable root and measured local work shared by a neighbourhood read. */
+export interface CompositionSnapshot {
+  header: CompositionHeader;
+  revision: string;
+  predecessor: string | null;
+  manifest: StructureManifest;
+  objects: ImmutableObjects;
+  sourcePosition: CompositionPage['sourcePosition'];
+  cost: TreeCost;
+}
+
+/** Resolve an exact revision once; sibling and ancestor seeks then reuse its roots. */
+export async function readCompositionSnapshot(env: WorkActivationEnvironment, input: {
+  structure: string; header?: CompositionHeader; revision?: string; objects?: ImmutableObjects;
+}): Promise<CompositionSnapshot> {
+  if (!NATIVE_ID.test(input.structure) || input.revision && !NATIVE_ID.test(input.revision)) {
+    throw new CompositionUnavailable('invalid composition revision');
+  }
+  const header = input.header ?? await readCompositionHeader(env, input.structure);
+  if (!header || header.structure !== input.structure) throw new CompositionUnavailable('composition is unavailable');
+  const revision = input.revision ?? header.head;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?count ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(input.structure)} ;
+        rv:manifest ?manifest ; rv:placementCount ?count ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+    }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) throw new CompositionUnavailable('composition revision is unavailable');
+  const row = rows[0]!;
+  const value = (name: string) => row[name]?.value;
+  if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(value('manifest') ?? '')
+    || !/^[0-9]+$/.test(value('count') ?? '') || !/^[0-9]+$/.test(value('sequence') ?? '')
+    || !value('epoch')) throw new CompositionCorrupt('composition revision is ambiguous');
+  if (revision === header.head && (value('manifest') !== header.manifest
+    || Number(value('count')) !== header.placementCount)) {
+    throw new CompositionCorrupt('composition head moved during read');
+  }
+  const objects = input.objects ?? structureObjects(env);
+  let bytes: Uint8Array;
+  try { bytes = await objects.get(value('manifest')!.slice(-64)); }
+  catch (error) {
+    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    throw error;
+  }
+  let manifest;
+  try { manifest = checkStructureManifest(bytes); }
+  catch (error) {
+    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+    throw error;
+  }
+  if (manifest.structure !== input.structure || manifest.structureOf !== header.component
+    || manifest.profile !== header.profile || manifest.placementCount !== Number(value('count'))
+    || manifest.order.count !== manifest.placementCount
+    || revision === header.head && manifest.generation !== header.generation) {
+    throw new StructureObjectCorrupt('composition manifest differs from revision');
+  }
+  const cost = newCost();
+  cost.pagesRead++;
+  return { header, revision, predecessor: value('predecessor') ?? null, manifest, objects,
+    sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! }, cost };
 }
 
 /** The measure set is part of an exact immutable revision, including an empty set. */
@@ -98,11 +165,15 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
 export async function readCompositionPage(env: WorkActivationEnvironment, input: {
   structure: string; revision?: string; parent?: string; occurrence?: string; after?: string; limit: number;
   canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
+  /** Descending sibling order; `after` remains an exclusive continuation anchor. */
+  reverse?: boolean;
   /** One disclosure pass per immutable range, including visible lookahead.
    * The returned set is local to that range, never a cached authorization. */
   canReadTargets?: (targets: readonly string[]) => Promise<ReadonlySet<string>>;
   /** The Structure's header when the caller already read it for this request; saves two queries. */
   header?: CompositionHeader;
+  /** Reuse an exact immutable revision and accumulate its measured tree work. */
+  snapshot?: CompositionSnapshot;
   /** An owner's disclosure projection filters inside the immutable range scan,
    * before lookahead, so sparse pages do not repeat graph/header reads per item. */
   visible?: (record: OccurrenceRecord) => boolean;
@@ -113,48 +184,16 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     || input.parent && !NATIVE_ID.test(input.parent)
     || input.occurrence && !NATIVE_ID.test(input.occurrence) || !Number.isInteger(input.limit)
     || input.limit < 1 || input.limit > 100) throw new CompositionUnavailable('invalid composition page');
-  const header = input.header ?? await readCompositionHeader(env, input.structure);
-  if (!header || header.structure !== input.structure) throw new CompositionUnavailable('composition is unavailable');
+  const snapshot = input.snapshot ?? await readCompositionSnapshot(env, input);
+  const { header, revision, predecessor, objects, manifest, sourcePosition, cost } = snapshot;
+  const headerKeys = ['structure', 'profile', 'owner', 'component', 'mainVersion', 'work',
+    'head', 'generation', 'placementCount', 'manifest'] as const;
+  if (header.structure !== input.structure || manifest.structure !== input.structure
+    || input.revision && input.revision !== revision
+    || input.header && headerKeys.some(key => input.header![key] !== header[key])) {
+    throw new CompositionUnavailable('composition snapshot differs from read');
+  }
   const profile = structureProfileFor(header.profile);
-  const revision = input.revision ?? header.head;
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?count ?epoch ?sequence WHERE {
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(input.structure)} ;
-        rv:manifest ?manifest ; rv:placementCount ?count ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
-    }
-  } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) throw new CompositionUnavailable('composition revision is unavailable');
-  const row = rows[0]!;
-  const value = (name: string) => row[name]?.value;
-  if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(value('manifest') ?? '')
-    || !/^[0-9]+$/.test(value('count') ?? '') || !/^[0-9]+$/.test(value('sequence') ?? '')
-    || !value('epoch')) throw new CompositionCorrupt('composition revision is ambiguous');
-  if (!input.revision && value('manifest') !== header.manifest) {
-    throw new CompositionCorrupt('composition head moved during read');
-  }
-  const objects = structureObjects(env);
-  let bytes: Uint8Array;
-  try { bytes = await objects.get(value('manifest')!.slice(-64)); }
-  catch (error) {
-    if (error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
-    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
-    throw error;
-  }
-  let manifest;
-  try { manifest = checkStructureManifest(bytes); }
-  catch (error) {
-    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
-    throw error;
-  }
-  if (manifest.structure !== input.structure || manifest.structureOf !== header.component
-    || manifest.profile !== header.profile || manifest.placementCount !== Number(value('count'))
-    || !input.revision && manifest.generation !== header.generation) {
-    throw new StructureObjectCorrupt('composition manifest differs from revision');
-  }
-  const cost = newCost();
-  cost.pagesRead++;
   if (input.occurrence) {
     const record = (await recordTree(objects).lookup(manifest.records, [input.occurrence], cost))
       .get(input.occurrence);
@@ -196,11 +235,11 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
     return { structure: input.structure, owner: header.owner, component: header.component,
       work: header.work, mainVersion: header.mainVersion,
-      revision, predecessor: value('predecessor') ?? null,
+      revision, predecessor,
       placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
       ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
       occurrences: !input.visible || input.visible(visible) ? [visible] : [], next: null,
-      sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
+      sourcePosition,
       cost, occurrenceContext };
   }
   const parent = input.parent ?? input.structure;
@@ -213,8 +252,9 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
   }
   const prefix = `${parent}\u0001`;
-  const cursorPosition = { dataEpoch: value('epoch')!, sequence: value('sequence')! };
-  const cursorBinding = { structure: input.structure, revision, parent };
+  const cursorPosition = sourcePosition;
+  const cursorBinding = { structure: input.structure, revision, parent,
+    ...(input.reverse ? { reverse: true } : {}) };
   let after = input.after;
   if (profile.withholdUnreadableTargets) {
     try { after = decodeReadCursor(input.after, cursorBinding, cursorPosition)?.after; }
@@ -234,7 +274,8 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   while (true) {
     input.signal?.throwIfAborted();
     const ordered = await orderTree(objects).range(manifest.order,
-      scanAfter ? `${scanAfter}\u0000` : prefix, `${parent}\u0002`, scanLimit, cost);
+      input.reverse ? prefix : scanAfter ? `${scanAfter}\u0000` : prefix,
+      input.reverse && scanAfter ? scanAfter : `${parent}\u0002`, scanLimit, cost, input.reverse);
     if (!disclosed) { page = ordered.slice(0, input.limit); hasNext = ordered.length > input.limit; }
     const candidates = disclosed ? ordered : ordered.slice(0, input.limit);
     const found = await recordTree(objects).lookup(manifest.records,
@@ -278,7 +319,8 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     occurrences.splice(input.limit);
     page = occurrences as Array<Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>>;
   }
-  let outline: { offset: number; childCounts: Record<string, number>; parentOrdinal?: number } | undefined;
+  let outline: { offset: number; siblingCount: number; childCounts: Record<string, number>;
+    parentOrdinal?: number } | undefined;
   if (input.outline && !profile.withholdUnreadableTargets) {
     const tree = orderTree(objects);
     const childCounts: Record<string, number> = {};
@@ -287,21 +329,22 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       childCounts[record.occurrence] = await tree.countBefore(manifest.order, `${record.occurrence}\u0002`, cost)
         - await tree.countBefore(manifest.order, `${record.occurrence}\u0001`, cost);
     }
-    const offset = page.length ? await tree.countBefore(manifest.order, orderTreeKey(page[0]!), cost)
-      - await tree.countBefore(manifest.order, prefix, cost) : 0;
+    const first = await tree.countBefore(manifest.order, prefix, cost);
+    const siblingCount = await tree.countBefore(manifest.order, `${parent}\u0002`, cost) - first;
+    const offset = page.length ? await tree.countBefore(manifest.order, orderTreeKey(page[0]!), cost) - first : 0;
     const parentOrdinal = parentRecord ? await tree.countBefore(manifest.order, orderTreeKey(parentRecord as
       Required<Pick<OccurrenceRecord, 'parent' | 'segmentKey' | 'orderKey'>>), cost)
       - await tree.countBefore(manifest.order, `${parentRecord.parent}\u0001`, cost) + 1 : undefined;
-    outline = { offset, childCounts, ...(parentOrdinal ? { parentOrdinal } : {}) };
+    outline = { offset, siblingCount, childCounts, ...(parentOrdinal ? { parentOrdinal } : {}) };
   }
   return { structure: input.structure, owner: header.owner, component: header.component,
     work: header.work, mainVersion: header.mainVersion,
-    revision, predecessor: value('predecessor') ?? null,
+    revision, predecessor,
     placementCount: profile.withholdUnreadableTargets ? 0 : manifest.placementCount,
     ...(header.profile === 'work-composition' ? { completion: manifest.completion ?? { status: 'unknown', evidence: [] } } : {}),
     occurrences, next: hasNext ? (profile.withholdUnreadableTargets
       ? encodeReadCursor(cursorBinding, cursorPosition, orderTreeKey(page.at(-1)!))
       : orderTreeKey(page.at(-1)!)) : null,
-    sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! },
+    sourcePosition,
     cost, ...outline };
 }
