@@ -317,7 +317,15 @@ function audienceScene(kind = 'moderation_outcome') {
           )
             return { rows: [] };
           if (
-            sql.includes('INSERT INTO access.notification_') ||
+            [
+              'INSERT INTO access.notification_producer_cursor',
+              'INSERT INTO access.notification_stream',
+              'INSERT INTO access.notification_display_context',
+              'INSERT INTO access.notification_delivery',
+              'INSERT INTO access.notification_proposal_context',
+              'INSERT INTO access.notification_digest_day',
+              'INSERT INTO access.notification_digest_candidate',
+            ].some((statement) => sql.includes(statement)) ||
             sql.includes('UPDATE access.notification_stream') ||
             sql.includes('pg_notify')
           )
