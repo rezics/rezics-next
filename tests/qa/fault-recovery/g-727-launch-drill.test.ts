@@ -27,6 +27,8 @@ import {
   closeRecoveryTestCustody,
   recoveryChecks,
   recoveryTestCustody,
+  retainCurrentRelay,
+  retainedRecoveryAuthority,
 } from './g-727-recovery-checks.ts';
 
 async function task(name: string, args: string[], timeout = 120_000): Promise<void> {
@@ -79,6 +81,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
   const frontier = Bun.env.OPS_RECOVERY_FRONTIER ?? join(custodyDirectory, 'current-frontier.json');
   const key = Bun.env.RECOVERY_MANIFEST_HMAC_KEY ?? randomBytes(32).toString('hex');
   let custody: ReturnType<typeof recoveryTestCustody> | undefined;
+  let retained: Awaited<ReturnType<typeof retainCurrentRelay>> | undefined;
   const pools: Pool[] = [];
   let phase = 'preparation';
   let failure: unknown;
@@ -186,13 +189,21 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
     const backupEvidence = JSON.parse(readFileSync(join(set, 'backup-evidence.json'), 'utf8'));
     expect(backupEvidence.elapsedMs).toBeLessThanOrEqual(600_000);
     phase = 'restore';
+    const offhost = custody?.offhost ?? { ...process.env, GNUPGHOME: retainedOffhost };
+    retained = await retainCurrentRelay(source, join(custodyDirectory, 'retained-relay'));
     const restored = await restoreRecoverySet({
       set,
       project: `rezics-qa-${targetId}`,
       frontier,
       key,
-      checks: recoveryChecks(probes, key),
-      environment: custody?.offhost ?? { ...process.env, GNUPGHOME: retainedOffhost },
+      checks: recoveryChecks(probes, key, {
+        relayPool: retained.relayPool,
+        erasures: {
+          authority: await retainedRecoveryAuthority(set, key, offhost),
+          signingKey: apps.FUSEKI_TITLE_ADMISSION_KEY!,
+        },
+      }),
+      environment: offhost,
     });
     expect(restored.state).toBe('verified');
     expect(restored.elapsedMs).toBeLessThanOrEqual(600_000);
@@ -225,7 +236,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
     failure = new Error(`Launch recovery drill failed during ${phase}`, { cause: error });
     throw failure;
   } finally {
-    await Promise.allSettled(pools.map((pool) => pool.end()));
+    await Promise.allSettled([...pools.map((pool) => pool.end()), retained?.close()]);
     const cleanupErrors: unknown[] = [];
     // Large-volume deletion is outside both 600-second command timers. Keep
     // the active command budgets and preserve a primary verification error.

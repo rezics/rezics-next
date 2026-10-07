@@ -1,9 +1,9 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { exportAccountData } from '../../../services/account/src/data-export.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -19,23 +19,131 @@ import {
 } from '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
+import { settleAccountErasures } from '../../../services/main/src/modules/erasure/account.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { objectStore } from '../../../scripts/ops/backup.ts';
+import type { StackOptions } from '../../../scripts/dev/config.ts';
+import {
+  administratorUrl,
+  fileDigest,
+  openIndex,
+  openManifest,
+  privateStaging,
+  RecoveryBudget,
+  stackContext,
+} from '../../../scripts/ops/recovery-set.ts';
+import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
+import type { RetainedAuthorityCoverage } from '../../../services/main/src/modules/erasure/authority.ts';
 import type { RestoredContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
+import { freePort } from './search-ops-support.ts';
 
 export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuseki'>;
 
 export interface RetainedRecoveryChecks {
-  /** Caller-owned current ledger, available while the original project is stopped. */
+  /** The original source's current relay, still running while the target restores. */
   relayPool: Pool;
-  /** The stopped source is qualified only through its retained native handoff. */
-  erasures: Extract<
-    NonNullable<RestoreResources['erasures']>,
-    {
-      originalSource: 'retained-native-event';
-    }
-  >;
+  /** Kept outside the restored owners: the signed capture and the source's key. */
+  erasures: Pick<NonNullable<RestoreResources['erasures']>, 'authority' | 'signingKey'>;
+}
+
+/** The signed owner capture the backup retained. Its head digest lives in the
+ * source relay, which the release compares before any hold opens. */
+export async function retainedRecoveryAuthority(
+  set: string,
+  key: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<RetainedAuthorityCoverage> {
+  const index = openIndex(readFileSync(join(set, 'set.json'), 'utf8'), key);
+  const staging = privateStaging();
+  try {
+    const manifest = join(staging, 'manifest.json');
+    const result = spawnSync(
+      'gpg',
+      ['--batch', '--no-tty', '--output', manifest, '--decrypt', join(set, 'manifest.json.gpg')],
+      { env: environment, encoding: 'utf8', timeout: 60_000 },
+    );
+    if (result.error || result.status !== 0) throw new Error('Retained authority is unavailable');
+    if ((await fileDigest(manifest)) !== index.manifestDigest)
+      throw new Error('Retained authority differs from the recovery index');
+    return {
+      sealedCoverage: openManifest(readFileSync(manifest, 'utf8'), key).sealedCoverage,
+      hmacKey: key,
+    };
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/** Backup stops the whole source project, so its relay cannot be the current
+ * ledger a successor reconciles against. Dump the stopped source's final relay
+ * once and keep it on a separate PostgreSQL instance that outlives both the
+ * source and the restored target. The copy holds exactly what the source
+ * retained: the coverage head and the deletion and erasure journals. */
+export async function retainCurrentRelay(
+  source: StackOptions,
+  directory: string,
+): Promise<{ relayPool: Pool; close: () => Promise<void> }> {
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const stopped = stackContext(source, new RecoveryBudget());
+  const dump = join(directory, 'relay.dump');
+  stopped.compose(['up', '-d', '--wait', 'postgres']);
+  try {
+    execFileSync(
+      'pg_dump',
+      ['-Fc', '-f', dump, `--dbname=${administratorUrl(stopped.saved, 'relay')}`],
+      { timeout: 60_000 },
+    );
+  } finally {
+    stopped.compose(['stop', 'postgres']);
+  }
+  const data = join(directory, 'retained-relay-pg');
+  const port = await freePort();
+  const stop = () =>
+    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '30', '-w', 'stop'], {
+      timeout: 40_000,
+    });
+  execFileSync('initdb', ['-D', data, '-U', 'postgres', '--auth=trust'], { timeout: 60_000 });
+  execFileSync(
+    'pg_ctl',
+    [
+      '-D',
+      data,
+      '-l',
+      join(directory, 'retained-relay-pg.log'),
+      '-o',
+      `-h 127.0.0.1 -p ${port} -c unix_socket_directories=`,
+      '-t',
+      '60',
+      '-w',
+      'start',
+    ],
+    { timeout: 65_000 },
+  );
+  const url = (database: string) => `postgresql://postgres@127.0.0.1:${port}/${database}`;
+  try {
+    execFileSync('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', 'relay'], {
+      timeout: 30_000,
+    });
+    execFileSync(
+      'pg_restore',
+      ['--exit-on-error', '--no-owner', '--no-privileges', `--dbname=${url('relay')}`, dump],
+      { timeout: 60_000 },
+    );
+  } catch (error) {
+    stop();
+    throw error;
+  }
+  const pool = new Pool({ connectionString: url('relay'), max: 4 });
+  pool.on('error', () => {});
+  return {
+    relayPool: pool,
+    close: async () => {
+      await pool.end();
+      stop();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
 }
 
 /** Ephemeral QA custody uses distinct secret/public keyrings, just like the
@@ -134,6 +242,9 @@ export async function captureRecoveryProbes(
   await mirrorAccountDeletionIntent(access, relay, deletion.principalId, deletion.enforcementEpoch);
   await retainAccountSubjectDeletion(relay, operator.issuer, deleted);
   await account.query('DELETE FROM public."user" WHERE id = $1', [deleted]);
+  // The tombstone trigger journals the erasure as requested; the operator
+  // settles it before capture so the current ledger has no open entry.
+  expect(await settleAccountErasures(relay, access, account, 100, content)).toBeGreaterThan(0);
   const revoked = randomUUID();
   const readScope = `work:read:${sample.work}`;
   await access.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [
@@ -171,10 +282,7 @@ export function recoveryChecks(
     typeof retained?.relayPool?.connect !== 'function' ||
     !retained.erasures?.authority?.sealedCoverage ||
     !retained.erasures.authority.hmacKey ||
-    !retained.erasures.signingKey ||
-    typeof retained.erasures.maintenance?.command !== 'function' ||
-    retained.erasures.originalSource !== 'retained-native-event' ||
-    'originalGraph' in retained.erasures
+    !retained.erasures.signingKey
   ) {
     throw new Error(
       'Recovery checks require independently retained current erasure and authority evidence',
@@ -233,6 +341,11 @@ export function recoveryChecks(
       verifiedBeforeRelease = true;
     },
     reconcile: async (context, body, idempotencyKey) => {
+      // The restored target's own held graph, never the stopped source's.
+      const maintenance = heldErasureMaintenanceClient(
+        context.apps.FUSEKI_URL!,
+        context.apps.FUSEKI_MAINTENANCE_TOKEN!,
+      );
       expect(verifiedBeforeRelease).toBe(true);
       const objects: RestoreResources['objectStore'] = objectStore(
         context.apps,
@@ -268,7 +381,7 @@ export function recoveryChecks(
         hmacKey: key,
         objectStore: objects,
         restoredRelayPool: context.pools.relay,
-        erasures: retained.erasures,
+        erasures: { ...retained.erasures, maintenance, originalSource: 'retained-native-event' },
       });
       const app = createMainApp(context.fuseki, {
         environment: env,

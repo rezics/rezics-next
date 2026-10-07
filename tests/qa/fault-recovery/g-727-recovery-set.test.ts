@@ -25,6 +25,8 @@ import {
   closeRecoveryTestCustody,
   recoveryChecks,
   recoveryTestCustody,
+  retainCurrentRelay,
+  retainedRecoveryAuthority,
 } from './g-727-recovery-checks.ts';
 
 const key = 'd9'.repeat(32);
@@ -50,6 +52,7 @@ test('G-727: encrypted small owner cut replays WAL, retains deletion/revocation,
   const directory = join(root, '.temp', 'ops', `drill-${nonce}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   let custody: ReturnType<typeof recoveryTestCustody> | undefined;
+  let retained: Awaited<ReturnType<typeof retainCurrentRelay>> | undefined;
   const frontier = join(directory, 'current-frontier.json');
   const set = join(directory, 'set');
   const pools: Pool[] = [];
@@ -191,6 +194,33 @@ process.exit(result.exitCode);
     await inFlight;
     expect(backup.phases['postgres-base-and-wal']).toBeGreaterThan(0);
     expect(readFileSync(join(set, 'set.json'), 'utf8')).not.toContain(saved.POSTGRES_PASSWORD!);
+    // The same independently retained evidence backs every restore attempt;
+    // the early refusals below never reach it.
+    retained = await retainCurrentRelay(source, join(directory, 'retained-relay'));
+    const checks = recoveryChecks(
+      probes,
+      key,
+      {
+        relayPool: retained.relayPool,
+        erasures: {
+          authority: await retainedRecoveryAuthority(set, key, offhost),
+          signingKey: apps.FUSEKI_TITLE_ADMISSION_KEY!,
+        },
+      },
+      async (context) => {
+        expect(
+          (
+            await context.pools.account.query(
+              'SELECT name, applied_at FROM public.rezics_local_migration ORDER BY name',
+            )
+          ).rows,
+        ).toEqual(migrationLedger);
+        expect(
+          (await context.pools.access.query('SELECT body FROM access.g727_inflight WHERE id = 1'))
+            .rows[0]?.body,
+        ).toBe('committed before cut');
+      },
+    );
     // Both early refusals happen before any target volume is made.
     await expect(
       restoreRecoverySet({
@@ -198,6 +228,7 @@ process.exit(result.exitCode);
         project: `rezics-qa-${sourceId}`,
         frontier,
         key,
+        checks,
         environment: offhost,
       }),
     ).rejects.toThrow('distinct from the original');
@@ -222,10 +253,11 @@ process.exit(result.exitCode);
         project: `rezics-qa-${restoredId}`,
         frontier: stale,
         key,
+        checks,
         environment: offhost,
       }),
     ).rejects.toThrow('older');
-    // Missing deployment checks never make a staged target serving-ready.
+    // Missing deployment checks refuse the restore before a target exists.
     await expect(
       restoreRecoverySet({
         set,
@@ -235,32 +267,17 @@ process.exit(result.exitCode);
         environment: offhost,
       }),
     ).rejects.toThrow('Restore is held');
-    const heldEvidence = JSON.parse(
-      readFileSync(
-        join(
-          stackDirectory(root, { profile: 'qa', runId: heldId, persistent: true }),
-          'recovery-evidence.json',
-        ),
-        'utf8',
-      ),
-    );
-    expect(heldEvidence.state).toBe('held');
-    // Avoid keeping two JVMs resident: the failed copy above has already stopped.
+    // Refusal precedes any target volume or serving-ready evidence.
+    expect(
+      existsSync(stackDirectory(root, { profile: 'qa', runId: heldId, persistent: true })),
+    ).toBe(false);
     const restored = await restoreRecoverySet({
       set,
       project: `rezics-qa-${restoredId}`,
       frontier,
       key,
       environment: offhost,
-      checks: recoveryChecks(probes, key, async (context) => {
-        expect((await context.pools.account.query(
-          'SELECT name, applied_at FROM public.rezics_local_migration ORDER BY name',
-        )).rows).toEqual(migrationLedger);
-        expect(
-          (await context.pools.access.query('SELECT body FROM access.g727_inflight WHERE id = 1'))
-            .rows[0]?.body,
-        ).toBe('committed before cut');
-      }),
+      checks,
     });
     expect(restored.state).toBe('verified');
     expect(restored.elapsedMs).toBeLessThanOrEqual(600_000);
@@ -276,7 +293,7 @@ process.exit(result.exitCode);
       JSON.stringify({ backup, restored }, null, 2),
     );
   } finally {
-    await Promise.allSettled(pools.map((pool) => pool.end()));
+    await Promise.allSettled([...pools.map((pool) => pool.end()), retained?.close()]);
     for (const runId of [sourceId, heldId, restoredId]) {
       try {
         run('bun', [
