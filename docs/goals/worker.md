@@ -24,6 +24,9 @@ delegate independent parts to sub-agents, do so.
   task ID; comments state reasons, not task IDs.
 - Never push, never touch the main checkout or `.temp/vault/`, never rebase or
   merge `main`: the manager rebases and merges.
+- `/tmp` on this host is RAM: never put checkouts, `node_modules` or bulk data
+  there. Use your worktree's `.temp` (or a short directory on disk when a path
+  must be short).
 
 ## Repository conventions
 
