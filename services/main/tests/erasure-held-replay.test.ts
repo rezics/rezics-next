@@ -488,3 +488,17 @@ test('maintenance-only client sends the maintenance bearer to a refusing endpoin
     globalThis.fetch = saved;
   }
 });
+
+test('known noncommitted native statuses cannot resolve through an old maintenance receipt', async () => {
+  const graph = new ProofGraph(),
+    f = context();
+  graph.proofRows = rows(f.options, true);
+  f.options.maintenance.command = async (envelope) => {
+    f.sent.push(envelope);
+    return { status: 'guard-unmatched' };
+  };
+  await expect(
+    suppressHeldGraphContentRevisions(graph, erasureId, epoch, f.options.revisionIds, f.options),
+  ).rejects.toThrow('proof is unavailable');
+  expect(f.sent).toHaveLength(3);
+});
