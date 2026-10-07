@@ -151,6 +151,7 @@ export const operationExposures = {
   "getV1MeImport-reviews": "public",
   "getV1MeInteraction-mutes": "public",
   "getV1MeLibrary-export": "public",
+  "getV1MeLibrary-importsByIdApply": "public",
   "getV1MeLibrary-importsByIdRows": "public",
   "getV1MeLibrary-loans": "public",
   "getV1MeMain-agent-preference": "public",
