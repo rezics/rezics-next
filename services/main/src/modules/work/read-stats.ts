@@ -18,7 +18,10 @@ import { admittedPublicWorks } from './public-patterns.ts';
  * Two shared disclosure batches, each with one head probe and owner query,
  * bracket those counts; their costs are additional to the target reader.
  */
-export const WORK_STATS_COST = { graphQueries: 1, disclosureBatches: 2, readerProbe: 10_000, reviewProbe: 10_000,
+/** Two graph queries: target summary and the context-acceptance policy read, which
+ * is bounded by its own row limit (policyRows + 1); position and disclosure reads
+ * are counted separately. */
+export const WORK_STATS_COST = { graphQueries: 2, disclosureBatches: 2, readerProbe: 10_000, reviewProbe: 10_000,
   sqlStatements: { readerCounts: 8, reviews: 4 }, sqlStatementMs: 1_000 } as const;
 
 export const statCount = t.Object({ value: t.Integer({ minimum: 0 }),
