@@ -23,6 +23,7 @@ const backendSources = [
 ];
 const commands: string[][] = [
   ['bun', 'scripts/qa/serialization-points.ts'],
+  ['task', 'apphost:typecheck'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/observability/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/observability/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/main/tsconfig.json'],

@@ -365,6 +365,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task dev:refresh` | Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan, -- --wait to queue for heavy QA. |
 | `task dev:seed` | Seed this checkout's local demo through its public APIs. |
 | `task dev:typecheck` | Type-check the development scripts. |
+| `task apphost:typecheck` | Type-check the AppHost and its configuration imports with Node types. |
 | `task aspire` | Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...). |
 | `task aspire:restore` | Generate the TypeScript AppHost SDK for the pinned Aspire version. |
 | `task stack:up` | Start the Compose storage stack and print its endpoints. |
@@ -396,6 +397,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task document:typecheck` | Type-check the independent document protocol. |
 | `task document:gen` | Generate the standalone Document Core, Text and Blocks JSON Schemas. |
 | `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to the program's live-worker cap and STORYBOOK_MAX_WORKERS to 2 when they are unset. |
+| `task goal:unit-files` | Run the explicit Bun unit and inventory files selected by the merge gate. |
 | `task observability:typecheck` | Type-check the shared telemetry runtime and probes. |
 | `task observability:aspire-smoke` | Verify real server spans, structured logs and OTLP authentication against the running backend AppHost. |
 | `task observability:check` | Validate the pinned observability Compose and Collector configurations with disposable local secrets. |

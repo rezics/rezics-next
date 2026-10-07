@@ -7,6 +7,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { repositoryGuards } from '../qa/repository-guards.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
@@ -1557,7 +1558,8 @@ export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>
   return before;
 }
 
-/** Select only backend unit files from the public affected plan; whole-unit widening uses its registered defaults. */
+/** Add inventory guards to backend units from the public affected plan;
+ * whole-unit widening uses its registered defaults. Both share the existing gate. */
 export function mergeUnitFiles(worktree: string, plan: string): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
   const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
@@ -1578,6 +1580,7 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
       for (const file of [...testArgs('unit'), ...unitHarnessFiles]) collect(file);
     } else collect(entry);
   }
+  for (const guard of repositoryGuards) collect(guard.file);
   return [...selected].sort();
 }
 
@@ -1653,7 +1656,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   const startedAt = Date.now();
   const unfinished = (output: string): UnitShardResult =>
     ({ done: false, failing: [], files: [...files], output, ms: Date.now() - startedAt });
-  const child = spawn('task', ['test', '--', ...files.map(file => `./${file}`)], {
+  // Inventory guards include owner files. Run the selected Bun files directly
+  // through Task so the public selector's tier-mixing refusal cannot mask them.
+  const child = spawn('task', ['goal:unit-files', '--', ...files.map(file => `./${file}`)], {
     cwd, env: { ...process.env, AGENT: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
@@ -1739,9 +1744,9 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
   const files = mergeUnitFiles(worktree, plan.stdout);
-  console.log(`Pre-merge unit gate: ${files.length} affected file(s) against main ${before.slice(0, 12)}`);
+  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${before.slice(0, 12)}`);
   if (!files.length) return;
-  // One budget per side: the branch's affected files, then only its failing files at main's committed boundary.
+  // One budget per side: the branch's affected files and guards, then only its failing files at main's committed boundary.
   // A side that does not finish is inconclusive and reported, never a refusal: the wave and the regression tier
   // still run those files (a per-file timeout once aborted every launch merge).
   const branch = await runUnitGate(worktree, files);
@@ -1750,7 +1755,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     return;
   }
   if (!branch.failing.length) {
-    console.log('Pre-merge unit gate: every affected unit file passes');
+    console.log('Pre-merge unit gate: every affected unit file and repository guard passes');
     return;
   }
   console.log(`Unit gate: ${branch.failing.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);

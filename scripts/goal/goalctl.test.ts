@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
@@ -536,6 +537,22 @@ describe('goalctl reclaim', () => {
 });
 
 describe('pre-merge unit selection', () => {
+  test('repository guards join a narrow or empty affected set exactly once', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'repository-guards-'));
+    try {
+      const guards = repositoryGuards.map(guard => guard.file);
+      for (const file of [...guards, 'operation.test.ts']) {
+        mkdirSync(join(dir, file, '..'), { recursive: true });
+        writeFileSync(join(dir, file), '');
+      }
+      expect(mergeUnitFiles(dir, 'Affected since HEAD: no unit changes')).toEqual([...guards].sort());
+      expect(mergeUnitFiles(dir, `Affected since HEAD: fixture\n  unit: operation.test.ts\n  unit: ${guards[0]}\n`))
+        .toEqual([...guards, 'operation.test.ts'].sort());
+      expect(balanceUnitShards(mergeUnitFiles(dir, 'Affected since HEAD: fixture'), 4).flat().sort())
+        .toEqual([...guards].sort());
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('whole-unit widening expands registered defaults and excludes heavier tiers', () => {
     const dir = mkdtempSync(join(tmpdir(), 'unit-selection-'));
     try {
@@ -945,6 +962,49 @@ process.exit(await child.exited);
         expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
         expect(existsSync(join(r.dir, file))).toBe(false);
         if (boundary === 'task') expect(r.git('rev-parse', 'main')).toBe(before);
+      } finally { r.cleanup(); }
+    }, 30_000);
+  }
+
+  for (const outcome of ['introduced', 'inherited'] as const) {
+    test(`a guard absent from the affected plan has its ${outcome} failure compared with committed main`, async () => {
+      const r = repo();
+      try {
+        const guard = repositoryGuards[0].file;
+        // The guard scans a source outside its imports, reproducing a route or SQL inventory omission.
+        const source = `import { test, expect } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n`
+          + `test('repository inventory is valid', () => expect(readFileSync('inventory.ts', 'utf8')).toBe('valid'));\n`;
+        mkdirSync(join(r.dir, guard, '..'), { recursive: true });
+        writeFileSync(join(r.dir, guard), source);
+        writeFileSync(join(r.dir, 'inventory.ts'), outcome === 'inherited' ? 'invalid' : 'valid');
+        r.git('add', '.'); r.git('commit', '-qm', 'Baseline inventory guard');
+        const task = await r.start('G-001');
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push('inventory.ts'); r.save(ledger);
+        r.commit(task);
+        writeFileSync(join(task.worktree, 'inventory.ts'), 'invalid');
+        expect(spawnSync('git', ['-C', task.worktree, 'commit', '--allow-empty', '-qam', 'Change inventory']).status).toBe(0);
+        await r.stopFixture(task.id);
+        const before = r.git('rev-parse', 'main');
+        const log = join(r.dir, '.temp/unit-log');
+        // The fixture's default affected plan contains no unit entries at all.
+        const result = r.run(['merge', task.id], { GOAL_TEST_LOG: log });
+        expect(result.status).toBe(outcome === 'introduced' ? 1 : 0);
+        if (outcome === 'introduced') {
+          expect(result.stderr).toContain(`introduced unit failures; not merging:\n  ${guard}`);
+          expect(r.git('rev-parse', 'main')).toBe(before);
+          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+        } else {
+          expect(result.stdout).toContain(`${guard} also fails on main`);
+          expect(result.stdout).toContain('reported, not blocking');
+          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+        }
+        const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+        expect(runs).toHaveLength(3);
+        expect(runs[0].cwd).toBe(task.worktree);
+        expect(runs[1].cwd).toBe(task.worktree);
+        expect(runs[2].cwd).not.toBe(task.worktree);
+        expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
+        expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
       } finally { r.cleanup(); }
     }, 30_000);
   }

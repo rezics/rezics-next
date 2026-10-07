@@ -90,6 +90,12 @@ tasks:
     cmds:
       - bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
 
+  apphost:typecheck:
+    desc: Type-check the AppHost and its configuration imports with Node types.
+    deps: [aspire:restore]
+    cmds:
+      - bun node_modules/typescript/bin/tsc --project apphost/tsconfig.apphost.json
+
   aspire:
     desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
     cmds:
@@ -292,6 +298,13 @@ tasks:
     cmds:
       # Six story workers (about 1.3 GiB of Chromium each) beside eleven agents and the 24 GiB Docker VM left 3 GiB on 2026-10-07.
       - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-16}" STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
+
+  # The merge gate combines cheap unit files with owner inventory guards; the
+  # public test selector deliberately refuses a mix of QA tiers.
+  goal:unit-files:
+    desc: Run the explicit Bun unit and inventory files selected by the merge gate.
+    cmds:
+      - bun test {{.CLI_ARGS}}
 
   # Checks and tests
 
