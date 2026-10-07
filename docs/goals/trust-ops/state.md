@@ -24,7 +24,14 @@ ordinary restore gates independently at600ACTIVE; aggregate626.229seconds
 active and947.344seconds external span remain reported without an aggregate
 ceiling. The manager queued the actual100k campaign behind Launch's heavy gate
 from the unchanged compatible539/fa worktree and literal medium backup/copies.
-Log: .temp/worktrees/g-1344/.temp/goal/campaign-medium-manager-2025.log.
+The first tool-owned wait exited before QA; its log is retained separately.
+The live retry is tmux goal-trust-ops:medium-campaign, Task961636/goalctl961682.
+Log: .temp/worktrees/g-1344/.temp/goal/campaign-medium-manager-tmux-2030.log;
+terminal result: .temp/goal/campaign-medium-manager-result.json in that worktree.
+Launch/Program have the specific G-1400 worker heavy-scope review request.
+G-1401 is dispatched for the inherited privacy-safe PostgreSQL deadlock signal
+through the existing shared pool and logger; production alert delivery remains
+unqualified.
 Qualification remains pending and will not be relabeled as current25ce release
 proof. Launch's unchanged signed-in browser regression remains the closure check
 for activated G-1394. Kernel has the narrow original-descriptor fixture loan in
