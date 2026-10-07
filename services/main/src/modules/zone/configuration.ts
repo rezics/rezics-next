@@ -473,6 +473,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     const batch = `urn:rezics:outbox:${hash(receipt)}`;
     const event = `urn:rezics:event:${hash(operation)}`;
     const publication = input.publication;
+    // The manifest holds the draft name. Public readers derive both the name
+    // and address suffix from this label, so only a bundle switch promotes it
+    // after the first publication. Unpublished Zones retain their live label.
+    const promotePublicName = !!publication || head.publicationRevision === null;
     const selectedTheme = typeof config.presentation === 'object' ? config.presentation.official?.theme : undefined;
     let themeSelection: ZoneThemeSelection | null = null;
     if (publication && selectedTheme) themeSelection = (await readZoneThemeExecution(env, selectedTheme, input.zone)).selection;
@@ -507,13 +511,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:presentation ?oldPresentation ;
           rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision .
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ?oldPublication .` : ''}
-          ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName . } }
+          ${promotePublicName ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName .` : ''} } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(revision)} ;
           rv:zoneState rv:${config.state === 'active' ? 'Active' : 'Retired'} .
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ${iri(revision)} .` : ''}
-          ${name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
+          ${promotePublicName && name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
           ${config.official ? `${iri(input.zone)} rv:official true .` : ''}
           ${config.defaultContext ? `${iri(input.zone)} rv:defaultContext ${iri(config.defaultContext.context)} ;
@@ -553,7 +557,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           ${publication ? `OPTIONAL { ${iri(input.zone)} rv:sitePublicationHead ?oldPublication }
             ${iri(head.navigation)} a rv:Structure ; rv:structureOf ${iri(input.zone)} ;
               rv:structureHead ${iri(publication.navigationRevision)} .` : ''}
-          OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName } }
+          ${promotePublicName ? `OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName }` : ''} }
         ${input.operation === 'retire' ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(head.navigation)} rv:selectedGeneration ?generation .
           ?generation rv:placementCount 0 . }` : ''}
