@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import { profileRegistry } from '../../packages/model/src/generated/profiles.ts';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { classificationPropositionProfile } from '../definitions/classification-proposition-v1.ts';
 import { semanticAnnotationProfile } from '../definitions/semantic-annotation-v1.ts';
 
@@ -11,7 +11,7 @@ test('MODEL13: generated profiles retain OA Annotation, SKOS-XL Label and SKOS p
     const generated = readFileSync(new URL(`../../generated/model/shapes/${profile.id}.ttl`,
       import.meta.url), 'utf8');
     const registered = profileRegistry[profile.id];
-    expect(generated).toBe(renderProfile(profile));
+    expect(generated).toBe(profileSource(profile));
     expect(createHash('sha256').update(generated).digest('hex')).toBe(registered.sha256);
   }
   const annotation = semanticAnnotationProfile.shapes[1]!;
