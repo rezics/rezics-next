@@ -7,8 +7,10 @@ COPY services/main/src/modules/query/templates /build/src/test/resources/query-t
 COPY generated/model/ /build/profiles/
 COPY infra/jena/fuseki-text.ttl /build/fuseki-text.ttl
 ENV MAVEN_OPTS="-Xmx128m"
-ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:ActiveProcessorCount=4"
-RUN mvn -B -ntp -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package
+ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:ActiveProcessorCount=4 -Djava.io.tmpdir=/build/tmp"
+# Fixture databases need a writable disk mount: syncing the image layer can exceed
+# their unchanged transaction deadlines. Each fixture still creates a fresh directory.
+RUN --mount=type=cache,id=rezics-native-test-files,target=/build/tmp,sharing=locked mvn -B -ntp -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0

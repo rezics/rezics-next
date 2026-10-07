@@ -55,7 +55,7 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
     if (!declaration) throw new Error(`missing native builder ${name}`);
     return `${name}=${declaration[1]!}`;
   });
-  const packageInvocation = /^RUN mvn (.+) package$/m.exec(moduleStage)?.[1];
+  const packageInvocation = /^RUN --mount=type=cache,id=rezics-native-test-files,target=\/build\/tmp,sharing=locked mvn (.+) package$/m.exec(moduleStage)?.[1];
   if (!packageInvocation || !packageInvocation.split(' ').every((argument) => /^-[^\s"'`]+$/.test(argument)))
     throw new Error('unsupported native builder Maven invocation');
   const mavenArguments = packageInvocation.split(' ');
@@ -139,7 +139,6 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
       'mvn',
       ...mavenArguments,
       '-Dmaven.repo.local=/maven-cache',
-      '-Djava.io.tmpdir=/build/tmp',
       `-Dtest=${classes.join(',')}`,
       'test',
     ];
