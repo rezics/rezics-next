@@ -1,5 +1,5 @@
-import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { COMMAND_MODULE_VERSION } from '../../infrastructure/profile.ts';
 import { GRAPHS, RV, hash, iri, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -15,6 +15,18 @@ export interface ExactModelGeneration {
   manifest: Uint8Array;
   commandModule: string;
   shapes: { profile: string; sha256: string; bytes: Uint8Array }[];
+}
+
+export const MODEL_CUSTODY_BACKFILL_COST = {
+  builds: 64, profiles: 512, artifactBytes: 4 * 1_048_576, buildBytes: 32 * 1_048_576,
+  turnObjects: 32, maximumTurnObjects: 64, totalMs: 600_000,
+} as const;
+export class ModelCustodyBackfillDeadline extends Error {}
+export class ModelCustodyBackfillConflict extends Error {}
+export interface ModelCustodyBackfillCheckpoint {
+  format: 'rezics-model-custody-backfill-v1'; context: string; deadlineAt: number; head: string;
+  after: string | null; pending: { generation: string; nextArtifact: number } | null;
+  generations: number; objects: number; complete: boolean;
 }
 
 function generationDigest(generation: string): string {
@@ -98,6 +110,210 @@ async function exactObject(objects: ImmutableObjects, digest: string): Promise<U
   }
 }
 
+async function retainedModelState(env: WorkActivationEnvironment, generation: string,
+  anchor?: { manifest: string; commandModule: string }): Promise<{ manifestSha256: string; commandModule: string }> {
+  const digest = generationDigest(generation);
+  if (!anchor) {
+    const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?commandModule WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} a rv:ModelGeneration, rv:RevisionAnchor ;
+        rv:component ${iri(MODEL_COMPONENT)} ; rv:manifest ?manifest ; rv:commandModuleVersion ?commandModule }
+    } LIMIT 2`, 4096);
+    const rows = result.results?.bindings ?? [];
+    if (!rows.length) throw new RevisionNotFound('model generation is not retained');
+    const row = rows[0]!;
+    if (rows.length !== 1 || !row.manifest || !row.commandModule) {
+      throw new RevisionCorrupt('model generation anchor is incomplete or ambiguous');
+    }
+    anchor = { manifest: row.manifest.value, commandModule: row.commandModule.value };
+  }
+  const state = await readWorkComponentState(env, anchor.manifest, generation, PROFILES.generation);
+  if (state.modelManifestSha256 !== digest || state.commandModule !== anchor.commandModule || state.entailment !== 'none') {
+    throw new RevisionCorrupt('model generation state differs from its anchor');
+  }
+  return { manifestSha256: digest, commandModule: anchor.commandModule };
+}
+
+function originalArtifact(path: string): Uint8Array {
+  try {
+    const size = statSync(path).size;
+    if (size > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) throw new RevisionCorrupt('original model artifact exceeds its byte bound');
+    const bytes = readFileSync(path);
+    if (bytes.length > MODEL_CUSTODY_BACKFILL_COST.artifactBytes) throw new RevisionCorrupt('original model artifact exceeds its byte bound');
+    return bytes;
+  } catch (error) {
+    if (error instanceof RevisionCorrupt) throw error;
+    throw new RevisionUnavailable(`original model artifact is unavailable: ${path}`);
+  }
+}
+
+/** One bounded custody turn. Only original bytes reach object storage; model
+ * heads, revision pins, receipts and graph sequence are read-only throughout. */
+export async function backfillRetainedModelCustody(env: WorkActivationEnvironment, options: {
+  buildDirectories: string[]; checkpoint?: ModelCustodyBackfillCheckpoint; maxObjects?: number;
+  deadlineAt?: number; now?: () => number; sourceKey?: string;
+}, saveCheckpoint?: (checkpoint: ModelCustodyBackfillCheckpoint) => void | Promise<void>): Promise<ModelCustodyBackfillCheckpoint> {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const maxObjects = options.maxObjects ?? MODEL_CUSTODY_BACKFILL_COST.turnObjects;
+  if (!Number.isInteger(maxObjects) || maxObjects < 1 || maxObjects > MODEL_CUSTODY_BACKFILL_COST.maximumTurnObjects
+    || !options.buildDirectories.length || options.buildDirectories.length > MODEL_CUSTODY_BACKFILL_COST.builds) {
+    throw new ModelCustodyBackfillConflict('invalid bounded model custody turn');
+  }
+  const context = hash(JSON.stringify([env.lineage, resolve(env.objectDirectory), options.sourceKey ?? '']));
+  const previous = options.checkpoint;
+  const deadlineAt = previous?.deadlineAt ?? options.deadlineAt ?? started + MODEL_CUSTODY_BACKFILL_COST.totalMs;
+  if (!Number.isSafeInteger(deadlineAt) || deadlineAt > started + MODEL_CUSTODY_BACKFILL_COST.totalMs
+    || previous && options.deadlineAt !== undefined && options.deadlineAt !== previous.deadlineAt) {
+    throw new ModelCustodyBackfillConflict('model custody deadline cannot be extended on resume');
+  }
+  let expired = false;
+  const checkDeadline = () => {
+    if (expired || now() >= deadlineAt) throw new ModelCustodyBackfillDeadline('model custody preparation exceeded its total deadline');
+  };
+  checkDeadline();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const run = async (): Promise<ModelCustodyBackfillCheckpoint> => {
+    const headResult = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ?head }
+    } LIMIT 2`, 4096);
+    checkDeadline();
+    const heads = headResult.results?.bindings ?? [];
+    if (heads.length !== 1 || !heads[0]?.head) throw new RevisionCorrupt('retained model head is unavailable or ambiguous');
+    const head = heads[0].head.value;
+    generationDigest(head);
+    if (previous && (previous.format !== 'rezics-model-custody-backfill-v1' || previous.context !== context
+      || previous.head !== head || !Number.isSafeInteger(previous.generations) || previous.generations < 0
+      || !Number.isSafeInteger(previous.objects) || previous.objects < 0 || typeof previous.complete !== 'boolean'
+      || previous.pending && (!Number.isInteger(previous.pending.nextArtifact) || previous.pending.nextArtifact < 0))) {
+      throw new ModelCustodyBackfillConflict('model custody checkpoint belongs to another source or model head');
+    }
+    if (previous?.after) generationDigest(previous.after);
+    if (previous?.pending) generationDigest(previous.pending.generation);
+    await retainedModelState(env, head);
+    checkDeadline();
+    let checkpoint: ModelCustodyBackfillCheckpoint = previous ? { ...previous } : {
+      format: 'rezics-model-custody-backfill-v1', context, deadlineAt, head, after: null, pending: null,
+      generations: 0, objects: 0, complete: false,
+    };
+    // A completed invocation is replayed as a bounded verification pass. A
+    // stale local completion marker cannot mask subsequently lost originals.
+    if (checkpoint.complete) checkpoint = { ...checkpoint, after: null, pending: null,
+      generations: 0, objects: 0, complete: false };
+    const save = async () => { checkDeadline(); await saveCheckpoint?.(checkpoint); checkDeadline(); };
+    await save();
+    // Build paths are supplied explicitly even for the current generation.
+    // Hash-indexing these files is local input matching, not an artifact registry.
+    const builds = new Map<string, { bytes: Uint8Array; manifest: ModelManifest; directory: string }>();
+    for (const directory of new Set(options.buildDirectories.map(path => resolve(path)))) {
+      checkDeadline();
+      const bytes = originalArtifact(join(directory, 'manifest.json'));
+      const manifest = checkedManifest(bytes);
+      if (manifest.profiles.length > MODEL_CUSTODY_BACKFILL_COST.profiles) throw new RevisionCorrupt('original model profile count exceeds its bound');
+      const digest = hash(bytes);
+      if (builds.has(digest)) throw new ModelCustodyBackfillConflict('multiple original build paths name the same model generation');
+      builds.set(digest, { bytes, manifest, directory });
+    }
+    const objects = modelObjects(env);
+    let completedThisTurn = 0;
+    while (!checkpoint.complete) {
+      checkDeadline();
+      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?generation ?manifest ?commandModule WHERE {
+        GRAPH ${iri(GRAPHS.revisions)} { ?generation a rv:ModelGeneration .
+          OPTIONAL { ?generation a rv:RevisionAnchor ; rv:component ${iri(MODEL_COMPONENT)} ;
+            rv:manifest ?manifest ; rv:commandModuleVersion ?commandModule } }
+        ${checkpoint.after ? `FILTER(STR(?generation) > ${JSON.stringify(checkpoint.after)})` : ''}
+      } ORDER BY STR(?generation) LIMIT 2`, 8192)).results?.bindings;
+      checkDeadline();
+      if (!rows) throw new RevisionUnavailable('retained model inventory is unavailable');
+      if (!rows.length) {
+        if (checkpoint.pending) throw new ModelCustodyBackfillConflict('pending retained model generation disappeared');
+        checkpoint = { ...checkpoint, complete: true };
+        await save();
+        break;
+      }
+      const row = rows[0]!;
+      if (!row.generation || !row.manifest || !row.commandModule
+        || rows[1]?.generation?.value === row.generation.value) throw new RevisionCorrupt('retained model anchor is incomplete or ambiguous');
+      const generation = row.generation.value;
+      const state = await retainedModelState(env, generation, { manifest: row.manifest.value, commandModule: row.commandModule.value });
+      checkDeadline();
+      if (checkpoint.pending && checkpoint.pending.generation !== generation) throw new ModelCustodyBackfillConflict('retained model inventory changed during custody');
+      const build = builds.get(state.manifestSha256);
+      if (!build) throw new RevisionUnavailable(`original retained build is required for ${generation}`);
+      if (build.manifest.commandModule !== state.commandModule) throw new RevisionCorrupt('original model module differs from its retained anchor');
+      let inputBytes = build.bytes.length;
+      const artifacts = build.manifest.profiles.map(profile => {
+        checkDeadline();
+        const bytes = originalArtifact(join(build.directory, profile.file));
+        inputBytes += bytes.length;
+        if (inputBytes > MODEL_CUSTODY_BACKFILL_COST.buildBytes) throw new RevisionCorrupt('original model build exceeds its byte bound');
+        if (hash(bytes) !== profile.sha256) throw new RevisionCorrupt('original model shape differs from its manifest');
+        return { digest: profile.sha256, bytes };
+      });
+      artifacts.push({ digest: state.manifestSha256, bytes: build.bytes });
+      let index = checkpoint.pending?.nextArtifact ?? 0;
+      if (index >= artifacts.length) throw new ModelCustodyBackfillConflict('model custody artifact cursor exceeds the original build');
+      // A restored or interrupted object owner may have lost a previously
+      // acknowledged shape. Rewind to its exact original instead of trusting
+      // the local progress file as custody evidence.
+      for (let prior = 0; prior < index; prior++) {
+        try { await exactObject(objects, artifacts[prior]!.digest); }
+        catch (error) {
+          if (!(error instanceof RevisionUnavailable)) throw error;
+          index = prior;
+          break;
+        }
+        checkDeadline();
+      }
+      checkpoint = { ...checkpoint, pending: { generation, nextArtifact: index } };
+      await save();
+      while (index < artifacts.length && completedThisTurn < maxObjects) {
+        checkDeadline();
+        const artifact = artifacts[index]!;
+        if (index === artifacts.length - 1) {
+          // A resumed cursor cannot publish a root without rechecking its full
+          // object closure, including shapes uploaded in a prior process.
+          for (const shape of artifacts.slice(0, -1)) { await exactObject(objects, shape.digest); checkDeadline(); }
+        }
+        try { await exactObject(objects, artifact.digest); }
+        catch (error) {
+          if (!(error instanceof RevisionUnavailable)) throw error;
+          checkDeadline();
+          try {
+            if (await objects.put(artifact.bytes) !== artifact.digest) throw new RevisionCorrupt('custodied original model digest differs');
+          } catch (error) {
+            if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message);
+            if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message);
+            throw error;
+          }
+          await exactObject(objects, artifact.digest);
+        }
+        checkDeadline();
+        index++; completedThisTurn++;
+        checkpoint = { ...checkpoint, objects: checkpoint.objects + 1, pending: { generation, nextArtifact: index } };
+        if (index === artifacts.length) {
+          checkpoint = { ...checkpoint, after: generation, pending: null, generations: checkpoint.generations + 1 };
+        }
+        await save();
+      }
+      if (completedThisTurn === maxObjects) break;
+    }
+    const lastHead = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ?head }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    checkDeadline();
+    if (lastHead.length !== 1 || lastHead[0]?.head?.value !== head) throw new ModelCustodyBackfillConflict('model head changed during original artifact custody');
+    return checkpoint;
+  };
+  try {
+    return await Promise.race([run(), new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => { expired = true;
+        reject(new ModelCustodyBackfillDeadline('model custody preparation exceeded its total deadline')); },
+        Math.max(1, deadlineAt - started));
+    })]);
+  } finally { if (timeout !== undefined) clearTimeout(timeout); }
+}
+
 /** Publish the digest-rooted manifest only after every referenced shape is custodied. */
 export async function custodyModelGenerationArtifacts(env: WorkActivationEnvironment, generation: string,
   manifestBytes: Uint8Array, readShape: (file: string) => Uint8Array): Promise<void> {
@@ -158,21 +374,8 @@ export async function visitModelGenerationArtifacts(generation: string,
 
 /** Read a retained generation through its own anchor; neither head nor build artifacts substitute. */
 export async function readExactModelGeneration(env: WorkActivationEnvironment, generation: string): Promise<ExactModelGeneration> {
-  const digest = generationDigest(generation);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?commandModule WHERE {
-    GRAPH ${iri(GRAPHS.revisions)} { ${iri(generation)} a rv:ModelGeneration, rv:RevisionAnchor ;
-      rv:component ${iri(MODEL_COMPONENT)} ; rv:manifest ?manifest ; rv:commandModuleVersion ?commandModule }
-  } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) throw new RevisionNotFound('model generation is not retained');
-  const row = rows[0]!;
-  if (rows.length !== 1 || !row.manifest || !row.commandModule) {
-    throw new RevisionCorrupt('model generation anchor is incomplete or ambiguous');
-  }
-  const state = await readWorkComponentState(env, row.manifest.value, generation, PROFILES.generation);
-  if (state.modelManifestSha256 !== digest || state.commandModule !== row.commandModule.value || state.entailment !== 'none') {
-    throw new RevisionCorrupt('model generation state differs from its anchor');
-  }
+  const state = await retainedModelState(env, generation);
+  const digest = state.manifestSha256;
   const objects = modelObjects(env);
   let manifestBytes: Uint8Array | undefined;
   const shapes: ExactModelGeneration['shapes'] = [];

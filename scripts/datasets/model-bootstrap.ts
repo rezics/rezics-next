@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
 import { Pool } from 'pg';
@@ -21,7 +21,8 @@ import {
   type ActiveModelGeneration,
 } from '../../services/main/src/modules/semantic/generation-guard.ts';
 import { MODEL_COMPONENT, PROFILES } from '../../services/main/src/modules/semantic/schema.ts';
-import { custodyModelGenerationArtifacts } from '../../services/main/src/modules/semantic/model-custody.ts';
+import { backfillRetainedModelCustody, custodyModelGenerationArtifacts,
+  type ModelCustodyBackfillCheckpoint } from '../../services/main/src/modules/semantic/model-custody.ts';
 import {
   DATASET,
   GRAPHS,
@@ -523,11 +524,66 @@ sync`,
   }
 }
 
+export interface ModelCustodyArguments {
+  buildDirectories: string[]; checkpoint?: string; maxObjects?: number;
+}
+
+/** Original model artifact roots are positional data inputs, never credentials. */
+export function modelCustodyArguments(args: string[]): ModelCustodyArguments {
+  if (args[0] !== '--custody') throw new Error('Use --custody --build <original model artifact directory>');
+  const result: ModelCustodyArguments = { buildDirectories: [] };
+  for (let index = 1; index < args.length; index += 2) {
+    const flag = args[index], value = args[index + 1];
+    if (!value || value.startsWith('--')) throw new Error(`Missing value for ${flag}`);
+    if ((flag === '--build' || flag === '--checkpoint') && /^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+      throw new Error('Model custody accepts filesystem paths; credentials come from the existing stack environment');
+    }
+    if (flag === '--build') result.buildDirectories.push(resolve(value));
+    else if (flag === '--checkpoint' && result.checkpoint === undefined) result.checkpoint = resolve(value);
+    else if (flag === '--max-objects' && result.maxObjects === undefined && /^[1-9][0-9]*$/.test(value)) {
+      result.maxObjects = Number(value);
+    } else throw new Error(`Unknown or repeated model custody option: ${flag}`);
+  }
+  if (!result.buildDirectories.length) throw new Error('Supply each original retained model build with --build');
+  return result;
+}
+
+/** One read-only graph/object-custody turn through the existing operator entry.
+ * Repeating the exact invocation resumes its checkpoint and total deadline. */
+export async function backfillLocalDatasetModelCustody(options: ModelCustodyArguments,
+  stack = process.env.REZICS_DATASET_STACK ?? join(repository, '.temp/stack/rezics-dev')) {
+  const env = readEnv(join(stack, 'dev.env'));
+  checkedLocalModelEndpoint(env.FUSEKI_URL!);
+  const sourceKey = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_S3_ENDPOINT ?? null,
+    env.MAIN_S3_BUCKET ?? null, env.MAIN_OBJECT_DIRECTORY]));
+  const checkpointPath = options.checkpoint ?? join(repository, '.temp/datasets/model-custody', `${sourceKey}.json`);
+  const lock = `${checkpointPath}.lock`;
+  mkdirSync(dirname(lock), { recursive: true });
+  try { mkdirSync(lock); }
+  catch { throw new Error(`Model artifact custody is already running; inspect ${lock} before resuming`); }
+  try {
+    const checkpoint = existsSync(checkpointPath)
+      ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as ModelCustodyBackfillCheckpoint : undefined;
+    const fuseki = new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN);
+    const workObjects = env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
+      endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT), bucket: env.MAIN_S3_BUCKET!,
+      region: env.MAIN_S3_REGION, accessKeyId: env.MAIN_S3_ACCESS_KEY!, secretAccessKey: env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/work/',
+    }) : undefined;
+    const completed = await backfillRetainedModelCustody({ fuseki,
+      lineage: { dataEpoch: env.MAIN_DATA_EPOCH!, routingEpoch: env.MAIN_ROUTING_EPOCH! },
+      objectDirectory: env.MAIN_OBJECT_DIRECTORY!, ...(workObjects ? { workObjects } : {}),
+    }, { buildDirectories: options.buildDirectories, checkpoint, maxObjects: options.maxObjects, sourceKey },
+    value => atomicJson(checkpointPath, value));
+    return { state: completed.complete ? 'completed' : 'pending', ...completed, checkpointPath };
+  } finally { rmSync(lock, { recursive: true, force: true }); }
+}
+
 if (import.meta.main) {
   try {
-    if (process.argv.slice(2).length)
-      throw new Error('Model fixture bootstrap takes no arguments; use REZICS_DATASET_STACK');
-    console.log(await ensureLocalDatasetModelGeneration());
+    const args = process.argv.slice(2);
+    console.log(args.length ? await backfillLocalDatasetModelCustody(modelCustodyArguments(args))
+      : await ensureLocalDatasetModelGeneration());
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

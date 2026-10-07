@@ -1,14 +1,17 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { modelCustodyArguments } from '../../../scripts/datasets/model-bootstrap.ts';
 import { FusekiClient, type CommandEnvelope, type CommandHealth, type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import { protectedObjectDigests, replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
 import { captureObjectRecoveryCoverage, ObjectRecoveryConflict } from '../src/modules/owner/object-coverage.ts';
 import { ACTIVE_GENERATION, ensureModelGeneration, MODEL_MANIFEST_SHA256 } from '../src/modules/semantic/command.ts';
-import { custodyGeneratedModelGeneration, custodyModelGenerationArtifacts, readExactModelGeneration, readPinnedRevisionModel } from '../src/modules/semantic/model-custody.ts';
+import { backfillRetainedModelCustody, custodyGeneratedModelGeneration, custodyModelGenerationArtifacts,
+  ModelCustodyBackfillConflict, ModelCustodyBackfillDeadline,
+  readExactModelGeneration, readPinnedRevisionModel } from '../src/modules/semantic/model-custody.ts';
 import { MODEL_COMPONENT, PROFILES } from '../src/modules/semantic/schema.ts';
 import { GRAPHS, hash, prepareWorkComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../src/modules/work/history.ts';
@@ -26,6 +29,7 @@ afterEach(() => {
 class MemoryObjects implements ImmutableObjects {
   readonly data = new Map<string, Uint8Array>();
   readonly puts: string[] = [];
+  readonly gets: string[] = [];
   failDigest?: string;
   returnWrongDigest = false;
 
@@ -40,6 +44,7 @@ class MemoryObjects implements ImmutableObjects {
   }
 
   async get(digest: string): Promise<Uint8Array> {
+    this.gets.push(digest);
     const bytes = this.data.get(digest);
     if (!bytes) throw new ObjectUnavailable('custody object is missing');
     return new Uint8Array(bytes);
@@ -52,6 +57,7 @@ class ModelGraph extends FusekiClient {
   readonly generations = new Map<string, { manifest: string; commandModule: string }>();
   readonly revisionPins = new Map<string, string>();
   active = false;
+  head = ACTIVE_GENERATION;
   lostResponse = false;
   beforeCommit?: () => void;
 
@@ -66,6 +72,18 @@ class ModelGraph extends FusekiClient {
   override async query(query: string): Promise<SparqlResult> {
     this.queries.push(query);
     const term = (value: string) => ({ type: 'uri', value });
+    if (query.includes('SELECT ?head')) {
+      return { results: { bindings: this.active ? [{ head: term(this.head) }] : [] } };
+    }
+    if (query.includes('SELECT ?generation ?manifest ?commandModule')) {
+      const cursor = /(?:STR\(\?generation\)|\?generation)\s*>\s*(<[^>]+>|"(?:[^"\\]|\\.)*")/.exec(query)?.[1];
+      const after = cursor?.startsWith('<') ? cursor.slice(1, -1) : cursor ? JSON.parse(cursor) as string : null;
+      const limit = Number(/LIMIT\s+(\d+)/i.exec(query)?.[1] ?? this.generations.size);
+      const generations = [...this.generations].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+        .filter(([generation]) => after === null || generation > after).slice(0, limit);
+      return { results: { bindings: generations.map(([generation, anchor]) => ({ generation: term(generation),
+        manifest: term(anchor.manifest), commandModule: { type: 'literal', value: anchor.commandModule } })) } };
+    }
     if (query.includes('SELECT ?graph ?subject ?manifest')) {
       return { results: { bindings: [...this.generations].map(([generation, anchor]) => ({
         graph: term(GRAPHS.revisions), subject: term(generation), manifest: term(anchor.manifest),
@@ -96,6 +114,7 @@ class ModelGraph extends FusekiClient {
     const anchorManifest = /rv:manifest <(urn:rezics:sha256:[0-9a-f]{64})>/.exec(command.update)?.[1];
     if (!anchorManifest) throw new Error('model activation omitted its retained manifest');
     this.generations.set(ACTIVE_GENERATION, { manifest: anchorManifest, commandModule: COMMAND_MODULE_VERSION });
+    this.head = ACTIVE_GENERATION;
     this.active = true;
     if (this.lostResponse) throw new Error('lost activation response');
     return { status: 'committed', position: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
@@ -326,4 +345,329 @@ test('recovery and erasure retention include every exact model artifact and reje
   expect(await replayObjectErasure(store, `sha256:${manifest.profiles[0]!.sha256}`, protectedDigests, true)).toBe('conflict');
   objects.data.delete(manifest.profiles[0]!.sha256);
   await expect(captureObjectRecoveryCoverage(f.graph, store)).rejects.toBeInstanceOf(ObjectRecoveryConflict);
+});
+
+type BackfillCheckpoint = Awaited<ReturnType<typeof backfillRetainedModelCustody>>;
+
+async function retainedOriginalBuild(f: ReturnType<typeof fixture>, objects: MemoryObjects,
+  name: string, commandModule = '0.4.1', shapeCount = 2) {
+  const directory = join(f.directory, `build-${name}`);
+  mkdirSync(join(directory, 'shapes'), { recursive: true });
+  const profiles = Array.from({ length: shapeCount }, (_, index) => {
+    const id = `${name}-profile-${index}-v1`;
+    const bytes = Buffer.from(`@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:${id}:shape> a sh:NodeShape .\n`);
+    const file = `shapes/${id}.ttl`;
+    writeFileSync(join(directory, file), bytes);
+    return { id, file, sha256: hash(bytes), bytes };
+  });
+  const bytes = Buffer.from(JSON.stringify({ commandModule,
+    profiles: profiles.map(({ id, file, sha256 }) => ({ id, file, sha256 })) }));
+  writeFileSync(join(directory, 'manifest.json'), bytes);
+  const generation = `urn:rezics:model-generation:${hash(bytes)}`;
+  const anchor = await prepareWorkComponent(objects, generation, {
+    modelManifestSha256: hash(bytes), commandModule, entailment: 'none',
+  }, PROFILES.generation);
+  f.graph.generations.set(generation, { manifest: `urn:rezics:sha256:${anchor}`, commandModule });
+  const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+  f.graph.revisionPins.set(revision, generation);
+  f.graph.active = true;
+  f.graph.head = generation;
+  return { directory, generation, commandModule, profiles, bytes, revision };
+}
+
+const backfillOptions = (buildDirectories: string[]) => ({ buildDirectories,
+  sourceKey: 'retained-model-unit', now: () => 1000 });
+
+test('retained original builds backfill in bounded turns without changing later heads or model pins', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'older');
+  const later = await retainedOriginalBuild(f, objects, 'later', '0.4.2');
+  const roots = [later.directory, old.directory];
+  const anchors = [...f.graph.generations], pins = [...f.graph.revisionPins];
+  const store = { directory: f.directory, workObjects: objects };
+  await expect(captureObjectRecoveryCoverage(f.graph, store)).rejects.toBeInstanceOf(ObjectRecoveryConflict);
+  const progress: BackfillCheckpoint[] = [];
+  let checkpoint = await backfillRetainedModelCustody(f.env, { ...backfillOptions(roots), maxObjects: 1 },
+    value => { progress.push(structuredClone(value)); });
+  expect(progress[0]!.objects).toBe(0);
+  expect(progress.at(-1)!.objects).toBe(1);
+  expect(checkpoint.objects).toBe(1);
+  expect(checkpoint.generations).toBe(0);
+  expect(checkpoint.complete).toBe(false);
+  expect(checkpoint.pending).toEqual({ generation: [old.generation, later.generation].sort()[0], nextArtifact: 1 });
+  for (let turn = 0; !checkpoint.complete && turn < 8; turn++) {
+    const previous = checkpoint.objects;
+    checkpoint = await backfillRetainedModelCustody(f.env, {
+      ...backfillOptions(roots), checkpoint, maxObjects: 1,
+    });
+    expect(checkpoint.objects - previous).toBeLessThanOrEqual(1);
+  }
+  expect(checkpoint).toMatchObject({ complete: true, generations: 2, objects: 6, pending: null, head: later.generation });
+  for (const build of [old, later]) {
+    const root = hash(build.bytes);
+    expect(objects.data.get(root)).toEqual(new Uint8Array(build.bytes));
+    for (const profile of build.profiles) {
+      expect(objects.data.get(profile.sha256)).toEqual(new Uint8Array(profile.bytes));
+      expect(objects.puts.indexOf(profile.sha256)).toBeLessThan(objects.puts.indexOf(root));
+    }
+  }
+  expect(await readPinnedRevisionModel(f.env, old.revision)).toMatchObject({ generation: old.generation,
+    commandModule: old.commandModule, manifest: new Uint8Array(old.bytes) });
+  expect(await readPinnedRevisionModel(f.env, later.revision)).toMatchObject({ generation: later.generation,
+    commandModule: later.commandModule, manifest: new Uint8Array(later.bytes) });
+  const puts = objects.puts.length;
+  const replay = await backfillRetainedModelCustody(f.env, { ...backfillOptions(roots), checkpoint });
+  expect(replay).toMatchObject({ complete: true, generations: 2, objects: 6 });
+  expect((await backfillRetainedModelCustody(f.env, { ...backfillOptions(roots), maxObjects: 64 })).complete).toBe(true);
+  expect(objects.puts).toHaveLength(puts);
+  expect(f.graph.head).toBe(later.generation);
+  expect([...f.graph.generations]).toEqual(anchors);
+  expect([...f.graph.revisionPins]).toEqual(pins);
+  expect(f.graph.commands).toHaveLength(0);
+  const retained = new Set<string>();
+  expect((await captureObjectRecoveryCoverage(f.graph, store, retained)).anchorCount).toBe('2');
+  expect(await protectedObjectDigests(f.graph, store)).toEqual(retained);
+  expect(await replayObjectErasure(store, `sha256:${hash(old.bytes)}`, retained, true)).toBe('conflict');
+});
+
+test('a current build cannot substitute for an unavailable retained original generation', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'original');
+  const puts = objects.puts.length;
+  await expect(backfillRetainedModelCustody(f.env, backfillOptions([modelDirectory])))
+    .rejects.toBeInstanceOf(RevisionUnavailable);
+  expect(objects.puts).toHaveLength(puts);
+  expect(objects.data.has(hash(old.bytes))).toBe(false);
+  expect(f.graph.revisionPins.get(old.revision)).toBe(old.generation);
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+test('partial resume restores a lost previously verified shape before publishing its generation root', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'rewind');
+  const options = { ...backfillOptions([old.directory]), maxObjects: 1 };
+  let checkpoint = await backfillRetainedModelCustody(f.env, options);
+  const first = old.profiles[0]!;
+  objects.data.delete(first.sha256);
+  checkpoint = await backfillRetainedModelCustody(f.env, { ...options, checkpoint });
+  expect(checkpoint.pending).toEqual({ generation: old.generation, nextArtifact: 1 });
+  expect(objects.data.get(first.sha256)).toEqual(new Uint8Array(first.bytes));
+  expect(objects.data.has(hash(old.bytes))).toBe(false);
+  expect(checkpoint.complete).toBe(false);
+  const complete = await backfillRetainedModelCustody(f.env, { ...backfillOptions([old.directory]), checkpoint });
+  expect(complete.complete).toBe(true);
+  expect(objects.puts.filter(digest => digest === first.sha256)).toHaveLength(2);
+  expect((await readPinnedRevisionModel(f.env, old.revision)).manifest).toEqual(new Uint8Array(old.bytes));
+  expect(f.graph.head).toBe(old.generation);
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+test('completed checkpoint replay still refuses changed original shape bytes', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'completed-replay');
+  const options = backfillOptions([old.directory]);
+  const checkpoint = await backfillRetainedModelCustody(f.env, options);
+  expect(checkpoint.complete).toBe(true);
+  writeFileSync(join(old.directory, old.profiles[1]!.file), 'changed original after custody');
+  const puts = objects.puts.length;
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint }))
+    .rejects.toBeInstanceOf(RevisionCorrupt);
+  expect(objects.puts).toHaveLength(puts);
+  expect(objects.data.get(hash(old.bytes))).toEqual(new Uint8Array(old.bytes));
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+for (const missing of [false, true]) {
+  test(`${missing ? 'missing' : 'corrupt'} later original shape prevents every artifact upload and root publication`, async () => {
+    const objects = new MemoryObjects(), f = fixture(objects);
+    const old = await retainedOriginalBuild(f, objects, 'invalid');
+    const shape = join(old.directory, old.profiles[1]!.file);
+    if (missing) rmSync(shape); else writeFileSync(shape, 'changed original shape');
+    const puts = objects.puts.length;
+    await expect(backfillRetainedModelCustody(f.env, { ...backfillOptions([old.directory]), maxObjects: 1 }))
+      .rejects.toBeInstanceOf(missing ? RevisionUnavailable : RevisionCorrupt);
+    expect(objects.puts).toHaveLength(puts);
+    expect(objects.data.has(old.profiles[0]!.sha256)).toBe(false);
+    expect(objects.data.has(hash(old.bytes))).toBe(false);
+    expect(f.graph.commands).toHaveLength(0);
+  });
+}
+
+test('retained generation state and graph command module must match the exact original build', async () => {
+  for (const mismatch of ['command-module', 'state'] as const) {
+    const objects = new MemoryObjects(), f = fixture(objects);
+    const old = await retainedOriginalBuild(f, objects, 'mismatch');
+    const original = f.graph.generations.get(old.generation)!;
+    if (mismatch === 'command-module') {
+      f.graph.generations.set(old.generation, { ...original, commandModule: '0.4.9' });
+    } else {
+      const anchor = await prepareWorkComponent(objects, old.generation, {
+        modelManifestSha256: '0'.repeat(64), commandModule: old.commandModule, entailment: 'none',
+      }, PROFILES.generation);
+      f.graph.generations.set(old.generation, { ...original, manifest: `urn:rezics:sha256:${anchor}` });
+    }
+    const puts = objects.puts.length;
+    await expect(backfillRetainedModelCustody(f.env, backfillOptions([old.directory])))
+      .rejects.toBeInstanceOf(RevisionCorrupt);
+    expect(objects.puts).toHaveLength(puts);
+    expect(objects.data.has(hash(old.bytes))).toBe(false);
+  }
+});
+
+test('backfill rejects corrupt existing objects and verifies newly uploaded bytes before saving progress', async () => {
+  for (const existing of [true, false]) {
+    const objects = new MemoryObjects(), f = fixture(objects);
+    const old = await retainedOriginalBuild(f, objects, 'corruption');
+    const digest = old.profiles[0]!.sha256;
+    if (existing) objects.data.set(digest, Buffer.from('corrupt existing artifact'));
+    else {
+      const put = objects.put.bind(objects);
+      objects.put = async bytes => {
+        const result = await put(bytes);
+        if (result === digest) objects.data.set(result, Buffer.from('corrupt read-back artifact'));
+        return result;
+      };
+    }
+    const saved: BackfillCheckpoint[] = [];
+    await expect(backfillRetainedModelCustody(f.env, backfillOptions([old.directory]),
+      value => { saved.push(structuredClone(value)); })).rejects.toBeInstanceOf(RevisionCorrupt);
+    expect(saved.every(value => value.objects === 0)).toBe(true);
+    expect(objects.data.has(hash(old.bytes))).toBe(false);
+    expect(f.graph.commands).toHaveLength(0);
+  }
+});
+
+test('a lost checkpoint write resumes from prior persisted progress and safely reuses verified objects', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'checkpoint');
+  let persisted: BackfillCheckpoint | undefined;
+  await expect(backfillRetainedModelCustody(f.env, { ...backfillOptions([old.directory]), maxObjects: 1 }, value => {
+    if (value.objects > 0) throw new Error('checkpoint unavailable');
+    persisted = structuredClone(value);
+  })).rejects.toThrow('checkpoint unavailable');
+  expect(persisted?.objects).toBe(0);
+  expect(objects.data.has(old.profiles[0]!.sha256)).toBe(true);
+  const result = await backfillRetainedModelCustody(f.env, {
+    ...backfillOptions([old.directory]), checkpoint: persisted!,
+  });
+  expect(result).toMatchObject({ complete: true, generations: 1, objects: 3 });
+  expect(objects.puts.filter(digest => digest === old.profiles[0]!.sha256)).toHaveLength(1);
+  expect(objects.gets.filter(digest => digest === old.profiles[0]!.sha256).length).toBeGreaterThanOrEqual(2);
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+test('a lost PUT acknowledgement resumes the same generation without duplicate object writes', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'put-response');
+  const put = objects.put.bind(objects);
+  let loseResponse = true;
+  objects.put = async bytes => {
+    const digest = await put(bytes);
+    if (loseResponse && digest === old.profiles[0]!.sha256) {
+      loseResponse = false; throw new ObjectUnavailable('PUT acknowledgement lost');
+    }
+    return digest;
+  };
+  let persisted: BackfillCheckpoint | undefined;
+  await expect(backfillRetainedModelCustody(f.env, backfillOptions([old.directory]),
+    value => { persisted = structuredClone(value); })).rejects.toBeInstanceOf(RevisionUnavailable);
+  expect(persisted?.objects).toBe(0);
+  expect(objects.data.has(old.profiles[0]!.sha256)).toBe(true);
+  expect((await backfillRetainedModelCustody(f.env, {
+    ...backfillOptions([old.directory]), checkpoint: persisted!,
+  })).complete).toBe(true);
+  expect(objects.puts.filter(digest => digest === old.profiles[0]!.sha256)).toHaveLength(1);
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+test('initial checkpoint failure prevents any artifact publication', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'initial-checkpoint');
+  const puts = objects.puts.length;
+  await expect(backfillRetainedModelCustody(f.env, backfillOptions([old.directory]),
+    () => { throw new Error('initial checkpoint unavailable'); })).rejects.toThrow('initial checkpoint unavailable');
+  expect(objects.puts).toHaveLength(puts);
+  expect(objects.data.has(hash(old.bytes))).toBe(false);
+});
+
+test('backfill defaults to 32 artifacts and refuses turns above the 64 artifact limit', async () => {
+  for (const limit of [undefined, 64]) {
+    const objects = new MemoryObjects(), f = fixture(objects);
+    const old = await retainedOriginalBuild(f, objects, 'bounded', '0.4.1', 65);
+    const result = await backfillRetainedModelCustody(f.env, {
+      ...backfillOptions([old.directory]), ...(limit === undefined ? {} : { maxObjects: limit }),
+    });
+    expect(result.objects).toBe(limit ?? 32);
+    expect(result.complete).toBe(false);
+    expect(result.pending?.nextArtifact).toBe(limit ?? 32);
+    expect(objects.data.has(hash(old.bytes))).toBe(false);
+    const puts = objects.puts.length;
+    for (const maxObjects of [0, 65]) {
+      await expect(backfillRetainedModelCustody(f.env, { ...backfillOptions([old.directory]), maxObjects }))
+        .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+    }
+    expect(objects.puts).toHaveLength(puts);
+  }
+});
+
+test('the original total backfill deadline remains bounded across resumed turns', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'deadline');
+  let now = 1000;
+  const options = { ...backfillOptions([old.directory]), now: () => now, maxObjects: 1 };
+  let checkpoint = await backfillRetainedModelCustody(f.env, { ...options, deadlineAt: 1100 });
+  expect(checkpoint.deadlineAt).toBe(1100);
+  now = 1099;
+  checkpoint = await backfillRetainedModelCustody(f.env, { ...options, checkpoint });
+  expect(checkpoint.deadlineAt).toBe(1100);
+  expect(checkpoint.objects).toBe(2);
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint, deadlineAt: 1101 }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+  const puts = objects.puts.length;
+  now = 1100;
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillDeadline);
+  expect(objects.puts).toHaveLength(puts);
+  await expect(backfillRetainedModelCustody(f.env, { ...options, deadlineAt: now + 600_001 }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+});
+
+test('resume refuses another retained head, checkpoint context or source identity', async () => {
+  const objects = new MemoryObjects(), f = fixture(objects);
+  const old = await retainedOriginalBuild(f, objects, 'context');
+  const options = { ...backfillOptions([old.directory]), maxObjects: 1 };
+  const checkpoint = await backfillRetainedModelCustody(f.env, options);
+  const puts = objects.puts.length;
+  f.graph.head = `urn:rezics:model-generation:${'f'.repeat(64)}`;
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+  f.graph.head = checkpoint.head;
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint: { ...checkpoint, context: 'another-context' } }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+  await expect(backfillRetainedModelCustody(f.env, { ...options, checkpoint, sourceKey: 'another-source' }))
+    .rejects.toBeInstanceOf(ModelCustodyBackfillConflict);
+  expect(objects.puts).toHaveLength(puts);
+  expect(f.graph.head).toBe(old.generation);
+  expect(f.graph.revisionPins.get(old.revision)).toBe(old.generation);
+  expect(f.graph.commands).toHaveLength(0);
+});
+
+test('model custody operator arguments name multiple original build roots and a resumable local checkpoint', () => {
+  const old = resolve('.temp/retained-model-original'), later = resolve('.temp/retained-model-later');
+  const checkpoint = resolve('.temp/model-custody-checkpoint.json');
+  expect(modelCustodyArguments(['--custody', '--build', old, '--build', later,
+    '--checkpoint', checkpoint, '--max-objects', '3'])).toEqual({
+    buildDirectories: [old, later], checkpoint, maxObjects: 3,
+  });
+  for (const args of [[], ['--custody'], ['--custody', '--build'],
+    ['--custody', '--build', old, '--max-objects', '0'],
+    ['--custody', '--build', old, '--max-objects', '1.5'],
+    ['--custody', '--build', old, '--checkpoint', checkpoint, '--checkpoint', checkpoint],
+    ['--custody', '--build', old, '--max-objects', '3', '--max-objects', '4'],
+    ['--custody', '--build', 'https://models.example/original'],
+    ['--custody', '--build', 'postgres://user:secret@127.0.0.1/database'],
+    ['--custody', '--build', old, '--checkpoint', 's3://access:secret@bucket/checkpoint'],
+    ['--custody', '--build', old, '--secret', 'credential']]) {
+    expect(() => modelCustodyArguments(args)).toThrow();
+  }
 });
