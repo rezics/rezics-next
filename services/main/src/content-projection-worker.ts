@@ -1,5 +1,6 @@
 import type { ContentProjectionResult } from './modules/content-publication/relay.ts';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { logWorkerFault } from '@rezics/observability/log';
 
 function waitForPoll(intervalMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -21,7 +22,7 @@ export class ContentProjectionWorker {
 
   constructor(private readonly poll: () => Promise<ContentProjectionResult | null>,
     private readonly intervalMs = 1000,
-    private readonly onError: (error: unknown) => void = error => console.error('Content projection:', error)) {
+    private readonly onError: (error: unknown) => void = error => logWorkerFault('main.content.projection', error)) {
     if (!Number.isInteger(intervalMs) || intervalMs < 100 || intervalMs > 60_000) {
       throw new Error('CONTENT_PROJECTION_INTERVAL_MS must be an integer from 100 to 60000');
     }

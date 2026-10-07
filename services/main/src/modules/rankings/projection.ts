@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { ContentCore, ContentOutboxEvent } from '../../../../content/src/core.ts';
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -61,7 +62,7 @@ export class ReadRankingProjection {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.read-ranking.projection', () => this.tick(), count => ({
         outcome: count ? 'worked' : 'idle', processed: count, unit: 'event',
-      })).catch(error => { console.error('read ranking projection deferred', error); })
+      })).catch(error => { logWorkerFault('main.read-ranking.projection', error); })
         .finally(() => { this.running = undefined; });
     }, 500);
   }
