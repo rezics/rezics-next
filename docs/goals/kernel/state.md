@@ -1,9 +1,72 @@
 # State
 
-Checkpoint: 2026-10-07 22:30 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 23:06 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
+
+## Current checkpoint corrections
+
+This section supersedes the older per-slice status below; historical proof counts
+remain attached to their original inputs. Whole Goal remains active.
+
+- Native union LANDED74298b7cf96c: actual current-fa396 225 cases/16 suites,
+  zero failures/errors/skips, run-dgkP3d. Original208 plus Body2/Zone8/Retirement7
+  preserved. All162 affected files and19 guards pass; native shard610130ms.
+  Native78dc38c96966 is not serving. The mandatory refresh failed before writer
+  stop: full original Docker package351 tests,0 failures/1 error/0 skips,
+  22:15min. Only the unchanged90s trimmedReceiptBoundBodyAndSourceEvidenceNeverAcceptsWrongPhysicalDelivery
+  deadline expired. Work8 and Retirement7 now pass. Evidence:
+  `.temp/kernel/native-build-default-policy-351-one-timeout.log`.
+- Root build-only170ce4989 on G1330 runs the normal164-file/19-guard gate:
+  `.temp/kernel/native-build-policy-merge-2304.log`, handle71962.
+  MODULE-only Maven128MiB/test384MiB, SerialGC/four processors and sequential
+  nonreused forks match the accepted owner gate. The wrapper now derives exact
+  Docker Maven/JVM policy and complete COPY inputs. Native900s and every original
+  test cap/assertion remain unchanged; runtime server stage unchanged. Candidate
+  pin1ca9ffd0e6b0; refresh mandatory after landing. Previous refresh handle73866
+  finished exit201. Servingcb2446/25ce with retained populated volumes; no merge hold.
+- Audit deadline repair LANDED6bc98cdba635, owner51/957 and original real Access
+  integration21/704. All162 affected/19 guards pass; native shard752879ms.
+  Awaited Content expiry and final return check refuse the whole turn; caller
+  deadline intersects32 lookups/64 native calls/2621440bytes/10s. complete:false;
+  stronger C/R/B/E and operator Content quiescence remain prerequisites.
+- G1282 corrected95dd0a255 accepted: actual56 TDB2 original45+11, all267 current
+  fa396 profiles. Historical original seal fields/marker/token equality retained;
+  new process cannot mint fresh authority on an old job. Unlanded. Codex24
+  inventories authentic creator/source-cut/seal closure only, no completion.
+- G1290 Codex21 exited read-only: all13 loans composed over74298, exact107-input
+  manifest and additive patches staged. Zero tests/production edits/commits.
+  Accepted61-native proof remains historical ab6d; current-fa396 rerun and LIVE
+  G1300 facade reconciliation remain required. No REPEATABLE READ proof.
+- G1379 opt-in original association13dc8efac exited: actual16/9320 units, original
+  owner1/3 hashes. Independent review pending. Real stage64 integration remains
+  pending activation, no Episode completeness/absence claim. Ordinary recursive,
+  signed and original-generation coverage must remain unchanged.
+- G1397 Sonnet4 exiteda74f9c823: shaded Jena integer-writer patch and actual
+  separate-JVM proof. HEAD image original three release cases passed348.6s;
+  borrowed native overlay paired case failed mutation-loop startup90s. Independent
+  critical review and current-union packaged-image qualification still required.
+  Temporary Maven test skips restored; no healing existing truncated stores.
+- G1373 Cursor/Grok13 builds bounded original private Contribution CREATE source
+  using existing RevisionReadBudget and LIMIT2 receipt/history cardinality.
+  Physical private delivery/erasure qualification remains later, no inferred actor.
+- G1352 Cursor/Grok18 readonly comment excerpt inventory done, no runtime edits.
+  Content1708 reservation released through reclaim. Trust sole repairG1408 owns
+  atomic journal-id/epoch source-selector erasure and authorized erased-anchor
+  read/list/replay. Kernel exact Content/locator loans granted; critical inventory
+  review pending. Preserve authored body/IDs/digests, all original assertions,
+  immutable transition/holds/lock fences and coverage-before-replay. Inventory's
+  suggested new table/split owners/404-only wording is nonbinding under Program.
+- ProgramG1404 image-specific45min streamed0600 diagnostics live; G1406d283c845d
+  unstarted-shard retry landed. G1407 alone owns runner-labelled container cleanup.
+  Exact expired Root build mount scans found no surviving containers.
+
+Admission RESTRICTED. New/resumed workers default Cursor/Grok4.7, no new Sol or
+Luna and no force-usage. Sonnet only assertion-integrity/contested/flaky/correctness
+critical work, at most two per Goal; currently G1300 live, G1397 exited. Existing
+admitted Codex workers finish. Protect manager codex-1 reserve (93% observed).
+Host-wide24 ceiling and kernel12GiB dispatch floor remain. No reset credits.
 
 ## Shared stack and latest landings
 
@@ -241,7 +304,7 @@ publish/retry/privacy qualification follows activation; no product cap added.
 
 The coordinator owns finite turns: handle ready merges/rebases/resumes, then
 end the turn when nothing is ready. Do not run a duplicate foreground loop. Up to24 host workers; dispatch/resume only
-at least12GiB available. Sonnet/high for new backend work, short briefs, reuse exited workers,
+at least12GiB available. Restricted routing above applies; short briefs, reuse exited workers,
 no worker --heavy/lifecycle/vault. Keep Main clean, respect peer holds, preserve
 maintainer documentation changes. Use durable keyed mail and ACK after action;
 Program contract/blocker/cross-request messages also append history as requested.
@@ -260,8 +323,8 @@ kill current owner, enroll duplicate or run foreground loop. Finish ready action
 then end the turn; coordinator wakes on durable mail/task exits. Whole Goal active.
 Protect manager codex-1 reserve (92% observed; default codex84%). Sonnet
 admission now restricted by week projected100%; admitted workers finish, no
---force-usage. Route narrow read-only work to default Codex while its reserve
-allows; complex/assertion-sensitive changes need independent review. Existing workers
+--force-usage. Do not admit new Sol/Luna workers. Default Cursor/Grok for new or resumed work;
+correctness-critical work needs independent review within the two-Sonnet ceiling. Existing workers
 finish their frozen handoffs. No banked reset credits or dependence on a reset.
 Only a regular automatic reset or weekly window changes that reserve. Live native artifact
 boundaries in `.temp/kernel/native-manager-handoff.md` and exact per-worker manifests.
