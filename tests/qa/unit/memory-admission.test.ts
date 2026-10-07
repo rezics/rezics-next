@@ -10,6 +10,7 @@ import { GiB, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
 
 const root = resolve(import.meta.dir, '../../..');
 const need = qaMemoryNeed(root, 'other', 'ordinary', {});
+const qaEnv = { REZICS_STACK_PROFILE: 'qa' };
 const plenty: MemoryReading = { vmTotal: 24 * GiB, vmUsed: 5 * GiB, hostAvailable: 20 * GiB };
 
 test('memory admission budgets Compose caps, resource classes and overridden thresholds', () => {
@@ -48,16 +49,21 @@ test('admission uses existing Goal orchestration or the actual QA profile, never
     expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: 'qa' })).toBe(true);
     mkdirSync(join(dir, '.temp', 'goal-orchestration', 'qa-slots'), { recursive: true });
     expect(await isLocalQaRun(dir, {})).toBe(true);
+    for (const profile of ['dev', 'production', '']) {
+      expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: profile })).toBe(false);
+      expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: profile, GOAL_TASK_ID: 'G-1234' })).toBe(false);
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('production operations bypass all admission entry points while local QA still waits', async () => {
+test('saved dev restores bypass all admission entry points even with Goal metadata, while QA still waits', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-production-'));
   const lockFile = join(dir, 'must-not-be-created.sqlite');
   const starts: string[] = [];
   try {
     execFileSync('git', ['init', '--quiet'], { cwd: dir });
-    const env = { REZICS_STACK_PROFILE: 'dev', REZICS_QA_MEMORY_DEADLINE: 'invalid',
+    mkdirSync(join(dir, '.temp', 'goal-orchestration', 'qa-slots'), { recursive: true });
+    const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'G-1234', REZICS_QA_MEMORY_DEADLINE: 'invalid',
       REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_QA_HOST_RESERVE_GIB: 'invalid' };
     const options = { root: dir, env, lockFile, deadline: -1, pollMs: 0,
       now: () => { throw new Error('Production inspected a QA clock'); },
@@ -94,7 +100,7 @@ test('independent QA processes measure after the preceding startup and wait for 
     import { join } from 'node:path';
     const [dir, name] = process.argv.slice(2);
     await withMemoryStartup(${JSON.stringify(need)}, {
-      deadline: Date.now() + 5_000, lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
+      env: ${JSON.stringify(qaEnv)}, deadline: Date.now() + 5_000, lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
       announce: message => {
         if (message.startsWith('Waiting for another')) writeFileSync(join(dir, name + '-queued'), message);
         if (message.startsWith('Waiting;')) writeFileSync(join(dir, name + '-short'), message);
@@ -140,7 +146,7 @@ test('startup mutex obeys deadlines and releases after memory shortage and start
   const lockFile = join(dir, 'mutex.sqlite');
   const holder = new Database(lockFile, { create: true });
   let now = 0, started = false;
-  const options = { lockFile, deadline: 25, now: () => now, pollMs: 10,
+  const options = { env: qaEnv, lockFile, deadline: 25, now: () => now, pollMs: 10,
     sleep: async (ms: number) => { now += ms; }, announce: () => {}, read: async () => plenty };
   try {
     holder.exec('BEGIN IMMEDIATE');
@@ -168,7 +174,7 @@ test('process death releases the startup mutex without stale-owner bookkeeping',
     writeFileSync(script, `
       import { withMemoryStartup } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
       import { writeFileSync } from 'node:fs';
-      await withMemoryStartup(${JSON.stringify(need)}, { lockFile: ${JSON.stringify(lockFile)},
+      await withMemoryStartup(${JSON.stringify(need)}, { env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(lockFile)},
         deadline: Date.now() + 5_000, announce: () => {}, read: async () => (${JSON.stringify(plenty)}) }, async () => {
         writeFileSync(${JSON.stringify(ready)}, 'held');
         await new Promise(() => { setInterval(() => {}, 1000); });
@@ -179,7 +185,7 @@ test('process death releases the startup mutex without stale-owner bookkeeping',
       await untilFile(ready);
       child.kill(signal);
       await child.exited;
-      expect(await withMemoryStartup(need, { lockFile, deadline: Date.now() + 500,
+      expect(await withMemoryStartup(need, { env: qaEnv, lockFile, deadline: Date.now() + 500,
         announce: () => {}, read: async () => plenty }, () => 'recovered')).toBe('recovered');
     } finally { child.kill(); await child.exited; rmSync(dir, { recursive: true, force: true }); }
   }
@@ -219,12 +225,12 @@ test('host-only admission can start without Docker and still enforces its reserv
   try {
     process.env.PATH = '';
     await waitForMemory({ vm: 0, vmReserve: 0, host: 0, hostReserve: 0 }, {
-      deadline: Date.now() + 100, announce: () => {},
+      env: qaEnv, deadline: Date.now() + 100, announce: () => {},
     });
   } finally { process.env.PATH = previous; }
   let now = 0;
   await expect(waitForMemory({ vm: 0, vmReserve: 0, host: 4 * GiB, hostReserve: 8 * GiB }, {
-    deadline: 10, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10, announce: () => {},
+    env: qaEnv, deadline: 10, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10, announce: () => {},
     read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: 11 * GiB }),
   })).rejects.toThrow('host needs 4.00 GiB + 8.00 GiB reserve, available 11.00 GiB');
 });
@@ -247,7 +253,7 @@ for (const short of ['vm', 'host'] as const) {
     let now = 0, reads = 0;
     const messages: string[] = [];
     await waitForMemory(need, {
-      deadline: 30, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10,
+      env: qaEnv, deadline: 30, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10,
       announce: message => messages.push(message),
       read: async () => {
         reads++;
@@ -270,13 +276,13 @@ test('memory admission deadline reports both shortages and never admits late rea
   let now = 0;
   const messages: string[] = [];
   await expect(waitForMemory(need, {
-    deadline: 25, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10,
+    env: qaEnv, deadline: 25, now: () => now, sleep: async ms => { now += ms; }, pollMs: 10,
     announce: message => messages.push(message), read: async () => ({ ...plenty, vmUsed: 24 * GiB, hostAvailable: GiB }),
   })).rejects.toThrow('Docker VM needs 5.38 GiB + 0.00 GiB reserve, free 0.00 GiB; host needs 1.00 GiB + 8.00 GiB reserve, available 1.00 GiB');
   expect(now).toBe(25);
   expect(messages.every(message => message.startsWith('Waiting;'))).toBe(true);
   now = 0;
-  await expect(waitForMemory(need, { deadline: 10, now: () => now, announce: () => {},
+  await expect(waitForMemory(need, { env: qaEnv, deadline: 10, now: () => now, announce: () => {},
     read: async remaining => { expect(remaining).toBe(10); now = 10; return plenty; },
   })).rejects.toThrow('deadline reached');
 });
@@ -284,7 +290,7 @@ test('memory admission deadline reports both shortages and never admits late rea
 test('unavailable readings fail closed, retry and retain the reason at the deadline', async () => {
   let now = 0, reads = 0;
   const messages: string[] = [];
-  const options = { deadline: 15, now: () => now, sleep: async (ms: number) => { now += ms; }, pollMs: 10,
+  const options = { env: qaEnv, deadline: 15, now: () => now, sleep: async (ms: number) => { now += ms; }, pollMs: 10,
     announce: (message: string) => messages.push(message) };
   await waitForMemory(need, { ...options, read: async () => {
     if (++reads === 1) throw new Error('Docker unavailable');

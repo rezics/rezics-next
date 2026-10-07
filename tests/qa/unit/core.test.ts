@@ -19,7 +19,7 @@ mkdirSync(scratch, { recursive: true });
 test('QA work starts only after memory admission and stays unstarted at the deadline', async () => {
   const need = { vm: 10, host: 2, hostReserve: 8, vmReserve: 1 };
   let now = 0, started = false;
-  const options = { deadline: 20, now: () => now, sleep: async (ms: number) => { now += ms; }, pollMs: 10,
+  const options = { env: { REZICS_STACK_PROFILE: 'qa' }, deadline: 20, now: () => now, sleep: async (ms: number) => { now += ms; }, pollMs: 10,
     announce: () => {}, read: async () => ({ vmTotal: 24, vmUsed: 14, hostAvailable: 10 }) };
   await expect(withQaMemory(need, options, async () => { started = true; })).rejects.toThrow('deadline');
   expect(started).toBe(false);

@@ -99,11 +99,12 @@ export interface MemoryWaitOptions {
   pollMs?: number;
 }
 
-/** Archived production restores also use QA project names. Only actual local
- * orchestration or the saved QA profile opts into this host's QA reserves. */
+/** Saved non-QA profiles retain their restore policy even in a Goal checkout.
+ * Orchestration metadata opts in only when there is no saved stack profile. */
 export async function isLocalQaRun(root = resolve(import.meta.dir, '../..'),
   env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  if (env.GOAL_TASK_ID?.trim() || env.REZICS_STACK_PROFILE === 'qa') return true;
+  if (env.REZICS_STACK_PROFILE !== undefined) return env.REZICS_STACK_PROFILE === 'qa';
+  if (env.GOAL_TASK_ID?.trim()) return true;
   // core imports admission; load its existing worktree-aware slot lookup lazily.
   const { goalSlotDirectory } = await import('./core.ts');
   return goalSlotDirectory(root) !== undefined;
