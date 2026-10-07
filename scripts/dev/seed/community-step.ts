@@ -33,6 +33,7 @@ export function publicWork(state: SeedState, id: string):
 
 /** A Main read that answers 404 as absent and retries a graph that moves under it. */
 export async function readMain<T>(api: SeedApi, path: string, token?: string): Promise<T | null> {
+  await api.prepareClosed('GET', path, token);
   for (let attempt = 0; ; attempt++) {
     const response = await fetch(`${api.endpoints.main}${path}`,
       token ? { headers: { authorization: `Bearer ${token}` } } : {});
@@ -43,7 +44,8 @@ export async function readMain<T>(api: SeedApi, path: string, token?: string): P
       await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
       continue;
     }
-    throw new SeedApiError(`Main ${path}`, response.status, (await response.text()).slice(0, 300));
+    const detail = (await response.text()).slice(0, 300);
+    throw new SeedApiError(`Main ${path}`, response.status, api.closedDetail('GET', path, response.status, detail));
   }
 }
 

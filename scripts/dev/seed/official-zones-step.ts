@@ -96,6 +96,7 @@ class Official {
   }
   /** A read; Main answers 409 or 503 while the graph moves under it, so those are tried again a few times. */
   async read<T>(path: string, token?: string): Promise<T | null> {
+    await this.api.prepareClosed('GET', path, token);
     for (let attempt = 0; ; attempt++) {
       const response = await fetch(`${this.api.endpoints.main}${path}`,
         token ? { headers: { authorization: `Bearer ${token}` } } : {});
@@ -106,7 +107,8 @@ class Official {
         await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
         continue;
       }
-      throw new SeedApiError(`Main ${path}`, response.status, (await response.text()).slice(0, 300));
+      const detail = (await response.text()).slice(0, 300);
+      throw new SeedApiError(`Main ${path}`, response.status, this.api.closedDetail('GET', path, response.status, detail));
     }
   }
 }
@@ -421,7 +423,7 @@ async function mods(o: Official) {
         ? JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: item.release,
           environment: 'client', depends: {} })
         : `modLoader="javafml"\nloaderVersion="[52,)"\nlicense="MIT"\nclientSideOnly=true\n[[mods]]\nmodId="${item.nativeId}"\nversion="${item.release}"\n`;
-      if (await modReleaseBound(path => o.read(path), target.work.work, item.release, '1.21.1', item.ecosystem)) return;
+      if (await modReleaseBound(path => o.read(path, token), target.work.work, item.release, '1.21.1', item.ecosystem)) return;
       const bytes = Buffer.from(manifest);
       const resolved = await api.post<{ resolution: { resolution: string } }>(
         '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem: item.ecosystem,
@@ -454,7 +456,7 @@ async function mods(o: Official) {
         : JSON.stringify({ schemaVersion: 1, id: item.nativeId, version: later.release,
           ...later.environment ? { environment: later.environment } : {}, depends: later.depends ?? {},
           ...later.recommends ? { recommends: later.recommends } : {}, ...later.breaks ? { breaks: later.breaks } : {} });
-      if (await modReleaseBound(path => o.read(path), target.work.work, later.release, later.gameVersion, ecosystem)) return;
+      if (await modReleaseBound(path => o.read(path, token), target.work.work, later.release, later.gameVersion, ecosystem)) return;
       const resolved = await api.post<{ resolution: { resolution: string } }>(
         '/v1/package-resolutions/mods', { profile: 'mod-native-capture-v1', ecosystem,
           side: 'CLIENT', root: item.nativeId,

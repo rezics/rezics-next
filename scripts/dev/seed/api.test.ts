@@ -61,3 +61,40 @@ test('G-543: seed moving-read write retries remain bounded', async () => {
     expect(new Set(calls.map(call => call.key))).toEqual(new Set(['seed-key']));
   });
 }, 10_000);
+
+test('a closed call without a platform administrator names the group and still reaches Main', async () => {
+  let calls = 0;
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch() {
+    calls += 1;
+    return Response.json({ code: 'platform_closed', title: 'This capability is closed' }, { status: 403 });
+  } });
+  try {
+    const api = new SeedApi({ main: server.url.origin } as SeedEndpoints);
+    const error = await api.get(`/v1/themes/${uuid}/first-party`, 'token').then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('platform:executable-themes');
+    expect((error as Error).message).toContain('platform_closed');
+    expect(calls).toBe(1);
+  } finally { await server.stop(true); }
+});
+
+test('a public call keeps a platform_closed body, and another 403 is left unchanged', async () => {
+  const bodies = [
+    { code: 'platform_closed', title: 'This capability is closed' },
+    { code: 'forbidden', title: 'No' },
+  ];
+  let index = 0;
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch() {
+    const body = bodies[index]!;
+    index += 1;
+    return Response.json(body, { status: 403 });
+  } });
+  try {
+    const api = new SeedApi({ main: server.url.origin } as SeedEndpoints);
+    await expect(api.get('/v1/works', 'token')).rejects.toThrow(JSON.stringify(bodies[0]));
+    const denied = await api.get(`/v1/themes/${uuid}/first-party`, 'token')
+      .then(() => null, (caught: unknown) => caught);
+    expect((denied as Error).message).toContain('"code":"forbidden"');
+    expect((denied as Error).message).not.toContain('platform:executable-themes');
+  } finally { await server.stop(true); }
+});

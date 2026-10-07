@@ -2,6 +2,7 @@ import { signupPolicyFixture } from '../signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { assertSeedRequest } from './request-schema.ts';
 import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
+import { nameClosedRefusal, openSeedPlatformGroup, seedCallExposure, type SeedPlatformGrant } from './platform-use.ts';
 
 
 /** POST operations that read or compute and never record anything. */
@@ -23,6 +24,8 @@ export interface SeedEndpoints {
   resource: string;
   scope: string;
   writeCounts?: SeedWriteCounts;
+  /** The dev stack's platform administrator. A seed step opens only the closed groups it calls. */
+  platformGrant?: SeedPlatformGrant;
 }
 
 export interface Credentials { email: string; password: string; name?: string }
@@ -33,9 +36,14 @@ export class SeedApiError extends Error {
   }
 }
 
-async function payload<T>(response: Response, operation: string): Promise<T> {
+async function payload<T>(response: Response, operation: string,
+  closed?: { method: string; path: string }): Promise<T> {
   const text = await response.text();
-  if (!response.ok) throw new SeedApiError(operation, response.status, text.slice(0, 500));
+  if (!response.ok) {
+    const detail = text.slice(0, 500);
+    throw new SeedApiError(operation, response.status,
+      closed ? nameClosedRefusal(closed.method, closed.path, response.status, detail) : detail);
+  }
   try { return JSON.parse(text) as T; }
   catch { throw new Error(`${operation}: invalid JSON response`); }
 }
@@ -210,19 +218,38 @@ export class SeedApi {
     return result.access_token;
   }
 
+  /** Open platform:use for this bearer before a closed Main call. A seed with no
+   * local administrator still makes the call; a platform_closed answer then names the group. */
+  async prepareClosed(method: string, path: string, token?: string): Promise<void> {
+    const exposure = seedCallExposure(method, path);
+    if (!exposure?.startsWith('platform:')) return;
+    const group = exposure.slice('platform:'.length);
+    if (!this.endpoints.platformGrant) return;
+    if (!token) {
+      throw new Error(`Seed ${method} ${path} needs platform:use:${group} for ${exposure} and has no caller token`);
+    }
+    await openSeedPlatformGroup(this.endpoints, token, group);
+  }
+
+  closedDetail(method: string, path: string, status: number, detail: string): string {
+    return nameClosedRefusal(method, path, status, detail);
+  }
+
   async put<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
     return this.write('PUT', path, body, token, key);
   }
 
   async get<T>(path: string, token: string): Promise<T> {
-    return this.read(path, { authorization: `Bearer ${token}` });
+    await this.prepareClosed('GET', path, token);
+    return this.read(path, { authorization: `Bearer ${token}` }, 'GET');
   }
 
   async getPublic<T>(path: string): Promise<T> {
-    return this.read(path);
+    await this.prepareClosed('GET', path);
+    return this.read(path, undefined, 'GET');
   }
 
-  private async read<T>(path: string, headers?: HeadersInit): Promise<T> {
+  private async read<T>(path: string, headers: HeadersInit | undefined, method: string): Promise<T> {
     for (let attempt = 0; attempt < 10; attempt++) {
       const response = await this.mainResponse(path, { headers }, attempt, 9);
       if (!response) continue;
@@ -234,7 +261,7 @@ export class SeedApi {
           continue;
         }
       }
-      return payload<T>(response, `Main ${path}`);
+      return payload<T>(response, `Main ${path}`, { method, path });
     }
     throw new Error(`Main ${path}: read retries exhausted`);
   }
@@ -246,6 +273,7 @@ export class SeedApi {
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
     assertSeedRequest(method, path, body);
+    await this.prepareClosed(method, path, token);
     let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await this.mainResponse(path, { method,
@@ -324,7 +352,7 @@ export class SeedApi {
         }
       }
       if (response.status !== 202) {
-        const result = await payload<T>(response, `Main ${path}`);
+        const result = await payload<T>(response, `Main ${path}`, { method, path });
         if (this.endpoints.writeCounts) {
           // Like the catalogue fixture's createdWrites, count seed-record
           // commands separately from candidate searches, their evidence and

@@ -99,11 +99,19 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
     clientId: string; redirectUris: string[]; scope: string; resource: string };
   const privateConfig = existsSync(privatePath)
     ? JSON.parse(readFileSync(privatePath, 'utf8')) as {
-      operator?: { id: string; email: string; password: string } }
+      operator?: { id: string; email: string; password: string };
+      member?: { email: string; password: string };
+      actingSubject?: string }
     : null;
   const account = env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL;
   const accountService = env.ACCOUNT_SERVICE_ORIGIN ?? account;
   const main = Bun.env.REZICS_SEED_MAIN_ORIGIN ?? env.MAIN_ORIGIN;
+  const member = privateConfig?.member;
+  const platformGrant = member?.email && member.password && privateConfig?.actingSubject
+    && env.ACCESS_DATABASE_URL && publicConfig.resource
+    ? { email: member.email, password: member.password, actingSubject: privateConfig.actingSubject,
+      clientId: publicConfig.clientId, redirectUri: publicConfig.redirectUris[0]!,
+      resource: publicConfig.resource, accessDatabaseUrl: env.ACCESS_DATABASE_URL } : undefined;
   if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope) {
     throw new Error('Dev stack lacks its public OAuth client');
   }
@@ -119,7 +127,7 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
   endpoints: { account, accountService, main, enrollmentToken: env.ACCOUNT_ENROLLMENT_TOKEN,
     mailpit: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
     clientId: publicConfig.clientId, redirectUri: publicConfig.redirectUris[0],
-    resource: publicConfig.resource, scope: publicConfig.scope } };
+    resource: publicConfig.resource, scope: publicConfig.scope, ...(platformGrant ? { platformGrant } : {}) } };
 }
 
 function describe(error: unknown): string {
