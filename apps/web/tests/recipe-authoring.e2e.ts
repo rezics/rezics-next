@@ -27,8 +27,13 @@ async function createRecipe(page: Page, title: string): Promise<string> {
   await page.goto(sessionStudio('/new'));
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
   await choose(page.getByRole('radio', { name: /^Recipe/ }));
-  await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();
-  await page.getByRole('option', { name: 'English', exact: true }).click();
+  // A click before the page hydrates opens nothing: open it again until the list shows.
+  const english = page.getByRole('option', { name: 'English', exact: true });
+  await expect(async () => {
+    if (!await english.isVisible()) await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();
+    await expect(english).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await english.click();
   await page.getByRole('button', { name: /^Create as / }).click();
   await page.waitForURL(/\/works\/[0-9a-f-]{36}\/write\?language=en$/);
   return /\/works\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
