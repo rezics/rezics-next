@@ -1,0 +1,6 @@
+@prefix ex: <https://rezics.com/jena-cli/> .
+ex:default ex:kind "default" .
+<https://rezics.com/jena-cli/scratch> {
+  ex:named ex:kind "named" .
+  ex:named ex:extra "one" .
+}

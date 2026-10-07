@@ -1,0 +1,2 @@
+@prefix ex: <https://rezics.com/jena-cli/> .
+ex:subject ex:predicate "unterminated

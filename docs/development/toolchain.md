@@ -125,6 +125,38 @@ Run `task search:rebuild` with writers stopped to upgrade an existing volume;
 its quarantined profile step replaces the probe before rebuilding an empty
 index. Activation and requests require the Chinese, kana and width witnesses.
 
+## Pinned Jena CLI
+
+`task jena:check` runs the already built Fuseki image from Compose. It does not
+build or pull that image and it does not start the shared stack. Host Java is
+still unnecessary. The command validates authored Turtle under
+`model/definitions`, generated shapes under `generated/model/shapes`, and the
+four Fuseki assemblers in `infra/jena` with `riotcmd.riot --validate`. It parses
+the reviewed [work-versions query](../../services/main/src/modules/query/templates/work-versions.rq)
+through the same offline `arq.qparse --explain` capture as
+[fuseki-plan.ts](../../scripts/load/fuseki-plan.ts), and RIOT-checks the TriG
+dataset in that query's
+[fixed fixture](../../services/main/src/modules/query/templates/work-versions.fixture.json).
+It then loads only [scratch.trig](../../tests/fixtures/jena-cli/scratch.trig)
+with `tdb2.tdbloader --loader=basic` into container-local `/tdb` and runs
+`tdb2.tdbstats` twice, once for the default graph and once for
+`https://rezics.com/jena-cli/scratch`. Stats stay on stdout under `.temp/jena-cli`.
+The check does not install `stats.opt`, does not measure a live store, and does
+not prove physical boundedness.
+[Jena command-line tools](https://jena.apache.org/documentation/tools/) and the
+[TDB2 commands](https://jena.apache.org/documentation/tdb2/tdb2_cmds.html)
+describe these programs. The class names in the pinned 6.2 jar are `riotcmd.riot`,
+`arq.qparse`, `tdb2.tdbloader` and `tdb2.tdbstats`.
+
+The container is `rezics-jena-cli`. The only bind mount is `.temp/jena-cli`,
+read-only, at `/artifacts`. The checkout and the vault are not mounted. Memory
+is 768 MiB, the process limit is 256, each command's output is at most 1 MiB,
+and the run's deadline is 60 seconds. The container is removed after success,
+failure or cancellation.
+`task jena:check` takes no dataset or path argument. Generated shapes must
+already exist (`task gen`). Wiring this command into root check or CI belongs
+to the program gate, not this task.
+
 ## Architecture evaluation exception (2026-09-24)
 
 The [storage research runner](../../scripts/research/storage_architecture/README.md)
@@ -415,6 +447,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
 | `task gen` | Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory. |
 | `task gen:check` | Fail if generated artifacts are stale. |
+| `task jena:check` | Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI. |
 | `task toolchain:inventory` | Regenerate the toolchain inventory from manifests and root commands. |
 | `task dataset:fetch` | Explicitly capture complete real-world series into the external local dataset store. |
 | `task dataset:verify` | Verify an external dataset snapshot and all referenced local bytes without network access. |

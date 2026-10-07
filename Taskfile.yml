@@ -396,6 +396,11 @@ tasks:
     cmds:
       - bun scripts/generate.ts --check
 
+  jena:check:
+    desc: Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI.
+    cmds:
+      - bun scripts/qa/jena-cli.ts
+
   toolchain:inventory:
     desc: Regenerate the toolchain inventory from manifests and root commands.
     cmds:
