@@ -835,6 +835,23 @@ test('resume rejects a checkout map whose child symlink escapes the verified cac
   } finally { r.cleanup(); external.cleanup(); }
 });
 
+test('resume rejects a legacy root symlink into another repository before preparing it', async () => {
+  const r = repo();
+  const external = repo();
+  try {
+    await r.run({ runId: 'legacy-root-escape' });
+    const legacy = join(r.dir, '.temp/regress'); symlinkSync(external.dir, legacy);
+    const mapPath = join(r.options.stateDir, 'regress/legacy-root-escape/checkouts.json');
+    const map = JSON.parse(readFileSync(mapPath, 'utf8')) as Record<string, string>;
+    map[`${r.base}:pinned`] = legacy; writeFileSync(mapPath, JSON.stringify(map));
+    let prepared = false;
+    await expect(r.run({ resume: 'legacy-root-escape', prepare: async () => {
+      prepared = true; return { ok: true, artifactPaths: [] };
+    } })).rejects.toThrow('outside its cache');
+    expect(prepared).toBe(false);
+  } finally { r.cleanup(); external.cleanup(); }
+});
+
 test('pinned Task preparation uses a verified private disk TMPDIR', async () => {
   const r = repo();
   try {

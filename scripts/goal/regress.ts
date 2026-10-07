@@ -411,6 +411,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const worktrees = regressionCheckoutRoot(repo, options.checkoutRoot);
     const legacyRoot = resolve(repo, '.temp/regress');
     const physicalLegacyRoot = physicalPath(legacyRoot);
+    const legacyOwned = within(realpathSync(repo), physicalLegacyRoot) || within(worktrees, physicalLegacyRoot);
     const treeMapPath = join(directory, 'checkouts.json');
     const treeMap = existsSync(treeMapPath) ? json<Record<string, string>>(treeMapPath) : {};
     const nameLength = checkoutNameLength(worktrees);
@@ -422,8 +423,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (checkout) {
         const candidate = resolve(checkout);
         const physical = physicalPath(candidate);
-        if ((!within(worktrees, candidate) && !within(legacyRoot, candidate) && !within(physicalLegacyRoot, candidate))
-          || (!within(worktrees, physical) && !within(physicalLegacyRoot, physical))) {
+        const legacyCandidate = legacyOwned && (within(legacyRoot, candidate) || within(physicalLegacyRoot, candidate));
+        if ((!within(worktrees, candidate) && !legacyCandidate)
+          || (!within(worktrees, physical) && !(legacyOwned && within(physicalLegacyRoot, physical)))) {
           throw new Error('Regression checkout map points outside its cache or legacy repository directory');
         }
         let existing = candidate;
