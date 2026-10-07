@@ -1458,6 +1458,18 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
 }
 
 /** A branch failure is blocking only when that file passes at main's committed boundary. */
+/** Files a failing bun run names: in AGENT mode bun prints a `path:` header only for files with failures or errors. */
+export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
+  const known = new Set(candidates);
+  const found = new Set<string>();
+  for (const match of output.matchAll(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/gm)) {
+    let file = match[1]!.replace(/^\.\//, '');
+    if (root && isAbsolute(file)) file = relative(root, file);
+    if (known.has(file)) found.add(file);
+  }
+  return [...found].sort();
+}
+
 function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean): string | undefined {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
@@ -1469,52 +1481,59 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
   const files = mergeUnitFiles(worktree, plan.stdout);
   console.log(`Pre-merge unit gate: ${files.length} affected file(s) against main ${before.slice(0, 12)}`);
   if (!files.length) return;
-  // One run for the common passing case; the per-file loop below only diagnoses a failing set.
-  const all = spawnSync('task', ['test', '--', ...files.map(file => `./${file}`)], {
-    cwd: worktree, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 256 * 1024 * 1024, timeout: 1_800_000,
-  });
-  if (all.status === 0) {
+  // One run per side: the branch's affected files, then only its failing files at main's committed boundary.
+  // A run that cannot finish is inconclusive and reported, never a refusal: the wave and the regression tier
+  // still run those files (a per-file timeout once aborted every launch merge).
+  const runSet = (cwd: string, set: readonly string[]) => {
+    const result = spawnSync('task', ['test', '--', ...set.map(file => `./${file}`)], {
+      cwd, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 256 * 1024 * 1024, timeout: 1_800_000,
+    });
+    const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    if (result.status === null) return { done: false as const, failing: [] as string[], output };
+    const failing = result.status === 0 ? [] : failingTestFiles(output, set, cwd);
+    // A failure bun did not attribute to a file counts against the whole set.
+    return { done: true as const, failing: result.status !== 0 && !failing.length ? [...set] : failing, output };
+  };
+  const branch = runSet(worktree, files);
+  if (!branch.done) {
+    console.log(`Unit gate inconclusive: the affected run did not finish (${files.length} files); reported, not blocking`);
+    return;
+  }
+  if (!branch.failing.length) {
     console.log('Pre-merge unit gate: every affected unit file passes');
     return;
   }
-  const run = (cwd: string, file: string) => {
-    const result = spawnSync('task', ['test', '--', `./${file}`], {
-      cwd, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 64 * 1024 * 1024, timeout: 300_000,
-    });
-    if (result.status === null) throw new Error(`Unit gate could not run ${file}: ${result.error?.message ?? result.signal}`);
-    if (result.status !== 0) console.log(`${cwd}: ${file} failed:\n${result.stdout}\n${result.stderr}`);
-    return result.status === 0;
-  };
+  console.log(`Unit gate: ${branch.failing.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
+  const introduced = branch.failing.filter(file =>
+    spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0);
+  const existing = branch.failing.filter(file => !introduced.includes(file));
   let directory: string | undefined;
-  let baseline: string | undefined;
-  const introduced: string[] = [];
   try {
-    for (const file of files) {
-      // With one file the combined run above was that file's run.
-      if (files.length > 1 && run(worktree, file)) continue;
-      if (spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0) {
-        introduced.push(file);
-        continue;
+    if (existing.length) {
+      // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
+      mkdirSync(join(mainRoot, '.temp'), { recursive: true });
+      directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
+      git(mainRoot, ['worktree', 'add', '--detach', directory, before]);
+      // Own workspace links keep the baseline on HEAD even when main has local source edits.
+      const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+      if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+      const main = runSet(directory, existing);
+      if (!main.done) {
+        console.log(`Unit gate inconclusive: main's run of ${existing.length} file(s) did not finish; reported, not blocking`);
+      } else {
+        for (const file of existing) {
+          if (main.failing.includes(file)) console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
+          else introduced.push(file);
+        }
       }
-      if (!baseline) {
-        // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
-        mkdirSync(join(mainRoot, '.temp'), { recursive: true });
-        directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
-        baseline = directory;
-        git(mainRoot, ['worktree', 'add', '--detach', baseline, before]);
-        // Own workspace links keep the baseline on HEAD even when main has local source edits.
-        const install = spawnSync('task', ['install'], { cwd: baseline, encoding: 'utf8', timeout: 120_000 });
-        if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
-      }
-      if (existsSync(join(baseline, file)) && !run(baseline, file)) {
-        console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
-      } else introduced.push(file);
     }
   } finally {
-    if (baseline) git(mainRoot, ['worktree', 'remove', '--force', baseline]);
-    if (directory) rmSync(directory, { recursive: true, force: true });
+    if (directory) {
+      git(mainRoot, ['worktree', 'remove', '--force', directory]);
+      rmSync(directory, { recursive: true, force: true });
+    }
   }
-  return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.join('\n  ')}` : undefined;
+  return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.sort().join('\n  ')}` : undefined;
 }
 
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {

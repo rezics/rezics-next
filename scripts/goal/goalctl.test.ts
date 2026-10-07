@@ -7,7 +7,7 @@ import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
-  type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
+  failingTestFiles, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -736,6 +736,14 @@ process.exit(await child.exited);
       expect(events()).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 30_000);
+
+  test('the unit gate reads failing files from one bun run instead of rerunning each file', () => {
+    const output = ['bun test v1.4.2', 'services/main/tests/a.test.ts:', '(fail) a > breaks',
+      '/repo/scripts/b.test.ts:', '# Unhandled error between tests', 'services/main/tests/unlisted.test.ts:', ' 1 pass'].join('\n');
+    expect(failingTestFiles(output, ['services/main/tests/a.test.ts', 'scripts/b.test.ts', 'scripts/c.test.ts'], '/repo'))
+      .toEqual(['scripts/b.test.ts', 'services/main/tests/a.test.ts']);
+    expect(failingTestFiles(' 3 pass\n', ['scripts/c.test.ts'])).toEqual([]);
+  });
 
   test('pre-merge unit gate runs without holding the ledger lock', async () => {
     const r = repo();
