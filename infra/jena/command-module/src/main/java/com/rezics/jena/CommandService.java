@@ -611,9 +611,8 @@ final class CommandService extends ActionService {
                 if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
                     throw new java.util.concurrent.CancellationException("native command cancelled or expired");
                 for (BulkItem item : items) {
-                    if (System.nanoTime() >= deadline) {
-                        results.add(Map.of("status", "deadline")); continue;
-                    }
+                    if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                        return bulkDeadline(items);
                     CommandOverlay staged = new CommandOverlay(new CurrentScope(batchDelta.observed()));
                     var publicationMembership = new StatementPublicationMembership(staged, item.plan());
                     SearchDeltaJournal.Capture delta = null;
@@ -630,6 +629,7 @@ final class CommandService extends ActionService {
                             CommandPolicy.parse(cancellation, item.receipt()), List.of(), deadline, delta);
                         if (!"committed".equals(cancelled.get("status"))) result = cancelled;
                     }
+                    if ("deadline".equals(result.get("status"))) return bulkDeadline(items);
                     if ("committed".equals(result.get("status")) || "invalid".equals(result.get("status"))
                         || "guard-unmatched".equals(result.get("status"))) {
                         if ("committed".equals(result.get("status"))) publicationMembership.advance(item.receipt());
@@ -638,10 +638,14 @@ final class CommandService extends ActionService {
                     }
                     results.add(result);
                 }
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                    return bulkDeadline(items);
                 if (changed) {
                     // One journal entry per physical commit, so a large names-only
                     // import cannot evict the qualified baseline with item entries.
                     if (tracksIndex) SearchDeltaJournal.append(dataset, batchDelta, publicSearchWriteEpoch.get() + 1, deadline);
+                    if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                        return bulkDeadline(items);
                     batchDelta.finishSemanticSources(deadline);
                     CommandWork.enter("commit");
                     SemanticSourceBasis.check(deadline);
@@ -651,8 +655,7 @@ final class CommandService extends ActionService {
                 }
                 return Map.of("items", results);
             } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
-                return Map.of("status", "deadline", "items",
-                    java.util.Collections.nCopies(items.size(), Map.of("status", "deadline")));
+                return bulkDeadline(items);
             } finally {
                 // Lucene rollback performs interruptible I/O; preserve cancellation after cleanup.
                 boolean interrupted = Thread.interrupted();
@@ -669,6 +672,12 @@ final class CommandService extends ActionService {
                 }
             }
         }
+    }
+
+    private static Map<String, Object> bulkDeadline(List<BulkItem> items) {
+        // No item result survives a cancellation of the shared physical commit.
+        return Map.of("status", "deadline", "items",
+            java.util.Collections.nCopies(items.size(), Map.of("status", "deadline")));
     }
 
     private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
@@ -808,7 +817,9 @@ final class CommandService extends ActionService {
             // TDB advances its data version even for an empty writer commit.
             // A validated durable replay must leave the native scope proof unchanged.
             // Content replay repair touches its retained unit and must commit that bounded repair.
-            if (replay && delta.changes().isEmpty()) return result;
+            // Exact Content replay has verified the committed reader and retained
+            // original pins; an empty Lucene commit would discard that qualification.
+            if (replay && (delta.contentReplayIntact() || delta.changes().isEmpty())) return result;
             if (publicationMembership != null) publicationMembership.advance(receipt);
             CommandWork.enter("commit");
             if (ClaimStatementFoldPolicy.applies(receipt)

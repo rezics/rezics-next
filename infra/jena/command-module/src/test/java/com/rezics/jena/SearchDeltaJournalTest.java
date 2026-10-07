@@ -310,6 +310,8 @@ public class SearchDeltaJournalTest {
         int receiptProjectionLookups;
         Runnable afterJournalSource;
         int journalSourceWrites;
+        int journalEntriesWritten;
+        int quadAddDepth;
         ContentFixture(Path existing) throws Exception { root = existing; open(); }
         ContentFixture() throws Exception {
             Files.createDirectories(Path.of(".temp"));
@@ -368,9 +370,16 @@ public class SearchDeltaJournalTest {
             filtered = new FilteredGraphTextIndex(index);
             storage = TDB2Factory.connectDataset(root.resolve("tdb2").toString()).asDatasetGraph();
             data = new DatasetGraphText(storage, filtered, new TextDocProducerTriples(filtered), true) {
+                @Override public void add(Quad quad) {
+                    quadAddDepth++;
+                    try { super.add(quad); } finally { quadAddDepth--; }
+                    if (quadAddDepth == 0 && Thread.currentThread() instanceof CancellationWorker worker) worker.afterCopy(quad);
+                }
                 @Override public void add(Node graph, Node subject, Node predicate, Node object) {
                     super.add(graph, subject, predicate, object);
-                    observeJournalSource(new Quad(graph, subject, predicate, object));
+                    Quad quad = new Quad(graph, subject, predicate, object);
+                    observeJournalSource(quad);
+                    if (quadAddDepth == 0 && Thread.currentThread() instanceof CancellationWorker worker) worker.afterCopy(quad);
                 }
                 @Override public java.util.Iterator<Quad> find(Node graph, Node subject, Node predicate, Node object) {
                     if (NodeFactory.createURI(CommandPolicy.RECEIPTS).equals(graph) && Node.ANY.equals(subject)
@@ -408,6 +417,8 @@ public class SearchDeltaJournalTest {
             finally { storage.end(); }
         }
         void observeJournalSource(Quad quad) {
+            if (quad.getGraph().equals(NodeFactory.createURI("urn:rezics:graph:search-delta"))
+                && quad.getPredicate().equals(property("searchDeltaWriteEpoch"))) journalEntriesWritten++;
             if (!quad.getGraph().equals(NodeFactory.createURI("urn:rezics:graph:search-delta"))
                 || !quad.getPredicate().equals(property("searchDeltaContentSource"))) return;
             journalSourceWrites++;
@@ -531,6 +542,212 @@ public class SearchDeltaJournalTest {
         }
     }
 
+    private enum DeliveryMode { ORDINARY, SLIM, BULK }
+    private enum CancellationPoint { COPY, PRECOMMIT, NONE }
+    private static final String NATIVE_EPOCH = "00000000-0000-4000-8000-000000000002";
+    private static String catalogueId(int item, String part) {
+        return "https://rezics.com/id/00000000-0000-4000-8000-" + String.format("%012d", 100 + item * 10 +
+            switch (part) { case "work" -> 1; case "main" -> 2; case "revision" -> 3; default -> 4; });
+    }
+    /** This is the existing catalogue import footprint: it cannot carry Content text. */
+    private static CommandService.BulkItem catalogueItem(ContentFixture f, int item) {
+        String receipt = "urn:rezics:receipt:catalogue-cancellation:" + item;
+        String work = catalogueId(item, "work"), main = catalogueId(item, "main"),
+            revision = catalogueId(item, "revision"), mainRevision = catalogueId(item, "mainRevision");
+        String operation = "urn:rezics:operation:" + "f".repeat(63) + item;
+        String admission = "00000000-0000-4000-8000-00000000000" + item;
+        String profile = "https://rezics.com/definition/work-metadata-v1";
+        String common = "GRAPH <" + CommandPolicy.CONTROL + "> { <urn:rezics:dataset:product> rv:dataEpoch \""
+            + NATIVE_EPOCH + "\" ; rv:routingEpoch \"routing\" ; rv:sequence ?n }"
+            + " FILTER NOT EXISTS { GRAPH <" + CommandPolicy.CONTROL + "> { <urn:rezics:dataset:product> rv:restoreHold true } }"
+            + " FILTER NOT EXISTS { GRAPH <" + CommandPolicy.RECEIPTS + "> { <" + receipt + "> ?p ?o } } BIND(?n + 1 AS ?next)";
+        String stamp = "<" + receipt + "> a rv:OperationReceipt ; rv:requestDigest \"digest\" ;"
+            + " rv:admissionId \"" + admission + "\" ; rv:authorityEpoch \"0\" ; rv:admittedScope \"work:create:catalogue-import\" ;"
+            + " rv:commandFamily \"work-catalogue-import-v1\" ; rv:datasetId <urn:rezics:dataset:product> ;"
+            + " rv:dataEpoch \"" + NATIVE_EPOCH + "\" ; rv:sequence ?next";
+        String control = "GRAPH <" + CommandPolicy.CONTROL + "> { <urn:rezics:dataset:product> rv:sequence ?next }";
+        String batch = "GRAPH <" + CommandPolicy.OUTBOX + "> { <" + receipt + ":batch> a rv:OutboxBatch ;"
+            + " rv:dataEpoch \"" + NATIVE_EPOCH + "\" ; rv:sequence ?next ; rv:eventCount 1 ; rv:event <" + receipt + ":event> ."
+            + " <" + receipt + ":event> rv:ordinal 0 ; rv:action \"work.create\" ; rv:receipt <" + receipt + ">";
+        String outbox = batch + " ; a rv:WorkCreatedEvent ; rv:operation <" + operation + "> ; rv:work <" + work + "> }";
+        String cancelledOutbox = batch + " ; a rv:AdmissionCancelledEvent ; rv:admissionId \"" + admission + "\" }";
+        String prefix = "PREFIX rv: <" + RV + "> DELETE { GRAPH <" + CommandPolicy.CONTROL
+            + "> { <urn:rezics:dataset:product> rv:sequence ?n } } INSERT { " + control;
+        String update = prefix + " GRAPH <" + CommandPolicy.CURRENT + "> { <" + work
+            + "> a <https://schema.org/CreativeWork> ; rv:mainVersion <" + main + "> ;"
+            + " rv:continuityProfile <https://rezics.com/definition/continuity/native-work-v1> ;"
+            + " <http://www.w3.org/2000/01/rdf-schema#label> \"Catalogue title " + item + "\"@en ; rv:head <" + revision + "> ;"
+            + " rv:catalogueVisible true ; rv:provisional false ; rv:declaredGrain \"new-creative-scope\" ."
+            + " <" + main + "> a rv:MainVersion ; rv:work <" + work + "> ; rv:hostingPolicy rv:MetadataOnly ; rv:head <" + mainRevision + "> }"
+            + " GRAPH <" + CommandPolicy.REVISIONS + "> { "
+            + List.of(Map.entry(revision, work), Map.entry(mainRevision, main)).stream().map(entry ->
+                "<" + entry.getKey() + "> a rv:RevisionAnchor ; rv:component <" + entry.getValue()
+                + "> ; rv:operation <" + operation + "> ; rv:manifest <urn:rezics:sha256:" + "d".repeat(64) + "> ; rv:modelRevision <" + profile
+                + "> ; rv:shapeRevision <" + profile + "> ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch \""
+                + NATIVE_EPOCH + "\" ; rv:sequence ?next .")
+                .collect(java.util.stream.Collectors.joining(" ")) + " }"
+            + " GRAPH <" + CommandPolicy.RECEIPTS + "> { " + stamp + " ; rv:outcome rv:Succeeded ; rv:operation <" + operation
+            + "> ; rv:work <" + work + "> ; rv:mainVersion <" + main + "> ; rv:workRevision <" + revision
+            + "> ; rv:mainRevision <" + mainRevision + "> } " + outbox
+            + " } WHERE { " + common
+            + List.of(Map.entry(CommandPolicy.CURRENT, work), Map.entry(CommandPolicy.CURRENT, main),
+                Map.entry(CommandPolicy.REVISIONS, revision), Map.entry(CommandPolicy.REVISIONS, mainRevision)).stream()
+                .map(entry -> " FILTER NOT EXISTS { GRAPH <" + entry.getKey() + "> { <" + entry.getValue() + "> ?occupied ?value } }")
+                .collect(java.util.stream.Collectors.joining()) + " }";
+        String cancellation = prefix + " GRAPH <" + CommandPolicy.RECEIPTS + "> { " + stamp
+            + " ; rv:outcome rv:Cancelled ; rv:importFailure \"candidate-failed\" } " + cancelledOutbox + " } WHERE { " + common + " }";
+        var validations = List.of(
+            new CommandService.Validation("work-metadata-v1", f.profiles.get("work-metadata-v1"), profile + "/work-shape",
+                List.of(work), List.of(CommandPolicy.CURRENT), Map.of()),
+            new CommandService.Validation("work-metadata-v1", f.profiles.get("work-metadata-v1"), profile + "/main-version-shape",
+                List.of(main), List.of(CommandPolicy.CURRENT), Map.of()),
+            new CommandService.Validation("work-kind-v3", f.profiles.get("work-kind-v3"),
+                "https://rezics.com/definition/work-kind-v3/work-shape", List.of(work), List.of(CommandPolicy.CURRENT), Map.of()));
+        var plan = CommandPolicy.parse(update, receipt);
+        assertFalse(plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH));
+        assertFalse(plan.graphs().contains(CommandPolicy.PRIVATE_SEARCH));
+        return new CommandService.BulkItem(receipt, "digest", update, plan, validations,
+            cancellation, CommandPolicy.parse(cancellation, receipt));
+    }
+    private static void seedSlim(ContentFixture f) {
+        var seed = SlimCommandTest.dataset();
+        seed.begin(ReadWrite.READ); f.data.begin(ReadWrite.WRITE);
+        try {
+            var rows = seed.find();
+            try { rows.forEachRemaining(quad -> {
+                if (!quad.getGraph().equals(CONTROL)) f.data.add(new Quad(quad.getGraph(), quad.getSubject(), quad.getPredicate(),
+                    quad.getObject().equals(NodeFactory.createLiteralString("test")) ? NodeFactory.createLiteralString(NATIVE_EPOCH) : quad.getObject()));
+            }); } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            f.data.commit();
+        } finally { f.data.end(); seed.end(); seed.close(); }
+    }
+    private record CancellationSnapshot(Set<Quad> rdf, List<String> documents, long generation, Map<String, Object> proof) {}
+    private static CancellationSnapshot cancellationSnapshot(ContentFixture f) throws Exception {
+        List<String> documents = new java.util.ArrayList<>();
+        try (var reader = DirectoryReader.open(f.index.getDirectory())) {
+            var hits = new IndexSearcher(reader).search(new org.apache.lucene.search.MatchAllDocsQuery(), 100);
+            assertTrue(hits.totalHits.value() < 100);
+            for (var hit : hits.scoreDocs) {
+                var document = reader.storedFields().document(hit.doc);
+                Map<String, List<String>> fields = new java.util.TreeMap<>();
+                for (var field : document.getFields()) fields.put(field.name(), List.of(document.getValues(field.name())));
+                documents.add(fields.toString());
+            }
+        }
+        documents.sort(String::compareTo);
+        Set<Quad> rdf = f.graphSnapshot();
+        f.data.begin(ReadWrite.READ);
+        try {
+            var proof = SearchDeltaJournal.qualifiedProof(f.data, 0, Long.MAX_VALUE - 1);
+            assertEquals(proof.toString(), true, proof.get("available"));
+            assertEquals(1, f.documents(ContentFixture.UNIT_ID));
+            FilteredGraphTextIndex.verifyContentBodyCommitted(f.data, ContentFixture.UNIT_ID);
+            return new CancellationSnapshot(rdf, List.copyOf(documents), f.committedGeneration(), Map.copyOf(proof));
+        } finally { f.data.end(); }
+    }
+    /** Cancellation is injected into the worker's real guard or after a real
+     * physical copy; the production classes expose no test hook. */
+    private static final class CancellationWorker extends Thread {
+        final ContentFixture fixture; final DeliveryMode mode; final CancellationPoint point; final boolean expire;
+        final long deadline; final int priorJournalEntries;
+        Map<String, Object> result; Throwable failure; boolean fired, interruptedAtExit; long commits;
+        CancellationWorker(ContentFixture fixture, DeliveryMode mode, CancellationPoint point, boolean expire) {
+            super("native-delivery-cancellation");
+            this.fixture = fixture; this.mode = mode; this.point = point; this.expire = expire;
+            deadline = System.nanoTime() + (expire ? 3_000_000_000L : 30_000_000_000L);
+            priorJournalEntries = fixture.journalEntriesWritten;
+        }
+        void cancelAtSeam() {
+            fired = true;
+            if (expire) while (System.nanoTime() < deadline)
+                java.util.concurrent.locks.LockSupport.parkNanos(Math.max(1, deadline - System.nanoTime()));
+            else super.interrupt();
+        }
+        void afterCopy(Quad quad) {
+            if (fired || point != CancellationPoint.COPY) return;
+            boolean atCopy = switch (mode) {
+                case ORDINARY -> quad.getGraph().equals(PUBLIC) && quad.getPredicate().equals(BODY)
+                    && quad.getObject().equals(NodeFactory.createLiteralLang("replacement source", "en"));
+                case SLIM -> Quad.isDefaultGraph(quad.getGraph()) && quad.getSubject().equals(NodeFactory.createURI(SlimCommandTest.COMPONENT))
+                    && quad.getPredicate().equals(NodeFactory.createURI("https://schema.org/name"));
+                case BULK -> quad.getGraph().equals(NodeFactory.createURI(CommandPolicy.CURRENT))
+                    && quad.getPredicate().equals(NodeFactory.createURI("http://www.w3.org/2000/01/rdf-schema#label"));
+            };
+            if (atCopy) cancelAtSeam();
+        }
+        @Override public boolean isInterrupted() {
+            if (!fired && point == CancellationPoint.PRECOMMIT && fixture.journalEntriesWritten > priorJournalEntries
+                && StackWalker.getInstance().walk(frames -> frames.skip(1).findFirst().map(frame ->
+                    frame.getClassName().equals(CommandService.class.getName())
+                    && frame.getMethodName().equals(mode == DeliveryMode.BULK ? "runBulk" : "runSerialized")).orElse(false))) cancelAtSeam();
+            return super.isInterrupted();
+        }
+        @Override public void run() {
+            try (var work = new CommandWork()) {
+                try {
+                    result = switch (mode) {
+                        case ORDINARY -> fixture.deliver(2, "replacement source", "en", deadline);
+                        // Slim's closed metadata envelope copies edition facts,
+                        // retaining the already admitted Content body and source.
+                        case SLIM -> fixture.service.runSlim(fixture.data, SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST,
+                            SlimCommandTest.update(SlimCommandTest.RECEIPT, SlimCommandTest.OLD, SlimCommandTest.NEW, 1)
+                                .replace("\"test\"", "\"" + NATIVE_EPOCH + "\"")
+                                .replace("rv:routingEpoch \"0\"", "rv:routingEpoch \"routing\""),
+                            new CommandService.Slim(SlimCommandTest.PAYLOAD, SlimCommandTest.COMPONENT, SlimCommandTest.NEW),
+                            SlimCommandTest.validations(fixture.profiles, SlimCommandTest.NEW), deadline);
+                        case BULK -> fixture.service.runBulk(fixture.data, List.of(catalogueItem(fixture, 1), catalogueItem(fixture, 2)), deadline);
+                    };
+                } finally {
+                    for (String counter : work.counters().split(",")) if (counter.startsWith("durable_commits="))
+                        commits = Long.parseLong(counter.substring("durable_commits=".length()));
+                }
+            } catch (Throwable thrown) { failure = thrown; }
+            finally { interruptedAtExit = super.isInterrupted(); Thread.interrupted(); }
+        }
+    }
+    private static CancellationWorker cancellationRun(ContentFixture f, DeliveryMode mode, CancellationPoint point, boolean expire) throws Exception {
+        var worker = new CancellationWorker(f, mode, point, expire);
+        worker.start(); worker.join(20_000);
+        assertFalse("native cancellation did not finish", worker.isAlive());
+        if (worker.failure != null) throw new AssertionError("native cancellation worker failed", worker.failure);
+        assertNotNull(worker.result); return worker;
+    }
+    private static void cancellationOutcome(DeliveryMode mode, CancellationWorker worker, String expected) {
+        if (mode != DeliveryMode.BULK) assertEquals(worker.result.toString(), expected, worker.result.get("status"));
+        else {
+            var items = (List<?>) worker.result.get("items"); assertNotNull(items); assertEquals(2, items.size());
+            for (Object item : items) assertEquals(worker.result.toString(), expected, ((Map<?, ?>) item).get("status"));
+            if (worker.result.containsKey("status")) assertEquals(expected, worker.result.get("status"));
+        }
+    }
+    private static void cancellationAcrossWriters(CancellationPoint point) throws Exception {
+        for (DeliveryMode mode : DeliveryMode.values()) try (var f = new ContentFixture()) {
+            if (mode == DeliveryMode.SLIM) seedSlim(f);
+            assertEquals("committed", f.deliver(1, "committed source", "en").get("status"));
+            var before = cancellationSnapshot(f);
+            for (boolean expire : List.of(true, false)) {
+                var stopped = cancellationRun(f, mode, point, expire);
+                assertTrue(mode + " did not reach " + point + ": " + stopped.result, stopped.fired);
+                cancellationOutcome(mode, stopped, "deadline"); assertEquals(0, stopped.commits);
+                if (!expire) assertTrue(stopped.interruptedAtExit);
+                assertEquals("cancelled native writer changed RDF, receipt/stream, journal, body or source proof", before, cancellationSnapshot(f));
+            }
+            var retry = cancellationRun(f, mode, CancellationPoint.NONE, false);
+            cancellationOutcome(mode, retry, "committed"); assertEquals(1, retry.commits);
+            var committed = cancellationSnapshot(f);
+            var replay = cancellationRun(f, mode, CancellationPoint.NONE, false);
+            cancellationOutcome(mode, replay, "committed");
+            assertEquals("intact receipt replay must not publish another physical commit", 0, replay.commits);
+            assertEquals("lost acknowledgement replay duplicated native facts or source delivery", committed, cancellationSnapshot(f));
+        }
+    }
+    @Test(timeout = 90_000) public void nativePhysicalCopiesCancelAcrossOrdinarySlimAndCatalogueBulkWriters() throws Exception {
+        cancellationAcrossWriters(CancellationPoint.COPY);
+    }
+    @Test(timeout = 90_000) public void nativeFinalPrecommitCancellationRollsBackEveryBulkOutcomeAndKeepsContentProof() throws Exception {
+        cancellationAcrossWriters(CancellationPoint.PRECOMMIT);
+    }
+
     @Test public void nativeContentDeliveryReplacesOneBodyAndRetainsRdfWithConfiguredCjkQueries() throws Exception {
         try (var f = new ContentFixture()) {
             var first = f.deliver(1, "old selected body", "en");
@@ -559,6 +776,21 @@ public class SearchDeltaJournalTest {
                         + "ASK { GRAPH <" + CommandPolicy.PUBLIC_SEARCH + "> { <" + ContentFixture.UNIT_ID
                         + "> text:query (rv:searchBody 'alpha') } }", DatasetFactory.wrap(f.data))) {
                     assertTrue(query.execAsk());
+                }
+                CommandModule.registerTextAssembler();
+                // ARQ expressions can receive the base TDB dataset while the
+                // assembler's merged context supplies the same native index.
+                try (var query = org.apache.jena.query.QueryExecution.create(
+                    "PREFIX rv: <" + RV + "> SELECT ?population WHERE {"
+                        + " BIND(rv:publicTextInventory() AS ?population) }", DatasetFactory.wrap(f.storage))) {
+                    query.getContext().set(org.apache.jena.query.text.TextQuery.textIndex, f.filtered);
+                    var rows = query.execSelect();
+                    assertTrue(rows.hasNext());
+                    var row = rows.next();
+                    assertTrue("base-dataset inventory must verify the receipt-bound body", row.contains("population"));
+                    assertEquals(1, row.getLiteral("population").getLong());
+                    assertFalse(rows.hasNext());
+                    assertTrue(f.storage.isInTransaction());
                 }
                 assertTrue(f.filtered.query(BODY, "old", CommandPolicy.PUBLIC_SEARCH, null, 64).isEmpty());
                 assertEquals(true, SearchDeltaJournal.proof(f.data, 0, 4).get("available"));

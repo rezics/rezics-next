@@ -70,13 +70,27 @@ public class CommitProofRetirementTest {
         var profiles = SlimCommandTest.profiles(); var service = SlimCommandTest.service(profiles);
         var data = new org.apache.jena.sparql.core.DatasetGraphWrapper(SlimCommandTest.dataset()) {
             boolean interrupt = true;
-            @Override public void deleteAny(org.apache.jena.graph.Node graph, org.apache.jena.graph.Node subject,
-                org.apache.jena.graph.Node predicate, org.apache.jena.graph.Node object) {
-                super.deleteAny(graph, subject, predicate, object);
+            private void interruptReceipt(org.apache.jena.graph.Node graph, org.apache.jena.graph.Node subject) {
                 if (interrupt && graph.equals(SlimCommandTest.uri(CommandPolicy.RECEIPTS))
                     && subject.equals(SlimCommandTest.uri(SlimCommandTest.RECEIPT))) {
                     interrupt = false; throw new IllegalStateException("interrupted retirement");
                 }
+            }
+            @Override public void deleteAny(org.apache.jena.graph.Node graph, org.apache.jena.graph.Node subject,
+                org.apache.jena.graph.Node predicate, org.apache.jena.graph.Node object) {
+                super.deleteAny(graph, subject, predicate, object);
+                interruptReceipt(graph, subject);
+            }
+            // The observed text-monitor facade enumerates a deleteAny and removes each
+            // receipt quad individually; interrupt after the first actual deletion too.
+            @Override public void delete(org.apache.jena.sparql.core.Quad quad) {
+                super.delete(quad);
+                interruptReceipt(quad.getGraph(), quad.getSubject());
+            }
+            @Override public void delete(org.apache.jena.graph.Node graph, org.apache.jena.graph.Node subject,
+                org.apache.jena.graph.Node predicate, org.apache.jena.graph.Node object) {
+                super.delete(graph, subject, predicate, object);
+                interruptReceipt(graph, subject);
             }
         };
         try {

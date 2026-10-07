@@ -231,9 +231,10 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!(base instanceof org.apache.jena.query.text.DatasetGraphText text)
             || !(text.getTextIndex() instanceof FilteredGraphTextIndex index))
             throw new TextIndexException("Content delivery requires its filtered native writer");
-        return index.verifyContentBody(data, id, originalIdentity, receiptBound);
+        return verifyContentBody(data, index.lucene, id, originalIdentity, receiptBound);
     }
-    private long verifyContentBody(org.apache.jena.sparql.core.DatasetGraph data, String id, String originalIdentity, boolean receiptBound) {
+    static long verifyContentBody(org.apache.jena.sparql.core.DatasetGraph data, TextIndexLucene lucene,
+                                  String id, String originalIdentity, boolean receiptBound) {
         var source = receiptBound ? contentBodyMetadataSource(data, id) : contentBodySource(data, id);
         if (!id.startsWith(CONTENT_UNIT)) throw new IllegalArgumentException("not a Content unit");
         var rank = rankMetadata(data, id);

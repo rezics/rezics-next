@@ -11,7 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '../../..');
 const classes = [
@@ -29,6 +29,8 @@ const classes = [
   'ErasurePurgeCampaignTest',
   'RealmSearchSeekTest',
   'StatementPublicationMembershipTest',
+  'ModelMutationPolicyTest',
+  'CommitProofRetirementTest',
 ] as const;
 
 function attributes(element: string): Record<string, string> {
@@ -44,28 +46,23 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
   const evidenceBase = join(temporary, 'goal/native-accepted-union/evidence');
   mkdirSync(evidenceBase, { recursive: true });
   const evidence = mkdtempSync(join(evidenceBase, 'run-'));
-  const image = /^FROM (\S+) AS module$/m.exec(
-    readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8'),
-  )?.[1];
+  const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
+  const image = /^FROM (\S+) AS module$/m.exec(dockerfile)?.[1];
   if (!image) throw new Error('missing pinned native builder');
   const cache = join(temporary, 'semantic-source-readiness-maven-cache');
   mkdirSync(cache, { recursive: true });
-  const native = join(root, 'infra/jena/command-module');
 
   try {
-    cpSync(join(native, 'pom.xml'), join(build, 'pom.xml'));
-    cpSync(join(root, 'infra/jena/fuseki-text.ttl'), join(build, 'fuseki-text.ttl'));
-    cpSync(join(native, 'src/main'), join(build, 'src/main'), { recursive: true });
-    cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
-    if (existsSync(join(native, 'src/test/resources')))
-      cpSync(join(native, 'src/test/resources'), join(build, 'src/test/resources'), {
-        recursive: true,
-      });
-    mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
-    // Compile the existing fixture helper without selecting its independent proof suite.
-    for (const name of [...classes, 'SlimCommandTest']) {
-      const path = `src/test/java/com/rezics/jena/${name}.java`;
-      cpSync(join(native, path), join(build, path));
+    // Use the exact image build inputs, including startup configuration and query
+    // fixtures. Refuse new COPY syntax instead of silently diverging from Docker.
+    const moduleStage = dockerfile.split(/\nFROM /, 1)[0]!;
+    for (const line of moduleStage.split('\n')) {
+      if (!/^COPY\s/.test(line)) continue;
+      const copy = /^COPY (\S+) (\/build\/\S+)$/.exec(line);
+      if (!copy) throw new Error(`unsupported native module COPY: ${line}`);
+      const destination = join(build, copy[2]!.slice('/build/'.length));
+      mkdirSync(dirname(destination), { recursive: true });
+      cpSync(join(root, copy[1]!), destination, { recursive: true });
     }
 
     const hashes: Record<string, string> = {};
@@ -195,6 +192,7 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
       expect(counts[name]).toBe(cases.length);
     }
     const observed = Object.values(counts).reduce((total, count) => total + count, 0);
+    expect(observed).toBe(225);
     writeFileSync(
       join(evidence, 'actual-xml-counts.json'),
       `${JSON.stringify({ classes: counts, tests: observed, failures: 0, errors: 0, skipped: 0 }, null, 2)}\n`,

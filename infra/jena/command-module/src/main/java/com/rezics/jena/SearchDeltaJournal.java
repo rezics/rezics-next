@@ -208,7 +208,7 @@ final class SearchDeltaJournal {
                         if (subject == null || !seen.add(subject))
                             throw new IllegalStateException("duplicate public body document");
                         if (contentUnit(subject)) {
-                            if (verifyContentSubject(data, subject) != reader.getIndexCommit().getGeneration())
+                            if (verifyContentSubject(data, lucene, subject) != reader.getIndexCommit().getGeneration())
                                 throw new IllegalStateException("public Content reader changed during audit");
                         } else {
                             Node unit = uri(subject), body = one(data, PUBLIC, unit, BODY);
@@ -341,6 +341,7 @@ final class SearchDeltaJournal {
             throw new IllegalStateException("receipt Content body differs from recorded delivery");
         try {
             FilteredGraphTextIndex.verifyContentBodyCommitted(data, unit.getURI(), identity);
+            capture.contentReplayIntact = true;
             return false;
         } catch (TextIndexException mismatch) {
             // Old intact receipts remain replayable after journal trimming, but
@@ -497,6 +498,8 @@ final class SearchDeltaJournal {
         private final Set<Node> headTouchedUnits = new LinkedHashSet<>(), publicTouchedUnits = new LinkedHashSet<>();
         private boolean reset;
         private final long deadline;
+        private boolean contentReplayIntact;
+        boolean contentReplayIntact() { return contentReplayIntact; }
 
         Capture(DatasetGraph data) { this(data, false); }
         Capture(DatasetGraph data, boolean rebuild) { this(data, rebuild, Long.MAX_VALUE); }
@@ -865,7 +868,7 @@ final class SearchDeltaJournal {
                                       IndexSearcher searcher, String subject)
         throws IOException {
         if (contentUnit(subject)) {
-            if (verifyContentSubject(data, subject) != ((DirectoryReader) searcher.getIndexReader()).getIndexCommit().getGeneration())
+            if (verifyContentSubject(data, lucene, subject) != ((DirectoryReader) searcher.getIndexReader()).getIndexCommit().getGeneration())
                 throw new IllegalStateException("Content reader changed during proof");
             return;
         }
@@ -895,14 +898,14 @@ final class SearchDeltaJournal {
         }
         if (bodies != (exists ? 1 : 0)) throw new IllegalStateException("exact-subject index membership differs");
     }
-    private static long verifyContentSubject(DatasetGraph data, String subject) {
+    private static long verifyContentSubject(DatasetGraph data, TextIndexLucene lucene, String subject) {
         var current = FilteredGraphTextIndex.contentBodyMetadataSource(data, subject);
         String identity = current == null ? "" : currentContentBodyDigest(data, subject);
         String source = latestContentSource(data, uri(subject)), body = latestContentBodyDigest(data, uri(subject));
         if (source != null && !source.equals(current == null ? "" : current.encoded())
             || body != null && !body.equals(identity))
             throw new IllegalStateException("public Content differs from recorded delivery");
-        return FilteredGraphTextIndex.verifyContentBodyCommitted(data, subject, identity);
+        return FilteredGraphTextIndex.verifyContentBody(data, lucene, subject, identity, true);
     }
     private SearchDeltaJournal() {}
 }
