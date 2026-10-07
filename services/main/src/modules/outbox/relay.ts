@@ -290,6 +290,7 @@ export interface MainCloudEvent {
   id: string;
   source: typeof SOURCE;
   type: 'com.rezics.work.title-control.v1' | 'com.rezics.work.created.v1' | 'com.rezics.work.edited.v1' | 'com.rezics.work.author-credit-adopted.v1'
+    | 'com.rezics.work.metadata-changed.v1' | 'com.rezics.work.metadata-revised.v1'
     | 'com.rezics.work.author-credit-retired.v1'
     | 'com.rezics.work.edit-rejected.v1' | 'com.rezics.work.admission-cancelled.v1'
     | 'com.rezics.contribution.draft-created.v1'
@@ -338,6 +339,8 @@ export interface MainCloudEvent {
       operation?: string; work?: string; mainVersion?: string; target?: string; workRevision?: string;
       mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
       workManifest?: string; mainManifest?: string;
+      metadata?: { work: string; component: string; revision: string; manifest: string };
+      component?: string; revision?: string; contentLanguages?: string[];
       titleControl?: import('../work/title-control.ts').TitleControlReceipt;
       authorCredit?: string; creditRevision?: string; sourceIntent?: string;
       contribution?: string; draftRevision?: string; draftManifest?: string;

@@ -1,4 +1,5 @@
 import { CATALOGUE_IMPORT_SCOPE, catalogueImportInput, catalogueImportDigest, catalogueImportIdentity, prepareCatalogueImport, type CatalogueImportInput } from './catalogue-import.ts';
+export { reconcileRetainedSlimMetadata, SlimMetadataRestoreConflict } from './reconcile-slim-metadata.ts';
 import { prepareRetainedClassification, retainedClassificationConcept, statementUpgradeMarker,
   STATEMENT_CONVERSION_COST } from '../statement/populated-conversion.ts';
 import { canonicalLanguage } from '../display-language/select.ts';

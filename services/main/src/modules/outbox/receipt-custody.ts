@@ -1,10 +1,11 @@
 import { createHash, createHmac } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type FusekiClient } from '../../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ProofRetirement } from '../graph/slim-command.ts';
-import type { MetadataEditionState, MetadataEditionStateV2 } from '../work/metadata-schema.ts';
+import { checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest,
+  type MetadataEditionState, type MetadataEditionStateV2 } from '../work/metadata-schema.ts';
 import type { CustodiedOutbox, CustodiedOutboxSource, MainOutboxBatch } from './relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from './relay-position.ts';
 
@@ -34,6 +35,23 @@ export interface PreparedCommand {
   routingEpoch: string; state: MetadataEditionState | MetadataEditionStateV2;
   receipt: Omit<CustodiedReceipt, 'sequence' | 'streamSequence'>;
 }
+export interface CommittedCustodySource {
+  prepared: PreparedCommand;
+  terminal: CustodiedReceipt;
+  outbox: CustodiedOutboxRecord;
+  payloadSha256: string;
+  manifestSha256: string;
+  componentPayloadSha256: string;
+  model: string;
+  /** Existing owner retention traversals can protect this exact source closure. */
+  objectReferences: { digest: string; kind: 'command' | 'manifest' | 'payload' | 'shape' }[];
+}
+export interface HistoricalReceiptSource {
+  outbox: CustodiedOutbox;
+  objectDigests: ReadonlySet<string>;
+}
+export const CUSTODY_RECOVERY_COST = { commandBytes: 2_097_152, stateBytes: 65_536,
+  shapeBytes: 4_194_304, selectedProfiles: 2 } as const;
 export interface CustodyRow {
   receipt: string; requestDigest: string; payloadSha256: string; payload: Uint8Array;
   revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
@@ -225,18 +243,20 @@ export class ReceiptCustody implements CustodiedOutboxSource {
           } } }] };
   }
 
-  private async reconcile(row: CustodyRow, session: ReceiptCustodySession): Promise<CustodiedReceipt | null> {
-    if (row.reconciled) {
-      if (!row.terminal || !row.outbox) throw new ObjectIntegrityError('Reconciled owner receipt is incomplete');
-      const prepared = this.prepared(row);
-      if (!/^[1-9][0-9]*$/.test(row.terminal.sequence) || !/^[1-9][0-9]{0,99}$/.test(row.terminal.streamSequence)
-        || Object.entries(prepared.receipt).some(([key, value]) =>
-          row.terminal![key as keyof CustodiedReceipt] !== value)
-        || canonicalJson(row.outbox) !== canonicalJson(this.outbox(row, prepared, row.terminal))) {
-        throw new ObjectIntegrityError('Durable receipt or outbox differs from the prepared command');
-      }
-      return row.terminal;
+  private committedTerminal(row: CustodyRow): CustodiedReceipt {
+    if (!row.reconciled || !row.terminal || !row.outbox) throw new ObjectIntegrityError('Reconciled owner receipt is incomplete');
+    const prepared = this.prepared(row);
+    if (!/^[1-9][0-9]*$/.test(row.terminal.sequence) || !/^[1-9][0-9]{0,99}$/.test(row.terminal.streamSequence)
+      || Object.entries(prepared.receipt).some(([key, value]) =>
+        row.terminal![key as keyof CustodiedReceipt] !== value)
+      || canonicalJson(row.outbox) !== canonicalJson(this.outbox(row, prepared, row.terminal))) {
+      throw new ObjectIntegrityError('Durable receipt or outbox differs from the prepared command');
     }
+    return row.terminal;
+  }
+
+  private async reconcile(row: CustodyRow, session: ReceiptCustodySession): Promise<CustodiedReceipt | null> {
+    if (row.reconciled) return this.committedTerminal(row);
     const proof = await this.proof(row.receipt);
     if (!proof) return null;
     const prepared = await this.exactObject(row);
@@ -253,6 +273,122 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       const row = await session.read();
       return row ? this.reconcile(row, session) : null;
     });
+  }
+
+  /** Read an already committed source; recovery must never dispatch a live
+   * command or turn a pending admission into historical authority. */
+  async readCommitted(receipt: string): Promise<CommittedCustodySource | null> {
+    nativeIri(receipt);
+    return this.store.withReceipt(receipt, async session => {
+      const row = await session.read();
+      return row ? this.verifyCommitted(row) : null;
+    });
+  }
+
+  /** The caller owns its held Access transaction and object store selection.
+   * Historical reads never acquire a pool client, reconcile or consult native
+   * proof/current heads, including when the original proof is retired. */
+  async readHistorical(position: { dataEpoch: string; streamSequence: string },
+    accessClient: PoolClient): Promise<HistoricalReceiptSource | null> {
+    const { dataEpoch, streamSequence } = position;
+    if (!dataEpoch || !/^[1-9][0-9]{0,99}$/.test(streamSequence)) throw new ObjectIntegrityError('Invalid historical custody position');
+    const rows = (await accessClient.query<{ receipt: string; request_digest: string; payload_sha256: string;
+      payload: Buffer; revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
+      reconciled: boolean; retired: boolean; data_epoch: string; stream_sequence: string }>(
+      `SELECT receipt,request_digest,payload_sha256,payload,revision,terminal,outbox,
+        reconciled_at IS NOT NULL AS reconciled,retired_at IS NOT NULL AS retired,
+        data_epoch,stream_sequence::text
+       FROM access.command_custody WHERE data_epoch=$1 AND stream_sequence=$2 LIMIT 2`,
+      [dataEpoch,streamSequence])).rows;
+    if (rows.length > 1) throw new ObjectIntegrityError('Historical custody position is ambiguous');
+    const value = rows[0];
+    if (!value) return null;
+    const source = await this.verifyCommitted({ receipt: value.receipt, requestDigest: value.request_digest,
+      payloadSha256: value.payload_sha256, payload: value.payload, revision: value.revision, terminal: value.terminal,
+      outbox: value.outbox, reconciled: value.reconciled, retired: value.retired });
+    if (value.data_epoch !== dataEpoch || value.stream_sequence !== streamSequence
+      || source.terminal.dataEpoch !== dataEpoch || source.terminal.streamSequence !== streamSequence) {
+      throw new ObjectIntegrityError('Historical custody position differs from its exact terminal');
+    }
+    return { outbox: this.deliveredOutbox(source.terminal.receipt,source.outbox),
+      objectDigests: new Set(source.objectReferences.map(reference => reference.digest)) };
+  }
+
+  private async verifyCommitted(row: CustodyRow): Promise<CommittedCustodySource> {
+    nativeIri(row.receipt);
+    if (!row.reconciled || !row.terminal || !row.outbox
+      || row.payload.byteLength > CUSTODY_RECOVERY_COST.commandBytes) {
+      throw new ObjectIntegrityError('Retained command is not bounded committed custody');
+    }
+    const terminal = this.committedTerminal(row);
+    const prepared = await this.exactObject(row);
+    if (Buffer.byteLength(JSON.stringify(prepared.state)) > CUSTODY_RECOVERY_COST.stateBytes) {
+      throw new ObjectIntegrityError('Retained edition state exceeds its byte bound');
+    }
+    const manifestSha256 = prepared.manifest.slice(-64);
+    const manifestBytes = await this.objects.get(manifestSha256);
+    if (sha256(manifestBytes) !== manifestSha256) throw new ObjectIntegrityError('Retained component manifest differs');
+    const manifest = JSON.parse(Buffer.from(manifestBytes).toString('utf8')) as {
+      payload: string; model: string;
+    };
+    const model = manifest.model;
+    const state = model.endsWith('-v2') ? checkedEditionV2(prepared.state) : checkedMetadataState(prepared.state);
+    const expectedHead = terminal.predecessor === prepared.component ? null : terminal.predecessor;
+    if (state.kind !== 'edition' || expectedHead === undefined || canonicalJson(state) !== canonicalJson(prepared.state)
+      || ('contentLanguages' in state
+        ? editionV2Digest({ work: terminal.work,expectedHead,state })
+        : metadataDigest({ work: terminal.work,expectedHead,state })) !== terminal.requestDigest) {
+      throw new ObjectIntegrityError('Retained edition intent differs from its exact request');
+    }
+    const profile = model.slice('https://rezics.com/definition/'.length);
+    const expected = [
+      { profile: 'work-metadata-details-v1', role: 'work', focus: prepared.receipt.work },
+      { profile, role: 'component', focus: prepared.component },
+      { profile, role: 'revision', focus: prepared.revision },
+    ];
+    const validations = prepared.envelope.validations;
+    if (!Array.isArray(validations) || validations.length !== expected.length
+      || expected.some(entry => validations.filter(validation => validation && typeof validation === 'object'
+        && validation.profile === entry.profile
+        && validation.shape === `https://rezics.com/definition/${entry.profile}/${entry.role}-shape`
+        && Array.isArray(validation.focus) && Array.isArray(validation.graphs)
+        && validation.focus.length === 1 && validation.focus[0] === entry.focus
+        && validation.graphs.length === 2 && new Set(validation.graphs).size === 2
+        && validation.graphs.includes('urn:rezics:graph:current')
+        && validation.graphs.includes('urn:rezics:graph:revisions')
+        && validation.binding === undefined && /^[0-9a-f]{64}$/.test(validation.sha256)).length !== 1)) {
+      throw new ObjectIntegrityError('Retained edition validation pins differ from their exact source');
+    }
+    const shapeDigests = new Set(validations.map(validation => validation.sha256));
+    if (shapeDigests.size > CUSTODY_RECOVERY_COST.selectedProfiles
+      || expected.some(entry => new Set(validations.filter(validation => validation.profile === entry.profile)
+        .map(validation => validation.sha256)).size !== 1)) {
+      throw new ObjectIntegrityError('Retained profile shape identity is ambiguous');
+    }
+    for (const digest of shapeDigests) {
+      const bytes = await this.objects.get(digest);
+      if (bytes.byteLength > CUSTODY_RECOVERY_COST.shapeBytes || sha256(bytes) !== digest) {
+        throw new ObjectIntegrityError('Retained profile artifact differs from its exact pin');
+      }
+    }
+    return {
+      prepared, terminal: structuredClone(terminal), outbox: this.outbox(row, prepared, terminal),
+      payloadSha256: row.payloadSha256, manifestSha256,
+      componentPayloadSha256: manifest.payload.slice(7), model,
+      objectReferences: [
+        { digest: row.payloadSha256, kind: 'command' },
+        { digest: manifestSha256, kind: 'manifest' },
+        { digest: manifest.payload.slice(7), kind: 'payload' },
+        ...[...shapeDigests].sort().map(digest => ({ digest, kind: 'shape' as const })),
+      ],
+    };
+  }
+
+  private deliveredOutbox(receipt: string, retained: CustodiedOutboxRecord): CustodiedOutbox {
+    return { batch: { batchId: retained.batchId,streamScope: retained.streamScope,
+      dataEpoch: retained.dataEpoch,sequence: retained.sequence,graphSequence: retained.graphSequence,
+      routingEpoch: retained.routingEpoch,eventIds: retained.events.map(event => event.id),custodiedReceipt: receipt },
+    events: retained.events };
   }
 
   /** The existing relay probes one indexed owner position; an interrupted
@@ -280,10 +416,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       }
       const prepared = await this.exactObject(row);
       const retained = this.outbox(row, prepared, terminal);
-      return { batch: { batchId: retained.batchId, streamScope: MAIN_RELAY_STREAM_SCOPE,
-        dataEpoch, sequence: streamSequence, graphSequence: terminal.sequence,
-        routingEpoch: prepared.routingEpoch, eventIds: retained.events.map(event => event.id), custodiedReceipt: receipt },
-        events: retained.events };
+      return this.deliveredOutbox(receipt,retained);
     });
   }
 
