@@ -41,6 +41,8 @@ export interface TemplateQueryEnvelope {
   bindings: Record<string, TemplateTerm>;
   /** Server-owned tuples replace matching empty VALUES blocks in the parsed query. */
   tables: { columns: string[]; rows: TemplateTerm[][] }[];
+  /** Point qualifications bind candidate/head terms before native planning. */
+  candidates?: Record<string,TemplateTerm>[];
   /** One page plus its lookahead row. Physical candidate work is qualified separately. */
   limit: number;
 }
@@ -64,12 +66,19 @@ export interface CommandEnvelope {
 }
 
 export interface CommandPosition { datasetId: string; dataEpoch: string; sequence: string }
+export interface TemplateIndexKey { graph: string; predicate: string; anchor: string; type: string }
+export interface TemplateIndexDelta {
+  position: { dataEpoch: string; sequence: string };
+  entities?: { graph: string; id: string; terms: Record<string,string[]> }[];
+  bases: (TemplateIndexKey & { sequence: string;previous?:string })[];
+  next?: string;
+}
 export interface CatalogueBulkEnvelope extends CommandEnvelope {
   /** A normal guarded cancellation, sharing the item's receipt identity. */
   cancellation: string;
 }
 export type CommandResult =
-  | { status: 'committed'; position: CommandPosition }
+  | { status: 'committed'; position: CommandPosition; templateIndex?: TemplateIndexDelta }
   | { status: 'guard-unmatched' | 'conflict' | 'unknown-profile' | 'deadline' }
   | { status: 'invalid'; report?: unknown };
 export interface CommandHealth { moduleVersion: string; instanceId: string;
@@ -143,6 +152,10 @@ function safeIri(value: string): string {
 }
 
 export class FusekiClient {
+  private templateIndexWriter?: (delta: TemplateIndexDelta) => Promise<void>;
+  attachTemplateIndexWriter(writer: (delta: TemplateIndexDelta) => Promise<void>): void {
+    this.templateIndexWriter = writer;
+  }
   private readonly baseUrl: URL;
   private readonly maintenanceCapability: string | undefined;
 
@@ -177,9 +190,10 @@ export class FusekiClient {
   }
 
   async templateQuery(envelope: TemplateQueryEnvelope, maxResponseBytes = 512 * 1024): Promise<SparqlResult> {
-    if (!Number.isSafeInteger(envelope.limit) || envelope.limit < 1 || envelope.limit > 65
+    if (!Number.isSafeInteger(envelope.limit) || envelope.limit < 1 || envelope.limit > 256
       || Object.keys(envelope.bindings).length > 64 || envelope.tables.length > 4
       || envelope.tables.reduce((total, table) => total + table.rows.length, 0) > 256
+      || (envelope.candidates?.length ?? 0)>256
       || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 512 * 1024) {
       throw new Error('invalid template query budget');
     }
@@ -197,6 +211,18 @@ export class FusekiClient {
     if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
     if (!response.ok) throw new Error(`Fuseki template query returned ${response.status}`);
     return boundedJson<SparqlResult>(response, maxResponseBytes);
+  }
+
+  async templateIndex(input: { operation: 'basis'; keys: TemplateIndexKey[] }
+    | { operation: 'backfill'; phase: number; after: string }): Promise<TemplateIndexDelta> {
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Template index capability is required');
+    takeReadCall();
+    const response = await fetch(new URL('command',this.baseUrl), {
+      method: 'POST', headers: { 'content-type':'application/json', authorization:`Bearer ${this.commandCapability}` },
+      body: JSON.stringify({ templateIndex: input }), signal: readSignal(),
+    });
+    if (!response.ok) throw new Error(`Template index returned ${response.status}`);
+    return boundedJson<TemplateIndexDelta>(response,1024*1024);
   }
 
   /** Legacy write surface; remaining domain and recovery adapters must migrate before P0.2 exit. */
@@ -286,6 +312,10 @@ export class FusekiClient {
     if (!response.ok && response.status !== 409 && response.status !== 422) {
       throw new CommandOutcomeUnknown(`Fuseki command returned ${response.status}`);
     }
+    if (result.status === 'committed' && result.templateIndex && this.templateIndexWriter) {
+      try { await this.templateIndexWriter(result.templateIndex); }
+      catch (error) { throw new CommandOutcomeUnknown('Graph committed; template index needs receipt replay', { cause:error }); }
+    }
     return result;
   }
 
@@ -307,6 +337,9 @@ export class FusekiClient {
     if (!Array.isArray(result.items) || result.items.length !== items.length
       || result.items.some(item => !['committed', 'invalid', 'guard-unmatched', 'conflict', 'deadline', 'unknown-profile'].includes(item.status)))
       throw new CommandOutcomeUnknown('Malformed catalogue batch result');
+    if (this.templateIndexWriter) for (const item of result.items) {
+      if (item.status === 'committed' && item.templateIndex) await this.templateIndexWriter(item.templateIndex);
+    }
     return result.items;
   }
 
@@ -327,6 +360,7 @@ export class FusekiClient {
       const row = rows[0]!;
       if (row.digest?.value !== envelope.digest) return { status: 'conflict' };
       if (!row.dataset || !row.epoch || !row.sequence) throw new Error('incomplete command receipt');
+      if (this.templateIndexWriter) return this.command(envelope);
       return { status: 'committed', position: {
         datasetId: row.dataset.value, dataEpoch: row.epoch.value, sequence: row.sequence.value,
       } };

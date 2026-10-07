@@ -100,7 +100,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     mainVersionRevision: basis.mainRevision, mainVersionLabel: selected.mainVersionLabel,
     selectedLanguage: basis.selectedLanguage, sourcePosition: { ...session.position,
       ...(session.options.localBasis ? { dependencyToken: basis.dependencyToken } : {}) },
-    links: { versions: `${path}/versions`, classifications: `${path}/classifications`,
-      adoptions: `${path}/adoptions`, ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
+    links: { versions: '/v1/query#work-versions', classifications: `${path}/classifications`,
+      adoptions: '/v1/query#work-adoptions', ratings: `${path}/ratings`, history: `${path}/history`, credits: '/v1/query#work-credits',
       metadata: `${path}/metadata`, editions: `${path}/editions` } };
 }

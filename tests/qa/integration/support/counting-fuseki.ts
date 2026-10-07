@@ -1,4 +1,4 @@
-import { FusekiClient, type SparqlResult } from '../../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, type SparqlResult, type TemplateQueryEnvelope } from '../../../../services/main/src/infrastructure/fuseki.ts';
 import { isForegroundOperation, runBackgroundOperation } from './operation-cost.ts';
 
 /** Compatibility entry point for fixtures that previously installed only the
@@ -23,5 +23,13 @@ export class CountingFuseki extends FusekiClient {
   override async query(sparql: string, maxBytes?: number): Promise<SparqlResult> {
     if (!this.isBackgroundContext) this.queries++;
     return super.query(sparql, maxBytes);
+  }
+  override async templateQuery(input:TemplateQueryEnvelope,maxBytes?:number):Promise<SparqlResult> {
+    if(!this.isBackgroundContext) this.queries++;
+    return super.templateQuery(input,maxBytes);
+  }
+  override async templateIndex(input:Parameters<FusekiClient['templateIndex']>[0]) {
+    if(!this.isBackgroundContext) this.queries++;
+    return super.templateIndex(input);
   }
 }

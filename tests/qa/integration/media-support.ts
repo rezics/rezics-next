@@ -41,6 +41,7 @@ import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/lib
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
+import { TemplateSeekIndex } from '../../../services/main/src/modules/query/seek-index.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -124,8 +125,10 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const contextSelections = new PrivateContextSelections(accessPool);
   const erasures = new ErasureService(relayPool, contentPool, accessPool);
   const statementSeek = new StatementSeek(accessPool,env);
+  const templateSeek = new TemplateSeekIndex(accessPool,fuseki);
+  await templateSeek.backfill(env.lineage.dataEpoch);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
-    statementSeek,
+    statementSeek, templateSeek,
     content, contentAuthoring: content, media, votes, erasures,
     ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
@@ -313,7 +316,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
     rmSync(directory, { recursive: true, force: true });
   };
   return { env, fuseki, main, call, member, stableAdmission, access, mediaAccess, accessPool, contentPool, content,
-    statementSeek,
+    statementSeek, templateSeek,
     contentCursor, contentConsumer, store, objects,
     media, admission, catalogueWork, privateWork, publicWork, contribution, stop };
 }

@@ -44,8 +44,22 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       discovery: new DiscoveryProjection(stack.accessPool), judgments: new AccessJudgments(stack.accessPool),
       platformAccess,
       account: { verify: async () => a.principal } });
-    const get = (path: string) => path === '/v1/works' || path.startsWith('/v1/works?')
-      ? discoveryApp.handle(new Request(`http://main.local${path}`)) : stack.call('GET', path);
+    const get = async (path: string) => {
+      const url=new URL(path,'http://main.local');
+      const view=/^\/v1\/works\/([^/]+)\/(versions|adoptions|credits)$/.exec(url.pathname);
+      if(view) {
+        const parameters={roots:[`https://rezics.com/id/${view[1]}`],
+          ...(view[2]==='versions'?{contentLanguage:url.searchParams.get('contentLanguage') ?? undefined,kind:url.searchParams.get('kind') ?? undefined}:{})};
+        const response=await stack.call('POST','/v1/query',{body:{profile:'template-query-v1',
+          query:`https://rezics.com/query/work-${view[2]}`,revision:1,parameters,
+          presentation:{language:url.searchParams.get('language') ?? undefined},
+          page:{size:url.searchParams.has('limit')?Number(url.searchParams.get('limit')):undefined,cursor:url.searchParams.get('cursor') ?? undefined}}});
+        if(!response.ok) return response;
+        return Response.json((await response.json() as {result:unknown}).result,{headers:response.headers});
+      }
+      return path === '/v1/works' || path.startsWith('/v1/works?')
+        ? discoveryApp.handle(new Request(`http://main.local${path}`)) : stack.call('GET', path);
+    };
     let discoveryHead: string | null = null;
     const refreshDiscovery = async () => {
       const post = (path: string, body: object) => discoveryApp.handle(new Request(`http://main.local${path}`, {
@@ -149,6 +163,9 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${creditTriples.current} }
       GRAPH ${iri(GRAPHS.revisions)} { ${creditTriples.revision} } }`);
+    // Raw QA writes bypass the command's native projection delta. Rebuild this
+    // disposable directory explicitly; production writes use receipt deltas.
+    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch,true);
     expect((await json<Page<unknown>>(await get(`${root}/credits`))).items)
       .toMatchObject([{ id: credit, key: '/authors/OL1A', agent: null, handle: null }]);
     await a.grant(`rating:context:${realm.realm}`, 'rating.context.create');

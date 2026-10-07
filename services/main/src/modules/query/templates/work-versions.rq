@@ -1,0 +1,25 @@
+PREFIX rv: <https://rezics.com/vocab/>
+PREFIX schema: <https://schema.org/>
+SELECT DISTINCT ?id ?kind ?language ?revision ?contribution ?selected ?selection ?key ?ordinal WHERE {
+VALUES (?_work_iri ?_main_iri) {}
+VALUES (?id ?_sort) {}
+
+{ GRAPH <urn:rezics:graph:current> {
+          ?id a rv:TextContribution ; rv:work ?_work_iri ; rv:publicationHead ?decision ; rv:language ?language . }
+        GRAPH <urn:rezics:graph:revisions> { ?decision a rv:PublicationDecision ; rv:component ?id ;
+          rv:work ?_work_iri ; rv:contribution ?id ; rv:selectedDraft ?revision ;
+          rv:language ?language ; rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution .
+          ?revision a rv:RevisionAnchor ; rv:component ?id .
+          FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+        BIND(?id AS ?contribution) BIND("text-variant" AS ?kind)
+        BIND(EXISTS { GRAPH <urn:rezics:graph:current> { ?_main_iri rv:selectionHead ?selection }
+          GRAPH <urn:rezics:graph:revisions> { ?selection rv:contribution ?id ; rv:publicationDecision ?decision } } AS ?selected)
+      } UNION { GRAPH <urn:rezics:graph:revisions> {
+          ?id a rv:FixedRelease ; rv:work ?_work_iri ; rv:mainVersion ?_main_iri ;
+            rv:selectedDraft ?revision ; rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:language ?language .
+          ?decision rv:disclosure rv:Public . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+        GRAPH <urn:rezics:graph:current> { ?contribution rv:publicationHead ?decision }
+        BIND("release" AS ?kind) BIND(false AS ?selected) }
+FILTER(?_contentLanguage = "" || LCASE(STR(?language)) = ?_contentLanguage)
+FILTER(?_kind = "" || ?kind = ?_kind)
+}

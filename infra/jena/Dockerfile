@@ -3,6 +3,7 @@ WORKDIR /build
 COPY infra/jena/command-module/pom.xml /build/pom.xml
 RUN mvn -B -ntp dependency:go-offline
 COPY infra/jena/command-module/src /build/src
+COPY services/main/src/modules/query/templates /build/src/test/resources/query-templates/
 COPY generated/model/ /build/profiles/
 RUN mvn -B -ntp package
 

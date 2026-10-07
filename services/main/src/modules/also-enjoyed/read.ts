@@ -12,7 +12,8 @@ import { RatingAggregateBudgetExceeded } from '../rating/aggregate.ts';
 import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { readWorkBasis } from '../work/read-header.ts';
-import { readWorkPage } from '../work/read-pages.ts';
+import { executeTemplate } from '../query/template-read.ts';
+import type { adoptionItem } from '../work/read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid,
   WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { alsoEnjoyedItem } from './contract.ts';
@@ -84,7 +85,11 @@ async function typeCandidates(session: WorkReadSession, source: Awaited<ReturnTy
 }
 
 async function realmCandidates(session: WorkReadSession, source: string) {
-  const adoptions = await readWorkPage(sourceSession(session), source, 'adoptions');
+  const response = await executeTemplate(session.deps,session.request,{profile:'template-query-v1',
+    query:'https://rezics.com/query/work-adoptions',revision:1,parameters:{roots:[source]},
+    presentation:{language:session.options.language,actingSubject:session.options.actingSubject}});
+  const envelope = await response.json() as {result:{items:Static<typeof adoptionItem>[]}};
+  const adoptions = envelope.result;
   const works: string[] = [];
   for (const adoption of adoptions.items.slice(0, 2)) {
     if (!('realm' in adoption)) continue;

@@ -33,6 +33,8 @@ export class WorkReadLimit extends Error {}
 export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ReadPosition { dataEpoch: string; sequence: string; dependencyToken?: string }
 export interface ReadOptions { language?: string; languages?: string; actingSubject?: string; cursor?: string; limit?: number;
+  /** Only the server-selected, effect-free template executor may enable POST retries. */
+  readOnlyTemplate?: boolean;
   /** The Work header and editions bind selected dependencies, rather than the dataset counter. */
   localBasis?: boolean;
   /** Edition pages consume both supported record profiles; the header consumes its selected metadata profile. */
@@ -317,7 +319,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
       const url = new URL(request.url);
       // Some owners decode their own cursor without forwarding it in options.
       const hasCursor = !!options.cursor || url.searchParams.has('cursor');
-      const attempts = !options.movingGraph && (!hasCursor || options.retainedBasis) && request.method === 'GET'
+      const attempts = !options.movingGraph && (!hasCursor || options.retainedBasis) && (request.method === 'GET' || options.readOnlyTemplate)
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {

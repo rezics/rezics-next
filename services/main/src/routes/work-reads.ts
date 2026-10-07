@@ -8,15 +8,14 @@ import { TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts'
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   workRead } from '../modules/work/read-session.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
-import { readWorkPage } from '../modules/work/read-pages.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
 import { readResourceRating, readResourceRatingContexts, resourceRatingRead } from '../modules/rating/target-read.ts';
 import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
 import { ratingContextOwner } from '../modules/rating/target-api.ts';
 import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
-import { adoptionItem, classificationItem, creditItem, pageFields, pageQuery,
-  readId, readLanguage, readQuery, readScope, readUuid, scopeQuery, versionItem,
+import { classificationItem, pageFields, pageQuery,
+  readId, readQuery, readScope, readUuid, scopeQuery,
   workHeader } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -40,15 +39,11 @@ export function workReadError(error: unknown): Response {
 }
 const params = t.Object({ id: readUuid });
 const resourceParams = t.Object({ resource: readUuid });
-const query = t.Object(pageQuery, { additionalProperties: false });
 const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 // Bearer is optional for public reads; Mine requires it at runtime. No GET uses an idempotency key.
 export const openApiOperations = {
   '/v1/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
-  '/v1/works/{id}/versions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
-  '/v1/works/{id}/adoptions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
-  '/v1/works/{id}/credits': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/works/{id}/classifications': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/resources/{resource}/ratings': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/resources/{resource}/rating-contexts': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
@@ -61,30 +56,6 @@ export function workReadRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, { ...options, localBasis: true },
         session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
-      catch (error) { return workReadError(error); }
-    })
-    .get('/v1/works/:id/versions', { params, detail,
-      query: t.Object({ ...pageQuery, contentLanguage: t.Optional(readLanguage),
-        kind: t.Optional(t.Union([t.Literal('text-variant'), t.Literal('release')])) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(versionItem), ...pageFields }), ...workReadProblems },
-    }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
-        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'versions',
-          { language: options.contentLanguage, kind: options.kind })), { headers }); }
-      catch (error) { return workReadError(error); }
-    })
-    .get('/v1/works/:id/adoptions', { params, detail, query,
-      response: { 200: t.Object({ items: t.Array(adoptionItem), ...pageFields }), ...workReadProblems },
-    }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
-        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'adoptions')), { headers }); }
-      catch (error) { return workReadError(error); }
-    })
-    .get('/v1/works/:id/credits', { params, detail, query,
-      response: { 200: t.Object({ items: t.Array(creditItem), ...pageFields }), ...workReadProblems },
-    }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, options,
-        session => readWorkPage(session, `https://rezics.com/id/${path.id}`, 'credits')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/works/:id/classifications', { params, detail,

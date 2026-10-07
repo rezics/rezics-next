@@ -25,6 +25,8 @@ import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/rele
 import { resourceListQuery, resourceListPage, type ResourceListQuery } from '../modules/query/resource-contract.ts';
 import { readResourceList } from '../modules/query/resources.ts';
 import { withResourceListBudget } from '../modules/query/budget.ts';
+import { executeTemplate, templateRequests, templateResponses } from '../modules/query/template-read.ts';
+import type { TemplateInput } from '../modules/query/template-schema.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const closed = { additionalProperties: false } as const;
@@ -49,7 +51,7 @@ export const resourceQueryV1 = t.Object({ ...documentFields, scope: scopeV1, sor
 /** filter-document-v2 admits top-rated, Mine, and the rating Context and reader. */
 export const resourceQueryV2 = t.Object({ profile: t.Literal('filter-document-v2'), ...documentFields,
   scope, sort, ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId) }, closed);
-const body = t.Union([resourceQueryV1, resourceQueryV2, resourceListQuery]);
+const body = t.Union([resourceQueryV1, resourceQueryV2, resourceListQuery, templateRequests]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phrase-v1'),
   resultGrain: t.Literal('mainVersion'),
@@ -63,7 +65,7 @@ const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phras
     nextOffset: t.Integer({ minimum: 1, maximum: 512 }), expiresAt: t.Integer({ minimum: 0 }) })),
 });
 const selectionText = t.Union([text, t.Object({ phrase: t.String({ minLength: 1, maxLength: 80 }) }, closed)]);
-const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(selectionText), sort,
+const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(selectionText), sort:t.Union([sort,t.Literal('identity')]),
   pageSize: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
   facetRefs: t.Array(t.String(), { maxItems: QUERY_COST.nodes }),
   semanticRevisions: t.Array(nativeId, { maxItems: QUERY_COST.conceptReads }),
@@ -93,11 +95,15 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: {
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
-      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage]) }),
+      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage,templateResponses]) }),
     400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
+      if ('profile' in input && input.profile==='template-query-v1') {
+        try { return await executeTemplate(work,request,input as TemplateInput); }
+        catch(error) { return workReadError(error); }
+      }
       const compiled = compileQuery(input as AdmittedQuery | ResourceListQuery);
       const capabilities = compiledQueryCapabilities(compiled);
       const principal = capabilities.some(exposure => exposure !== 'public') && request.headers.has('authorization')
@@ -237,7 +243,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     } catch (error) {
       if (error instanceof QueryRejected) return problem(error.refusal.startsWith('stale_') ? 409 : 422,
         error.refusal, error.message);
-      if (input.scope.kind === 'realm' || 'profile' in input && input.profile === 'resource-list-v1') return workReadError(error);
+      if ('scope' in input && input.scope.kind === 'realm' || 'profile' in input && input.profile === 'resource-list-v1') return workReadError(error);
       return commandError(error);
     }
   });

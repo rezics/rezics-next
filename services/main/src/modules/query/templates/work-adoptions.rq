@@ -1,0 +1,17 @@
+PREFIX rv: <https://rezics.com/vocab/>
+SELECT ?id ?realm ?selection ?contribution ?language WHERE {
+  VALUES (?_work_iri ?_main_iri) {}
+  VALUES (?id ?_sort) {}
+  GRAPH <urn:rezics:graph:current> {
+    ?id a rv:RealmPublicationSlot ; rv:realm ?realm ; rv:work ?_work_iri ; rv:mainVersion ?_main_iri ; rv:selectionHead ?selection .
+    ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+    ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+    ?contribution rv:publicationHead ?decision .
+  }
+  GRAPH <urn:rezics:graph:revisions> {
+    ?selection a rv:PublicationSelection ; rv:work ?_work_iri ; rv:contribution ?contribution ;
+      rv:publicationDecision ?decision ; rv:language ?language ; rv:selectedDraft ?draft .
+    ?decision rv:disclosure rv:Public .
+    FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
+  }
+}

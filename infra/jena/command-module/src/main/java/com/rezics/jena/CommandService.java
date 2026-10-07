@@ -112,6 +112,10 @@ final class CommandService extends ActionService {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            if (body.get("templateIndex") != null) {
+                if (!authorized(action, admittedCapability)) { respond(action,403,Map.of("status","forbidden")); return; }
+                respond(action,200,TemplateIndexService.read(action.getDataService().getDataset(),body.get("templateIndex").getAsObject())); return;
+            }
             if (body.get("templateQuery") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -415,10 +419,14 @@ final class CommandService extends ActionService {
                                         long deadline, SearchDeltaJournal.Capture delta) {
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
             String existing = receiptValue(dataset, receipt, "requestDigest");
-            if (existing != null) return existing.equals(digest)
-                && (!StatementUpgradePolicy.applies(receipt) || StatementUpgradePolicy.templateDigest(update)
-                    .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest")))
-                ? committed(dataset, receipt) : Map.of("status", "conflict");
+            if (existing != null) {
+                if (!existing.equals(digest)
+                    || (StatementUpgradePolicy.applies(receipt) && !StatementUpgradePolicy.templateDigest(update)
+                        .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest"))))
+                    return Map.of("status", "conflict");
+                Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
+                replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan)); return replay;
+            }
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
             if (StatementUpgradePolicy.applies(receipt))
@@ -444,6 +452,7 @@ final class CommandService extends ActionService {
             var releaseCoverage = ReleaseCoveragePolicy.capture(dataset, model);
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
+            var templateBefore = TemplateIndexService.capture(dataset,plan);
             CommandWork.enter("update");
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(delta == null ? dataset : delta.observed()))));
             CommandWork.enter("invariants");
@@ -503,6 +512,10 @@ final class CommandService extends ActionService {
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
+            result = new LinkedHashMap<>(result);
+            var templateDelta = TemplateIndexService.refresh(dataset,templateBefore,plan);
+            TemplateIndexService.retain(dataset,receipt,templateDelta);
+            result.put("templateIndex",templateDelta);
             CommandWork.enter("projections");
             PublicNameProjection.refresh(CommandWork.observe(delta == null ? dataset : delta.observed()), plan, receipt, validations, delta == null ? List.of() : delta.changes());
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
@@ -977,16 +990,18 @@ final class CommandService extends ActionService {
         if (datasetId == null || epoch == null || sequence == null) return Map.of("status", "committed");
         return Map.of("status", "committed", "position", Map.of("datasetId", datasetId, "dataEpoch", epoch, "sequence", sequence));
     }
-    private static JsonObject jsonObject(Map<String, ?> payload) {
+    static JsonObject jsonObject(Map<String, ?> payload) {
         JsonObject result = new JsonObject();
         payload.forEach((key, value) -> {
-            if (value instanceof Map<?, ?> map) {
+            if (value instanceof JsonValue json) result.put(key,json);
+            else if (value instanceof Map<?, ?> map) {
                 Map<String, Object> nested = new LinkedHashMap<>();
                 map.forEach((k, v) -> nested.put(String.valueOf(k), v));
                 result.put(key, jsonObject(nested));
             } else if (value instanceof List<?> list) {
                 org.apache.jena.atlas.json.JsonArray array = new org.apache.jena.atlas.json.JsonArray();
                 for (Object item : list) {
+                    if(item instanceof String text) { array.add(text); continue; }
                     if (!(item instanceof Map<?, ?> map)) throw new IllegalArgumentException("JSON list item must be object");
                     Map<String, Object> nested = new LinkedHashMap<>();
                     map.forEach((k, v) -> nested.put(String.valueOf(k), v));

@@ -198,12 +198,20 @@ export const readReleases = cache(async (id: string) => {
 
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }));
+  return settle(async () => {
+    const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-credits',revision:1,
+      parameters:{roots:[iriOf(id)]},presentation:{actingSubject}});
+    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-credits' ? result.data.result:null};
+  });
 });
 
 export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).adoptions.get({ query: { actingSubject } }));
+  return settle(async () => {
+    const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-adoptions',revision:1,
+      parameters:{roots:[iriOf(id)]},presentation:{actingSubject}});
+    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-adoptions' ? result.data.result:null};
+  });
 });
 
 export const readRealm = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> => {
@@ -246,8 +254,11 @@ export const readRatings = cache(async (id: string, scope: WorkScope, contextId:
 
 export async function readVersions(id: string, _locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).versions.get({ query: { actingSubject,
-    kind: filter.kind, contentLanguage: filter.language, cursor: filter.cursor } }), filter.cursor);
+  return settle(async () => {
+    const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-versions',revision:1,
+      parameters:{roots:[iriOf(id)],kind:filter.kind,contentLanguage:filter.language},presentation:{actingSubject},page:{cursor:filter.cursor}});
+    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-versions' ? result.data.result:null};
+  },filter.cursor);
 }
 
 /** The Work's public activity, newest first: metadata revisions, publications and placed replies. */

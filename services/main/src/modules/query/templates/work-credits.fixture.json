@@ -1,0 +1,190 @@
+{
+  "parameters": {
+    "roots": [
+      "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+    ]
+  },
+  "bindings": {},
+  "tables": [
+    {
+      "columns": [
+        "_work_iri",
+        "_main_iri"
+      ],
+      "rows": [
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+          },
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd"
+          }
+        ]
+      ]
+    },
+    {
+      "columns": [
+        "id",
+        "_sort"
+      ],
+      "rows": [
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7"
+          },
+          {
+            "type": "literal",
+            "value": "https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7"
+          }
+        ],
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+          },
+          {
+            "type": "literal",
+            "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+          }
+        ],
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444444"
+          },
+          {
+            "type": "literal",
+            "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444444"
+          }
+        ]
+      ]
+    },
+    {
+      "columns": [
+        "id",
+        "key",
+        "ordinal",
+        "_work_iri",
+        "_source_confirmed"
+      ],
+      "rows": [
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+          },
+          {
+            "type": "literal",
+            "value": "OL900000A"
+          },
+          {
+            "type": "literal",
+            "value": "1",
+            "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          },
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+          },
+          {
+            "type": "literal",
+            "value": "false",
+            "datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+          }
+        ],
+        [
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444444"
+          },
+          {
+            "type": "literal",
+            "value": "OL1A"
+          },
+          {
+            "type": "literal",
+            "value": "1",
+            "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          },
+          {
+            "type": "uri",
+            "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+          },
+          {
+            "type": "literal",
+            "value": "true",
+            "datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+          }
+        ]
+      ]
+    }
+  ],
+  "dataset": "@prefix rv: <https://rezics.com/vocab/> .\n@prefix schema: <https://schema.org/> .\n\n<urn:rezics:graph:current> {\n <https://rezics.com/id/b5dc5c8d-fc82-508f-b28c-a984a8e00ad2> a rv:TextContribution ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:publicationHead <https://rezics.com/id/97716b09-dae9-54dc-9e32-dc2e7db5375a> ; rv:language \"zh\" .\n <https://rezics.com/id/37d4a6ab-a9fd-50a5-a688-c751db278af2> a rv:TextContribution ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:publicationHead <https://rezics.com/id/ddaa973e-b25e-5ef1-92b0-0ce0b2eb1be6> ; rv:language \"zh\" .\n <https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd> rv:selectionHead <https://rezics.com/id/fa529c34-153d-56a4-b523-45eb6a8f6fb8> .\n <https://rezics.com/id/18c311c1-fd85-540a-849d-e61842292366> a rv:Realm ; rv:realmState rv:Active ; rv:space <https://rezics.com/id/d7508dc6-027b-5d37-90e2-3d0bbada2c5d> .\n <https://rezics.com/id/d7508dc6-027b-5d37-90e2-3d0bbada2c5d> a rv:Space ; rv:realmCapability <https://rezics.com/id/18c311c1-fd85-540a-849d-e61842292366> ; rv:disclosure rv:Public .\n <https://rezics.com/id/9e141d4e-1425-5898-8670-68ef3c5f5ad8> a rv:RealmPublicationSlot ; rv:realm <https://rezics.com/id/18c311c1-fd85-540a-849d-e61842292366> ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:mainVersion <https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd> ; rv:selectionHead <https://rezics.com/id/fa529c34-153d-56a4-b523-45eb6a8f6fb8> .\n <https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7> a rv:AuthorCredit ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:creditRevision <https://rezics.com/id/db192860-e63b-5196-8881-e12ea3c3114a> ; schema:roleName \"author\" ; rv:externalProvider \"open-library\" ; rv:externalNamespace \"author\" ; rv:externalKey \"OL1A\" ; schema:position 1 ; rv:editControl rv:HumanConfirmed .\n}\n<urn:rezics:graph:revisions> {\n <https://rezics.com/id/97716b09-dae9-54dc-9e32-dc2e7db5375a> a rv:PublicationDecision ; rv:component <https://rezics.com/id/b5dc5c8d-fc82-508f-b28c-a984a8e00ad2> ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:contribution <https://rezics.com/id/b5dc5c8d-fc82-508f-b28c-a984a8e00ad2> ; rv:selectedDraft <https://rezics.com/id/7cbfc6a8-4590-5d7f-97c5-69d306829050> ; rv:language \"zh\" ; rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution .\n <https://rezics.com/id/ddaa973e-b25e-5ef1-92b0-0ce0b2eb1be6> a rv:PublicationDecision ; rv:component <https://rezics.com/id/37d4a6ab-a9fd-50a5-a688-c751db278af2> ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:contribution <https://rezics.com/id/37d4a6ab-a9fd-50a5-a688-c751db278af2> ; rv:selectedDraft <https://rezics.com/id/6e84efbb-af9b-572d-824f-ad47e013cbf7> ; rv:language \"zh\" ; rv:disclosure rv:Private ; rv:rightsBasis rv:OriginalContribution .\n <https://rezics.com/id/7cbfc6a8-4590-5d7f-97c5-69d306829050> a rv:RevisionAnchor ; rv:component <https://rezics.com/id/b5dc5c8d-fc82-508f-b28c-a984a8e00ad2> .\n <https://rezics.com/id/6e84efbb-af9b-572d-824f-ad47e013cbf7> a rv:RevisionAnchor ; rv:component <https://rezics.com/id/37d4a6ab-a9fd-50a5-a688-c751db278af2> .\n <https://rezics.com/id/fa529c34-153d-56a4-b523-45eb6a8f6fb8> a rv:PublicationSelection ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:contribution <https://rezics.com/id/b5dc5c8d-fc82-508f-b28c-a984a8e00ad2> ; rv:publicationDecision <https://rezics.com/id/97716b09-dae9-54dc-9e32-dc2e7db5375a> ; rv:language \"zh\" ; rv:selectedDraft <https://rezics.com/id/7cbfc6a8-4590-5d7f-97c5-69d306829050> .\n <https://rezics.com/id/db192860-e63b-5196-8881-e12ea3c3114a> a rv:AuthorCreditRevision ; rv:component <https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7> ; rv:work <https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360> ; rv:externalKey \"OL1A\" ; schema:position 1 .\n}\n",
+  "expectedIds": [
+    "https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7",
+    "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+  ],
+  "candidates": [
+    {
+      "id": {
+        "type": "uri",
+        "value": "https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7"
+      },
+      "_sort": {
+        "type": "literal",
+        "value": "https://rezics.com/id/8403fa5a-f1ba-5c2e-b784-dd626727f9a7"
+      },
+      "_work_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+      },
+      "_main_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd"
+      },
+      "revision": {
+        "type": "uri",
+        "value": "https://rezics.com/id/db192860-e63b-5196-8881-e12ea3c3114a"
+      }
+    },
+    {
+      "id": {
+        "type": "uri",
+        "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+      },
+      "_sort": {
+        "type": "literal",
+        "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+      },
+      "_work_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+      },
+      "_main_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd"
+      }
+    },
+    {
+      "id": {
+        "type": "uri",
+        "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444444"
+      },
+      "_sort": {
+        "type": "literal",
+        "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444444"
+      },
+      "_work_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/ce021b81-ee0e-5b26-a868-b70d8eff7360"
+      },
+      "_main_iri": {
+        "type": "uri",
+        "value": "https://rezics.com/id/5097db46-28d5-5b9a-bbaf-356dbe6f3cbd"
+      }
+    }
+  ]
+}

@@ -38,7 +38,7 @@ final class TemplateQueryService {
         "urn:rezics:graph:current", "urn:rezics:graph:revisions");
 
     record Terms(List<Var> columns, List<Binding> rows) {}
-    record Prepared(Query query, Binding parameters) {}
+    record Prepared(Query query, Binding parameters,List<Binding> candidates) {}
 
     static Prepared prepare(JsonObject body) {
         try { return prepareInput(body); }
@@ -47,9 +47,10 @@ final class TemplateQueryService {
     }
 
     private static Prepared prepareInput(JsonObject body) {
-        if (!body.keys().equals(Set.of("query", "bindings", "tables", "limit")))
+        if (!Set.of("query", "bindings", "tables", "limit","candidates").containsAll(body.keys())
+            || !body.keys().containsAll(Set.of("query","bindings","tables","limit")))
             throw new IllegalArgumentException("invalid template query fields");
-        int limit = integer(body.get("limit"), 1, 65);
+        int limit = integer(body.get("limit"), 1, MAX_ROWS);
         String source = ProfileRegistry.required(body, "query");
         if (source.length() > 64 * 1024) throw new IllegalArgumentException("template text exceeds bound");
         Query query = QueryFactory.create(source, Syntax.syntaxSPARQL_11);
@@ -91,17 +92,77 @@ final class TemplateQueryService {
             }
         });
         if (consumed.size() != tables.size()) throw new IllegalArgumentException("binding table has no template slot");
+        Set<String> anchors = new HashSet<>();
+        parameters.forEach((variable,node) -> { if(node.isURI()) anchors.add(variable.getVarName()); });
+        for(Terms table : tables) for(Binding row : table.rows()) row.forEach((variable,node) -> {
+            if(node.isURI()) anchors.add(variable.getVarName());
+        });
+        reviewHops(query,anchors);
         // LIMIT is a parsed-query property. Neither scalars nor tuple cells are
         // serialized into SPARQL; Jena substitutes RDF Nodes in the syntax tree.
         query.setLimit(limit);
-        return new Prepared(query, parameters);
+        List<Binding> candidates=new ArrayList<>();
+        if(body.get("candidates")!=null) for(var row:body.get("candidates").getAsArray()) {
+            candidates.add(binding(row.getAsObject()));
+            if(candidates.size()>MAX_ROWS) throw new IllegalArgumentException("too many candidate qualifications");
+        }
+        return new Prepared(query, parameters,List.copyOf(candidates));
+    }
+
+    /** Pre-plan Node substitution requires removing bound VALUES columns first.
+     * This preserves tuple compatibility and allows each selected subject/head
+     * to become an exact graph index lookup even across UNION/EXISTS branches. */
+    static Query bind(Query query,Binding terms) {
+        var values=new java.util.HashMap<Var,Node>();terms.forEach(values::put);
+        Query stripped=QueryTransformOps.transform(query,new ElementTransformCopyBase() {
+            @Override public Element transform(ElementData table) {
+                List<Var> columns=table.getVars().stream().filter(variable->!values.containsKey(variable)).toList();
+                List<Binding> rows=new ArrayList<>();
+                for(Binding row:table.getRows()) {
+                    boolean compatible=true;
+                    for(Var variable:table.getVars()) if(values.containsKey(variable) && row.contains(variable)
+                        && !values.get(variable).equals(row.get(variable))) compatible=false;
+                    if(!compatible) continue;
+                    BindingBuilder builder=BindingBuilder.create();
+                    for(Var variable:columns) if(row.contains(variable)) builder.add(variable,row.get(variable));
+                    rows.add(builder.build());
+                }
+                return new ElementData(columns,rows);
+            }
+            @Override public Element transform(ElementBind element,Var variable,Expr expression) {
+                return values.containsKey(variable) ? new ElementFilter(new org.apache.jena.sparql.expr.E_Equals(
+                    expression,org.apache.jena.sparql.expr.NodeValue.makeNode(values.get(variable))))
+                    : super.transform(element,variable,expression);
+            }
+        });
+        return QueryTransformOps.replaceVars(stripped,values);
     }
 
     static JsonObject select(DatasetGraph dataset, JsonObject body) {
         Prepared prepared = prepare(body);
         dataset.begin(ReadWrite.READ);
-        try (QueryExecution execution = QueryExecution.dataset(DatasetFactory.wrap(dataset))
-            .query(prepared.query()).substitution(prepared.parameters()).timeout(10_000).build()) {
+        try {
+            List<Binding> candidates=prepared.candidates().isEmpty()?List.of(org.apache.jena.sparql.engine.binding.BindingFactory.empty()):prepared.candidates();
+            org.apache.jena.atlas.json.JsonArray collected=new org.apache.jena.atlas.json.JsonArray();
+            JsonObject head=null;long deadline=System.nanoTime()+10_000_000_000L;
+            for(Binding candidate:candidates) {
+                BindingBuilder builder=BindingBuilder.create();prepared.parameters().forEach(builder::add);candidate.forEach(builder::add);
+                Query query=bind(prepared.query(),builder.build());
+                long remaining=(deadline-System.nanoTime())/1_000_000L;
+                if(remaining<=0) throw new IllegalArgumentException("template deadline exceeded");
+                try(QueryExecution execution=QueryExecution.dataset(DatasetFactory.wrap(dataset)).query(query).timeout(remaining).build()) {
+                    ByteArrayOutputStream chunk=new ByteArrayOutputStream();
+                    ResultSetFormatter.outputAsJSON(chunk,execution.execSelect());
+                    JsonObject result=JSON.parse(chunk.toString(java.nio.charset.StandardCharsets.UTF_8));
+                    head=result.get("head").getAsObject();
+                    for(var row:result.get("results").getAsObject().get("bindings").getAsArray()) {
+                        collected.add(row);
+                        if(collected.size()>MAX_ROWS) throw new IllegalArgumentException("template result exceeds candidate bound");
+                    }
+                }
+            }
+            JsonObject result=new JsonObject(),bindings=new JsonObject();
+            result.put("head",head);bindings.put("bindings",collected);result.put("results",bindings);
             ByteArrayOutputStream output = new ByteArrayOutputStream() {
                 @Override public synchronized void write(int value) {
                     if (count >= MAX_BYTES) throw new IllegalArgumentException("template response exceeds byte bound");
@@ -112,7 +173,7 @@ final class TemplateQueryService {
                     super.write(bytes, offset, length);
                 }
             };
-            ResultSetFormatter.outputAsJSON(output, execution.execSelect());
+            JSON.write(output,result);
             return JSON.parse(output.toString(java.nio.charset.StandardCharsets.UTF_8));
         } finally { dataset.end(); }
     }
@@ -207,6 +268,36 @@ final class TemplateQueryService {
         } else if (element instanceof ElementTriplesBlock) {
             if (!namedGraph) throw new IllegalArgumentException("default graph is not admitted");
         } else if (!(element instanceof ElementData)) throw new IllegalArgumentException("unsupported template element");
+    }
+
+    /** Count variable-node expansion from supplied RDF anchors, not constraint
+     * checks against fixed IRIs/literals. Every graph expansion is at most two
+     * edges from a bounded root/candidate. Empty tables execute no expansion. */
+    private static void reviewHops(Query query,Set<String> anchors) {
+        if(anchors.isEmpty()) return;
+        java.util.Map<String,Set<String>> edges = new java.util.HashMap<>();
+        java.util.function.Consumer<org.apache.jena.graph.Triple> add = triple -> {
+            Node a=triple.getSubject(),b=triple.getObject();
+            if(a.isVariable() && b.isVariable()) {
+                edges.computeIfAbsent(a.getName(),ignored->new HashSet<>()).add(b.getName());
+                edges.computeIfAbsent(b.getName(),ignored->new HashSet<>()).add(a.getName());
+            }
+        };
+        var visitor = new ElementVisitorBase() {
+            @Override public void visit(ElementPathBlock block) { block.patternElts().forEachRemaining(path->add.accept(path.asTriple())); }
+            @Override public void visit(ElementTriplesBlock block) { block.patternElts().forEachRemaining(add); }
+            @Override public void visit(ElementSubQuery sub) { reviewHops(sub.getQuery(),anchors); }
+        };
+        ElementWalker.walk(query.getQueryPattern(),visitor);
+        java.util.Map<String,Integer> distance=new java.util.HashMap<>();
+        java.util.ArrayDeque<String> queue=new java.util.ArrayDeque<>();
+        anchors.forEach(anchor->{distance.put(anchor,0);queue.add(anchor);});
+        while(!queue.isEmpty()) {
+            String node=queue.remove();int depth=distance.get(node);
+            for(String next:edges.getOrDefault(node,Set.of())) if(!distance.containsKey(next)) {distance.put(next,depth+1);queue.add(next);}
+        }
+        if(edges.keySet().stream().anyMatch(node->distance.getOrDefault(node,3)>2))
+            throw new IllegalArgumentException("template expands beyond two hops from its RDF bindings");
     }
 
     private TemplateQueryService() {}

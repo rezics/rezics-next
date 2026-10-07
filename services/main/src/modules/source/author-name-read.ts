@@ -8,6 +8,19 @@ const reportedReads = new WeakMap<WorkReadSession, Map<string, string>>();
 export const SOURCE_REPORTED_CREDIT_COST = { works: 64, names: 192, perWork: 128,
   sourceQueriesPerRead: 1, sourceFenceQueries: 1, nameQueriesPerRead: 1 } as const;
 
+/** Raw server-owned attribution tuples, before candidate selection or names. */
+export async function sourceCreditReferences(session: WorkReadSession, works: readonly string[]) {
+  const read = async () => {
+    const refs = await session.deps.sourceAdoptions?.authorReferences(works) ?? new Map<string,Array<{id:string;key:string;ordinal:number}>>();
+    return works.map(work=>[work,refs.get(work) ?? []] as const);
+  };
+  const rows = await read();
+  if (works.length>64 || rows.reduce((sum,[,refs])=>sum+refs.length,0)>128) throw new WorkReadUnavailable('Source credit bindings exceed their bound');
+  session.observeDependency(`source-credit-tuples:${JSON.stringify(works)}`,rows,read);
+  recordReported(session,works,new Map(rows));
+  return rows.flatMap(([work,refs])=>refs.map(ref=>({work,...ref})));
+}
+
 /** Current source facts are read once per page, not copied into discovery's
  * projection. A final fence covers refresh/removal during any Work read. */
 export async function readAuthorNames(session: WorkReadSession, keys: readonly string[], preview = false) {

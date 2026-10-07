@@ -62,7 +62,7 @@ describe('Native template term transport', () => {
 
   test('enforces page lookahead and tuple budgets before transport', async () => {
     const fetch = respond(Response.json({ results: { bindings: [] } }));
-    for (const limit of [0, 66, 1.5, NaN]) {
+    for (const limit of [0, 257, 1.5, NaN]) {
       await expect(client().templateQuery({ ...envelope(), limit })).rejects.toThrow('budget');
     }
     const table = {

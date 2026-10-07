@@ -28,6 +28,7 @@ import { LibraryImportRetentionWorker } from './modules/library-import/retention
 import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { TemplateSeekIndex } from './modules/query/seek-index.ts';
 import { DiscoveryAudienceStore } from './modules/discovery/audience.ts';
 import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
@@ -206,6 +207,7 @@ const port = config.MAIN_PORT;
 
 const fuseki = new FusekiClient(fusekiUrl, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
 const pool = boundedPool({ connectionString: config.ACCESS_DATABASE_URL });
+const templateSeek = new TemplateSeekIndex(pool,fuseki);
 const types = new AdmittedTypeStore(pool);
 await types.refresh();
 // IAM35: every Main enforces the Access-active profile; this release requests its own.
@@ -418,6 +420,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool, {
 });
 const app = createMainApp(fuseki, {
   statementSeek: new StatementSeek(pool, environment),
+  templateSeek,
   mcp: { issuer: config.ACCOUNT_ISSUER, resource: config.ACCOUNT_MAIN_RESOURCE },
   wikiQuotations: new WikiQuotationStore(contentPool),
   wikiEvidence: new WikiEvidenceStore(contentPool),
@@ -579,6 +582,8 @@ const app = createMainApp(fuseki, {
   ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
   ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });
+const templatePreparation = templateSeek.backfill(environment.lineage.dataEpoch)
+  .catch(error=>{ console.error('Template directory is unavailable',error); });
 libraryImport.setDispatch(request => app.handle(request));
 const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
   judgments: new AccessJudgments(pool),
@@ -652,6 +657,7 @@ async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   try {
+  await templatePreparation;
   await occurrenceLabelWorker.stop();
   await statementSeekWorker.stop();
   await realmPolicyRecovery.stop();

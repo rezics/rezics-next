@@ -1,0 +1,21 @@
+PREFIX rv: <https://rezics.com/vocab/>
+PREFIX schema: <https://schema.org/>
+SELECT ?id ?key ?ordinal ?confirmation WHERE {
+  VALUES (?_work_iri ?_main_iri) {}
+  VALUES (?id ?_sort) {}
+  {
+    GRAPH <urn:rezics:graph:current> {
+      ?id a rv:AuthorCredit ; rv:work ?_work_iri ; rv:creditRevision ?revision ;
+        schema:roleName "author" ; rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
+        rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed .
+      FILTER NOT EXISTS { ?id rv:retiredBy ?retirement }
+    }
+    GRAPH <urn:rezics:graph:revisions> {
+      ?revision a rv:AuthorCreditRevision ; rv:component ?id ; rv:work ?_work_iri ; rv:externalKey ?key ; schema:position ?ordinal .
+    }
+  } UNION {
+    VALUES (?id ?key ?ordinal ?_work_iri ?_source_confirmed) {}
+    FILTER(!?_source_confirmed)
+    BIND("source-reported" AS ?confirmation)
+  }
+}
