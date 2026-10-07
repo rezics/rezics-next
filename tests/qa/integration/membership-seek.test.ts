@@ -15,8 +15,114 @@ import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/a
 import { itemListIri } from '../../../services/main/src/modules/structure/graph.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 
+import { S3ImmutableObjects, type ImmutableObjects }
+  from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { startMediaStack } from './media-support.ts';
+
 type Turn = Extract<MembershipPreparationResult, { status: 'committed' }>;
 const SCHEMA = 'https://schema.org/';
+
+test('MODEL13: API-only membership remains prepared across unrelated commands and a second Zone mount', async () => {
+  const stack = await startMediaStack('membership-api', { profileCredits: true, matchUploads: false });
+  const nativeCommands: Array<{ input: Parameters<FusekiClient['command']>[0];
+    result: Awaited<ReturnType<FusekiClient['command']>> }> = [];
+  const command = stack.fuseki.command.bind(stack.fuseki);
+  const observed = spyOn(stack.fuseki, 'command').mockImplementation(async (input) => {
+    const result = await command(input);
+    nativeCommands.push({ input, result });
+    return result;
+  });
+  try {
+    const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/' });
+    await objects.initialize();
+    (stack.env as typeof stack.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
+    const editor = await stack.member('membership-editor');
+    const native = () => `https://rezics.com/id/${randomUUID()}`;
+    const short = (id: string) => id.slice(-36);
+    const json = async <T>(response: Response, status = 200): Promise<T> => {
+      const text = await response.text();
+      if (response.status !== status) throw new Error(`Expected ${status}, got ${response.status}: ${text}`);
+      return JSON.parse(text) as T;
+    };
+    await editor.grant(`agent:control:${editor.actor}`, 'agent.control');
+    await editor.grant('work:create:root', 'work.create');
+    const work = await json<{ work: string }>(await editor.send('POST', '/v1/works', {
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Franchise member',
+      language: 'en', semanticTypes: ['https://schema.org/Book'], actingSubject: editor.actor,
+    }), 201);
+    await editor.grant(`work:read:${work.work}`, 'work.read');
+    await editor.grant('space:create:root', 'space.create');
+    const space = await json<{ space: string }>(await editor.send('POST', '/v1/spaces', {
+      profile: 'space-realm-v2', handle: `membership-${randomUUID().slice(0, 8)}`, name: 'API membership wiki',
+      capabilities: ['realm'], actingSubject: editor.actor,
+    }), 201);
+    const zone = native();
+    await editor.grant(`zone:edit:${zone}`, 'zone.edit');
+    await editor.grant(`semantic:read:${zone}`, 'semantic.read');
+    const navigation = await json<{ revision: string }>(await editor.send('POST', '/v1/zones', {
+      zone, space: space.space, disclosure: 'public', name: 'API membership wiki',
+      language: 'en', actingSubject: editor.actor,
+    }), 201);
+    const collection = async (name: string) => {
+      const id = native();
+      await editor.grant(`collection:edit:${id}`, 'collection.edit');
+      await editor.grant(`semantic:read:${id}`, 'semantic.read');
+      return { id, ...await json<{ structure: string; revision: string }>(
+        await editor.send('POST', '/v1/collections', {
+          collection: id, name, language: 'en', disclosure: 'public', actingSubject: editor.actor,
+        }), 201) };
+    };
+    const franchise = await collection('Franchise');
+    await json(await editor.send('POST', `/v1/collections/${short(franchise.id)}/changes`, {
+      expectedHead: franchise.revision, actingSubject: editor.actor,
+      operations: [{ op: 'insert', parent: franchise.structure, role: 'member',
+        position: 'last', target: work.work }],
+    }));
+    const root = `/v1/zones/${short(zone)}`;
+    const first = await json<{ revision: string; occurrences: string[] }>(
+      await editor.send('POST', `${root}/mounts`, {
+        expectedHead: navigation.revision, target: franchise.id, routeSegment: 'franchise',
+        position: 'last', disclosure: 'public', actingSubject: editor.actor,
+      }));
+    const proof = () => stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?proof WHERE {
+      GRAPH <urn:rezics:graph:template-index> {
+        <urn:rezics:membership-preparation> rv:membershipCompletedForm ?proof }
+    }`);
+    const afterFirst = await proof();
+    // This ordinary admitted write does not change the existing navigation list.
+    const characters = await collection('Characters');
+    const second = await json<{ revision: string; occurrences: string[] }>(
+      await editor.send('POST', `${root}/mounts`, {
+        expectedHead: first.revision, target: characters.id, routeSegment: 'characters',
+        position: 'last', disclosure: 'public', actingSubject: editor.actor,
+      }));
+    expect(second.occurrences).toHaveLength(1);
+    expect(second.revision).not.toBe(first.revision);
+    const mounted = await json<{ mounts: Array<{ target: string }> }>(await editor.read(root));
+    expect(mounted.mounts.map(mount => mount.target)).toEqual([franchise.id, characters.id]);
+    const members = await json<{ occurrences: Array<{ target: string }> }>(
+      await editor.read(`/v1/collections/${short(franchise.id)}`));
+    expect(members.occurrences.map(member => member.target)).toEqual([work.work]);
+    expect(await hasUnnormalizedMembership(stack.fuseki)).toBe(false);
+    expect(afterFirst.results?.bindings).toHaveLength(1);
+    expect(await proof()).toEqual(afterFirst);
+    const artifact = Bun.env.REZICS_QA_ARTIFACT_DIR;
+    if (artifact) writeFileSync(join(artifact, 'membership-api-mounts.json'), JSON.stringify({
+      zone, franchise: franchise.id, characters: characters.id,
+      first, second, mounts: mounted.mounts, members: members.occurrences,
+      completion: afterFirst.results?.bindings,
+      qualification: 'Actual Main API handlers, native HTTP Fuseki and isolated owner storage; no preparation between admitted writes.',
+    }, null, 2));
+  } finally {
+    observed.mockRestore();
+    const artifact = Bun.env.REZICS_QA_ARTIFACT_DIR;
+    if (artifact) writeFileSync(join(artifact, 'membership-api-native.json'), JSON.stringify(nativeCommands, null, 2));
+    await stack.stop();
+  }
+}, 180_000);
 
 test('ordered membership preparation exhausts native seeks, resumes and replays over a populated HTTP store', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL

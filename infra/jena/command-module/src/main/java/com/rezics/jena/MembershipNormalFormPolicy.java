@@ -35,12 +35,19 @@ final class MembershipNormalFormPolicy {
         TemplateIndexService.invalidateMembershipCompletion(data);
     }
 
-    record Result(String error, Set<Node> validatedLists) {}
+    record Result(String error, Set<Node> validatedLists, boolean completesEmptyPrestate) {}
     static Result check(CommandOverlay delta, ProfileRegistry profiles, long deadlineNano) {
         try {
             Check check=new Check((CommandOverlay)CommandOverlay.membershipStorage(delta), profiles, deadlineNano); check.run();
-            return new Result(null,Set.copyOf(check.validatedLists));
-        } catch (IllegalArgumentException invalid) { return new Result(invalid.getMessage(),Set.of()); }
+            return new Result(null,Set.copyOf(check.validatedLists),check.emptyBefore);
+        } catch (IllegalArgumentException invalid) { return new Result(invalid.getMessage(),Set.of(),false); }
+    }
+
+    /** Publish only inside the command's existing savepoint. Later refusal or
+     * persistence failure rolls this authority back with the primary facts. */
+    static void applied(DatasetGraph data, Result result) {
+        if(result.error()==null && result.completesEmptyPrestate())
+            TemplateIndexService.completeEmptyMembership(data);
     }
 
     static Map<String,Object> validateList(DatasetGraph data,ProfileRegistry profiles,String subject,Set<Node> verifiedLists) {
@@ -75,10 +82,13 @@ final class MembershipNormalFormPolicy {
         private int inboundWork;
         private final Set<Node> validatedLists=new LinkedHashSet<>();
         private final boolean completedBefore;
+        private final boolean emptyBefore;
 
         Check(CommandOverlay after, ProfileRegistry profiles, long deadline) {
             this.after = after; this.before = after.getWrapped(); this.profiles = profiles; this.deadline = deadline;
-            this.completedBefore=TemplateIndexService.membershipCompleted(this.before);
+            boolean completed=TemplateIndexService.membershipCompleted(this.before);
+            this.emptyBefore=!completed && TemplateIndexService.emptyMembership(this.before);
+            this.completedBefore=completed || emptyBefore;
         }
 
         void run() {

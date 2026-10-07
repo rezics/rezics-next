@@ -403,20 +403,23 @@ public class MembershipSeekTest {
         assertEquals(0, result.get("examined")); assertFalse(needsPreparation(data));
     }
     private static String controlCommand(String receipt) {
+        return controlCommand(receipt, "test", "0");
+    }
+    private static String controlCommand(String receipt, String epoch, String routing) {
         return """
             PREFIX rv: <https://rezics.com/vocab/>
             DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n } }
             INSERT {
               GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
               GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt ; rv:outcome rv:Cancelled ;
-                rv:requestDigest "%s" ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "test" ; rv:sequence ?next }
-              GRAPH <urn:rezics:graph:outbox> { <%s:batch> a rv:OutboxBatch ; rv:dataEpoch "test" ; rv:sequence ?next ; rv:eventCount 0 }
+                rv:requestDigest "%s" ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "%s" ; rv:sequence ?next }
+              GRAPH <urn:rezics:graph:outbox> { <%s:batch> a rv:OutboxBatch ; rv:dataEpoch "%s" ; rv:sequence ?next ; rv:eventCount 0 }
             } WHERE {
-              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "test" ; rv:routingEpoch "0" ; rv:sequence ?n }
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "%s" ; rv:routingEpoch "%s" ; rv:sequence ?n }
               FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <%s> ?p ?o } }
               BIND(?n + 1 AS ?next)
             }
-            """.formatted(receipt, SlimCommandTest.DIGEST, receipt, receipt);
+            """.formatted(receipt, SlimCommandTest.DIGEST, epoch, receipt, epoch, epoch, routing, receipt);
     }
     private static Map<String,Object> activateInitialModel(CommandService service, DatasetGraph data) {
         String generation = "urn:rezics:model-generation:" + "e".repeat(64), head = "urn:rezics:model:product";
@@ -557,6 +560,10 @@ public class MembershipSeekTest {
             validations.add(new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
                 "https://rezics.com/definition/structure-composition-v1/" + focus.getKey() + "-shape",
                 List.of(focus.getValue().getURI()), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+        if (facts.contains("<" + NEW_PLACEMENT.getURI() + ">"))
+            validations.add(new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/placement-shape", List.of(NEW_PLACEMENT.getURI()),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
         return SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
             membershipCommand(receipt, deletes, inserts, guard), validations, System.nanoTime() + 30_000_000_000L);
     }
@@ -912,6 +919,9 @@ public class MembershipSeekTest {
         data.add(CURRENT, NEW_OCCURRENCE, p("introducedBy"), HEAD);
     }
     private static Map<String,Object> insertFirstOwnedPlacement(DatasetGraph data, String suffix) {
+        return insertFirstOwnedPlacement(data, suffix, false);
+    }
+    private static Map<String,Object> insertFirstOwnedPlacement(DatasetGraph data, String suffix, boolean invalidValidation) {
         String placement = "<" + NEW_PLACEMENT.getURI() + ">";
         String insert = placement + " a rv:OccurrencePlacement, schema:ListItem ; rv:generation <" + GENERATION.getURI()
             + "> ; rv:occurrence <" + NEW_OCCURRENCE.getURI() + "> ; rv:occurrenceRole rv:ChapterRole ; rv:orderSegment <"
@@ -926,9 +936,130 @@ public class MembershipSeekTest {
             new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
                 "https://rezics.com/definition/structure-composition-v1/item-list-shape", List.of(LIST.getURI()),
                 List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+        if (invalidValidation) {
+            checks = new ArrayList<>(checks);
+            checks.add(new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/placement-shape", List.of(HEAD.getURI()),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+        }
         return SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
             membershipCommand(receipt, "", insert, "<" + NEW_OCCURRENCE.getURI() + "> a schema:ListItem ."), checks,
             System.nanoTime() + 30_000_000_000L);
+    }
+    @Test public void admittedEmptyMembershipEstablishesProofWithoutPreparationOrPopulationWalks() {
+        Long baseline = null;
+        for (int unrelated : List.of(0, 20_000)) {
+            var data = fixture(0, 0, 0, unrelated);
+            try {
+                write(data, () -> unplacedOccurrence(data));
+                assertTrue(completedProof(data).isEmpty());
+                var counted = new ParentReads(data, false);
+                var first = insertFirstOwnedPlacement(counted, "empty-" + unrelated);
+                assertEquals(first.toString(), "committed", first.get("status"));
+                assertEquals(0, counted.populationProbes);
+                assertTrue("empty-prestate admission exceeded bounded point reads: " + counted.returnedRows, counted.returnedRows < 2000);
+                if (baseline == null) baseline = counted.returnedRows;
+                else assertEquals("empty-prestate admission scanned unrelated entities", baseline.longValue(), counted.returnedRows);
+                Set<Quad> proof = completedProof(data); assertEquals(1, proof.size()); assertFalse(needsPreparation(data));
+                String receipt = "urn:rezics:receipt:membership-unrelated:" + unrelated;
+                var control = SlimCommandTest.service(PROFILES).runCommand(counted, receipt, SlimCommandTest.DIGEST,
+                    controlCommand(receipt, "epoch", "routing"), List.of(), System.nanoTime() + 30_000_000_000L);
+                assertEquals(control.toString(), "committed", control.get("status"));
+                String placement = "<" + NEW_PLACEMENT.getURI() + ">";
+                var changed = nativeMembershipWrite(counted, receipt + ":reorder",
+                    placement + " rv:orderKey \"zzz\" ; schema:position \"0-zzz\" .",
+                    placement + " rv:orderKey \"zzy\" ; schema:position \"0-zzy\" .",
+                    placement + " rv:orderKey \"zzz\" ; schema:position \"0-zzz\" .");
+                assertEquals(changed.toString(), "committed", changed.get("status"));
+                assertEquals(proof, completedProof(data)); assertFalse(needsPreparation(data));
+                assertEquals(0, counted.populationProbes);
+                System.out.println("membership fresh admission unrelated=" + unrelated + " pointRows=" + counted.returnedRows + " populationProbes=0");
+            } finally { data.close(); }
+        }
+    }
+    @Test public void emptyRestoreCutoverReplacesItsIneligiblePriorEpochProofAtomically() {
+        var data = fixture(0, 0, 0, 0);
+        try {
+            assertEquals(0, drain(data, countPhysicalRows(data), 1));
+            Set<Quad> oldProof = completedProof(data); assertEquals(1, oldProof.size());
+            // Recovery retains semantic rows but changes the control epoch.
+            data.begin(ReadWrite.WRITE);
+            try {
+                data.deleteAny(CONTROL, PRODUCT, p("dataEpoch"), Node.ANY);
+                data.add(CONTROL, PRODUCT, p("dataEpoch"), text("restored"));
+                data.commit();
+            } finally { data.end(); }
+            assertEquals(oldProof, completedProof(data)); assertTrue(needsPreparation(data));
+            String receipt = "urn:rezics:receipt:membership-empty-restored";
+            var admitted = SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
+                controlCommand(receipt, "restored", "routing"), List.of(), System.nanoTime() + 30_000_000_000L);
+            assertEquals(admitted.toString(), "committed", admitted.get("status"));
+            Set<Quad> newProof = completedProof(data); assertEquals(1, newProof.size());
+            assertNotEquals(oldProof, newProof); assertFalse(needsPreparation(data));
+            assertTrue(newProof.iterator().next().getObject().getLiteralLexicalForm().contains("restored"));
+        } finally { data.close(); }
+    }
+    @Test public void rawCorruptionOutsideTheBoundedFocusCannotBeCertifiedByAnotherInsertion() {
+        var data = populatedParent(500);
+        try {
+            write(data, () -> {
+                data.deleteAny(CURRENT, id(10499), p("generation"), Node.ANY);
+            });
+            Set<Quad> before = snapshot(data); var counted = new ParentReads(data, true);
+            var inserted = insertIntoPopulatedParent(counted, "late-corruption");
+            assertEquals(inserted.toString(), "invalid", inserted.get("status"));
+            assertTrue(inserted.toString(), inserted.get("report").toString().contains("populated ItemList requires completed membership preparation"));
+            assertEquals(before, snapshot(data)); assertTrue(completedProof(data).isEmpty());
+            boolean refused = false;
+            for (int turn = 0; turn < 10 && !refused; turn++) {
+                var result = prepare(data, request());
+                if ("invalid".equals(result.get("status"))) refused = true;
+                else assertFalse(result.toString(), Boolean.TRUE.equals(result.get("complete")));
+            }
+            assertTrue("preparation must find corruption beyond the command's bounded member focus", refused);
+            assertTrue(needsPreparation(data)); assertTrue(completedProof(data).isEmpty());
+        } finally { data.close(); }
+    }
+    @Test public void refusedOrRolledBackEmptyPrestateCommandsCannotCreateMembershipAuthority() {
+        var data = fixture(0, 0, 0, 0);
+        try {
+            write(data, () -> unplacedOccurrence(data)); Set<Quad> before = snapshot(data);
+            var invalid = insertFirstOwnedPlacement(data, "invalid-validation", true);
+            assertEquals(invalid.toString(), "invalid", invalid.get("status"));
+            assertEquals(before, snapshot(data)); assertTrue(completedProof(data).isEmpty());
+            String receipt = "urn:rezics:receipt:membership-empty-unmatched";
+            var stale = SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
+                membershipCommand(receipt, "", "", "<urn:rezics:missing> a schema:ItemList ."), List.of(),
+                System.nanoTime() + 30_000_000_000L);
+            assertEquals(stale.toString(), "guard-unmatched", stale.get("status"));
+            assertEquals(before, snapshot(data)); assertTrue(completedProof(data).isEmpty());
+            // Abort the same staged and proved mutation at the existing item savepoint.
+            data.begin(ReadWrite.WRITE);
+            try {
+                var delta = new CommandOverlay(data);
+                var checked = MembershipNormalFormPolicy.check(delta, PROFILES, System.nanoTime() + 30_000_000_000L);
+                assertNull(checked.error()); assertTrue(checked.completesEmptyPrestate());
+                MembershipNormalFormPolicy.applied(data, checked);
+                assertTrue(TemplateIndexService.membershipCompleted(data));
+                data.abort();
+            } finally { data.end(); }
+            assertEquals(before, snapshot(data)); assertTrue(completedProof(data).isEmpty());
+        } finally { data.close(); }
+    }
+    @Test public void failedBulkCancellationCannotPublishEmptyMembershipAuthority() {
+        var data = fixture(0, 0, 0, 0);
+        try {
+            Set<Quad> before = snapshot(data);
+            String receipt = "urn:rezics:receipt:membership-empty-bulk-unmatched";
+            String unmatched = membershipCommand(receipt, "", "", "<urn:rezics:missing> a schema:ItemList .");
+            var plan = CommandPolicy.parse(unmatched, receipt);
+            var item = new CommandService.BulkItem(receipt, SlimCommandTest.DIGEST, unmatched, plan,
+                List.of(), unmatched, plan);
+            var result = SlimCommandTest.service(PROFILES).runBulk(data, List.of(item), System.nanoTime() + 30_000_000_000L);
+            assertTrue(result.toString(), result.get("items").toString().contains("guard-unmatched"));
+            assertEquals("failed candidate and unmatched cancellation must not durably create authority", before, snapshot(data));
+            assertTrue(completedProof(data).isEmpty()); assertTrue(needsPreparation(data));
+        } finally { data.close(); }
     }
     @Test public void emptyNamedMembershipCannotCertifyDefaultOwnersOrSplitOwnerFields() {
         for (String defect : DEFAULT_OWNER_CASES) {
