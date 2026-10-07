@@ -1,0 +1,11 @@
+PREFIX rv: <https://rezics.com/vocab/>
+PREFIX schema: <https://schema.org/>
+SELECT ?id ?concept WHERE {
+  VALUES (?_work_iri ?_main_iri) {}
+  VALUES (?id ?_sort) {}
+  GRAPH <urn:rezics:graph:current> {
+    ?id a schema:CreativeWork ; rv:mainVersion ?main .
+    ?main a rv:MainVersion ; rv:work ?id ; rv:head ?head .
+  }
+  BIND(?_work_iri AS ?concept)
+}
