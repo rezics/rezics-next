@@ -21,6 +21,9 @@ class ContentGraph extends FusekiClient {
   scans = 0;
   constructor() { super('http://content-custody.invalid'); }
   override async query(query: string): Promise<SparqlResult> {
+    if (query.includes('SELECT DISTINCT ?type') && query.includes(`<${work}> a ?type`)) {
+      return { results: { bindings: [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] } };
+    }
     if (query.includes('SELECT ?target WHERE') && query.includes('rv:ErasedRevision')) {
       this.scans++;
       return { results: { bindings: this.erased ? [{ target: { type: 'uri',
@@ -78,14 +81,16 @@ function fixture() {
   const read = (surface: Surface) => app.handle(new Request(`http://main.local${surface === 'comment'
     ? `/v1/content-comments/${commentId}` : `/v1/content-revisions/${revision}${surface === 'comment-page' ? '/comments' : ''}`}`
     + `?actingSubject=${encodeURIComponent(actor)}`, { headers: { authorization: 'Bearer admitted-reader' } }));
-  return { graph, state, exact, comment, read, rightsEntered, releaseRights };
+  const waitForRights = (pending: Promise<Response>) => Promise.race([rightsEntered,
+    pending.then(response => { throw new Error(`Content read ended before the rights fence: HTTP ${response.status}`); })]);
+  return { graph, state, exact, comment, read, waitForRights, releaseRights };
 }
 
 for (const surface of ['revision', 'comment', 'comment-page'] as const) {
   test(`OPS12: the ${surface} HTTP read delivers coherent exact public-domain Content while both gates stay open`, async () => {
     const f = fixture();
     const pending = f.read(surface);
-    await f.rightsEntered;
+    await f.waitForRights(pending);
     expect(f.graph.scans).toBe(1);
     f.releaseRights();
     const response = await pending;
@@ -101,7 +106,7 @@ for (const surface of ['revision', 'comment', 'comment-page'] as const) {
   test(`OPS12: Access closure during the ${surface} rights read withholds exact Content and annotation bytes`, async () => {
     const f = fixture();
     const pending = f.read(surface);
-    await f.rightsEntered;
+    await f.waitForRights(pending);
     f.state.held = true;
     f.releaseRights();
     const response = await pending;
@@ -115,7 +120,7 @@ for (const surface of ['revision', 'comment', 'comment-page'] as const) {
   test(`OPS12: graph suppression during the ${surface} rights read hides still-retained Content and annotations`, async () => {
     const f = fixture();
     const pending = f.read(surface);
-    await f.rightsEntered;
+    await f.waitForRights(pending);
     f.graph.erased = true;
     f.releaseRights();
     const response = await pending;

@@ -290,23 +290,35 @@ public class g556QualificationTest {
         try (Fixture fixture = new Fixture(500)) {
             fixture.data.begin(ReadWrite.WRITE);
             try {
+                Node current = iri(CommandPolicy.CURRENT);
+                Node realmNode = iri(realm);
+                Node space = iri("https://rezics.com/id/22222222-2222-4222-8222-222222222222");
+                fixture.data.add(current, realmNode, RDF.type.asNode(), iri(RV + "Realm"));
+                fixture.data.add(current, realmNode, iri(RV + "realmState"), iri(RV + "Active"));
+                fixture.data.add(current, realmNode, iri(RV + "space"), space);
+                fixture.data.add(current, realmNode, iri(RV + "disclosure"), iri(RV + "Public"));
+                fixture.data.add(current, space, RDF.type.asNode(), iri(RV + "Space"));
+                fixture.data.add(current, space, iri(RV + "disclosure"), iri(RV + "Public"));
                 for (int number = 0; number < 500; number++) {
                     Node main = iri("https://rezics.com/id/00000000-0000-4000-8000-" + String.format("%012d", number));
+                    Node work = iri("https://rezics.com/id/00000000-0000-4000-8000-" + String.format("%012d", 1000 + number));
                     Node unit = iri("urn:rezics:match:g556:realm:" + number);
                     Node selection = iri("urn:rezics:selection:g556:realm:" + number);
                     Node slot = iri("urn:rezics:slot:g556:realm:" + number);
                     fixture.data.add(PUBLIC, unit, RDF.type.asNode(), MATCH);
                     fixture.data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + number, "en"));
                     fixture.data.add(PUBLIC, unit, iri(RV + "mainVersion"), main);
+                    fixture.data.add(PUBLIC, unit, iri(RV + "work"), work);
                     fixture.data.add(PUBLIC, unit, iri(RV + "context"), iri(realm));
                     fixture.data.add(PUBLIC, unit, iri(RV + "selection"), selection);
                     fixture.data.add(PUBLIC, unit, iri(RV + "language"), literal("en"));
                     fixture.data.add(PUBLIC, unit, iri(RV + "disclosure"), iri(RV + "Public"));
-                    Node current = iri(CommandPolicy.CURRENT);
                     fixture.data.add(current, slot, RDF.type.asNode(), iri(RV + "RealmPublicationSlot"));
                     fixture.data.add(current, slot, iri(RV + "selectionHead"), selection);
                     fixture.data.add(current, slot, iri(RV + "realm"), iri(realm));
                     fixture.data.add(current, slot, iri(RV + "mainVersion"), main);
+                    fixture.data.add(current, slot, iri(RV + "work"), work);
+                    fixture.data.add(iri(CommandPolicy.REVISIONS), selection, iri(RV + "slot"), slot);
                 }
                 fixture.data.commit();
             } finally { fixture.data.end(); }

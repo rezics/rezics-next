@@ -15,8 +15,9 @@ import { ensureRetentionDomain, ErasureUnavailable, readErasure } from
 import { CONTENT_LIVE_DOMAIN, CONTENT_LIVE_RETENTION, CONTENT_WAL_DOMAIN,
   completePendingContentErasures, ErasureService } from
   '../../../services/main/src/modules/erasure/request.ts';
-import { initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
+import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { assertGraphAdmissionOpen } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
@@ -61,7 +62,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
   const relayPool = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
   const directory = join(resolve(import.meta.dir, '../../..'), '.temp', `erasure-custody-${randomUUID()}`);
   const account = await ratingAccount({ ...apps, ACCOUNT_DATABASE_URL: databases.urls.account },
-    'openid access:manage work:read');
+    'openid access:manage work:create work:read');
   try {
     await migrateContent(contentPool);
     const content = new ContentCore(contentPool);
@@ -83,7 +84,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     const fuseki = new FusekiClient(apps.FUSEKI_URL);
     const environment = { fuseki, objectDirectory: directory,
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
-    await initializeFreshGraph(fuseki, environment.lineage);
+    await assertGraphAdmissionOpen(fuseki, environment.lineage);
     const dependencies = { environment, account: account.verifier, access, content, erasures: service };
     const main = createMainApp(fuseki, dependencies);
     const call = (method: string, path: string, token: string | null, body?: object,
@@ -91,7 +92,6 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
       method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
-    const work = `https://rezics.com/id/${randomUUID()}`;
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const otherActor = `https://rezics.com/id/${randomUUID()}`;
     const principalA = randomUUID(), principalB = randomUUID();
@@ -99,6 +99,17 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
       VALUES ($1, $3, $4), ($2, $3, $5)`, [principalA, principalB, account.issuer, account.a.id, account.b.id]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent'), ($2, 'agent')",
       [actor, otherActor]);
+    await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
+    await accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`, [randomUUID(), principalA, actor]);
+    await accessPool.query(`INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '1 hour')`, [randomUUID(), actor]);
+    const work = (await createAdmittedMetadataWork(environment, account.verifier, access,
+      new Request('http://main.local/v1/works', { headers: { authorization: `Bearer ${account.tokenA}` } }),
+      { actingSubject: actor, idempotencyKey: `erasure-custody:${randomUUID()}`,
+        title: `Content erasure fixture ${randomUUID()}`, language: 'en' })).work;
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1), ($2)',
       [`erasure:${work}`, `work:read:${work}`]);
     for (const action of ['erasure.request', 'work.read']) {
@@ -127,6 +138,11 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     const sealed = await save(secret), inventoried = await save('inventory interruption'),
       raced = await save('concurrent target'), kept = await save('unrelated retained text'),
       partial = await save('private bytes while the Content owner retries');
+    const readRevision = (revision: string) => call('GET',
+      `/v1/content-revisions/${revision}?actingSubject=${encodeURIComponent(actor)}`, account.tokenA);
+    const readable = await readRevision(partial);
+    expect(readable.status).toBe(200);
+    expect(await readable.json()).toMatchObject({ body: { body: 'private bytes while the Content owner retries' } });
     const status = async (revision: string) =>
       (await content.readExactBatch([revision], async ids => new Set(ids)))[0]?.status;
     const body = (revisionIds: string[], actingSubject = actor) => ({
@@ -227,8 +243,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
       expect(await status(partial)).toBe('available');
       expect(await dependencies.content.readExactBatch([partial], async ids => new Set(ids)))
         .toEqual([{ revisionId: partial, status: 'erased' }]);
-      expect((await call('GET', `/v1/content-revisions/${partial}?actingSubject=${encodeURIComponent(actor)}`,
-        account.tokenA)).status).toBe(404);
+      expect((await readRevision(partial)).status).toBe(404);
       expect(await journalCount()).toBe(4);
     } finally {
       await contentPool.query('DROP TRIGGER erasure_custody_fail ON content.revision_erasure');
@@ -252,13 +267,13 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
       await registry.canReadWork(principal, actor, work) ? new Set(ids) : new Set<string>());
     expect(await publicRead()).toBe('public bytes');
     expect((await exactRead())[0]?.status).toBe('available');
+    expect((await readRevision(kept)).status).toBe(200);
     expect((await call('GET', '/health/ready', null)).status).toBe(200);
     const fence = await engageAccessRecoveryFence(accessPool);
     try {
       await expect(publicRead()).rejects.toBeInstanceOf(AdmissionUnavailable);
       await expect(exactRead()).rejects.toBeInstanceOf(AdmissionUnavailable);
-      expect((await call('GET', `/v1/content-revisions/${kept}?actingSubject=${encodeURIComponent(actor)}`,
-        account.tokenA)).status).toBe(503);
+      expect((await readRevision(kept)).status).toBe(503);
       expect((await call('GET', '/health/ready', null)).status).toBe(503);
       expect((await call('GET', `/v1/erasures/${report.erasureId}`, account.tokenA)).status).toBe(503);
       const priorCount = await journalCount();
@@ -272,6 +287,7 @@ test('OPS10/OPS11/OPS12: Content suppression survives owner handoff failures and
     expect(await publicRead()).toBe('public bytes');
     expect((await call('GET', '/health/ready', null)).status).toBe(200);
     expect((await exactRead())[0]?.status).toBe('available');
+    expect((await readRevision(kept)).status).toBe(200);
     let deliveryFence: string | undefined;
     try {
       await expect(workRead(dependencies, new Request('http://main.local/v1/works'), {}, async () => {
