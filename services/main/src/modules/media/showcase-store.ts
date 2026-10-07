@@ -35,18 +35,24 @@ interface SourceBasis {
 }
 type Inspector = (basis: SourceBasis) => Promise<ImageSize & { hasAlpha?: boolean }>;
 
-/** One owner query for <=64 disclosed targets. Two indexed context ranges per
- * target, one head/Use/source probe per slot, <=12 candidates per image. Cost is
- * O(B log S + K*C log R), output O(K*C), where K is the selected slots of these
- * targets (including all logo languages), C<=12. No inventory/history scan or
+/** One owner query for <=64 disclosed targets. Two indexed active ranges per
+ * target, exact context/head/Use/source probes per role, <=12 candidates per image.
+ * Cost is O((B+K) log S + K*C log R), output O(K*C), where K is the selected slots of these
+ * targets (including all active logo languages), C<=12. No inventory/history scan or
  * per-target round trip. A requested slot wins even if removed or unreadable. */
 export const SHOWCASE_BATCH_SQL = `WITH owner AS (
   SELECT data_epoch,sequence::text FROM content.owner_control WHERE singleton),
-  wanted AS (SELECT t.target,c.context,c.rank FROM unnest($1::text[]) t(target)
-    CROSS JOIN unnest($2::text[]) WITH ORDINALITY c(context,rank)),
-  chosen AS (SELECT DISTINCT ON (w.target,s.role) w.target,s.role,s.context,s.head
+  wanted AS (SELECT t.target,c.context FROM unnest($1::text[]) t(target)
+    CROSS JOIN unnest($2::text[]) c(context)),
+  candidates AS MATERIALIZED (SELECT DISTINCT w.target,s.role
     FROM wanted w JOIN media.selection_slot s ON s.target=w.target AND s.context=w.context
-      AND s.role LIKE 'showcase-%' ORDER BY w.target,s.role,w.rank)
+      AND s.role LIKE 'showcase-%' AND s.showcase_active),
+  chosen AS (SELECT candidate.target,candidate.role,slot.context,slot.head
+    FROM candidates candidate JOIN LATERAL (
+      SELECT s.context,s.head FROM unnest($2::text[]) WITH ORDINALITY c(context,rank)
+      JOIN media.selection_slot s ON s.target=candidate.target AND s.context=c.context
+        AND s.role=candidate.role AND s.role LIKE 'showcase-%'
+      ORDER BY c.rank LIMIT 1) slot ON true)
   SELECT o.data_epoch,o.sequence,c.target,c.role,c.context,r.id AS selection,r.trailer_url,
     u.id AS use,u.asset_id,u.crop,u.focal_area,u.logo_anchor,u.oriented_width,u.oriented_height,
     p.id AS representation,p.media_type,p.pixel_width,p.pixel_height,
@@ -73,6 +79,11 @@ export const SHOWCASE_BATCH_SQL = `WITH owner AS (
       ORDER BY d.pixel_width,d.media_type,d.id LIMIT ${RENDITION_LIMITS.candidates}) candidate
   ) candidates ON p.id IS NOT NULL
   ORDER BY c.target,c.role`;
+
+/** At most two active tones for each of eight languages in this context. */
+export const SHOWCASE_LOGO_CAPACITY_SQL = `SELECT array_agg(DISTINCT split_part(role,':',2)) AS languages
+  FROM media.selection_slot WHERE target=$1 AND context=$2
+    AND role LIKE 'showcase-%' AND role LIKE 'showcase-logo:%' AND showcase_active`;
 
 /** Showcase is an extension of media selections, not a second document owner. */
 export class MediaShowcaseStore {
@@ -190,8 +201,10 @@ export class MediaShowcaseStore {
           replayed: true,
         };
       } else {
-        if (!trailer && input.role === 'logo' && input.asset !== null)
-          await this.admitLogoLanguage(client, input.target, input.context, role);
+        if (!trailer && input.role === 'logo')
+          await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+            `showcase-logo:${input.target}`,
+          ]);
         await client.query(
           `INSERT INTO media.selection_slot(target,context,role,policy)
           VALUES ($1,$2,$3,'showcase-selection-v1') ON CONFLICT DO NOTHING`,
@@ -218,6 +231,8 @@ export class MediaShowcaseStore {
             replayed: false,
           };
         } else {
+          if (!trailer && input.role === 'logo' && input.asset !== null)
+            await this.admitLogoLanguage(client, input.target, input.context, role);
           let source: SourceBasis | null = null;
           let inspected: (ImageSize & { hasAlpha?: boolean }) | null = null;
           if (!trailer && input.asset !== null) {
@@ -289,22 +304,17 @@ export class MediaShowcaseStore {
     return { ...result, position: await settledContentPosition(this.pool, operationId) };
   }
 
-  /** A new language needs room among the Work's logo slots. Removed slots keep
-   * their language, so the count bounds every read, not only the visible logos.
-   * One lock per target serializes concurrent additions; the count probes the
-   * (target, context) slot range, O(L) for L<=2*SHOWCASE_LOGO_LANGUAGES. */
+  /** The caller holds the target lock through commit. Removed slots retain their
+   * history but release capacity; either active tone keeps its language counted.
+   * The partial index visits only active slots, O(L) for L<=2*SHOWCASE_LOGO_LANGUAGES. */
   private async admitLogoLanguage(
     client: PoolClient,
     target: string,
     context: string,
     role: string,
   ): Promise<void> {
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-      `showcase-logo:${target}`,
-    ]);
     const { rows } = await client.query(
-      `SELECT array_agg(DISTINCT split_part(role,':',2)) AS languages FROM media.selection_slot
-      WHERE target=$1 AND context=$2 AND role LIKE 'showcase-logo:%'`,
+      SHOWCASE_LOGO_CAPACITY_SQL,
       [target, context],
     );
     const languages: string[] = rows[0].languages ?? [];

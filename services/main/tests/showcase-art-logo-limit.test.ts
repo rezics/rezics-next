@@ -13,7 +13,7 @@ const admission = {
   requestDigest: 'a'.repeat(64),
 };
 
-/** A pool whose only stored state is the languages of the Work's logo slots. */
+/** A pool whose stored state is the currently selected logo languages. */
 function poolWith(languages: string[]) {
   const statements: string[] = [];
   const client = {
@@ -21,9 +21,10 @@ function poolWith(languages: string[]) {
     async query(sql: string) {
       statements.push(sql);
       if (sql.includes('array_agg')) return { rows: [{ languages }] };
-      if (sql.includes('content.receipt')) return { rows: [] };
+      if (sql.includes('SELECT r.*,s.id')) return { rows: [] };
+      if (sql.includes('SELECT head')) return { rows: [{ head: null }] };
       // Stop after admission: the test only asks whether the language fits.
-      if (sql.includes('INSERT INTO media.selection_slot')) throw new Error('admitted');
+      if (sql.includes('SELECT v.draft_head') || sql.includes('WITH terminal')) throw new Error('admitted');
       return { rows: [] };
     },
   };

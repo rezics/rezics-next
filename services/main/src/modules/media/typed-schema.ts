@@ -127,6 +127,7 @@ const selectionSlot = media.table('selection_slot', {
   policy: text('policy').$type<'avatar-selection-v1' | 'showcase-selection-v1'>().notNull(),
   head: uuid('head'),
   deliveryHead: uuid('delivery_head'),
+  showcaseActive: boolean('showcase_active').notNull().default(false),
 });
 
 const selectionRevision = media.table('selection_revision', {
