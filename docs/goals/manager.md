@@ -179,10 +179,21 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   catalog completion and mechanical edits go to cheap models (Luna at `max`,
   Grok or Cursor); Sol, Opus and Sonnet are for design, copywriting,
   architecture, review and hard debugging.
-- **Host memory.** About seven workers exhausted this machine's memory on
-  2026-09-28 (Docker, dev servers, Storybook, type checkers and Playwright);
-  keep five or fewer, verify with `storybook:test` rather than a Storybook dev
-  server, and run one dev server at a time.
+  Observed on 2026-10-07, with every task landed through a Sol review:
+  - Luna at `max` gave clean first handoffs on bounded code (G-1356 goalctl,
+    G-1359) and on translation into seven languages (G-1357). Review found a
+    few moderate issues each time, and each was fixed in one resume.
+  - Grok gave a clean first handoff on G-1355 for $2.36. Its mocked tests
+    missed a real endpoint limit that the review caught.
+
+  Cheap engine plus Sol review works. Give the cheap engine checks that touch
+  the real thing, not only mocks.
+- **Host memory.** A worker process is cheap; QA stacks, browsers, Storybook
+  and type checkers are not. Those wait for measured memory (`scripts/qa/host-admission.ts`)
+  and the heavy lock, so width comes from workers, and test scheduling is the
+  manager's job. Verify with `storybook:test` rather than a Storybook dev
+  server, run one dev server at a time, and never put bulk data in `/tmp`
+  (RAM on this host).
 - **Claude 7d.** `goalctl status` projects the week at reset from the recent
   burn rate against `WEEK_CAP` (100%). Ten points below the cap it prints
   `widen`. New Claude dispatch stops when the week would pass five points below
