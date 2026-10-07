@@ -38,13 +38,11 @@ const grainKey = ({ principal, context }: Grain) => `${principal}|${context}`;
 test('rating merge seeks bounded raw indexed grains and completely resumes sparse duplicate histories', async () => {
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access']);
   const pool = new Pool({ connectionString: databases.urls.access });
+  const personPrefix = randomUUID().slice(0, 24), contextPrefix = randomUUID().slice(0, 24);
   const people = Array.from({ length: 10_000 }, (_, n) =>
-    `00000000-0000-4000-8000-${(n + 1).toString(16).padStart(12, '0')}`);
-  const contexts = [
-    'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
-    'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
-    'https://rezics.com/id/00000000-0000-4000-8000-000000000003',
-  ];
+    `${personPrefix}${(n + 1).toString(16).padStart(12, '0')}`);
+  const contexts = Array.from({ length: 3 }, (_, n) =>
+    `https://rezics.com/id/${contextPrefix}${(n + 1).toString(16).padStart(12, '0')}`);
   const actor = id(), scope = `rating:observe:${contexts[0]}`;
   const proposal = randomUUID(), application = randomUUID();
   const task: MergeTask = {
