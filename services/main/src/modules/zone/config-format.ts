@@ -22,16 +22,39 @@ const contentRevisionId = Type.String({
 /** One bounded publication command; retained bundles never follow draft heads. */
 export const ZONE_SITE_PUBLICATION_COST = { maxPages: 32, receiptRows: 33,
   membershipGraphReads: 1, membershipResponseBytes: 1024, receiptResponseBytes: 65_536,
+  maxContentPreparations: 32, maxContentSettlements: 32, maxPreflightBodyReads: 32,
+  publicBodyReads: 1,
   graphCommands: 1, deadlineMs: 10_000 } as const;
 export const ZonePublishedPage = Type.Object({ page: nativeId,
   variantId: Type.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
-  revisionId: contentRevisionId }, { additionalProperties: false });
+  revisionId: contentRevisionId,
+  language: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false });
 export type ZonePublishedPage = Static<typeof ZonePublishedPage>;
 export const ZoneSitePublicationSelection = Type.Object({
   routesRevision: nativeId, navigationRevision: nativeId,
   pages: Type.Array(ZonePublishedPage, { minItems: 1, maxItems: ZONE_SITE_PUBLICATION_COST.maxPages }),
 }, { additionalProperties: false });
 export type ZoneSitePublicationSelection = Static<typeof ZoneSitePublicationSelection>;
+
+/** Content supplies these exact expectations when an editor saves a draft. */
+export const ZonePagePublicationInput = Type.Object({ ...Type.Omit(ZonePublishedPage, ['language']).properties,
+  byteDigest: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+  contentEpoch: contentRevisionId }, { additionalProperties: false });
+export type ZonePagePublicationInput = Static<typeof ZonePagePublicationInput>;
+export const ZoneSitePublishSelection = Type.Object({
+  routesRevision: nativeId, navigationRevision: nativeId,
+  pages: Type.Array(ZonePagePublicationInput, { minItems: 1, maxItems: ZONE_SITE_PUBLICATION_COST.maxPages }),
+}, { additionalProperties: false });
+export type ZoneSitePublishSelection = Static<typeof ZoneSitePublishSelection>;
+
+export function checkZoneSitePublishSelection(value: unknown): ZoneSitePublishSelection {
+  if (!Value.Check(ZoneSitePublishSelection, value)) {
+    throw new InvalidZoneConfiguration('Site publication requires exact Content digest and owner epoch');
+  }
+  checkZoneSitePublication({ ...value, pages: value.pages.map(({ page, variantId, revisionId }) =>
+    ({ page, variantId, revisionId })) });
+  return value;
+}
 
 export function checkZoneSitePublication(value: unknown): ZoneSitePublicationSelection {
   if (!Value.Check(ZoneSitePublicationSelection, value)) {

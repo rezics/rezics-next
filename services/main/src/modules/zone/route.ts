@@ -16,7 +16,7 @@ import { WORK_READ_COST } from '../work/read-contract.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import type { WorkCard } from '../work/read-header.ts';
-import { readZonePublication } from './publication.ts';
+import { readZonePublication, readZoneHomeDocument, type ZonePublicPage } from './publication.ts';
 import { ZoneUnavailable } from './configuration.ts';
 import { parseZonePath } from './route-path.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
@@ -45,7 +45,7 @@ interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
   listing: Publication['listing']; discovery: Publication['discovery'];
   realm: string | null; revision: string; sourcePosition: ReadPosition; cost: typeof ZONE_ROUTE_COST }
 export type ZoneRoute = RouteBasis & (
-  { kind: 'home' }
+  { kind: 'home'; page?: ZonePublicPage }
   | { kind: 'document'; mount: ZoneMountBinding; resource: ResourceBinding }
   | { kind: 'index'; mount: ZoneMountBinding; collection: string;
     items: Array<(WorkCard | ResourceBinding) & { inZone: boolean }>; nextCursor: string | null }
@@ -141,7 +141,7 @@ class RouteRead {
   async zone(state: Publication) {
     const current = await this.work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?spaceDisclosure WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.zone)} a rv:Zone ; rv:zoneState rv:Active ;
-        rv:zoneHead ${iri(state.revision)} ; rv:disclosure rv:${state.storedDisclosure === 'public' ? 'Public' : 'Private'} ;
+        rv:zoneHead ${iri(state.currentRevision)} ; rv:disclosure rv:${state.storedDisclosure === 'public' ? 'Public' : 'Private'} ;
         rv:space ${iri(state.configuration.space)} .
         ${iri(state.configuration.space)} a rv:Space ; rv:disclosure ?spaceDisclosure . }
     } LIMIT 2`, 1024);
@@ -247,8 +247,10 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
   return boundedRead(work, request, actingSubject, async read => {
     const state = await readZonePublication(work.environment, zone);
     await read.zone(state);
+    if (state.documentSite && !state.bundle) return present(state, [], read.viewer);
     const header = await navigationHeader(read, state);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
+      ...(state.bundle ? { revision: state.bundle.navigationRevision } : {}),
       limit: ZONE_ROUTE_COST.maxNavigation,
       canReadTarget: async target => {
         const summary = await read.target(target);
@@ -264,17 +266,36 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
       items.push({ occurrence: item.occurrence, segment: qualifier.routeSegment, target: item.target!,
         kind: summary.type === 'collection' ? 'index' : 'document', name: summary.name });
     }
-    const currentSlides = state.presentation.slides.filter(slide => slideIsCurrent(slide));
-    const targets = [...new Set([...items.map(item => item.target),
-      ...currentSlides.flatMap(slide => 'work' in slide ? [slide.work] : [])])];
-    await read.targets(targets);
-    const slides = currentSlides.filter(slide => !('work' in slide) || read.summaries.get(slide.work)?.type === 'work');
-    return present({ ...state, presentation: { ...state.presentation, slides } },
+    await read.targets([...new Set(items.map(item => item.target))]);
+    return present(await visibleZonePresentation(read, state),
       items.filter(item => read.summaries.get(item.target)), read.viewer);
   });
 }
 
+async function visibleZonePresentation(read: RouteRead, state: Publication): Promise<Publication> {
+  const currentSlides = state.presentation.slides.filter(slide => slideIsCurrent(slide));
+  await read.targets([...new Set(currentSlides.flatMap(slide => 'work' in slide ? [slide.work] : []))]);
+  const slides = currentSlides.filter(slide => !('work' in slide) || read.summaries.get(slide.work)?.type === 'work');
+  return { ...state, presentation: { ...state.presentation, slides } };
+}
+
 async function mountAt(read: RouteRead, state: Publication, header: CompositionHeader, segment: string) {
+  if (state.bundle) {
+    // The current projection is an editor's draft. Resolve the retained route
+    // qualifiers from the immutable publication, then apply current disclosure.
+    const page = await readVisibleCompositionPage(read.work.environment, { structure: header.structure, header,
+      revision: state.bundle.routesRevision, limit: ZONE_ROUTE_COST.mountRows,
+      canReadTarget: async () => true,
+      visible: item => item.role === 'mount' && !!item.target && item.qualifier?.type === 'zone-mount'
+        && item.qualifier.zone === state.zone && item.qualifier.routeSegment === segment });
+    const mount = page.occurrences[0];
+    const qualifier = mount?.qualifier;
+    if (page.next || page.occurrences.length !== 1 || !mount?.target || qualifier?.type !== 'zone-mount') {
+      throw new ZoneRouteMissing('Zone route is unavailable');
+    }
+    if (qualifier.disclosure !== 'public') await read.semantic(state.zone);
+    return { occurrence: mount.occurrence, target: mount.target, segment, key: qualifier.key ?? 'id' };
+  }
   const rows = (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?occurrence ?target ?disclosure ?key WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(header.structure)} rv:structureHead ${iri(header.head)} ; rv:selectedGeneration ${iri(header.generation)} .
@@ -394,7 +415,13 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       name: state.name, language: state.language, direction: state.direction,
       listing: state.listing, discovery: state.discovery,
       realm: state.realm, revision: state.revision, sourcePosition: read.position, cost: ZONE_ROUTE_COST };
-    if (path.kind === 'home') return { ...basis, kind: 'home' };
+    if (state.documentSite && !state.bundle && path.kind !== 'home') {
+      throw new ZoneRouteMissing('Zone site has not been published');
+    }
+    if (path.kind === 'home') {
+      const page = await readZoneHomeDocument(work, request, await visibleZonePresentation(read, state));
+      return { ...basis, kind: 'home', ...(page ? { page } : {}) };
+    }
     if (path.kind === 'work') {
       const resource = `https://rezics.com/id/${path.resource}`;
       if (!state.realm || !await publiclyAdopted(read, state.realm, resource)
@@ -438,7 +465,8 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     // Unrelated graph writes do not expire an immutable membership continuation.
     // A changed Collection head or recovery epoch still requires a fresh page.
     const binding = ['zone-route-v1', input.zone, input.path, input.actingSubject ?? null,
-      mount.target, header.structure, await read.boundary.binding()];
+      mount.target, header.structure, await read.boundary.binding(),
+      ...(state.bundle ? [state.bundle.routesRevision] : [])];
     const collectionPosition = { dataEpoch: read.position.dataEpoch, sequence: header.head };
     const cursor = decodeReadCursor(input.cursor, binding, collectionPosition);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,

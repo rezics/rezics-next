@@ -238,7 +238,8 @@ async function fixture() {
       );
       return json<ZoneSitePublicationReceipt>(
         await call('POST', `/v1/zones/${shortId(created.zone)}/site-publications`, {
-          pages: [{ page: created.zone, variantId: saved.variantId, revisionId: saved.revisionId }],
+          pages: [{ page: created.zone, variantId: saved.variantId, revisionId: saved.revisionId,
+            byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
           routesRevision: created.navigationRevision,
           navigationRevision: created.navigationRevision,
           expectedHead: state.revision,
@@ -380,7 +381,7 @@ test('Zone Blocks documents retain opaque payloads, draft CAS and language varia
       'pending',
     );
     const site = await f.publishSite(revised);
-    expect(site.pages).toEqual([
+    expect(site.pages.map(({ page, variantId, revisionId }) => ({ page, variantId, revisionId }))).toEqual([
       { page: f.zone, variantId: f.variantId, revisionId: revised.revisionId },
     ]);
     expect(

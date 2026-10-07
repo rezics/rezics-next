@@ -19,12 +19,12 @@ import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
 import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
 import { languageTag } from '../modules/display-language/schema.ts';
 import { changeZoneConfiguration, readZoneConfiguration, publishZoneSite,
-  ZoneOfficialDenied, ZoneStale, ZoneUnavailable } from '../modules/zone/configuration.ts';
-import { InvalidZoneConfiguration, ZoneSitePublicationSelection } from '../modules/zone/config-format.ts';
+  ZoneOfficialDenied, ZoneStale, ZoneUnavailable, ZonePublicationUnavailable } from '../modules/zone/configuration.ts';
+import { InvalidZoneConfiguration, ZoneSitePublicationSelection, ZoneSitePublishSelection } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
-  readZoneCampaignArt }
+  readZoneCampaignArt, readZoneHomeDocument, ZonePublicPage }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
@@ -51,6 +51,8 @@ import { AdmissionDenied } from '../modules/access/admission.ts';
 import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
+import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
+import { readZoneThemeExecution } from '../modules/presentation/zone-theme.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const disclosure = t.Union([t.Literal('public'), t.Literal('private')]);
@@ -91,6 +93,8 @@ function key(request: Request) {
 }
 
 function routeError(error: unknown): Response {
+  if (error instanceof ZonePublicationUnavailable) return problem(503, 'zone_publication_unavailable', error.message);
+  if (error instanceof EmptyContentPublicationBody) return problem(422, 'empty_body', error.message);
   if (error instanceof ZoneRouteRetired) return problem(410,'zone_title_retired','Zone title is retired');
   if (error instanceof ZoneRouteMissing) return problem(404, 'route_missing', 'Zone route is unavailable');
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_zone_cursor', error.message);
@@ -133,6 +137,7 @@ const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
   replayed: t.Boolean(), sourcePosition });
 const sitePublicationWrite = t.Object({ ...ZoneSitePublicationSelection.properties,
   outcome: t.Literal('succeeded'), zone: ref, revision: ref, themeRevision: ref,
+  publishedThemeRevision: t.Optional(ref), publishedThemeActivation: t.Optional(ref),
   receipt: t.String(), admissionId: t.String(), requestDigest: t.String(), authorityEpoch: t.String(),
   scope: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean() });
 const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String(), address: canonicalAddress });
@@ -158,7 +163,7 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
   listing: resourceListing, discovery: pageDiscovery,
   ...ZoneName.properties,
   zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref, address: canonicalAddress,
-  presentation: ZonePresentation,
+  presentation: ZonePresentation, home: t.Optional(ZonePublicPage),
   slideMedia: t.Array(t.Object({ id: t.String(), art: t.Object({
     landscape: t.Nullable(campaignImage), portrait: t.Nullable(campaignImage), cutout: t.Nullable(campaignImage),
     logos: t.Array(t.Object({ ...campaignImage.properties,
@@ -195,7 +200,7 @@ const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.Str
   cost: t.Object(Object.fromEntries(Object.entries(ZONE_ROUTE_COST).map(([name, value]) =>
     [name, t.Literal(value)]))) };
 const routeRead = t.Union([
-  t.Object({ ...routeBasis, kind: t.Literal('home') }),
+  t.Object({ ...routeBasis, kind: t.Literal('home'), page: t.Optional(ZonePublicPage) }),
   t.Object({ ...routeBasis, kind: t.Literal('document'), mount: mountBinding, resource: resourceBinding }),
   t.Object({ ...routeBasis, kind: t.Literal('index'), mount: mountBinding, collection: ref,
     items: t.Array(t.Union([t.Object({ ...workCard.properties, inZone: t.Boolean() }),
@@ -290,16 +295,20 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const moduleData = await readZoneModuleData(work.environment, state.configuration);
           const slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
             state.presentation.slides, { environment: work.environment, zone });
+          const home = await readZoneHomeDocument(work, request, state, moduleData, slideMedia);
           const theme = state.presentation.official?.theme;
           const forced = query.safeTheme || query['safe-theme']
             ? { state: 'fallback' as const, reason: 'safe_mode' as const }
             : query.viewerOptOut ? { state: 'fallback' as const, reason: 'viewer_opt_out' as const }
               : null;
           const execution = forced ?? (theme && state.disclosure === 'public'
-            ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
+            ? state.bundle ? (await readZoneThemeExecution(work.environment, theme, zone,
+              state.bundle.publishedThemeRevision && state.bundle.publishedThemeActivation
+                ? { revision: state.bundle.publishedThemeRevision, activation: state.bundle.publishedThemeActivation } : null)).execution
+              : zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
             : { state: 'fallback' as const, reason: 'none_approved' as const });
           const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address,
-            listing: state.listing, discovery: state.discovery, navigation, moduleData, slideMedia, execution }))}"`;
+            listing: state.listing, discovery: state.discovery, navigation, moduleData, slideMedia, execution, home }))}"`;
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
             ...pageDiscoveryHeaders(state.discovery),
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
@@ -310,7 +319,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             address: state.address,
             name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation: state.presentation,
-            navigation, moduleData, slideMedia, renderTokens: zoneRenderTokens(execution.state === 'active'
+            navigation, moduleData, slideMedia, ...(home ? { home } : {}), renderTokens: zoneRenderTokens(execution.state === 'active'
               || execution.state === 'package'
               || execution.reason === 'none_approved'
               ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
@@ -531,15 +540,15 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .post('/v1/zones/:id/site-publications', { params: t.Object({ id: groupUuid }),
-      body: t.Object({ ...ZoneSitePublicationSelection.properties,
+      body: t.Object({ ...ZoneSitePublishSelection.properties,
         expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
       response: { 200: sitePublicationWrite, 201: sitePublicationWrite,
-        202: pendingOperation, ...errors } }, async ({ request, params, body }) => {
+        202: pendingOperation, 422: problemResult(422), ...errors } }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
         const result = await publishZoneSite(work.environment, work.account, work.access, request,
-          { ...body, zone: `https://rezics.com/id/${params.id}`, idempotencyKey });
+          { ...body, zone: `https://rezics.com/id/${params.id}`, idempotencyKey }, work.contentAuthoring);
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }

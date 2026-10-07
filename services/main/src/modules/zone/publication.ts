@@ -1,6 +1,6 @@
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { readZoneConfiguration, ZoneUnavailable } from './configuration.ts';
+import { readZoneConfiguration, readZoneRevisionConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable } from './configuration.ts';
 import { uuidToSid } from '@rezics/model/address/sid';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PUBLIC_READ_SOURCES } from './presentation-format.ts';
 import { readDynamicDefinition, executeDynamicDefinition } from '../collection/dynamic.ts';
@@ -11,10 +11,23 @@ import { InvalidZoneConfiguration, ZONE_SITE_PUBLICATION_COST, ZonePublishedPage
 import { Value } from 'typebox/value';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import { ZONE_CAMPAIGN_ART_COST } from './campaign-art.ts';
+import { ZONE_CAMPAIGN_ART_COST, readZoneCampaignArt } from './campaign-art.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import { identityCanonical } from '../address/canonical.ts';
+import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import { parseDocument } from '@rezics/document';
+import { Type, type Static } from 'typebox';
+import { exactContentRevision } from '../../api-responses.ts';
+import { ZonePageDocument, resolveZonePageDocument } from '../presentation/zone-document.ts';
+import { readerLanguages, selectDisplayName } from '../display-language/select.ts';
+import { discloseContent } from '../disclosure/assembly.ts';
+import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
+import { ZonePublicationUnavailable } from './configuration.ts';
+
+export const ZonePublicPage = Type.Object({ ...ZonePageDocument.properties,
+  reference: exactContentRevision.properties.reference }, { additionalProperties: false });
+export type ZonePublicPage = Static<typeof ZonePublicPage>;
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
   officialPageSize: 50, maxModules: 24, ...ZONE_CAMPAIGN_ART_COST,
@@ -25,23 +38,51 @@ export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
 export async function readZonePublication(env: WorkActivationEnvironment, zone: string) {
   const state = await readZoneConfiguration(env, zone);
   if (state.state !== 'active') throw new ZoneUnavailable('Zone is retired');
+  let bundle: Awaited<ReturnType<typeof readZoneSitePublicationReceipt>> = null;
+  let publishedRevision = state.revision;
+  let published = { configuration: state.configuration, name: state.name, language: state.language, direction: state.direction };
+  if (state.publicationRevision) {
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(state.publicationRevision)} a rv:ZoneRevision ;
+        rv:component ${iri(zone)} ; rv:sitePublicationReceipt ?receipt . }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.receipt?.value) throw new ZoneUnavailable('Published Zone bundle is unavailable');
+    bundle = await readZoneSitePublicationReceipt(env, rows[0].receipt.value);
+    if (!bundle || bundle.zone !== zone || bundle.revision !== state.publicationRevision) {
+      throw new ZoneUnavailable('Published Zone bundle differs from its selected head');
+    }
+    published = await readZoneRevisionConfiguration(env, state, bundle.themeRevision);
+    publishedRevision = bundle.revision;
+  } else if (state.documentSite) {
+    // Zone-only sites expose their creation shell until their first bundle.
+    // A configuration or navigation draft cannot become an implicit publication.
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?creation WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ?creation a rv:ZoneRevision ;
+        rv:component ${iri(zone)} ; rv:zoneOperation rv:ZoneCreate . }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.creation?.value) throw new ZoneUnavailable('Zone creation shell is unavailable');
+    published = await readZoneRevisionConfiguration(env, state, rows[0].creation.value);
+    publishedRevision = rows[0].creation.value;
+  }
   const disclosure = state.disclosure === 'private' || state.spaceVisibility === 'private' ? 'private' as const : 'public' as const;
-  const presentation = typeof state.configuration.presentation === 'object'
-    ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
+  const presentation = typeof published.configuration.presentation === 'object'
+    ? published.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
   const name = (await env.addresses?.currents([state.space]).catch(() => new Map()))?.get(`space\0${state.space}`);
-  const address = { ...identityCanonical('zone', state.space, disclosure === 'public' ? state.name ?? '' : ''),
+  const address = { ...identityCanonical('zone', state.space, disclosure === 'public' ? published.name ?? '' : ''),
     ...(name ? { key: name.key } : {}) };
-  return { zone, realm: state.configuration.defaultRealm ?? null,
+  return { zone, realm: published.configuration.defaultRealm ?? null,
     address,
-    name: state.name, language: state.language, direction: state.direction,
-    official: state.configuration.official ? address.key : null,
-    revision: state.revision,
+    name: published.name, language: published.language, direction: published.direction,
+    official: published.configuration.official ? address.key : null,
+    revision: publishedRevision, currentRevision: state.revision, bundle,
+    documentSite: state.documentSite,
     publicationRevision: state.publicationRevision,
     disclosure,storedDisclosure: state.disclosure,space:state.space,listing: state.listing,
     discovery: pageDiscoveryPolicy(disclosure,state.listing),presentation,
-    configuration: state.configuration,
-    etag: `"${hash(JSON.stringify({ revision: state.revision, presentation,disclosure,listing:state.listing,address }))}"`,
-    cost: ZONE_PUBLICATION_COST };
+    configuration: published.configuration,
+    etag: `"${hash(JSON.stringify({ revision: publishedRevision, presentation,disclosure,listing:state.listing,address }))}"`,
+    cost: { ...ZONE_PUBLICATION_COST, graphReads: bundle ? 4 : state.documentSite ? 3 : 1,
+      objectReads: bundle || state.documentSite ? 4 : 2 } };
 }
 
 /** Current public-bundle membership, O(1) after the ordinary Zone publication
@@ -82,6 +123,46 @@ export async function isZonePublishedPageRevision(env: WorkActivationEnvironment
 }
 
 export { readZoneCampaignArt } from './campaign-art.ts';
+
+/** One exact body per home read. Languages are the Content owner's immutable
+ * publication metadata, so selecting one never enumerates or loads draft bodies. */
+export async function readZoneHomeDocument(work: MainWorkDependencies, request: Request,
+  state: Awaited<ReturnType<typeof readZonePublication>>,
+  moduleData?: Awaited<ReturnType<typeof readZoneModuleData>>,
+  slideMedia?: Awaited<ReturnType<typeof readZoneCampaignArt>>): Promise<ZonePublicPage | null> {
+  if (!state.bundle || state.disclosure !== 'public') return null;
+  const pages = state.bundle.pages.filter(page => page.page === state.zone);
+  const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
+    readerLanguages(request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language')));
+  const page = pages.find(page => page.revisionId === selected?.value) ?? pages[0];
+  if (!page) throw new ZoneUnavailable('Published Zone home is unavailable');
+  if (!work.content) throw new ZonePublicationUnavailable('Content owner is unavailable');
+  if (!await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
+    throw new ZoneUnavailable('Published Zone home is unavailable');
+  }
+  const viewer = disclosureViewer(null);
+  const results = await withDisclosureViewer(viewer, () => work.content!.readExactBatch([page.revisionId],
+    async ids => new Set(ids)));
+  const exact = (await discloseContent(work.environment, results, viewer))[0];
+  if (exact?.status !== 'available' || exact.reference.resourceId !== page.page
+    || exact.reference.variantId !== page.variantId || exact.body.document === undefined) {
+    throw new ZoneUnavailable('Published Zone home is unavailable');
+  }
+  const document = parseDocument(exact.body.document);
+  if (document.profile !== 'blocks') throw new ZoneUnavailable('Published Zone home is not a Blocks document');
+  const resolved = resolveZonePageDocument(document, state.presentation,
+    moduleData ?? await readZoneModuleData(work.environment, state.configuration),
+    slideMedia ?? await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
+      { environment: work.environment, zone: state.zone }));
+  const metadata = work.contentAuthoring && await work.contentAuthoring.readExactMetadataBatch([page.revisionId],
+    async ids => new Set(ids));
+  if (metadata && (metadata.get(page.revisionId)?.availability !== 'available'
+    || metadata.get(page.revisionId)?.byteDigest !== exact.reference.byteDigest)
+    || !await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
+    throw new ZoneUnavailable('Published Zone home changed during the read');
+  }
+  return { ...resolved, reference: exact.reference };
+}
 
 /** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */
 export async function readZoneModuleData(env: WorkActivationEnvironment,
