@@ -3,7 +3,7 @@ import { cleanEnv, url, type ValidatorSpec } from 'envalid';
 import { Pool } from 'pg';
 import { mainSpec, relaySpec, relayInitSpec } from '../../services/main/src/config.ts';
 import { requiredMatcherMode } from '../../services/main/src/modules/media-screen/required-matcher.ts';
-import { safetyResponders } from '../../services/main/src/modules/safety-alerts/store.ts';
+import { safetyResponders } from '../../services/main/src/modules/safety-alerts/roster.ts';
 import { accountSpec, accountCoreSpec, accountConfig } from '../../services/account/src/config.ts';
 import { webSpec } from '../../apps/web/features/config/env.ts';
 import { accountsSpec, enrollmentSiteKey } from '../../apps/accounts/features/config/env.ts';

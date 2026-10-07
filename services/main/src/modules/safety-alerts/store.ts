@@ -1,6 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import type { NotificationSubjectReader } from '../notification/dispatcher.ts';
 import { requireAccessOpen, sha256, type NotificationStore } from '../notification/store.ts';
+import type { SafetyResponders } from './roster.ts';
+
+export { safetyResponders, type SafetyResponders } from './roster.ts';
 
 export const SAFETY_ALERT_BASIS = 'safety-deadline-v1';
 /** Two active-case deadline selections and one pending page; no inventory-sized writes.
@@ -18,11 +21,6 @@ export const SAFETY_ALERT_COST = {
   sourceStatements: 14,
   statementsPerIntake: 2,
 } as const;
-export interface SafetyResponders {
-  issuer: string;
-  primary: string;
-  backup: string;
-}
 
 // MATERIALIZED prevents flattening back into a scan from the oldest global
 // deadline. The bounded LATERAL read uses safety_case_due for each open case:
@@ -66,31 +64,6 @@ type Alert = {
   reason: 'approaching' | 'unacknowledged' | 'overdue';
   due_at: Date;
 };
-
-export function safetyResponders(
-  issuer: string,
-  primary?: string,
-  backup?: string,
-): SafetyResponders | null {
-  if (primary === undefined && backup === undefined) return null;
-  if (
-    !primary?.trim() ||
-    !backup?.trim() ||
-    primary === backup ||
-    [primary, backup].some(
-      (value) =>
-        value.length > 128 ||
-        value.trim() !== value ||
-        /[\s\x00-\x1f]/.test(value) ||
-        /^(TBD|TODO|UNSET|<.*>)$/i.test(value),
-    )
-  ) {
-    throw new Error(
-      'SAFETY_PRIMARY_ACCOUNT and SAFETY_BACKUP_ACCOUNT require distinct existing Account subjects',
-    );
-  }
-  return { issuer, primary, backup };
-}
 
 /** Only process metadata crosses the notification boundary; evidence never does. */
 export class SafetyAlerts implements NotificationSubjectReader {
