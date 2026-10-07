@@ -79,6 +79,21 @@ class CapturingFuseki extends FusekiClient {
     }] } };
     if (query.includes('SELECT ?main ?type')) return { results: { bindings: [{ main: uri(main), type: uri('https://schema.org/CreativeWork'),
       workManifest: uri(this.priorManifest) }] } };
+    if (query.includes('SELECT ?work ?recipe WHERE')) {
+      // The shared native recipe returns serialized RDF literals, including the proposed title.
+      // Accept only this fixture's one-Work bounded request, never an unknown projection query.
+      const match = /^PREFIX rv: <https:\/\/rezics\.com\/vocab\/> SELECT \?work \?recipe WHERE \{\s+\{ BIND\(<([^>]+)> AS \?work\)\s+BIND\(rv:rankedText\(rv:publicTitle, "", 64, "", ("(?:[^"\\]|\\.)*")\) AS \?recipe\) \}\s+\} LIMIT 2$/u.exec(query);
+      if (!match || match[1] !== work) throw new Error(`Unexpected catalogue recipe query: ${query}`);
+      const scope = JSON.parse(JSON.parse(match[2]!)) as {
+        catalogueNames: { work: string; override?: { replacementTitle?: { value: string; language: string } } };
+      };
+      if (scope.catalogueNames.work !== work) throw new Error('Unexpected catalogue recipe Work');
+      const replacement = scope.catalogueNames.override?.replacementTitle;
+      const names = replacement
+        ? [`${JSON.stringify('Original name')}@en`, `${JSON.stringify(replacement.value)}@${replacement.language}`]
+        : [`${JSON.stringify('元の名前')}@${this.language}`, `${JSON.stringify('Original name')}@en`];
+      return { results: { bindings: [{ work: uri(work), recipe: lit(JSON.stringify({ names })) }] } };
+    }
     if (query.includes('SELECT ?work ?name ?namePredicate ?state')) return { results: { bindings: [{
       work: uri(work), name: { ...lit('元の名前'), 'xml:lang': this.language },
       namePredicate: uri('http://www.w3.org/2000/01/rdf-schema#label'),

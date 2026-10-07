@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { openapi } from '@elysia/openapi';
 import { readFileSync } from 'node:fs';
 import { Value } from 'typebox/value';
 import {
@@ -7,7 +8,17 @@ import {
   type ListOpenApi,
 } from '../../../scripts/static/list-convention.ts';
 import { listRequest, listResponse } from '../src/api-list.ts';
-import { t } from 'elysia';
+import { resourceListQuery, resourceListPage } from '../src/modules/query/resource-contract.ts';
+import { Elysia, t } from 'elysia';
+
+type QueryShape = {
+  anyOf?: QueryShape[];
+  oneOf?: QueryShape[];
+  properties?: Record<string, QueryShape>;
+  const?: string;
+};
+const unionLeaves = (shape: QueryShape): QueryShape[] =>
+  shape.anyOf?.flatMap(unionLeaves) ?? shape.oneOf?.flatMap(unionLeaves) ?? [shape];
 
 const document = () =>
   JSON.parse(
@@ -15,7 +26,7 @@ const document = () =>
   ) as ListOpenApi;
 const owned = ['/v1/discovery/concepts', '/v1/discovery/sections', '/v1/rating-populations'];
 
-test('G939: all new list reads serve the convention in generated OpenAPI', () => {
+test('G939: all new list reads serve the convention in generated OpenAPI', async () => {
   const api = document();
   expect(owned.every((path) => !!api.paths[path])).toBe(true);
   expect(
@@ -29,7 +40,7 @@ test('G939: all new list reads serve the convention in generated OpenAPI', () =>
       requestBody: {
         content: {
           'application/json': {
-            schema: { anyOf: Array<{ properties: { profile?: { const?: string } } }> };
+            schema: QueryShape & { anyOf: QueryShape[] };
           };
         };
       };
@@ -39,7 +50,7 @@ test('G939: all new list reads serve the convention in generated OpenAPI', () =>
             'application/json': {
               schema: {
                 properties: {
-                  result: { anyOf: Array<{ properties: { profile?: { const?: string } } }> };
+                  result: QueryShape & { anyOf: QueryShape[] };
                 };
               };
             };
@@ -50,15 +61,24 @@ test('G939: all new list reads serve the convention in generated OpenAPI', () =>
   >;
   const post = query.post!;
   const input = post.requestBody.content['application/json'].schema;
-  input.anyOf = input.anyOf.filter(
-    (shape) => shape.properties.profile?.const === 'resource-list-v1',
+  input.anyOf = unionLeaves(input).filter(
+    (shape) => shape.properties?.profile?.const === 'resource-list-v1',
   );
   const result = post.responses['200'].content['application/json'].schema.properties.result;
-  result.anyOf = result.anyOf.filter(
+  result.anyOf = unionLeaves(result).filter(
     (shape) => shape.properties?.profile?.const === 'resource-list-v1',
   );
   expect(input.anyOf).toHaveLength(1);
   expect(result.anyOf).toHaveLength(1);
+  const fixture = new Elysia()
+    .post('/resource-list', { body: resourceListQuery, response: { 200: resourceListPage } },
+      () => { throw new Error('Only the fixture OpenAPI document is served'); })
+    .use(openapi());
+  const response = await fixture.handle(new Request('http://localhost/openapi/json'));
+  expect(response.status).toBe(200);
+  const expected = (await response.json() as ListOpenApi).paths['/resource-list']!.post!;
+  expect(input.anyOf[0]).toEqual(expected.requestBody!.content!['application/json']!.schema);
+  expect(result.anyOf[0]).toEqual(expected.responses!['200']!.content!['application/json']!.schema);
   assertListConvention({ paths: { '/v1/query': query as never } });
 });
 
