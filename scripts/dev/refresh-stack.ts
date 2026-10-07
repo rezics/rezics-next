@@ -9,7 +9,7 @@ import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
-import { statementUpgradeCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
+import { ensureStatementSeekCurrent, statementUpgradeCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
 import { mainSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { appEnvironment, composeProcessEnvironment, readEnv, stackDirectory } from './config.ts';
@@ -391,6 +391,12 @@ export async function refreshSharedStack(root: string, args: string[], preparati
         console.log(`  Model generation: ${result.generation} (${result.state})`);
       },
       restartResources: async () => {
+        const env = readEnv(join(stackDirectory(root, { profile: 'dev' }), 'dev.env'));
+        const pool = new Pool({connectionString: env.ACCESS_DATABASE_URL,max: 2,connectionTimeoutMillis: 5_000});
+        try { await ensureStatementSeekCurrent({fuseki: new FusekiClient(env.FUSEKI_URL!,
+          env.FUSEKI_MAINTENANCE_TOKEN,env.FUSEKI_COMMAND_TOKEN),lineage: {
+          dataEpoch: env.MAIN_DATA_EPOCH!,routingEpoch: env.MAIN_ROUTING_EPOCH!},objectDirectory: env.MAIN_OBJECT_DIRECTORY!},pool); }
+        finally { await pool.end(); }
         for (const name of refreshResources) {
           aspire(root, ['resource', name, 'restart']);
           aspire(root, ['wait', name, '--timeout', '120'], 125_000);

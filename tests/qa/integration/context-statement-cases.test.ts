@@ -26,7 +26,7 @@ import { assertCommandRace } from '../support/command-race.ts';
 import { migrateOwnerData, assertOwnerMigrationsComplete } from '../../../scripts/fixture/migrate.ts';
 import { migrateTracked, migrationRecords, repositoryRoot, migrationDirectories } from '../../../scripts/ops/migrate.ts';
 import { executeRefresh, refreshPlan, type RefreshInputs, type RefreshActions } from '../../../scripts/dev/refresh.ts';
-import { statementUpgradeCurrent } from '../../../services/main/src/modules/statement/upgrade.ts';
+import { ensureStatementSeekCurrent, statementUpgradeCurrent } from '../../../services/main/src/modules/statement/upgrade.ts';
 import { commandReceiptIri, readCommandReceipt } from '../../../services/main/src/modules/context/command.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean };
@@ -120,8 +120,19 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
         expect(stopped).toBe(true);events.push('prepare-storage');
         await migrateTracked(apps.ACCESS_DATABASE_URL!,repositoryRoot,migrationDirectories.access);
         assertOwnerMigrationsComplete(await migrateOwnerData(apps));
-      },alignModel: async () => {},
+      },alignModel: async () => {
+        // The real model bootstrap appends a zero-event position after owner
+        // preparation. Main must restart with coverage of that position too.
+        const batch = `urn:rezics:outbox:model-alignment:${randomUUID()}`;
+        await f.env.fuseki.update(`PREFIX rv: <${RV}>
+          DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+          INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+            GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
+              rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 } }
+          WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } BIND(?n+1 AS ?next) }`);
+      },
       restartResources: async () => {
+        await ensureStatementSeekCurrent(f.env,f.accessPool);
         expect(await statementUpgradeCurrent(f.env.fuseki,f.env.lineage.dataEpoch,f.accessPool)).toBe(true);
         events.push('restart-resources');stopped = false;
       },waitReady: async () => {},approveZones: async () => {},stopAppHost: async () => {},

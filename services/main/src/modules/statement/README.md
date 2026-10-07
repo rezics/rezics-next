@@ -37,7 +37,9 @@ decisions, rebuilds seek coverage and verifies the exact graph position before
 releasing its fences. Failure prevents restart; retry resumes the upgrade's
 own durable fence marker. It refuses unrelated recovery holds. A completed
 upgrade is a no-op in the same data epoch. Install upgrades use the same owner
-step. `task statement:convert -- --fenced` remains available to operators who
+step. Before restarting Main, `restart-resources` advances the bounded seek
+projection through any position appended by model alignment and verifies coverage.
+`task statement:convert -- --fenced` remains available to operators who
 already hold both recovery fences.
 `populated-conversion.ts` uses exact retained manifests, preserves the public
 proposer/decider and original operation, and writes an idempotent maintenance

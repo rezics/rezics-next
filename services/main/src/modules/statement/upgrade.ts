@@ -12,6 +12,21 @@ import { StatementSeek } from './seek.ts';
 const upgrade = (epoch: string) => `urn:rezics:maintenance:statement-upgrade:${hash(epoch)}`;
 export const STATEMENT_UPGRADE_COST = { admissionsPerBatch: 32, responseBytes: 64 * 1024 } as const;
 
+/** Model alignment may append a zero-event graph position after conversion.
+ * Consume the ordinary bounded seek projection before restarting stopped Main;
+ * this never enumerates a populated inventory to repair missing coverage. */
+export async function ensureStatementSeekCurrent(env: WorkActivationEnvironment,pool: Pool) {
+  const seek = new StatementSeek(pool,env);
+  while (await seek.projectOnce()) { /* contiguous bounded outbox batches */ }
+  const coverage = await seek.coverage();
+  if (!coverage?.complete || !(await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ${coverage.through_sequence} }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+  }`,STATEMENT_UPGRADE_COST.responseBytes)).boolean)
+    throw new Error('Statement seek coverage is incomplete before Main restart');
+}
+
 /** A completed upgrade remains current while the ordinary seek worker advances
  * subsequent positions. Its completion marker is scoped to the restored epoch. */
 export async function statementUpgradeCurrent(fuseki: FusekiClient, epoch: string, pool: Pool) {
@@ -90,8 +105,9 @@ async function settleAdmissions(env: WorkActivationEnvironment, pool: Pool, clie
 export async function upgradeStoredStatements(env: WorkActivationEnvironment, pool: Pool) {
   const client = await pool.connect();
   const marker = upgrade(env.lineage.dataEpoch);
+  const lockKey = `rezics-statement-upgrade:${env.lineage.dataEpoch}`;
   try {
-    await client.query("SELECT pg_advisory_lock(hashtextextended('rezics-statement-upgrade',0))");
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lockKey]);
     const lineage = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} } }`);
     if (!lineage.boolean) throw new Error('Statement upgrade lineage differs from the prepared stack');
@@ -134,7 +150,7 @@ export async function upgradeStoredStatements(env: WorkActivationEnvironment, po
       throw new Error('Statement upgrade fence release is incomplete');
     return {status: 'complete' as const,...result,noop: false};
   } finally {
-    try { await client.query("SELECT pg_advisory_unlock(hashtextextended('rezics-statement-upgrade',0))"); }
+    try { await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lockKey]); }
     finally { client.release(); }
   }
 }

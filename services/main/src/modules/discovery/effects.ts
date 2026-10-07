@@ -98,6 +98,10 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'statement.record': 'scope',
   'statement.withdraw': 'scope',
   'statement.decide': 'scope',
+  // Retained terminal events can still be delivered during a stopped-writer
+  // upgrade. Their original successful effects remain scoped invalidations.
+  'statement.migrate': 'scope',
+  'statement.cutover': 'scope',
   'governance.ballot.invalidate': 'irrelevant',
   'governance.ballot.operate': 'irrelevant',
   'governance.poll.administer': 'irrelevant',
