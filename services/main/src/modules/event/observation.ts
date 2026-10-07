@@ -212,6 +212,7 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     throw new PendingActivation('stale event observation was not sealed');
   }
   const revision = ID + Bun.randomUUIDv7();
+  const collection = `urn:rezics:event-collection:${input.timeStatus}`;
   const operation = ID + Bun.randomUUIDv7();
   const recordedAt = canonicalInstant(admission.registeredAt);
   const start = eventPointRdf(input.start, () => ID + Bun.randomUUIDv7());
@@ -223,6 +224,8 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     revision, predecessor: prior, recordedAt };
   const manifest = prepareComponent(env.objectDirectory, eventTime, state, EVENT_TIME_PROFILE);
   const eventProfileChecks = await profileValidations(env.fuseki, EVENT_TIME_PROFILE_ID, [
+    { shape: 'https://rezics.com/definition/event-time-v1/collection-shape', focus: [collection],
+      graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: 'https://rezics.com/definition/event-time-v1/event-shape', focus: [input.event], graphs: [GRAPHS.current] },
     { shape: 'https://rezics.com/definition/event-time-v1/slot-shape', focus: [eventTime],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
@@ -249,10 +252,13 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     const result = await env.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+          GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} rv:eventTimeCollectionHead ?collectionHead }
           ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(eventTime)} rv:eventTimeHead ${iri(prior)} }` : ''} }
         INSERT {
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
           GRAPH ${iri(GRAPHS.current)} {
+            ${iri(collection)} a rv:EventTimeCollection ; rv:timeStatus rv:${eventTimeStatus} ;
+              rv:eventTimeCollectionHead ${iri(revision)} .
             ${iri(input.event)} a rv:Event ; rv:eventTime ${iri(eventTime)} .
             ${iri(eventTime)} a rv:EventTime ; rv:event ${iri(input.event)} ;
               rv:timeStatus rv:${eventTimeStatus} ; rv:eventTimeHead ${iri(revision)} . }
@@ -291,6 +297,7 @@ export async function setEventObservation(env: WorkActivationEnvironment,
         WHERE {
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+          OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} rv:eventTimeCollectionHead ?collectionHead } }
           ${headGuard}
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }

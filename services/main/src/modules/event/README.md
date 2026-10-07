@@ -25,38 +25,40 @@ stores an immutable revision manifest, advances the Main sequence and writes
 the receipt and outbox row atomically. Corrections preserve the predecessor.
 Admission sealing, replay and stale-head outcomes use the shared owner protocol.
 
-`POST /v1/events/queries` reads one bounded Main graph snapshot, checks each
-head against its immutable manifest, and publishes derived interval rows and
-sparse histogram buckets in Access migration 112. It checks the Main source
-position before and after activation while holding Access's recovery fence.
-Pages bind an HMAC cursor to the request and generation; a new Main sequence
-returns an explicit restart response. Date-normalized rows are indexes, never
-the source of temporal meaning. Accepted topic filters use the existing
-Statement decision resolver.
+`POST /v1/events/queries` consumes the Event temporal projection. A cold index
+or an unfinished bucket window returns explicit coverage progress; retry the
+same request while the existing Main projection worker advances it. Queries
+do not build coverage or enumerate source slots. A ready page rechecks its
+current graph heads and exact manifests. Its cursor binds the selected Event
+collection heads and topic acceptance basis, so unrelated owner writes keep
+it usable.
 
-## Cost contract
+## Projection recovery
 
-The synchronous rebuild accepts at most 2,000 event-time slots and 2,001 graph
-source bindings (the last binding detects overflow). It writes at most 2,000
-interval keys and 732 nonempty histogram rows (366 days for both time statuses).
-A page returns at most 50 events and at most eight topic Statements; it emits
-at most 732 histogram buckets including zero-fill. A larger source returns
-`event_query_too_large`; unsupported instant conversion returns an explicit
-unsupported-time response. These are structural caps, not a capacity claim.
+The existing Main projection lifecycle also advances Event source backfill,
+retained outbox batches, target retries and requested bucket windows. Backfill
+and window scans commit seek checkpoints; restarting Main resumes them.
+A target with missing or inconsistent immutable bytes remains a failed pending
+item while healthy targets proceed. Restore the exact retained bytes and let
+the retry run; do not substitute a source scan in the query handler.
 
-The selected integration crosses Account, Access, Content, Main and Jena for
-denied admission, exact Content evidence, idempotent replay, actual/planned
-slots, stale and concurrent corrections, paging and histogram restart. A
-separate fault fixture
-closes the Access recovery fence, removes an exact event manifest and restores
-its retained bytes. Unit and model checks cover month precision, open endpoints
-and profile reuse. These tests do not meter remote owner attempts and bytes,
-Jena scan work or SQL row-plan costs. The RATE08 integration creates, accepts
-and queries two G-049 aliases for one Event through the real owner path.
-Production throughput and large-corpus cost remain unmeasured. Source-driven
-index invalidation and expensive exact distribution jobs require separate work.
-The current query profile supports overlap, possible/definite matching and
-bounded calendar conversion. Temporal uncertainty, start-in ordering, and
-queries joining participant/role conditions to the same occurrence still need
-an admitted profile and owner tests. Their meaning cannot be inferred from the
-available interval index.
+The Access recovery fence and graph lineage apply to both projected reads and
+consumer work. A different data epoch requires recovery of the projection's
+checkpoint and rows together before coverage can be claimed. Without the
+retained relay configured, the index remains unavailable with progress.
+
+The request and consumer budgets live in `EVENT_QUERY_COST_CONTRACT` and
+`EVENT_PROJECTION_COST`. The EventTime and Event query bounds tests cover
+precision, actual/planned slots, accepted aliases, authority, interrupted
+backfill, target isolation, retries, withdrawal, cursor changes and more than
+2,000 legal slots. Their row counters measure returned source rows and SQL
+rows touched by the instrumented statements; they are not measurements of
+Jena quad visits, PostgreSQL buffer reads or production throughput.
+
+Requested windows retain their own membership and counters so pagination and
+histograms stay independent of the total Event population. This uses more
+projection storage as distinct windows are requested. Status-leading page and
+work indexes follow PostgreSQL's [multicolumn index guidance](https://www.postgresql.org/docs/current/indexes-multicolumn.html);
+the sparse-status fixture checks actual filtered rows through `EXPLAIN`.
+Consumer transactions use an [advisory transaction lock](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)
+to serialize durable scans and deltas within the existing worker lifecycle.

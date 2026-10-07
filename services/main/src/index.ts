@@ -198,6 +198,7 @@ import { RankingBuildWorker } from './modules/recommendation/build-worker.ts';
 import { verifyRankingSemanticBasis } from './modules/recommendation/semantic-basis.ts';
 import { graphZeroCandidates, graphZeroSnapshot } from './modules/recommendation/zero-candidates.ts';
 import { EventTemporalQueries } from './modules/event/queries.ts';
+import { EventTemporalProjection } from './modules/event/projection.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 import { mainConfig } from './config.ts';
 import { WorkMaintainers } from './modules/work/maintainers.ts';
@@ -334,6 +335,7 @@ const recommendations = recommendationRelayPool ? new RankingGenerations({ acces
 const recommendationWorker = recommendations ? new RankingBuildWorker(pool, recommendations) : undefined;
 const eventQueries = new EventTemporalQueries(pool, environment, createHash('sha256')
   .update('rezics-event-cursor-v1\0').update(config.ACCOUNT_MAIN_CLIENT_SECRET).digest());
+const eventProjection = relayPool ? new EventTemporalProjection(pool, relayPool, environment) : undefined;
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
@@ -601,7 +603,10 @@ for (const basis of SAVED_VIEW_BASES) notificationStore.registerReadSubjectReade
 for (const basis of SAVED_VIEW_BASES) notificationDispatcher?.registerSubjectReader(basis, savedViewNotifications);
 const realmPolicyRecovery = new RealmPolicyRecoveryWorker(pool, environment);
 const worker = new ContentProjectionWorker(
-  () => relayContentProjectionOnce(environment, content, cursor, consumer),
+  async () => {
+    await eventProjection?.tick().catch(error => logWorkerFault('main.event.projection', error));
+    return relayContentProjectionOnce(environment, content, cursor, consumer);
+  },
   config.CONTENT_PROJECTION_INTERVAL_MS);
 const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, access, account, media,
   discoveryRefreshInputs: new DiscoveryRefreshInputs(relayPool, relayConsumer!),

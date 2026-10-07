@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -8,14 +8,20 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
-import { EventQueryRestart, EventTemporalQueries }
+import { EventQueryRestart, EventQueryUnavailable, EventTemporalQueries }
   from '../../../services/main/src/modules/event/queries.ts';
+import { EventTemporalProjection }
+  from '../../../services/main/src/modules/event/projection.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce }
+  from '../../../services/main/src/modules/outbox/relay.ts';
 import { eventTimeSlotIri }
   from '../../../services/main/src/modules/event/observation.ts';
-import { ID, type WorkActivationEnvironment }
+import { UnsupportedEventTime } from '../../../services/main/src/modules/event/time.ts';
+import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { AccessAdmissionRegistry }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { classificationContextDigest, createClassificationContext }
   from '../../../services/main/src/modules/classification/context.ts';
 import { createRealmSpace, spaceCreationDigest }
@@ -39,9 +45,22 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN,
     Bun.env.FUSEKI_COMMAND_TOKEN);
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content']);
+  const command = fuseki.command.bind(fuseki);
+  let commandFailure: unknown;
+  fuseki.command = async envelope => {
+    try {
+      const result = await command(envelope);
+      if (result.status !== 'committed') commandFailure = result;
+      return result;
+    } catch (error) {
+      commandFailure = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  };
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access', 'content', 'relay']);
   const access = new Pool({ connectionString: databases.urls.access, max: 8 });
   const contentPool = new Pool({ connectionString: databases.urls.content, max: 4 });
+  const relay = new Pool({ connectionString: databases.urls.relay, max: 4 });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const identity = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>,
@@ -49,15 +68,34 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   const env: WorkActivationEnvironment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
     routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(stateDir, 'objects') };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 7));
+  const projection = new EventTemporalProjection(access, relay, env);
+  const relayConsumer = `event-time-${randomUUID()}`;
+  await initializeRelayCheckpoint(relay, relayConsumer, env.lineage.dataEpoch);
+  const drain = async () => {
+    for (let batch = 0; batch < 1000; batch++) {
+      if (!await relayMainOutboxOnce(fuseki, relay, relayConsumer)) return;
+    }
+    throw new Error('Event fixture relay exceeded its batch bound');
+  };
   const actor = native();
   const eventA = native(), eventB = native();
   const principal = randomUUID();
   const accessRegistry = new AccessAdmissionRegistry(access);
   const main = createMainApp(fuseki, { environment: env, account: identity.verifier, access: accessRegistry,
-    content, eventQueries: queries });
+    platformAccess: new AccessExposure(access), content, eventQueries: queries });
   await access.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
     [principal, identity.issuer, identity.a.id]);
   await access.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
+  const platformGrant = randomUUID();
+  await access.query(`INSERT INTO access.principal_permission_grant
+    (id,issuer_subject,principal_id,scope_id,action,valid_until)
+    VALUES ($1,$2,$3,'platform:access','platform:use:events',now()+interval '1 hour')`,
+  [platformGrant, actor, principal]);
+  await access.query(`INSERT INTO access.platform_grant_episode
+    (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+    VALUES ($1,$1,$2,'platform:use:events','platform:access',$3,$4)`,
+  [platformGrant, actor, principal,
+    `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
   const author = { kind: 'person' as const, displayName: 'Event fixture author' };
   await createAgentGraph(env, { id: randomUUID(), agent: actor, ...author, digest: agentProvisionDigest(author) });
   async function grantEvent(event: string) {
@@ -96,7 +134,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     const data = await response.json() as { event?: string; eventTime?: string; observationRevision?: string; predecessor?: string | null;
       sourcePosition?: { sequence: string }; code?: string; title?: string };
     if (response.status !== 201 || data.event !== event) {
-      throw new Error(`event observation failed: ${response.status} ${JSON.stringify(data)}`);
+      throw new Error(`event observation failed: ${response.status} ${JSON.stringify(data)}; command=${JSON.stringify(commandFailure)}`);
     }
     expect({ status: response.status, event: data.event }).toMatchObject({ status: 201, event });
     return data;
@@ -155,6 +193,24 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     const queryBody = (match: 'possible' | 'definite', start = '2026-05-15', end = start, pageSize = 10,
       continuation?: string) => ({ profile: 'event-query-v1', interpretation: 'civil-date', match,
       grain: 'day', start, end, pageSize, ...(continuation ? { continuation } : {}) });
+    const warm = async (start: string, end = start,
+      interpretation: 'civil-date' | 'instant' = 'civil-date') => {
+      const input = { interpretation, match: 'possible' as const,
+        grain: 'day' as const, start, end, pageSize: 10 };
+      for (let tick = 0; tick < 100; tick++) {
+        const result = await queries.query(input);
+        if (result.state === 'ready') return result;
+        expect(result.state === 'unavailable' || result.state === 'partial').toBe(true);
+        expect(result.progress).toBeDefined();
+        await projection.tick();
+      }
+      throw new Error('Event fixture projection did not become ready within its tick bound');
+    };
+    const unavailable = await queries.query({ interpretation: 'civil-date', match: 'possible',
+      grain: 'day', start: '2026-05-15', end: '2026-05-15', pageSize: 10 });
+    expect(unavailable).toMatchObject({ state: 'unavailable', progress: expect.any(Object) });
+    await drain();
+    await warm('2026-05-15');
     const possibleResponse = await post('/v1/events/queries', queryBody('possible'));
     expect(possibleResponse.status).toBe(200);
     const possible = await possibleResponse.json() as { items: { event: string; timeStatus: string; certainty: string }[];
@@ -167,10 +223,40 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       .toMatchObject({ definite: 0, possible: 2 });
     expect(possible.histogram.find(bucket => bucket.timeStatus === 'planned'))
       .toMatchObject({ definite: 0, possible: 1 });
+    // A disappeared slot has no retained withdrawal proof. Keep its prior
+    // counts and isolate the damaged target until its exact head is restored.
+    await fuseki.update(`DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.eventTime!)} ?p ?o } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(first.eventTime!)} ?p ?o } }`);
+    try {
+      await access.query(`INSERT INTO access.event_temporal_pending
+        (event,time_status,source_sequence) VALUES ($1,'actual',0)`, [eventA]);
+      await projection.tick();
+      expect((await access.query(`SELECT state FROM access.event_temporal_pending
+        WHERE event=$1 AND time_status='actual'`, [eventA])).rows[0]?.state).toBe('failed');
+      expect((await access.query(`SELECT time_revision FROM access.event_temporal_interval
+        WHERE event=$1 AND time_status='actual'`, [eventA])).rows[0]?.time_revision).toBe(first.observationRevision);
+    } finally {
+      await fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(first.eventTime!)} a rv:EventTime ; rv:event ${iri(eventA)} ; rv:timeStatus rv:ActualTime ;
+          rv:eventTimeHead ${iri(first.observationRevision!)} . } }`);
+      await access.query(`UPDATE access.event_temporal_pending SET state='queued',retry_at=clock_timestamp()
+        WHERE event=$1 AND time_status='actual'`, [eventA]);
+    }
+    expect((await warm('2026-05-15')).histogram).toEqual(possible.histogram);
     const definiteResponse = await post('/v1/events/queries', queryBody('definite'));
     expect(definiteResponse.status).toBe(200);
     const definite = await definiteResponse.json() as { items: unknown[] };
     expect(definite.items).toHaveLength(0);
+    const irrelevantInstant = await warm('2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z', 'instant');
+    expect(irrelevantInstant.state).toBe('ready');
+    expect(irrelevantInstant.items).toHaveLength(0);
+    await expect(warm('2026-05-15T00:00:00Z', '2026-05-15T00:00:00Z', 'instant'))
+      .rejects.toBeInstanceOf(UnsupportedEventTime);
+    const unsupportedInstant = await post('/v1/events/queries', {
+      ...queryBody('possible'), interpretation: 'instant',
+      start: '2026-05-15T00:00:00Z', end: '2026-05-15T00:00:00Z' });
+    expect(unsupportedInstant.status).toBe(422);
+    expect(await unsupportedInstant.json()).toMatchObject({ code: 'unsupported_event_time' });
 
     // The first Realm classification context installs the retained Global acceptance scope.
     const fixtureAdmission = (scope: string, action: string, requestDigest: string) => ({
@@ -226,24 +312,48 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       topics, acceptance: { kind: 'global' } });
     const aliasesResponse = await post('/v1/events/queries', topicQuery(topicStatements));
     expect(aliasesResponse.status).toBe(200);
-    const aliases = await aliasesResponse.json() as { items: { event: string; eventTime: string;
-      timeRevision: string; topicStatements: string[] }[] };
+    const aliases = await aliasesResponse.json() as { state: string; items: { event: string; eventTime: string;
+      timeRevision: string; topicStatements: string[] }[];
+      histogram: { timeStatus: string; definite: number; possible: number }[] };
+    expect(aliases.state).toBe('ready');
     expect(aliases.items).toHaveLength(1);
     expect(aliases.items[0]).toMatchObject({ event: eventA, eventTime: first.eventTime,
       timeRevision: first.observationRevision });
     expect(aliases.items[0]!.topicStatements).toEqual(topicStatements.slice(0, 2));
+    expect(aliases.histogram.find(bucket => bucket.timeStatus === 'actual'))
+      .toMatchObject({ definite: 0, possible: 1 });
     const rejectedResponse = await post('/v1/events/queries', topicQuery([topicStatements[2]!]));
     expect(rejectedResponse.status).toBe(200);
-    expect((await rejectedResponse.json() as { items: unknown[] }).items).toHaveLength(0);
+    const rejected = await rejectedResponse.json() as { state: string; items: unknown[];
+      histogram: { definite: number; possible: number }[] };
+    expect(rejected.state).toBe('ready');
+    expect(rejected.items).toHaveLength(0);
+    expect(rejected.histogram.every(bucket => bucket.definite === 0 && bucket.possible === 0)).toBe(true);
     const singleAliasResponse = await post('/v1/events/queries', topicQuery([topicStatements[1]!]));
     expect(singleAliasResponse.status).toBe(200);
-    expect((await singleAliasResponse.json() as { items: { event: string; topicStatements: string[] }[] }).items)
+    const singleAlias = await singleAliasResponse.json() as { state: string;
+      items: { event: string; topicStatements: string[] }[] };
+    expect(singleAlias.state).toBe('ready');
+    expect(singleAlias.items)
       .toEqual([expect.objectContaining({ event: eventA, topicStatements: [topicStatements[1]] })]);
 
+    await access.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
+    try {
+      await expect(queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
+        start: '2026-05-15', end: '2026-05-15', pageSize: 10 })).rejects.toBeInstanceOf(EventQueryUnavailable);
+    } finally { await access.query('UPDATE access.recovery_fence SET open=true WHERE id=true'); }
+    expect((await queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
+      start: '2026-05-15', end: '2026-05-15', pageSize: 10 })).state).toBe('ready');
+
+    await warm('2026-05-01', '2026-05-31');
     const pagedResponse = await post('/v1/events/queries', queryBody('possible', '2026-05-01', '2026-05-31', 1));
     expect(pagedResponse.status).toBe(200);
     const paged = await pagedResponse.json() as { continuation: string | null };
     expect(paged.continuation).not.toBeNull();
+    await createWork(`Unrelated Work preserves Event cursor ${randomUUID()}`);
+    const nextPage = await queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
+      start: '2026-05-01', end: '2026-05-31', pageSize: 1, continuation: paged.continuation! });
+    expect(nextPage.state).toBe('ready');
     const correction = await write(eventA, '2026-06', first.observationRevision!);
     expect(correction.predecessor).toBe(first.observationRevision);
     const stale = await post('/v1/events/observations', makeBody(eventA, '2026-07', first.observationRevision!));
@@ -269,27 +379,30 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     const winner = competing.find(response => response.status === 201)!;
     const winnerData = await winner.json() as { observationRevision: string };
 
-    // A correction committed after the snapshot but before generation activation must fence it.
+    await drain();
+    await warm('2030-01-01');
+    // A correction committed between the dependency checks must fence the read.
     const originalQuery = fuseki.query.bind(fuseki);
     let injected = false;
     fuseki.query = async (sparql: string) => {
-      if (!injected && sparql.includes('SELECT ?epoch ?sequence WHERE')) {
+      const result = await originalQuery(sparql);
+      if (!injected && sparql.includes('SELECT ?epoch ?sequence ?actual ?planned')) {
         injected = true;
         await write(eventA, '2026-07', winnerData.observationRevision);
       }
-      return originalQuery(sparql);
+      return result;
     };
     try {
       await expect(queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
         start: '2030-01-01', end: '2030-01-01', pageSize: 10 })).rejects.toBeInstanceOf(EventQueryRestart);
       expect(injected).toBe(true);
     } finally { fuseki.query = originalQuery; }
-    const recovered = await queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
-      start: '2030-01-01', end: '2030-01-01', pageSize: 10 }) as { sourcePosition: { sequence: string } };
+    await drain();
+    const recovered = await warm('2030-01-01') as { sourcePosition: { sequence: string } };
     expect(BigInt(recovered.sourcePosition.sequence)).toBeGreaterThan(BigInt(first.sourcePosition!.sequence));
   } finally {
     await identity.close();
-    await Promise.all([access.end(), contentPool.end()]);
+    await Promise.all([access.end(), contentPool.end(), relay.end()]);
     await databases.close();
   }
-}, 30_000);
+}, 120_000);

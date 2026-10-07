@@ -53,9 +53,22 @@ test('RATE09: endpoint explanations stay bounded and unsupported calendars fail 
     .toThrow(InvalidEventObservationInput);
 });
 
-test('RATE07/RATE08/RATE09: Event query limits bound source, page, aliases and histogram fanout', () => {
-  expect(EVENT_QUERY_COST_CONTRACT).toEqual({ maxEventTimeSlots: 2000, maxPageSize: 50,
-    maxTopicStatements: 8, maxHistogramBuckets: 732, maxSourceBindings: 2001 });
+test('RATE09: indexed precision ends at the last microsecond without touching the next instant', () => {
+  expect(() => checkedInstantRange('2026-05-15T12:30:00.0000005Z', '2026-05-15T12:30:00.000001Z'))
+    .toThrow(UnsupportedEventTime);
+  const second = eventEndpointBounds(temporal('2026-05-15T12:30:00Z', 'second'), 'instant');
+  expect(second).toMatchObject({ instantMin: '2026-05-15T12:30:00Z',
+    instantMax: '2026-05-15T12:30:00.999999Z' });
+  expect(Date.parse(second.instantMax!)).toBeLessThan(Date.parse('2026-05-15T12:30:01Z'));
+  const microsecond = eventEndpointBounds(temporal('2026-05-15T12:30:00.123456Z', 'second'), 'instant');
+  expect(microsecond.instantMax).toBe(microsecond.instantMin);
+  const minute = eventEndpointBounds(temporal('2026-05-15T12:30Z', 'minute'), 'instant');
+  expect(minute.instantMax).toBe('2026-05-15T12:30:59.999999Z');
+});
+
+test('RATE07/RATE08/RATE09: Event query limits bound indexed pages, aliases and histogram fanout', () => {
+  expect(EVENT_QUERY_COST_CONTRACT).toEqual({ maxPageSize: 50, maxIndexedPageRows: 51,
+    maxTopicStatements: 8, maxHistogramBuckets: 732 });
   expect(checkedDateRange('2026-01-01', '2026-12-31', 'day').buckets * 2)
     .toBeLessThanOrEqual(EVENT_QUERY_COST_CONTRACT.maxHistogramBuckets);
   expect(checkedDateRange('2028-01-01', '2028-12-31', 'day').buckets * 2)

@@ -137,7 +137,9 @@ function instantRange(value: Extract<SemanticValue, { kind: 'temporal' }>): { mi
   const span = value.precision === 'minute' ? 60_000_000_000n
     : 10n ** BigInt(9 - fraction.length);
   return { min: start.toString(), max: Temporal.Instant.fromEpochNanoseconds(
-    start.epochNanoseconds + span - 1n).toString() };
+    // PostgreSQL indexes microseconds; the last representable instant must not
+    // round up into the following minute or second.
+    start.epochNanoseconds + span - 1000n).toString() };
 }
 
 export function eventEndpointBounds(point: EventPoint, interpretation: 'civil-date' | 'instant'): EndpointBounds {
@@ -190,6 +192,9 @@ export function checkedInstantRange(start: string, end: string) {
   let first: Temporal.Instant, last: Temporal.Instant;
   try { first = Temporal.Instant.from(start); last = Temporal.Instant.from(end); }
   catch { throw new InvalidEventObservationInput('instant query bounds require exact UTC offsets'); }
+  if (first.epochNanoseconds % 1000n !== 0n || last.epochNanoseconds % 1000n !== 0n) {
+    throw new UnsupportedEventTime('instant query bounds must resolve to whole microseconds');
+  }
   if (Temporal.Instant.compare(first, last) > 0) throw new InvalidEventObservationInput('query start follows query end');
   if (last.epochNanoseconds - first.epochNanoseconds > 366n * 86_400_000_000_000n) {
     throw new UnsupportedEventTime('instant query range exceeds 366 days');
