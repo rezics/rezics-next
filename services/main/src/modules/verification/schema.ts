@@ -104,7 +104,7 @@ interface ChallengeResolutionRow {
   acting_subject: string; operation_id: string; principal_id: string; created_at: Date;
 }
 interface ChallengePendingRow { challenge_id: string; claim: string; created_at: Date }
-interface ChallengeHeadRow { claim: string; revision: string; open_count: number; updated_at: Date }
+interface ChallengeHeadRow { claim: string; revision: string; open_count: number; updated_at: Date; resolved_count: string }
 interface SummaryGenerationRow {
   id: string; target: string; context: string; generation: string; predecessor: string | null;
   claim: string; claim_revision: string; adopted_revision: string | null; assessment: string | null;
@@ -220,7 +220,7 @@ export const verificationColumns = {
   challenge_resolution: ['challenge_id', 'outcome', 'assessment', 'reason', 'acting_subject', 'operation_id',
     'principal_id', 'created_at'] satisfies (keyof ChallengeResolutionRow)[],
   challenge_pending: ['challenge_id', 'claim', 'created_at'] satisfies (keyof ChallengePendingRow)[],
-  challenge_head: ['claim', 'revision', 'open_count', 'updated_at'] satisfies (keyof ChallengeHeadRow)[],
+  challenge_head: ['claim', 'revision', 'open_count', 'updated_at', 'resolved_count'] satisfies (keyof ChallengeHeadRow)[],
   summary_generation: ['id', 'target', 'context', 'generation', 'predecessor', 'claim', 'claim_revision',
     'adopted_revision', 'assessment', 'policy_revision', 'support', 'review', 'dispute', 'coverage',
     'dependence', 'reason_codes', 'dependency_count', 'dependency_digest', 'owner_positions',

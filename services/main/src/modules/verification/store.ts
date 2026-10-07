@@ -628,11 +628,10 @@ export class VerificationStore {
     }, true);
   }
 
-  private async challengeStateWith(client: PoolClient, claim: string) {
+  private async challengeStateWith(client: PoolClient, claim: string): Promise<{ revision: string | null; open: number; resolved: number }> {
     const row = (await client.query<{ revision: string; open_count: number; resolved: number }>(`
-      SELECT h.revision::text, h.open_count, (SELECT count(*)::int FROM verification.challenge c
-        JOIN verification.challenge_resolution r ON r.challenge_id = c.id WHERE c.claim = h.claim) AS resolved
-      FROM verification.challenge_head h WHERE h.claim = $1`, [claim])).rows[0];
+      SELECT revision::text, open_count, resolved_count::int AS resolved
+      FROM verification.challenge_head WHERE claim = $1`, [claim])).rows[0];
     return { revision: row?.revision ?? null, open: row?.open_count ?? 0, resolved: row?.resolved ?? 0 };
   }
 
