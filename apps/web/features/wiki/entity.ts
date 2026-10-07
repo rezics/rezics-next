@@ -9,6 +9,7 @@ import { zoneContentText } from '../language/untagged.ts';
 import { offContinuity, pageFrame } from './continuity.ts';
 import { zoneText } from '../realm/adapt.ts';
 import { creditedNameOf, relationRows } from '../work-levels/relation-rows.ts';
+import type { RelationEntry } from '../work-levels/types.ts';
 import { namesOf } from '../work-levels/read.ts';
 import { idOf } from '../work-page/route.ts';
 import { memberHref, zoneLink, type ZoneSite } from './links.ts';
@@ -43,6 +44,50 @@ export type ZoneRelationshipOther = ZoneRelationship['others'][number] & { withh
 
 /** A claim in words: `Family: Bennet family`, or the value alone when no label was served for the property. */
 const claimText = (label: string | null, value: string) => label ? `${label}: ${value}` : value;
+
+/**
+ * Relationship rows for a Zone page. Roles stay their own rows. A credit Main recorded for the
+ * viewed subject is the one `together` would put on the appearance; it is carried onto each
+ * participant of that relation so the slot can show the label and the link.
+ */
+export async function relationshipsFrom(
+  entries: readonly RelationEntry[],
+  linkFor: (reference: string, kind: string | null) => Promise<string>,
+): Promise<{ relationships: ZoneRelationship[]; claims: { ids: string[]; supports: string }[] }> {
+  const appearanceCredit = new Map<string, NonNullable<ReturnType<typeof creditedNameOf>>>();
+  for (const row of relationRows(entries, { together: true })) {
+    for (const item of row.items) {
+      if (item.appearance?.creditedName && !appearanceCredit.has(item.relation)) {
+        appearanceCredit.set(item.relation, item.appearance.creditedName);
+      }
+    }
+  }
+  const relationships: ZoneRelationship[] = [];
+  const claims: { ids: string[]; supports: string }[] = [];
+  for (const row of relationRows(entries)) {
+    const others: ZoneRelationshipOther[] = [];
+    for (const item of row.items) {
+      if (item.target.kind === 'resource' && item.target.summary?.status === 'available') {
+        const summaryOf = item.target.summary;
+        others.push({ name: zoneText(summaryOf.name), href: await linkFor(summaryOf.reference, summaryOf.type) });
+      } else if (item.target.kind === 'external') others.push({ name: zoneContentText(item.target.label), href: null });
+      else continue;
+      const last = others.at(-1)!;
+      const credit = creditedNameOf(item.creditedName) ?? appearanceCredit.get(item.relation);
+      if (credit && 'status' in credit) {
+        const same = item.target.kind === 'resource' && item.target.reference === credit.reference;
+        last.withheldCredit = same && last.href ? last.href : await linkFor(credit.reference, null);
+      } else if (credit && credit.lexical !== last.name.value) {
+        last.creditedName = zoneContentText(credit.lexical, credit.language);
+      }
+      const cited = item.evidence ? idOf(item.evidence) : null;
+      if (cited) claims.push({ ids: [cited], supports: claimText(row.label.text?.value ?? null, others.at(-1)!.name.value) });
+    }
+    if (others.length) relationships.push({ label: row.label.text?.value ?? '', others });
+  }
+  return { relationships, claims };
+}
+
 const evidenceIds = (sources: readonly string[]) => sources.flatMap(source => idOf(source) ?? []);
 
 async function evidenceFor(claims: readonly { ids: string[]; supports: string }[], main: string | undefined):
@@ -158,27 +203,9 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   const relationships: ZoneRelationship[] = [];
   if (relations?.ok) {
     more ||= relations.data.next !== null;
-    for (const row of relationRows(relations.data.items)) {
-      const others: ZoneRelationshipOther[] = [];
-      for (const item of row.items) {
-        if (item.target.kind === 'resource' && item.target.summary?.status === 'available') {
-          const summaryOf = item.target.summary;
-          others.push({ name: zoneText(summaryOf.name), href: await zoneLink(site, summaryOf.reference, summaryOf.type) });
-        } else if (item.target.kind === 'external') others.push({ name: zoneContentText(item.target.label), href: null });
-        else continue;
-        const last = others.at(-1)!;
-        const credit = creditedNameOf(item.creditedName);
-        if (credit && 'status' in credit) {
-          const same = item.target.kind === 'resource' && item.target.reference === credit.reference;
-          last.withheldCredit = same && last.href ? last.href : await zoneLink(site, credit.reference, null);
-        } else if (credit && credit.lexical !== last.name.value) {
-          last.creditedName = zoneContentText(credit.lexical, credit.language);
-        }
-        const cited = item.evidence ? idOf(item.evidence) : null;
-        if (cited) claims.push({ ids: [cited], supports: claimText(row.label.text?.value ?? null, others.at(-1)!.name.value) });
-      }
-      if (others.length) relationships.push({ label: row.label.text?.value ?? '', others });
-    }
+    const built = await relationshipsFrom(relations.data.items, (reference, kind) => zoneLink(site, reference, kind));
+    relationships.push(...built.relationships);
+    claims.push(...built.claims);
   }
 
   const evidence = await evidenceFor(claims, main);

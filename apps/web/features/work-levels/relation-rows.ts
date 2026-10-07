@@ -138,12 +138,15 @@ export function relationRows(entries: readonly RelationEntry[], { together = fal
           .map(target => ({ label: labelFor(other, 1), target }))),
         ...(credited ? { creditedName: credited } : {}) } : undefined;
       for (const argument of projection.arguments.filter(item => item.role === projection.toRole)) {
-        const named = (rendering.viewingRole === 'work' || rendering.viewingRole === 'occurrence')
-          && projection.toRole === 'character' ? creditedNameOf(argument.creditedName) : undefined;
+        const named = creditedNameOf(argument.creditedName);
+        // A lexical credit stays with a character named from a work or an occurrence. A withheld
+        // credit is the participant's own page, so every role keeps it.
+        const keep = named && ('status' in named || ((rendering.viewingRole === 'work' || rendering.viewingRole === 'occurrence')
+          && projection.toRole === 'character')) ? named : undefined;
         group.items.push({ relation: entry.relation, target: participantTarget(argument.value, summaries),
           unresolvedSource: entry.sourceVersionStatus === 'unresolved', evidence: entry.evidence,
           ...(appearance ? { appearance } : {}),
-          ...(named ? { creditedName: named } : {}) });
+          ...(keep ? { creditedName: keep } : {}) });
       }
       groups.set(key, group);
     }

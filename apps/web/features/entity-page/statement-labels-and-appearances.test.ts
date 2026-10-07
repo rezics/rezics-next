@@ -2,9 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { resourceHref } from '../address/path.ts';
+import { RelationRows } from '../work-levels/connections.tsx';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
+import { relationshipsFrom } from '../wiki/entity.ts';
 import { appearances, componentStatements, predicateLabels, statements, withheldCreditAppearance } from './fixtures.ts';
+import { alter, identityEntry } from './identity-fixtures.ts';
 import { copyOf } from './messages.ts';
 import { presentStatements } from './statement-groups.ts';
 import { standaloneHrefFor } from './route.ts';
@@ -87,6 +91,47 @@ describe('Appearances', () => {
     expect(html).not.toContain('data-credited-name');
     expect(html).not.toContain('https://example.test/not-an-id');
     expect(html).toContain('Supporting character');
+  });
+  test('a withheld credit on a translator stays on the connection and links the label', () => {
+    const entry = identityEntry('work', 'translator', alter);
+    entry.rendering!.projections[0]!.labels = {
+      noun: 'Translator', heading: 'Translator', plurals: { other: 'Translator' }, grammaticalForms: [],
+    };
+    const argument = entry.rendering!.projections[0]!.arguments[0]!;
+    argument.creditedName = {
+      lexical: 'Hidden Alias', language: 'en', reference: alter.reference, status: 'unavailable',
+    } as typeof argument.creditedName;
+    const rows = relationRows([entry]);
+    expect(rows[0]!.items[0]!.creditedName).toEqual({ reference: alter.reference, status: 'unavailable' });
+    const html = draw(createElement(RelationRows, { rows, locale: 'en', t: levelsCopy('en') }));
+    expect(html).toContain('Translator');
+    expect(html).toContain('Name not shown');
+    expect(html).toContain('data-credited-unavailable');
+    expect(html).toContain(resourceHref('/e/', alter.reference));
+    expect(html).not.toContain('Hidden Alias');
+    expect(html).not.toContain(alter.reference);
+  });
+  test('the wiki adapter carries a withheld appearance credit to the slot', async () => {
+    const subject = 'https://rezics.com/id/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d';
+    const page = resourceHref('/e/', subject);
+    const { relationships } = await relationshipsFrom(withheldCreditAppearance().items, async reference => resourceHref('/e/', reference));
+    const credits = relationships.flatMap(row => row.others.flatMap(other =>
+      'withheldCredit' in other && typeof other.withheldCredit === 'string' ? [other.withheldCredit] : []));
+    expect(relationships.some(row => row.label === 'Translator')).toBe(true);
+    expect(credits).toContain(page);
+    expect(JSON.stringify(relationships)).not.toContain('Hidden Alias');
+    expect(JSON.stringify(relationships)).not.toContain(subject);
+    const html = draw(createElement(WikiEntity, {
+      zone: wiki.zoneFor('en'), fallback: null,
+      Link: ({ href, children }) => createElement('a', { href }, children),
+      entity: { ...wiki.elizabeth, relationships }, position: wiki.atEverything, mount: null, rest: null,
+    }));
+    expect(html).toContain('Translator');
+    expect(html).toContain('Name not shown');
+    expect(html).toContain('data-credited-unavailable');
+    expect(html).toContain(page);
+    expect(html).not.toContain('Hidden Alias');
+    expect(html).not.toContain(subject);
   });
   test('the wiki slot shows a withheld credit as its own label and still shows a recorded one', () => {
     const html = draw(createElement(WikiEntity, {
