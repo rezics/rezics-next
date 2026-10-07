@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
-import { classificationAlreadyAccepted, classificationContextBody, classifiedStatementBody,
-  expectedLocalDecisionHead, rejectionRevises, statementAcceptance, statementDecisionBody } from './classified-statement.ts';
+import { acceptClassifiedStatement, classificationAlreadyAccepted, classificationContextBody, classifiedStatementBody,
+  expectedScopeDecisionHead, rejectionRevises, statementAcceptance, statementDecisionBody,
+  type ClassificationPost } from './classified-statement.ts';
 
 const actor = 'https://rezics.com/id/019d0000-0000-7000-8000-000000000001';
 const concept = 'https://rezics.com/id/019d0000-0000-7000-8000-000000000002';
@@ -42,9 +43,40 @@ test('acceptance is Global or the Realm, and an inherited Global head is not rev
     { kind: 'realm-classification', id: realm })).toBe(false);
   expect(classificationAlreadyAccepted({ state: 'accepted', source: 'local' },
     { kind: 'realm-classification', id: realm })).toBe(true);
-  expect(expectedLocalDecisionHead({ source: 'local', decision: definition })).toBe(definition);
-  expect(expectedLocalDecisionHead({ source: 'global', decision: definition })).toBeNull();
-  expect(expectedLocalDecisionHead({ source: 'inherited-global', decision: definition })).toBeNull();
+  expect(expectedScopeDecisionHead({ source: 'local', decision: definition },
+    { kind: 'realm-classification', id: realm })).toBe(definition);
+  expect(expectedScopeDecisionHead({ source: 'global', decision: definition }, { kind: 'global' })).toBe(definition);
+  expect(expectedScopeDecisionHead({ source: 'inherited-global', decision: definition },
+    { kind: 'realm-classification', id: realm })).toBeNull();
+});
+
+test('seeding a rejected Global classification accepts it by revising the existing Global decision', async () => {
+  const statement = { statement: other, meaningKey: 'urn:rezics:meaning:ab' };
+  const writes: { path: string; body: unknown }[] = [];
+  const post: ClassificationPost = async <T>(path: string, body: unknown) => {
+    writes.push({ path, body });
+    if (path === '/v1/statements') return statement as T;
+    // The decision operation requires the current head even when its outcome is rejected.
+    expect(body).toMatchObject({ expectedDecisionHead: definition, outcome: 'accepted', acceptance: { kind: 'global' } });
+    return { decision: concept } as T;
+  };
+  await acceptClassifiedStatement(post, 'token', actor, { mainVersion }, concept, context, { kind: 'global' },
+    { state: 'rejected', source: 'global', decision: definition }, { statement: 'statement-key', decision: 'decision-key' });
+  expect(writes.map(write => write.path)).toEqual(['/v1/statements', '/v1/statement-decisions']);
+  expect(writes[1]?.body).toMatchObject({ target: { meaningKey: statement.meaningKey, support: [statement.statement] } });
+});
+
+test('seeding a Realm that inherits a Global rejection creates its own acceptance without revising the Global head', async () => {
+  const writes: { path: string; body: unknown }[] = [];
+  const post: ClassificationPost = async <T>(path: string, body: unknown) => {
+    writes.push({ path, body });
+    return { statement: other, meaningKey: 'urn:rezics:meaning:ab' } as T;
+  };
+  await acceptClassifiedStatement(post, 'token', actor, { mainVersion }, concept, context,
+    { kind: 'realm-classification', id: realm }, { state: 'rejected', source: 'inherited-global', decision: definition },
+    { statement: 'statement-key', decision: 'decision-key' });
+  expect(writes.map(write => write.path)).toEqual(['/v1/statements', '/v1/statement-decisions']);
+  expect(writes[1]?.body).toMatchObject({ expectedDecisionHead: null, outcome: 'accepted', acceptance: { kind: 'realm', realm } });
 });
 
 test('a rejection revises the accepted head, and a fresh slot is not rejected', () => {

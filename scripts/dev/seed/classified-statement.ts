@@ -23,9 +23,10 @@ export function classificationAlreadyAccepted(current: Pick<ClassificationResolu
   return current.state === 'accepted' && (scope.kind === 'global' || current.source === 'local');
 }
 
-/** Revise only a decision this scope already holds. An inherited Global head is not the local head. */
-export function expectedLocalDecisionHead(current: Pick<ClassificationResolution, 'source' | 'decision'>): string | null {
-  return current.source === 'local' ? current.decision : null;
+/** Revise the decision held by the requested scope; a Realm's inherited Global head belongs to another slot. */
+export function expectedScopeDecisionHead(current: Pick<ClassificationResolution, 'source' | 'decision'>,
+  scope: ClassificationScope): string | null {
+  return current.source === (scope.kind === 'global' ? 'global' : 'local') ? current.decision : null;
 }
 
 /** A rejection revises the accepted head this read returned, including a Global one. */
@@ -95,7 +96,7 @@ export async function acceptClassifiedStatement(post: ClassificationPost, token:
   const statement = await recordClassifiedStatement(post, token, actor, work.mainVersion, concept, interpretation,
     keys.statement);
   await post('/v1/statement-decisions', statementDecisionBody(actor, statement, scope, 'accepted',
-    expectedLocalDecisionHead(settled)), token, keys.decision);
+    expectedScopeDecisionHead(settled, scope)), token, keys.decision);
 }
 
 /** Reject an acceptance this scope already holds, so an older Sense stops matching. */
