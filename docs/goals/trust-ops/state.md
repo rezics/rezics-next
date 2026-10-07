@@ -187,6 +187,14 @@ qualification needs further implementation/drill waves and the already listed
 external operator facts/registrations; no defensible final date can be stated
 until those inputs are supplied. No production action is authorized.
 
+G-1394 owns the proven signed-in release-browse budget failure: two summary
+passes duplicate anonymous disclosure, producing13graph calls versus12. The
+fix must reuse only valid request/snapshot decisions with exact target, revision,
+context and channel keys, retain private-name/current-authority checks, and keep
+the limit12. Launch G-1391 retains the real signed-in/out regression. Kernel
+coordinates any minimal request seam. G-1289 has the exact one-line restored
+Content pool verification-store hook loan; G-1351 composition remains its owner.
+
 ## Contracts and promises to other Goals
 
 - **C1 landed:** e64b08472 (policy in admission, earliest-expiry lease) and
