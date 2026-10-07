@@ -40,33 +40,41 @@ owns audience gates. Server revocation fences future delivery; it cannot promise
 to recall independent copies already delivered, as
 [client synchronization](../contracts/client-synchronization.md) records.
 
-## Launch review, 2026-10-01
+## Qualification evidence, 2026-10-07
 
-G-744 reviewed launch source at
-`d1cba62ea061a5c861a2bce1c7684522ed32e05b`: Account enrollment, recovery,
-OAuth, first-party sessions and mail suppression; Main admission and disclosure
-for editorial proposals and wiki publication; media clearance, public reports,
-appeals and preservation; MCP dispatch and wiki-toolkit credentials; Worker
-proxies, release image inputs and production configuration checks. The existing
-G-897/G-904 and G-898 disclosure regressions passed, as did the Account SR-1/SR-3
-and G-731 regressions. This is a source review with targeted disposable-stack
-checks, not release-image qualification. The OCI build failed because its
-context omitted the wiki-toolkit workspace; a fresh release-image bootstrap
-therefore could not be reviewed.
+The earlier G-744 review at `d1cba62ea061a5c861a2bce1c7684522ed32e05b`
+identified missing deadline/escalation alerts and uploader safety mail. Those
+capabilities are implemented by G-917/G-918, with
+[deadline integration](../../tests/qa/integration/g-917-safety-alerts.test.ts)
+and [uploader-mail integration](../../tests/qa/integration/g-918-safety-mail.test.ts).
+The later deadline/suppression repair `9a082844f8e2` passed seventeen integration
+and fourteen owner checks: cancelled or unconfirmed effects cannot retire a due
+case, and identical-copy suppression commits with its original restriction.
+Named responders and real mail delivery remain operator prerequisites.
 
-Readiness remains blocked by G744-H1 (no automatic NCII deadline alert or
-absent-responder escalation) and G744-M1 (media enforcement creates a private
-party notice but does not queue the affected uploader's safety email). Their
-executable counterexamples are in the
-[finding tests](../../tests/qa/integration/g-744-findings.test.ts); the
-[safety drills](../../tests/qa/fault-recovery/g-744-safety.test.ts) leave missing
-capabilities explicitly unfinished. Neither finding is an accepted residual risk.
+The G-1294 source review at `12186858a0f3b9c2fad0edcb28c25eb294574373`
+found four High issues and one Medium issue. Each repair has targeted evidence:
 
-The accepted launch limits remain the maintainer's narrowed market/feature
-policy and lack of age assurance: assessed age-gated targets are withheld from
-everyone, and staff retain separate correction authority. Off-service copies
-already delivered cannot be recalled. No conclusion here covers deployed edge
-configuration, off-host inbox staffing, vendor scanner enrollment or container
-dependency vulnerabilities; those need release and operator evidence. Changes
-merged after the reviewed source, including merge/unmerge, wiki deltas and
-library import, require the manager's final pass.
+| Finding | Repair and verification |
+| --- | --- |
+| Recovery enrollment bypassed the second factor | `96bf4db360df`: every enrollment consumes normal session-bound step-up; [real recovery proof](../../services/account/tests/recovery-step-up.integration.test.ts) includes first/spent enrollment, expiry and session binding. |
+| Snapshot acquisition could reach private addresses before edit authority | `1154b205ebc7`: checked numeric public destinations, pinned sockets and authority before acquisition/storage; [network proof](../../services/main/tests/web-snapshot-network.test.ts) and [authority proof](../../services/main/tests/web-snapshot-network-authority.test.ts). |
+| OAuth backchannel logout could dispatch to unresolved/private destinations | `c037159f4364`: all metadata write boundaries refuse the unsupported URI, legacy rows cannot dispatch and discovery marks it unsupported; [provider/session integration](../../services/account/tests/oauth-backchannel.integration.test.ts). |
+| Read-only consent could mutate personal reading records | Account `07ac9df29782` and enforcement `f4724506c`: eighteen mutations require `library:write`, fifteen reads keep `work:read`; [owner proof](../../services/main/tests/library-write-scope.test.ts) and [integration](../../tests/qa/integration/library-write-scope.test.ts) passed at the enforcement pin. |
+| Upload bodies buffered before authentication/reservation/size checks | `3957f02adb3a`: live bearer and reservation before streamed reads, byte cap and cancellation deadline; [intake proof](../../services/main/tests/media-stream-intake.test.ts). |
+
+H1–H4 are fixed and verified; that does not substitute for whole-release
+regression. The OCI context omission is fixed. Image qualification at
+`e140c7c42385` passed three live tests/fifty-five assertions in112seconds,
+including building all five backend roles twice and actual readiness, refusal,
+recovery and native image decoding. Later model/native changes need targeted
+current-image qualification; the pinned evidence cannot qualify those bytes.
+
+The accepted limits remain the maintainer's narrowed market/feature policy and
+lack of age assurance: assessed age-gated targets are withheld from everyone,
+and staff retain separate correction authority. Independent delivered copies
+cannot be recalled. Deployed edge configuration, off-host staffing, vendor
+scanner enrollment, real mail and container dependency vulnerabilities require
+release/operator evidence. Suppression/erasure restore and populated backup/
+compaction qualification remain incomplete; the program owns whole-main
+regression and the manager's final security pass.
