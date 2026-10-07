@@ -457,7 +457,7 @@ export async function readClaimHead(env: WorkActivationEnvironment, claim: strin
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?head WHERE {
     { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement ; rv:head ?head ; rv:retainedClaimHead ?root } }
     UNION { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rv:Claim ; rv:claimHead ?head }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement } } }`);
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement } } } }`);
   const rows = head.results?.bindings ?? [];
   if (rows.length !== 1) return null;
   return (await readClaimRevisions(env, [rows[0]!.head!.value])).get(rows[0]!.head!.value) ?? null;
