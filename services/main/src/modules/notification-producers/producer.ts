@@ -7,6 +7,7 @@ import { requireAccessOpen } from '../notification/store.ts';
 import { reviewNotification } from '../notification/producer-review.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { editorialNotification, EDITORIAL_NOTIFICATION_COST } from './editorial.ts';
+import { SafetyNoticeContinuation } from '../governance/notices-mail.ts';
 import type { EditorialEvent } from '../editorial-review/store.ts';
 import type { RelationshipRecipients } from '../follows/recipients.ts';
 import { recoverSpaceFollows } from '../follows/recovery.ts';
@@ -354,9 +355,18 @@ export class NotificationProducer {
       ?? { epoch: '0', xid: '0', id: '0' };
     const events = (await this.access.query<AccessEvent>(notificationProducerEventsSql,
       [cursor.epoch, cursor.xid, cursor.id, PRODUCER_COST.accessEventsPerTick])).rows;
+    let checkpointed = 0;
     for (const event of events) {
-      if (event.kind === 'moderation_outcome')
-        await this.safetyCorrespondence.enqueueDecision(event.event_id);
+      if (event.kind === 'moderation_outcome') {
+        try {
+          await this.safetyCorrespondence.enqueueDecision(event.event_id);
+        } catch (error) {
+          if (!(error instanceof SafetyNoticeContinuation)) throw error;
+          // One committed page is progress. This event stays at the cursor so
+          // the next tick resumes its remaining pages, and later events wait.
+          return checkpointed + 1;
+        }
+      }
       // Concurrent replays share immutable intake identities. A checkpoint may
       // advance only after intake, and an older acknowledgement cannot rewind it.
       const client = await this.access.connect();
@@ -373,8 +383,9 @@ export class NotificationProducer {
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
       finally { client.release(); }
+      checkpointed++;
     }
-    return events.length;
+    return checkpointed;
   }
 
   /** Cursor advances only after every recipient intake commits. Partial retries
