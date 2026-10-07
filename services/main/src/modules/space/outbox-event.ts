@@ -8,9 +8,10 @@ const realmPolicyEvent: OwnerOutboxEventHandler = {
   type: 'com.rezics.realm.policy-changed.v1', authority: 'system',
   async read({ fuseki, batch, eventId, value, ordinal }) {
     const receipt = value('receipt');
+    const receiptId = receipt?.match(/^urn:rezics:(?:realm-policy:([0-9a-f-]{36})|receipt:([0-9a-f]{64}))$/);
     const realm = value('realm');
     const space = value('space');
-    if (!receipt || !/^urn:rezics:realm-policy:[0-9a-f-]{36}$/.test(receipt) || !realm || !space
+    if (!receipt || !receiptId || !realm || !space
       || value('eventRealm') !== realm || value('outcome') !== `${RV}Succeeded`
       || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
       || eventId !== `urn:rezics:event:${hash(receipt)}` || !value('digest')) throw new Error('Realm policy event differs');
@@ -28,7 +29,7 @@ const realmPolicyEvent: OwnerOutboxEventHandler = {
         sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
         receipt: { id: receipt, action: 'realm.policy.publish', outcome: 'succeeded', requestDigest: value('digest')!,
           realm, space, visibility: row!.visibility!.value, reviewMode: row!.mode!.value,
-          generation: row!.generation!.value, systemProof: { kind: 'realm-settings-receipt', receiptId: receipt.slice(-36) } } } };
+          generation: row!.generation!.value, systemProof: { kind: 'realm-settings-receipt', receiptId: receiptId[1] ?? receiptId[2]! } } } };
   },
 };
 
