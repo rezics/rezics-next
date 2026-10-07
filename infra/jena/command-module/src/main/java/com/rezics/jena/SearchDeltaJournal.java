@@ -173,6 +173,7 @@ final class SearchDeltaJournal {
             if (position == null || position.textGeneration() == null || lucene == null || position.held()
                 || requireAnchor && !data.contains(PUBLIC, ANCHOR, RDF.type.asNode(), uri(RV + "SearchGraphAnchor")))
                 return null;
+            if (!CanonicalPolicy.auditRealmOwners(data)) return null;
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
                 IndexSearcher searcher = new IndexSearcher(reader);
                 boolean rankMetadata = org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null;
@@ -191,6 +192,8 @@ final class SearchDeltaJournal {
                             && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
                             throw new IllegalStateException("public title rank metadata differs from RDF");
                         if (stored.getValues("body").length == 0) return;
+                        if (subject != null && !CanonicalPolicy.realmUnitOwnerValid(data, uri(subject)))
+                            throw new IllegalStateException("public body has a noncanonical Realm owner");
                         if (subject == null || !seen.add(subject))
                             throw new IllegalStateException("duplicate public body document");
                         Node unit = uri(subject), body = one(data, PUBLIC, unit, BODY);
@@ -318,6 +321,7 @@ final class SearchDeltaJournal {
         private final DatasetGraph data;
         private final Map<Node, Boolean> before = new LinkedHashMap<>();
         private final Map<Node, Node> works = new LinkedHashMap<>();
+        private final Set<Node> realmOwners = new LinkedHashSet<>();
         private boolean reset;
 
         Capture(DatasetGraph data) { this(data, false); }
@@ -327,6 +331,13 @@ final class SearchDeltaJournal {
         @Override public void finish() {}
         @Override public void reset() {}
         @Override public void change(TextQuadAction action, Node graph, Node subject, Node predicate, Node object) {
+            if (uri(CommandPolicy.CURRENT).equals(graph) && (action == TextQuadAction.ADD || action == TextQuadAction.DELETE)
+                && (RDF.type.asNode().equals(predicate) && uri(RV + "RealmPublicationSlot").equals(object)
+                    || data.contains(graph, subject, RDF.type.asNode(), uri(RV + "RealmPublicationSlot")))) {
+                if (!reset && !realmOwners.contains(subject) && realmOwners.size() == MAX_UNITS)
+                    throw new IllegalArgumentException("actual Realm owner delta exceeds 64 owners");
+                if (!reset) realmOwners.add(subject);
+            }
             if (subject.isURI() && (subject.getURI().startsWith(PublicNameProjection.PREFIX)
                 || subject.getURI().startsWith(PublicNameProjection.DIRECTORY))) return;
             if (!PUBLIC.equals(graph) || action != TextQuadAction.ADD && action != TextQuadAction.DELETE) return;
@@ -389,6 +400,10 @@ final class SearchDeltaJournal {
 
     static void append(DatasetGraph data, Capture capture, long completedWriteEpoch) {
         List<Change> changes = capture.changes();
+        for (Node slot : capture.realmOwners) if (data.contains(uri(CommandPolicy.CURRENT), slot, RDF.type.asNode(), uri(RV + "RealmPublicationSlot"))
+            && CanonicalPolicy.realmSlotOwnerFailure(data, slot) != null)
+            throw new IllegalStateException("native delta contains a noncanonical Realm owner");
+        if (capture.reset && !CanonicalPolicy.auditRealmOwners(data)) throw new IllegalStateException("native reset contains a noncanonical Realm owner");
         FilteredGraphTextIndex.refreshRankMetadata(data, changes, capture.reset);
         // Existing datasets created by an earlier module have no journal. The
         // first new write starts one; Main has no baseline ordinal and audits.
@@ -534,6 +549,7 @@ final class SearchDeltaJournal {
             Document doc = searcher.storedFields().document(hit.doc);
             String[] values = doc.getValues("body");
             if (values.length == 0) continue;
+            if (!CanonicalPolicy.realmUnitOwnerValid(data, unit)) throw new IllegalStateException("exact-subject body has a noncanonical Realm owner");
             if (values.length != 1 || body == null || !body.getLiteralLexicalForm().equals(values[0])
                 || !body.getLiteralLanguage().equalsIgnoreCase(doc.get("lang")))
                 throw new IllegalStateException("exact-subject body differs from RDF");

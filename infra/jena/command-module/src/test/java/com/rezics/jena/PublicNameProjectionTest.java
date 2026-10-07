@@ -795,8 +795,7 @@ public class PublicNameProjectionTest {
             data.add(PUBLIC,id(99998),p("selection"),selected.selection());assertThrows(TextIndexException.class,()->catalogueNameHits(fixture,"zh-Hant",null,null));
             data.deleteAny(PUBLIC,id(99998),Node.ANY,Node.ANY);
             assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size());
-            // Existing Realm body selections declare their immutable slot;
-            // general body ranking must not require the producer's hash spelling.
+            // Alternate legacy slot spellings cannot create a second Realm/Main owner.
             Node legacySlot=id(99997);
             var slotRows=data.find(CURRENT,slot,Node.ANY,Node.ANY);var facts=new java.util.ArrayList<Quad>();
             try{slotRows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(slotRows);}
@@ -804,9 +803,9 @@ public class PublicNameProjectionTest {
             data.deleteAny(CURRENT,slot,Node.ANY,Node.ANY);
             data.deleteAny(REVISION_GRAPH,adoptionHead,p("slot"),Node.ANY);data.add(REVISION_GRAPH,adoptionHead,p("slot"),legacySlot);
             var realmScope=new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,true);
-            assertEquals(1,fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope).hits().stream().filter(hit->hit.key()!=null).count());
+            assertThrows(TextIndexException.class,()->fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope));
             data.add(REVISION_GRAPH,adoptionHead,p("slot"),id(99996));
-            assertTrue(fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope).hits().stream().noneMatch(hit->hit.key()!=null));
+            assertThrows(TextIndexException.class,()->fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope));
         } finally {data.abort();data.end();data.close();}
     }
     private static void setPublic(DatasetGraph data,Node subject,String predicate,Node object) {

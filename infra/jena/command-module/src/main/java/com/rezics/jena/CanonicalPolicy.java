@@ -15,6 +15,63 @@ final class CanonicalPolicy {
 
     private CanonicalPolicy() {}
 
+    static Node realmOwner(Node realm, Node main) {
+        if (realm == null || !realm.isURI() || main == null || !main.isURI()) return null;
+        try {
+            String key = realm.getURI() + "\0" + main.getURI();
+            return NodeFactory.createURI("urn:rezics:realm-selection:" + java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
+    }
+    private static Node oneIri(DatasetGraph data, Node graph, Node subject, String predicate) {
+        var rows = data.find(graph, subject, NodeFactory.createURI(RV + predicate), Node.ANY);
+        try {
+            if (!rows.hasNext()) return null;
+            Node value = rows.next().getObject();
+            return value.isURI() && !rows.hasNext() ? value : null;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    /** Identity is the owner key; alternate slots cannot be another current
+     * adoption for the same Realm/Main, even without a searchable body. */
+    static String realmSlotOwnerFailure(DatasetGraph data, Node slot) {
+        Node current = graph(false), realm = oneIri(data, current, slot, "realm"), main = oneIri(data, current, slot, "mainVersion");
+        if (realm == null || main == null || oneIri(data, current, slot, "work") == null || oneIri(data, current, slot, "selectionHead") == null)
+            return "incomplete Realm publication slot owner";
+        return slot.equals(realmOwner(realm, main)) ? null : "noncanonical Realm publication slot owner";
+    }
+    static String realmSelectionOwnerFailure(DatasetGraph data, Node selection) {
+        Node revisions = graph(true), context = oneIri(data, revisions, selection, "context"), main = oneIri(data, revisions, selection, "mainVersion");
+        boolean slotDeclared = data.contains(revisions, selection, NodeFactory.createURI(RV + "slot"), Node.ANY);
+        if (!slotDeclared && (context == null || main == null || context.equals(main))) return null;
+        Node slot = oneIri(data, revisions, selection, "slot"), expected = realmOwner(context, main);
+        if (expected == null || !expected.equals(slot)) return "noncanonical Realm publication selection owner";
+        // Historical selections keep their canonical owner after a newer head
+        // is selected. Do not compare their immutable identity to currentHead.
+        if (data.contains(revisions, selection, NodeFactory.createURI(RV + "component"), Node.ANY)
+            && !expected.equals(oneIri(data, revisions, selection, "component")))
+            return "Realm publication selection component differs from its owner";
+        return null;
+    }
+    static boolean realmUnitOwnerValid(DatasetGraph data, Node unit) {
+        Node context = oneIri(data, NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH), unit, "context");
+        Node main = oneIri(data, NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH), unit, "mainVersion");
+        if (context == null || main == null || context.equals(main)) return true;
+        Node selection = oneIri(data, NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH), unit, "selection");
+        if (selection == null || realmSelectionOwnerFailure(data, selection) != null) return false;
+        Node revisions = graph(true);
+        return context.equals(oneIri(data, revisions, selection, "context")) && main.equals(oneIri(data, revisions, selection, "mainVersion"));
+    }
+    /** Existing whole-generation qualification streams legacy/raw owners once
+     * before read traffic; ranked and delta reads use only exact owner keys. */
+    static boolean auditRealmOwners(DatasetGraph data) {
+        var rows = data.find(graph(false), Node.ANY, org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + "RealmPublicationSlot"));
+        try { while (rows.hasNext()) {
+            Node slot = rows.next().getSubject(); CommandWork.count("realm_owner_qualification_visits", 1);
+            if (realmSlotOwnerFailure(data, slot) != null) return false;
+        } return true; } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+
+
     record Selection(String type, ProfileRegistry.Route route, Set<String> selectors) {}
 
     static Selection select(ProfileRegistry profiles, DatasetGraph dataset, String subject, boolean revision) {
@@ -47,6 +104,14 @@ final class CanonicalPolicy {
         Node node = NodeFactory.createURI(subject);
         Set<String> types = types(dataset, graph, node);
         if (!revision && types.isEmpty()) return CommandService.invalid("current graph subject has no type: " + subject);
+        if (!revision && types.contains(RV + "RealmPublicationSlot")) {
+            String failure = realmSlotOwnerFailure(dataset, node);
+            if (failure != null) return CommandService.invalid(failure + ": " + subject);
+        }
+        if (revision && types.contains(RV + "PublicationSelection")) {
+            String failure = realmSelectionOwnerFailure(dataset, node);
+            if (failure != null) return CommandService.invalid(failure + ": " + subject);
+        }
         ProfileRegistry.Canonical canonical = profiles.canonical(types);
         if (canonical == null) {
             // A publication slot is a guarded pointer with no profile shape; every

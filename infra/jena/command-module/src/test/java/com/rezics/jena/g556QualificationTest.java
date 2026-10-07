@@ -30,11 +30,12 @@ public class g556QualificationTest {
 
     private static final class Fixture implements AutoCloseable {
         final TextIndexLucene index;
+        final FilteredGraphTextIndex filtered;
         final DatasetGraphText data;
         Fixture(int count) {
             EntityDefinition definition = new EntityDefinition("uri", "label", "graph");
             definition.set("body", BODY);
-            definition.set("publicTitle", iri(RV + "publicSearchTitle"));
+            definition.set("publicTitle", iri(RV + "publicTitle"));
             definition.set("privateBody", iri(RV + "privateSearchBody"));
             definition.setLangField("lang");
             definition.setUidField("uid");
@@ -46,9 +47,10 @@ public class g556QualificationTest {
                     return super.getDirectory();
                 }
             };
-            FilteredGraphTextIndex filtered = new FilteredGraphTextIndex(index);
+            filtered = new FilteredGraphTextIndex(index);
             data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), filtered, new TextDocProducerTriples(filtered));
             data.getContext().set(org.apache.jena.query.text.TextQuery.textIndex, filtered);
+            filtered.bindRankData(data);
             data.begin(ReadWrite.WRITE);
             try {
                 data.add(CONTROL, PRODUCT, iri(RV + "dataEpoch"), literal("epoch"));
@@ -66,16 +68,16 @@ public class g556QualificationTest {
                     Node main = iri("https://rezics.com/id/00000000-0000-4000-8000-" + String.format("%012d", n));
                     Node selection = iri("urn:rezics:selection:g556:" + n);
                     data.add(PUBLIC, unit, RDF.type.asNode(), MATCH);
-                    data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + n, "en"));
                     // Jena stores different mapped fields as separate docs
                     // sharing the unit ID. Cursor resolution must bind its query.
-                    data.add(PUBLIC, unit, iri(RV + "publicSearchTitle"), NodeFactory.createLiteralLang("catalogue heading", "en"));
                     data.add(PUBLIC, unit, iri(RV + "mainVersion"), main);
                     data.add(PUBLIC, unit, iri(RV + "context"), main);
                     data.add(PUBLIC, unit, iri(RV + "selection"), selection);
                     data.add(PUBLIC, unit, iri(RV + "language"), literal("en"));
                     data.add(PUBLIC, unit, iri(RV + "disclosure"), iri(RV + "Public"));
                     data.add(iri(CommandPolicy.CURRENT), main, iri(RV + "selectionHead"), selection);
+                    data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + n, "en"));
+                    data.add(PUBLIC, unit, iri(RV + "publicTitle"), NodeFactory.createLiteralLang("catalogue heading", "en"));
                 }
                 data.commit();
             } finally { data.end(); }
@@ -96,7 +98,7 @@ public class g556QualificationTest {
                 assertEquals("20005", proof.get("qualifiedPopulation"));
                 assertEquals(GENERATION, proof.get("generation"));
             }
-            FilteredGraphTextIndex ranked = new FilteredGraphTextIndex(fixture.index);
+            FilteredGraphTextIndex ranked = fixture.filtered;
             FilteredGraphTextIndex.RankAfter after = null;
             java.util.List<String> traversed = new java.util.ArrayList<>();
             for (int pageNumber = 0; pageNumber < 10; pageNumber++) {
@@ -304,9 +306,8 @@ public class g556QualificationTest {
                     Node work = iri("https://rezics.com/id/00000000-0000-4000-8000-" + String.format("%012d", 1000 + number));
                     Node unit = iri("urn:rezics:match:g556:realm:" + number);
                     Node selection = iri("urn:rezics:selection:g556:realm:" + number);
-                    Node slot = iri("urn:rezics:slot:g556:realm:" + number);
+                    Node slot = CanonicalPolicy.realmOwner(realmNode, main);
                     fixture.data.add(PUBLIC, unit, RDF.type.asNode(), MATCH);
-                    fixture.data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + number, "en"));
                     fixture.data.add(PUBLIC, unit, iri(RV + "mainVersion"), main);
                     fixture.data.add(PUBLIC, unit, iri(RV + "work"), work);
                     fixture.data.add(PUBLIC, unit, iri(RV + "context"), iri(realm));
@@ -319,13 +320,16 @@ public class g556QualificationTest {
                     fixture.data.add(current, slot, iri(RV + "mainVersion"), main);
                     fixture.data.add(current, slot, iri(RV + "work"), work);
                     fixture.data.add(iri(CommandPolicy.REVISIONS), selection, iri(RV + "slot"), slot);
+                    fixture.data.add(iri(CommandPolicy.REVISIONS), selection, iri(RV + "context"), realmNode);
+                    fixture.data.add(iri(CommandPolicy.REVISIONS), selection, iri(RV + "mainVersion"), main);
+                    fixture.data.add(PUBLIC, unit, BODY, NodeFactory.createLiteralLang("common catalogue phrase " + number, "en"));
                 }
                 fixture.data.commit();
             } finally { fixture.data.end(); }
             assertTrue(SearchDeltaJournal.qualify(fixture.data));
             fixture.data.begin(ReadWrite.READ);
             try {
-                FilteredGraphTextIndex ranked = new FilteredGraphTextIndex(fixture.index);
+                FilteredGraphTextIndex ranked = fixture.filtered;
                 FilteredGraphTextIndex.RankAfter after = null;
                 java.util.List<String> traversed = new java.util.ArrayList<>();
                 for (int number = 0; number < 25; number++) {
@@ -367,7 +371,7 @@ public class g556QualificationTest {
                 fixture.data.commit();
             } finally { fixture.data.end(); }
             assertEquals(true, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 2).get("available"));
-            FilteredGraphTextIndex ranked = new FilteredGraphTextIndex(fixture.index);
+            FilteredGraphTextIndex ranked = fixture.filtered;
             fixture.data.begin(ReadWrite.READ);
             try {
                 var page = ranked.ranked(BODY, "common catalogue phrase", 20, null, fixture.data,

@@ -54,7 +54,7 @@ public class RealmSearchSeekTest {
             return new Owner(work,main,unit,selection,contribution,decision,draft,slot);
         }
         void committed(){data.commit();data.end();}
-        @Override public void close(){if(data.isInTransaction()){data.abort();data.end();}data.close();}
+        @Override public void close(){SearchDeltaJournal.stopRecovery(data);if(data.isInTransaction()){data.abort();data.end();}data.close();}
     }
     private static final class Measured extends DatasetGraphWrapper {
         long rows;
@@ -291,6 +291,82 @@ public class RealmSearchSeekTest {
                     +" observedCollectionEvents="+collections+" scoreCalls="+count(work,"rank_lucene_score_calls")
                     +" iteratorNextCalls="+count(work,"rank_lucene_iterator_next_calls")+" iteratorAdvanceCalls="+count(work,"rank_lucene_iterator_advance_calls"));
             }finally{fixture.data.end();}
+        }
+    }
+
+    private static void control(Fixture fixture){
+        Node control=NodeFactory.createURI(CommandPolicy.CONTROL),product=NodeFactory.createURI("urn:rezics:dataset:product");
+        fixture.data.add(control,product,p("dataEpoch"),NodeFactory.createLiteralString("epoch"));fixture.data.add(control,product,p("routingEpoch"),NodeFactory.createLiteralString("route"));
+        fixture.data.add(control,product,p("sequence"),NodeFactory.createLiteralByValue(java.math.BigInteger.ZERO,org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        fixture.data.add(control,product,p("textIndexGeneration"),NodeFactory.createURI("urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111"));
+        fixture.data.add(PUBLIC,NodeFactory.createURI(CommandPolicy.PUBLIC_ANCHOR),RDF.type.asNode(),p("SearchGraphAnchor"));SearchDeltaJournal.initialize(fixture.data);
+    }
+    private static void copySlot(DatasetGraph data,Node source,Node target){
+        var rows=data.find(CURRENT,source,Node.ANY,Node.ANY);var facts=new ArrayList<Quad>();
+        try{rows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(rows);}
+        for(var fact:facts)data.add(CURRENT,target,fact.getPredicate(),fact.getObject());
+    }
+    @Test public void twoSlotsForOneRealmMainCannotDisagreeBetweenBodiesNamesAndIndexReadiness()throws Exception{
+        try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,true,true,BODY,null);Node alternate=id(19000),selection=id(19001),unit=id(19002);control(fixture);
+            copySlot(fixture.data,owner.slot(),alternate);set(fixture.data,CURRENT,alternate,"selectionHead",selection);
+            var rows=fixture.data.find(REVISIONS,owner.selection(),Node.ANY,Node.ANY);var facts=new ArrayList<Quad>();
+            try{rows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(rows);}
+            for(var fact:facts)fixture.data.add(REVISIONS,selection,fact.getPredicate(),fact.getObject());
+            set(fixture.data,REVISIONS,selection,"slot",alternate);set(fixture.data,REVISIONS,selection,"component",alternate);
+            copyUnit(fixture,owner,unit,selection,"Alternate owner unrelated words");fixture.committed();
+            fixture.data.begin(ReadWrite.READ);
+            try{
+                var profiles=ProfileRegistry.load(java.nio.file.Path.of("profiles"));
+                assertNull(CanonicalPolicy.validate(profiles,fixture.data,owner.slot().getURI(),false));
+                var slotFailure=CanonicalPolicy.validate(profiles,fixture.data,alternate.getURI(),false);assertNotNull(slotFailure);assertTrue(slotFailure.toString().contains("noncanonical Realm"));
+                var selectionFailure=CanonicalPolicy.validate(profiles,fixture.data,selection.getURI(),true);assertNotNull(selectionFailure);assertTrue(selectionFailure.toString().contains("noncanonical Realm"));
+                assertEquals(CanonicalPolicy.realmOwner(REALM,owner.main()),owner.slot());
+                // The competing body is outside the first phrase. It may not
+                // become another owner when its own phrase is searched.
+                assertThrows(TextIndexException.class,()->fixture.index.ranked(p("searchBody"),"Alternate owner unrelated words",64,null,new Measured(fixture.data),new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,true)));
+            }finally{fixture.data.end();}
+            assertFalse(SearchDeltaJournal.qualify(fixture.data));SearchDeltaJournal.stopRecovery(fixture.data);
+            assertThrows(IllegalStateException.class,()->SearchDeltaJournal.auditPopulation(fixture.data,fixture.index.lucene()));
+            // Canonical-only primitives agree, but actual serving is fenced by
+            // the failed generation proof until the alternate owner is removed.
+            assertEquals(owner.unit().getURI(),scan(fixture,BODY,REALM.getURI(),64).hits().getFirst().id());
+            assertEquals(owner.unit().getURI(),scan(fixture,ALIAS,REALM.getURI(),64).hits().getFirst().unit());
+            fixture.data.begin(ReadWrite.WRITE);fixture.data.deleteAny(CURRENT,alternate,Node.ANY,Node.ANY);fixture.data.deleteAny(REVISIONS,selection,Node.ANY,Node.ANY);fixture.data.deleteAny(PUBLIC,unit,Node.ANY,Node.ANY);fixture.committed();
+            assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            assertEquals(1,scan(fixture,BODY,REALM.getURI(),64).hits().size());assertEquals(1,scan(fixture,ALIAS,REALM.getURI(),64).hits().size());
+        }
+    }
+    @Test public void emptyIndexLegacyAndRawOwnerMaintenanceCannotQualifyAlternateSlots()throws Exception{
+        try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,true,false,BODY,null);control(fixture);fixture.committed();assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            Node alternate=id(19000);fixture.data.begin(ReadWrite.WRITE);
+            var capture=new SearchDeltaJournal.Capture(fixture.data);copySlot(capture.observed(),owner.slot(),alternate);
+            assertThrows(IllegalStateException.class,()->SearchDeltaJournal.append(capture.observed(),capture,1));fixture.data.abort();fixture.data.end();
+            assertTrue(SearchDeltaJournal.qualify(fixture.data));
+            fixture.data.begin(ReadWrite.WRITE);copySlot(fixture.data,owner.slot(),alternate);fixture.committed();
+            // No public unit points to this raw slot; readiness must still see it.
+            assertFalse(SearchDeltaJournal.qualify(fixture.data));SearchDeltaJournal.stopRecovery(fixture.data);
+            assertThrows(IllegalStateException.class,()->SearchDeltaJournal.auditPopulation(fixture.data,fixture.index.lucene()));
+        }
+        try(var fixture=new Fixture()){
+            control(fixture);Node alternate=id(19000);
+            for(var entry:Map.of("realm",REALM,"mainVersion",id(19001),"work",id(19002),"selectionHead",id(19003)).entrySet())fixture.data.add(CURRENT,alternate,p(entry.getKey()),entry.getValue());
+            fixture.data.add(CURRENT,alternate,RDF.type.asNode(),p("RealmPublicationSlot"));fixture.committed();
+            assertFalse(SearchDeltaJournal.qualify(fixture.data));SearchDeltaJournal.stopRecovery(fixture.data);
+        }
+    }
+    @Test public void canonicalOwnerProofPreservesImmutableHistoryAndRejectsMismatchedComponents()throws Exception{
+        try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,true,false,BODY,null);control(fixture);
+            fixture.data.add(REVISIONS,owner.selection(),p("component"),owner.slot());
+            set(fixture.data,CURRENT,owner.slot(),"selectionHead",id(19000));fixture.committed();
+            fixture.data.begin(ReadWrite.READ);
+            try{assertNull(CanonicalPolicy.realmSelectionOwnerFailure(fixture.data,owner.selection()));}finally{fixture.data.end();}
+            assertTrue(SearchDeltaJournal.qualify(fixture.data)); // stale body is still a fenced physical copy.
+            assertTrue(scan(fixture,BODY,REALM.getURI(),64).hits().isEmpty());
+            fixture.data.begin(ReadWrite.WRITE);set(fixture.data,REVISIONS,owner.selection(),"component",id(19001));fixture.committed();
+            assertFalse(SearchDeltaJournal.qualify(fixture.data));SearchDeltaJournal.stopRecovery(fixture.data);
         }
     }
 

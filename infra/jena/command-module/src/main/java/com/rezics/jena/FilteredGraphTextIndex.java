@@ -130,6 +130,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     static boolean rankMetadataMatches(org.apache.jena.sparql.core.DatasetGraph data, String id, Document doc) {
         var metadata = rankMetadata(data, id);
+        if (!CanonicalPolicy.realmUnitOwnerValid(data, uri(id))) return false;
         return metadata == null ? doc.get(RANK_CONTEXT) == null && doc.get(RANK_GROUP) == null
             : metadata.context().equals(doc.get(RANK_CONTEXT)) && metadata.group().equals(doc.get(RANK_GROUP));
     }
@@ -716,9 +717,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
         } else {
             // A Zone population contains actual adoptions, not Realm fallbacks.
             if (!context.equals(uri(scope.realm()))) return null;
-            // Realm selections carry their exact immutable slot owner. Probe
-            // that owner directly rather than walking reverse head references.
-            Node slot = namedValue(data, uri(CommandPolicy.REVISIONS), selection, "slot");
+            // Bodies and names use one canonical Realm/Main owner. An
+            // immutable alternate slot must never create a second adoption.
+            Node slot = CanonicalPolicy.realmOwner(uri(scope.realm()), main);
+            if (CanonicalPolicy.realmSelectionOwnerFailure(data, selection) != null
+                || !slot.equals(namedValue(data, uri(CommandPolicy.REVISIONS), selection, "slot")))
+                throw new TextIndexException("ranked Realm selection has a noncanonical owner");
             if (!PublicNameProjection.publicRealm(data, uri(scope.realm()))
                 || slot == null || !slot.isURI()
                 || !data.contains(current, slot, org.apache.jena.vocabulary.RDF.type.asNode(), property("RealmPublicationSlot"))
@@ -726,19 +730,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 || !data.contains(current, slot, property("mainVersion"), main)
                 || !java.util.Objects.equals(namedValue(data, current, slot, "work"), namedValue(data, PUBLIC_GRAPH, uri(id), "work"))
                 || !data.contains(current, slot, property("selectionHead"), selection)) return null;
+            if (CanonicalPolicy.realmSlotOwnerFailure(data, slot) != null)
+                throw new TextIndexException("ranked Realm selection owner is invalid");
             Node head = namedValue(data, current, slot, "selectionHead");
             if (head == null) throw new TextIndexException("ranked current Realm selection owner is ambiguous");
         }
         Node unit = proof.selectedUnit(data, selection);
         if (unit == null || !unit.isURI() || !unit.getURI().equals(id)) return null;
         return facts.key();
-    }
-    private static Node realmOwner(String realm, Node main) {
-        try {
-            String key = realm + "\0" + main.getURI();
-            return uri("urn:rezics:realm-selection:" + java.util.HexFormat.of().formatHex(
-                java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
-        } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
     }
     private static Node namedValue(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate) {
         var rows = data.find(graph, subject, uri(RV + predicate), Node.ANY);
@@ -764,7 +763,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!PublicNameProjection.productResource(main)) return null;
         Node context = scope.realm() == null ? main : uri(scope.realm());
         if (scope.realm() != null && !PublicNameProjection.publicRealm(data, context)) return null;
-        Node owner = scope.realm() == null ? main : realmOwner(scope.realm(), main);
+        Node owner = scope.realm() == null ? main : CanonicalPolicy.realmOwner(uri(scope.realm()), main);
         if (scope.realm() != null && !work.equals(namedValue(data, CURRENT_GRAPH, owner, "work"))) return null;
         // HeadCasPolicy admits <=64 distinct Main languages, and a Realm slot
         // has one head. Read that entire owner neighbourhood, checking overflow
