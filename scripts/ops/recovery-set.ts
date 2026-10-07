@@ -177,6 +177,13 @@ export class RecoveryBudget {
     this.phases.memoryAdmission = this.admissionWaitMs;
   };
   elapsed(): number { return this.now() - this.started - this.admissionWaitMs; }
+  timing(): { elapsedMs: number; admissionWaitMs: number; budgetMs: number } {
+    return {
+      elapsedMs: this.elapsed(),
+      admissionWaitMs: this.admissionWaitMs,
+      budgetMs: RECOVERY_BUDGET_MS,
+    };
+  }
   remaining(): number {
     const remaining = RECOVERY_BUDGET_MS - this.elapsed();
     if (remaining <= 0)

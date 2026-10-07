@@ -334,6 +334,7 @@ test('G-955: retained small backups are reused and absent/incompatible backups a
     profile: 'small',
     built: true,
     elapsedMs: 150_000,
+    admissionWaitMs: 0,
     deadlineMs: 600_000,
   });
   expect(builds).toBe(1);

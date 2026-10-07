@@ -4,6 +4,11 @@ import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { execFileSync } from 'node:child_process';
 import { withQaMemory } from '../../../scripts/qa/core.ts';
+import { FixtureWorkBudget } from '../../../scripts/fixture/budget.ts';
+import { startRestoredFixture } from '../../../scripts/fixture/restore.ts';
+import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
+import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
+import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
 import { GiB, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
   type MemoryReading } from '../../../scripts/qa/memory-admission.ts';
@@ -40,6 +45,34 @@ test('admission inherits the run deadline without capping it to the fallback dur
 
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
+
+for (const activeMs of [240_000, 400_000]) {
+test(`a restore reports five minutes of admission separately and qualifies ${activeMs} ms of active work`, async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-restore-timing-'));
+  let now = 0;
+  const budget = new FixtureWorkBudget(600_000, () => now);
+  try {
+    await startRestoredFixture(budget, { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '1000000' },
+      timeout => { expect(timeout).toBe(180_000); now += 120_000; }, {
+        lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 60_000,
+        sleep: async ms => { now += ms; }, announce: () => {},
+        read: async () => ({ ...plenty, vmUsed: now < 300_000 ? plenty.vmTotal : 0 }),
+      });
+    now += activeMs - 120_000;
+    const restore: FixtureRestoreEvidence = { fixture: PHASE_D_FIXTURE, target: 'fixture-clocked',
+      profile: 'medium', works: 100_000, startedAt: new Date(0).toISOString(), deadlineMs: 600_000,
+      phases: {}, artifacts: dir, completedAt: new Date(now).toISOString(), ...budget.timing() };
+    expect(restore).toMatchObject({ elapsedMs: activeMs, admissionWaitMs: 300_000 });
+    const manifest = { entities: { works: 100_000, publicUnits: 10_000 } } as FixtureManifest;
+    expect(() => assertPhaseDRestore(restore, manifest, restore.target)).not.toThrow();
+    now += 600_001 - activeMs;
+    expect(() => assertPhaseDRestore({ ...restore, ...budget.timing() }, manifest, restore.target))
+      .toThrow('not a qualified');
+    expect(() => budget.remaining()).toThrow('600 seconds');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+}
+
 async function untilFile(path: string): Promise<void> {
   const deadline = Date.now() + 3_000;
   while (!existsSync(path) && Date.now() < deadline) await Bun.sleep(5);

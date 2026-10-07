@@ -2,12 +2,14 @@ import { buildFixture } from './build.ts';
 import { DEFAULT_SEED, type FixtureProfile } from './corpus.ts';
 import { type FixtureManifest } from './manifest.ts';
 import { compatibleFixture, RESTORE_DEADLINE_MS } from './restore.ts';
+import { FixtureWorkBudget } from './budget.ts';
 
 export interface FixturePreparation {
   fixture: string;
   profile: FixtureProfile;
   built: boolean;
   elapsedMs: number;
+  admissionWaitMs: number;
   deadlineMs: number;
 }
 
@@ -22,21 +24,18 @@ export async function prepareFixture(
     now: Date.now,
   },
 ): Promise<FixturePreparation> {
-  const started = dependencies.now();
-  let admissionWaitMs = 0;
+  const budget = new FixtureWorkBudget(RESTORE_DEADLINE_MS, dependencies.now);
   const retained = dependencies.retained(profile, seed);
-  const remaining = RESTORE_DEADLINE_MS - (dependencies.now() - started);
-  if (remaining <= 0) throw new Error('Fixture preparation exceeded 600 seconds');
+  const remaining = budget.remaining();
   const manifest: FixtureManifest =
     retained ?? (await dependencies.build(profile, seed, remaining,
-      ms => { admissionWaitMs += ms; }));
-  const elapsedMs = dependencies.now() - started;
-  if (elapsedMs - admissionWaitMs > RESTORE_DEADLINE_MS) throw new Error('Fixture preparation exceeded 600 seconds');
+      budget.excludeAdmissionWait));
+  if (budget.elapsed() > RESTORE_DEADLINE_MS) throw new Error('Fixture preparation exceeded 600 seconds');
   return {
     fixture: manifest.id,
     profile,
     built: !retained,
-    elapsedMs,
+    ...budget.timing(),
     deadlineMs: RESTORE_DEADLINE_MS,
   };
 }

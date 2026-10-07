@@ -204,7 +204,8 @@ async function buildLocked(
     const bytes = await phase('measure', async () => volumeBytes(volumes, docker));
     const manifest: FixtureManifest = { ...core, id, digest,
       build: { startedAt: new Date(started).toISOString(), completedAt: new Date().toISOString(),
-        elapsedMs: Date.now() - started, phases, textIndexGeneration: index.generation, loads },
+        elapsedMs: Date.now() - started - budget.admissionWaitMs(),
+        admissionWaitMs: budget.admissionWaitMs(), phases, textIndexGeneration: index.generation, loads },
       backup: { project, volumes: bytes } };
     writeFileSync(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     writeFileSync(join(evidence, 'build.json'), `${JSON.stringify(manifest, null, 2)}\n`);

@@ -88,6 +88,7 @@ export interface RestoreEvidence {
   state: 'held' | 'verified';
   phases: Record<string, number>;
   elapsedMs: number;
+  admissionWaitMs: number;
   budgetMs: number;
   failure?: string;
 }
@@ -108,6 +109,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
     state: 'held',
     phases: budget.phases,
     elapsedMs: 0,
+    admissionWaitMs: 0,
     budgetMs: 600_000,
   };
   let context: ReturnType<typeof stackContext> | undefined;
@@ -432,7 +434,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
   } finally {
     await Promise.allSettled(Object.values(pools ?? {}).map((pool) => pool.end()));
     rmSync(staging, { recursive: true, force: true });
-    evidence.elapsedMs = Date.now() - budget.started;
+    Object.assign(evidence, budget.timing());
     if (created)
       writeFileSync(
         join(targetDirectory, 'recovery-evidence.json'),

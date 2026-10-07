@@ -10,6 +10,9 @@ export class FixtureWorkBudget {
   readonly excludeAdmissionWait = (ms: number): void => { this.waitingMs += ms; };
   elapsed(): number { return this.now() - this.started - this.waitingMs; }
   admissionWaitMs(): number { return this.waitingMs; }
+  timing(): { elapsedMs: number; admissionWaitMs: number } {
+    return { elapsedMs: this.elapsed(), admissionWaitMs: this.waitingMs };
+  }
   remaining(): number {
     const remaining = this.duration - this.elapsed();
     if (remaining <= 0) throw new Error('Fixture preparation exceeded 600 seconds');

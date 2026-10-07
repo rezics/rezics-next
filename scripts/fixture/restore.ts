@@ -55,6 +55,7 @@ export interface FixtureRestoreEvidence {
   deadlineMs: number; compatibility?: RestoreCompatibility; phases: Record<string, number>;
   copyMs?: Record<string, number>;
   appliedMigrations?: string[]; ready?: string[]; samples?: number; graph?: { generation: string; sequence: string };
+  /** Active restore work; admission queueing is reported separately. */
   elapsedMs?: number; admissionWaitMs?: number;
   completedAt?: string; failure?: string; artifacts: string;
 }
@@ -168,8 +169,7 @@ export async function restoreFixture(id: string, target: string,
   } finally {
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]);
   }
-  evidence.elapsedMs = Date.now() - started;
-  evidence.admissionWaitMs = budget.admissionWaitMs();
+  Object.assign(evidence, budget.timing());
   evidence.completedAt = new Date().toISOString();
   if (evidence.failure && created) {
     // A failed restore leaves no half-built writable copy behind; its logs stay as evidence.

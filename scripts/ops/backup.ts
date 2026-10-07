@@ -526,8 +526,7 @@ export async function backupRecoverySet(
     writePrivate(join(out, 'backup-evidence.json'), {
       id,
       phases: budget.phases,
-      elapsedMs: Date.now() - budget.started,
-      budgetMs: 600_000,
+      ...budget.timing(),
     });
     return { index, phases: budget.phases };
   } finally {

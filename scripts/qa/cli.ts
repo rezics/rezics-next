@@ -468,7 +468,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
           reason: 'Small-fixture preparation failed before the tier ran',
         }).xml,
       );
-      tiers.push({ name: tier, status: 'failed', elapsedMs: prepared.elapsedMs });
+      tiers.push({ name: tier, status: 'failed', elapsedMs: prepared.activeElapsedMs });
       return;
     }
     const report = JSON.parse(readFileSync(preparationFile, 'utf8')) as {
@@ -477,7 +477,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     };
     faultFixtureEnvironment.REZICS_FIXTURE_ROOT = fixtureRoot;
     faultFixtureEnvironment.G727_LAUNCH_FIXTURE = report.fixture;
-    faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.elapsedMs);
+    faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.activeElapsedMs);
   }
   const maximum = maximumShards(process.env, tier);
   const wanted =

@@ -71,6 +71,7 @@ export interface FixtureManifest extends FixtureManifestCore {
     startedAt: string;
     completedAt: string;
     elapsedMs: number;
+    admissionWaitMs?: number;
     phases: Record<string, number>;
     textIndexGeneration: string;
     loads: Record<string, unknown>;

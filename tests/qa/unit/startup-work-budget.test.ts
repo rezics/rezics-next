@@ -72,7 +72,8 @@ test('fixture preparation wrapper excludes builder admission while still rejecti
       at += 300_000;
       return manifest;
     } };
-  expect((await prepareFixture('small', undefined, dependencies)).elapsedMs).toBe(1_100_000);
+  expect(await prepareFixture('small', undefined, dependencies)).toMatchObject({
+    elapsedMs: 300_000, admissionWaitMs: 800_000 });
   await expect(prepareFixture('small', undefined, { ...dependencies,
     build: async (_profile: string, _seed?: string, _budgetMs?: number,
       onAdmissionWait?: (ms: number) => void) => {
