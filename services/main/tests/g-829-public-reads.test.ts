@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../src/app.ts';
-import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { canReadCompositionWork } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkWholes } from '../src/modules/composition/read.ts';
@@ -10,6 +10,7 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const value = (value: string) => ({ type: 'literal', value });
+const uri = (value: string) => ({ type: 'uri', value });
 
 test('G-829: Work composition reads share public disclosure, preserve private grants and hide absent/protected Works', async () => {
   const work = id();
@@ -40,23 +41,71 @@ test('G-829: Work composition reads share public disclosure, preserve private gr
 
 test('G-829: wholes scan beyond a hidden batch and never expose trailing private occurrences or a cursor', async () => {
   const resource = id(), visible = id();
-  const rows = Array.from({ length: 104 }, (_, index) => ({ whole: value(index === 102 ? visible : id()),
-    main: value(id()), structure: value(id()), occurrence: value(id()), segment: value('01'), order: value('01') }));
-  const session = new WorkReadSession({} as MainWorkDependencies, new Request('http://main.local/v1/works'), {},
-    { dataEpoch: 'one', sequence: '1' });
-  let scans = 0;
-  session.query = async query => {
-    if (query.includes('SELECT ?main ?public')) return [{ main: value(id()),
-      public: value(query.includes(`<${resource}>`) || query.includes(`<${visible}>`) ? 'true' : 'false') }];
-    return scans++ === 0 ? rows.slice(0, 101) : rows.slice(101);
+  const rows = Array.from({ length: 104 }, (_, index) => ({ whole: uri(index === 102 ? visible : id()),
+    main: uri(id()), structure: uri(id()), occurrence: uri(id()), segment: value('01'), order: value('01') }));
+  const revisions = new Map(rows.map(row => [row.whole.value, id()]));
+  const graph = new FusekiClient('http://graph.invalid');
+  const summaryBatches: string[][] = [], exactBatches: string[][] = [], hydrated: string[][] = [];
+  let scans = 0, scalarProbes = 0, privateGrantProbes = 0;
+  graph.query = async query => {
+    let bindings: NonNullable<SparqlResult['results']>['bindings'];
+    if (query.includes('SELECT ?main ?public')) {
+      scalarProbes++;
+      // Only the contained Work uses the scalar header proof. Candidate Works
+      // must pass the actual summary and exact-head resolver below.
+      expect(query).toContain(`<${resource}>`);
+      bindings = [{ main: uri(id()), public: value('true') }];
+    } else if (query.includes('SELECT ?whole ?main ?structure')) {
+      expect(query).toContain('LIMIT 101');
+      if (scans === 1) expect(query).toContain(`FILTER(?key > "${rows[100]!.whole.value}|${rows[100]!.occurrence.value}")`);
+      bindings = scans++ === 0 ? rows.slice(0, 101) : rows.slice(101);
+    } else {
+      const resources = [...new Set([...query.matchAll(/VALUES \?r \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(match => match[1]!)))];
+      expect(resources.length).toBeGreaterThan(0);
+      expect(resources.length).toBeLessThanOrEqual(64);
+      if (query.includes('SELECT ?epoch ?sequence ?hold')) {
+        summaryBatches.push(resources);
+        bindings = resources.map(work => ({ epoch: value('one'), sequence: value('1'), r: uri(work),
+          type: value('work'), work: uri(work), head: uri(revisions.get(work)!),
+          public: value(String(work === visible)), erased: value('false'),
+          label: { ...value(work === visible ? 'Visible whole' : 'Private whole'), 'xml:lang': 'en' } }));
+      } else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
+        exactBatches.push(resources);
+        expect(resources).toEqual([visible]);
+        bindings = ['https://schema.org/CreativeWork', 'https://schema.org/Book'].map(type => ({
+          epoch: value('one'), sequence: value('1'), r: uri(visible),
+          revision: uri(revisions.get(visible)!), type: uri(type) }));
+      } else throw new Error(`Unexpected wholes disclosure query: ${query}`);
+    }
+    return { results: { bindings } };
   };
+  const deps = { environment: { fuseki: graph, objectDirectory: '.temp/public-reads',
+    lineage: { dataEpoch: 'one', routingEpoch: 'one' } },
+    access: { canReadWork: async () => {
+      privateGrantProbes++;
+      throw new Error('Anonymous candidates cannot obtain a private grant');
+    } }, media: { store: { avatarRows: async (resources: readonly string[]) => {
+      hydrated.push([...resources]);
+      return { rows: new Map(), generation: { dataEpoch: 'media', sequence: '1' } };
+    } } },
+  } as unknown as MainWorkDependencies;
+  const session = new WorkReadSession(deps, new Request('http://main.local/v1/works'), {},
+    { dataEpoch: 'one', sequence: '1' });
   const page = await readWorkWholes(session, resource, { limit: 1 });
   expect(scans).toBe(2);
+  expect(scalarProbes).toBe(1);
+  expect(privateGrantProbes).toBe(0);
+  expect(summaryBatches.map(batch => batch.length)).toEqual([64, 37, 3]);
+  expect(summaryBatches.flat()).toEqual(rows.map(row => row.whole.value));
+  expect(exactBatches).toEqual([[visible]]);
+  expect(hydrated).toEqual([[visible]]);
   expect(page.wholes.map(item => item.work)).toEqual([visible]);
   expect(page.next).toBeNull();
   expect(page).not.toHaveProperty('count');
   for (const row of rows.filter(row => row.whole.value !== visible)) {
     expect(JSON.stringify(page)).not.toContain(row.occurrence.value);
+    expect(JSON.stringify(page)).not.toContain(row.whole.value);
   }
 });
 
