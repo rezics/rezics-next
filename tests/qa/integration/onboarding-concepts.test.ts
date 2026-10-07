@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
-import { shareClassifiedConcepts, type ClassifiedConcept, type ConceptContext } from './work-classification.ts';
+import { discloseConcept, shareClassifiedConcepts, type ClassifiedConcept, type ConceptContext }
+  from './work-classification.ts';
 
 interface Defined { scheme: string; schemeHead: string; concept: string; sense: string; definitionRevision: string }
 interface Choices { languages: string[]; groups: { type: string; concepts: { id: string; name: { value: string };
@@ -59,6 +61,9 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
       { id: fiction.scheme, expectedHead: fiction.schemeHead });
     const cooking = await define(label('Onboarding cooking', '入门烹饪'), [],
       { id: fantasy.scheme, expectedHead: fantasy.schemeHead });
+    for (const term of [fiction, fantasy, cooking]) {
+      await discloseConcept(stack.accessPool, author.principal, author.actor, term.concept);
+    }
     const [novel, epic, stew] = [await stack.publicWork(author.actor, ['zh-Hans'], '入门小说作品'),
       await stack.publicWork(author.actor, ['en'], 'Onboarding epic'),
       await stack.publicWork(author.actor, ['en'], 'Onboarding stew')];
@@ -112,6 +117,129 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
     // Without choices every suggestion is popular.
     const popular = await json<Suggestions>(await call('GET', '/v1/onboarding/suggested-follows'));
     expect(popular.items.every(item => item.reason.kind === 'popular')).toBe(true);
+
+    // Global acceptance alone never discloses a classification. The same public
+    // Work and Realm make each hidden association an otherwise eligible match.
+    const unknown = await define(label('Onboarding unknown hint', '入门未知提示'), [],
+      { id: cooking.scheme, expectedHead: cooking.schemeHead });
+    const major = await define(label('Onboarding major spoiler', '入门重大剧透'), [],
+      { id: unknown.scheme, expectedHead: unknown.schemeHead });
+    const privateMeaning = await define(label('Onboarding private meaning', '入门私密语义'), [],
+      { id: major.scheme, expectedHead: major.schemeHead });
+    const publicInterpretation = await shareClassifiedConcepts(send, json, author.actor, [unknown, major, fiction]);
+    for (const term of [unknown, major, fiction]) {
+      await acceptTopic(send, json, author.actor, novel, term, publicInterpretation, true);
+    }
+    await new AccessJudgments(stack.accessPool).declareHint(author.principal, {
+      concept: major.concept, context: { kind: 'global' }, hint: 'major', expectedGeneration: '0',
+      actingSubject: author.actor, idempotencyKey: randomUUID(),
+      requestDigest: hash(JSON.stringify([major.concept, { kind: 'global' }, 'major'])),
+    });
+    await discloseConcept(stack.accessPool, author.principal, author.actor, privateMeaning.concept);
+    const privateInterpretation = await json<ConceptContext>(await send('POST', '/v1/contexts', {
+      profile: 'context-v1', role: 'shared', disclosure: 'private', base: null,
+      entries: [{ target: privateMeaning.concept, relation: CLASSIFIED_AS, state: 'defined',
+        definition: privateMeaning.definitionRevision, applicability: [] }], actingSubject: author.actor,
+    }), 201);
+    await author.grant(`context:read:${privateInterpretation.context}`, 'context.read');
+    await acceptTopic(send, json, author.actor, novel, privateMeaning, privateInterpretation, true);
+
+    const guardedChoices = await json<Choices>(await call('GET', '/v1/onboarding/choices'));
+    for (const term of [unknown, major, privateMeaning]) {
+      expect(guardedChoices.groups.some(group => group.concepts.some(concept => concept.id === term.concept)))
+        .toBe(false);
+      const guarded = await json<Suggestions>(await call('GET',
+        `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(term.concept)}`));
+      expect(guarded.items.find(item => item.realm === realm.realm)?.reason.kind).toBe('popular');
+      expect(guarded.items.some(item => item.reason.concept?.id === term.concept)).toBe(false);
+    }
+
+    // An accepted, explicitly non-spoiler Concept is eligible until its
+    // protection head withholds it; that also hides it as a broader choice.
+    const visibleFiction = guardedChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === fiction.concept)!;
+    expect(visibleFiction.samples.map(sample => sample.id)).toEqual([novel.work]);
+    expect(guardedChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === fantasy.concept)?.broader).toBe(fiction.concept);
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(fiction.concept)} rv:protectionHead ${iri(`https://rezics.com/id/${randomUUID()}`)} . }
+    }`);
+    const withheldChoices = await json<Choices>(await call('GET', '/v1/onboarding/choices'));
+    expect(withheldChoices.groups.some(group => group.concepts.some(concept => concept.id === fiction.concept)))
+      .toBe(false);
+    expect(withheldChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === fantasy.concept)?.broader).toBeNull();
+    const withheld = await json<Suggestions>(await call('GET',
+      `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(fiction.concept)}`));
+    expect(withheld.items.find(item => item.realm === realm.realm)?.reason.kind).toBe('popular');
+    expect(withheld.items.some(item => item.reason.concept?.id === fiction.concept)).toBe(false);
+
+    // Unaccepted proposals can fill a classification page. Keep the existing
+    // accepted topic, and find another accepted topic after that page too.
+    const proposals: Defined[] = [];
+    let scheme = { id: privateMeaning.scheme, expectedHead: privateMeaning.schemeHead };
+    for (let index = 0; index < 21; index++) {
+      const proposal = await define(label(`Onboarding proposal ${index}`, `入门提案 ${index}`), [], scheme);
+      proposals.push(proposal);
+      scheme = { id: proposal.scheme, expectedHead: proposal.schemeHead };
+    }
+    const rawStatement = (work: { mainVersion: string }, term: ClassifiedConcept) => `
+      ${iri(`https://rezics.com/id/${randomUUID()}`)} a rdf:Statement ;
+        rdf:subject ${iri(work.mainVersion)} ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ${iri(term.concept)} ;
+        rv:statementState rv:Active ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+        rv:interpretationDefinition ${iri(term.definitionRevision)} .`;
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${proposals.map(term => rawStatement(novel, term)).join('\n')} }
+    }`);
+    const afterProposals = await define(label('Onboarding beyond proposals', '入门提案之后'), [], scheme);
+    // Definitions use UUIDv7 identities, so this accepted Sense follows all
+    // twenty-one proposals in the classification read's STR(?sense) order.
+    expect(proposals.every(term => term.sense < afterProposals.sense)).toBe(true);
+    await discloseConcept(stack.accessPool, author.principal, author.actor, afterProposals.concept);
+    const afterInterpretation = await shareClassifiedConcepts(send, json, author.actor, [afterProposals]);
+    await acceptTopic(send, json, author.actor, novel, afterProposals, afterInterpretation, true);
+    const pagedChoices = await json<Choices>(await call('GET', '/v1/onboarding/choices'));
+    expect(pagedChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === fantasy.concept)?.samples.map(sample => sample.id).sort())
+      .toEqual([novel.work, epic.work].sort());
+    expect(pagedChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === afterProposals.concept)?.samples.map(sample => sample.id))
+      .toEqual([novel.work]);
+    for (const term of [fantasy, afterProposals]) {
+      const pagedSuggestions = await json<Suggestions>(await call('GET',
+        `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(term.concept)}`));
+      expect(pagedSuggestions.items).toContainEqual(expect.objectContaining({ realm: realm.realm,
+        reason: { kind: 'matching-concept', concept: { id: term.concept,
+          name: expect.objectContaining({ value: expect.any(String) }) } },
+        sampleWorks: [expect.objectContaining({ id: novel.work })] }));
+    }
+
+    // Four earlier raw proposals must not crowd a fifth accepted Work out of
+    // the Concept's samples. Sort identities in the candidate seek's STR order.
+    const refillTopic = await define(label('Onboarding refilled samples', '入门补充示例'), [],
+      { id: afterProposals.scheme, expectedHead: afterProposals.schemeHead });
+    await discloseConcept(stack.accessPool, author.principal, author.actor, refillTopic.concept);
+    const refillWorks = [];
+    for (let index = 0; index < 5; index++) {
+      refillWorks.push(await stack.publicWork(author.actor, ['en'], `Onboarding sample candidate ${index}`));
+    }
+    refillWorks.sort((left, right) => left.work < right.work ? -1 : left.work > right.work ? 1 : 0);
+    const acceptedSample = refillWorks[4]!;
+    expect(refillWorks.slice(0, 4).every(work => work.work < acceptedSample.work)).toBe(true);
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${refillWorks.map(work => `${iri(work.work)} a schema:Book .`).join('\n')}
+        ${refillWorks.slice(0, 4).map(work => rawStatement(work, refillTopic)).join('\n')}
+      }
+    }`);
+    const refillInterpretation = await shareClassifiedConcepts(send, json, author.actor, [refillTopic]);
+    await acceptTopic(send, json, author.actor, acceptedSample, refillTopic, refillInterpretation, true);
+    const refilledChoices = await json<Choices>(await call('GET', '/v1/onboarding/choices'));
+    expect(refilledChoices.groups.flatMap(group => group.concepts)
+      .find(concept => concept.id === refillTopic.concept)?.samples.map(sample => sample.id))
+      .toEqual([acceptedSample.work]);
 
     // Any BCP 47 language the reader reads is accepted; a malformed or repeated one is not, nor a foreign Concept ID.
     expect((await call('GET', '/v1/onboarding/suggested-follows?languages=yue&languages=pt-BR')).status).toBe(200);

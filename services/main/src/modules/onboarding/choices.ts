@@ -1,13 +1,12 @@
 import { choiceWorkTypeOptions } from '../types/registry.ts';
 import type { Static } from 'typebox';
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { VOCABULARY_PROFILE } from '../classification/vocabulary.ts';
-import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE } from '../statement/schema.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
+import { CLASSIFIED_AS } from '../statement/schema.ts';
+import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { CHOICES_COST, type choiceConcept, contentLanguages, type OnboardingChoices } from './contract.ts';
+import { readOnboardingClassifications } from './classifications.ts';
 
 /**
  * The type a Work is grouped under when it has several: the most specific
@@ -71,37 +70,52 @@ export async function readChoices(session: WorkReadSession): Promise<OnboardingC
     }
   }
   if (concepts.size) {
-    // Each Concept reads at most four accepted, public Works; their types come with them.
-    const branch = (concept: string) => `{ SELECT DISTINCT ?concept ?work WHERE {
+    // Discover bounded samples; the classification read owns acceptance and disclosure.
+    const branch = (concept: string, after: string | null) => `{ SELECT DISTINCT ?concept ?work ?main WHERE {
       BIND(${iri(concept)} AS ?concept)
       GRAPH ${iri(GRAPHS.current)} {
-        ?expression rv:assertedConcept ${iri(concept)} ; rv:expressionState rv:Active .
-        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression ; rv:head ?revision .
-        ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ${iri(concept)} ;
-          rv:statementState rv:Active ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
-          rv:interpretationDefinition ?revision ; rv:meaningKey ?key .
-        FILTER NOT EXISTS { ?statement rv:applicability ?applicability }
-        FILTER NOT EXISTS { ?statement rv:interpretationDefinition ?other FILTER(?other != ?revision) }
-        ?main rv:work ?work .
-        ?slot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key ;
-          rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:decisionHead ?decision . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:StatementDecision, rv:RevisionAnchor ;
-        rv:component ?slot ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
-        rv:outcome rv:Accepted ; rv:support ?statement . }
+        ?statement rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ${iri(concept)} . }
       ${publicWork('?work', '?main')}
-    } LIMIT ${CHOICES_COST.samplesPerConcept} }`;
-    const limit = concepts.size * CHOICES_COST.samplesPerConcept * CHOICES_COST.workTypes;
-    const rows = await session.query(`SELECT ?concept ?work ?type WHERE {
-      ${[...concepts.keys()].map(branch).join(' UNION ')}
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
-        VALUES ?type { ${choiceTypes.map(type => `<${type}>`).join(' ')} } }
-    }`, limit);
+      ${after ? `FILTER(STR(?work) > ${lit(after)})` : ''}
+    } ORDER BY STR(?work) LIMIT ${CHOICES_COST.samplesPerConcept + 1} }`;
+    const disclosed = new Map<string, Set<string>>();
     const types = new Map<string, string[]>();
-    for (const row of rows) {
-      const work = row.work?.value, concept = row.concept?.value;
-      if (!work || !concept || !concepts.has(concept)) throw new WorkReadUnavailable('Concept samples are ambiguous');
-      types.set(work, [...types.get(work) ?? [], ...row.type ? [row.type.value] : []]);
-      concepts.get(concept)!.works.set(work, null);
+    let pending = new Map([...concepts.keys()].map(concept => [concept, null as string | null]));
+    while (pending.size) {
+      const limit = pending.size * (CHOICES_COST.samplesPerConcept + 1) * CHOICES_COST.workTypes;
+      const rows = await session.query(`SELECT ?concept ?work ?main ?type WHERE {
+        ${[...pending].map(([concept, after]) => branch(concept, after)).join(' UNION ')}
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
+          VALUES ?type { ${choiceTypes.map(type => `<${type}>`).join(' ')} } }
+      }`, limit);
+      const candidates = new Map([...pending.keys()].map(concept => [concept, new Map<string, string>()]));
+      for (const row of rows) {
+        const work = row.work?.value, concept = row.concept?.value, main = row.main?.value;
+        const own = candidates.get(concept ?? '');
+        if (!work || !concept || !main || !own || own.has(work) && own.get(work) !== main) {
+          throw new WorkReadUnavailable('Concept samples are ambiguous');
+        }
+        own.set(work, main);
+        types.set(work, [...types.get(work) ?? [], ...row.type ? [row.type.value] : []]);
+      }
+      const pages = new Map([...candidates].map(([concept, works]) => [concept,
+        [...works].sort(([a], [b]) => a.localeCompare(b))]));
+      const targets = [...pages.values()].flatMap(page => page.slice(0, CHOICES_COST.samplesPerConcept)
+        .filter(([work]) => !disclosed.has(work)).map(([work, mainVersion]) => ({ work, mainVersion })));
+      for (const [work, visible] of await readOnboardingClassifications(session, targets)) disclosed.set(work, visible);
+      const next = new Map<string, string | null>();
+      for (const [concept, page] of pages) {
+        const entry = concepts.get(concept)!;
+        for (const [work] of page.slice(0, CHOICES_COST.samplesPerConcept)) {
+          if (disclosed.get(work)?.has(concept) && entry.works.size < CHOICES_COST.samplesPerConcept) {
+            entry.works.set(work, null);
+          }
+        }
+        if (entry.works.size < CHOICES_COST.samplesPerConcept && page.length > CHOICES_COST.samplesPerConcept) {
+          next.set(concept, page[CHOICES_COST.samplesPerConcept - 1]![0]);
+        }
+      }
+      pending = next;
     }
     for (const entry of concepts.values()) {
       for (const work of entry.works.keys()) entry.works.set(work, primaryType(types.get(work) ?? []));

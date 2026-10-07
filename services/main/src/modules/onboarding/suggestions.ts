@@ -1,9 +1,6 @@
 import type { Static } from 'typebox';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { inOrder } from '../feed/settled.ts';
-import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE } from '../statement/schema.ts';
 import { readRealmDirectory } from '../realm-directory/read.ts';
 import { readRealmWorks } from '../realm-reads/read-works.ts';
 import { digest } from '../recommendation/derived-generation.ts';
@@ -12,38 +9,33 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { listOfficialZones } from '../zone/publication.ts';
 import { SUGGESTION_COST, type suggestedFollow, type SuggestionReason } from './contract.ts';
+import { readOnboardingClassifications } from './classifications.ts';
 
 type Suggestion = Static<typeof suggestedFollow>;
 
 /**
  * The chosen Concepts each Work carries in the Global Context, directly or
  * through a narrower Concept one step below: a Work shelved as Xianxia matches
- * a reader who chose Fantasy. One graph query of at most 128 rows.
+ * a reader who chose Fantasy. Only the shared classification read's disclosed
+ * Concepts participate in the bounded relationship query.
  */
-export async function readConceptMatches(session: WorkReadSession, works: readonly string[],
-  chosen: readonly string[]): Promise<Map<string, string[]>> {
-  const matches = new Map<string, string[]>(works.map(work => [work, []]));
+export async function readConceptMatches(session: WorkReadSession,
+  works: readonly { work: string; mainVersion: string }[], chosen: readonly string[]): Promise<Map<string, string[]>> {
+  const matches = new Map<string, string[]>(works.map(target => [target.work, []]));
   if (!works.length || !chosen.length) return matches;
-  // ?chosen is bound inside the graph group, where its FILTER is evaluated;
-  // bound outside, the FILTER would see it unbound and match any broader Concept.
+  const chosenNames = await session.summaries([...chosen]);
+  const visibleChosen = chosenNames.flatMap(summary => summary.status === 'available'
+    && summary.type === 'concept' ? [summary.reference] : []);
+  if (!visibleChosen.length) return matches;
+  const disclosed = await readOnboardingClassifications(session, works);
+  const classified = [...disclosed].flatMap(([work, concepts]) => [...concepts].map(concept =>
+    `(${iri(work)} ${iri(concept)})`));
+  if (!classified.length) return matches;
   const rows = await session.query(`SELECT DISTINCT ?work ?chosen WHERE {
-    VALUES ?work { ${works.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} {
-      VALUES ?chosen { ${chosen.map(iri).join(' ')} }
-      ?work rv:mainVersion ?main .
-      ?expression rv:assertedConcept ?concept ; rv:expressionState rv:Active .
-      ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression ; rv:head ?revision .
-      ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ?concept ;
-        rv:statementState rv:Active ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
-        rv:interpretationDefinition ?revision ; rv:meaningKey ?key .
-      FILTER NOT EXISTS { ?statement rv:applicability ?applicability }
-      FILTER NOT EXISTS { ?statement rv:interpretationDefinition ?other FILTER(?other != ?revision) }
-      ?slot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key ;
-        rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:decisionHead ?decision .
-      FILTER(?concept = ?chosen || EXISTS { ?concept skos:broader ?chosen } || EXISTS { ?chosen skos:narrower ?concept })
-    } GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:StatementDecision, rv:RevisionAnchor ;
-      rv:component ?slot ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
-      rv:outcome rv:Accepted ; rv:support ?statement . }
+    VALUES (?work ?concept) { ${classified.join(' ')} }
+    VALUES ?chosen { ${visibleChosen.map(iri).join(' ')} }
+    FILTER(?concept = ?chosen || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?concept skos:broader ?chosen } }
+      || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?chosen skos:narrower ?concept } })
   } LIMIT ${SUGGESTION_COST.conceptRows + 1}`, SUGGESTION_COST.conceptRows);
   for (const row of rows) {
     const work = row.work?.value, concept = row.chosen?.value;
@@ -151,7 +143,7 @@ export async function readSuggestedFollows(session: WorkReadSession,
       && rule.target === work.id && (rule.strength === 'hide' || rule.strength === 'not-interested'
         || rule.strength === 'fewer' && reduced([work.id, rule.kind, rule.target]))));
     const [conceptMatches, tagged] = await inOrder(
-      readConceptMatches(session, candidates.map(work => work.id), concepts),
+      readConceptMatches(session, candidates.map(work => ({ work: work.id, mainVersion: work.mainVersion })), concepts),
       inOrder(...candidates.map(async work => {
         if (!tagRules.length) return true;
         const tagSession = new WorkReadSession(session.deps, session.request,

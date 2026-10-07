@@ -9,9 +9,11 @@ const closed = { additionalProperties: false } as const;
  * A new reader's first choices (docs/plan/frontend.md, Home: "Never empty"):
  * content languages, then the shared scheme's Concepts grouped by the type of
  * the public Works that carry them, each with covers so a choice means
- * something. One read of at most 48 scheme Concepts, one of at most four
- * sample Works per Concept (each Work with its types), and two summary
- * batches: 24 Concepts and 64 sample Works.
+ * something. One read of at most 48 scheme Concepts, then ordered candidate
+ * pages of four Works per Concept (each Work with its types), followed by the
+ * shared classification read in Work batches. Refill until each Concept has
+ * four disclosed samples or its candidates end, within the Work read budget.
+ * Final summary batches name 24 Concepts and 64 sample Works.
  */
 export const CHOICES_COST = { schemeConcepts: 48, samplesPerConcept: 4, shownConcepts: 24, shownSamples: 3,
   sampleWorks: 64, workTypes: 3, groups: 8, groupConcepts: 12 } as const;
@@ -52,7 +54,8 @@ export const suggestionsResult = t.Object({ profile: t.Literal('home-suggested-f
 
 /** One activity directory page, at most four non-official and eight official
  * Realm candidates. Each reads at most eight adopted Works and, when Concepts
- * are chosen, one bounded match of those Works' accepted Concepts. */
+ * are chosen, the shared public classification read and one bounded match
+ * of its disclosed Concepts to the reader's choices. */
 export const SUGGESTION_COST = { realms: 8, nonOfficialRealms: 4, officialRealms: 8, workScan: 8,
   samples: 3, suggestions: 3, conceptRows: 128 } as const;
 
