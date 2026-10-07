@@ -1473,7 +1473,7 @@ export const profileRegistry = {
     ]
   },
   "work-derivation-unresolved-v1": {
-    "sha256": "6c703f04dde8586aa0d5fbb5601fc532c0d572c2097eb18e927e4b601f8f71d2",
+    "sha256": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
     "file": "shapes/work-derivation-unresolved-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape"
@@ -1483,7 +1483,7 @@ export const profileRegistry = {
     ]
   },
   "work-derivation-v1": {
-    "sha256": "b86e60ef69cf6a20088119dbb582154c7f27cbf30f1a8334869603e49b0dea1b",
+    "sha256": "27e4e0f2871f58bd1b7434dff809342721109220daec1b5b0f817da8abf176df",
     "file": "shapes/work-derivation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-derivation-v1/derivation-shape"
@@ -1619,7 +1619,7 @@ export const profileRegistry = {
     ]
   },
   "work-title-control-v1": {
-    "sha256": "100dddad43cac4fd47c3090e987ef9dc9aa272d189fc4240cc08302340c5d42d",
+    "sha256": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
     "file": "shapes/work-title-control-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-title-control-v1/control-shape"
