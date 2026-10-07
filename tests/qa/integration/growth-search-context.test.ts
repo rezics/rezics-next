@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import type {
   FusekiClient,
   SparqlResult,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { CONTEXT_LIMITS } from '../../../services/main/src/modules/context/schema.ts';
@@ -41,15 +43,23 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
     ]);
     const consumers: string[] = [];
     const original = f.env.fuseki;
+    const measured = new AsyncLocalStorage<true>();
     let queryCalls = 0,
       selectionRows = 0,
       chainRows = 0,
       chainCalls = 0;
+    const shapes: string[] = [];
     const meter = new Proxy(original, {
       get(target, property) {
         if (property === 'query')
           return async (sparql: string, maxResponseBytes?: number): Promise<SparqlResult> => {
+            // Schedulers and other files' follow-up reads share this client.
+            // Only the interpretation request under measurement is the cost.
+            if (!measured.getStore() || !isForegroundOperation()) {
+              return target.query(sparql, maxResponseBytes);
+            }
             queryCalls++;
+            shapes.push(sparql.replace(/\s+/g, ' ').slice(0, 140));
             const result = await target.query(sparql, maxResponseBytes);
             if (sparql.includes('SELECT ?key ?head ?state ?context ?revision')) {
               selectionRows += result.results?.bindings.length ?? 0;
@@ -69,6 +79,7 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
       selectionRows = 0;
       chainRows = 0;
       chainCalls = 0;
+      shapes.length = 0;
       f.env.fuseki = meter;
       try {
         const previewBody = {
@@ -81,14 +92,16 @@ test('SEARCH10: real Context interpretation reads stay bounded as consumers and 
             : null,
           actingSubject: f.actorA,
         };
-        const response = await f.call('POST', '/v1/context-interpretations', previewBody);
-        if (response.status !== 200) console.error('growth preview input', previewBody);
-        const result = await f.json<{ state: string; definition: string; sourcePosition: object }>(
-          response,
-          200,
-        );
-        expect(result).toMatchObject({ state: 'resolved', definition });
-        return { queries: queryCalls, selectionRows, chainRows, chainCalls };
+        return await measured.run(true, async () => {
+          const response = await f.call('POST', '/v1/context-interpretations', previewBody);
+          if (response.status !== 200) console.error('growth preview input', previewBody);
+          const result = await f.json<{ state: string; definition: string; sourcePosition: object }>(
+            response,
+            200,
+          );
+          expect(result).toMatchObject({ state: 'resolved', definition });
+          return { queries: queryCalls, selectionRows, chainRows, chainCalls, shapes: [...shapes] };
+        });
       } finally {
         f.env.fuseki = original;
       }

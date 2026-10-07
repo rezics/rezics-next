@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -393,12 +395,26 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       WHERE schemaname = 'reading_position' ORDER BY tablename`);
     expect(schema.rows.map(row => row.name)).toEqual(['change', 'generation', 'pending_revelation', 'revelation']);
 
-    let baselineQueries = 0;
+    const compositionRead = new AsyncLocalStorage<true>();
+    const compositionQueries = async (session: WorkReadSession, occurrences: number) => {
+      const shapes: string[] = [];
+      const native = stack.fuseki.query.bind(stack.fuseki);
+      stack.fuseki.query = async (sparql: string, maxBytes?: number) => {
+        if (compositionRead.getStore() && isForegroundOperation()) {
+          shapes.push(sparql.replace(/\s+/g, ' ').slice(0, 140));
+        }
+        return native(sparql, maxBytes);
+      };
+      try {
+        const composition = await compositionRead.run(true, () => readReadingComposition(session, series.work));
+        expect(composition.occurrences).toHaveLength(occurrences);
+        return { shapes, composition };
+      } finally { stack.fuseki.query = native; }
+    };
+    let baselineQueries: string[] = [];
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {
-      const before = stack.fuseki.queries;
       session.summaries = async () => { throw new Error('Boundary infrastructure must not recurse through request revelation summaries'); };
-      expect((await readReadingComposition(session, series.work)).occurrences).toHaveLength(8);
-      baselineQueries = stack.fuseki.queries - before;
+      baselineQueries = (await compositionQueries(session, 8)).shapes;
     });
     for (let offset = 3; offset < 1000; offset += 16) {
       firstBook = await json<Composition>(await call('POST', `/v1/compositions/${short(firstBook.structure)}/changes`, {
@@ -408,12 +424,10 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
           label: { value: `Chapter ${offset + index + 1}`, language: 'en' } })) }));
     }
     await workRead(deps, new Request('http://main.local/v1/fixture'), {}, async session => {
-      const before = stack.fuseki.queries;
-      const composition = await readReadingComposition(session, series.work);
-      expect(composition.occurrences).toHaveLength(1005);
-      expect(stack.fuseki.queries - before).toBe(baselineQueries);
-      expect(composition.occurrences.length).toBeLessThan(READING_POSITION_COST.occurrences);
-      expect(composition.occurrences.at(-3)?.occurrence).toBe(latePosition);
+      const measured = await compositionQueries(session, 1005);
+      expect(measured.shapes, measured.shapes.join('\n')).toHaveLength(baselineQueries.length);
+      expect(measured.composition.occurrences.length).toBeLessThan(READING_POSITION_COST.occurrences);
+      expect(measured.composition.occurrences.at(-3)?.occurrence).toBe(latePosition);
     });
   } finally { await stack.stop(); }
 }, 600_000);

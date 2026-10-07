@@ -16,7 +16,6 @@ export const isolatedIntegrationFileList = [
   // M6 replays reference suites that require fresh rating and catalogue inventories.
   'tests/qa/integration/g-856-wiki.test.ts',
   'tests/qa/integration/g-856-editorial.test.ts',
-  'tests/qa/integration/g-856-position.test.ts',
   'tests/qa/integration/g-856-readers.test.ts',
   'tests/qa/integration/g-856-sessions.test.ts',
   'tests/qa/integration/g-856-library.test.ts',
@@ -138,7 +137,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-542-endpoints.test.ts',
   // Retained relation definitions must use the object directory that owns their graph revisions.
   'tests/qa/integration/g-831-relations.test.ts',
-  'tests/qa/integration/g-832-lexicon.test.ts',
   'tests/qa/integration/g-840-catalogue.test.ts',
   'tests/qa/integration/g-894-progress-summary.test.ts',
   // Release traversal probes own their complete global publication and owner inventory.
