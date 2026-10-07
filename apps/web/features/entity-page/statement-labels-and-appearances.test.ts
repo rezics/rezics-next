@@ -4,10 +4,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { resourceHref } from '../address/path.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { appearances, componentStatements, predicateLabels, statements } from './fixtures.ts';
+import { appearances, componentStatements, predicateLabels, statements, withheldCreditAppearance } from './fixtures.ts';
 import { copyOf } from './messages.ts';
 import { presentStatements } from './statement-groups.ts';
 import { standaloneHrefFor } from './route.ts';
+import { WikiEntity } from '../../zones/official/franchise-wiki/slots.tsx';
+import * as wiki from '../wiki/fixtures.ts';
 import { RelationsView, StatementsView } from './views.tsx';
 
 const hrefFor = standaloneHrefFor({}, resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d'));
@@ -55,5 +57,49 @@ describe('Appearances', () => {
     expect(html.match(/data-appearance-part/g)).toHaveLength(2);
     expect(html).toContain('A Certain Magical Index');
     expect(html).toContain('Supporting character');
+  });
+  test('a withheld credited name keeps the role, links to its reference, and shows neither the name nor the IRI', () => {
+    const page = withheldCreditAppearance();
+    const subject = 'https://rezics.com/id/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d';
+    const rows = relationRows(page.items, { together: true });
+    expect(rows[0]!.items[0]!.appearance!.creditedName).toEqual({ reference: subject, status: 'unavailable' });
+    expect(JSON.stringify(rows)).not.toContain('Hidden Alias');
+    const html = draw(createElement(RelationsView, { page: { ok: true, data: page }, cursor: undefined, hrefFor,
+      locale: 'en', t: copyOf('en'), messages: workMessages.en }));
+    expect(html).toContain('Translator');
+    expect(html).toContain('Name not shown');
+    expect(html).toContain('data-credited-unavailable');
+    expect(html).toContain(resourceHref('/e/', subject));
+    expect(html).not.toContain('Hidden Alias');
+    expect(html).not.toContain(subject);
+    expect(html).not.toContain('data-credited-name=""');
+  });
+  test('an empty credit and a withheld reference that is not an id are left out', () => {
+    const page = appearances();
+    const role = page.items[0]!.rendering!.projections.find(projection => projection.toRole === 'role')!;
+    const credit = role.arguments.find(argument => argument.role === 'subject')!;
+    credit.creditedName = { lexical: '', language: 'en' } as typeof credit.creditedName;
+    expect(relationRows(page.items, { together: true })[0]!.items[0]!.appearance!.creditedName).toBeUndefined();
+    credit.creditedName = { reference: 'https://example.test/not-an-id', status: 'unavailable' } as unknown as typeof credit.creditedName;
+    expect(relationRows(page.items, { together: true })[0]!.items[0]!.appearance!.creditedName).toBeUndefined();
+    const html = draw(createElement(RelationsView, { page: { ok: true, data: page }, cursor: undefined, hrefFor,
+      locale: 'en', t: copyOf('en'), messages: workMessages.en }));
+    expect(html).not.toContain('data-credited-name');
+    expect(html).not.toContain('https://example.test/not-an-id');
+    expect(html).toContain('Supporting character');
+  });
+  test('the wiki slot shows a withheld credit as its own label and still shows a recorded one', () => {
+    const html = draw(createElement(WikiEntity, {
+      zone: wiki.zoneFor('en'), fallback: null,
+      Link: ({ href, children }) => createElement('a', { href }, children),
+      entity: wiki.elizabethCreditWithheld, position: wiki.atEverything, mount: null, rest: null,
+    }));
+    expect(html).toContain('Translator');
+    expect(html).toContain('Arthur');
+    expect(html).toContain('Name not shown');
+    expect(html).toContain('>Lizzy<');
+    expect(html).not.toContain('Hidden Alias');
+    expect(html).not.toContain('https://rezics.com/id/');
+    expect(html).toContain('data-credited-unavailable');
   });
 });

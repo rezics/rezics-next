@@ -15,13 +15,36 @@ export type RelationTarget =
   | { kind: 'external'; label: string; agent: string | null }
   | { kind: 'withheld' };
 
+/**
+ * A name credited for a participant. Main either returns the words, or withholds them and keeps the
+ * participant reference so the row can still name the role and link to where the name may be read.
+ */
+export type CreditedName =
+  | { lexical: string; language: string }
+  | { reference: string; status: 'unavailable' };
+
+const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The credit a rendering argument carries, or nothing when the value is empty or not a readable reference. */
+export function creditedNameOf(value: unknown): CreditedName | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const row = value as { lexical?: unknown; language?: unknown; reference?: unknown; status?: unknown };
+  if (row.status === 'unavailable' && typeof row.reference === 'string' && nativeId.test(row.reference)) {
+    return { reference: row.reference, status: 'unavailable' };
+  }
+  if (typeof row.lexical === 'string' && row.lexical.length > 0 && typeof row.language === 'string') {
+    return { lexical: row.lexical, language: row.language };
+  }
+  return undefined;
+}
+
 export interface RelationItem {
   relation: string;
   target: RelationTarget;
   /** The derivation's source Main Version has no pinned revision: the link is known, its version is not. */
   unresolvedSource: boolean;
   evidence: string | null;
-  creditedName?: { lexical: string; language: string };
+  creditedName?: CreditedName;
   /** The rest of an n-ary occurrence this item leads, read from the lead's side: what the subject was in the Work. */
   appearance?: Appearance;
 }
@@ -29,7 +52,7 @@ export interface RelationItem {
 /** The other participants of an occurrence whose lead counterpart is a Work, with the name credited for the viewed subject. */
 export interface Appearance {
   alongside: { label: RowLabel; target: RelationTarget }[];
-  creditedName?: { lexical: string; language: string };
+  creditedName?: CreditedName;
 }
 
 /** A label exactly as Main selected it, with where it came from. */
@@ -108,18 +131,19 @@ export function relationRows(entries: readonly RelationEntry[], { together = fal
       if (lead && projection !== lead) continue;
       const key = `${rendering.meaning.revision}\n${projection.fromRole}\n${projection.toRole}`;
       const group = groups.get(key) ?? { projection, items: [] };
-      const credited = lead ? viewed.flatMap(other => other.arguments)
-        .find(argument => argument.role === rendering.viewingRole && argument.creditedName)?.creditedName : undefined;
+      const credited = lead ? creditedNameOf(viewed.flatMap(other => other.arguments)
+        .find(argument => argument.role === rendering.viewingRole && argument.creditedName)?.creditedName) : undefined;
       const appearance: Appearance | undefined = lead ? {
         alongside: viewed.filter(other => other !== lead).flatMap(other => targetsOf(other, summaries)
           .map(target => ({ label: labelFor(other, 1), target }))),
         ...(credited ? { creditedName: credited } : {}) } : undefined;
       for (const argument of projection.arguments.filter(item => item.role === projection.toRole)) {
+        const named = (rendering.viewingRole === 'work' || rendering.viewingRole === 'occurrence')
+          && projection.toRole === 'character' ? creditedNameOf(argument.creditedName) : undefined;
         group.items.push({ relation: entry.relation, target: participantTarget(argument.value, summaries),
           unresolvedSource: entry.sourceVersionStatus === 'unresolved', evidence: entry.evidence,
           ...(appearance ? { appearance } : {}),
-          ...((rendering.viewingRole === 'work' || rendering.viewingRole === 'occurrence')
-            && projection.toRole === 'character' && argument.creditedName ? { creditedName: argument.creditedName } : {}) });
+          ...(named ? { creditedName: named } : {}) });
       }
       groups.set(key, group);
     }

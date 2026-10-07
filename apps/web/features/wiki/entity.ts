@@ -8,7 +8,7 @@ import type { EntityProjection, StatementItem } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { offContinuity, pageFrame } from './continuity.ts';
 import { zoneText } from '../realm/adapt.ts';
-import { relationRows } from '../work-levels/relation-rows.ts';
+import { creditedNameOf, relationRows } from '../work-levels/relation-rows.ts';
 import { namesOf } from '../work-levels/read.ts';
 import { idOf } from '../work-page/route.ts';
 import { memberHref, zoneLink, type ZoneSite } from './links.ts';
@@ -37,6 +37,9 @@ function literalText(item: StatementItem): ZoneText | null {
   }
   return item.value.kind === 'literal' ? zoneContentText(item.value.lexical, item.value.language ?? '') : null;
 }
+
+/** A relationship participant as the Zone SDK types it, plus where a withheld credited name can be read. */
+export type ZoneRelationshipOther = ZoneRelationship['others'][number] & { withheldCredit?: string };
 
 /** A claim in words: `Family: Bennet family`, or the value alone when no label was served for the property. */
 const claimText = (label: string | null, value: string) => label ? `${label}: ${value}` : value;
@@ -156,15 +159,20 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   if (relations?.ok) {
     more ||= relations.data.next !== null;
     for (const row of relationRows(relations.data.items)) {
-      const others: ZoneRelationship['others'] = [];
+      const others: ZoneRelationshipOther[] = [];
       for (const item of row.items) {
         if (item.target.kind === 'resource' && item.target.summary?.status === 'available') {
           const summaryOf = item.target.summary;
           others.push({ name: zoneText(summaryOf.name), href: await zoneLink(site, summaryOf.reference, summaryOf.type) });
         } else if (item.target.kind === 'external') others.push({ name: zoneContentText(item.target.label), href: null });
         else continue;
-        if (item.creditedName && item.creditedName.lexical !== others.at(-1)!.name.value) {
-          others.at(-1)!.creditedName = zoneContentText(item.creditedName.lexical, item.creditedName.language);
+        const last = others.at(-1)!;
+        const credit = creditedNameOf(item.creditedName);
+        if (credit && 'status' in credit) {
+          const same = item.target.kind === 'resource' && item.target.reference === credit.reference;
+          last.withheldCredit = same && last.href ? last.href : await zoneLink(site, credit.reference, null);
+        } else if (credit && credit.lexical !== last.name.value) {
+          last.creditedName = zoneContentText(credit.lexical, credit.language);
         }
         const cited = item.evidence ? idOf(item.evidence) : null;
         if (cited) claims.push({ ids: [cited], supports: claimText(row.label.text?.value ?? null, others.at(-1)!.name.value) });

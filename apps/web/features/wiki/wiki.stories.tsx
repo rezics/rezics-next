@@ -151,6 +151,23 @@ export const Character: Story = {
   },
 };
 
+/** A withheld credit keeps the role and the public name, and says the credited name is not shown. */
+export const WithheldCredit: Story = {
+  render: ({ locale }) => <EntityPage locale={locale} entity={data.elizabethCreditWithheld} position={data.atEverything} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const relationships = canvas.getByRole('heading', { name: 'Relationships' }).closest('section')!;
+    await expect(within(relationships).getByText('Translator')).toBeVisible();
+    await expect(within(relationships).getByRole('link', { name: 'Arthur' })).toBeVisible();
+    const hidden = within(relationships).getByRole('link', { name: 'Name not shown' });
+    await expect(hidden).toBeVisible();
+    await expect(hidden.getAttribute('href') ?? '').not.toContain('https://rezics.com/id/');
+    await expect(within(relationships).getByText('Lizzy')).toBeVisible();
+    await expect(canvasElement.textContent ?? '').not.toContain('Hidden Alias');
+    await fits();
+  },
+};
+
 /** Contradictory claims each say which continuity they belong to, by a link to that Work, so neither reads as the truth. */
 export const ClaimsByContinuity: Story = {
   render: ({ locale }) => <EntityPage locale={locale} entity={data.elizabethContinuities} position={data.atEverything} />,

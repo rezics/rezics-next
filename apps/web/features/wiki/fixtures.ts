@@ -76,6 +76,14 @@ export const elizabeth: ZoneEntity = { id: id('e1'), kind: 'Character', name: te
   firstSeen: { name: text('Chapter 1'), href: page('chapters', 'c1') }, more: false,
   fullPage: resourceHref('/e/', id('e1')), chapter: null };
 
+/** A relationship whose credited name is withheld, beside one whose words are shown. */
+export const elizabethCreditWithheld: ZoneEntity = { ...elizabeth,
+  relationships: [{ label: 'Translator', others: [
+    { name: text('Arthur'), href: page('characters', 'e4'),
+      withheldCredit: page('characters', 'e4') } as ZoneEntity['relationships'][number]['others'][number],
+    { name: text('Jane Bennet'), href: page('characters', 'e2'), creditedName: text('Lizzy') },
+  ] }] };
+
 /** Two claims about one property, each recorded for a different continuity (Work) and named as such. */
 export const elizabethContinuities: ZoneEntity = { ...elizabeth, facts: [{ label: 'Lives at', values: [
   { text: text('Longbourn'), href: null, continuity: [{ name: text('Pride and Prejudice'), href: page('franchise', 'w1') }] },

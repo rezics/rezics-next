@@ -4,6 +4,7 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { LinkIcon, NetworkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { resourceHref } from '../address/path.ts';
 import { authorHref } from '../author/route.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -12,7 +13,7 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink, SummaryLink, type SummaryHref } from './names.tsx';
-import { type Appearance, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
+import { type Appearance, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
 
@@ -42,9 +43,45 @@ function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy
   return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
 }
 
+/** Where a withheld credit can be read: the participant's own page, never the reference written out. */
+function creditPage(reference: string, item: RelationItem, hrefFor?: SummaryHref, people?: People): string {
+  const person = people?.get(reference);
+  if (person) return authorHref({ kind: 'agent', handle: person.handle, agent: reference });
+  const targets = [item.target, ...(item.appearance?.alongside.map(part => part.target) ?? [])];
+  for (const target of targets) {
+    if (target.kind !== 'resource' || target.reference !== reference || target.summary?.status !== 'available') continue;
+    const summary = target.summary;
+    if (summary.type === 'agent') return authorHref({ kind: 'agent', handle: null, agent: reference });
+    const href = hrefFor?.(summary) ?? (summary.type === 'work' ? workLinkHref(summary.reference) : null);
+    if (href) return href;
+  }
+  return resourceHref('/e/', reference);
+}
+
+const creditLink = 'rounded-sm underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+/** A credited name beside its role: the recorded words, or a neutral label linked to where they may be read. */
+function CreditedAs({ credit, item, t, hrefFor, people }: {
+  credit: CreditedName; item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People;
+}) {
+  if ('status' in credit) {
+    return <span data-credited-name data-credited-unavailable className="text-muted-foreground">{t.creditedAs}{' '}
+      <Link href={creditPage(credit.reference, item, hrefFor, people)} className={creditLink}>{t.nameNotShown}</Link></span>;
+  }
+  return <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
+    <bdi lang={credit.language} dir="auto">{credit.lexical}</bdi></span>;
+}
+
+/** A lexical credit that repeats the name already shown adds nothing; a withheld credit always says so. */
+function shownCredit(credit: CreditedName | undefined, visibleName: string | null): CreditedName | undefined {
+  if (!credit) return undefined;
+  if ('status' in credit) return credit;
+  return visibleName !== null && credit.lexical !== visibleName ? credit : undefined;
+}
+
 /** What else the occurrence names beside its Work, such as the role the subject had there, and the name credited for it. */
-function Alongside({ appearance, t, hrefFor, people, locale }: {
-  appearance: Appearance; t: Copy; hrefFor?: SummaryHref; people?: People; locale: UiLocale;
+function Alongside({ appearance, item, t, hrefFor, people, locale }: {
+  appearance: Appearance; item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People; locale: UiLocale;
 }) {
   return <>
     {appearance.alongside.map((part, index) => <span key={index} data-appearance-part className="inline-flex min-w-0 items-baseline gap-x-1">
@@ -53,8 +90,7 @@ function Alongside({ appearance, t, hrefFor, people, locale }: {
       <Participant item={{ relation: '', target: part.target, unresolvedSource: false, evidence: null }} t={t}
         hrefFor={hrefFor} people={people} />
     </span>)}
-    {appearance.creditedName ? <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
-      <bdi lang={appearance.creditedName.language} dir="auto">{appearance.creditedName.lexical}</bdi></span> : null}
+    {appearance.creditedName ? <CreditedAs credit={appearance.creditedName} item={item} t={t} hrefFor={hrefFor} people={people} /> : null}
   </>;
 }
 
@@ -63,12 +99,11 @@ function Target(props: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; peo
   const name = item.target.kind === 'resource' && item.target.summary?.status === 'available'
     ? item.target.summary.name.value : item.target.kind === 'external'
       ? (item.target.agent ? people?.get(item.target.agent)?.name : undefined) ?? item.target.label : null;
-  const credited = name !== null && item.creditedName?.lexical !== name ? item.creditedName : undefined;
+  const credited = shownCredit(item.creditedName, name);
   return <span className="inline-flex min-w-0 flex-wrap items-baseline gap-x-1">
     <Participant item={item} t={t} hrefFor={props.hrefFor} people={people} />
-    {item.appearance ? <Alongside appearance={item.appearance} t={t} hrefFor={props.hrefFor} people={people} locale={locale} /> : null}
-    {credited ? <span data-credited-name className="text-muted-foreground">{t.creditedAs}{' '}
-      <bdi lang={credited.language} dir="auto">{credited.lexical}</bdi></span> : null}
+    {item.appearance ? <Alongside appearance={item.appearance} item={item} t={t} hrefFor={props.hrefFor} people={people} locale={locale} /> : null}
+    {credited ? <CreditedAs credit={credited} item={item} t={t} hrefFor={props.hrefFor} people={people} /> : null}
   </span>;
 }
 

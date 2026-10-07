@@ -13,7 +13,7 @@ import { EntityHeader } from './header.tsx';
 import { drawnSections } from './views.tsx';
 import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
-import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements } from './fixtures.ts';
+import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements, withheldCreditAppearance } from './fixtures.ts';
 import { standaloneHrefFor } from './route.ts';
 import type { TargetBase } from './types.ts';
 
@@ -135,6 +135,21 @@ export const Appearances: Story = {
     await expect(rows[0]).toHaveTextContent(/A Certain Magical Index\s*·\s*RoleSupporting character\s*as Mikoto/);
     await expect(rows[1]).toHaveTextContent(/A Certain Scientific Railgun\s*·\s*RoleLead character/);
     await expect(canvasElement.querySelector('[data-role-chip]')).toBeNull();
+  },
+};
+
+/** A credited name Main withheld: the role stays, and the label links to where the name may be read. */
+export const WithheldCredit: Story = {
+  render: () => <Page><RelationsView page={{ ok: true, data: withheldCreditAppearance() }} cursor={undefined} {...common('en')} /></Page>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const row = canvas.getByRole('listitem');
+    await expect(row).toHaveTextContent('Translator');
+    await expect(row).toHaveTextContent('A Certain Magical Index');
+    const credit = within(row).getByRole('link', { name: 'Name not shown' });
+    await expect(credit).toBeVisible();
+    await expect(credit.getAttribute('href') ?? '').not.toContain('https://rezics.com/id/');
+    await expect(canvasElement.textContent ?? '').not.toContain('Hidden Alias');
   },
 };
 

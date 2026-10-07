@@ -48,6 +48,16 @@ describe('Identity relations', () => {
       lexical: 'Saber',
       language: 'en',
     });
+    const argument = appearance.rendering!.projections[0]!.arguments[0]!;
+    argument.creditedName = {
+      lexical: 'Hidden Alias', language: 'en', reference: alter.reference, status: 'unavailable',
+    } as typeof argument.creditedName;
+    const withheld = relationRows([appearance])[0]!.items[0]!.creditedName;
+    expect(withheld).toEqual({
+      reference: alter.reference,
+      status: 'unavailable',
+    });
+    expect(JSON.stringify(withheld)).not.toContain('Hidden Alias');
   });
   test('family continuation retains the Realm and spoiler position and is a single bounded cursor', () => {
     const path = resourceHref('/e/', saber.reference);

@@ -27,6 +27,7 @@ const en = {
   relationsList: 'Relations', rolesList: 'Roles', relationsPages: 'Relations pages',
   relatedFallback: 'Related',
   creditedAs: 'as',
+  nameNotShown: 'Name not shown',
   labelIn: insert('in {{language}}', { language: String }),
   unresolvedSource: 'Source version unresolved',
   unresolvedHint: 'The link is on record, but which revision of the source it follows is not.',

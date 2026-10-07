@@ -14,6 +14,30 @@ function Text({ text }: { text: ZoneText }) {
   return <bdi lang={text.lang || undefined} dir={text.dir}>{text.value}</bdi>;
 }
 
+/**
+ * A withheld credit is not a name the package was given. The platform sets `withheldCredit` to the page
+ * where that name may be read; this package supplies the label, and never prints an empty name or the reference.
+ */
+function withheldCredit(other: object): string | null | undefined {
+  if (!('withheldCredit' in other)) return undefined;
+  const value = (other as { withheldCredit?: unknown }).withheldCredit;
+  if (typeof value === 'string' && value && !value.startsWith('https://rezics.com/id/')) return value;
+  if (value === null || typeof value === 'string') return null;
+  return undefined;
+}
+
+function Credited({ other, t, Link }: {
+  other: { creditedName?: ZoneText }; t: Strings; Link: Link;
+}) {
+  const href = withheldCredit(other);
+  if (href !== undefined) {
+    return <span data-credited-name data-credited-unavailable className="fw-quiet">{' '}{t.creditedAs}{' '}
+      {href ? <Link href={href}>{t.nameNotShown}</Link> : t.nameNotShown}</span>;
+  }
+  if (!other.creditedName?.value) return null;
+  return <span data-credited-name className="fw-quiet">{' '}{t.creditedAs}{' '}<Text text={other.creditedName} /></span>;
+}
+
 /** Where the reader is reading up to; the frame's position control is the way to change it. */
 function PositionNote({ position, t }: { position: ZonePositionState; t: Strings }) {
   return <p data-wiki-position="" className="fw-position">
@@ -186,7 +210,7 @@ export function WikiEntity({ zone, entity, position, mount, rest, Link }: Entity
             <dd><ul className="fw-chips">{row.others.map((other, at) => <li key={at}>{other.href
               ? <Link href={other.href} className="fw-member"><Text text={other.name} /></Link>
               : <span className="fw-member"><Text text={other.name} /></span>}
-              {other.creditedName ? <span data-credited-name className="fw-quiet">{' '}{t.creditedAs}{' '}<Text text={other.creditedName} /></span> : null}</li>)}</ul></dd>
+              <Credited other={other} t={t} Link={Link} /></li>)}</ul></dd>
           </div>)}</dl>
         </section> : null}
         {entity.evidence.length ? <section aria-labelledby="fw-passages" data-wiki-passages="" className="fw-section">

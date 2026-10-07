@@ -4,6 +4,7 @@
 
 const en = {
   creditedAs: "as",
+  nameNotShown: 'Name not shown',
   atPosition: (label: string) => `Showing what is revealed up to ${label}.`,
   atAnyPosition: 'Showing what is revealed at your position.',
   atEverything: 'Includes records from chapters you may not have read.',
@@ -58,6 +59,7 @@ const translations: Record<ZoneLocale, Strings> = {
   en,
   'zh-Hans': {
     creditedAs: '署名为',
+    nameNotShown: '未显示名字',
     atPosition: (label: string) => `正在显示截至「${label}」已揭示的内容。`,
     atAnyPosition: '正在显示你当前位置已揭示的内容。',
     atEverything: '包含你可能还没读到的章节中的记录。',
@@ -89,6 +91,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   'zh-Hant': {
     creditedAs: '署名為',
+    nameNotShown: '未顯示名字',
     atPosition: (label: string) => `正在顯示截至「${label}」已揭示的內容。`,
     atAnyPosition: '正在顯示你目前位置已揭示的內容。',
     atEverything: '包含你可能還沒讀到的章節中的記錄。',
@@ -120,6 +123,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   ja: {
     creditedAs: "役名：",
+    nameNotShown: '名前は表示されていません',
     atPosition: (label: string) => `「${label}」までに明かされた内容を表示しています。`,
     atAnyPosition: '現在の位置で明かされている内容を表示しています。',
     atEverything: 'まだ読んでいない章の記録も含まれています。',
@@ -151,6 +155,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   ko: {
     creditedAs: "배역명:",
+    nameNotShown: '이름이 표시되지 않음',
     atPosition: (label: string) => `「${label}」까지 밝혀진 내용을 보여 주고 있습니다.`,
     atAnyPosition: '현재 위치에서 밝혀진 내용을 보여 주고 있습니다.',
     atEverything: '아직 읽지 않은 장의 기록도 포함되어 있습니다.',
@@ -182,6 +187,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   de: {
     creditedAs: "als",
+    nameNotShown: 'Name nicht angezeigt',
     atPosition: (label: string) => `Gezeigt wird, was bis „${label}“ verraten ist.`,
     atAnyPosition: 'Gezeigt wird, was an deiner Position verraten ist.',
     atEverything: 'Enthalten sind auch Einträge aus Kapiteln, die du vielleicht noch nicht gelesen hast.',
@@ -213,6 +219,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   fr: {
     creditedAs: 'sous le nom de',
+    nameNotShown: 'Nom non affiché',
     atPosition: (label: string) => `Ce qui est révélé jusqu’à « ${label} » est affiché.`,
     atAnyPosition: 'Ce qui est révélé à votre position est affiché.',
     atEverything: 'Cela comprend des fiches de chapitres que vous n’avez peut-être pas lus.',
@@ -244,6 +251,7 @@ const translations: Record<ZoneLocale, Strings> = {
   },
   es: {
     creditedAs: "como",
+    nameNotShown: 'Nombre no mostrado',
     atPosition: (label: string) => `Se muestra lo revelado hasta «${label}».`,
     atAnyPosition: 'Se muestra lo revelado en tu posición.',
     atEverything: 'Incluye registros de capítulos que quizá no hayas leído.',

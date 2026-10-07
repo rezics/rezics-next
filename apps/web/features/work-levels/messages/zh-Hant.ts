@@ -3,6 +3,7 @@ import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
   creditedAs: '署名為',
+  nameNotShown: '未顯示名字',
   parts: '組成部分', partsList: '依出版順序排列的組成部分', partsPages: '組成部分分頁',
   partsUnavailable: '組成部分暫時無法載入。',
   partOf: '屬於', partOfList: '包含這部作品的整體',

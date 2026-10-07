@@ -3,6 +3,7 @@ import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
   creditedAs: 'sous le nom de',
+  nameNotShown: 'Nom non affiché',
   parts: 'Parties', partsList: 'Parties par ordre de publication', partsPages: 'Pages des parties',
   partsUnavailable: 'Les parties n’ont pas pu être chargées.',
   partOf: 'Fait partie de', partOfList: 'Ensembles qui contiennent cette œuvre',

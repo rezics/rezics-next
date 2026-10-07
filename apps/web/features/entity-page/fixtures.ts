@@ -5,6 +5,7 @@ import { direction } from '@rezics/main/language';
 import { uuidToSid } from '@rezics/model/address/sid';
 import { typeEntry } from '../catalogue/types.ts';
 import { summary } from '../work-levels/fixtures.ts';
+import type { CreditedName } from '../work-levels/relation-rows.ts';
 import type { AvailableSummary } from '../work-levels/types.ts';
 import type { PredicateLabels } from './predicate-labels.ts';
 import type { EntityProjection, RelationsPage, SectionId, StatementItem, StatementPage, TargetBase } from './types.ts';
@@ -89,7 +90,7 @@ export const noStatements: StatementPage = { ...statements(), groups: [], count:
 export const predicateLabels: PredicateLabels = new Map(Object.entries({ name: 'Name', alternateName: 'Also known as', birthDate: 'Born' })
   .map(([term, value]) => [`https://schema.org/${term}`, { value, language: 'en', direction: direction('en', value) }]));
 
-const appearanceProjection = (toRole: string, label: string, ref: string, creditedName?: { lexical: string; language: string }) => ({
+const appearanceProjection = (toRole: string, label: string, ref: string, creditedName?: CreditedName) => ({
   fromRole: 'subject', toRole, presentation: null,
   labels: { noun: label, heading: label, plurals: { other: label }, grammaticalForms: [] },
   language: 'en', script: 'Latn', direction: direction('en', label), reviewStatus: 'reviewed', source: null, licence: null, fallback: null,
@@ -99,7 +100,7 @@ const appearanceProjection = (toRole: string, label: string, ref: string, credit
 /** Where a character appears, as Main renders an occurrence of three roles seen from the character: the Work and its role apart. */
 export function appearances(): RelationsPage {
   const subject = iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
-  const occurrence = (n: number, work: AvailableSummary, role: AvailableSummary, credited?: { lexical: string; language: string }) => ({
+  const occurrence = (n: number, work: AvailableSummary, role: AvailableSummary, credited?: CreditedName) => ({
     relation: iri(`a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a0${n}`), kind: 'occurrence', revision: iri(`a1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0b0${n}`),
     evidence: null, sourceVersionStatus: 'exact',
     rendering: { profile: 'relation-rendering-v1', occurrence: null, viewingRole: 'subject',
@@ -117,4 +118,21 @@ export function appearances(): RelationsPage {
       role('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0001', 'Supporting character'), { lexical: 'Mikoto', language: 'en' }),
     occurrence(2, work('b1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0002', 'A Certain Scientific Railgun'),
       role('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0002', 'Lead character'))] } as unknown as RelationsPage;
+}
+
+/**
+ * One appearance whose credited name Main withheld. The private words sit on the same value as the
+ * unavailable reference, so a reader that still expects only a lexical name would show them.
+ */
+export function withheldCreditAppearance(): RelationsPage {
+  const subject = iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
+  const page = appearances();
+  const item = page.items[0]!;
+  const roleProjection = item.rendering!.projections.find(projection => projection.toRole === 'role')!;
+  roleProjection.labels = { noun: 'Translator', heading: 'Translator', plurals: { other: 'Translator' }, grammaticalForms: [] };
+  const credit = roleProjection.arguments.find(argument => argument.role === 'subject')!;
+  credit.creditedName = { lexical: 'Hidden Alias', language: 'en', reference: subject, status: 'unavailable' } as typeof credit.creditedName;
+  const named = item.counterparts.find(summary => summary.status === 'available' && summary.name.value === 'Supporting character');
+  if (named?.status === 'available') named.name = { ...named.name, value: 'Translator' };
+  return { ...page, items: [item] };
 }
