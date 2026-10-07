@@ -6,9 +6,10 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { GLOBAL_CONTEXT } from '../governance/schema.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceUnavailable,
   normalizeGovernanceError, sha256, type CapturedEvidence } from '../governance/store.ts';
-import { addBusinessDays, categoryProcesses, correspondenceInput, PLATFORM_SCOPE, PUBLIC_REPORT_COST,
+import { categoryProcesses, correspondenceInput, PLATFORM_SCOPE, PUBLIC_REPORT_COST,
   publicReportInput, validContentLanguage, type CorrespondenceInput, type PublicReportInput } from './contract.ts';
 import { lockPreservationTarget } from './preservation.ts';
+import { partyDeclarations, recordCounterNotice } from '../rights/counter-notice.ts';
 
 export interface ReportTarget {
   evidence: CapturedEvidence;
@@ -36,7 +37,8 @@ export async function mintPartyCredential(client: PoolClient, caseId: string, re
 
 /** Public transport over the existing governance cases, evidence and process chain. */
 export class PublicReports {
-  constructor(private readonly pool: Pool, private readonly owners: PublicReportOwners) {}
+  constructor(private readonly pool: Pool, private readonly owners: PublicReportOwners,
+    private readonly clock: () => Date = () => new Date()) {}
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => { throw new GovernanceUnavailable('Governance is unavailable'); });
@@ -60,7 +62,7 @@ export class PublicReports {
   }
 
   async submit(input: PublicReportInput, key: string, request: Request, principal: VerifiedPrincipal | null) {
-    const received = new Date();
+    const received = this.clock();
     if (!Value.Check(publicReportInput, input) || !validContentLanguage(input.contentLanguage)
       || !keyPattern.test(key) || !input.statement.trim()
       || (input.category === 'ncii' && (!input.contactEmail || !input.ncii))
@@ -180,22 +182,32 @@ export class PublicReports {
       const credential = await this.credential(client, caseId, secret);
       const row = (await client.query<{ state: string; generation: string; received_at: Date;
         reason_code: string; content_language: string; process: string; outcome: string | null; rationale: string | null;
+        statement: string | null; declarations: Record<string, unknown> | null; contact_email: string | null;
           statement_of_reasons: unknown;
           decision_head: string | null;
           cancelled: boolean | null;
         }>(
-      `SELECT c.state, c.generation::text, r.received_at, r.reason_code, r.content_language, r.process,
+      `SELECT c.state, c.generation::text, r.received_at,
+        CASE WHEN c.kind = 'rights_complaint' THEN 'copyright' ELSE r.reason_code END AS reason_code,
+        COALESCE(r.content_language,'en') AS content_language,COALESCE(rc.process,r.process,'platform_rules') AS process,
+        r.statement,COALESCE(r.declarations,CASE WHEN rc.report_id IS NOT NULL THEN jsonb_build_object(
+          'claimantName',rc.claimant_name,'claimantContact',rc.claimant_contact,
+          'claimedWork',rc.claimed_work,'claimedRight',rc.claimed_right,'noticeDigest',rc.notice_digest) END) AS declarations,
+        CASE WHEN $2 = 'reporter' THEN COALESCE(r.contact_email,rc.claimant_contact) END AS contact_email,
         d.outcome, CASE WHEN $2 = 'affected' OR d.disclosure <> 'private' THEN d.statement_of_reasons END AS statement_of_reasons,
         c.decision_head,op.cancelled, CASE WHEN d.disclosure <> 'private' THEN d.rationale END AS rationale
         FROM access.governance_report r JOIN access.governance_case c ON c.id = r.case_id
+        LEFT JOIN access.rights_complaint rc ON rc.report_id = r.id
         LEFT JOIN access.moderation_decision d ON d.id = c.decision_head LEFT JOIN access.safety_decision_operation op ON op.decision_id = d.id WHERE r.id = $1`, [credential.report_id, credential.party])).rows[0]!;
       const steps = (await client.query<{ id: string; step: string; occurred_at: Date; due_at: Date | null;
-        statement: string | null; content_language: string | null;
-        }>(`SELECT id, step, occurred_at, due_at,
+        statement: string | null; content_language: string | null; party: string | null;
+        declarations: Record<string, unknown> | null;
+        }>(`SELECT id, step, occurred_at, due_at, party, declarations,
         statement, content_language FROM access.governance_process_step
-        WHERE report_id = $1 AND (party IS NULL OR party = $4)
+        WHERE case_id = $5 AND (report_id = $1 OR report_id IS NULL)
+        AND (party IS NULL OR party = $4 OR step IN ('intake','counter_notice','claimant_action'))
         AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT $3`,
-      [credential.report_id, after ?? null, PUBLIC_REPORT_COST.page + 1, credential.party])).rows;
+      [credential.report_id, after ?? null, PUBLIC_REPORT_COST.page + 1, credential.party, caseId])).rows;
       const page = steps.slice(0, PUBLIC_REPORT_COST.page);
       const effects =
         row.decision_head && row.cancelled !== null
@@ -212,12 +224,17 @@ export class PublicReports {
       return { caseId, reportId: credential.report_id, state: row.state, generation: row.generation,
         receivedAt: row.received_at.toISOString(), category: row.reason_code, contentLanguage: row.content_language,
         process: row.process, outcome: row.outcome, reasons: row.rationale,
+        notice: { statement: row.statement,
+          contactEmail: row.contact_email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.contact_email) ? row.contact_email : null,
+          declarations: partyDeclarations('intake', row.declarations, credential.party === 'reporter') },
         statementOfReasons: row.statement_of_reasons,
         operation: effects
           ? operationOutcome(row.decision_head!, effects, row.cancelled ?? false)
           : null,
         steps: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
-          dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language })),
+          dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language,
+          declarations: partyDeclarations(step.step, step.declarations,
+            (step.party ?? (step.step === 'intake' ? 'reporter' : null)) === credential.party) })),
         nextCursor: steps.length > PUBLIC_REPORT_COST.page ? page.at(-1)!.id : null };
     });
   }
@@ -225,7 +242,8 @@ export class PublicReports {
   async correspond(caseId: string, secret: string, key: string, input: CorrespondenceInput) {
     if (!Value.Check(correspondenceInput, input) || !validContentLanguage(input.contentLanguage)
       || !keyPattern.test(key) || !input.statement.trim()
-      || (input.kind === 'counter_notice') !== (input.counterNotice !== undefined)) {
+      || (input.kind === 'counter_notice') !== (input.counterNotice !== undefined)
+      || (input.kind === 'claimant_action') !== (input.courtFiling !== undefined)) {
       throw new GovernanceInvalid('Correspondence is incomplete');
     }
     return this.transaction(async client => {
@@ -240,20 +258,22 @@ export class PublicReports {
         return { stepId: prior.step_id, replayed: true };
       }
       const report = (await client.query<{ process: string }>(
-        'SELECT process FROM access.governance_report WHERE id = $1', [credential.report_id])).rows[0]!;
+        `SELECT COALESCE(rc.process,r.process,'platform_rules') AS process FROM access.governance_report r
+         LEFT JOIN access.rights_complaint rc ON rc.report_id = r.id WHERE r.id = $1`, [credential.report_id])).rows[0]!;
       if (input.kind === 'counter_notice' && (credential.party !== 'affected' || report.process !== 'dmca_512')) {
         throw new GovernanceDenied('Counter-notice requires the affected copyright party');
       }
-      const received = (await client.query<{ now: Date }>('SELECT clock_timestamp() AS now')).rows[0]!.now;
-      const process = input.kind === 'appeal' ? 'platform_appeal' : report.process;
-      const stepId = await this.step(client, caseId, credential.report_id, process, input.kind, received, null,
-        input.statement, input.contentLanguage, input.counterNotice ?? null, credential.party);
-      if (input.kind === 'counter_notice') {
-        await this.step(client, caseId, credential.report_id, 'dmca_512', 'restoration_not_before', received,
-          addBusinessDays(received, 10), null, input.contentLanguage, null);
-        await this.step(client, caseId, credential.report_id, 'dmca_512', 'restoration_not_after', received,
-          addBusinessDays(received, 14), null, input.contentLanguage, null);
+      if (input.kind === 'claimant_action' && (credential.party !== 'reporter' || report.process !== 'dmca_512')) {
+        throw new GovernanceDenied('Court-filing notice requires the copyright claimant');
       }
+      const received = this.clock();
+      const process = input.kind === 'appeal' ? 'platform_appeal' : report.process;
+      const stepId = input.kind === 'counter_notice'
+        ? await recordCounterNotice(client, { caseId, reportId: credential.report_id,
+          statement: input.statement, contentLanguage: input.contentLanguage, declarations: input.counterNotice!,
+          key: Bun.randomUUIDv7(), requestDigest: digest, now: received })
+        : await this.step(client, caseId, credential.report_id, process, input.kind, received, null,
+          input.statement, input.contentLanguage, input.courtFiling ?? null, credential.party);
       await client.query(`INSERT INTO access.governance_correspondence_receipt
         (credential_id, key_hash, request_digest, step_id) VALUES ($1, $2, $3, $4)`,
       [credential.id, sha256(key), digest, stepId]);

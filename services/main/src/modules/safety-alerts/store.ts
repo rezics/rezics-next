@@ -42,6 +42,10 @@ FROM open_cases c CROSS JOIN LATERAL (
     AND s.due_at <= $3::timestamptz + ($4::bigint * interval '1 millisecond')
     AND (c.review_pending OR s.step IN ('restoration_not_before','restoration_not_after'))
     AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
+    AND NOT EXISTS (SELECT 1 FROM access.rights_counter_notice j WHERE j.case_id = s.case_id
+      AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
+        OR (s.decision_id IS NULL AND j.report_id = s.report_id
+          AND s.step IN ('restoration_not_before','restoration_not_after'))))
     AND NOT EXISTS (SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id
       AND a.case_generation = c.generation AND a.responder = $2 AND a.principal_id = $1)
     AND ($2 = 'primary' OR s.due_at <= $3 OR NOT $7::boolean OR EXISTS (
@@ -160,7 +164,12 @@ export class SafetyAlerts implements NotificationSubjectReader {
         AND c.state = 'open' AND (c.review_pending OR EXISTS (
           SELECT 1 FROM access.governance_process_step s WHERE s.id = a.step_id
             AND s.step IN ('restoration_not_before','restoration_not_after')))
-        AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = a.step_id)`,
+        AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = a.step_id)
+        AND NOT EXISTS (SELECT 1 FROM access.governance_process_step s JOIN access.rights_counter_notice j
+          ON j.case_id = s.case_id WHERE s.id = a.step_id
+            AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
+              OR (s.decision_id IS NULL AND j.report_id = s.report_id
+                AND s.step IN ('restoration_not_before','restoration_not_after'))))`,
         [
           input.ref,
           input.principalId,

@@ -8,6 +8,8 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ownerEvidenceCapture } from '../../../services/main/src/modules/governance/evidence.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { RightsCounterNotices } from '../../../services/main/src/modules/rights/counter-notice-worker.ts';
+import { addBusinessDays } from '../../../services/main/src/modules/public-report/contract.ts';
 import { RightsStore, rightsExportUseScope } from '../../../services/main/src/modules/rights/store.ts';
 import { planExport, type VerifiedExportMember } from '../../../services/main/src/modules/export/planner.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -206,7 +208,10 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
         const value = id ? await source.read(id, observationId) : null;
         return value && value.record.endsWith(recordId) ? { record: value.record, retention: value.retention,
           byteDigest: value.byteDigest, mediaType: value.mediaType } : null;
-      } }), { current: async () => null }, { current: async ref => rules.get(ref) ?? null }, undefined, undefined, () => clock);
+      } }), { current: async () => null }, { current: async ref => rules.get(ref) ?? null }, {
+        plan: async () => ({ participant: submitter }),
+        apply: async (operation, ordinal) => ({ receipt: `access:${operation}:${ordinal}` }),
+      }, undefined, () => clock);
       const rightsStore = new RightsStore(content, access);
       const deps = { account: account.verifier, governance: { store }, rights: { store: rightsStore } } as unknown as MainWorkDependencies;
       const app = new Elysia().use(reportRoutes(deps)).use(rightsRoutes(deps));
@@ -259,7 +264,7 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
         target: { owner: 'source', resource: observed.record, component: 'synopsis' },
         disclosure: 'parties', reasonCode: 'claimed_synopsis', statement: 'This synopsis is disputed.',
         evidence, idempotencyKey: 'synopsis-complaint', complaint: { process: 'dmca_512',
-          claimantKind: 'rights_holder', claimantName: 'Fixture claimant', claimantContact: null,
+          claimantKind: 'rights_holder', claimantName: 'Fixture claimant', claimantContact: 'source-claimant@example.test',
           claimedWork: 'Reported book synopsis', claimedRight: 'copyright',
           noticeDigest: digest('fixture notice'), noticeReceivedAt: new Date().toISOString() },
       });
@@ -324,7 +329,10 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
       expect((await call('/v1/governance/process-steps', account.tokenB,
         step('uploader_notice', decider, submitter, 'uploader-notice'))).status).toBe(201);
       const counter = await call('/v1/governance/process-steps', account.tokenA,
-        step('counter_notice', submitter, submitter, 'counter-notice'));
+        { ...step('counter_notice', submitter, submitter, 'counter-notice'), contentLanguage: 'en',
+          counterNotice: { signature: 'Source contributor', materialLocation: observed.record,
+            goodFaithMistakeUnderPerjury: true, name: 'Contributor', address: 'Test address', phone: '+1 555 0100',
+            courtJurisdiction: 'District Court', consentToJurisdiction: true, acceptService: true } });
       expect(counter.status, JSON.stringify(counter.body)).toBe(201);
       // A counter-notice and refresh cannot release the committed fence by themselves.
       const refreshed = (await intake('r2')).observation;
@@ -368,18 +376,19 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
       const replayedFinal = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
       expect(replayedFinal.status).toBe(200);
       expect(replayedFinal.body).toMatchObject({ decisionId: final.body.decisionId, replayed: true });
-      const earliest = new Date(clock.getTime() + 14 * 86_400_000);
-      const windowStep = (kind: 'restoration_not_before' | 'restoration_not_after', dueAt: Date) => store.recordStep(
-        { issuer: account.issuer, subject: account.b.id }, { caseId: complaint.body.caseId,
-          decisionId: final.body.decisionId, actingSubject: decider, process: 'dmca_512', step: kind,
-          partySubject: null, statement: null, documentDigest: null, occurredAt: new Date().toISOString(),
-          dueAt: dueAt.toISOString(), idempotencyKey: kind });
-      await windowStep('restoration_not_before', earliest);
-      await windowStep('restoration_not_after', new Date(earliest.getTime() + 4 * 86_400_000));
+      const finalCounter = await call('/v1/governance/process-steps', account.tokenA,
+        { ...step('counter_notice', submitter, submitter, 'final-counter-notice'),
+          decisionId: final.body.decisionId, contentLanguage: 'en', counterNotice: {
+            signature: 'Source contributor', materialLocation: observed.record,
+            goodFaithMistakeUnderPerjury: true, name: 'Contributor', address: 'Test address', phone: '+1 555 0100',
+            courtJurisdiction: 'District Court', consentToJurisdiction: true, acceptService: true } });
+      expect(finalCounter.status, JSON.stringify(finalCounter.body)).toBe(201);
+      await new RightsCounterNotices(access, store, async () => 'sent', () => clock).runPage();
+      const earliest = addBusinessDays(clock, 10);
       expect((await restrict(decision('restore', '2', counter.body.stepId, 'before-earliest'))).status).toBe(409);
       clock = new Date(earliest.getTime() + 5 * 86_400_000);
       expect((await restrict(decision('restore', '2', null, 'unanswered-restore'))).status).toBe(400);
-      const restored = await restrict(decision('restore', '2', counter.body.stepId, 'answered-restore'));
+      const restored = await restrict(decision('restore', '2', finalCounter.body.stepId, 'answered-restore'));
       expect(restored.status, JSON.stringify(restored.body)).toBe(200);
       expect(restored.body.enforcement.every((item: { state: string }) => item.state === 'released')).toBe(true);
       expect((await restrict(decision('restore', '2', counter.body.stepId, 'stale-restore'))).status).toBe(409);

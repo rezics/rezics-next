@@ -43,8 +43,8 @@ cancellation, or when a newer report, appeal or counter-notice needs review.
 | Preservation                   | One indexed target or account hold lookup and idempotent postponement records. Intake and Content erasure share a target lock across owners. Held Content erasure stops before graph suppression; Account credentials may still be deleted while safety material and its reason remain.                        |
 | `readReport`                   | One report key and at most 16 evidence rows; one indexed authority check for a reviewer.                                                                                                                                                                                                                       |
 | Platform queue / claims       | At most 50 results plus one lookahead; reads use at most 15 Access statements, claims 21 and holds 11 including authority and recovery checks. Keysets retain full timestamp precision.                                                                                                                      |
-| `decide` / resume              | At most 64 reviewed targets; preparation retains one plan per target. Resume uses two Access transactions per unconfirmed effect, each at most 24 statements plus its owner call; graph and Content use exact receipt identities, and copy closure advances at most 100 assets per call. |
-| `recordStep`                   | One case and grant check, one receipt key, one append.                                                                                                                                                                                                                                                         |
+| `decide` / resume              | At most 64 reviewed targets; preparation retains one plan per target. Resume uses two Access transactions per unconfirmed effect, each at most 29 statements plus its owner call; rights releases include a target lock and four indexed eligibility probes. Graph and Content use exact receipt identities, and copy closure advances at most 100 assets per call. |
+| `recordStep`                   | One case and grant check, one receipt key, one append. Signed counters also use the shared operation's indexed notice/decision probes and three inserts, bounded by `COUNTER_NOTICE_COST`. |
 | `readEnforcement`              | Indexed target lookup limited to 50 rows.                                                                                                                                                                                                                                                                      |
 | `restrictedTitles`             | One recovery-fence check and one indexed Access lookup for at most 64 Work/head pairs; it returns no title without a graph head.                                                                                                                                                                               |
 | `restrictedContentRevision`    | One recovery-fence check and one indexed Access lookup for the exact Content revision under the global context.                                                                                                                                                                                                |
@@ -81,8 +81,8 @@ characters; UUIDs fit). The database retains only its hash. A retry returns the
 same case and report with a fresh random case credential; each credential is
 returned once and only its hash is retained. Clients keep both secrets privately.
 Case credentials travel in `X-Rezics-Case-Credential`, never in URLs. Status
-responses omit evidence, contact details and declarations; reporter and affected
-party messages are separate. The structured statement of reasons and effect outcome appear in credential-based
+responses omit evidence and the other party's private contact and signature fields;
+each party sees its own notice declarations and shared case steps. The structured statement of reasons and effect outcome appear in credential-based
 case status independently of the legacy rationale disclosure flag.
 
 G-565 calls `mintPartyCredential(client, caseId, reportId)` after authorizing the
@@ -90,9 +90,10 @@ affected party, within its decision/notice transaction. The secret belongs in
 the private notice payload, never in an outbox or an event. The seeded specialist
 role declares the grants staff provisioning must issue through Access. Deadlines
 are immutable governance steps: NCII is receipt plus 48 elapsed hours;
-counter-notice windows add 10 and 14 UTC weekdays, without a holiday calendar.
-The timing bases follow [FTC guidance](https://www.ftc.gov/business-guidance/resources/complying-take-it-down-act)
-and [17 USC 512(g)](https://www.copyright.gov/title17/92chap5.html#512).
+counter-notice windows add 10 and 14 UTC weekdays from confirmed claimant delivery,
+without a holiday calendar. The NCII timing basis follows
+[FTC guidance](https://www.ftc.gov/business-guidance/resources/complying-take-it-down-act).
+The delivery clock's distinction from the statutory receipt clock is recorded below.
 
 Erasure services require the Access pool at construction, including recovery
 callers. Direct Content erasure requires that pool or a live owner-issued target
@@ -122,13 +123,26 @@ must be disclosed. Cancellation preserves every confirmed effect and prevents
 future dispatch; reconsideration appends a new decision. A reversal after partial
 cancellation targets only the original confirmed effects. DMCA restoration must
 wait until the recorded earliest restoration date and is stayed by claimant action.
-The latest date is a deadline shown by due steps; missing it does not forbid later restoration.
+The rights owner's indexed counter-notice jobs forward the full signed copy through
+mandatory encrypted Account mail. Confirmed delivery starts the 10–14 UTC-weekday
+window, preserving time of day and excluding weekends, with no holiday calendar.
+Each minute, one leased page of at most eight jobs attempts delivery or invokes
+the existing restoration decision and effects after ten business days. A filing
+or overlapping active restriction blocks release at both acceptance and effect
+dispatch. Lost mail or owner acknowledgements retain their receipt identities;
+uncertain mail requires reconciliation, and restoration still checks the original
+actor's current authority and the reviewed rule. Resolved windows leave the due
+queue. The latest date remains an overdue deadline, and does not forbid later recovery.
+
+The operational delivery clock differs from the receipt clock in
+[17 USC §512(g)(2)(C)](https://www.copyright.gov/title17/92chap5.html#512);
+launch policy review must reconcile that distinction before claiming statutory eligibility.
 
 The operation shape adapts the separation of acceptance and progress in
 [AIP-151](https://google.aip.dev/151) and request identity in
 [AIP-155](https://google.aip.dev/155), reviewed 2026-10-01. It uses the case API
-and client-driven continuation because this milestone excludes a job runner and
-generic operations service. The local state-machine and real owner tests, rather
+and client-driven continuation; the rights deadline runner invokes that same path.
+The local state-machine and real owner tests, rather
 than those source patterns, establish receipt and cancellation behavior here.
 
 Content migration 740 preserves immutable suppression audit rows and adds one

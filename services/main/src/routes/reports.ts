@@ -7,6 +7,7 @@ import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStal
 import type { GovernanceRules } from '../modules/governance/rules.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { counterDeclaration, contentLanguage } from '../modules/public-report/contract.ts';
 
 /** Access grants on the case scope gate decide actual decision authority. */
 export const REPORT_SCOPE = 'governance:report';
@@ -94,6 +95,7 @@ export const stepFields = {
     'claimant_action'].map(value => t.Literal(value))),
   partySubject: t.Nullable(agent), statement: t.Nullable(bounded(8000)), documentDigest: t.Nullable(digest),
   occurredAt: t.String({ format: 'date-time' }), dueAt: t.Nullable(t.String({ format: 'date-time' })),
+  counterNotice: t.Optional(counterDeclaration), contentLanguage: t.Optional(contentLanguage),
   idempotencyKey: key,
 };
 const stepResult = t.Object({ profile: t.String(), stepId: t.String(), dueAt: t.Nullable(t.String()),

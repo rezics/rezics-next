@@ -12,6 +12,8 @@ import { SafetyQueue } from '../safety-queue/store.ts';
 import { prepareDecisionNotices } from './notices.ts';
 import { validateDecisionEvidence } from './decision-evidence.ts';
 import { validContentLanguage } from '../public-report/contract.ts';
+import { assertCounterNoticeRestoration, assertNoParallelRestriction,
+  recordCounterNotice, type CounterDeclaration } from '../rights/counter-notice.ts';
 
 export class GovernanceInvalid extends Error {}
 export class GovernanceDenied extends Error {}
@@ -26,11 +28,12 @@ export type DecisionOutcome = typeof decisionOutcomes[number];
 export type EnforcementEffect = typeof enforcementEffects[number];
 
 /** Preparation is bounded by 64 targets. Resume uses two Access transactions
- * per unconfirmed effect, each at most 24 statements plus one bounded owner call. */
+ * per unconfirmed effect, each at most 29 statements plus one bounded owner call.
+ * Rights releases add a target lock and four indexed eligibility probes. */
 export const GOVERNANCE_OPERATION_COST = {
   targets: 64,
   accessTransactionsPerEffect: 2,
-  accessStatementsPerTransaction: 24,
+  accessStatementsPerTransaction: 29,
   copyBatch: 100,
   statementTimeoutMs: 5000,
 } as const;
@@ -134,6 +137,7 @@ export interface StepInput {
   process: 'platform_appeal' | 'dmca_512' | 'ordinary_dispute'; step: typeof processSteps[number];
   partySubject: string | null; statement: string | null; documentDigest: string | null;
   occurredAt: string; dueAt: string | null; idempotencyKey: string;
+  counterNotice?: CounterDeclaration; contentLanguage?: string;
 }
 
 const restricting = new Set<DecisionOutcome>(['reject', 'restrict', 'interim_restrict', 'final_restrict']);
@@ -562,33 +566,10 @@ export class GovernanceStore {
         throw new GovernanceStale('resume or cancel the pending decision before reconsidering');
       }
       if (releasing.has(input.outcome)) {
-        const dmca = (
-          await client.query(
-            "SELECT 1 WHERE EXISTS (SELECT 1 FROM access.governance_report WHERE case_id = $1 AND process = 'dmca_512') OR EXISTS (SELECT 1 FROM access.rights_complaint WHERE case_id = $1 AND process = 'dmca_512')",
-            [caseRow.id],
-          )
-        ).rowCount;
-        if (dmca) {
-          const window = (
-            await client.query<{ earliest: Date | null; action: boolean }>(
-              `SELECT
-            max(due_at) FILTER (WHERE step = 'restoration_not_before') AS earliest,
-            bool_or(step = 'claimant_action') AS action FROM access.governance_process_step
-            WHERE case_id = $1 AND process = 'dmca_512'`,
-              [caseRow.id],
-            )
-          ).rows[0]!;
-          const now = this.clock();
-          if (
-            !window.earliest ||
-            now < window.earliest ||
-            window.action
-          ) {
-            throw new GovernanceStale(
-              'DMCA restoration is before the earliest date or stayed by claimant action',
-            );
-          }
-        }
+        const restriction = input.reversesDecisionId ?? (await client.query<{ decision_head: string }>(
+          'SELECT decision_head FROM access.governance_case WHERE id = $1', [caseRow.id])).rows[0]!.decision_head;
+        await assertCounterNoticeRestoration(client, caseRow.id, restriction, this.clock());
+        for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction);
       }
       const kind = caseRow.kind === 'rights_complaint' ? 'rights_disposition' : 'content_moderation';
       const allowed: readonly DecisionOutcome[] = kind === 'rights_disposition'
@@ -1003,7 +984,7 @@ export class GovernanceStore {
             kind: string;
             urgent: boolean;
           }>(`SELECT d.*,c.urgent FROM access.moderation_decision d
-              JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1`, [decisionId])
+              JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1 FOR UPDATE OF c`, [decisionId])
         ).rows[0];
         if (!decision) throw new GovernanceDenied('decision is unavailable');
         await this.decider(
@@ -1061,6 +1042,22 @@ export class GovernanceStore {
         };
         await client.query('SAVEPOINT effect_dispatch');
         try {
+          // Every restricting/releasing writer takes the same target lock before
+          // reading fences or invoking an owner, including across case scopes.
+          await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 512))',
+            [canonical([target.owner, target.resource, target.component])]);
+          if (releasing.has(decision.outcome)) {
+            const source = decision.reverses_decision_id ?? (await client.query<{ id: string }>(`
+              SELECT prior.id FROM access.moderation_decision prior JOIN access.moderation_decision current
+                ON current.case_id = prior.case_id AND prior.case_sequence < current.case_sequence
+              WHERE current.id = $1 AND prior.outcome IN ('reject','restrict','interim_restrict','final_restrict')
+              ORDER BY prior.case_sequence DESC LIMIT 1`, [decisionId])).rows[0]?.id;
+            if (!source) throw new GovernanceStale('Restoration has no original restriction');
+            await assertCounterNoticeRestoration(client, decision.case_id, source, this.clock());
+            // Earlier confirmed targets of this same restoration are released,
+            // and never count as an unrelated restriction.
+            await assertNoParallelRestriction(client, target, source);
+          }
           if (row.owner === 'review') {
             if (!this.reviews)
               throw new GovernanceUnavailable('review effect owner is unavailable');
@@ -1208,7 +1205,15 @@ export class GovernanceStore {
       });
       if (!next) break;
     }
-    return this.transaction((client) => this.decisionResult(client, decisionId, replayed));
+    return this.transaction(async client => {
+      const result = await this.decisionResult(client, decisionId, replayed);
+      if (result.outcome === 'restore' && result.operation.status === 'completed') {
+        await client.query(`UPDATE access.rights_counter_notice j SET phase = 'done',restoration_id = $1
+          FROM access.moderation_decision d WHERE d.id = $1 AND j.case_id = d.case_id
+            AND j.step_id = d.answers_step_id`, [decisionId]);
+      }
+      return result;
+    });
   }
 
   async cancelDecision(
@@ -1281,8 +1286,10 @@ export class GovernanceStore {
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
     return this.transaction(async client => {
       const caseRow = (await client.query<{ kind: 'content_report' | 'rights_complaint'; authority_scope_id: string }>(
-        `SELECT kind, authority_scope_id FROM access.governance_case WHERE id = $1 FOR SHARE`, [input.caseId])).rows[0];
+        `SELECT kind, authority_scope_id FROM access.governance_case WHERE id = $1 FOR UPDATE`, [input.caseId])).rows[0];
       if (!caseRow) throw new GovernanceDenied('case is unavailable');
+      if (!(await client.query('SELECT 1 FROM access.moderation_decision WHERE id = $1 AND case_id = $2',
+        [input.decisionId, input.caseId])).rowCount) throw new GovernanceInvalid('Step decision is outside this case');
       if (caseRow.kind === 'content_report' && input.process !== 'platform_appeal') {
         throw new GovernanceInvalid('process does not apply to this case');
       }
@@ -1303,7 +1310,27 @@ export class GovernanceStore {
         if (prior.request_digest !== request) throw new GovernanceConflict('idempotency key reused');
         return { stepId: prior.id, dueAt: prior.due_at?.toISOString() ?? null, replayed: true };
       }
-      const stepId = randomUUID();
+      if (input.step === 'counter_notice') {
+        if (input.process !== 'dmca_512' || !input.counterNotice || !input.contentLanguage || !input.statement) {
+          throw new GovernanceInvalid('Counter-notice requires a statement, language and subscriber declarations');
+        }
+        const notice = (await client.query<{ credential: string }>(`SELECT credential FROM access.safety_party_notice
+          WHERE case_id = $1 AND decision_id = $2 AND principal_id = $3`,
+        [input.caseId, input.decisionId, actor.principalId])).rows[0];
+        const affected = (await client.query<{ report_id: string }>(`SELECT cred.report_id
+          FROM access.safety_party_notice n JOIN access.governance_case_credential cred
+            ON cred.case_id = n.case_id AND cred.secret_hash = $4
+          WHERE n.case_id = $1 AND n.decision_id = $2 AND n.principal_id = $3 AND cred.party = 'affected'`,
+        [input.caseId, input.decisionId, actor.principalId, notice ? sha256(notice.credential) : ''])).rows[0];
+        if (!affected) throw new GovernanceDenied('Counter-notice requires the notified affected party');
+        const stepId = await recordCounterNotice(client, { caseId: input.caseId, reportId: affected.report_id,
+          decisionId: input.decisionId, principalId: actor.principalId, partySubject: input.partySubject,
+          statement: input.statement, contentLanguage: input.contentLanguage, declarations: input.counterNotice,
+          key: input.idempotencyKey, requestDigest: request, now: this.clock() });
+        return { stepId, dueAt: null, replayed: false };
+      }
+      if (input.counterNotice) throw new GovernanceInvalid('Subscriber declarations require a counter-notice');
+      const stepId = Bun.randomUUIDv7();
       await client.query(`INSERT INTO access.governance_process_step (id, case_id, decision_id, process, step,
           principal_id, party_subject, idempotency_key, request_digest, statement, document_digest, occurred_at, due_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
@@ -1311,6 +1338,83 @@ export class GovernanceStore {
         input.idempotencyKey, request, input.statement, input.documentDigest, input.occurredAt, input.dueAt]);
       return { stepId, dueAt: input.dueAt, replayed: false };
     });
+  }
+
+  /** Server-only continuation of the accepted restriction, using its original
+   * actor's current Access authority and the ordinary decision/effect path.
+   * Revoked authority, owner failures and competing claims remain retryable. */
+  async restoreCounterNotice(stepId: string): Promise<{ phase: 'done' | 'stayed' | 'restoring'; decisionId: string | null }> {
+    const basis = await this.transaction(async client => {
+      const row = (await client.query<{ case_id: string; restriction_id: string; not_before: Date | null;
+        principal_id: string; account_issuer: string; account_subject: string; acting_subject: string;
+        generation: string; decision_head: string; state: string; authority_kind: string; authority_scope_id: string;
+        rule_ref: string; rule_revision: string; rule_digest: string; evidence_digest: string;
+        statement_of_reasons: StatementOfReasons; disclosure: DecisionInput['disclosure'] }>(`
+        SELECT j.case_id,j.restriction_id,j.not_before,d.principal_id,p.account_issuer,p.account_subject,
+          d.acting_subject,c.generation::text,c.decision_head,c.state,c.authority_kind,c.authority_scope_id,
+          d.rule_ref,d.rule_revision,d.rule_digest,d.evidence_digest,d.statement_of_reasons,d.disclosure
+        FROM access.rights_counter_notice j JOIN access.governance_case c ON c.id = j.case_id
+        JOIN access.moderation_decision d ON d.id = j.restriction_id
+        JOIN access.principal p ON p.id = d.principal_id WHERE j.step_id = $1 FOR UPDATE OF c`, [stepId])).rows[0];
+      if (!row || !row.not_before || this.clock() < row.not_before) throw new GovernanceStale('Restoration is not due');
+      const key = `rights-deadline:${stepId}`;
+      const prior = (await client.query<{ id: string }>(`SELECT id FROM access.moderation_decision
+        WHERE principal_id = $1 AND kind = 'rights_disposition' AND idempotency_key = $2`,
+      [row.principal_id, key])).rows[0];
+      const principal = { issuer: row.account_issuer, subject: row.account_subject };
+      if (prior) return { row, principal, key, prior: prior.id, input: null, stayed: false };
+      if ((await client.query(`SELECT 1 FROM access.governance_process_step WHERE case_id = $1
+        AND process = 'dmca_512' AND step = 'claimant_action'
+        AND (decision_id = $2 OR decision_id IS NULL) LIMIT 1`, [row.case_id, row.restriction_id])).rowCount) {
+        return { row, principal, key, prior: null, input: null, stayed: true };
+      }
+      if (row.state !== 'open' || row.decision_head !== row.restriction_id) {
+        throw new GovernanceStale('The restriction has been superseded; review its scheduled restoration');
+      }
+      const authority = await this.decider(client, principal, row.acting_subject, row.authority_scope_id,
+        DECIDE_ACTION.rights_complaint);
+      if (row.authority_kind === 'platform') {
+        const claim = (await client.query<{ principal_id: string; acting_subject: string }>(`
+          SELECT principal_id,acting_subject FROM access.safety_case_claim
+          WHERE case_id = $1 AND case_generation = $2 AND expires_at > $3`,
+        [row.case_id, row.generation, this.clock()])).rows[0];
+        if (claim && (claim.principal_id !== authority.principalId || claim.acting_subject !== row.acting_subject)) {
+          throw new GovernanceStale('Another responder is working on the due case');
+        }
+        await client.query(`INSERT INTO access.safety_case_claim
+          (case_id,principal_id,acting_subject,case_generation,claimed_at,expires_at)
+          VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (case_id) DO UPDATE SET
+            principal_id = EXCLUDED.principal_id,acting_subject = EXCLUDED.acting_subject,
+            case_generation = EXCLUDED.case_generation,claimed_at = EXCLUDED.claimed_at,expires_at = EXCLUDED.expires_at`,
+        [row.case_id, authority.principalId, row.acting_subject, row.generation, this.clock(),
+          new Date(this.clock().getTime() + 30 * 60_000)]);
+      }
+      const targets = (await client.query<DecisionTargetInput>(`SELECT t.owner,t.resource,t.component,t.locator,
+        t.scope_kind AS "scopeKind",t.revision,t.expected_head AS "expectedHead",t.effect
+        FROM access.moderation_decision_target t JOIN access.safety_decision_effect e USING (decision_id,ordinal)
+        WHERE t.decision_id = $1 AND e.state = 'confirmed' ORDER BY t.ordinal LIMIT 64`,
+      [row.restriction_id])).rows;
+      if (!targets.length) throw new GovernanceStale('The restriction has no confirmed effects');
+      for (const target of targets) {
+        await assertNoParallelRestriction(client, target, row.restriction_id);
+        target.expectedHead = await this.heads.current(target);
+      }
+      const input: DecisionInput = { caseId: row.case_id, expectedGeneration: row.generation,
+        actingSubject: row.acting_subject, outcome: 'restore', targets,
+        rule: { ref: row.rule_ref, revision: row.rule_revision, digest: row.rule_digest },
+        evidenceDigest: row.evidence_digest, reversesDecisionId: null, answersStepId: stepId,
+        rationale: 'The delivered counter-notice waiting period elapsed without a court-filing notice.',
+        reasons: { ...row.statement_of_reasons,
+          facts: 'The delivered counter-notice waiting period elapsed without a court-filing notice.',
+          duration: 'The copyright restriction is released.', contentLanguage: 'en', automation: true },
+        disclosure: row.disclosure, idempotencyKey: key };
+      return { row, principal, key, prior: null, input, stayed: false };
+    });
+    if (basis.stayed) return { phase: 'stayed', decisionId: null };
+    const result = basis.prior
+      ? await this.resumeDecision(basis.principal, basis.row.acting_subject, basis.prior, true)
+      : await this.decide(basis.principal, basis.input!);
+    return { phase: result.operation.status === 'completed' ? 'done' : 'restoring', decisionId: result.decisionId };
   }
 
   /** Current effective fences for one target component, across scopes and contexts (bounded by index). */

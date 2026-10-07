@@ -2,6 +2,7 @@ import { getTableConfig } from 'drizzle-orm/pg-core';
 import { governanceTables } from '../../../services/main/src/modules/governance/schema.ts';
 import { mediaTables } from '../../../services/main/src/modules/media/typed-schema.ts';
 import { expect, test } from 'bun:test';
+import { RightsCounterNotices } from '../../../services/main/src/modules/rights/counter-notice-worker.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { requirePlatformParticipation } from '../../../services/main/src/modules/safety-queue/participation.ts';
@@ -1056,6 +1057,9 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ),
       200,
     );
+    clock = new Date();
+    expect((await new RightsCounterNotices(stack.accessPool, governance,
+      async () => 'sent', () => clock).runPage()).deferred).toBe(0);
     const restoration = {
       ...(await input(copyright, [target(copyrightAsset)], staff, 'restore')),
       answersStepId: counter.stepId,

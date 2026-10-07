@@ -52,8 +52,10 @@ export const counterDeclaration = t.Object({ signature: text(300), materialLocat
   courtJurisdiction: text(1000), consentToJurisdiction: t.Literal(true), acceptService: t.Literal(true) },
 { additionalProperties: false });
 export const correspondenceInput = t.Object({ kind: t.Union([t.Literal('message'), t.Literal('appeal'),
-  t.Literal('counter_notice')]), statement: text(8000), contentLanguage,
-  counterNotice: t.Optional(counterDeclaration) }, { additionalProperties: false });
+  t.Literal('counter_notice'), t.Literal('claimant_action')]), statement: text(8000), contentLanguage,
+  counterNotice: t.Optional(counterDeclaration),
+  courtFiling: t.Optional(t.Object({ court: text(1000), caseNumber: text(300),
+    documentDigest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false })) }, { additionalProperties: false });
 export type CorrespondenceInput = Static<typeof correspondenceInput>;
 
 const uuid = t.String({ format: 'uuid' });
@@ -65,11 +67,14 @@ export const publicReportReceipt = t.Object({ profile, ...reportReceipt,
 export const publicReportStatus = t.Object({ profile, ...reportReceipt, state: t.String(),
   generation: t.String(), category: reportCategory, contentLanguage, process: t.String(),
   outcome: t.Nullable(t.String()), reasons: t.Nullable(t.String()),
+  notice: t.Object({ statement: t.Nullable(t.String()), contactEmail: t.Nullable(t.String()),
+    declarations: t.Nullable(t.Record(t.String(), t.Unknown())) }, { additionalProperties: false }),
   statementOfReasons: t.Nullable(t.Object({ ...reasons.properties,
     rule: t.Object({ ref: t.String(), revision: t.String(), digest: t.String() }) })),
   operation: t.Nullable(operationResult),
   steps: t.Array(t.Object({ id: uuid, kind: t.String(), occurredAt: instant, dueAt: t.Nullable(instant),
-    statement: t.Nullable(t.String()), contentLanguage: t.Nullable(contentLanguage) }, { additionalProperties: false }),
+    statement: t.Nullable(t.String()), contentLanguage: t.Nullable(contentLanguage),
+    declarations: t.Nullable(t.Record(t.String(), t.Unknown())) }, { additionalProperties: false }),
   { maxItems: PUBLIC_REPORT_COST.page }), nextCursor: t.Nullable(uuid) }, { additionalProperties: false });
 export const publicReportList = t.Object({ profile,
   reports: t.Array(t.Object({ ...reportReceipt, category: reportCategory }, { additionalProperties: false }),

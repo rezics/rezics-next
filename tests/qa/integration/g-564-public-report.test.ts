@@ -9,7 +9,7 @@ import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/s
 import { GovernanceStore, sha256 } from '../../../services/main/src/modules/governance/store.ts';
 import { PublicReports, mintPartyCredential } from '../../../services/main/src/modules/public-report/store.ts';
 import { publicReportOwners } from '../../../services/main/src/modules/public-report/owners.ts';
-import { PLATFORM_SCOPE, SPECIALIST_ACTION, addBusinessDays } from '../../../services/main/src/modules/public-report/contract.ts';
+import { PLATFORM_SCOPE, SPECIALIST_ACTION } from '../../../services/main/src/modules/public-report/contract.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { applyContentErasure, ContentErasureStale } from '../../../services/main/src/modules/erasure/content.ts';
@@ -154,17 +154,10 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
         name: 'Uploader', address: '123 Test Street', phone: '+1 555 555 5555', courtJurisdiction: 'District of Delaware',
         consentToJurisdiction: true, acceptService: true } };
     expect((await correspond(copyright, counter)).status).toBe(404);
-    const counterKey = randomUUID();
-    await json(await correspond(copyright, counter, affected, counterKey), 200);
-    await json(await correspond(copyright, counter, affected, counterKey), 200);
-    const counterStatus = await status(copyright, affected);
-    const earliest = counterStatus.steps.find(step => step.kind === 'restoration_not_before')!;
-    const latest = counterStatus.steps.find(step => step.kind === 'restoration_not_after')!;
-    expect(earliest.dueAt).toBe(addBusinessDays(new Date(earliest.occurredAt), 10).toISOString());
-    expect(latest.dueAt).toBe(addBusinessDays(new Date(latest.occurredAt), 14).toISOString());
-    expect([0, 6]).not.toContain(new Date(earliest.dueAt!).getUTCDay());
-    expect(counterStatus.steps.filter(step => step.kind === 'counter_notice')).toHaveLength(1);
-    expect((await status(copyright)).steps.some(step => step.kind === 'counter_notice')).toBe(false);
+    // A credential alone cannot counter a notice before any material was removed.
+    // The delivered waiting/restoration flow is exercised by rights-counter-notice.test.ts.
+    expect((await correspond(copyright, counter, affected)).status).toBe(409);
+    expect((await status(copyright, affected)).steps.some(step => step.kind === 'restoration_not_before')).toBe(false);
     await json(await correspond(copyright, { kind: 'appeal', statement: 'Please review', contentLanguage: 'x-private' }, affected), 200);
 
     // Urgent anchors are never returned to general deciders or Realm moderators.

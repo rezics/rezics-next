@@ -186,6 +186,7 @@ import { NotificationDigestWorker } from './modules/notification/digest.ts';
 import { SafetyAlerts, SAFETY_ALERT_BASIS, safetyResponders } from './modules/safety-alerts/store.ts';
 import { SafetyAlertProvider } from './modules/safety-alerts/provider.ts';
 import { SafetyDecisionMail, accountSafetyNoticeIntake } from './modules/governance/notices-mail.ts';
+import { RightsCounterNotices, RightsCounterNoticeWorker, accountCounterNoticeIntake } from './modules/rights/counter-notice-worker.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
@@ -638,6 +639,10 @@ readRankings.start();
 correctionWorker.start();
 notificationProducerWorker.start();
 notificationDigestWorker.start();
+const rightsCounterNoticeWorker = new RightsCounterNoticeWorker(new RightsCounterNotices(pool,
+  governanceServices(pool, contentPool, content, sourceIntake, access, environment).store,
+  accountCounterNoticeIntake(config.ACCOUNT_INTROSPECT_URL, config.ACCOUNT_MAIN_CLIENT_SECRET)));
+rightsCounterNoticeWorker.start();
 notificationDeliveryWorker?.start();
 
 let stopping = false;
@@ -665,6 +670,7 @@ async function stop(): Promise<void> {
   await correctionWorker.stop();
   await notificationProducerWorker.stop();
   await notificationDigestWorker.stop();
+  await rightsCounterNoticeWorker.stop();
   await notificationDeliveryWorker?.stop();
   await notificationRealtime?.stop();
   await recommendationWorker?.stop();
