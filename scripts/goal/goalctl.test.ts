@@ -8,8 +8,9 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  codexHoursUntil100, failingTestFiles, loadCodexResetStatus, memoryFloorRefusal, streamUnitBaseline, timedOutTestFiles,
-  type AccountUsage, type Ledger, type Task, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
+  codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, memoryFloorRefusal,
+  shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails,
+  type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -226,6 +227,37 @@ describe('goalctl runtime policy', () => {
       .toEqual(['scripts/goal/other.test.ts', 'tests/qa/unit/slow.test.ts']);
   });
 
+  test('keeps earlier test timeouts when the containing shard also times out', () => {
+    const files = ['tests/qa/unit/first.test.ts', 'tests/qa/unit/last.test.ts'];
+    const output = [
+      `${files[0]}:`, '(fail) first test timed out [300ms]', 'Timeout: test first test timed out after 300ms',
+      `${files[1]}:`,
+    ].join('\n');
+    expect(shardTimeoutFiles(output, files, process.cwd())).toEqual(files);
+  });
+
+  test('extracts test names and assertion diffs from guard failures', () => {
+    const file = 'tests/qa/unit/serialization-points.test.ts';
+    const output = [
+      `${file}:`, 'error: expect(received).toEqual(expected)', '- Expected  - 1', '+ Received  + 1',
+      '  + "branch-only finding"', '    at <anonymous> (/branch/tests/qa/unit/serialization-points.test.ts:42:9)',
+      '(fail) serialization guard > checks findings [2.3ms]',
+    ].join('\n');
+    expect(unitFailureDetails(output, [file], process.cwd())).toEqual([{
+      file, test: 'serialization guard > checks findings',
+      detail: 'error: expect(received).toEqual(expected)\n- Expected  - 1\n+ Received  + 1\n  + "branch-only finding"',
+    }]);
+  });
+
+  test('a branch-only guard finding is introduced while an identical finding is inherited', () => {
+    const file = 'tests/qa/unit/serialization-points.test.ts';
+    const report = (detail: string): UnitFailureDetail[] => [{ file, test: 'serialization guard > checks findings', detail }];
+    const main = report('Expected []\nReceived ["existing finding"]');
+    expect(introducedUnitFailureFiles([file], report('Expected []\nReceived ["existing finding", "branch-only finding"]'), main))
+      .toEqual([file]);
+    expect(introducedUnitFailureFiles([file], report('Expected []\nReceived ["existing finding"]'), main)).toEqual([]);
+  });
+
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-status-test-'));
     const cacheFile = join(directory, 'status.json');
@@ -250,6 +282,10 @@ describe('goalctl runtime policy', () => {
       const account: AccountUsage = { account: 'codex', home: '', engines: ['codex'], used: 40,
         windowMinutes: 7 * 24 * 60, windowResetsAt: now + 2 * 24 * 3600, sampledAt: now };
       expect(codexHoursUntil100(account, loaded.status?.data?.latest_reset?.announced_at, nowMs)).toBe(18);
+      const oldFullSample = { ...account, used: 100, sampledAt: now - 3600 };
+      expect(codexHoursUntil100(oldFullSample, new Date((now - 1800) * 1000).toISOString(), nowMs)).toBeUndefined();
+      expect(codexHoursUntil100({ ...oldFullSample, sampledAt: now - 900 },
+        new Date((now - 1800) * 1000).toISOString(), nowMs)).toBe(0);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
@@ -1189,6 +1225,54 @@ ${edit}
     }, 30_000);
   }
 
+  for (const outcome of ['branch-adds-finding', 'identical-findings'] as const) {
+    test(`guard failure details classify ${outcome} against a red main baseline`, async () => {
+      const r = repo();
+      const guard = 'guard-report.test.ts';
+      const findings = 'findings.txt';
+      try {
+        writeFileSync(join(r.dir, guard), `import { expect, test } from 'bun:test';\n`
+          + `import { readFileSync } from 'node:fs';\n`
+          + `test('inventory guard has no findings', () => {\n`
+          + `  const report = readFileSync(${JSON.stringify(findings)}, 'utf8').trim().split('\\n').filter(Boolean);\n`
+          + `  expect(report).toEqual([]);\n});\n`);
+        writeFileSync(join(r.dir, findings), 'existing finding\n');
+        r.git('add', guard, findings); r.git('commit', '-qm', 'Add a red inventory guard baseline');
+        const task = await r.start('G-001');
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(findings); r.save(ledger);
+        r.commit(task);
+        if (outcome === 'branch-adds-finding') {
+          writeFileSync(join(task.worktree, findings), 'existing finding\nbranch-only finding\n');
+          expect(spawnSync('git', ['-C', task.worktree, 'add', findings]).status).toBe(0);
+          expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a guard finding']).status).toBe(0);
+        }
+        await r.stopFixture(task.id);
+        const plan = join(r.dir, '.temp/unit-plan');
+        const log = join(r.dir, '.temp/unit-log');
+        writeFileSync(plan, `  unit: ${guard}\n`);
+        const before = r.git('rev-parse', 'main');
+        const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
+        const introduced = outcome === 'branch-adds-finding';
+        expect(result.status).toBe(introduced ? 1 : 0);
+        if (introduced) {
+          expect(result.stderr).toContain(`introduced unit failures; not merging:\n  ${guard}`);
+          expect(r.git('rev-parse', 'main')).toBe(before);
+          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+        } else {
+          expect(result.stdout).toContain(`${guard} also fails on main`);
+          expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
+          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+        }
+        const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
+        expect(runs).toHaveLength(3);
+        expect(runs[0]!.cwd).toBe(task.worktree);
+        expect(runs[1]!.cwd).toBe(task.worktree);
+        expect(runs[2]!.cwd).not.toBe(task.worktree);
+        expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
+      } finally { r.cleanup(); }
+    }, 30_000);
+  }
+
   for (const outcome of ['introduced', 'inherited', 'skipped', 'dirty-main', 'new-file'] as const) {
     test(`pre-merge unit gate handles ${outcome} failures before fast-forward`, async () => {
       const r = repo();
@@ -1331,7 +1415,7 @@ ${edit}
     } finally { r.cleanup(); }
   }, 45_000);
 
-  test('a unit gate shard that exceeds the budget is inconclusive and the merge proceeds', async () => {
+  test('a unit gate timeout that remains inconclusive after an isolated retry blocks the merge', async () => {
     const r = repo();
     try {
       const fast = 'gate-fast.test.ts';
@@ -1356,18 +1440,12 @@ ${edit}
       }, 40_000);
       const elapsed = Date.now() - started;
       expect(elapsed).toBeLessThan(30_000);
-      expect(result.status).toBe(0);
+      expect(result.status).toBe(1);
       expect(result.stdout).toContain('inconclusive');
-      expect(result.stdout).toContain('not blocking');
-      const named: string[] = [];
-      for (const line of (result.stdout.split('reported, not blocking\n')[1] ?? '').split('\n')) {
-        if (!line.startsWith('  ')) break;
-        named.push(line.trim());
-      }
-      expect(named).toEqual([slow]);
-      expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
-      expect(r.git('rev-parse', 'main')).not.toBe(before);
-      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(result.stderr).toContain('unit gate remains inconclusive after isolated timeout retry');
+      expect(result.stdout).toContain(`${slow} timed out on affected; rerunning alone`);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
       const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
       expect(runs).toHaveLength(3);
       expect(runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).join(' ')).sort())
