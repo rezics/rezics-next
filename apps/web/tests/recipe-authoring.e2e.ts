@@ -117,7 +117,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await page.getByRole('button', { name: 'Edit 1½ cups flour, sifted' }).click();
   const edit = page.getByRole('form', { name: 'Edit 1½ cups flour, sifted' });
   await expect(edit.getByRole('textbox', { name: 'Amount' })).toHaveValue('1½');
-  await expect(edit.getByRole('textbox', { name: 'Unit' })).toHaveValue('cups');
+  await expect(edit.getByRole('combobox', { name: 'Unit' })).toHaveValue('cups');
   await expect(edit.getByRole('textbox', { name: 'Ingredient', exact: true })).toHaveValue('flour');
   await expect(edit.getByRole('textbox', { name: 'Note' })).toHaveValue('sifted');
   await edit.getByRole('textbox', { name: 'Amount' }).fill('1 1/2');
