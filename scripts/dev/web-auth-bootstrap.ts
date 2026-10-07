@@ -375,6 +375,14 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
   }
 }
 
+/** Whether the active installation ceiling is exactly the main site's scopes. */
+function webInstallationCurrent(registered: { installationScopes?: string[]; installationState?: string }): boolean {
+  const requested = new Set(scope.split(' '));
+  return registered.installationState === 'active'
+    && requested.size === registered.installationScopes?.length
+    && (registered.installationScopes?.every(grant => requested.has(grant)) ?? false);
+}
+
 /** Whether a stack's registered web client already has today's scopes and grants. */
 export function webClientCurrent(registered: { scope: string; grantTypes?: string[]; name?: string;
   installationScopes?: string[]; installationState?: string; firstParty?: boolean; skipConsent?: boolean }): boolean {
@@ -382,10 +390,118 @@ export function webClientCurrent(registered: { scope: string; grantTypes?: strin
   const declared = new Set(registered.scope.split(' '));
   return declared.size === requested.size && [...requested].every(grant => declared.has(grant))
     && registered.name === 'REZICS' && registered.firstParty === true && registered.skipConsent === true
-    && registered.installationState === 'active'
-    && requested.size === registered.installationScopes?.length
-    && registered.installationScopes.every(grant => requested.has(grant))
+    && webInstallationCurrent(registered)
     && webGrantTypes.every(grant => registered.grantTypes?.includes(grant));
+}
+
+/** Fields the client-update API may change. The auth method is omitted so Account keeps any client secret. */
+function webClientUpdate(redirectUris: string[]) {
+  const registration = webClientRegistration(redirectUris);
+  return { client_name: registration.client_name, redirect_uris: registration.redirect_uris,
+    grant_types: [...registration.grant_types], scope: registration.scope, skip_consent: registration.skip_consent };
+}
+
+export interface WebClientRegistrationState {
+  name: string;
+  scopes: string[];
+  grantTypes: string[];
+  installationScopes?: string[];
+  installationState?: string;
+  installationId?: string;
+  firstParty: boolean;
+  skipConsent?: boolean;
+  disabled?: boolean;
+}
+
+export type WebClientReconcileOutcome =
+  | { case: 'current' | 'updated'; clientId: string }
+  | { case: 'registered'; clientId: string }
+  | { case: 'reregistered'; clientId: string; previousClientId: string; reason: string };
+
+/** The Account update path refused this client, so the caller registers another. */
+export class WebClientNotUpdatable extends Error {
+  constructor(readonly reason: string) {
+    super(`Web OAuth client cannot be updated (${reason})`);
+    this.name = 'WebClientNotUpdatable';
+  }
+}
+
+export interface WebClientAccount {
+  updateClient(clientId: string, update: ReturnType<typeof webClientUpdate>): Promise<{ client_id: string }>;
+  registerClient(registration: ReturnType<typeof webClientRegistration>): Promise<{ client_id: string }>;
+  markFirstParty(clientId: string): Promise<void>;
+  replaceInstallation(clientId: string, installationId: string | undefined, scopes: readonly string[]): Promise<void>;
+}
+
+type WebClientPlan =
+  | { action: 'current' }
+  | { action: 'update' }
+  | { action: 'register' }
+  | { action: 'reregister'; reason: string };
+
+function registrationView(registered: WebClientRegistrationState) {
+  return { scope: registered.scopes.join(' '), name: registered.name, grantTypes: registered.grantTypes,
+    installationScopes: registered.installationScopes, installationState: registered.installationState,
+    firstParty: registered.firstParty, skipConsent: registered.skipConsent };
+}
+
+function webClientPlan(registered: WebClientRegistrationState | undefined): WebClientPlan {
+  if (!registered) return { action: 'register' };
+  // A revoked installation cannot take a new ceiling on the same client. A
+  // disabled client cannot be re-enabled through the client-update API.
+  if (registered.installationState === 'revoked') return { action: 'reregister', reason: 'its installation was revoked' };
+  if (registered.disabled) return { action: 'reregister', reason: 'it is disabled' };
+  if (webClientCurrent(registrationView(registered))) return { action: 'current' };
+  return { action: 'update' };
+}
+
+export function webClientReconcileMessage(outcome: WebClientReconcileOutcome): string {
+  switch (outcome.case) {
+    case 'current': return `Web OAuth client is current: ${outcome.clientId}`;
+    case 'updated': return `Web OAuth client updated in place: ${outcome.clientId}`;
+    case 'registered': return `Web OAuth client registered: ${outcome.clientId}`;
+    case 'reregistered': return `Web OAuth client re-registered because ${outcome.reason}: ${outcome.clientId} (was ${outcome.previousClientId})`;
+  }
+}
+
+async function registerWebClient(account: WebClientAccount, saved: { clientId: string; redirectUris: string[] },
+  reason?: string): Promise<WebClientReconcileOutcome> {
+  const created = await account.registerClient(webClientRegistration(saved.redirectUris));
+  if (!created.client_id) throw new Error('Account did not issue a web client id');
+  await account.markFirstParty(created.client_id);
+  return reason
+    ? { case: 'reregistered', clientId: created.client_id, previousClientId: saved.clientId, reason }
+    : { case: 'registered', clientId: created.client_id };
+}
+
+/** Bring a dev web client up to the site's scopes and grants. A client update
+ * never moves the installation ceiling, so an active ceiling that differs is
+ * revoked and installed again. That keeps the client id and any secret. */
+export async function reconcileWebClient(account: WebClientAccount,
+  saved: { clientId: string; redirectUris: string[] },
+  registered: WebClientRegistrationState | undefined): Promise<WebClientReconcileOutcome> {
+  const plan = webClientPlan(registered);
+  if (plan.action === 'current') return { case: 'current', clientId: saved.clientId };
+  if (plan.action === 'register') return registerWebClient(account, saved);
+  if (plan.action === 'reregister') return registerWebClient(account, saved, plan.reason);
+  if (!registered) throw new Error('Web client update requires a registered client');
+  try {
+    const updated = await account.updateClient(saved.clientId, webClientUpdate(saved.redirectUris));
+    if (updated.client_id !== saved.clientId) {
+      throw new Error(`Account changed the web client id from ${saved.clientId} to ${updated.client_id}`);
+    }
+    await account.markFirstParty(saved.clientId);
+    if (!webInstallationCurrent(registered)) {
+      if (registered.installationState === 'active' && !registered.installationId) {
+        throw new Error('Active web client installation has no id');
+      }
+      await account.replaceInstallation(saved.clientId, registered.installationId, MAIN_SITE_SCOPES);
+    }
+    return { case: 'updated', clientId: saved.clientId };
+  } catch (error) {
+    if (!(error instanceof WebClientNotUpdatable)) throw error;
+    return registerWebClient(account, saved, `it cannot be updated (${error.reason})`);
+  }
 }
 
 /** A missing or stale installation stops local startup before a browser sees invalid_scope. */
@@ -410,12 +526,106 @@ export async function assertWebInstallationReady(apps: Record<string, string>, p
   } finally { await account.end(); }
 }
 
-/** A stack prepared before the main site's current scopes or refresh grant
- * keeps a web client whose installation ceiling refuses them. Register a new
- * client with the fixture's operator and point the public config at it; the
- * old client stays installed until the stack is reset. Also align the local
- * person's consent grant with normal provisioning, even if OAuth is current.
- * Returns whether it registered a new client. */
+async function readWebClientRegistration(pool: Pool, clientId: string): Promise<WebClientRegistrationState | undefined> {
+  const registered = await pool.query<{ name: string; scopes: string[] | null; grantTypes: string[] | null;
+    skipConsent: boolean | null; disabled: boolean | null; installationId: string | null;
+    installationScopes: string[] | null; installationState: string | null; firstParty: boolean }>(`
+    SELECT c.name, c.scopes, c."grantTypes", c."skipConsent", c.disabled,
+      active.id AS "installationId", active.scopes AS "installationScopes",
+      CASE WHEN active.id IS NOT NULL THEN 'active'
+           WHEN revoked.id IS NOT NULL THEN 'revoked'
+           ELSE NULL END AS "installationState",
+      fp.client_id IS NOT NULL AS "firstParty"
+    FROM "oauthClient" c
+    LEFT JOIN rezics_oauth_installation active
+      ON active.client_id = c."clientId" AND active.state = 'active'
+    LEFT JOIN LATERAL (
+      SELECT id FROM rezics_oauth_installation
+      WHERE client_id = c."clientId" AND state = 'revoked' LIMIT 1) revoked ON true
+    LEFT JOIN rezics_oauth_first_party_client fp ON fp.client_id = c."clientId"
+    WHERE c."clientId" = $1`, [clientId]);
+  const row = registered.rows[0];
+  if (!row) return undefined;
+  return { name: row.name, scopes: row.scopes ?? [], grantTypes: row.grantTypes ?? [],
+    skipConsent: row.skipConsent ?? undefined, disabled: row.disabled === true,
+    installationId: row.installationId ?? undefined,
+    installationScopes: row.installationScopes ?? undefined,
+    installationState: row.installationState ?? undefined, firstParty: row.firstParty };
+}
+
+/** In-process Account, the same way registration calls the client API. Installation
+ * changes go through the operator installation API: a client update does not move
+ * the ceiling, and widening it in place would let old tokens gain scopes. */
+async function openWebClientAccount(pool: Pool, apps: Record<string, string>,
+  operator: { id: string; email: string; password: string }): Promise<WebClientAccount> {
+  const operatorIds = new Set([operator.id]);
+  const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
+    resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: operatorIds });
+  const app = createAccountApp(auth, pool, { operatorUserIds: operatorIds });
+  const signIn = await app.handle(new Request(`${apps.ACCOUNT_BASE_URL}/api/auth/sign-in/email`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: apps.ACCOUNT_BASE_URL! },
+    body: JSON.stringify({ email: operator.email, password: operator.password }) }));
+  const cookie = signIn.headers.get('set-cookie');
+  await signIn.body?.cancel();
+  if (signIn.status !== 200 || !cookie) throw new Error(`Local operator sign-in failed with HTTP ${signIn.status}`);
+  const headers = new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! });
+  const postInstallation = async (body: Record<string, unknown>): Promise<void> => {
+    const response = await app.handle(new Request(`${apps.ACCOUNT_BASE_URL}/api/account/installation-changes`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: apps.ACCOUNT_BASE_URL! },
+      body: JSON.stringify(body) }));
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) {
+      throw new Error(`Web client installation change failed with HTTP ${response.status}${
+        payload?.error ? ` (${payload.error})` : ''}`);
+    }
+  };
+  return {
+    async updateClient(clientId, update) {
+      let updated: { client_id?: string };
+      try {
+        updated = await auth.api.adminUpdateOAuthClient({ headers, body: { client_id: clientId, update } });
+      } catch (error) {
+        const status = typeof error === 'object' && error && 'status' in error
+          ? String((error as { status?: unknown }).status) : '';
+        // Not the owner, or the row disappeared. Permission and validation
+        // failures stay errors so a refused update does not change the client id.
+        if (status === 'UNAUTHORIZED' || status === 'NOT_FOUND') throw new WebClientNotUpdatable(status);
+        throw error;
+      }
+      if (!updated?.client_id) throw new Error('Account did not return the web client id');
+      if (updated.client_id !== clientId) {
+        throw new Error(`Account changed the web client id from ${clientId} to ${updated.client_id}`);
+      }
+      return { client_id: updated.client_id };
+    },
+    async registerClient(registration) {
+      const created = await auth.api.adminCreateOAuthClient({ headers, body: registration });
+      if (!created.client_id) throw new Error('Account did not issue a web client id');
+      return { client_id: created.client_id };
+    },
+    async markFirstParty(clientId) {
+      await pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
+        [clientId]);
+    },
+    async replaceInstallation(clientId, installationId, scopes) {
+      if (installationId) await postInstallation({ change: 'revoke', installationId });
+      await postInstallation({ change: 'install', clientId, scopes: [...scopes], changeKey: randomUUID() });
+    },
+  };
+}
+
+function webClientFileDiffers(saved: { clientId: string; scope: string; grantTypes?: string[] }, clientId: string): boolean {
+  const grantsMatch = webGrantTypes.length === (saved.grantTypes?.length ?? 0)
+    && webGrantTypes.every(grant => saved.grantTypes?.includes(grant));
+  return saved.clientId !== clientId || saved.scope !== scope || !grantsMatch;
+}
+
+/** A stack prepared before the main site's current scopes or grants keeps its
+ * web client id. The fixture operator updates that client's scopes, grants and
+ * first-party installation. A missing client is registered. A revoked or
+ * otherwise unupdatable client is registered again, and the log says which.
+ * The local person's consent grant is aligned either way.
+ * Returns whether the public client id changed. */
 export async function upgradeWebClient(options: { runId: string; profile?: 'dev' | 'qa'; fixtureName?: string }): Promise<boolean> {
   const profile = options.profile ?? 'qa';
   const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId: options.runId });
@@ -438,40 +648,17 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
   finally { await access.end(); }
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   try {
-    const registered = await pool.query<{ name: string; scopes: string[]; grantTypes: string[];
-      installationScopes: string[] | null; installationState: string | null; firstParty: boolean; skipConsent: boolean }>(`
-      SELECT c.name, c.scopes, c."grantTypes", c."skipConsent", i.scopes AS "installationScopes",
-        i.state AS "installationState", fp.client_id IS NOT NULL AS "firstParty"
-      FROM "oauthClient" c
-      LEFT JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
-      LEFT JOIN rezics_oauth_first_party_client fp ON fp.client_id = c."clientId"
-      WHERE c."clientId" = $1`, [current.clientId]);
-    const installed = registered.rows[0];
-    if (installed && webClientCurrent({ scope: installed.scopes.join(' '), name: installed.name,
-      grantTypes: installed.grantTypes, installationScopes: installed.installationScopes ?? undefined,
-      installationState: installed.installationState ?? undefined, firstParty: installed.firstParty,
-      skipConsent: installed.skipConsent })) return false;
-    const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
-      resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: new Set([operator.id]) });
-    const signIn = await createAccountApp(auth, pool).handle(new Request(
-      `${apps.ACCOUNT_BASE_URL}/api/auth/sign-in/email`, { method: 'POST',
-        headers: { 'content-type': 'application/json', origin: apps.ACCOUNT_BASE_URL! },
-        body: JSON.stringify({ email: operator.email, password: operator.password }) }));
-    const cookie = signIn.headers.get('set-cookie');
-    await signIn.body?.cancel();
-    if (signIn.status !== 200 || !cookie) throw new Error(`Local operator sign-in failed with HTTP ${signIn.status}`);
-    const webClient = await auth.api.adminCreateOAuthClient({
-      headers: new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! }),
-      body: webClientRegistration(current.redirectUris) });
-    await pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)', [webClient.client_id]);
-    if (installed?.name === 'QA-only loopback PKCE') {
-      await pool.query('UPDATE "oauthClient" SET name = $1 WHERE "clientId" = $2', ['REZICS', current.clientId]);
-      await pool.query('INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
-        [current.clientId]);
+    const registered = await readWebClientRegistration(pool, current.clientId);
+    const outcome = webClientPlan(registered).action === 'current'
+      ? { case: 'current' as const, clientId: current.clientId }
+      : await reconcileWebClient(await openWebClientAccount(pool, apps, operator),
+        { clientId: current.clientId, redirectUris: current.redirectUris }, registered);
+    if (webClientFileDiffers(current, outcome.clientId)) {
+      writeFileSync(publicPath, JSON.stringify({ ...current, clientId: outcome.clientId, scope,
+        grantTypes: webGrantTypes }, null, 2) + '\n', { mode: 0o600 });
     }
-    writeFileSync(publicPath, JSON.stringify({ ...current, clientId: webClient.client_id, scope,
-      grantTypes: webGrantTypes }, null, 2) + '\n', { mode: 0o600 });
-    return true;
+    console.log(webClientReconcileMessage(outcome));
+    return outcome.clientId !== current.clientId;
   } finally { await pool.end(); }
 }
 
