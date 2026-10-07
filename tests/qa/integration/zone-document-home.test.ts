@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
@@ -11,7 +11,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
-import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import { ContentDraftUnavailable } from '../../../services/main/src/modules/content-publication/draft.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable, ZonePublicationUnavailable,
   type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
@@ -20,16 +21,33 @@ import { ZONE_SITE_PUBLICATION_COST, zonePublishedPageBinding } from '../../../s
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
-interface SavedDraft { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
+interface SavedDraft { revisionId: string; predecessor: string | null; byteDigest: string;
+  sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }
 interface SelectedPage { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string }
 interface Home { kind: string; realm: string | null; page?: { reference: { revisionId: string };
   document: DocumentSnapshot; blocks: Array<Record<string, unknown>>;
-  showcases: Array<{ id: string; module: { id: string; type: string } | null; sources: unknown[] }>;
+  showcases: Array<{ id: string; module: ZonePresentation['modules'][number] | null;
+    sources: Array<{ source: unknown }>; slides?: ZonePresentation['slides'];
+    titleEffect?: ZonePresentation['tokens']['titleEffect'] }>;
   showcaseData: { slides: Array<{ id: string }>; slideMedia: unknown[] } } }
 const boundPages = (pages: readonly Pick<SelectedPage, 'page' | 'variantId' | 'revisionId'>[]) => pages.map(({ page, variantId, revisionId }) =>
   ({ page, variantId, revisionId }));
 
-async function fixture() {
+const documentHero: ZonePresentation['modules'][number] = { id: 'hero', type: 'hero-carousel',
+  title: 'Document highlights', titles: { en: 'Document highlights', 'zh-Hant': '文件精選' },
+  source: { kind: 'query-block', block: 'new-adoptions' }, options: { limit: 4, shuffle: false } };
+const documentSlides: ZonePresentation['slides'] = [{ id: 'document-slide', href: '/',
+  title: 'Published document highlight', titles: { 'zh-Hant': '已發佈文件精選' } }];
+function showcaseDocument(slides = documentSlides, titleEffect: ZonePresentation['tokens']['titleEffect'] = 'outline') {
+  const document = structuredClone(fromPlainText('Document-owned home', 'blocks'));
+  document.doc.content!.push({ type: 'extensionBlock', attrs: { id: 'document-showcase', dir: null, lang: null,
+    definition: 'https://rezics.com/definition/showcase-block-v1', version: '2',
+    payload: { 'rv:module': [structuredClone(documentHero)], 'rv:slides': structuredClone(slides),
+      'rv:titleEffect': [titleEffect] }, fallback: 'Document highlights' } });
+  return document;
+}
+
+async function fixture(initialDocument = fromPlainText('Published home', 'blocks')) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-document-home-${randomUUID()}`),
@@ -59,10 +77,19 @@ async function fixture() {
     await objects.initialize();
     (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
     const core = new ContentCore(f.pool);
+    let loseDraftResponse = false;
     let failSettlement = false;
     let failRejectionAt: number | null = null;
     let failPreparationAt: number | null = null;
     const content = new Proxy(core, { get(target, property) {
+      if (property === 'saveDraft') return async (...args: Parameters<typeof target.saveDraft>) => {
+        const saved = await target.saveDraft(...args);
+        if (loseDraftResponse) {
+          loseDraftResponse = false;
+          throw new ContentDraftUnavailable('lost response after Content committed the draft');
+        }
+        return saved;
+      };
       if (property === 'preparePublication') return async (...args: Parameters<typeof target.preparePublication>) => {
         if (failPreparationAt !== null && --failPreparationAt === 0) {
           failPreparationAt = null;
@@ -136,7 +163,6 @@ async function fixture() {
         byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
     };
     const initialContentPosition = await core.ownerPosition();
-    const initialDocument = fromPlainText('Published home', 'blocks');
     const selection = { routesRevision: created.navigationRevision,
       navigationRevision: created.navigationRevision, pages: [await save(initialDocument)] };
     const publish = async (pages = selection.pages, key = randomUUID(),
@@ -159,6 +185,7 @@ async function fixture() {
       failSettlement: () => { failSettlement = true; },
       failRejection: () => { failRejectionAt = 1; },
       failSecondRejection: () => { failRejectionAt = 2; },
+      loseDraftResponse: () => { loseDraftResponse = true; },
       failSecondPreparation: () => { failPreparationAt = 2; } };
   } catch (error) { await f.close(); throw error; }
 }
@@ -279,6 +306,129 @@ test('anonymous home language preferences select only exact variants in the publ
   } finally { await f.close(); }
 }, 120_000);
 
+test('Content Showcase save replays exact bytes, rejects stale heads and publishes block-local slides independently of Zone drafts', async () => {
+  const f = await fixture();
+  try {
+    const original = f.selection.pages[0]!;
+    const document = showcaseDocument();
+    const unknownPayload = { future: [null, { coordinates: [121.5, 25], preserved: true }], unicode: '雨夜書店' };
+    document.doc.content!.push(
+      { type: 'extensionBlock', attrs: { id: 'unknown-map', dir: null, lang: null,
+        definition: 'https://example.org/future-map', version: '9', payload: unknownPayload, fallback: 'Place map' } },
+      { type: 'extensionBlock', attrs: { id: 'future-showcase', dir: null, lang: null,
+        definition: 'https://rezics.com/definition/showcase-block-v1', version: '99',
+        payload: { opaque: ['留存', null] }, fallback: 'Future highlights' } },
+    );
+    const body = { profile: 'content-text-v1', resourceId: f.zone, variantId: original.variantId,
+      expectedHead: original.revisionId, document,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor };
+    const zoneHead = (await readZoneConfiguration(f.env, f.zone)).revision;
+    const key = randomUUID();
+    f.loseDraftResponse();
+    expect((await f.call('POST', '/v1/content-drafts', body, key)).status).toBe(503);
+    const committed = await f.content.readDraftHead(f.zone, original.variantId);
+    expect(committed?.revisionId).not.toBe(original.revisionId);
+    const committedPosition = await f.content.ownerPosition();
+    const saved = await f.json<SavedDraft>(await f.call('POST', '/v1/content-drafts', body, key), 200);
+    expect(saved).toMatchObject({ revisionId: committed?.revisionId, predecessor: original.revisionId, replayed: true });
+    expect(await f.content.ownerPosition()).toEqual(committedPosition);
+    expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(zoneHead);
+    const page: SelectedPage = { page: f.zone, variantId: original.variantId, revisionId: saved.revisionId,
+      byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
+    const editor = async () => f.json<{ revision: string; configuration: { presentation: ZonePresentation };
+      draft: { variantId: string; revisionId: string | null; document: DocumentSnapshot | null; byteDigest: string | null;
+        language: { kind: string; tag?: string; originalTag?: string }; direction: string;
+        sourcePosition: { owner: string; dataEpoch: string; sequence: string } };
+      publishedPage: { page: string; variantId: string; revisionId: string } | null }>(
+      await f.call('GET', `${f.path}/showcase-editor?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    const unpublishedEditor = await editor();
+    expect(unpublishedEditor.revision).toBe(zoneHead);
+    expect(unpublishedEditor.publishedPage).toBeNull();
+    expect(unpublishedEditor.draft).toMatchObject({ variantId: page.variantId, revisionId: page.revisionId,
+      document, byteDigest: page.byteDigest, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+      sourcePosition: { owner: 'content', dataEpoch: page.contentEpoch } });
+    const retained = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(
+      await f.exact(page.revisionId, true), 200);
+    expect(retained.body.document).toEqual(document);
+    expect(createHash('sha256').update(retained.serializedJson).digest('hex')).toBe(saved.byteDigest);
+    expect((await f.exact(page.revisionId)).status).toBe(404);
+    expect((await f.home()).page).toBeUndefined();
+    const changedRetry = { ...body, document: showcaseDocument([{ id: 'changed-retry', href: '/' }]) };
+    expect((await f.call('POST', '/v1/content-drafts', changedRetry, key)).status).toBe(409);
+    const stale = await f.json<{ code: string; currentHead: string }>(
+      await f.call('POST', '/v1/content-drafts', changedRetry), 409);
+    expect(stale).toMatchObject({ code: 'stale_head', currentHead: page.revisionId });
+    expect((await f.content.readDraftHead(f.zone, original.variantId))?.revisionId).toBe(page.revisionId);
+
+    const conflicting: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+      tokens: { ...DEFAULT_ZONE_PRESENTATION.tokens, titleEffect: 'glow' },
+      modules: [{ ...documentHero, title: 'Whole-Zone conflict', source: { kind: 'query-block', block: 'recent-decisions' } }],
+      slides: [{ id: 'zone-conflict', href: '/', title: 'Whole-Zone conflict' }] };
+    await f.json(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: zoneHead, presentation: conflicting, actingSubject: f.actor,
+    }), 200);
+    const receipt = await f.json<ZoneSitePublicationReceipt>(await f.publish([page]), 201);
+    expect(boundPages(receipt.pages)).toEqual(boundPages([page]));
+    const publishedEditor = await editor();
+    expect(publishedEditor.revision).toBe(receipt.revision);
+    expect(publishedEditor.configuration.presentation).toEqual(conflicting);
+    expect(publishedEditor.publishedPage).toMatchObject({ page: f.zone, variantId: page.variantId, revisionId: page.revisionId });
+    const home = await f.home();
+    expect(home.page).toMatchObject({ reference: { revisionId: page.revisionId }, document });
+    expect(home.page?.blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'document-showcase', status: 'resolved', kind: 'showcase', showcase: 'block:document-showcase' }),
+      expect.objectContaining({ id: 'unknown-map', status: 'placeholder', reason: 'unknown_definition', fallback: 'Place map' }),
+      expect.objectContaining({ id: 'future-showcase', status: 'placeholder', reason: 'unsupported_version', fallback: 'Future highlights' }),
+    ]));
+    const showcase = home.page?.showcases.find(item => item.id === 'block:document-showcase');
+    expect(showcase).toMatchObject({ module: documentHero, slides: documentSlides, titleEffect: 'outline' });
+    expect(showcase?.sources.map(item => item.source)).toEqual([documentHero.source]);
+    const presentation = async () => f.json<{ presentation: ZonePresentation; home?: Home['page'] }>(
+      await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
+    const published = await presentation();
+    expect(published.presentation.modules).toEqual([documentHero]);
+    expect(published.presentation.slides).toEqual(documentSlides);
+    expect(published.presentation.tokens.titleEffect).toBe('outline');
+    const exported = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(await f.exact(page.revisionId), 200);
+    expect(exported.serializedJson).toBe(retained.serializedJson);
+    expect(exported.body.document).toEqual(document);
+    expect(JSON.parse(exported.serializedJson).document.doc.content.at(-2).attrs.payload).toEqual(unknownPayload);
+
+    const draftDocument = structuredClone(document);
+    draftDocument.doc.content![1]!.attrs!.payload = { 'rv:module': [documentHero],
+      'rv:slides': [{ id: 'private-content-draft', href: '/', title: 'Private Content draft' }], 'rv:titleEffect': ['gradient'] };
+    const draft = await f.save(draftDocument, page.revisionId, page.variantId);
+    expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(receipt.revision);
+    const draftEditor = await editor();
+    expect(draftEditor.revision).toBe(receipt.revision);
+    expect(draftEditor.draft).toMatchObject({ variantId: draft.variantId, revisionId: draft.revisionId,
+      document: draftDocument, byteDigest: draft.byteDigest });
+    expect(draftEditor.publishedPage).toEqual(publishedEditor.publishedPage);
+    expect((await f.home()).page).toEqual(home.page);
+    expect((await presentation()).presentation).toEqual(published.presentation);
+    expect((await f.exact(draft.revisionId)).status).toBe(404);
+    expect((await f.json<{ body: { document: DocumentSnapshot } }>(await f.exact(draft.revisionId, true), 200)).body.document)
+      .toEqual(draftDocument);
+    await f.json(await f.call('PUT', `${f.path}/configuration`, {
+      expectedHead: receipt.revision, presentation: { ...conflicting,
+        slides: [{ id: 'private-zone-draft', href: '/', title: 'Private Zone draft' }] }, actingSubject: f.actor,
+    }), 200);
+    expect((await f.home()).page).toEqual(home.page);
+    expect((await presentation()).presentation).toEqual(published.presentation);
+    await f.json(await f.publish([draft]), 201);
+    const updated = await f.home();
+    expect(updated.page?.reference.revisionId).toBe(draft.revisionId);
+    expect((await editor()).publishedPage?.revisionId).toBe(draft.revisionId);
+    expect(updated.page?.showcases.find(item => item.id === 'block:document-showcase')).toMatchObject({
+      slides: [{ id: 'private-content-draft' }], titleEffect: 'gradient',
+    });
+    expect((await f.exact(page.revisionId)).status).toBe(404);
+    expect((await f.json<{ serializedJson: string }>(await f.exact(page.revisionId, true), 200)).serializedJson)
+      .toBe(retained.serializedJson);
+    expect(boundPages((await readZoneSitePublicationReceipt(f.env, receipt.receipt))!.pages)).toEqual(boundPages([page]));
+  } finally { await f.close(); }
+}, 120_000);
+
 test('site publication rejects nonexistent, unrelated, wrongly selected and stale Content revisions', async () => {
   const f = await fixture();
   try {
@@ -308,7 +458,7 @@ test('site publication rejects nonexistent, unrelated, wrongly selected and stal
 }, 120_000);
 
 test('revocation after the Content pin prevents the final site bundle switch', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const before = await readZoneConfiguration(f.env, f.zone);
     const page = f.selection.pages[0]!;
@@ -343,7 +493,7 @@ test('revocation after the Content pin prevents the final site bundle switch', a
 }, 120_000);
 
 test('an interrupted rejection retains the cancelled receipt and replay releases its pending pin', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const before = await readZoneConfiguration(f.env, f.zone);
     const page = f.selection.pages[0]!;
@@ -376,7 +526,7 @@ test('an interrupted rejection retains the cancelled receipt and replay releases
 }, 120_000);
 
 test('cancellation replay skips erased rejected bytes and releases the remaining page pin', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const before = await readZoneConfiguration(f.env, f.zone);
     const first = f.selection.pages[0]!;
@@ -432,7 +582,7 @@ test('cancellation replay skips erased rejected bytes and releases the remaining
 }, 120_000);
 
 test('failure pinning the second page rejects the first pin without publishing a partial bundle', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const before = await readZoneConfiguration(f.env, f.zone);
     const first = f.selection.pages[0]!;
@@ -454,7 +604,7 @@ test('failure pinning the second page rejects the first pin without publishing a
 }, 120_000);
 
 test('a site receipt survives interrupted Content settlement and replay settles its exact pin once', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const expectedHead = (await readZoneConfiguration(f.env, f.zone)).revision;
     const key = randomUUID();
@@ -477,6 +627,9 @@ test('a site receipt survives interrupted Content settlement and replay settles 
     } LIMIT 3`, 4096);
     expect(receipts.results?.bindings).toHaveLength(1);
     expect((await f.home()).page?.reference.revisionId).toBe(f.selection.pages[0]!.revisionId);
+    expect((await f.home()).page?.showcases.find(item => item.id === 'block:document-showcase')).toMatchObject({
+      module: documentHero, slides: documentSlides, titleEffect: 'outline',
+    });
   } finally { await f.close(); }
 }, 120_000);
 
@@ -507,6 +660,7 @@ test('public home resolves published Showcase and unknown placeholders while dra
         version: '9', payload, fallback: 'Place map' } },
     );
     const page = await f.save(document, f.selection.pages[0]!.revisionId, f.selection.pages[0]!.variantId);
+    const legacyBytes = (await f.json<{ serializedJson: string }>(await f.exact(page.revisionId, true), 200)).serializedJson;
     const collection = nativeId();
     await f.grant(`collection:edit:${collection}`, 'collection.edit');
     await f.grant(`semantic:read:${collection}`, 'semantic.read');
@@ -547,6 +701,7 @@ test('public home resolves published Showcase and unknown placeholders while dra
     expect(home.page?.showcaseData.slides).toEqual(publishedPresentation.slides);
     const exported = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(await f.exact(page.revisionId), 200);
     expect(exported.body.document).toEqual(document);
+    expect(exported.serializedJson).toBe(legacyBytes);
     expect(JSON.parse(exported.serializedJson).document.doc.content.at(-1).attrs.payload).toEqual(payload);
     const before = await presentation();
     expect(before.name).toBe('Edited site draft');
@@ -578,6 +733,16 @@ test('public home resolves published Showcase and unknown placeholders while dra
     expect(republished.navigation.map(item => item.segment)).toEqual(['draft-document']);
     expect((await f.call('GET', `${f.path}/routes?path=%2Fpublished-document`, undefined, randomUUID(), null)).status).toBe(404);
     expect((await f.call('GET', `${f.path}/routes?path=%2Fdraft-document`, undefined, randomUUID(), null)).status).toBe(200);
+    const converted = showcaseDocument();
+    const convertedPage = await f.save(converted, page.revisionId, page.variantId);
+    await f.json(await f.publish([convertedPage], randomUUID(), undefined, added.revision), 201);
+    expect((await f.home()).page?.document).toEqual(converted);
+    const historical = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(
+      await f.exact(page.revisionId, true), 200);
+    expect(historical.serializedJson).toBe(legacyBytes);
+    expect(historical.body.document).toEqual(document);
+    expect(historical.body.document.doc.content!.at(-2)!.attrs!.version).toBe('1');
+    expect(boundPages((await readZoneSitePublicationReceipt(f.env, receipt.receipt))!.pages)).toEqual(boundPages([page]));
   } finally { await f.close(); }
 }, 120_000);
 
@@ -646,7 +811,7 @@ test('concurrent publishers select one bundle and a membership lookup rechecks a
 }, 120_000);
 
 test('lost publish acknowledgement replays one receipt and original page, route, navigation and theme cuts', async () => {
-  const f = await fixture();
+  const f = await fixture(showcaseDocument());
   try {
     const key = randomUUID();
     const before = await readZoneConfiguration(f.env, f.zone);
@@ -679,6 +844,8 @@ test('lost publish acknowledgement replays one receipt and original page, route,
     } LIMIT 3`, 4096);
     expect(receipts.results?.bindings).toHaveLength(1);
     expect((await f.publish([{ ...f.selection.pages[0]!, revisionId: randomUUID() }], key, before.revision)).status).toBe(409);
+    expect((await f.home()).page).toMatchObject({ reference: { revisionId: f.selection.pages[0]!.revisionId },
+      document: f.initialDocument });
   } finally { await f.close(); }
 }, 120_000);
 
