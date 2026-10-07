@@ -112,6 +112,19 @@ final class CommandService extends ActionService {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            if (body.get("templateQuery") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (bytes.length > 512 * 1024 || body.keys().size() != 1)
+                    throw new IllegalArgumentException("invalid template query envelope");
+                JsonObject result = TemplateQueryService.select(action.getDataService().getDataset(),
+                    body.get("templateQuery").getAsObject());
+                action.getResponse().setStatus(200);
+                action.getResponse().setContentType("application/sparql-results+json; charset=utf-8");
+                JSON.write(action.getResponse().getOutputStream(), result);
+                return;
+            }
             if (body.get("items") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;

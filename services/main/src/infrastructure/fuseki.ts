@@ -32,6 +32,19 @@ export interface SparqlResult {
     datatype?: string; 'xml:lang'?: string }>[] };
 }
 
+/** Input RDF terms retain their identity; no SPARQL literal escaping at callers. */
+export type TemplateTerm = { type: 'uri'; value: string }
+  | { type: 'literal'; value: string; datatype?: string; language?: string };
+export interface TemplateQueryEnvelope {
+  /** Only authored, reviewed template text; never a public request field. */
+  query: string;
+  bindings: Record<string, TemplateTerm>;
+  /** Server-owned tuples replace matching empty VALUES blocks in the parsed query. */
+  tables: { columns: string[]; rows: TemplateTerm[][] }[];
+  /** One page plus its lookahead row. Physical candidate work is qualified separately. */
+  limit: number;
+}
+
 export interface CommandValidation {
   profile: string;
   sha256: string;
@@ -160,6 +173,29 @@ export class FusekiClient {
       signal: readSignal(),
     });
     if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
+    return boundedJson<SparqlResult>(response, maxResponseBytes);
+  }
+
+  async templateQuery(envelope: TemplateQueryEnvelope, maxResponseBytes = 512 * 1024): Promise<SparqlResult> {
+    if (!Number.isSafeInteger(envelope.limit) || envelope.limit < 1 || envelope.limit > 65
+      || Object.keys(envelope.bindings).length > 64 || envelope.tables.length > 4
+      || envelope.tables.reduce((total, table) => total + table.rows.length, 0) > 256
+      || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1 || maxResponseBytes > 512 * 1024) {
+      throw new Error('invalid template query budget');
+    }
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error('Fuseki template query capability is required');
+    }
+    const body = JSON.stringify({ templateQuery: envelope });
+    if (Buffer.byteLength(body) > 512 * 1024) throw new Error('template query exceeds request byte budget');
+    takeReadCall();
+    const response = await fetch(new URL('command', this.baseUrl), {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        accept: 'application/sparql-results+json', authorization: `Bearer ${this.commandCapability}` },
+      body, signal: readSignal(),
+    });
+    if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
+    if (!response.ok) throw new Error(`Fuseki template query returned ${response.status}`);
     return boundedJson<SparqlResult>(response, maxResponseBytes);
   }
 
