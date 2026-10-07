@@ -8,15 +8,28 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 19:59 UTC. Kernel's roots/membership activation
-completed with native25ce9fb19154/model fa39610 unchanged, Content1705/1706
-applied and all six applications healthy. Retained volumes are preserved and
-the Main hold is released. The checkpoint carries GroupRole/qualifier custody,
-membership and Trust disclosure reusea895. No Trust refresh ticket exists.
-Launch is asked to run its unchanged signed-in browse regression on this runtime.
-G-1330's mixed retained repair/cutover is active; positive restore
-release and the remaining Claim/source-projection unions are unqualified.
+Checkpoint 2026-10-07 20:27 UTC. Serving roots/membership remains healthy at
+native25ce9fb19154/model fa39610, with Content1705/1706 applied and the Main
+hold released. No Trust refresh is queued. G-1398 attempt2 is qualifying its
+new private Access history reader and migration1774 in isolated PG/native tests.
+G-1351's two commits are rebased to a7b4d5cf9 with current GroupRole/qualifier
+custody and restoredContent hooks preserved; attempt6 checks this exact current
+composition. Borrowed transaction checks remain, while the original saved relay
+cut is authenticated from the distinct restored relay snapshot and current
+retained authority/head/journal stays checked by the existing callback. Successful
+crash retry waits for Kernel's corrected frozen released-proof reader.
 
+G-1344 accounting-only ba6e8d5e6 passed six focused cases/94 assertions. Each
+ordinary restore gates independently at600ACTIVE; aggregate626.229seconds
+active and947.344seconds external span remain reported without an aggregate
+ceiling. The manager queued the actual100k campaign behind Launch's heavy gate
+from the unchanged compatible539/fa worktree and literal medium backup/copies.
+Log: .temp/worktrees/g-1344/.temp/goal/campaign-medium-manager-2025.log.
+Qualification remains pending and will not be relabeled as current25ce release
+proof. Launch's unchanged signed-in browser regression remains the closure check
+for activated G-1394. Kernel has the narrow original-descriptor fixture loan in
+unclaimed scripts/ops/tests/g-916-object-coverage.test.ts; no lifecycle or custody
+semantics are loaned.
 G-1343 borrowed reconciliation and retained-native-event component landed at
 `f83b0b599b06`. Forty-seven owner cases, fifty-five actual integration cases and
 a167.7second single-cut restore with152assertions passed. The source reader
@@ -24,7 +37,7 @@ uses real retained native events, distinct diagnostic/Main positions and the
 caller's transactions. The merge gate passed after narrowly registering this
 offline recovery-fence writer in the existing maintenance allowance; no guard
 or runtime fence was bypassed. G-1351 uses the exact reviewed source for actual
-operator release. G-1343 attempt6 now repairs interruption recovery through existing entrypoints:
+operator release. G-1343 attempt7 now repairs interruption recovery through existing entrypoints:
 committed graph release before Access CAS, and committed owner releases before
 outer outcome recording. Prior reconciliation/remaining closure must authenticate
 the mutated copy; no optional hold bypass. G-1351 keeps these exclusions until
@@ -123,8 +136,8 @@ above for the inherited verification gaps.
 | G-1333 | Closed/verified `3b12289689e1` after launch accepted its listener ownership fix. Plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. |
 | G-1342 | Closed/verified `98e679a8edc0`: two lent projection faults use the existing safe logger. |
 | G-1343 | Component landed `f83b0b599b06`: borrowed clients, exact historical roots and retained native-event proof. 47owner/55integration/152restore assertions pass; merge gate green after explicit maintenance-writer registration. Keep task open for any helper change needed by actual partial-release retry and the separate private-custody erasure contract. |
-| G-1344 | Held caller and measurement repair landed `dda9c5361193`; all160 affected unit/guard files pass. Actual native HTTP proof passed53.6s/136assertions; measurement3cases/40assertions pass. Attempt7 checks the current repository image and prepares a compatible medium baseline. Real campaign/time/peak qualification remains open. |
-| G-1351 | Safe seam/lock order landed. Actual composition `152d95e17` has78 focused passes; old metadata default-alias defect blocked native proof and is fixed upstream. Attempt5 composes paired borrowed clients/pure scans and actual retained-source proof before both releases. |
+| G-1344 | Held caller and measurement repair landed `dda9c5361193`; all160 affected unit/guard files pass. Actual native HTTP proof passed53.6s/136assertions; measurement3cases/40assertions pass. Accounting ba6e8d5e6 passed6/94; manager actual100k campaign is queued on frozen539/fa sources. Real campaign/time/peak qualification remains open. |
+| G-1351 | Safe seam/lock order landed. Actual composition `152d95e17` has78 focused passes; old metadata default-alias defect blocked native proof and is fixed upstream. Attempt6 qualifies rebased a7b4d5cf9 on current Main; prior actual operator proof passed564 assertions, with successful retry/recapture still excluded. |
 | G-1353 | Closed/verified. Queue `85a01f3c`, exact reply `d9ad2ba574cb` and fixture `fe7fb82d4922` landed. Actual report/notice and governance integration passed; affected units and guards green. |
 | G-1359 | Closed/verified `46dd3930714e`: exact Content GET declares optional bearer and generated anonymous-or-bearer security; other private/closed readers remain mandatory. Luna/max accepted first handoff,5files33insert/10delete;103 affected unit/guards all green after current rebase. |
 
