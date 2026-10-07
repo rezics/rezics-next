@@ -11,7 +11,7 @@ import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
   qaWaitStatusLines, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails, withSlot,
-  type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
+  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -2659,3 +2659,84 @@ function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => 
     tick();
   });
 }
+
+
+describe('Goal mail CLI', () => {
+  test('lost sender response and acknowledgement retries preserve IDs and each Goal receipt', () => {
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/goal-mail-command-'));
+    const payload = join(directory, 'request.md');
+    const options = { stateDir: directory, goals: ['program', 'kernel'] };
+    writeFileSync(payload, 'Please review this request; it conveys no permission.');
+    try {
+      const first = JSON.parse(mailCommand(['send', 'program', '--file', payload, '--key', 'retry-send'], options)[0]!);
+      const repeated = JSON.parse(mailCommand(['send', 'program', '--file', payload, '--key', 'retry-send'], options)[0]!);
+      expect(repeated.id).toBe(first.id);
+      const inbox = () => mailCommand(['inbox'], {...options, callerGoal:'program'}).map(line => JSON.parse(line));
+      expect(inbox()).toHaveLength(1);
+      expect(inbox()[0].acknowledged).toBe(false);
+      expect(mailCommand(['inbox', 'kernel'], options)).toEqual([]);
+      const acknowledged = JSON.parse(mailCommand(['ack',first.id], {...options,callerGoal:'program'})[0]!);
+      const retry = JSON.parse(mailCommand(['ack',first.id,'--goal','program'], options)[0]!);
+      expect(retry.acknowledgedAt).toBe(acknowledged.acknowledgedAt);
+      expect(inbox()[0].acknowledged).toBe(true);
+      expect(() => mailCommand(['ack',first.id,'--goal','kernel'],options)).toThrow('not delivered');
+    } finally { rmSync(directory,{recursive:true,force:true}); }
+  });
+
+  test('unknown Goals and malformed CLI options cannot send or implicitly acknowledge', () => {
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/goal-mail-refusal-'));
+    const payload = join(directory,'request.md');
+    writeFileSync(payload,'Request');
+    const options = {stateDir:directory,goals:['program']};
+    try {
+      expect(() => mailCommand(['send','missing','--file',payload,'--key','a'],options)).toThrow('Unknown');
+      expect(() => mailCommand(['send','program','--file',payload],options)).toThrow('needs');
+      expect(() => mailCommand(['send','program','--file',payload,'--key','a','--key','b'],options)).toThrow('Invalid option');
+      expect(() => mailCommand(['inbox','program','--ack','1'],options)).toThrow('one Goal');
+      expect(() => mailCommand(['inbox'],options)).toThrow('GOAL_ID');
+      expect(() => mailCommand(['ack','regression:program:1'],{...options,callerGoal:'program'})).toThrow('inbox --ack');
+      expect(existsSync(join(directory,'mail.sqlite'))).toBe(false);
+    } finally { rmSync(directory,{recursive:true,force:true}); }
+  });
+
+  test('worker launch adapters retain native resume, model, effort and account tier arguments', () => {
+    const prior = process.env.GOAL_CODEX_SERVICE_TIER;
+    process.env.GOAL_CODEX_SERVICE_TIER = 'default';
+    try {
+      for (const engine of ['codex','codex-1','luna'] as const) {
+        const [program,args] = launchCommand({id:'program',engine,effort:'high',session:'native-session',prompt:'mail prompt',
+          resume:true,worktree:'/manager',lastMessage:'/manager/last.md'});
+        expect(program).toBe('codex');
+        expect(args.slice(0,3)).toEqual(['exec','resume','native-session']);
+        expect(args).toContain(engine === 'luna' ? 'gpt-6-luna' : 'gpt-6.1-sol');
+        expect(args).toContain('model_reasoning_effort=high');
+        expect(args).toContain('service_tier="default"');
+        expect(args.slice(-3)).toEqual(['-o','/manager/last.md','mail prompt']);
+      }
+    } finally { if (prior === undefined) delete process.env.GOAL_CODEX_SERVICE_TIER; else process.env.GOAL_CODEX_SERVICE_TIER = prior; }
+  });
+});
+
+describe('registered Goal mail lifecycle', () => {
+  test('a closed registered Goal keeps its durable address, inbox and receipt across CLI processes', () => {
+    const directory = mkdtempSync(join(import.meta.dir,'../../.temp/goal-closed-mail-'));
+    const payload = join(directory,'request.md');
+    writeFileSync(payload,'A durable request for a registered Goal.');
+    writeFileSync(join(directory,'ledger.json'),JSON.stringify({tasks:{},goals:{program:{manager:'throwaway',
+      startedAt:'2026-01-01T00:00:00Z',closedAt:'2026-02-01T00:00:00Z'}}}));
+    const invoke = (args: string[]) => {
+      const result = spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'mail',...args],{
+        cwd:join(import.meta.dir,'../..'),encoding:'utf8',
+        env:{...process.env,GOAL_MAIL_STATE_DIR:directory,GOAL_ID:'program'}});
+      expect(result.status).toBe(0);
+      return result.stdout.trim().split('\n').map(line=>JSON.parse(line));
+    };
+    try {
+      const sent = invoke(['send','program','--file',payload,'--key','closed-goal-request'])[0];
+      expect(invoke(['inbox'])[0]).toMatchObject({id:sent.id,acknowledged:false});
+      const ack = invoke(['ack',sent.id])[0];
+      expect(invoke(['ack',sent.id])[0].acknowledgedAt).toBe(ack.acknowledgedAt);
+      expect(invoke(['inbox'])[0].acknowledged).toBe(true);
+    } finally { rmSync(directory,{recursive:true,force:true}); }
+  });
+});

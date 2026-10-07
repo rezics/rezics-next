@@ -1,0 +1,25 @@
+# Copy to ~/.config/systemd/user/goal-coordinator.service after review.
+# Customize WorkingDirectory and supply PATH (Bun + Task + tmux + Codex) in the env file.
+# Start tmux OUTSIDE this unit first; enroll only after the previous native owner exits:
+# task goal -- coordinator enroll <goal> --session <UUID> --engine codex --effort high --cwd <root> --tmux-socket <socket>
+# Check task goal -- coordinator status before enabling; messages never grant permission.
+# systemctl --user daemon-reload && systemctl --user enable --now goal-coordinator.service
+# Linger=no on the pilot host: the maintainer must enable lingering for logout survival,
+# or select a system service. This unit does not change login/linger policy.
+[Unit]
+Description=REZICS durable Goal manager wake coordinator
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/rezics/rezics-next
+EnvironmentFile=%h/.config/rezics/goal-coordinator.env
+ExecStart=/usr/bin/env task goal -- coordinator
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=15
+# Manager turns and their workers live under the independent tmux server, outside this cgroup.
+
+[Install]
+WantedBy=default.target

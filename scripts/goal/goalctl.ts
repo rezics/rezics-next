@@ -3,13 +3,16 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
-  renameSync, readlinkSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
+  renameSync, readlinkSync, realpathSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { land, type LandScope } from './land.ts';
+import { GoalMailStore } from './mail.ts';
+import { GoalCoordinator, nativeSession, tmuxServer, WAKE_LAST_MESSAGE, WAKE_PROMPT,
+  type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -930,7 +933,7 @@ function resetStatusFrom(value: unknown): CodexResetStatus | undefined {
 
 /** Read a public GET-only status snapshot, with a local 30-minute cache and no credentials. */
 export async function loadCodexResetStatus(options: {
-  fetcher?: typeof fetch; cacheFile?: string; nowMs?: number;
+  fetcher?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>; cacheFile?: string; nowMs?: number;
 } = {}): Promise<CodexResetLoad> {
   const nowMs = options.nowMs ?? Date.now();
   const cacheFile = options.cacheFile ?? codexResetCachePath;
@@ -993,7 +996,7 @@ export interface GoalUsageReport {
 }
 
 export async function usageReport(options: {
-  fetcher?: typeof fetch; cacheFile?: string; nowMs?: number;
+  fetcher?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>; cacheFile?: string; nowMs?: number;
 } = {}): Promise<GoalUsageReport> {
   const nowMs = options.nowMs ?? Date.now();
   const reset = await loadCodexResetStatus({ ...options, nowMs });
@@ -3205,6 +3208,129 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   }
 }
 
+/** The override confines disposable mail/pump trials to their own ledger and local state. */
+function eventStateDirectory(): string {
+  return process.env.GOAL_MAIL_STATE_DIR ? resolve(process.env.GOAL_MAIL_STATE_DIR) : stateDir;
+}
+function eventLedger(directory: string): Ledger {
+  const path = join(directory, 'ledger.json');
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as Ledger : { tasks: {} };
+}
+function namedOptions(args: string[], allowed: string[]): Record<string, string> {
+  const options: Record<string, string> = {};
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index]!;
+    const value = args[index + 1];
+    if (!allowed.includes(flag) || options[flag] !== undefined || !value || value.startsWith('--')) {
+      throw new Error(`Invalid option: ${flag}; expected ${allowed.join(', ')}`);
+    }
+    options[flag] = value;
+  }
+  return options;
+}
+export function mailCommand(args: string[], options: {stateDir: string; goals: string[]; callerGoal?: string}): string[] {
+  const [action, ...rest] = args;
+  const store = new GoalMailStore(options);
+  try {
+    if (action === 'send') {
+      const goal = rest[0] ?? '';
+      const flags = namedOptions(rest.slice(1), ['--file', '--key']);
+      if (!flags['--file'] || !flags['--key']) throw new Error('mail send <goal> needs --file <path> --key <retry-key>');
+      return [JSON.stringify(store.send(goal, readFileSync(resolve(flags['--file']), 'utf8'), flags['--key']))];
+    }
+    if (action === 'inbox') {
+      if (rest.length > 1) throw new Error('mail inbox accepts one Goal');
+      const goal = rest[0] ?? options.callerGoal;
+      if (!goal) throw new Error('mail inbox needs <goal> or GOAL_ID');
+      return store.inbox(goal).map(entry => JSON.stringify(entry));
+    }
+    if (action === 'ack') {
+      const flags = namedOptions(rest.slice(1), ['--goal']);
+      const goal = flags['--goal'] ?? options.callerGoal;
+      if (!goal || !rest[0]) throw new Error('mail ack <id> needs GOAL_ID or --goal <goal>');
+      return [JSON.stringify(store.ack(goal, rest[0]))];
+    }
+    throw new Error('mail needs send <goal> --file <path> --key <retry-key> | inbox [goal] | ack <id> [--goal <goal>]');
+  } finally { store.close(); }
+}
+function managerEvents(directory: string, goal: string, mail: GoalMailStore): WakeEvent[] {
+  const events: WakeEvent[] = mail.pending(goal).map(message => ({key:message.id,body:message.body}));
+  for (const task of Object.values(eventLedger(directory).tasks)) {
+    if (task.goal !== goal || ['verified', 'cancelled', 'merged'].includes(task.state) || !task.attempts.length) continue;
+    const attempt = lastAttempt(task);
+    if (task.state === 'running' && running(task)) continue;
+    events.push({key:`task:${task.id}:${attempt.n}`,body:`${task.id}: ${task.state}; attempt ${attempt.n} exited. Output: ${attempt.output}`});
+  }
+  return events;
+}
+async function coordinatorCommand(args: string[]): Promise<void> {
+  const directory = eventStateDirectory();
+  const goals = Object.keys(eventLedger(directory).goals ?? {});
+  const mail = new GoalMailStore({stateDir:directory,goals});
+  const coordinator = new GoalCoordinator({stateDir:directory,
+    events:goal => goals.includes(goal) ? managerEvents(directory,goal,mail) : [],
+    admit:descriptor => {
+      if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
+      const home = engineEnv(descriptor.engine).CODEX_HOME;
+      if (!home || realpathSync(home) !== descriptor.home) throw new Error('Selected engine account home changed; handover required');
+      launchGates(Object.values(readLedger().tasks),descriptor.engine,false);
+    }});
+  try {
+    const [action, ...rest] = args;
+    if (action === 'status') {
+      if (rest.length) throw new Error('coordinator status takes no options');
+      console.log(JSON.stringify(coordinator.status(),null,2)); return;
+    }
+    if (action === 'unenroll') {
+      if (rest.length !== 1) throw new Error('coordinator unenroll needs <goal>');
+      coordinator.acquire();
+      try { coordinator.unenroll(rest[0]!); } finally { coordinator.release(); }
+      return;
+    }
+    if (action === 'enroll') {
+      const goal = rest[0] ?? '';
+      if (!activeGoals(eventLedger(directory)).includes(goal)) throw new Error(`Unknown active Goal: ${goal}`);
+      if (coordinator.status().managers.length) throw new Error('This pilot enrolls one manager; unenroll before a new handover');
+      const flags = namedOptions(rest.slice(1),['--session','--engine','--effort','--cwd','--tmux-socket']);
+      const engine = flags['--engine'] ?? 'codex';
+      if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna') throw new Error('This pilot enrolls Codex managers only');
+      const effort = flags['--effort'];
+      const session = flags['--session'];
+      if (!effort || !effortsOf(engine).includes(effort) || !session || !flags['--cwd']) {
+        throw new Error('Enrollment requires --session <native UUID> --effort <effort> --cwd <directory>');
+      }
+      const cwd = realpathSync(resolve(flags['--cwd']));
+      const home = realpathSync(engineEnv(engine).CODEX_HOME!);
+      nativeSession(home,session,cwd);
+      const socket = flags['--tmux-socket'] ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
+      if (!socket) throw new Error('Enrollment needs an existing independent tmux server');
+      const [program, launchArgs] = launchCommand({id:goal,engine,effort,session,worktree:cwd,resume:true,
+        prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
+      const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,
+        program:Bun.which(program) ?? program,args:launchArgs,socket,server:tmuxServer(socket),
+        env:{PATH:process.env.PATH ?? '',HOME:homedir(),CODEX_HOME:home,GOAL_ID:goal,
+          GOAL_MANAGER:managerOf(eventLedger(directory),goal),
+          ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
+          ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
+            'GOAL_CODEX_1_HOME','GOAL_CODEX_SERVICE_TIER'].filter(key => process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
+      coordinator.acquire();
+      try { coordinator.enroll(descriptor); } finally { coordinator.release(); }
+      console.log(JSON.stringify(descriptor,null,2)); return;
+    }
+    const once = args.includes('--once');
+    const flags = namedOptions(args.filter(arg=>arg !== '--once'),['--interval-ms']);
+    const interval = Number(flags['--interval-ms'] ?? 5000);
+    if (!Number.isSafeInteger(interval) || interval < 100 || interval > 60_000) throw new Error('interval must be 100..60000 ms');
+    coordinator.acquire();
+    let stopped = false;
+    const stop = () => { stopped = true; };
+    process.on('SIGTERM',stop); process.on('SIGINT',stop);
+    try {
+      do { coordinator.step(); if (!once && !stopped) await Bun.sleep(interval); } while (!once && !stopped);
+    } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
+  } finally { mail.close(); coordinator.close(); }
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
   const flags = new Set(rest.filter(arg => arg.startsWith('--')));
@@ -3242,6 +3368,12 @@ async function main(argv: string[]): Promise<number> {
       return holders.length ? 1 : 0;
     }
     case 'status': await status(); return 0;
+    case 'mail': {
+      const directory = eventStateDirectory();
+      for (const line of mailCommand(rest,{stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {}),callerGoal:process.env.GOAL_ID})) console.log(line);
+      return 0;
+    }
+    case 'coordinator': await coordinatorCommand(rest); return 0;
     case 'regress': {
       // Worktree smoke runs can keep reports/inboxes in their writable checkout; QA still uses the shared host lock.
       const regressionState = process.env.GOAL_REGRESS_STATE_DIR ? resolve(process.env.GOAL_REGRESS_STATE_DIR) : stateDir;
@@ -3288,6 +3420,8 @@ async function main(argv: string[]): Promise<number> {
         + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
+        + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
+        + ' | coordinator [enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy] -- <command>');
       return 2;
   }
