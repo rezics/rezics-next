@@ -58,7 +58,7 @@ Realm rules may add restrictions but cannot waive platform rules.
 
 REZICS supports multilingual content, catalogue information, personal libraries, creative work and communities. Features become available as they are released. A roadmap, visible Zone or product description does not promise that every related capability is available.
 
-Cover and image uploads are available from launch. Uploaded and imported images pass automated safety checks, likely explicit images are held for review, new accounts have upload limits, and we remove images on valid reports.
+Cover and image uploads are available from launch under the layered media controls in the [Child Safety Policy](child-safety-policy.md). Sexually explicit images are prohibited. Automatic image analysis only suggests an NSFW label for presentation; it does not decide whether an image is allowed or hold it for review. A separate platform safety decision can hold or remove an image. New accounts have upload limits, anyone can report an image, and we remove images on valid reports.
 
 [REZICS TO FILL: public feature-status page and actual launch configuration.]
 
