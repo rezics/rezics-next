@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 export interface ProcessIdentity { pid: number; start: string; boot: string; cgroup: string }
 export function processIdentity(pid: number, procRoot = '/proc'): ProcessIdentity | undefined {
@@ -19,6 +19,23 @@ export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): bool
   return current?.start === identity.start && current.boot === identity.boot;
 }
 
+/** A worker a manager dispatched inherits the manager's session variables, but its `codex exec`
+ * process owns its own native session, and its tools carry that session. Only a `codex exec`
+ * resuming this same session is the manager itself. */
+function underOtherCodexExec(pid: number, session: string, procRoot: string): boolean {
+  for (let current = pid, depth = 0; current > 1 && depth < 64; depth++) {
+    let args: string[];
+    try { args = readFileSync(join(procRoot, String(current), 'cmdline'), 'utf8').split('\0').filter(Boolean); }
+    catch { return false; }
+    if (/^codex(?:\.exe)?$/.test(basename(args[0] ?? '')) && args[1] === 'exec') return !args.includes(session);
+    try {
+      const stat = readFileSync(join(procRoot, String(current), 'stat'), 'utf8');
+      current = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+    } catch { return false; }
+  }
+  return false;
+}
+
 /** Ownership is the handed-over process generation or evidence naming this exact session. */
 export function nativeOwner(_home: string, session: string, previousOwner?: ProcessIdentity, procRoot = '/proc'): string | undefined {
   if (previousOwner && sameProcess(previousOwner, procRoot)) return `waiting for previous owner ${previousOwner.pid}`;
@@ -33,7 +50,8 @@ export function nativeOwner(_home: string, session: string, previousOwner?: Proc
     }
     let env: string[];
     try { env = readFileSync(join(procRoot, entry, 'environ'), 'utf8').split('\0'); } catch { continue; }
-    if (env.includes(`CODEX_SESSION_ID=${session}`) || env.includes(`CODEX_THREAD_ID=${session}`)) {
+    if ((env.includes(`CODEX_SESSION_ID=${session}`) || env.includes(`CODEX_THREAD_ID=${session}`))
+      && !underOtherCodexExec(pid, session, procRoot)) {
       return `Native session still owned by process ${pid} (environment)`;
     }
   }

@@ -42,9 +42,9 @@ function fixture() {
   mkdirSync(join(procRoot, 'sys/kernel/random'), { recursive: true });
   writeFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'test-boot\n');
   return { dir, stateDir, launcher, descriptor, procRoot,
-    process(pid: number, args: string[], env: string[] = [], start = '100', state = 'S') {
+    process(pid: number, args: string[], env: string[] = [], start = '100', state = 'S', ppid = 0) {
       const directory = join(procRoot, String(pid)); mkdirSync(directory, { recursive: true });
-      const fields = Array<string>(22).fill('0'); fields[0] = state; fields[19] = start;
+      const fields = Array<string>(22).fill('0'); fields[0] = state; fields[1] = String(ppid); fields[19] = start;
       writeFileSync(join(directory, 'stat'), `${pid} (tool with spaces) ${fields.join(' ')}\n`);
       writeFileSync(join(directory, 'cgroup'), '0::/test\n');
       writeFileSync(join(directory, 'cmdline'), `${args.join('\0')}\0`);
@@ -350,6 +350,29 @@ describe('durable Goal wake coordinator', () => {
       const third = f.open(); third.acquire(); third.release();
       expect(sameProcess({ ...processIdentity(process.pid)!, start: 'stale' })).toBe(false);
       expect(processIdentity(2_147_483_647)).toBeUndefined();
+    } finally { f.cleanup(); }
+  });
+
+  test('workers that inherited the manager session variables do not own it; the manager and its tools do', () => {
+    const f = fixture();
+    try {
+      const session = f.descriptor.session;
+      const inherited = [`CODEX_SESSION_ID=${session}`, `CODEX_THREAD_ID=${session}`];
+      const owner = () => nativeOwner(f.descriptor.home, session, undefined, f.procRoot);
+      // A worker on its own session, and the code-mode host it spawned (real shapes on 2026-10-07).
+      f.process(130, ['codex', 'exec', 'resume', '01a115d3-5933-78b0-b728-52d3b04a2b3b', '-m', 'gpt-6.1-sol'], inherited);
+      f.process(131, ['/home/edge/.codex/packages/standalone/bin/codex-code-mode-host'], inherited, '100', 'S', 130);
+      expect(owner()).toBeUndefined();
+      // A tool of the manager's own interactive session still owns it.
+      f.process(132, ['/bin/bash', 'next-event.sh'], inherited);
+      expect(owner()).toContain('process 132 (environment)');
+      rmSync(join(f.procRoot, '132'), { recursive: true });
+      // A headless resume of this very session is the manager; its tools own the session too.
+      f.process(133, ['codex', 'exec', 'resume', session], inherited);
+      f.process(134, ['/bin/bash', 'next-event.sh'], inherited, '100', 'S', 133);
+      expect(owner()).toContain('process 133 (resume)');
+      rmSync(join(f.procRoot, '133'), { recursive: true });
+      expect(owner()).toContain('process 134 (environment)');
     } finally { f.cleanup(); }
   });
 
