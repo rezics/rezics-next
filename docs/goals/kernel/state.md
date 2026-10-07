@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 16:47 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 17:06 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal remains active. Completion cannot be projected reliably until the physical
 locality and exact restore/Claim qualifications pass.
@@ -94,18 +94,23 @@ held native work, final seal follows permit release, revocation is fenced.
   guards passed. Cold2048prefix/2051slots561.4sec/600;33outside effects32applied/
   1pending ready, relevant delta refuses. ActualAPI96assertions; exact background
   checkpoint/writers7ca7eac4f approved Program; request writers still findings.
-- G1300#18: no standalone landing. Own895a385e9 hook5actualnative cases pass.
-  Cold ORDER/LIMIT128 scans2/322/4098bindings at0/320/4096 proposals. Accepted
-  bounded-source decision now implemented in existing StatementPublicationMembership
-  and authenticated templateIndex;<=128physical GPOS/POS entries,127+lookahead,
-  exactEOF/source-token CAS, SQL candidate C-order separate. Corrected1545 inputs.
-  ActualG920 application still pending;128steps/160calls/4MiB/10sec unchanged,
-  outer WorkRead global fence remains debt.
-- G1290#12: Work source/adoption1282cedd0b9e+cancellation2f623f5e0ba3
-  independently accepted with mandatory staged Core hook.22actualTDB2, original15
-  and25sourceprobes/16rows+77adoptionprobes/37rows preserved. Qualifying ONLY actual
-  CommandService ordinary/slim/bulk cancellation+rollback on corrected1545 union.
-  No query switch/promotion/current-name release; canonical owner/admission live.
+- G1300#19: bounded publication component3bcfafda3 independently accepted:
+  11actualnative,56owners1064assert,7PG88assert. GPOS/POS <=128physical entries
+  per turn,127+lookahead; same-subject0/320/4096 proposals take2/324/4130 tuples
+  across1/3/33turns. EOF token is source identity, not complete custody proof;
+  held hooks mandatory. Strict actualG920 blocked by missing Zone fixture
+  membership preparation; resumed localnormalize+complete immediately before
+  product requests, all assertions/refusals/budgets retained. Default-only
+  hydration and outer WorkRead global fence remain explicit debt.
+- G1290#14: primitive1282cedd0b9e+cancellation2f623f5e0ba3 now C3 BLOCKED.
+  PublicNameProjection singleton scopeVersion compares global TDB dataVersion
+  and advances even on unrelated ordinary commits. Earlier local/cancellation
+  component acceptance does not waive C3. Removing that stamp/equality, retaining
+  bounded Work-local net effects and controlled raw/restore uncertainty guards.
+  Original22actualTDB2/counters and CommandService cancellation integration must
+  pass plus unrelated commit causes NO singleton correctness mutation. #13 CLI
+  resume failed parsing frontmatter-leading prompt; fresh codex-1#14 preserves
+  dirty borrowed overlays/new owned tests. No query/promotion/read activation.
 - G1341 CLOSED: Verification72b04d1d6ade+1703repair ACTIVE;45actualPG plans
   under65536row growth,80/128loops,241/384buffers,160affected+19guards pass.
   Zone fixture4c98d4bf77a6 localnormalize+complete:true before product requests;
@@ -132,20 +137,25 @@ held native work, final seal follows permit release, revocation is fenced.
   existing rebuild/relay transition; original receipt cannot infer missing original
   source from current state. Proving this plus trimmedjournal/after-start rollback,
   retain RDF authority and all original24 assertions; no enabled Content bulk API.
-- G1379#2: direct accepted Resource scalar authority confirmed. Implement ONLY
-  native local Resource source-effect generation/proof, actual bounded TDB2 tests,
-  staged Core/Journal hooks; no retained adoption inventory/promotion/read switch.
-  Mutable Episode index remains held until full reciprocal source barrier composed.
+- G1379#3: local helper7911d0ebb C3 BLOCKED: singleton semanticSourceVersion
+  matched globalTDBdataVersion and advanced on every tracked ordinary commit.
+  Original13TDB2 local-token/cost tests pass but do not prove absence of global
+  writes. Revised source removes stamp/equality, retains Resource-local net
+  effects and startup/raw/restore qualification; focused new actual proof active.
+  Integration warnings staged G1330/G1373/G1300/G1379/G1290. No alone activation,
+  retained adoption inventory/promotion barrier/Episode read switch.
 - G1381#1: Launch actions/slides/server loan granted4a568bae; ONE concrete
   Showcase block-local payload/current Content document draft+exact Zone publish
   consumer, existing page===zone authority/pins, unchanged UI/copy; preserve
   G1374 anonymous draft privacy. No whole-Zone family bump/history repin/API.
 
-Launch G1380 chapter400 source-diagnosed as raw schema:Book fixture update
-invalidating membership completion; smallest feed-read-support preparation after
-raw write, before both chapter APIs. Launch owns correction; Structure producer
-unchanged, native guards/all assertions retained. Other shared fixture class audit
-continues read-only.
+Launch G1380 fixture preparation23d7ea59f landed. Class audit found three
+additional setup instances in feed-home, library-status and g937-support;
+Launch G1383 owns them. Existing native completion guards/all assertions remain.
+Trust G1344 TS held callerdda9c5361193 landed with160affected/19guards; coalesce
+backend activation into next ready refresh. Reviewed retained-event contract and
+frozen custody/reconcile source staged G1330/.temp/ref/retained-event-reviewed-1657;
+full positive release still requires actual owner proof.
 
 Immutable native snapshot `.temp/kernel/held-native-union-1545` preserves1455
 and imports only committed486577521 MetadataRestore exact-delta default-alias
