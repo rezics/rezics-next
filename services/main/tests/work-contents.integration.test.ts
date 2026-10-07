@@ -492,6 +492,7 @@ async function legacySparseBook(stack: Awaited<ReturnType<typeof startMediaStack
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(structure)} ;
+        rv:generation ${iri(generation)} ;
         rv:manifest <urn:rezics:sha256:${digest}> ; rv:placementCount ${source.placementCount} ;
         rv:modelRevision <${STRUCTURE_PROFILE}> ; rv:shapeRevision <${STRUCTURE_PROFILE}> ;
         rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence 1 .
