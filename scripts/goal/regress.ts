@@ -18,6 +18,7 @@ export interface Execution {
   code: number; outcomes: Record<string, 'passed' | 'failed' | 'missing'>; artifactPaths: string[];
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
   failingTests?: string[];
+  cause?: string;
 }
 export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
@@ -30,6 +31,7 @@ export interface Diagnosis {
 export interface InboxEntry {
   runId: string; atCommit: string; failingTests: string[]; before?: string; after: string;
   goal: string; taskIds: string[]; status: Diagnosis['status']; classification: Classification; artifactPaths: string[];
+  runEvent?: { batchId: string; tier: RegressionTier; fileCount: number; cause: string };
 }
 export interface Manifest {
   version: 1; runId: string; atCommit: string; checkout: string; startedAt: string; finishedAt?: string;
@@ -89,7 +91,7 @@ const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
 const batchSize = (tier: RegressionTier, files: number): number =>
-  tier === 'integration' ? 5 : tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
+  tier === 'integration' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -236,6 +238,19 @@ export function classify(evidence: string, code = 1): Classification {
   return 'deterministic';
 }
 
+function assertionFiles(batch: Batch, result: Execution): string[] {
+  const assertions = result.failingTests?.filter(test => !test.endsWith(`: ${UNEXECUTED_FILE_TEST}`)) ?? [];
+  // Storybook outcomes come from completed suites; unlike missing suites, their failures are assertion evidence.
+  return batch.files.filter(file => result.outcomes[file] === 'failed'
+    && (file.includes('.stories.') || assertions.some(test => test.startsWith(`${file}:`))));
+}
+
+function batchRunFailure(batch: Batch, result: Execution): boolean {
+  return Boolean(result.code) && (result.classification === 'infrastructure'
+    || ((result.classification === 'deadline' || result.classification === 'resource')
+      && (batch.files.some(file => !result.outcomes[file] || result.outcomes[file] === 'missing') || !assertionFiles(batch, result).length)));
+}
+
 async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000,
   env: NodeJS.ProcessEnv = process.env): Promise<number> {
   const temporary = diskDirectory(join(checkout, '.temp/tmp'), 'subprocess TMPDIR');
@@ -354,7 +369,8 @@ async function runBatch(checkout: string, batch: Batch, directory: string, shard
   for (const entry of isolated.filter(entry => entry.status === 'order-dependent')) outcomes[entry.file] = 'failed';
   return { ...metadata, code, outcomes, evidence,
     classification: isolated.some(entry => entry.status === 'infrastructure-dependent') ? 'infrastructure' : code ? classify(evidence, code) : undefined,
-    artifactPaths: [directory, ...metadata.artifactPaths], failingTests: tests.filter(test => test.failed).map(test => `${test.file}: ${test.name}`) };
+    artifactPaths: [directory, ...metadata.artifactPaths], failingTests: tests.filter(test => test.failed && test.name !== UNEXECUTED_FILE_TEST)
+      .map(test => `${test.file}: ${test.name}`) };
 }
 
 export function inboxEntries(stateDir: string, goal: string, ack?: number): (InboxEntry & { number: number; acknowledged: boolean })[] {
@@ -373,8 +389,10 @@ export function inboxEntries(stateDir: string, goal: string, ack?: number): (Inb
 
 /** Called under the ledger lock. A resumed diagnosis cannot append the same routed failure twice. */
 export function appendInbox(stateDir: string, entry: InboxEntry): void {
-  if (entry.classification === 'infrastructure') return;
-  if (inboxEntries(stateDir, entry.goal).some(prior => prior.runId === entry.runId && prior.failingTests.join('\0') === entry.failingTests.join('\0'))) return;
+  if (entry.classification === 'infrastructure' && !entry.runEvent) return;
+  if (inboxEntries(stateDir, entry.goal).some(prior => prior.runId === entry.runId && (entry.runEvent
+    ? prior.runEvent?.batchId === entry.runEvent.batchId
+    : !prior.runEvent && prior.failingTests.join('\0') === entry.failingTests.join('\0')))) return;
   mkdirSync(join(stateDir, 'inbox'), { recursive: true });
   appendFileSync(join(stateDir, 'inbox', `${entry.goal}.jsonl`), `${JSON.stringify(entry)}\n`);
 }
@@ -543,6 +561,12 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const result = await runner(tree, batch, join(directory, label), manifest.shards, slotLimit);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
+      if (result.code && result.classification) {
+        // Keep the runtime cause when checkpoints discard the unabridged log evidence.
+        result.cause ??= (result.evidence ?? '').replace(/^\s*\d+\s*\|.*$/gm, '').split('\n').reverse()
+          .find(line => line.trim() && classify(line) === result.classification && result.classification !== 'deterministic')?.trim()
+          .slice(0, 500) ?? `Batch runner ended with ${result.classification} (exit ${result.code})`;
+      }
       if (git(tree, ['rev-parse', 'HEAD']) !== commit || git(tree, ['status', '--porcelain'])) throw new Error(`Source changed during regression: ${tree}`);
       return result;
     };
@@ -562,7 +586,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         if (!voided) break;
       }
     };
-    // Large unit/model runs and the bounded Jena container keep their own turn; stack and owner batches use measured memory admission.
+    // Unit batches fit the harness's three-minute budget and run serially; stack and owner batches use measured memory admission.
     for (const batch of manifest.batches.filter(batch => batch.tier === 'unit' || batch.tier === 'model' || batch.tier === 'jena:check')) {
       await runInitialBatch(batch);
     }
@@ -588,17 +612,38 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const eventPath = join(stateDir, 'merges.jsonl');
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as MergeEvent) : [];
     const route = options.route ?? (async entry => appendInbox(stateDir, entry));
-    for (const batch of manifest.batches.filter(batch => batch.state === 'done')) {
+    const routeBatchFailure = async (batch: Batch, result: Execution, fallback?: string) => {
+      const cause = result.cause ?? fallback ?? `Batch runner ended with ${result.classification ?? 'deterministic'} (exit ${result.code})`;
+      const diagnosis: Diagnosis = { file: `batch:${batch.id}`, status: 'unavailable', classification: result.classification ?? 'deterministic',
+        after: pinned, probes: [], artifactPaths: result.artifactPaths, reason: `${batch.id}: ${batch.files.length} files; ${cause}` };
+      if (manifest.diagnoses.some(item => item.file === diagnosis.file)) return;
+      await route({ runId, atCommit: pinned, failingTests: [diagnosis.file], after: pinned, goal: 'program', taskIds: [],
+        status: diagnosis.status, classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths,
+        runEvent: { batchId: batch.id, tier: batch.tier, fileCount: batch.files.length, cause } });
+      manifest.diagnoses.push(diagnosis); save();
+    };
+    const routeFileFailure = async (file: string, initial: Execution, diagnosis: Diagnosis) => {
+      diagnosis.artifactPaths = [...new Set(diagnosis.artifactPaths)];
+      const failingTests = initial.failingTests?.filter(test => test.startsWith(`${file}:`) && !test.endsWith(`: ${UNEXECUTED_FILE_TEST}`)) ?? [];
+      // Route before checkpointing; append is idempotent if interruption falls between the writes.
+      await route({ runId, atCommit: pinned, failingTests: failingTests.length ? failingTests : [file], before: diagnosis.before,
+      after: diagnosis.after, goal: diagnosis.goal ?? 'program', taskIds: diagnosis.taskIds ?? [], status: diagnosis.status,
+      classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
+      manifest.diagnoses.push(diagnosis); save();
+    };
+    for (const batch of manifest.batches.filter(batch => batch.attempts.length > 0)) {
       const initial = batch.attempts.at(-1)!;
-      const failing = batch.files.filter(file => initial.outcomes[file] !== 'passed');
+      let failing = batch.files.filter(file => initial.outcomes[file] !== 'passed');
+      if (batchRunFailure(batch, initial)) {
+        await routeBatchFailure(batch, initial);
+      }
+      if (manifest.diagnoses.some(item => item.file === `batch:${batch.id}`)) {
+        // Missing execution is a batch problem. Probe only files with actual assertion evidence.
+        failing = assertionFiles(batch, initial);
+      }
+      if (batch.state !== 'done') continue;
       if (!failing.length && initial.code) {
-        const diagnosis: Diagnosis = { file: `batch:${batch.id}`, status: 'unavailable', classification: initial.classification ?? 'deterministic',
-          after: pinned, probes: [], artifactPaths: initial.artifactPaths, reason: 'Batch runner failed despite passing file evidence' };
-        if (!manifest.diagnoses.some(item => item.file === diagnosis.file)) {
-          await route({ runId, atCommit: pinned, failingTests: [diagnosis.file], after: pinned, goal: 'program',
-            taskIds: [], status: diagnosis.status, classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
-          manifest.diagnoses.push(diagnosis); save();
-        }
+        await routeBatchFailure(batch, initial, 'Batch runner failed despite passing file evidence');
       }
       let repeatBatch: Execution | undefined;
       for (const file of failing) {
@@ -608,10 +653,25 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         repeatBatch ??= await execute(pinned, batch, `${batch.id}/confirm`);
         const repeat = repeatBatch;
         diagnosis.artifactPaths.push(...repeat.artifactPaths);
+        if (batchRunFailure(batch, repeat)) {
+          await routeBatchFailure(batch, repeat);
+          if (repeat.classification === 'infrastructure') {
+            batch.state = 'pending';
+            for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
+            save(); break;
+          }
+          // Retain initial assertion failures, but unavailable confirmation cannot establish flakiness or blame.
+          if (assertionFiles(batch, initial).includes(file)) {
+            diagnosis.status = 'unavailable'; diagnosis.reason = 'Batch confirmation unavailable';
+            await routeFileFailure(file, initial, diagnosis);
+          }
+          continue;
+        }
         const alone: Batch = { ...batch, files: [file], tier: file.includes('.stories.') && batch.tier === 'e2e' ? 'e2e' : batch.tier };
         const isolated = await execute(pinned, alone, `${batch.id}/alone-${batch.files.indexOf(file)}`);
         diagnosis.artifactPaths.push(...isolated.artifactPaths);
         if ([repeat, isolated].some(result => result.classification === 'infrastructure')) {
+          await routeBatchFailure(batch, [repeat, isolated].find(result => result.classification === 'infrastructure')!);
           batch.state = 'pending';
           for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;
@@ -634,17 +694,13 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           await bisectFailure(repo, stateDir, pinned, file, alone, events, diagnosis, checkoutAt, prepared, execute, takeProbe);
         }
         if (diagnosis.classification === 'infrastructure') {
+          await routeBatchFailure(batch, { ...initial, classification: 'infrastructure', cause: diagnosis.reason,
+            artifactPaths: diagnosis.artifactPaths });
           batch.state = 'pending';
           for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;
         }
-        diagnosis.artifactPaths = [...new Set(diagnosis.artifactPaths)];
-        // Route before checkpointing the diagnosis; append is idempotent if interruption falls between the two writes.
-        await route({ runId, atCommit: pinned, failingTests: initial.failingTests?.filter(test => test.startsWith(`${file}:`)).length
-          ? initial.failingTests.filter(test => test.startsWith(`${file}:`)) : [file], before: diagnosis.before,
-        after: diagnosis.after, goal: diagnosis.goal ?? 'program', taskIds: diagnosis.taskIds ?? [], status: diagnosis.status,
-        classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
-        manifest.diagnoses.push(diagnosis); save();
+        await routeFileFailure(file, initial, diagnosis);
       }
     }
     if (!manifest.preflight.ok && !manifest.diagnoses.some(item => item.file === 'preflight')) {

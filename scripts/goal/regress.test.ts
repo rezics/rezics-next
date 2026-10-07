@@ -88,6 +88,159 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
+  test('a large unit tier splits into serial fifteen-file batches within the harness deadline', async () => {
+    const r = repo();
+    try {
+      for (let index = 1; index < 380; index++) {
+        const file = `tests/qa/unit/example-${index}.test.ts`;
+        r.files.push({ file, tier: 'unit', outcome: 'pending' }); r.write(file, 'pass\n');
+      }
+      r.commit();
+      let active = 0;
+      const result = await r.run({ runId: 'unit-batches', only: ['unit'], runner: async (...args) => {
+        if (args[1].tier !== 'unit') return r.runner(...args);
+        expect(++active).toBe(1);
+        expect(args[1].files.length).toBeLessThanOrEqual(15);
+        const result = await r.runner(...args); active--;
+        return { ...result, testMs: args[1].files.length * 10_000 };
+      } });
+      const batches = result.batches.filter(batch => batch.tier === 'unit');
+      expect(batches).toHaveLength(26);
+      expect(batches.flatMap(batch => batch.files).sort()).toEqual(r.files.filter(file => file.tier === 'unit').map(file => file.file).sort());
+      expect(batches.every(batch => batch.attempts[0]!.testMs < 180_000)).toBe(true);
+      expect(result.files.filter(file => file.tier === 'unit').every(file => file.outcome === 'passed')).toBe(true);
+      r.calls.length = 0;
+      await r.run({ resume: 'unit-batches' });
+      expect(r.calls).toHaveLength(0);
+    } finally { r.cleanup(); }
+  });
+
+  test('a whole-tier deadline routes one batch event without confirming or probing its files', async () => {
+    const r = repo();
+    try {
+      for (let index = 1; index < 12; index++) {
+        const file = `tests/qa/unit/example-${index}.test.ts`;
+        r.files.push({ file, tier: 'unit', outcome: 'pending' }); r.write(file, 'pass\n');
+      }
+      r.commit();
+      const result = await r.run({ runId: 'tier-deadline', only: ['unit'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        return args[1].tier === 'unit' ? { ...result, code: 1, classification: 'deadline', outcomes: {},
+          evidence: 'bun timed out after 180000 ms of active work',
+          failingTests: args[1].files.map(file => `${file}: QA file did not complete`) } : result;
+      } });
+      expect(result.status).toBe('incomplete');
+      expect(r.calls.filter(call => call.batch.tier === 'unit')).toHaveLength(1);
+      expect(result.diagnoses).toEqual([expect.objectContaining({ file: 'batch:unit-1', classification: 'deadline', status: 'unavailable' })]);
+      expect(inboxEntries(r.options.stateDir, 'program')).toEqual([expect.objectContaining({
+        failingTests: ['batch:unit-1'], runEvent: { batchId: 'unit-1', tier: 'unit', fileCount: 12,
+          cause: 'bun timed out after 180000 ms of active work' },
+      })]);
+      expect(result.batches[0]!.attempts[0]!.cause).toContain('180000');
+      r.calls.length = 0;
+      await r.run({ resume: 'tier-deadline' });
+      expect(r.calls).toHaveLength(0);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(1);
+    } finally { r.cleanup(); }
+  });
+
+  test('a deadline with partial evidence retains per-file assertion failures alongside one run event', async () => {
+    const r = repo();
+    try {
+      const missing = 'tests/qa/unit/unexecuted.test.ts';
+      r.files.push({ file: missing, tier: 'unit', outcome: 'pending' }); r.write(missing, 'pass\n');
+      r.commit({ [r.unit]: 'fail\n' });
+      const result = await r.run({ runId: 'partial-deadline', only: ['unit'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (args[1].tier !== 'unit') return result;
+        return { ...result, failingTests: [`${r.unit}: expected assertion`],
+          ...(args[2].endsWith('/attempt-1') ? { classification: 'deadline', outcomes: { [r.unit]: 'failed', [missing]: 'missing' } } : {}) };
+      } });
+      const entries = inboxEntries(r.options.stateDir, 'program');
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.runEvent).toMatchObject({ batchId: 'unit-1', fileCount: 2 });
+      expect(entries[1]!.failingTests).toEqual([`${r.unit}: expected assertion`]);
+      expect(entries[1]!.runEvent).toBeUndefined();
+      expect(result.diagnoses.some(diagnosis => diagnosis.file === missing)).toBe(false);
+      expect(r.calls.some(call => call.directory.includes('/alone-') && call.batch.files.includes(missing))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
+  test('an infrastructure retry that recovers produces no run event', async () => {
+    const r = repo();
+    try {
+      let down = true;
+      const result = await r.run({ runId: 'infra-recovered', runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (down && args[1].tier === 'unit') { down = false; return { ...result, code: 1, classification: 'infrastructure' }; }
+        return result;
+      } });
+      expect(result.status).toBe('passed');
+      expect(result.batches[0]!.attempts).toHaveLength(2);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(0);
+    } finally { r.cleanup(); }
+  });
+
+  test('a confirmation deadline produces one run event without probing unavailable files', async () => {
+    const r = repo();
+    try {
+      const missing = 'tests/qa/unit/unexecuted.test.ts';
+      r.files.push({ file: missing, tier: 'unit', outcome: 'pending' }); r.write(missing, 'pass\n');
+      r.commit({ [r.unit]: 'fail\n' });
+      const result = await r.run({ runId: 'confirm-deadline', only: ['unit'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (args[1].tier !== 'unit') return result;
+        return { ...result, outcomes: {}, code: 1, classification: args[2].endsWith('/confirm') ? 'deadline' : 'deterministic' };
+      } });
+      expect(result.diagnoses).toEqual([expect.objectContaining({ file: 'batch:unit-1', classification: 'deadline' })]);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(1);
+      expect(r.calls.filter(call => call.batch.tier === 'unit')).toHaveLength(2);
+      expect(r.calls.some(call => call.directory.includes('/alone-'))).toBe(false);
+      r.calls.length = 0;
+      await r.run({ resume: 'confirm-deadline' });
+      expect(r.calls).toHaveLength(0);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(1);
+    } finally { r.cleanup(); }
+  });
+
+  test('a confirmation deadline retains initial assertions without assigning regression blame', async () => {
+    const r = repo();
+    try {
+      r.commit({ [r.unit]: 'fail\n' });
+      const result = await r.run({ runId: 'confirm-assertion', only: ['unit'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (args[1].tier !== 'unit') return result;
+        return { ...result, failingTests: [`${r.unit}: expected assertion`],
+          ...(args[2].endsWith('/confirm') ? { classification: 'deadline', outcomes: {} } : {}) };
+      } });
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(2);
+      expect(result.diagnoses.find(diagnosis => diagnosis.file === r.unit)).toMatchObject({
+        status: 'unavailable', classification: 'deterministic', reason: 'Batch confirmation unavailable',
+      });
+      expect(r.calls.some(call => call.directory.includes('/alone-') || call.directory.includes('/probes/'))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
+  test('a Storybook assertion followed by a deadline keeps both the file failure and run event', async () => {
+    const r = repo();
+    const story = 'apps/web/features/example.stories.tsx';
+    const journey = 'apps/web/tests/example.e2e.ts';
+    try {
+      r.commit({ [story]: 'fail\n' });
+      const result = await r.run({ runId: 'story-deadline', only: ['e2e'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        return args[1].tier === 'e2e' && args[2].endsWith('/attempt-1')
+          ? { ...result, classification: 'deadline', outcomes: executionOutcomes(args[0], args[1], [],
+            '<testsuite name="features/example.stories.tsx" tests="2" failures="1"></testsuite>') } : result;
+      } });
+      expect(inboxEntries(r.options.stateDir, 'program')).toEqual([
+        expect.objectContaining({ runEvent: expect.objectContaining({ batchId: 'e2e-1', fileCount: 2 }) }),
+        expect.objectContaining({ failingTests: [story] }),
+      ]);
+      expect(result.diagnoses.some(diagnosis => diagnosis.file === journey)).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
   test('browser execution joins the fair heavy queue directly by default', async () => {
     const r = repo();
     const status = spyOn(goalctl, 'heavyQaStatus').mockImplementation(() => { throw new Error('Unexpected heavy queue drain'); });
@@ -551,7 +704,10 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       expect(first.status).toBe('incomplete');
       expect(first.batches.find(batch => batch.id === 'integration-2')!.attempts).toHaveLength(2);
       expect(first.files.some(file => file.outcome === 'void')).toBe(true);
-      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(0);
+      expect(inboxEntries(r.options.stateDir, 'program')).toEqual([expect.objectContaining({ classification: 'infrastructure',
+        runEvent: { batchId: 'integration-2', tier: 'integration', fileCount: 5, cause: 'Cannot connect to the Docker daemon' } })]);
+      await r.run({ resume: 'infra', runner });
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(1);
       const completed = first.batches.filter(batch => batch.state === 'done').map(batch => batch.id);
       r.calls.length = 0; engineDown = false;
       const resumed = await r.run({ resume: 'infra', runner });
@@ -664,7 +820,9 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
             || (classification === 'order-dependent' && args[2].includes('/alone-')))) {
             result.outcomes[r.unit] = 'passed'; result.code = 0;
           }
-          if (classification === 'resource' || classification === 'deadline') result.classification = classification;
+          if (classification === 'resource' || classification === 'deadline') {
+            result.classification = classification; result.failingTests = [`${r.unit}: failed assertion`];
+          }
           return result;
         } });
         expect(result.diagnoses[0]!.classification).toBe(classification);
@@ -742,7 +900,7 @@ test('file evidence parses Vitest stories and rejects zero tests and absent data
   expect(executionOutcomes('/repo', batch, [], '<testsuite name="features/a.stories.tsx" tests="0" failures="0"></testsuite>')['apps/web/features/a.stories.tsx']).toBe('missing');
 });
 
-test('inbox delivery is idempotent, acknowledgements are per line and infrastructure is never routed', () => {
+test('inbox delivery is idempotent, acknowledgements are per line and infrastructure needs a run event', () => {
   const dir = mkdtempSync(join(tmpdir(), 'regression-inbox-'));
   try {
     const entry = { runId: 'run', atCommit: 'sha', failingTests: ['a'], after: 'sha', goal: 'program', taskIds: [],
@@ -752,6 +910,10 @@ test('inbox delivery is idempotent, acknowledgements are per line and infrastruc
     expect(inboxEntries(dir, 'program')).toHaveLength(2);
     expect(inboxEntries(dir, 'program', 2).map(entry => entry.acknowledged)).toEqual([false, true]);
     expect(() => inboxEntries(dir, 'program', 3)).toThrow('existing');
+    const runEvent = { batchId: 'unit-1', tier: 'unit' as const, fileCount: 15, cause: 'Docker engine unavailable' };
+    appendInbox(dir, { ...entry, failingTests: ['batch:unit-1'], classification: 'infrastructure', runEvent });
+    appendInbox(dir, { ...entry, failingTests: ['different summary'], classification: 'infrastructure', runEvent: { ...runEvent, cause: 'Still unavailable' } });
+    expect(inboxEntries(dir, 'program')).toHaveLength(3);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -823,27 +985,24 @@ test('detached worktree names leave room for owner PostgreSQL Unix sockets', () 
   expect(() => checkoutNameLength(`/disk/${'a'.repeat(100)}`)).toThrow('GOAL_REGRESS_CHECKOUT_ROOT');
 });
 
-test('default checkout cache is independent of a source repository filesystem and canonicalizes aliases', () => {
+test('default checkout cache is independent of a source filesystem and refuses RAM before allocation', () => {
   const r = repo();
-  let cache = '';
   const previous = process.env.GOAL_REGRESS_CHECKOUT_ROOT;
   delete process.env.GOAL_REGRESS_CHECKOUT_ROOT;
-  const expected = join(realpathSync(join(homedir(), '.cache/rezics-r')), createHash('sha256').update(realpathSync(r.dir)).digest('hex').slice(0, 12));
+  const expected = join(homedir(), '.cache/rezics-r', createHash('sha256').update(realpathSync(r.dir)).digest('hex').slice(0, 12));
   try {
     const probes: string[] = [];
-    cache = regressionCheckoutRoot(r.dir, undefined, path => {
+    const probe = (path: string) => {
       probes.push(path);
-      return path.startsWith(r.dir) ? 0x01021994 : statfsSync(path).type;
-    });
-    expect(cache).toBe(expected);
-    expect(cache.startsWith(r.dir)).toBe(false);
+      return 0x01021994;
+    };
+    expect(() => regressionCheckoutRoot(r.dir, undefined, probe)).toThrow(expected);
+    expect(expected.startsWith(r.dir)).toBe(false);
     expect(probes.some(path => path.startsWith(r.dir))).toBe(false);
     const alias = join(r.dir, '.temp/repo-alias');
     mkdirSync(join(r.dir, '.temp'), { recursive: true }); symlinkSync(r.dir, alias);
-    expect(regressionCheckoutRoot(alias)).toBe(cache);
-    expect(isRamBackedFileSystem(statfsSync(cache).type)).toBe(false);
+    expect(() => regressionCheckoutRoot(alias, undefined, probe)).toThrow(expected);
   } finally {
-    if (cache === expected) rmSync(cache, { recursive: true, force: true });
     if (previous === undefined) delete process.env.GOAL_REGRESS_CHECKOUT_ROOT;
     else process.env.GOAL_REGRESS_CHECKOUT_ROOT = previous;
     r.cleanup();
