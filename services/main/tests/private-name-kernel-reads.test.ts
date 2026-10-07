@@ -170,7 +170,7 @@ test('both relation reads preserve private Agent identities and public non-Agent
         + `?actingSubject=${encodeURIComponent(id(9))}&position=all`));
       expect(response.status).toBe(200);
       const read = await response.json();
-      expect(read.definition.roles[0].members).toEqual([privateAgent, character, concept].toSorted());
+      expect(read.definition.roles[0].members).toEqual([privateAgent, character, concept].sort());
       expect(read.participations[0]).toMatchObject({ participant: { kind: 'resource', ref: privateAgent },
         availability: 'available', creditedName: principal === controller
           ? { lexical: privateName, language: 'en' } : { reference: privateAgent, status: 'unavailable' } });
