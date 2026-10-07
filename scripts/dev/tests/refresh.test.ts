@@ -491,15 +491,17 @@ describe('official Zone approval refresh', () => {
 });
 
 test('a refresh is current when nothing is left to do, even if HEAD moved meanwhile', () => {
+  // The real case: the stored checkpoint names an older revision because a brief or archive commit landed.
   const current = {
-    input: { storageChanged: false, pendingMigrations: [], modelCurrent: true, statementCurrent: true,
-      membershipCurrent: true, unhealthyResources: [], zoneApprovals: [] },
-    plan: { steps: [], blockers: [] },
+    revision: 'new-head', previousRevision: 'old-head', imagePresent: true, storageChanged: false,
+    pendingMigrations: [], modelCurrent: true, statementCurrent: true, membershipCurrent: true,
+    unhealthyResources: [], environmentChanges: [], appHostChanged: false, lostResources: [], zoneApprovals: [],
   };
-  // A brief or archive commit moves HEAD without changing any material input.
   expect(refreshIsCurrent(current)).toBe(true);
-  expect(refreshIsCurrent({ ...current, input: { ...current.input, pendingMigrations: ['1700_x.sql'] } })).toBe(false);
-  expect(refreshIsCurrent({ ...current, input: { ...current.input, modelCurrent: false } })).toBe(false);
-  expect(refreshIsCurrent({ ...current, plan: { steps: ['build-image'], blockers: [] } })).toBe(false);
-  expect(refreshIsCurrent({ ...current, plan: { steps: [], blockers: ['apphost restart'] } })).toBe(false);
+  expect(refreshIsCurrent({ ...current, pendingMigrations: ['1700_x.sql'] })).toBe(false);
+  expect(refreshIsCurrent({ ...current, modelCurrent: false })).toBe(false);
+  expect(refreshIsCurrent({ ...current, imagePresent: false })).toBe(false);
+  expect(refreshIsCurrent({ ...current, storageChanged: true })).toBe(false);
+  expect(refreshIsCurrent({ ...current, unhealthyResources: ['main'] })).toBe(false);
+  expect(refreshIsCurrent({ ...current, environmentChanges: ['WEB_OAUTH_CLIENT_ID'] })).toBe(false);
 });

@@ -14,7 +14,7 @@ import { hasUnnormalizedMembership } from '../../services/main/src/modules/struc
 import { mainSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { appEnvironment, composeProcessEnvironment, readEnv, stackDirectory } from './config.ts';
-import { AppHostResourceLost, appHostRestartInstruction, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
+import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   refreshResources, type RefreshResource } from './refresh.ts';
 import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
 import { officialSourceDigest } from './seed/official-theme-step.ts';
@@ -315,15 +315,12 @@ export async function inspectRefresh(root: string, stackRoot = root) {
     checkpointPath, checkpoint: { revision, appHostHash, appHostSession } satisfies Checkpoint };
 }
 
-/** The stack is current when nothing is left to do at the current HEAD. A HEAD that moved during the refresh
- * (a brief or archive commit) does not make a current stack stale; material inputs are judged directly. */
-export function refreshIsCurrent(checked: { input: { storageChanged: boolean; pendingMigrations: readonly string[];
-  modelCurrent: boolean; statementCurrent: boolean; membershipCurrent: boolean; unhealthyResources: readonly string[];
-  zoneApprovals: readonly unknown[] }; plan: { steps: readonly string[]; blockers: readonly string[] } }): boolean {
-  const { input, plan } = checked;
-  return !input.storageChanged && !input.pendingMigrations.length && input.modelCurrent && input.statementCurrent
-    && input.membershipCurrent && !input.unhealthyResources.length && !input.zoneApprovals.length
-    && !plan.blockers.length && !plan.steps.length;
+/** The stack is current when recording a checkpoint at the current HEAD would leave no step or blocker. The plan
+ * is computed against that hypothetical checkpoint, because the stored one names an older revision whenever any
+ * commit (a brief, an archive) landed meanwhile, and that alone would always plan a prepare and restart. */
+export function refreshIsCurrent(input: RefreshInputs): boolean {
+  const plan = refreshPlan({ ...input, previousRevision: input.revision });
+  return !plan.steps.length && !plan.blockers.length;
 }
 
 export interface RefreshPreparation {
@@ -441,7 +438,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
       },
       recordSuccess: async () => {
         const checked = await inspectRefresh(root);
-        if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no']) || !refreshIsCurrent(checked)) {
+        if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no']) || !refreshIsCurrent(checked.input)) {
           throw new Error('Shared stack changed or is not current after refresh; no success checkpoint recorded');
         }
         writeFileSync(`${snapshot.checkpointPath}.tmp`, `${JSON.stringify(checked.checkpoint)}\n`, { mode: 0o600 });
