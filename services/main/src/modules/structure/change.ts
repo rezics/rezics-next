@@ -9,8 +9,8 @@ import { DATASET, GRAPHS, RV, hash, iri, lit,
   metadataWorkRequestDigest, prepareComponent, prepareWorkComponent,
   IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
-  STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkStructureManifest, checkStructureSealManifest,
+import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+  STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkOccurrenceQualifier, checkOccurrenceQualifierRole, checkIngredientReferences, checkStructureManifest, checkStructureSealManifest,
   checkRecipeMeasures, WorkCompletion, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
   type StructureProfile } from './format.ts';
@@ -68,7 +68,7 @@ export type CompositionOperation =
     qualifier?: OccurrenceRecord['qualifier'] }
   | { op: 'move'; occurrence: string; parent: string; position: Position }
   | { op: 'remove'; occurrence: string }
-  /** Retitle an occurrence or change how a Book group divides the book; its place is unchanged. */
+  /** Replace supplied qualifiers or a localized label in place; omitted state is preserved. */
   | { op: 'update'; occurrence: string; label?: Label; qualifier?: OccurrenceRecord['qualifier'] };
 
 // The v1 command digest retains its legacy identity slots for same-key retries.
@@ -177,14 +177,21 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     if (operation.op === 'remove') return { op: 'remove', occurrence: native(operation.occurrence, 'occurrence') };
     if (operation.op === 'update') {
       const label = checkedLabel(operation.label);
-      const qualifier = operation.qualifier;
-      if (!label && !qualifier) throw new InvalidCompositionChange('an update names a label or a division');
-      const workPart = qualifier?.type === 'work-part' && registration?.id === 'work-composition';
-      if (qualifier && !workPart && (qualifier.type !== 'book-group' || !BOOK_DIVISIONS.includes(qualifier.division)
-        || Object.keys(qualifier).length !== 2
-        || registration && registration.id !== 'book-composition')) {
-        throw new InvalidCompositionChange('only a Book group division can be updated');
+      let qualifier: OccurrenceRecord['qualifier'];
+      if (operation.qualifier !== undefined) {
+        try { qualifier = checkOccurrenceQualifier(operation.qualifier); }
+        catch (error) {
+          if (!(error instanceof InvalidStructureObject)) throw error;
+          throw new InvalidCompositionChange(operation.qualifier?.type === 'book-group'
+            ? 'Book group division differs from its format' : error.message);
+        }
+        if (registration && !registration.roles.some(role => {
+          try { checkOccurrenceQualifierRole({ role, qualifier }, registration.id); return true; }
+          catch (error) { if (!(error instanceof InvalidStructureObject)) throw error; return false; }
+        })) throw new InvalidCompositionChange(qualifier.type === 'book-group' || registration.id === 'book-composition'
+          ? 'Book group division is not admitted by this Structure profile' : 'qualifier is not admitted by this Structure profile');
       }
+      if (!label && !qualifier) throw new InvalidCompositionChange('an update names a label or qualifier');
       return { op: 'update', occurrence: native(operation.occurrence, 'occurrence'),
         ...(label ? { label } : {}),
         ...(qualifier ? { qualifier } : {}) };
@@ -225,6 +232,13 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       else throw new InvalidCompositionChange('selection mode is not admitted');
     } else if (!target && operation.selection !== undefined) {
       throw new InvalidCompositionChange('a group has no selection');
+    }
+    if (operation.qualifier !== undefined) {
+      try { checkOccurrenceQualifier(operation.qualifier); }
+      catch (error) {
+        if (!(error instanceof InvalidStructureObject)) throw error;
+        throw new InvalidCompositionChange(error.message);
+      }
     }
     const label = checkedLabel(operation.label);
     if (operation.sourceKey !== undefined && (!operation.sourceKey.length || operation.sourceKey.length > 200
@@ -1062,8 +1076,12 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   const state = await w.get(operation.occurrence);
   if (!state?.active) throw new CompositionConflict('occurrence is not active in this composition');
   if (operation.op === 'update') {
-    if (operation.qualifier && state.role !== (operation.qualifier.type === 'work-part' ? 'part' : 'group')) {
-      throw new CompositionConflict('qualifier does not belong to this occurrence role');
+    if (operation.qualifier) {
+      try { checkOccurrenceQualifierRole({ role: state.role, qualifier: operation.qualifier }, w.header.profile); }
+      catch (error) {
+        if (!(error instanceof InvalidStructureObject)) throw error;
+        throw new CompositionConflict(error.message);
+      }
     }
     if (operation.label) {
       state.labels = [...state.labels ?? (state.label ? [state.label] : [])]
@@ -1096,6 +1114,47 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   }
   await unplace(w, state);
   await place(w, state, operation.parent, operation.position);
+}
+
+/** Ingredient occurrence references are local membership, never arbitrary ListItem identities. */
+async function checkRecipeReferences(env: WorkActivationEnvironment, w: Working,
+  manifest: StructureManifest, cost: TreeCost): Promise<void> {
+  const removed = [...w.placements.values()].filter(state => !state.active && state.role === 'ingredient'
+    && w.original.get(state.occurrence)).map(state => state.occurrence);
+  if (removed.length) {
+    const excluded = [...w.placements.values()].filter(state => !state.active).map(state => state.occurrence);
+    // The projected inverse predicates seek only these removed identities in
+    // this generation. At most the batch's removed referrers can be skipped;
+    // one remaining active referrer is enough to refuse the removal.
+    const incoming = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?referrer WHERE {
+      VALUES ?removed { ${removed.map(iri).join(' ')} }
+      VALUES ?referencePredicate { rv:usesIngredient rv:substituteFor }
+      GRAPH ${iri(GRAPHS.current)} {
+        ?qualifier ?referencePredicate ?removed ; rv:generation ${iri(w.header.generation)} .
+        ?placement rv:qualifier ?qualifier ; rv:generation ${iri(w.header.generation)} ; rv:occurrence ?referrer .
+        FILTER(?referrer NOT IN (${excluded.map(iri).join(', ')}))
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+      }
+    } LIMIT 1`, 16 * 1024);
+    if (incoming.results?.bindings?.length) {
+      throw new CompositionConflict('an active occurrence still references the removed ingredient');
+    }
+  }
+  const active = [...w.placements.values()].filter(state => state.active);
+  const references = [...new Set(active.flatMap(state => state.qualifier?.type === 'recipe-step'
+    ? state.qualifier.usesIngredient : state.qualifier?.type === 'ingredient-line' ? state.qualifier.substituteFor : []))];
+  if (references.length) {
+    // The bounded request's references select exact records from this root.
+    // Overlay all pending edits first, so validation does not depend on batch order.
+    const missing = references.filter(id => !w.placements.has(id));
+    const retained = missing.length ? await recordTree(structureObjects(env)).lookup(manifest.records, missing, cost)
+      : new Map<string, OccurrenceRecord>();
+    try { checkIngredientReferences([...w.placements.values()].map(placementRecord), retained); }
+    catch (error) {
+      if (!(error instanceof InvalidStructureObject)) throw error;
+      throw new CompositionConflict(error.message);
+    }
+  }
 }
 
 /** A fixed Content pin must be an actual publication of that same chapter target. */
@@ -1267,6 +1326,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     if (targetInvariant?.invalid) throw new CompositionConflict('invalid Work target ancestry');
     await checkFixedSelections(env, operations);
     for (const [index, operation] of operations.entries()) await apply(w, operation, index);
+    await checkRecipeReferences(env, w, manifest, cost);
   } catch (error) {
     if (!(error instanceof CompositionConflict)) throw error;
     await sealRejection(env, intent.admission, 'composition.change', 'TopologyConflict', headGuard);
@@ -1277,6 +1337,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const order = new Map<string, OrderEntry | null>();
   const deletes: string[] = [];
   const inserts: string[] = [];
+  const qualifierEdits = new Set(operations.flatMap(operation => operation.op === 'update' && operation.qualifier
+    ? [operation.occurrence] : []));
   const changedExisting: PlacementState[] = [];
   const listParents = new Set<string>();
   for (const [occurrence, state] of w.placements) {
@@ -1286,7 +1348,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
       old ? placementTriples(old, header.generation, header.profile) : [],
       placementTriples(state, header.generation, header.profile),
     );
-    if (old && !change.removed.length && !change.added.length) continue;
+    if (old && !change.removed.length && !change.added.length && !qualifierEdits.has(occurrence)) continue;
     const record = placementRecord(state);
     checkOccurrenceRecord(
       record,
@@ -1331,12 +1393,24 @@ export async function changeComposition(env: WorkActivationEnvironment,
     changedExisting.map(state => state.occurrence), cost);
   for (const old of changedExisting) {
     const canonical = (record: OccurrenceRecord | undefined) => record && JSON.stringify({ ...record,
+      ...(record.qualifier ? { qualifier: record.qualifier.type === 'ingredient-line'
+        ? { ...record.qualifier, substituteFor: [...new Set(record.qualifier.substituteFor)].sort() }
+        : record.qualifier.type === 'recipe-step' ? { ...record.qualifier,
+          usesIngredient: [...new Set(record.qualifier.usesIngredient)].sort(), media: [...new Set(record.qualifier.media)].sort() }
+          : record.qualifier } : {}),
       labels: record.labels.map(label => ({ ...label, language: label.language.toLowerCase() }))
         .sort((a, b) => a.language < b.language ? -1 : a.language > b.language ? 1 : 0),
     }, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
     if (canonical(retained.get(old.occurrence)) !== canonical(placementRecord(old))) {
       throw new StructureObjectCorrupt('composition graph differs from its retained head');
+    }
+    // RDF references are sets; the authored immutable record remains the source
+    // of array order/repetition when the request omitted its qualifier entirely.
+    if (!qualifierEdits.has(old.occurrence)) {
+      const nextRecord = records.get(old.occurrence)!;
+      const authored = retained.get(old.occurrence)!;
+      if (authored.qualifier) nextRecord.qualifier = authored.qualifier;
     }
   }
   const count = header.placementCount + w.activeDelta;
@@ -1771,6 +1845,11 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     throw new StructureObjectCorrupt('retained Structure tree count differs');
   }
   const byOccurrence = new Map(records.map(record => [record.occurrence, record]));
+  try { checkIngredientReferences(records, byOccurrence); }
+  catch (error) {
+    if (!(error instanceof InvalidStructureObject)) throw error;
+    throw new CompositionConflict(error.message);
+  }
   const orderKeys = new Set(ordered.map(orderTreeKey));
   const readableTargets = new Set<string>();
   for (const record of records) {

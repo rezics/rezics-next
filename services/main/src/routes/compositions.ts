@@ -76,6 +76,7 @@ const operation = t.Union([
     { additionalProperties: false }),
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
   t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
+    qualifier: t.Optional(t.Union([ingredientLine, recipeStep])),
     division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
     inclusion: t.Optional(inclusion) }, { additionalProperties: false }),
 ]);
@@ -85,7 +86,6 @@ type BodyOperation = Static<typeof operation>;
 function commandOperation(item: BodyOperation): CompositionOperation {
   if (item.op !== 'insert' && item.op !== 'update') return item;
   if (
-    item.op === 'insert' &&
     item.qualifier &&
     (item.division !== undefined || item.displayLabel !== undefined || item.inclusion !== undefined)
   ) {

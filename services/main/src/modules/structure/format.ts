@@ -313,6 +313,27 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   if ((structural && record.target !== undefined) || (targeted && record.target === undefined)) {
     throw new InvalidStructureObject(`role ${record.role} target cardinality differs`);
   }
+  checkOccurrenceQualifierRole(record, profile);
+}
+
+/** The same qualifier format is used for insertion, replacement and in-place edits. */
+export function checkOccurrenceQualifier(value: unknown): NonNullable<OccurrenceRecord['qualifier']> {
+  if (!Value.Check(qualifier, value)) throw new InvalidStructureObject('occurrence qualifier differs from its format');
+  const checked = value as NonNullable<OccurrenceRecord['qualifier']>;
+  if (checked.type === 'work-part' && /[\u0000-\u001f\u007f]/u.test(checked.displayLabel)) {
+    throw new InvalidStructureObject('a Work part requires its display label and inclusion');
+  }
+  if (checked.type === 'ingredient-line' && checked.amountUpper !== undefined && checked.amount === undefined) {
+    throw new InvalidStructureObject('an amount range needs its lower bound');
+  }
+  return checked;
+}
+
+/** Shared role normalization: edits must obey the same meaning as authored records. */
+export function checkOccurrenceQualifierRole(record: Pick<OccurrenceRecord, 'role' | 'qualifier'>,
+  profile: StructureProfile): void {
+  if (!PROFILE_ROLES[profile].includes(record.role)) throw new InvalidStructureObject(`role ${record.role} is not admitted by ${profile}`);
+  if (record.qualifier !== undefined) checkOccurrenceQualifier(record.qualifier);
   const qualifierType = record.qualifier?.type;
   const expected = profile === 'work-composition' && record.role === 'part' ? 'work-part'
     : record.role === 'mount' ? 'zone-mount' : record.role === 'ingredient'
@@ -322,12 +343,22 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   if (qualifierType !== expected && !bookGroup) {
     throw new InvalidStructureObject(`role ${record.role} requires qualifier ${expected ?? 'none'}`);
   }
-  if (record.role === 'part' && (!Value.Check(qualifier, record.qualifier)
-    || record.qualifier?.type !== 'work-part' || /[\u0000-\u001f\u007f]/u.test(record.qualifier.displayLabel))) {
-    throw new InvalidStructureObject('a Work part requires its display label and inclusion');
-  }
-  if (record.qualifier?.type === 'ingredient-line'
-    && record.qualifier.amountUpper !== undefined && record.qualifier.amount === undefined) {
-    throw new InvalidStructureObject('an amount range needs its lower bound');
+}
+
+
+/** Validate references against this Composition's indexed membership plus the entire candidate overlay. */
+export function checkIngredientReferences(candidate: readonly OccurrenceRecord[],
+  retained: ReadonlyMap<string, OccurrenceRecord>): void {
+  const pending = new Map(candidate.map(record => [record.occurrence, record]));
+  for (const record of candidate) {
+    if (record.state !== 'active') continue;
+    const references = record.qualifier?.type === 'recipe-step' ? record.qualifier.usesIngredient
+      : record.qualifier?.type === 'ingredient-line' ? record.qualifier.substituteFor : [];
+    for (const reference of references) {
+      const ingredient = pending.get(reference) ?? retained.get(reference);
+      if (!ingredient || ingredient.state !== 'active' || ingredient.role !== 'ingredient') {
+        throw new InvalidStructureObject('ingredient reference is not an active ingredient occurrence of this composition');
+      }
+    }
   }
 }
