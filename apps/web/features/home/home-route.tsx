@@ -13,6 +13,7 @@ import { followedRealmIds, segmentsOf } from '../shell/communities.ts';
 import { FeedSkeleton } from '../feed/feed-list.tsx';
 import { HomePage, HomePosts, type HomePostsProps, MissingTab } from './home-page.tsx';
 import { PICKER_COOKIE, WELCOME_COOKIE } from './cookies.ts';
+import { conceptFeedIdentity } from './followed-concept-feed.ts';
 import { ConceptTopicFeed } from './tabs.tsx';
 import type { HomeMessages } from './messages.ts';
 import { Rail } from './rail.tsx';
@@ -51,8 +52,10 @@ async function StreamedPosts({ posts, ...props }: Omit<HomePostsProps, 'query' |
 /** A followed topic's works, once the public template answers. */
 async function StreamedConcept({ topic, locale, messages }: { topic: FollowedConceptTab; locale: UiLocale;
   messages: { home: HomeMessages; feed: HomePostsProps['messages']['feed'] } }) {
-  return <ConceptTopicFeed key={topic.id} topic={topic} locale={locale} messages={messages}
-    initial={await readConceptTopicFeed(topic.id, locale)} />;
+  const initial = await readConceptTopicFeed(topic.id, locale);
+  // The key is this read, not only the topic, so a retry replaces a failed page.
+  return <ConceptTopicFeed key={`${topic.id}:${conceptFeedIdentity(initial)}`} topic={topic} locale={locale}
+    messages={messages} initial={initial} />;
 }
 
 /**
@@ -86,7 +89,7 @@ export async function HomeRoute({ locale, searchParams }: { locale: UiLocale;
   return <HomePage locale={locale} messages={messages} now={Date.now()}
     signedIn={view.signedIn} actingSubject={view.actingSubject} avatarQuery={view.avatarQuery} state={view.state}
     defaults={view.defaults} readingLanguages={view.readingLanguages} newPerson={view.newPerson === true}
-    followed={view.followed} concepts={topic.tabs}
+    followed={view.followed} concepts={topic.tabs} conceptCursor={followedConcepts?.nextCursor ?? null}
     continueItems={continueItems} official={official} savedFilters={savedFilters}
     setupHref={`${localizedPath('/welcome', locale)}?next=${encodeURIComponent(here)}`}
     setupLater={jar.get(PICKER_COOKIE)?.value === 'skipped'}

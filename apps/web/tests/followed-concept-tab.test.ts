@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  addressConceptTab, appendConceptWorks, collectConceptTabs, conceptFeedPage, conceptFeedQuery,
-  conceptTabsFromFollows, CONCEPT_FEED_MAX_PAGE, CONCEPT_FEED_QUERY, filtersBesideTopics,
-  readConceptFeed, tabFromFollowState, withOpenedConcept,
+  addressConceptTab, appendConceptTabs, appendConceptWorks, applyConceptWorks, conceptFeedIdentity,
+  conceptFeedPage, conceptFeedQuery, conceptTabList, conceptTabsFromFollows, conceptTabsThatFit,
+  conceptWorksExhausted, CONCEPT_FEED_MAX_PAGE, CONCEPT_FEED_QUERY, filtersBesideTopics, readConceptFeed,
+  readFirstConceptPage, tabFromFollowState, topicContinuation, topicFeedFrom, visibleConceptTabs, withOpenedConcept,
 } from '../features/home/followed-concept-feed.ts';
 const concept = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uuid = (n: number) => concept(n).slice(-36);
@@ -107,35 +108,66 @@ describe('followed topic tabs', () => {
       target: { id: concept(8), kind: 'work', name: name('Cozy') } }, uuid(8))).toBeNull();
   });
 
-  test('the follows list is seek-paged, a failed first page is unread, and a moved list is read once more', async () => {
-    const pages = [
-      { items: [follow(1)], nextCursor: 'p2', complete: false },
-      { items: [follow(2), { ...follow(3), kind: 'realm' }], nextCursor: null, complete: true },
-    ];
-    const cursors: (string | undefined)[] = [];
-    const listed = await collectConceptTabs(async cursor => {
-      cursors.push(cursor);
-      const page = pages[cursors.length - 1]!;
-      return { ok: true, data: page };
+  test('Home keeps the first follows page and reaches every later topic from its cursor', async () => {
+    const calls: (string | undefined)[] = [];
+    const first = conceptTabList({ items: [follow(1), follow(2)], nextCursor: 'p2', complete: false });
+    const listed = await readFirstConceptPage(async () => {
+      calls.push('first');
+      return { ok: true, data: first };
     });
-    expect(cursors).toEqual([undefined, 'p2']);
-    expect(listed).toEqual({ tabs: conceptTabsFromFollows([follow(1), follow(2)]), complete: true });
+    expect(calls).toEqual(['first']);
+    expect(listed).toEqual({ tabs: conceptTabsFromFollows([follow(1), follow(2)]), nextCursor: 'p2', complete: false });
+    const next = conceptTabList({ items: [follow(3), { ...follow(4), kind: 'realm' }], nextCursor: 'p3', complete: false });
+    const empty = conceptTabList({ items: [], nextCursor: 'p4', complete: false });
+    const more = appendConceptTabs(listed!.tabs, next, 'p2');
+    expect(more.tabs.map(tab => tab.tab)).toEqual([uuid(1), uuid(2), uuid(3)]);
+    expect(more.cursor).toBe('p3');
+    // An empty follows page is not the end while its cursor continues.
+    expect(appendConceptTabs(more.tabs, empty, 'p3')).toEqual({ tabs: more.tabs, cursor: 'p4' });
+    expect(conceptTabsThatFit({ available: 300, prefix: 100, more: 80, tabs: [80, 80, 80] }, false)).toBe(1);
+    expect(conceptTabsThatFit({ available: 300, prefix: 100, more: 80, tabs: [80] }, true)).toBe(1);
+    expect(conceptTabsThatFit({ available: 300, prefix: 100, more: 80, tabs: [80, 80] }, true)).toBe(1);
+    const open = visibleConceptTabs(conceptTabsFromFollows([follow(1), follow(2), follow(3)]), 1, uuid(3));
+    expect(open.map(tab => tab.tab)).toEqual([uuid(3)]);
 
-    expect(await collectConceptTabs(async () => ({ ok: false, failure: 'unavailable' }))).toBeNull();
-
+    expect(await readFirstConceptPage(async () => ({ ok: false, failure: 'unavailable' }))).toBeNull();
     let moved = true;
-    const retried = await collectConceptTabs(async () => {
+    const retried = await readFirstConceptPage(async () => {
       if (moved) { moved = false; return { ok: false, failure: 'moved' }; }
-      return { ok: true, data: { items: [follow(4)], nextCursor: null, complete: true } };
+      return { ok: true, data: conceptTabList({ items: [follow(4)], nextCursor: null, complete: true }) };
     });
     expect(retried?.tabs.map(tab => tab.tab)).toEqual([uuid(4)]);
+    expect(await readFirstConceptPage(async () => ({ ok: false, failure: 'moved' }))).toBeNull();
+  });
 
-    expect(await collectConceptTabs(async () => ({ ok: false, failure: 'moved' }))).toBeNull();
+  test('a new read replaces the page, including a retry after the first read failed', () => {
+    const failed = { ok: false as const, failure: 'unavailable' as const };
+    const first = { ok: true as const, data: conceptFeedPage(envelope([work(1)], 'older'))! };
+    const retried = { ok: true as const, data: conceptFeedPage(envelope([work(2)], null))! };
+    expect(conceptFeedIdentity(failed)).not.toBe(conceptFeedIdentity(first));
+    expect(conceptFeedIdentity(first)).not.toBe(conceptFeedIdentity(retried));
+    expect(topicFeedFrom(failed)).toEqual({ items: [], cursor: null });
+    expect(topicFeedFrom(retried).items.map(item => item.id)).toEqual([concept(202)]);
+    expect(topicFeedFrom(retried).cursor).toBeNull();
+  });
 
-    const partial = await collectConceptTabs(async cursor => cursor
-      ? { ok: false, failure: 'unavailable' }
-      : { ok: true, data: { items: [follow(1)], nextCursor: 'p2', complete: false } });
-    expect(partial).toEqual({ tabs: conceptTabsFromFollows([follow(1)]), complete: false });
+  test('an empty page with a cursor is not the end of the topic', () => {
+    const empty = conceptFeedPage(envelope([], 'older'))!;
+    expect(conceptWorksExhausted(empty.items, empty.nextCursor)).toBe(false);
+    expect(appendConceptWorks([], empty, 'first')).toEqual({ items: [], cursor: 'older' });
+    expect(conceptWorksExhausted([], null)).toBe(true);
+    expect(conceptFeedPage(envelope([], null))!.complete).toBe(true);
+  });
+
+  test('a moved continuation starts again from the newest page instead of the rejected cursor', () => {
+    expect(topicContinuation('moved')).toBe('restart');
+    expect(topicContinuation('invalid')).toBe('restart');
+    expect(topicContinuation('unavailable')).toBe('retry');
+    const stale = conceptFeedPage(envelope([work(1)], 'dead'))!;
+    const newest = conceptFeedPage(envelope([work(9)], null))!;
+    const restarted = applyConceptWorks(stale.items, newest, null);
+    expect(restarted).toEqual({ items: newest.items, cursor: null });
+    expect(restarted.items.map(item => item.id)).not.toEqual(stale.items.map(item => item.id));
   });
 
   test('a topic tab does not depend on Saved Filters, and it replaces only the filter that named that topic', () => {

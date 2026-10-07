@@ -7,7 +7,8 @@ import { type ContinueItem, type FeedPage, type FeedQuery, type Loaded, settle, 
 import { readFollowed, readModerated, readOfficialZones, shellReader } from '../shell/communities-read.ts';
 import type { Community, Moderated } from '../shell/communities.ts';
 import {
-  addressConceptTab, collectConceptTabs, type ConceptAddress, type ConceptFeedPage, type FollowedConceptTab,
+  addressConceptTab, type ConceptAddress, type ConceptFeedPage, type ConceptTabList, type FollowedConceptTab,
+  readConceptFollows, readFirstConceptPage,
   readConceptFeed, tabFromFollowState, withOpenedConcept,
 } from './followed-concept-feed.ts';
 
@@ -95,19 +96,14 @@ export async function readHomeView(params: Record<string, string | string[] | un
 }
 
 /**
- * The topics the reader follows, as Home tabs. Null when Home could not read
- * the follows list. Saved Filters are not consulted: a topic tab needs no platform grant.
+ * The first page of topics the reader follows, in follow order, plus the cursor
+ * for the rest. Null when Home could not read that page. Saved Filters are not
+ * consulted: a topic tab needs no platform grant.
  */
-export async function readFollowedConceptTabs(): Promise<{ tabs: FollowedConceptTab[]; complete: boolean } | null> {
+export async function readFollowedConceptTabs(): Promise<ConceptTabList | null> {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;
-  const actingSubject = reader.actingSubject;
-  return collectConceptTabs(async cursor => {
-    const read = await settle(() => reader.main.v1.me.follows.get({ query: {
-      actingSubject, kind: 'concept', limit: 20, ...(cursor ? { cursor } : {}) } }));
-    if (!read.ok) return read;
-    return { ok: true, data: { items: read.data.items, nextCursor: read.data.nextCursor, complete: read.data.complete } };
-  });
+  return readFirstConceptPage(() => readConceptFollows(reader.main, reader.actingSubject!));
 }
 
 /**
@@ -116,7 +112,7 @@ export async function readFollowedConceptTabs(): Promise<{ tabs: FollowedConcept
  * bookmarked topic still opens and a saved-filter address does not become one.
  */
 export async function resolveConceptTab(tabUuid: string | null,
-  listed: { tabs: readonly FollowedConceptTab[]; complete: boolean } | null): Promise<
+  listed: ConceptTabList | null): Promise<
   { kind: 'selected'; tab: FollowedConceptTab; tabs: FollowedConceptTab[] }
   | { kind: 'absent'; tabs: FollowedConceptTab[] }
   | { kind: 'unread'; tabs: FollowedConceptTab[] }> {

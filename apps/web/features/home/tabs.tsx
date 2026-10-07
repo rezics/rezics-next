@@ -11,7 +11,7 @@ import { ArrowLeftIcon, ArrowRightIcon, EllipsisIcon, PencilIcon, PinOffIcon, Re
 import { materializeData } from 'native-i18n';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
@@ -30,8 +30,9 @@ import { droppedOn, filterTitle, moved } from '../saved-filter/tabs.ts';
 import type { CommandResult, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
 import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import {
-  appendConceptWorks, type ConceptFeedPage, type ConceptWork, type FollowedConceptTab, filtersBesideTopics,
-  readConceptFeed,
+  appendConceptTabs, applyConceptWorks, type ConceptFeedPage, type ConceptTabList, type ConceptWork,
+  conceptFeedIdentity, conceptTabsThatFit, conceptWorksExhausted, type FollowedConceptTab, filtersBesideTopics,
+  readConceptFeed, readConceptFollows, topicContinuation, topicFeedFrom, visibleConceptTabs,
 } from './followed-concept-feed.ts';
 import type { HomeMessages } from './messages.ts';
 
@@ -45,8 +46,12 @@ export interface HomeTabsProps {
   actingSubject: string;
   /** The reader's filters; null when Main could not read them, so only Following and All show. */
   filters: SavedFilters | null;
-  /** Topics the reader follows. Each is a tab whether or not Saved Filters are open. */
+  /** The first page of topics the reader follows, in follow order. Each may be a tab. */
   concepts?: readonly FollowedConceptTab[];
+  /** The follows cursor after `concepts`, when that page is not the whole list. */
+  conceptCursor?: string | null;
+  /** Stories: the next follows page. Absent, Home asks the follows API. */
+  loadTopics?: (cursor?: string) => Promise<Loaded<ConceptTabList>>;
   /** The `+` picker, drawn after the tabs. */
   picker?: ReactNode;
   /** Stories: an in-memory Main. */
@@ -61,8 +66,8 @@ export interface HomeTabsProps {
  * desktop a pinned tab is dragged to a new place, and every tab's menu moves,
  * renames or removes it with the keyboard too. Each tab has its own address.
  */
-export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, concepts = [], picker, api: given,
-  gate: givenGate }: HomeTabsProps) {
+export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, concepts = [], conceptCursor = null,
+  loadTopics, picker, api: given, gate: givenGate }: HomeTabsProps) {
   const t = materializeData(messages.home, { locale });
   const feed = materializeData(messages.feed, { locale });
   const router = useRouter();
@@ -83,9 +88,33 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   const [dragging, setDragging] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<SavedFilter | null>(null);
   const strip = useRef<HTMLUListElement>(null);
+  const gauge = useRef<HTMLDivElement>(null);
+  // Topics past the first page arrive only when More topics asks for the next cursor.
+  const listKey = `${conceptCursor ?? ''}\n${concepts.map(concept => concept.id).join('\n')}`;
+  const [listSeen, setListSeen] = useState(listKey);
+  const [loaded, setLoaded] = useState<FollowedConceptTab[] | null>(null);
+  const [topicCursor, setTopicCursor] = useState<string | null | undefined>(undefined);
+  const [topicsNotice, setTopicsNotice] = useState<'retry' | 'restart' | null>(null);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [fit, setFit] = useState<number | null>(null);
+  const topicsBusy = useRef(false);
+  if (listSeen !== listKey) {
+    setListSeen(listKey);
+    setLoaded(null);
+    setTopicCursor(undefined);
+    setTopicsNotice(null);
+    setTopicsLoading(false);
+    topicsBusy.current = false;
+  }
+  const followed = loaded ?? concepts;
+  const followsCursor = topicCursor === undefined ? conceptCursor : topicCursor;
+  const currentTopic = state.tab === 'pinned' ? state.filter : null;
+  const visibleTopics = visibleConceptTabs(followed, fit ?? followed.length, currentTopic);
+  const moreTopics = followsCursor !== null || visibleTopics.length < followed.length;
   // A followed topic has its own tab. The saved filter that only named that topic is not shown beside it.
   const shown = filtersBesideTopics((order ?? server).flatMap(id => filters?.pinned.find(filter => filter.id === id) ?? []),
-    concepts);
+    followed);
   const href = (next: FeedState) => localizedPath(`/${feedSearch(next, defaults)}`, locale);
   const serverKey = server.join();
 
@@ -113,7 +142,50 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     resized.observe(list);
     list.addEventListener('scroll', mark, { passive: true });
     return () => { resized.disconnect(); list.removeEventListener('scroll', mark); };
-  }, [state.tab, state.filter, shown.length, concepts.length]);
+  }, [state.tab, state.filter, shown.length, visibleTopics.length]);
+
+  // The strip shows only the topic tabs that fit. The rest stay behind More topics.
+  useLayoutEffect(() => {
+    const list = strip.current;
+    const box = gauge.current;
+    if (!list || !box) return;
+    const apply = () => {
+      const available = list.clientWidth;
+      if (available < 1) return;
+      const prefix = [...box.querySelectorAll<HTMLElement>('[data-prefix]')]
+        .reduce((sum, item) => sum + item.offsetWidth, 0);
+      const more = box.querySelector<HTMLElement>('[data-more]')?.offsetWidth ?? 0;
+      const tabs = [...box.querySelectorAll<HTMLElement>('[data-topic]')].map(item => item.offsetWidth);
+      if (prefix < 1 || (tabs.length > 0 && tabs.every(width => width < 1))) return;
+      const count = conceptTabsThatFit({ available, prefix, more, tabs }, followsCursor !== null);
+      setFit(current => current === count ? current : count);
+    };
+    apply();
+    const resized = new ResizeObserver(apply);
+    resized.observe(list);
+    return () => resized.disconnect();
+  }, [followed, followsCursor, currentTopic, locale]);
+
+  async function pageTopics(fromStart: boolean) {
+    if (topicsBusy.current) return;
+    if (!fromStart && !followsCursor) return;
+    topicsBusy.current = true;
+    setTopicsLoading(true);
+    const requested = fromStart ? undefined : followsCursor!;
+    const read = await (loadTopics ?? (next => readConceptFollows(browserMainApi(), actingSubject, next)))(requested);
+    topicsBusy.current = false;
+    setTopicsLoading(false);
+    if (!read.ok) { setTopicsNotice(topicContinuation(read.failure)); return; }
+    if (fromStart) {
+      setLoaded(read.data.tabs);
+      setTopicCursor(read.data.nextCursor);
+    } else {
+      const appended = appendConceptTabs(followed, read.data, requested!);
+      setLoaded(appended.tabs);
+      setTopicCursor(appended.cursor);
+    }
+    setTopicsNotice(null);
+  }
 
   async function settle<R>(result: Promise<CommandResult<R>>, after?: () => void) {
     const done = await result;
@@ -148,7 +220,19 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
       : action === 'unfollow' ? client().followConcept(filter.concept!.id, false) : client().remove(filter), leave(filter));
   }
 
-  return <><nav aria-label={feed.views} className="flex min-w-0 items-stretch border-border/60 border-b">
+  return <><nav aria-label={feed.views} className="relative flex min-w-0 items-stretch border-border/60 border-b">
+    <div ref={gauge} aria-hidden="true" className="pointer-events-none fixed h-0 w-0 overflow-hidden">
+      <div className="flex w-max">
+        <span data-prefix className={cn(tabLink, 'inline-grid w-max')}>{feed.following}</span>
+        <span data-prefix className={cn(tabLink, 'inline-grid w-max')}>{feed.all}</span>
+        {followed.map(concept => {
+          const name = concept.name?.value ?? t.untitledTab;
+          return <span key={concept.id} data-topic className={cn(tabLink, 'inline-grid w-max max-w-56',
+            currentTopic === concept.tab && 'pe-9 sm:pe-10')}>{name}</span>;
+        })}
+        <span data-more className={cn(tabLink, 'inline-grid w-max')}>{t.moreTopics}</span>
+      </div>
+    </div>
     <ul ref={strip} className="relative flex min-w-0 flex-1 snap-x overflow-x-auto [scrollbar-width:none]
       [&::-webkit-scrollbar]:hidden data-after:[mask-image:linear-gradient(to_right,black_calc(100%-3rem),transparent)]
       data-before:[mask-image:linear-gradient(to_left,black_calc(100%-3rem),transparent)]
@@ -159,10 +243,10 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
         <Link href={href(withChange(state, { tab }))} aria-current={state.tab === tab ? 'page' : undefined}
           className={tabLink}>{tab === 'following' ? feed.following : feed.all}</Link>
       </li>)}
-      {concepts.map(concept => {
+      {visibleTopics.map(concept => {
         const title = concept.name;
         const name = title?.value ?? t.untitledTab;
-        const current = state.tab === 'pinned' && state.filter === concept.tab;
+        const current = currentTopic === concept.tab;
         return <li key={concept.id} className="group/tab relative flex shrink-0 snap-start items-stretch">
           <Link href={href(pinnedTab(state, concept.tab))} aria-current={current ? 'page' : undefined}
             lang={title?.language} dir={title?.direction} draggable={false}
@@ -175,6 +259,10 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
             onClick={() => unfollow(concept)}><UserMinusIcon aria-hidden="true" className="size-4" /></button> : null}
         </li>;
       })}
+      {moreTopics ? <li className="flex shrink-0 snap-start">
+        <button type="button" className={tabLink} aria-haspopup="dialog" onClick={() => setMoreOpen(true)}>
+          {t.moreTopics}</button>
+      </li> : null}
       {shown.map((filter, index) => {
         const title = filterTitle(filter);
         const name = title?.value ?? t.untitledTab;
@@ -209,6 +297,9 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     text-warning-foreground">{status}</p> : null}
   {renaming ? <RenameDialog t={t} filter={renaming} onClose={() => setRenaming(null)}
     onSave={name => settle(client().update(renaming, { name }), () => setRenaming(null))} /> : null}
+  {moreOpen ? <MoreTopics t={t} topics={followed} cursor={followsCursor} notice={topicsNotice} loading={topicsLoading}
+    hrefFor={tab => href(pinnedTab(state, tab))} onClose={() => setMoreOpen(false)}
+    onMore={() => void pageTopics(false)} onRestart={() => void pageTopics(true)} /> : null}
   </>;
 }
 
@@ -246,6 +337,37 @@ function TabMenu({ t, name, filter, first, last, can, visible, onSelect }: { t: 
   </Menu>;
 }
 
+/** Every followed topic, in follow order. Show more asks for the next follows cursor. */
+function MoreTopics({ t, topics, cursor, notice, loading, hrefFor, onClose, onMore, onRestart }: {
+  t: T; topics: readonly FollowedConceptTab[]; cursor: string | null; notice: 'retry' | 'restart' | null;
+  loading: boolean; hrefFor: (tab: string) => string; onClose: () => void; onMore: () => void; onRestart: () => void;
+}) {
+  return <Dialog open pending={loading} onOpenChange={details => { if (!details.open) onClose(); }}>
+    <DialogContent size="sm">
+      <DialogHeader title={t.moreTopics} />
+      <DialogBody>
+        <ul className="grid max-h-80 overflow-y-auto">
+          {topics.map(topic => {
+            const title = topic.name;
+            const name = title?.value ?? t.untitledTab;
+            return <li key={topic.id}>
+              <Link href={hrefFor(topic.tab)} lang={title?.language} dir={title?.direction} onClick={onClose}
+                className="block rounded-md px-2 py-2 text-sm outline-none hover:bg-foreground/[0.04]
+                  focus-visible:ring-2 focus-visible:ring-ring">{name}</Link>
+            </li>;
+          })}
+        </ul>
+        {notice === 'restart' ? <p role="status" className="text-sm">{t.topicsChanged}</p> : null}
+        {notice === 'retry' ? <p role="status" className="text-destructive-foreground text-sm">{t.topicsMoreFailed}</p> : null}
+        {notice === 'restart' ? <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={onRestart}>
+          {loading ? t.loadingMoreTopics : t.showTopicsFromStart}</Button>
+          : cursor ? <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={onMore}>
+            {loading ? t.loadingMoreTopics : t.showMoreWorks}</Button> : null}
+      </DialogBody>
+    </DialogContent>
+  </Dialog>;
+}
+
 /** A new name for a tab; a followed Concept's tab can go back to the Concept's own label. */
 function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilter; onClose: () => void;
   onSave: (name: string | null) => Promise<boolean> }) {
@@ -279,7 +401,7 @@ function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilte
   </Dialog>;
 }
 
-type ConceptLoader = (cursor: string) => Promise<Loaded<ConceptFeedPage>>;
+type ConceptLoader = (cursor?: string) => Promise<Loaded<ConceptFeedPage>>;
 
 /** The first page failed: say what failed, and offer the one next step. */
 function TopicFailure({ failure, reference }: { failure: ReadFailure; reference?: string }) {
@@ -309,28 +431,41 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
   messages: { home: HomeMessages }; load?: ConceptLoader;
 }) {
   const home = materializeData(messages.home, { locale });
-  const [items, setItems] = useState<ConceptWork[]>(initial.ok ? initial.data.items : []);
-  const [cursor, setCursor] = useState<string | null>(initial.ok ? initial.data.nextCursor : null);
+  const identity = conceptFeedIdentity(initial);
+  const opened = topicFeedFrom(initial);
+  const [seen, setSeen] = useState(identity);
+  const [items, setItems] = useState<ConceptWork[]>(opened.items);
+  const [cursor, setCursor] = useState<string | null>(opened.cursor);
   const [loading, setLoading] = useState(false);
-  const [moreFailed, setMoreFailed] = useState(false);
+  const [notice, setNotice] = useState<'retry' | 'restart' | null>(null);
   const busy = useRef(false);
+  // A new read (retry, refresh) replaces the page. The previous cursor is not kept.
+  if (seen !== identity) {
+    setSeen(identity);
+    setItems(opened.items);
+    setCursor(opened.cursor);
+    setNotice(null);
+    setLoading(false);
+    busy.current = false;
+  }
   const label = topic?.name?.value ?? home.untitledTab;
-  async function more() {
-    if (!topic || !cursor || busy.current) return;
+  async function more(fromStart = false) {
+    if (!topic || busy.current) return;
+    if (!fromStart && !cursor) return;
     busy.current = true;
     setLoading(true);
-    const requested = cursor;
+    const requested = fromStart ? undefined : cursor!;
     const read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested);
     busy.current = false;
     setLoading(false);
-    if (!read.ok) { setMoreFailed(true); return; }
-    const appended = appendConceptWorks(items, read.data, requested);
-    setItems(appended.items);
-    setCursor(appended.cursor);
-    setMoreFailed(false);
+    if (!read.ok) { setNotice(topicContinuation(read.failure)); return; }
+    const applied = applyConceptWorks(fromStart ? [] : items, read.data, fromStart ? null : cursor);
+    setItems(applied.items);
+    setCursor(applied.cursor);
+    setNotice(null);
   }
   if (!initial.ok) return <TopicFailure failure={initial.failure} reference={initial.reference} />;
-  if (!items.length) {
+  if (conceptWorksExhausted(items, cursor)) {
     return <EmptyState icon={TagIcon} title={home.emptyPinned({ topic: label })} description={home.emptyTopicBody}
       className="m-3 sm:m-4">
       {topic ? <Link href={localizedPath(conceptPath(topic.id), locale)}
@@ -346,10 +481,14 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
           {item.name.value}</Link>
       </li>)}
     </ul>
-    {cursor ? <div className="grid justify-items-center gap-2 px-4 py-3">
-      {moreFailed ? <p role="status" className="text-destructive-foreground text-sm">{home.topicMoreFailed}</p> : null}
-      <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={() => void more()}>
-        {loading ? home.loadingMoreWorks : home.showMoreWorks}</Button>
+    {notice === 'restart' || cursor ? <div className="grid justify-items-center gap-2 px-4 py-3">
+      {notice === 'restart' ? <p role="status" className="text-center text-sm">{home.topicMoved}</p> : null}
+      {notice === 'retry' ? <p role="status" className="text-destructive-foreground text-sm">{home.topicMoreFailed}</p> : null}
+      {notice === 'restart'
+        ? <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={() => void more(true)}>
+          {loading ? home.loadingMoreWorks : home.startFromNewest}</Button>
+        : <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={() => void more(false)}>
+          {loading ? home.loadingMoreWorks : home.showMoreWorks}</Button>}
     </div> : null}
   </div>;
 }

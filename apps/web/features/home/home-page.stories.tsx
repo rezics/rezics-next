@@ -454,6 +454,103 @@ export const FollowedTopicPhone: Story = {
   },
 };
 
+const cozyTab = idOf(topics.cozy.id)!;
+const mysteryTab = idOf(topics.mystery.id)!;
+const cozyTopic = { id: topics.cozy.id, tab: cozyTab, name: { value: 'Cozy games', language: 'en' },
+  revision: storyId(91, 'aaaa') };
+const mysteryTopic = { id: topics.mystery.id, tab: mysteryTab, name: { value: 'Mystery', language: 'en' },
+  revision: storyId(92, 'aaaa') };
+
+/** Topics past the ones that fit, and past the first follows page, open from More topics. */
+export const MoreTopics: Story = {
+  args: props({
+    savedFilters: null,
+    state: state({ tab: 'all' }),
+    concepts: [followedTopic, cozyTopic],
+    conceptCursor: 'page-2',
+    loadTopics: async cursor => cursor === 'page-2'
+      ? { ok: true, data: { tabs: [mysteryTopic], nextCursor: null, complete: true } }
+      : { ok: false, failure: 'invalid' },
+  }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'More topics' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'More topics' }));
+    await expect(dialog.getByRole('link', { name: 'Fantasy' })).toHaveAttribute('href', `/en?tab=${fantasyTab}`);
+    await expect(dialog.getByRole('link', { name: 'Cozy games' })).toHaveAttribute('href', `/en?tab=${cozyTab}`);
+    await userEvent.click(dialog.getByRole('button', { name: 'Show more' }));
+    await expect(dialog.getByRole('link', { name: 'Mystery' })).toHaveAttribute('href', `/en?tab=${mysteryTab}`);
+    await expect(dialog.queryByRole('button', { name: 'Show more' })).toBeNull();
+  },
+};
+
+/** A phone shows the topics that fit; the rest are still in More topics, and the page does not scroll sideways. */
+export const MoreTopicsPhone: Story = {
+  args: props({
+    savedFilters: null,
+    state: state({ tab: 'all' }),
+    concepts: Array.from({ length: 6 }, (_, index) => ({
+      id: storyId(320 + index, 'eeee'), tab: idOf(storyId(320 + index, 'eeee'))!,
+      name: { value: `Contemporary fantasy romance topic ${index + 1}`, language: 'en' },
+      revision: storyId(70 + index, 'aaaa'),
+    })),
+  }),
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const tabs = canvas.getByRole('navigation', { name: 'Feed' });
+    await waitFor(() => expect(within(tabs).getByRole('button', { name: 'More topics' })).toBeVisible());
+    await expect(within(tabs).getAllByRole('link').length).toBeLessThan(8);
+    await userEvent.click(within(tabs).getByRole('button', { name: 'More topics' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'More topics' }));
+    await expect(dialog.getByRole('link', { name: 'Contemporary fantasy romance topic 6' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** An empty page that still has a cursor is not an empty topic. Show more reaches the next works. */
+export const FollowedTopicEmptyPage: Story = {
+  args: props({
+    savedFilters: null,
+    state: state({ tab: 'pinned', filter: fantasyTab }),
+    concepts: [followedTopic],
+    posts: <ConceptTopicFeed topic={followedTopic} locale="en" messages={{ home }}
+      initial={{ ok: true, data: { items: [], nextCursor: 'older', complete: false } }}
+      load={async () => ({ ok: true, data: { items: [conceptWork(2, 'Older Tale')], nextCursor: null, complete: true } })} />,
+  }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('Nothing about Fantasy yet')).toBeNull();
+    await expect(canvas.queryByText('Works with this topic are listed here, newest first.')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(canvas.getByRole('link', { name: 'Older Tale' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+  },
+};
+
+/** A moved continuation starts again from the newest works instead of asking for the rejected cursor. */
+export const FollowedTopicMoved: Story = {
+  args: props({
+    savedFilters: null,
+    state: state({ tab: 'pinned', filter: fantasyTab }),
+    concepts: [followedTopic],
+    posts: <ConceptTopicFeed topic={followedTopic} locale="en" messages={{ home }}
+      initial={{ ok: true, data: { items: [conceptWork(1, 'Lantern Market')], nextCursor: 'dead', complete: false } }}
+      load={async cursor => cursor
+        ? { ok: false, failure: 'moved' }
+        : { ok: true, data: { items: [conceptWork(3, 'Newest Tale')], nextCursor: null, complete: true } }} />,
+  }),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Start again from the newest');
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Start from the newest' }));
+    await expect(canvas.getByRole('link', { name: 'Newest Tale' })).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: 'Lantern Market' })).toBeNull();
+  },
+};
+
 /** Saved Filters closed for the reader: Following and All only, with nothing to pin and no menu to open. */
 export const SavedViewsClosed: Story = {
   args: props({ savedFilters: null, state: state({ tab: 'all' }) }),

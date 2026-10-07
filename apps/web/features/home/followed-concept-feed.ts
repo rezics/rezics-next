@@ -1,5 +1,5 @@
 import { idOf, iriOf, isUuid } from '../discover/scope.ts';
-import type { Loaded, MainClient } from '../feed/types.ts';
+import type { Loaded, MainClient, ReadFailure } from '../feed/types.ts';
 import { settle } from '../feed/types.ts';
 import { languageTag } from '../onboarding/languages.ts';
 
@@ -13,13 +13,8 @@ export const CONCEPT_FEED_REVISION = 1;
 /** The template's own default and maximum page sizes (`limit` on the request). */
 export const CONCEPT_FEED_PAGE = 20;
 export const CONCEPT_FEED_MAX_PAGE = 64;
-/**
- * Follows are seek-paged at 20. Home reads a few pages so a reader who follows
- * more than one page still gets those tabs, and stops rather than walking the
- * whole inventory on every Home render. Past this, the open tab is confirmed
- * on its own.
- */
-export const MAX_CONCEPT_TAB_PAGES = 4;
+/** One follows page. The strip shows the topics that fit; More topics asks for the next cursor. */
+export const CONCEPT_FOLLOWS_PAGE = 20;
 
 const CONCEPT_IRI = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
@@ -46,6 +41,13 @@ export interface ConceptFeedPage {
 
 export interface ConceptFollowPage {
   items: readonly unknown[];
+  nextCursor: string | null;
+  complete: boolean;
+}
+
+/** The first follows page, plus the cursor More topics uses to read the rest. */
+export interface ConceptTabList {
+  tabs: FollowedConceptTab[];
   nextCursor: string | null;
   complete: boolean;
 }
@@ -134,41 +136,67 @@ export function conceptTabsFromFollows(items: readonly unknown[]): FollowedConce
   return tabs;
 }
 
+/** One follows page as topic tabs. A cursor stays only while the page says the list continues. */
+export function conceptTabList(page: ConceptFollowPage): ConceptTabList {
+  const next = typeof page.nextCursor === 'string' && page.nextCursor.length > 0 ? page.nextCursor : null;
+  const complete = page.complete === true || next === null;
+  return { tabs: conceptTabsFromFollows(page.items), nextCursor: complete ? null : next, complete };
+}
+
 /**
- * Walk the follows list. The first page failing is an unread list, not an empty
- * Home. A later page failing keeps the tabs already read and says the list is
- * incomplete. A moved list is read once more from the start.
+ * The first follows page only. Home does not walk the rest: More topics asks
+ * for each next cursor. A moved first page is read once more. Any other
+ * failure is an unread list, not an empty Home.
  */
-export async function collectConceptTabs(readPage: (cursor?: string) => Promise<Loaded<ConceptFollowPage>>):
-  Promise<{ tabs: FollowedConceptTab[]; complete: boolean } | null> {
-  let retried = false;
-  let cursor: string | undefined;
-  let tabs: FollowedConceptTab[] = [];
-  const seen = () => new Set(tabs.map(tab => tab.id));
-  for (let page = 0; page < MAX_CONCEPT_TAB_PAGES; page++) {
-    const read = await readPage(cursor);
-    if (!read.ok) {
-      if (read.failure === 'moved' && !retried) {
-        retried = true;
-        cursor = undefined;
-        tabs = [];
-        page = -1;
-        continue;
-      }
-      if (read.failure === 'moved') return null;
-      return tabs.length === 0 ? null : { tabs, complete: false };
-    }
-    const known = seen();
-    for (const tab of conceptTabsFromFollows(read.data.items)) {
-      if (known.has(tab.id)) continue;
-      known.add(tab.id);
-      tabs.push(tab);
-    }
-    if (read.data.complete || !read.data.nextCursor) return { tabs, complete: true };
-    if (read.data.nextCursor === cursor) return { tabs, complete: false };
-    cursor = read.data.nextCursor;
+export async function readFirstConceptPage(readPage: () => Promise<Loaded<ConceptTabList>>): Promise<ConceptTabList | null> {
+  const first = await readPage();
+  if (first.ok) return first.data;
+  if (first.failure !== 'moved') return null;
+  const again = await readPage();
+  return again.ok ? again.data : null;
+}
+
+/** The next follows page, in order, without repeating a topic or asking for the same cursor again. */
+export function appendConceptTabs(current: readonly FollowedConceptTab[], page: ConceptTabList, requestedCursor: string):
+  { tabs: FollowedConceptTab[]; cursor: string | null } {
+  const seen = new Set(current.map(tab => tab.id));
+  const tabs = [...current];
+  for (const tab of page.tabs) {
+    if (seen.has(tab.id)) continue;
+    seen.add(tab.id);
+    tabs.push(tab);
   }
-  return { tabs, complete: false };
+  const stalled = !page.complete && page.nextCursor === requestedCursor;
+  return { tabs, cursor: page.complete || stalled || !page.nextCursor ? null : page.nextCursor };
+}
+
+/**
+ * How many topic tabs fit beside Following and All, leaving room for More topics
+ * when anything remains. Widths are the rendered boxes, in follow order.
+ */
+export function conceptTabsThatFit(widths: { available: number; prefix: number; more: number; tabs: readonly number[] },
+  moreRemains: boolean): number {
+  let used = widths.prefix;
+  let count = 0;
+  for (let index = 0; index < widths.tabs.length; index++) {
+    const remains = moreRemains || index < widths.tabs.length - 1;
+    if (used + widths.tabs[index]! + (remains ? widths.more : 0) > widths.available) break;
+    used += widths.tabs[index]!;
+    count++;
+  }
+  return count;
+}
+
+/** The prefix that fits, with the open topic kept on the strip when the prefix had not reached it. */
+export function visibleConceptTabs(topics: readonly FollowedConceptTab[], fit: number, current: string | null):
+  FollowedConceptTab[] {
+  const count = Math.max(0, Math.min(Math.floor(fit), topics.length));
+  const head = topics.slice(0, count);
+  if (!current || head.some(tab => tab.tab === current)) return head;
+  const opened = topics.find(tab => tab.tab === current);
+  if (!opened) return head;
+  if (count === 0) return [opened];
+  return [...head.slice(0, -1), opened];
 }
 
 export type ConceptAddress =
@@ -221,6 +249,49 @@ export function appendConceptWorks(current: readonly ConceptWork[], page: Concep
   const items = [...current, ...page.items.filter(item => !seen.has(item.id))];
   const stalled = !page.complete && page.nextCursor === requestedCursor;
   return { items, cursor: page.complete || stalled ? null : page.nextCursor };
+}
+
+/** A first page replaces the list. A later page appends. `requestedCursor` null is that first page. */
+export function applyConceptWorks(current: readonly ConceptWork[], page: ConceptFeedPage, requestedCursor: string | null):
+  { items: ConceptWork[]; cursor: string | null } {
+  if (requestedCursor === null) return { items: page.items, cursor: page.complete ? null : page.nextCursor };
+  return appendConceptWorks(current, page, requestedCursor);
+}
+
+/** The empty topic state is only the end of the list. An empty page with a cursor still continues. */
+export function conceptWorksExhausted(items: readonly unknown[], cursor: string | null): boolean {
+  return items.length === 0 && cursor === null;
+}
+
+/** What a failed Show more may do. A moved or rejected cursor is not asked for again. */
+export function topicContinuation(failure: ReadFailure): 'restart' | 'retry' {
+  return failure === 'moved' || failure === 'invalid' ? 'restart' : 'retry';
+}
+
+/** Identity of one template read, so a retry replaces the page instead of keeping the failed one. */
+export function conceptFeedIdentity(read: Loaded<ConceptFeedPage>): string {
+  if (!read.ok) return `unread:${read.failure}:${read.reference ?? ''}`;
+  return `page:${read.data.nextCursor ?? ''}:${read.data.items.map(item => item.id).join(' ')}`;
+}
+
+/** The list and cursor one read shows, before any Show more. */
+export function topicFeedFrom(read: Loaded<ConceptFeedPage>): { items: ConceptWork[]; cursor: string | null } {
+  if (!read.ok) return { items: [], cursor: null };
+  return { items: read.data.items, cursor: read.data.complete ? null : read.data.nextCursor };
+}
+
+/** One follows page. `cursor` omitted is the first page, in the reader's follow order. */
+export async function readConceptFollows(main: MainClient, actingSubject: string, cursor?: string):
+  Promise<Loaded<ConceptTabList>> {
+  const read = await settle(() => main.v1.me.follows.get({ query: {
+    actingSubject, kind: 'concept', limit: CONCEPT_FOLLOWS_PAGE, ...(cursor ? { cursor } : {}) } }));
+  if (!read.ok) return read;
+  const body = read.data as { items?: unknown; nextCursor?: unknown; complete?: unknown };
+  return { ok: true, data: conceptTabList({
+    items: Array.isArray(body.items) ? body.items : [],
+    nextCursor: typeof body.nextCursor === 'string' ? body.nextCursor : null,
+    complete: body.complete === true,
+  }) };
 }
 
 /** The Concept IRI a tab address names, or null when the address is not one. */
