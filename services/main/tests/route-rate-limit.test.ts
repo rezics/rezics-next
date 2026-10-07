@@ -81,6 +81,103 @@ test('route metadata preserves special budgets and read-only command exemptions'
   expect(rateLimitFamily('GET', '/.well-known/oauth-protected-resource/mcp')).toBeNull();
 });
 
+test('rights and governance declarations retain command, report and read-only policies', () => {
+  for (const path of ['/v1/governance/rule-queries', '/v1/rights/use-evaluations'])
+    expect(rateLimitFamily('POST', path)).toBeNull();
+  for (const path of ['/v1/reports', '/v1/rights/complaints'])
+    expect(rateLimitFamily('POST', path)).toBe('report');
+  for (const path of [
+    '/v1/governance/rules',
+    '/v1/governance/process-steps',
+    '/v1/moderation/decisions',
+    '/v1/rights/offerings',
+    '/v1/rights/offerings/offering/changes',
+    '/v1/rights/use-assessments',
+    '/v1/rights/restrictions',
+  ])
+    expect(rateLimitFamily('POST', path)).toBe('write');
+  for (const path of [
+    '/v1/reports/report',
+    '/v1/rights/offerings/offering',
+    '/v1/rights/offerings/offering/revisions/revision',
+  ]) {
+    expect(rateLimitFamily('GET', path)).toBeNull();
+    expect(rateLimitFamily('HEAD', path)).toBeNull();
+  }
+});
+
+test('rights and governance read exemptions and report budgets survive Account loss', async () => {
+  let verifications = 0,
+    classifications = 0,
+    effects = 0;
+  const consumed: string[] = [];
+  const app = new Elysia().use(
+    rateLimitHook(
+      {
+        async verify() {
+          verifications++;
+          throw new Error('Account unavailable');
+        },
+      },
+      {
+        options: {
+          secret: 'route-admission-counter-secret-at-least-32-characters',
+          serviceClientIds: new Set(),
+          trustedProxyPeers: new Set(),
+          clientIpHeader: 'x-forwarded-for',
+        },
+        budgets: rateLimitBudgets(),
+        store: {
+          async classify() {
+            classifications++;
+            throw new Error('Classification unavailable');
+          },
+          async consume(_identity, family) {
+            consumed.push(family);
+            return { allowed: false, retryAfter: 19 };
+          },
+        },
+      },
+    ),
+  );
+  for (const path of [
+    '/v1/governance/rule-queries',
+    '/v1/rights/use-evaluations',
+    '/v1/reports',
+    '/v1/rights/complaints',
+  ])
+    app.post(path, () => {
+      effects++;
+      return 'effect';
+    });
+  for (const path of ['/v1/governance/rule-queries', '/v1/rights/use-evaluations']) {
+    const response = await app.handle(
+      new Request(`http://main.test${path}`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer rejected' },
+      }),
+    );
+    expect(response.status).toBe(200);
+  }
+  for (const path of ['/v1/reports', '/v1/rights/complaints']) {
+    const response = await app.handle(
+      new Request(`http://main.test${path}`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer rejected' },
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('19');
+    expect(await response.json()).toMatchObject({ family: 'report' });
+  }
+  expect(consumed).toEqual(['report', 'report']);
+  expect({ verifications, classifications, effects }).toEqual({
+    verifications: 0,
+    classifications: 0,
+    effects: 2,
+  });
+});
+
 test('an undeclared operation denies before verification, counters or handler effects', async () => {
   let calls = 0;
   const unexpected = () => {

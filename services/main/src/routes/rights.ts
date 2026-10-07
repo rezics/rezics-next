@@ -15,14 +15,14 @@ export const RIGHTS_DECIDE_SCOPE = 'rights:decide';
 export const RIGHTS_OFFER_SCOPE = 'rights:offer';
 
 export const openApiOperations = {
-  '/v1/rights/offerings': { post: { exposure: 'platform:commerce', bearer: true, idempotencyKey: true } },
-  '/v1/rights/offerings/{offering}/changes': { post: { exposure: 'platform:commerce', bearer: true, idempotencyKey: true } },
-  '/v1/rights/offerings/{offering}': { get: { exposure: 'platform:commerce', bearer: true } },
-  '/v1/rights/offerings/{offering}/revisions/{revision}': { get: { exposure: 'platform:commerce', bearer: true } },
-  '/v1/rights/use-assessments': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/rights/use-evaluations': { post: { exposure: 'public', bearer: true } },
-  '/v1/rights/complaints': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/rights/restrictions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}/changes': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/rights/offerings/{offering}': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read', bearer: true } },
+  '/v1/rights/offerings/{offering}/revisions/{revision}': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read', bearer: true } },
+  '/v1/rights/use-assessments': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/rights/use-evaluations': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/rights/complaints': { post: { exposure: 'public', rateLimitFamily: 'report', bearer: true, idempotencyKey: true } },
+  '/v1/rights/restrictions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 export interface RightsRouteDependencies { rights?: { store: RightsStore } }
