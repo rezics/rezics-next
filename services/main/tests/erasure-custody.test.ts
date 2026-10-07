@@ -11,7 +11,7 @@ import { discloseContent } from '../src/modules/disclosure/assembly.ts';
 import { configureDisclosure, type DisclosureReader } from '../src/modules/disclosure/read.ts';
 import { graphErasedContentRevisions, GraphErasureConflict, GraphErasureUnavailable } from
   '../src/modules/erasure/graph.ts';
-import { replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
+import { ObjectErasureConflict, replayObjectErasure } from '../src/modules/erasure/replay-objects.ts';
 import type { CustodiedOutbox } from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { custodyModelGenerationArtifacts } from '../src/modules/semantic/model-custody.ts';
@@ -139,6 +139,18 @@ test('a current model head without an exact retained anchor keeps restored custo
   f.fuseki.currentHeads.add(`urn:rezics:model-generation:${'e'.repeat(64)}`);
   await expect(f.read()).rejects.toBeInstanceOf(RevisionNotFound);
 });
+
+for (const root of ['manifestDigest', 'shapeDigest'] as const) {
+  for (const state of ['missing', 'corrupt'] as const) {
+    test(`a ${state} original model ${root} keeps restored custody unavailable`, async () => {
+      const f = fixture();
+      const model = await f.addModel('retained-old-module');
+      if (state === 'missing') f.objects.data.delete(model[root]);
+      else f.objects.data.set(model[root], Buffer.from('divergent original bytes'));
+      await expect(f.read()).rejects.toBeInstanceOf(ObjectErasureConflict);
+    });
+  }
+}
 
 for (const state of ['missing', 'ambiguous', 'different-generation'] as const) {
   test(`a semantic revision with a ${state} model pin keeps restored custody unavailable`, async () => {

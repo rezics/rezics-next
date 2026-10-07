@@ -71,7 +71,8 @@ export function sha256(value: string): string {
 }
 
 export async function relayTransaction<T>(pool: Pool,
-  work: (client: PoolClient) => Promise<T>): Promise<T> {
+  work: (client: PoolClient) => Promise<T>, borrowed?: PoolClient): Promise<T> {
+  if (borrowed) return work(borrowed);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

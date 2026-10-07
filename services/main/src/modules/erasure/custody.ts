@@ -61,7 +61,9 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
     after = rows.at(-1)!.revision!.value;
   }
   for (const generation of generations) {
-    await readExactModelGeneration(env, generation);
+    const model = await readExactModelGeneration(env, generation);
+    retained.add(model.manifestSha256);
+    for (const shape of model.shapes) retained.add(shape.sha256);
   }
   // Retired slim proofs no longer appear in the graph's object-reference scan.
   // The owner position reader rechecks durable terminal/outbox AND exact objects.

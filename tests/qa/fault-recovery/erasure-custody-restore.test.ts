@@ -69,7 +69,8 @@ test('OPS12: a consistent pre-erasure cut replays Content suppression and proves
   const backupObjects = join(directory, 'pre-erasure-objects');
   const objects = new DirectoryObjects(join(directory, 'live-objects'));
   const pools = new Set<Pool>();
-  const pool = (url: string) => { const value = new Pool({ connectionString: url, max: 2 });
+  const pool = (url: string) => { const value = new Pool({ connectionString: url, max: 1,
+    connectionTimeoutMillis: 2000 });
     pools.add(value); return value; };
   const close = async (value: Pool) => { await value.end(); pools.delete(value); };
   let access = pool(databases.urls.access), content = pool(databases.urls.content);

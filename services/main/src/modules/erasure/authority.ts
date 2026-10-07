@@ -15,9 +15,11 @@ export interface RetainedAuthorityCoverage {
 /**
  * Offline full Access comparison. Cost is O(Access rows + outbox rows), paged by
  * the owner coverage scanner; no restored route opens while it runs.
+ * A supplied Access client keeps the caller's transaction; both scans finish
+ * before this operation returns or rejects.
  */
 export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, access: Pool,
-  consumer: string, evidence: RetainedAuthorityCoverage): Promise<void> {
+  consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient): Promise<void> {
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence.sealedCoverage, evidence.hmacKey, 'graph-recovery-coverage'); }
@@ -43,14 +45,14 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
     || current.coverage_generation !== head.generation) {
     throw new ErasureAuthorityCoverageConflict('a newer retained authority capture supersedes this restore');
   }
-  const fence = (await access.query<{ open: boolean }>(
+  const fence = (await (accessClient ?? access).query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0];
   if (fence?.open !== false) {
     throw new ErasureAuthorityCoverageConflict('restored Access recovery fence is open');
   }
-  const [outbox, state] = await Promise.all([
-    accessOutboxCoverage(access), accessStateCoverage(access),
-  ]);
+  const [outbox, state] = accessClient
+    ? [await accessOutboxCoverage(access, accessClient), await accessStateCoverage(access, accessClient)]
+    : await Promise.all([accessOutboxCoverage(access), accessStateCoverage(access)]);
   if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest
     || state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
     throw new ErasureAuthorityCoverageConflict('restored Access authority differs from retained coverage');

@@ -300,7 +300,7 @@ export async function engageAccessRecoveryFence(pool: Pool): Promise<string> {
 }
 
 /** Release follows successful graph/authority reconciliation. */
-export async function releaseAccessRecoveryFence(pool: Pool, generation: string): Promise<void> {
+export async function releaseAccessRecoveryFence(pool: Pool | PoolClient, generation: string): Promise<void> {
   if (!/^[0-9]+$/.test(generation)) throw new AdmissionUnavailable('invalid Access recovery generation');
   const result = await pool.query(
     `UPDATE access.recovery_fence SET open = true, generation = generation + 1

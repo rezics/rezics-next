@@ -530,7 +530,7 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
     if (head?.generation !== row.coverage_generation || journal !== row.erasure_epoch) {
       throw new ErasureRestoreHold('a newer retained frontier needs reconciliation');
     }
-    try { await assertAccountDeletionJournalCoverage(restored.access, relay); }
+    try { await assertAccountDeletionJournalCoverage(restored.access, relay, undefined, client); }
     catch (error) {
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;

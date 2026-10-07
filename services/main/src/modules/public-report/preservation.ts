@@ -1,9 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 
 declare const fenceBrand: unique symbol;
-/** A live target lock, minted only while this owner's transaction is open. */
+/** A live target lock, minted only while its transaction is open. */
 export interface PreservationFence { readonly resource: string; readonly [fenceBrand]: true }
-export type PreservationAccess = Pool | PreservationFence;
+export type PreservationAccess = Pool | PoolClient | PreservationFence;
 const activeFences = new WeakSet<PreservationFence>();
 
 /** Intake and erasure serialize on the same target across owner databases. */
@@ -17,25 +17,30 @@ export async function withPreservationFence<T>(access: PreservationAccess, resou
     if (access.resource !== resource || !activeFences.has(access)) throw new Error('Preservation fence is unavailable');
     return { held: false, value: await write(access) };
   }
+  // The caller keeps this client's transaction and target lock through release.
+  if ('release' in access) return writeWithPreservationFence(access, resource, operationId, write);
   const client = await access.connect();
-  const fence = { resource } as PreservationFence;
   try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    await lockPreservationTarget(client, resource);
-    if (await postponeHeldMaterial(client, resource, operationId)) {
-      await client.query('COMMIT');
-      return { held: true };
-    }
-    activeFences.add(fence);
-    const value = await write(fence);
+    const result = await writeWithPreservationFence(client, resource, operationId, write);
     await client.query('COMMIT');
-    return { held: false, value };
+    return result;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;
-  } finally { activeFences.delete(fence); client.release(); }
+  } finally { client.release(); }
+}
+
+async function writeWithPreservationFence<T>(client: PoolClient, resource: string, operationId: string,
+  write: (fence: PreservationFence) => Promise<T>): Promise<{ held: true } | { held: false; value: T }> {
+  await lockPreservationTarget(client, resource);
+  if (await postponeHeldMaterial(client, resource, operationId)) return { held: true };
+  const fence = { resource } as PreservationFence;
+  activeFences.add(fence);
+  try { return { held: false, value: await write(fence) }; }
+  finally { activeFences.delete(fence); }
 }
 
 /** One indexed hold lookup and one idempotent audit append per held resource. */
