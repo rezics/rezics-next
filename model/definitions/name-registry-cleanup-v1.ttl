@@ -1,0 +1,10 @@
+# Names live in Access. Native migration cleanup proves the former graph naming predicates are absent.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/name-registry-cleanup-v1/cleaned-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rv:communityHandle ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:routeSegment ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:routeNamespace ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:normalizedSlug ; sh:maxCount 0 ] .

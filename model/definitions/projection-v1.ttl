@@ -1,0 +1,31 @@
+# One Resource naming a subject within a frame: the one projectionOf Resource seen in one to eight frame coordinates.
+# Its identity is unique per subject and frame set; the owner never edits a projection, so its single revision is
+# the immutable record of what it names. Facts about the subject within the frame stay Statements about the subject.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/projection-v1/projection-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Projection ] ;
+    sh:property [ sh:path rv:projectionOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:frame ; sh:minCount 1 ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:projectionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProjectionRevision ] ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/projection-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ProjectionRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Projection ] ;
+    sh:property [ sh:path rv:projectionOf ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:frame ; sh:minCount 1 ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/projection-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/projection-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
