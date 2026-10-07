@@ -25,7 +25,7 @@ export async function RecentShelf({ locale }: { locale: UiLocale }) {
         <h2 className="font-semibold text-xl">{t.popular}</h2>
         <Link
           href={browseHref({ ...emptyBrowse, section: section.id })}
-          className="text-primary text-sm hover:underline"
+          className="inline-flex min-h-8 items-center text-primary text-sm hover:underline"
         >
           {t.seeAll}
         </Link>

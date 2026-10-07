@@ -150,7 +150,7 @@ export const ComboboxTrigger = (props: React.ComponentProps<typeof ArkCombobox.T
       asChild
     >
       {children ?? (
-        <Button className="size-4" variant="ghost">
+        <Button className="size-6" variant="ghost">
           <ChevronsUpDownIcon />
         </Button>
       )}

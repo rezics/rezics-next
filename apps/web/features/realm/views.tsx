@@ -205,7 +205,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
               {other.members ? <span className="text-muted-foreground text-xs">{other.members}</span> : null}
             </LocalizedLink></li>)}
         </ul>
-        <LocalizedLink href="/discover?tab=communities" className="text-primary text-sm underline-offset-4 hover:underline">
+        <LocalizedLink href="/discover?tab=communities" className="inline-flex min-h-8 items-center text-primary text-sm underline-offset-4 hover:underline">
           {browseMessages[locale].seeAll}</LocalizedLink>
       </nav> : null}
     </div> : null}

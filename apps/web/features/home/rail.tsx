@@ -111,7 +111,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           </li>;
         })}
       </ul>
-      <LocalizedLink href="/discover?tab=communities" className="font-medium text-primary text-sm underline-offset-4 hover:underline">
+      <LocalizedLink href="/discover?tab=communities" className="inline-flex min-h-8 items-center font-medium text-primary text-sm underline-offset-4 hover:underline">
         {browseMessages[locale].seeAll}</LocalizedLink>
     </Module> : null}
     {data.ranking ? <details className="group rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm">

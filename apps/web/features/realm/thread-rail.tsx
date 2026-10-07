@@ -37,8 +37,8 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
         {description.value}</p> : null}
       {members ? <p className="flex items-center gap-1.5 text-sm"><UsersRoundIcon aria-hidden="true"
         className="size-4 text-muted-foreground" />{members}</p> : null}
-      <LocalizedLink href={aboutHref} className="w-fit font-medium text-primary text-sm underline-offset-4
-        hover:underline">{labels.more}</LocalizedLink>
+      <LocalizedLink href={aboutHref} className="inline-flex min-h-8 w-fit items-center font-medium text-primary text-sm
+        underline-offset-4 hover:underline">{labels.more}</LocalizedLink>
     </section>
     {rules.length ? <section aria-labelledby="rail-rules" className={card}>
       <h2 id="rail-rules" className="flex items-center gap-1.5 font-semibold text-muted-foreground text-xs uppercase

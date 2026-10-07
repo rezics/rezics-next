@@ -33,7 +33,7 @@ export function ShelfHeader({ id, heading, locale, children }: {
     </div>
     <div className="flex shrink-0 items-center gap-3">
       {children}
-      {heading.seeAll ? <Link href={heading.seeAll.href} className="inline-flex items-center gap-0.5 rounded-sm
+      {heading.seeAll ? <Link href={heading.seeAll.href} className="inline-flex min-h-8 items-center gap-0.5 rounded-sm
         font-medium text-primary text-sm outline-none underline-offset-4 hover:underline focus-visible:ring-2
         focus-visible:ring-ring">{heading.seeAll.label ?? t.seeAll}<ChevronRightIcon aria-hidden="true"
           className="size-4 rtl:rotate-180" /></Link> : null}

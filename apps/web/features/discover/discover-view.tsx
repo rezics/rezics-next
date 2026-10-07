@@ -144,7 +144,7 @@ export function DiscoverView({
                 {!state.section ? (
                   <Link
                     href={browseHref(changeBrowse(state, { section: section.id }))}
-                    className="text-primary text-sm underline-offset-4 hover:underline"
+                    className="inline-flex min-h-8 items-center text-primary text-sm underline-offset-4 hover:underline"
                   >
                     {t.seeAll}
                   </Link>

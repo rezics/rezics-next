@@ -201,7 +201,7 @@ export function AccountMenu({ session, messages, accountOrigin }: {
       <AccountSheet open={sheetOpen} onOpenChange={setSheetOpen} title={panel ? messages[panel] : messages.accountMenu}
         closeLabel={t.close} returnFocus={() => phoneTrigger.current}>
         <div className="min-h-0 overflow-y-auto">
-          <div ref={panelBody} className="grid gap-1 px-5 py-3">
+          <div ref={panelBody} className="grid grid-cols-1 gap-1 px-5 py-3">
             {panel ? <>
               <Button data-back type="button" variant="ghost" className="justify-start" onClick={() => setPanel(null)}>
                 <ArrowLeftIcon aria-hidden="true" />{messages.back}</Button>
@@ -220,7 +220,7 @@ export function AccountMenu({ session, messages, accountOrigin }: {
                   ? ` · ${currentVanityHandle(session.agent.agent.handle)
                     ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</p>
               <Button type="button" variant="ghost" className="min-h-11 justify-start" onClick={switchAgent}>{messages.switchAgent}</Button>
-              {sections.map((section, index) => <div key={index} className="grid gap-1 border-border/60 border-t py-2">
+              {sections.map((section, index) => <div key={index} className="grid grid-cols-1 gap-1 border-border/60 border-t py-2">
                 {section.map(entry => 'panel' in entry ? <Button key={entry.id} data-panel={entry.id} type="button" variant="ghost"
                   className="min-h-11 justify-between" aria-label={accountRowName(entry.label, rowValue(entry.id))} onClick={() => setPanel(entry.id)}>
                   <AccountRowValue label={entry.label} value={rowValue(entry.id)} lang={entry.id === 'language' ? locale : undefined} /><ChevronRightIcon aria-hidden="true" /></Button>
