@@ -4,6 +4,7 @@ import { resourceHref } from '../features/address/path.ts';
 import { studioHref } from '../features/studio/agent.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { canonicalFlight } from './work-response.ts';
 
 function fixture<T>(name: string): T {
   const path = process.env[name];
@@ -16,9 +17,11 @@ function normalizeAddress(value: string, ref: string): string {
   return value.replaceAll(encodeURIComponent(ref), 'work-ref').replaceAll(ref, 'work-ref');
 }
 
-async function responseBody(page: Page, body: string, ref: string): Promise<{ body: string; staticAssets: string[] }> {
-  return page.evaluate(html => {
+async function responseBody(page: Page, body: string, ref: string, link: string | undefined): Promise<{ body: string; link: string }> {
+  const content = await page.evaluate(({ html, link }) => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    const primary: string[] = [];
+    const compatibility: string[] = [];
     // The shell's community navigation can finish before the first flush or in a later React segment.
     // Expand the streamed segment, retaining its content and all serialized RSC data.
     for (const segment of doc.querySelectorAll('div[hidden][id^="S:"]')) {
@@ -42,6 +45,24 @@ async function responseBody(page: Page, body: string, ref: string): Promise<{ bo
     }
     // These are React's segment insertion/timing helpers, never application bootstrap data.
     for (const script of doc.querySelectorAll('script')) {
+      const text = script.textContent ?? '';
+      const marker = '.rsc.push(';
+      const start = text.indexOf(marker);
+      if (text.startsWith('((self[Symbol.for("vinext.navigationRuntime")]') && start >= 0) {
+        const payload: unknown = JSON.parse(text.slice(start + marker.length).replace(/\);?$/, ''));
+        if (typeof payload !== 'string') throw new Error('Unexpected Flight payload');
+        primary.push(payload);
+        script.remove();
+        continue;
+      }
+      const legacy = text.match(/^self\.__next_f\.push\(\[1,([\s\S]*)\]\);?$/);
+      if (legacy) {
+        const payload: unknown = JSON.parse(legacy[1]!);
+        if (typeof payload !== 'string') throw new Error('Unexpected compatibility payload');
+        compatibility.push(payload);
+        script.remove();
+        continue;
+      }
       if (script.textContent?.startsWith('$RB=[];$RV=function')
         || script.textContent?.startsWith('requestAnimationFrame(function(){$RT=')) script.remove();
     }
@@ -49,9 +70,19 @@ async function responseBody(page: Page, body: string, ref: string): Promise<{ bo
     const markers: Node[] = [];
     while (comments.nextNode()) if (/^(?:\$[?!~]?|\/\$)$/.test(comments.currentNode.nodeValue ?? '')) markers.push(comments.currentNode);
     for (const marker of markers) marker.parentNode?.removeChild(marker);
-    const staticAssets = [...doc.querySelectorAll('link[rel="stylesheet"],link[rel="preload"][as="font"]')]
-      .map(link => link.getAttribute('href') ?? '')
-      .filter(href => /^\/_next\/static\/(?:css\/.+\.css|media\/.+\.woff2)$/.test(href));
+    // A font hint can move wholly into HTTP Link. Lift its complete metadata back into the compared body.
+    const remaining = (link ?? '').split(/,\s*(?=<)/).filter(part => {
+      const style = part.match(/^<(\/_next\/static\/css\/[^>]+\.css)>; rel=preload; as="style"$/);
+      if (style && [...doc.querySelectorAll('link[rel="stylesheet"]')].some(node => node.getAttribute('href') === style[1])) return false;
+      const font = part.match(/^<(\/_next\/static\/media\/[^>]+\.woff2)>; rel=preload; as="font"; crossorigin="anonymous"; type="font\/woff2"$/);
+      if (!font) return Boolean(part);
+      if (![...doc.querySelectorAll('link[rel="preload"][as="font"]')].some(node => node.getAttribute('href') === font[1])) {
+        const preload = doc.createElement('link');
+        for (const [key, value] of Object.entries({ rel: 'preload', as: 'font', href: font[1]!, crossorigin: 'anonymous', type: 'font/woff2' })) preload.setAttribute(key, value);
+        doc.head.append(preload);
+      }
+      return false;
+    });
     // Preload locations/order follow segment timing. Compare their complete tags in a fixed location.
     const preloads = [...doc.querySelectorAll('link[rel="modulepreload"],link[rel="preload"]')];
     for (const preload of preloads) {
@@ -61,21 +92,10 @@ async function responseBody(page: Page, body: string, ref: string): Promise<{ bo
     }
     preloads.sort((a, b) => a.outerHTML.localeCompare(b.outerHTML));
     for (const preload of preloads) doc.head.append(preload);
-    return { body: doc.documentElement.outerHTML, staticAssets };
-  }, normalizeAddress(body, ref));
-}
-
-function normalizePreloadHeader(headers: Record<string, string>, staticAssets: readonly string[]): void {
-  if (!headers.link) return;
-  // React can promote either the font or stylesheet preload into HTTP Link before flushing.
-  // Remove only those exact static hints whose assets are still compared in the response body.
-  const remaining = headers.link.split(/,\s*(?=<)/).filter(part => {
-    const hint = part.match(/^<(\/_next\/static\/css\/[^>]+\.css)>; rel=preload; as="style"$/)
-      ?? part.match(/^<(\/_next\/static\/media\/[^>]+\.woff2)>; rel=preload; as="font"; crossorigin="anonymous"; type="font\/woff2"$/);
-    return !hint || !staticAssets.includes(hint[1]!);
-  });
-  if (remaining.length) headers.link = remaining.join(', ');
-  else delete headers.link;
+    return { body: doc.documentElement.outerHTML, primary: primary.join(''), compatibility: compatibility.join(''), link: remaining.join(', ') };
+  }, { html: normalizeAddress(body, ref), link });
+  expect(content.primary).toBe(content.compatibility);
+  return { body: JSON.stringify({ html: content.body, flight: canonicalFlight(content.primary) }), link: content.link };
 }
 
 async function missingPage(page: Page, address: string, tail: string) {
@@ -85,8 +105,9 @@ async function missingPage(page: Page, address: string, tail: string) {
   await expect(page.getByRole('heading', { level: 1, name: 'Work not found', exact: true })).toBeVisible();
   await expect(page).toHaveTitle('Work not found · REZICS');
   const headers = await response!.allHeaders();
-  const content = await responseBody(page, await response!.text(), ref);
-  normalizePreloadHeader(headers, content.staticAssets);
+  const content = await responseBody(page, await response!.text(), ref, headers.link);
+  if (content.link) headers.link = content.link;
+  else delete headers.link;
   // Transport timestamps and tracing describe an individual request. Cache/security headers remain compared.
   for (const name of ['date', 'server-timing', 'x-request-id', 'traceparent']) delete headers[name];
   return {
