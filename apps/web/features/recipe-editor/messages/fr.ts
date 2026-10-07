@@ -34,7 +34,6 @@ export default {
   addIngredient: 'Ajouter un ingrédient', addIngredientTo: insert('Ajouter un ingrédient à {{section}}', { section: String }),
   ingredientPlaceholder: '250 g de farine, tamisée',
   ingredientHelp: 'Écrivez la ligne comme vous la noteriez : quantité, unité, nom, puis une note après une virgule.',
-  readAs: 'Lu comme', partNone: 'aucun',
   quantity: 'Quantité', unit: 'Unité', name: 'Ingrédient', note: 'Note',
   unitSuggestions: 'Unités courantes',
   addAction: 'Ajouter', saveAction: 'Enregistrer', cancel: 'Annuler', edit: insert('Modifier {{name}}', { name: String }),

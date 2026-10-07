@@ -42,7 +42,6 @@ const en = {
   addIngredient: 'Add an ingredient', addIngredientTo: insert('Add an ingredient to {{section}}', { section: String }),
   ingredientPlaceholder: '1½ cups flour, sifted',
   ingredientHelp: 'Type the line as you would write it: amount, unit, name, then a note after a comma.',
-  readAs: 'Read as', partNone: 'none',
   quantity: 'Amount', unit: 'Unit', name: 'Ingredient', note: 'Note',
   unitSuggestions: 'Common units',
   addAction: 'Add', saveAction: 'Save', cancel: 'Cancel', edit: insert('Edit {{name}}', { name: String }),

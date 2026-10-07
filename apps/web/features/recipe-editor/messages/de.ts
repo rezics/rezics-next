@@ -34,7 +34,6 @@ export default {
   addIngredient: 'Zutat hinzufügen', addIngredientTo: insert('Zutat zu {{section}} hinzufügen', { section: String }),
   ingredientPlaceholder: '250 g Mehl, gesiebt',
   ingredientHelp: 'Schreibe die Zeile, wie du sie notieren würdest: Menge, Einheit, Name, nach einem Komma eine Anmerkung.',
-  readAs: 'Gelesen als', partNone: 'keine',
   quantity: 'Menge', unit: 'Einheit', name: 'Zutat', note: 'Anmerkung',
   unitSuggestions: 'Gängige Einheiten',
   addAction: 'Hinzufügen', saveAction: 'Speichern', cancel: 'Abbrechen', edit: insert('{{name}} bearbeiten', { name: String }),

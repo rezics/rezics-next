@@ -18,18 +18,9 @@ interface Common { store: RecipeStore; state: RecipeState; language: string; t: 
 
 const fieldClass = 'grid min-w-0 gap-1 text-sm';
 
-/** The four parts a line was read as, shown while typing so a misread is seen before it is saved. */
-function ReadAs({ parts, t }: { parts: IngredientParts; t: Copy }) {
-  const items: [string, string][] = [[t.quantity, parts.quantity], [t.unit, parts.unit], [t.name, parts.name], [t.note, parts.note]];
-  return <dl aria-label={t.readAs} className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-xs">
-    {items.map(([label, value]) => <div key={label} className="flex gap-1">
-      <dt>{label}:</dt><dd className={cn(value ? 'font-medium text-foreground' : '')}>{value || t.partNone}</dd></div>)}
-  </dl>;
-}
-
 /** One field for a whole line, and the same line as parts that stay editable. */
-function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, language, autoFocus, idPrefix }: {
-  line: string; parts: IngredientParts; onLine: (line: string) => void; onParts: (parts: IngredientParts) => void;
+function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, language, autoFocus, idPrefix, showParts = true }: {
+  showParts?: boolean; line: string; parts: IngredientParts; onLine: (line: string) => void; onParts: (parts: IngredientParts) => void;
   onSubmit: () => void; onCancel?: () => void; t: Copy; language: string; autoFocus?: boolean; idPrefix: string;
 }) {
   const lang = { lang: language, dir: directionOf(language) } as const;
@@ -45,12 +36,12 @@ function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, langu
     <label className={fieldClass}>{t.ingredientLine}
       <Input value={line} onChange={event => onLine(event.target.value)} onKeyDown={keys} placeholder={t.ingredientPlaceholder}
         autoComplete="off" enterKeyHint="done" autoFocus={autoFocus} maxLength={1000} {...lang} /></label>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[6rem_8rem_minmax(0,1fr)_minmax(0,1fr)]">
+    {showParts ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-[6rem_8rem_minmax(0,1fr)_minmax(0,1fr)]">
       {part('quantity', t.quantity)}
       {part('unit', t.unit, { list: `${idPrefix}-units` })}
       {part('name', t.name, { className: 'col-span-2 sm:col-span-1' })}
       {part('note', t.note, { className: 'col-span-2 sm:col-span-1' })}
-    </div>
+    </div> : null}
     <datalist id={`${idPrefix}-units`}>{knownUnits.map(unit => <option key={unit} value={unit} />)}</datalist>
   </div>;
 }
@@ -59,7 +50,6 @@ function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, langu
 function AddLine({ section, label, store, language, t, busy }: Common & { section: string | null; label: string | null }) {
   const [line, setLine] = useState('');
   const [parts, setParts] = useState<IngredientParts>(emptyParts);
-  const [editing, setEditing] = useState(false);
   const id = useId();
   const field = useRef<HTMLDivElement>(null);
   const problem = partsProblem(parts);
@@ -67,7 +57,7 @@ function AddLine({ section, label, store, language, t, busy }: Common & { sectio
     if (problem || busy) return;
     const outcome = await store.submit({ kind: 'addLine', section, qualifier: qualifierOf(parts, language) });
     if (outcome.kind === 'saved' || outcome.kind === 'unchanged') {
-      setLine(''); setParts(emptyParts); setEditing(false);
+      setLine(''); setParts(emptyParts);
       field.current?.querySelector<HTMLInputElement>('input')?.focus();
     }
   };
@@ -75,10 +65,10 @@ function AddLine({ section, label, store, language, t, busy }: Common & { sectio
   return <form onSubmit={submit} aria-label={label ? t.addIngredientTo({ section: label }) : t.addIngredient} className="grid gap-2">
     <div ref={field} className="grid gap-3">
       <LineFields line={line} parts={parts} idPrefix={id} t={t} language={language} onSubmit={() => void add()}
-        onLine={value => { setLine(value); setParts(parseLine(value)); setEditing(false); }}
-        onParts={value => { setParts(value); setLine(composeLine(value)); setEditing(true); }} />
+        showParts={Boolean(line.trim())}
+        onLine={value => { setLine(value); setParts(parseLine(value)); }}
+        onParts={value => { setParts(value); setLine(composeLine(value)); }} />
     </div>
-    {line.trim() && !editing ? <ReadAs parts={parts} t={t} /> : null}
     <p className="text-muted-foreground text-xs">{t.ingredientHelp}</p>
     <div><Button type="submit" size="md" disabled={Boolean(problem) || busy} className="pointer-coarse:h-11">
       <PlusIcon aria-hidden="true" />{t.addAction}</Button></div>

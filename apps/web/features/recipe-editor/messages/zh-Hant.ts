@@ -34,7 +34,6 @@ export default {
   addIngredient: '新增食材', addIngredientTo: insert('新增食材到 {{section}}', { section: String }),
   ingredientPlaceholder: '麵粉 150 克，過篩',
   ingredientHelp: '照平常的寫法輸入：份量、單位、名稱，逗號後面可加備註。',
-  readAs: '解讀為', partNone: '無',
   quantity: '份量', unit: '單位', name: '食材', note: '備註',
   unitSuggestions: '常用單位',
   addAction: '新增', saveAction: '儲存', cancel: '取消', edit: insert('編輯 {{name}}', { name: String }),

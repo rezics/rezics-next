@@ -34,7 +34,6 @@ export default {
   addIngredient: 'Añadir un ingrediente', addIngredientTo: insert('Añadir un ingrediente a {{section}}', { section: String }),
   ingredientPlaceholder: '250 g de harina, tamizada',
   ingredientHelp: 'Escribe la línea como la anotarías: cantidad, unidad, nombre y, tras una coma, una nota.',
-  readAs: 'Interpretado como', partNone: 'ninguno',
   quantity: 'Cantidad', unit: 'Unidad', name: 'Ingrediente', note: 'Nota',
   unitSuggestions: 'Unidades habituales',
   addAction: 'Añadir', saveAction: 'Guardar', cancel: 'Cancelar', edit: insert('Editar {{name}}', { name: String }),

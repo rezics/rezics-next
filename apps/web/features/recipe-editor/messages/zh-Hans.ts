@@ -34,7 +34,6 @@ export default {
   addIngredient: '添加食材', addIngredientTo: insert('添加食材到 {{section}}', { section: String }),
   ingredientPlaceholder: '面粉 150 克，过筛',
   ingredientHelp: '按平常的写法输入：用量、单位、名称，逗号后面可加备注。',
-  readAs: '识别为', partNone: '无',
   quantity: '用量', unit: '单位', name: '食材', note: '备注',
   unitSuggestions: '常用单位',
   addAction: '添加', saveAction: '保存', cancel: '取消', edit: insert('编辑 {{name}}', { name: String }),

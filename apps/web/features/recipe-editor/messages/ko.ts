@@ -34,7 +34,6 @@ export default {
   addIngredient: '재료 추가', addIngredientTo: insert('{{section}}에 재료 추가', { section: String }),
   ingredientPlaceholder: '밀가루 150g, 체에 친 것',
   ingredientHelp: '평소 적는 대로 입력하세요. 양, 단위, 이름 순이며 쉼표 뒤에 메모를 붙일 수 있습니다.',
-  readAs: '인식 결과', partNone: '없음',
   quantity: '양', unit: '단위', name: '재료', note: '메모',
   unitSuggestions: '자주 쓰는 단위',
   addAction: '추가', saveAction: '저장', cancel: '취소', edit: insert('{{name}} 편집', { name: String }),

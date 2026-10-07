@@ -42,11 +42,11 @@ export const TypesAnIngredientLine: Story = {
     const add = canvas.getByRole('form', { name: 'Add an ingredient' });
     const field = within(add).getByRole('textbox', { name: 'Ingredient line' });
     await userEvent.type(field, '1½ cups all-purpose flour, sifted');
-    const parts = within(add).getByLabelText('Read as');
-    await expect(parts).toHaveTextContent('Amount:1½');
-    await expect(parts).toHaveTextContent('Unit:cups');
-    await expect(parts).toHaveTextContent('Ingredient:all-purpose flour');
-    await expect(parts).toHaveTextContent('Note:sifted');
+    // The line is read into parts that stay editable beside it.
+    await expect(within(add).getByRole('textbox', { name: 'Amount' })).toHaveValue('1½');
+    await expect(within(add).getByRole('combobox', { name: 'Unit' })).toHaveValue('cups');
+    await expect(within(add).getByRole('textbox', { name: 'Ingredient' })).toHaveValue('all-purpose flour');
+    await expect(within(add).getByRole('textbox', { name: 'Note' })).toHaveValue('sifted');
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(lines(canvasElement)).toEqual(['1½ cups all-purpose flour, sifted']));
     // The first write created the recipe's Composition, then inserted the line with its exact amount.

@@ -34,7 +34,6 @@ export default {
   addIngredient: '材料を追加', addIngredientTo: insert('{{section}}に材料を追加', { section: String }),
   ingredientPlaceholder: '薄力粉 150g（ふるっておく）',
   ingredientHelp: '書くときと同じように入力してください。分量、単位、名前の順で、読点のあとにメモを付けられます。',
-  readAs: '解釈', partNone: 'なし',
   quantity: '分量', unit: '単位', name: '材料', note: 'メモ',
   unitSuggestions: 'よく使う単位',
   addAction: '追加', saveAction: '保存', cancel: 'キャンセル', edit: insert('{{name}} を編集', { name: String }),

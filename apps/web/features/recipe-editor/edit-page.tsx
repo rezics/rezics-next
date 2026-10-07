@@ -6,7 +6,7 @@ import { bodyText, editorValue } from '../document-editor/body.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { detailsValues } from '../studio/details-api.ts';
 import { readStudioText, readWorkTexts } from '../studio/read.ts';
-import { canonicalLanguage, workKind } from '../studio/types.ts';
+import { canonicalLanguage, idOf, workKind } from '../studio/types.ts';
 import { mayEdit } from '../work-levels-edit/allowed.ts';
 import { readAllowedActions } from '../work-levels-edit/authority.ts';
 import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
@@ -25,7 +25,7 @@ async function readNotes(actingSubject: string, work: string, language: string):
   const texts = await readWorkTexts(actingSubject, work);
   const own = texts.ok ? texts.data.find(text => text.language.toLowerCase() === language.toLowerCase()) : undefined;
   if (!own) return empty;
-  const opened = await readStudioText(actingSubject, own.id, own.revision);
+  const opened = await readStudioText(actingSubject, idOf(own.id), idOf(own.revision));
   if (!opened.draft.ok) return empty;
   const draft = opened.draft.data;
   return { text: draft.contribution, head: opened.head ?? draft.revision, publicationHead: opened.publicationHead,
