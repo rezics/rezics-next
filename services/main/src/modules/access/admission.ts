@@ -24,6 +24,7 @@ import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
+import { resolveZonePageContent, savedZonePageContent, zonePageAdministratorAllowed } from './zone-content-authority.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scope-gates.ts';
@@ -73,6 +74,9 @@ export interface AdmissionRequest {
   baselineSourceRevision?: string;
   /** Exact public contribution offered by the submission owner. */
   baselineContribution?: string;
+  /** Server-resolved Zone that owns this Content page. Content sets it after
+   * resolution and covers it in requestDigest; a request body must not. */
+  resolvedZonePage?: string;
   /** Owner-bound type configuration, covered by the Work creation digest. */
   workSemanticTypes?: readonly string[];
 }
@@ -1074,6 +1078,7 @@ export class AccessAdmissionRegistry {
           dispatchEligible, replayed: true };
       }
 
+      const zonePage = resolveZonePageContent(request);
       const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
       if (existing && savedBaseline) {
         if (existing.request_digest !== request.requestDigest
@@ -1082,10 +1087,15 @@ export class AccessAdmissionRegistry {
           || savedBaseline.collection_create !== (request.baselineCollectionCreate === true)
           || savedBaseline.related_work !== (request.baselineRelatedWork ?? null)
           || savedBaseline.source_revision !== (request.baselineSourceRevision ?? null)
-          || (savedBaseline.submission_contribution ?? null) !== (request.baselineContribution ?? null)) {
+          || (savedBaseline.submission_contribution ?? null) !== (request.baselineContribution ?? null)
+          || zonePage.kind === 'refused'
+          || savedZonePageContent(savedBaseline, existing.action) !== (zonePage.kind === 'zone' ? zonePage.zone : null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = !participationDenied && witnessCurrent && request.principal.emailVerified === true
+        const zoneAdministrator = await zonePageAdministratorAllowed(client, this.baselineGraph,
+          existing.principal_id, existing.acting_subject, savedBaseline, existing.action);
+        const dispatchEligible = !participationDenied && witnessCurrent
+          && (request.principal.emailVerified === true || zoneAdministrator)
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
@@ -1197,7 +1207,7 @@ export class AccessAdmissionRegistry {
       let publishingProof: RepresentedWorkProof | null = null;
       if (participationDenied) throw participationDenied;
       authoritySources.push(...participationSources);
-      const administratorCandidate = !existing && authorityPath === 'represented-agent'
+      const administratorCandidate = !existing && zonePage.kind !== 'zone' && authorityPath === 'represented-agent'
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
         ? await platformAdministratorProof(client, principalId, request.actingSubject) : null;
@@ -1208,6 +1218,13 @@ export class AccessAdmissionRegistry {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
+      if (!existing && zonePage.kind === 'refused') {
+        throw new AdmissionDenied('Content zone page target is unresolved');
+      }
+      if (!existing && zonePage.kind === 'zone' && !baseline
+        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) {
+        throw new AdmissionDenied('Zone edit authority is unavailable');
+      }
       const rating = !existing && authorityPath === 'represented-agent' && ratingConfiguration
         ? await realmRatingProof(client, this.baselineGraph, principalId, request.actingSubject,
           request.action, request.scope) : null;
@@ -1598,7 +1615,14 @@ export class AccessAdmissionRegistry {
           if (error instanceof AccountAssertionDenied) throw new AdmissionDenied('baseline Account assertion is inactive');
           throw error;
         }
-        if (current?.emailVerified !== true || current.issuer !== identity.account_issuer
+        const zoneAdministrator = await zonePageAdministratorAllowed(client, this.baselineGraph,
+          row.principal_id, row.acting_subject, baseline, row.action);
+        if (zoneAdministrator) {
+          if (!current || current.issuer !== identity.account_issuer
+            || current.subject !== identity.account_subject) {
+            throw new AdmissionDenied('platform administrator authority changed before claim');
+          }
+        } else if (current?.emailVerified !== true || current.issuer !== identity.account_issuer
           || current.subject !== identity.account_subject) {
           throw new AdmissionDenied('baseline claim needs the current verified Account assertion');
         }
