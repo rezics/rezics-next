@@ -7,21 +7,36 @@ import type { MainClient } from '../studio/types.ts';
 // they are saved by their own writers. The same rules hold as for the Composition: one write in
 // flight, a refused head reads Main again and writes the newest intent once more over it.
 
-/** One write at a time; a value submitted while one is in flight replaces the one waiting behind it. */
-export function latestLane<I, R>(run: (input: I) => Promise<R>, failed: R, onChange: () => void) {
+/**
+ * One record's writes: at most one in flight and one newest slot behind it, which every newer
+ * submission overwrites (`merge` says how, for inputs that must not simply replace each other). A
+ * refused write that reads Main again asks `newest()` for what to write over it: the slot's input
+ * if there is one, never the stale original, and the callers waiting on either share the outcome.
+ */
+export function latestLane<I, R>(run: (input: I, newest: () => I) => Promise<R>, failed: R, onChange: () => void,
+  merge: (waiting: I, next: I) => I = (_waiting, next) => next) {
+  type Task = { input: I; resolvers: ((result: R) => void)[] };
   let running = false;
-  let waiting: { input: I; resolvers: ((result: R) => void)[] } | null = null;
-  async function go(first: { input: I; resolvers: ((result: R) => void)[] }) {
-    running = true;
-    onChange();
-    let current: typeof first | null = first;
-    while (current) {
-      const result: R = await run(current.input).catch(() => failed);
-      const next: typeof waiting = waiting;
+  let current: Task | null = null;
+  let waiting: Task | null = null;
+  const newest = () => {
+    if (waiting && current) {
+      current = { input: merge(current.input, waiting.input), resolvers: [...current.resolvers, ...waiting.resolvers] };
       waiting = null;
-      if (next) { next.resolvers.unshift(...current.resolvers); current = next; continue; }
-      for (const resolve of current.resolvers) resolve(result);
-      current = null;
+    }
+    return current!.input;
+  };
+  async function go(first: Task) {
+    running = true;
+    current = first;
+    onChange();
+    while (current) {
+      const task: Task = current;
+      const result: R = await run(task.input, newest).catch(() => failed);
+      const done: Task = current;
+      for (const resolve of done.resolvers) resolve(result);
+      current = waiting;
+      waiting = null;
     }
     running = false;
     onChange();
@@ -29,8 +44,8 @@ export function latestLane<I, R>(run: (input: I) => Promise<R>, failed: R, onCha
   return {
     busy: () => running,
     submit: (input: I) => new Promise<R>(resolve => {
-      if (running) waiting = { input, resolvers: [...(waiting?.resolvers ?? []), resolve] };
-      else void go({ input, resolvers: [resolve] });
+      if (!running) { void go({ input, resolvers: [resolve] }); return; }
+      waiting = { input: waiting ? merge(waiting.input, input) : input, resolvers: [...(waiting?.resolvers ?? []), resolve] };
     }),
   };
 }
@@ -73,8 +88,10 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
     for (const listener of listeners) listener();
   };
 
-  async function run(change: { title: string; description: string }): Promise<SaveOutcome> {
+  async function run(first: { title: string; description: string },
+    newest: () => { title: string; description: string }): Promise<SaveOutcome> {
     failure = null;
+    let change = first;
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = entryOf(values, language);
       if (current.title === change.title && current.description === change.description) return { kind: 'unchanged' };
@@ -87,6 +104,8 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
         if (!read.data) return refuse('unavailable');
         head = read.data.revision;
         values = detailsValues(read.data, language);
+        // Only the newest title and description are written over what Main holds now.
+        change = newest();
         continue;
       }
       if (result.status === 'denied') return refuse('denied');
@@ -110,7 +129,8 @@ export interface NotesState { text: string | null; head: string | null; body: st
 export interface NotesSnapshot { notes: NotesState; busy: boolean; publishing: boolean; failure: SaveRefusal | null;
   /** True once this editor has published, or the notes were already published when it opened. */
   published: boolean }
-export type PublishOutcome = { kind: 'published' } | { kind: 'refused'; refusal: SaveRefusal } | { kind: 'busy' };
+export type PublishOutcome = { kind: 'published' } | { kind: 'refused'; refusal: SaveRefusal };
+type NotesOutcome = SaveOutcome | { kind: 'published' };
 
 const idOf = (iri: string) => iri.slice(-36);
 
@@ -123,13 +143,15 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
   let snapshot: NotesSnapshot = { notes, busy: false, publishing, failure, published: Boolean(initial.publicationHead) };
   const listeners = new Set<() => void>();
   const notify = () => {
-    snapshot = { notes, busy: lane.busy() || publishing, publishing, failure, published: Boolean(notes.publicationHead) };
+    snapshot = { notes, busy: lane.busy(), publishing, failure, published: Boolean(notes.publicationHead) };
     for (const listener of listeners) listener();
   };
   const target = { actingSubject, work, language };
+  type Task = { body: string; publish: boolean };
 
-  /** Writes `body` as the draft; a moved draft head is read and the body written once more over it. */
-  async function write(body: string): Promise<SaveOutcome> {
+  /** Writes `body` as the draft; a moved draft head is read, and the newest body is written over it. */
+  async function write(first: string, adopt: () => string): Promise<SaveOutcome> {
+    let body = first;
     for (let attempt = 0; attempt < 2; attempt++) {
       if (notes.text && notes.body === body) return { kind: 'unchanged' };
       if (!body.trim()) return notes.text ? { kind: 'refused', refusal: 'empty' } : { kind: 'unchanged' };
@@ -140,34 +162,36 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         const latest = await readLatest(actingSubject, notes.text, main());
         if (!latest) return { kind: 'refused', refusal: 'unavailable' };
         notes = { ...notes, head: latest.head, body: latest.body };
+        body = adopt();
         continue;
       }
       return { kind: 'refused', refusal: saved.kind === 'denied' ? 'denied' : saved.kind === 'conflict' ? 'moved' : 'unavailable' };
     }
     return { kind: 'refused', refusal: 'moved' };
   }
-  async function save(body: string): Promise<SaveOutcome> {
-    failure = null;
-    const outcome = await write(body);
-    if (outcome.kind === 'refused') failure = outcome.refusal;
-    notify();
-    return outcome;
-  }
-  const lane = latestLane(save, { kind: 'refused', refusal: 'unavailable' } as SaveOutcome, notify);
 
-  async function publish(body: string): Promise<PublishOutcome> {
-    if (publishing) return { kind: 'busy' };
-    publishing = true;
+  /**
+   * One task of the notes record: save the body, and for a publication publish it and select it as the
+   * text readers open. Publication runs in this lane, so a field save made meanwhile waits in the newest
+   * slot and never overlaps it, and a publication waits for the saves ahead of it.
+   */
+  async function runTask(first: Task, newest: () => Task): Promise<NotesOutcome> {
+    let task = first;
+    const adopt = () => { task = newest(); return task.body; };
     failure = null;
+    publishing = task.publish;
     notify();
-    const fail = (refusal: SaveRefusal): PublishOutcome => { failure = refusal; return { kind: 'refused', refusal }; };
+    const finish = (outcome: NotesOutcome): NotesOutcome => {
+      failure = outcome.kind === 'refused' ? outcome.refusal : null;
+      return outcome;
+    };
+    const fail = (refusal: SaveRefusal) => finish({ kind: 'refused', refusal });
     try {
-      // A save started by leaving the field finishes first, and what is in the field now is what gets published.
-      const first = await lane.submit(body);
-      if (first.kind === 'refused') return fail(first.refusal);
       for (let attempt = 0; attempt < 2; attempt++) {
-        const saved = await write(body);
-        if (saved.kind === 'refused') return fail(saved.refusal);
+        const saved = await write(task.body, adopt);
+        if (saved.kind === 'refused') return finish(saved);
+        if (!task.publish) return finish(saved);
+        publishing = true;
         if (!notes.text || !notes.head) return fail('invalid');
         const published = await publishText({ actingSubject, text: notes.text, head: notes.head,
           expectedPublicationHead: notes.publicationHead, key: crypto.randomUUID() }, main());
@@ -175,6 +199,7 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
           const current = await main().v1.contributions({ contribution: idOf(notes.text) }).get({ query: { actingSubject } });
           if (!current.data) return fail('unavailable');
           notes = { ...notes, head: current.data.draftHead, publicationHead: current.data.publicationHead };
+          adopt();
           continue;
         }
         if (published.outcome === 'denied') return fail('denied');
@@ -186,16 +211,26 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         if (selected === 'pending') return fail('pending');
         if (selected !== 'done') return fail('unavailable');
         notes = { ...notes, publicationHead: published.publication.publicationDecision };
-        return { kind: 'published' };
+        return finish({ kind: 'published' });
       }
       return fail('moved');
     } finally { publishing = false; notify(); }
   }
+  const lane = latestLane(runTask, { kind: 'refused', refusal: 'unavailable' } as NotesOutcome, notify,
+    // A save that lands behind a waiting publication joins it: the publication is of what is typed last.
+    (waiting, next) => ({ body: next.body, publish: waiting.publish || next.publish }));
+
   return {
     snapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    save: (body: string) => lane.submit(body),
-    publish,
+    async save(body: string): Promise<SaveOutcome> {
+      const outcome = await lane.submit({ body, publish: false });
+      return outcome.kind === 'published' ? { kind: 'saved' } : outcome;
+    },
+    async publish(body: string): Promise<PublishOutcome> {
+      const outcome = await lane.submit({ body, publish: true });
+      return outcome.kind === 'published' || outcome.kind === 'refused' ? outcome : { kind: 'refused', refusal: 'unavailable' };
+    },
   };
 }
 export type NotesWriter = ReturnType<typeof createNotesWriter>;

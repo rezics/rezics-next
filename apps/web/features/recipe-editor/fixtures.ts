@@ -53,13 +53,18 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   let metadata = { head: start.metadataHead ?? id(700), values: start.details ?? detailsValues };
   let notes = { ...(start.notes ?? noNotes), text: start.notes?.text ?? null };
   const calls: Call[] = [];
-  const interference: { before?: (call: Call) => void; /** Holds every write until it settles, to put several edits in flight together. */ gate?: Promise<void> } = {};
+  const interference: { before?: (call: Call) => void;
+    /** Holds every call until it settles, to put several edits in flight together. */ gate?: Promise<void>;
+    /** Holds the calls of one name (`changes`, `timings`, `details`, `notes-create`, `publish`…); the call is recorded first. */
+    gates?: Record<string, Promise<void>> } = {};
   const answer = (data: unknown) => ({ data, error: null });
   const refuse = (status: number, code: string) => ({ data: null, error: { status, value: { code } } });
-  const record = (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
+  const record = async (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
     const call = { name, body, key: options?.headers?.['idempotency-key'] };
     calls.push(call);
     interference.before?.(call);
+    await interference.gates?.[name];
+    await interference.gate;
   };
   const page = () => recipe.structure ? { structure: recipe.structure, revision: recipe.head, measures: recipe.measures,
     occurrences: recipe.nodes.map(node => ({ ...node, state: 'active', labels: node.role === 'group' && node.label ? [node.label] : [] })) } : null;
@@ -67,8 +72,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   const advance = () => { recipe = { ...recipe, head: next() }; return recipe.head!; };
 
   const compositionChanges = { post: async (body: { expectedHead: string; operations: Operation[] }, options?: never) => {
-    record('changes', body, options);
-    await interference.gate;
+    await record('changes', body, options);
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     const created = body.operations.filter(operation => operation.op === 'insert').map(() => next());
@@ -76,8 +80,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     return answer({ structure: recipe.structure, revision: recipe.head, occurrences: created, receipt: 'receipt', replayed: false });
   } };
   const measurePost = (kind: 'measures' | 'timings') => async (body: Record<string, unknown> & { expectedHead: string }, options?: never) => {
-    record(kind, body, options);
-    await interference.gate;
+    await record(kind, body, options);
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     let measures = recipe.measures;
@@ -104,7 +107,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       works: (_: { id: string }) => ({ get: async () => answer(page()) }) }),
     compositions: Object.assign((_: { id: string }) => ({ changes: compositionChanges }), {
       post: async (body: unknown, options?: never) => {
-        record('create', body, options);
+        await record('create', body, options);
         if (!recipe.structure) recipe = { ...recipe, structure, head: next() };
         return answer({ structure, revision: recipe.head, receipt: 'receipt', replayed: false });
       } }),
@@ -113,31 +116,33 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
         localized: metadata.values.entries.map(entry => ({ ...entry, mainVersionLabel: entry.label })) }),
       put: async (body: { expectedHead: string | null; state: { localized: { language: string; title: string | null; description: string | null; tagline: string | null; mainVersionLabel: string | null }[] } },
         options?: never) => {
-        record('details', body, options);
+        await record('details', body, options);
         if (body.expectedHead !== metadata.head) return refuse(409, 'stale_work_head');
         metadata = { head: next(), values: { ...metadata.values, entries: body.state.localized.map(entry => ({ language: entry.language,
           title: entry.title ?? '', description: entry.description ?? '', tagline: entry.tagline ?? '', label: entry.mainVersionLabel })) } };
         return answer({ revision: metadata.head });
       } } }),
-    contributions: Object.assign((_: { contribution: string }) => ({ get: async () => answer({ draftHead: notes.head, publicationHead: notes.publicationHead }) }), {
+    contributions: Object.assign((_: { contribution: string }) => ({
+      get: async () => answer({ draftHead: notes.head, publicationHead: notes.publicationHead }),
+      drafts: (_draft: { revision: string }) => ({ get: async () => answer({ body: notes.body, work, language: 'en', contribution: notes.text, revision: notes.head }) }) }), {
       post: async (body: { body?: string }, options?: never) => {
-        record('notes-create', body, options);
+        await record('notes-create', body, options);
         notes = { ...notes, text: id(300), head: next(), body: body.body ?? '' };
         return answer({ contribution: notes.text, draftRevision: notes.head });
       } }),
     'contribution-edits': { post: async (body: { body?: string; expectedHead: string }, options?: never) => {
-      record('notes-edit', body, options);
+      await record('notes-edit', body, options);
       if (body.expectedHead !== notes.head) return refuse(409, 'stale_draft');
       notes = { ...notes, head: next(), body: body.body ?? '' };
       return answer({ draftRevision: notes.head });
     } },
     'contribution-publications': { post: async (body: unknown, options?: never) => {
-      record('publish', body, options);
+      await record('publish', body, options);
       notes = { ...notes, publicationHead: next() };
       return answer({ publicationDecision: notes.publicationHead, selectedDraft: notes.head });
     } },
     'main-versions': (_: { mainVersion: string }) => ({ selection: { get: async () => refuse(404, 'not_found') } }),
-    'publication-selections': { post: async (body: unknown, options?: never) => { record('select', body, options); return answer({ receipt: 'receipt' }); } },
+    'publication-selections': { post: async (body: unknown, options?: never) => { await record('select', body, options); return answer({ receipt: 'receipt' }); } },
   } } as unknown as MainClient;
   return { main: () => main, calls, interference, world: () => ({ recipe, notes, metadata }),
     /** Another tab's write: the head moves under the editor. */
