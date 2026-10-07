@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 07:48 UTC. Manager GPT-6.1 Sol in tmux
+Checkpoint: 2026-10-07 08:08 UTC. Manager GPT-6.1 Sol in tmux
 `goal-kernel`, registered as `goal-kernel-codex`. Live truth:
 `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 
@@ -22,18 +22,27 @@ refresh now succeeded after program fixed its old-checkpoint self-reference
 at 7359b43ee. All six resources Healthy, no pending SQL, model generation 11
 41d0b7e1e152 current; evidence `.temp/kernel/dev-refresh-corrected-checkpoint.log`.
 
-Six derived rating profiles subsequently landed b3825b4c4; artifacts 427f44faf
-advance model/native image. Trust-ops' one queued refresh acquired at 2138207d,
-including its Access1750/1751/1760. No duplicate kernel refresh exists. Keep
-material main stable until its checkpoint, then resume C5 merge CLI PID1348540
-(suspended by manager before fast-forward; unit children may finish).
+C5 templates landed at 35c3fe3c5 and canonical refresh succeeded:
+`.temp/kernel/dev-refresh-c5.log`, Access1761-1764 applied, all six Healthy.
+Final focused integration 20261007t075017-accc57 passes. Three Work GETs are
+retired; POST /v1/query uses top-level limit/cursor. G-1282 reused for physical
+ordered-membership preparation.
 
-G-1296 has its native claims restored and is resumed on default codex. Its
-authored draft was stashed, rebased onto the repair, and restored; the stash
-remains as backup. Strict Statement replay/template checks were preserved.
-Class audit found another raw update in `work/reconcile-restored.ts` (offline
-classification representation recovery); reuse the repair worker for it next.
-Do not enable a product raw-update endpoint.
+C6 delivery landed at 3348b4ad6 (4f5ba9781/bf5fabd36/6d190b891).
+Existing Main relay consumes exact custodied events after proof retirement,
+including interrupted reconciliation/lost acknowledgement. Manager native union
+passes 39 cases; 111-file gate passes, with isolated serialization timeout reported
+on baseline under host load. Current artifacts 6e01dba9e include six target-rating
+profiles 28268ce84 and native 0.5.39. Local challenge counts 1c75b67fb landed:
+one claim-head row read, 25 integrations pass. Exactly one refresh queued in
+`.temp/kernel/dev-refresh-c6-combined.log` for Access1765/1766, Content1522 and
+model/native artifacts. No other kernel lifecycle waiter exists.
+
+C6 legacy exact-model backfill is the next prerequisite; G-1296 reclaimed
+narrowly, native core released for G-1330. G-1300 reclaimed on Recipe in-place
+qualifier edits for launch. Their resumes and G-1330 dispatch hit the 12GiB
+admission floor, so retry when memory permits; never override it. G-1326 is
+merged and ready for reuse on another bounded profile group.
 
 ## Contracts
 
@@ -43,8 +52,8 @@ Do not enable a product raw-update endpoint.
 | C2 | First slice G-1226 7adef77bc + fac97ab59. G-1289 running against landed launch G-1284 and trust-ops G-1288. Every profile off the DSL remains. |
 | C3 | First path G-1228 d27907918, bf6503e96, 02542960b. |
 | C4 | First slice G-1243 932f08a28182 repaired by G-1315 67883e853690; real product-layout QA and shared refresh passed. Claim folding/classification and retained restore audit remain. |
-| C5 | G-1282 reviewed: independent-anchor pending reconciliation and focused QA pass. Manager rebase preserves strict Statement replay/rate metadata; generated query bindings/image pins now committed. Retry gate runs; merge held for peer refresh checkpoint. |
-| C6 | G-1296 resumed attempt 3: five-quad proof, durable custody and exact models pass focused checks, but enabled slim writes have no owner-outbox relay reader. Delivery must work before landing. Legacy exact-model backfill remains a restore prerequisite. |
+| C5 | First slice landed 35c3fe3c5: native terms, four templates, local paging/basis, natural-anchor reconciliation; shared refresh and focused acceptance passed. Further physical query debt remains. |
+| C6 | First slice/delivery landed 3348b4ad6: six-quad proof, exact custody, existing relay/consumer delivery and 39 native cases pass. Shared refresh pending; legacy exact-model backfill remains a restore prerequisite. |
 
 Other landings: G-1297 246110a9d12f gives truthful complete on three list
 reads; G-1290 first slice a72bb482c197 gives live parent name fences and durable
@@ -57,15 +66,14 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
   chapter GET/PUT progress passed focused QA; Recipe duplicate transports
   retired. Shared refresh queued. Candidate normalization still scans/sorts
   the full population before bounded writes; physical-work followup remains.
-- G-1282 reviewed attempt 3: C5 independent-anchor pending consumption fixed;
-  three Work templates and query/schema/fixture-only Concept feed pass.
-  Send launch/program exact acceptance after review and landing. Populated
-  startup directory rebuild qualification remains explicit.
+- G-1282 attempt 4 running: physically bounded, resumable ordered-membership
+  preparation replaces candidate population sorting and unbounded parent validation.
 - G-1290 second slice f5d13e096d70 and native pin 99c43a9d1 landed.
   Bounded owner proofs and complete 1,001-name recovery pass. Worker attempt 3
   fixes adjacent CatalogueNamePolicy/TS recipe sorts and caps plus IRI isolation.
-- G-1300 singleton correction landed as above; attempt 5 removes the remaining
-  history-wide resolved-challenge COUNT in favor of the local claim head.
+- G-1300 singleton correction/counts landed; reused next for stable Recipe
+  ingredient/step qualifier edits and bounded local ingredient references.
+- G-1296 delivery landed; reused next for exact original retained-model backfill.
 - G-1306 resumed attempt 3: real owner-journal source seek passed populated
   2,051-slot/64-row qualification, but review found moving Main-stream tail
   and global pending-empty coverage gates. Remove unrelated-churn starvation
@@ -73,14 +81,12 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
 - G-1289 running: G-1284 and G-1288 landed; exact owner hooks and current
   publication membership signatures staged in its worktree.
 - G-1315 closed and archived after product-layout and shared-stack acceptance.
-- G-1326 first slice f624193d388d landed; artifacts b190b56a5, refresh queued.
-  Three source profiles preserve 56 constraints/five focus roles. Six base
-  rating profiles preserve 153 constraints / 22 focus roles; six derived Realm
-  profiles b3825b4c4 preserve 179 constraints / 23 shapes, artifacts 427f44faf.
-  Worker attempt 4 authors remaining six target-rating v2-v4 profiles.
+- G-1326 source/base/derived/target slices landed: 23 Turtle profiles. Latest
+  six target v2-v4 preserve 157 constraints/18 shapes and all 17 earlier author bytes.
+  Reuse worker on next bounded group once memory permits.
 - G-1341 running Luna/max: title-control and two derivation profiles move to
   authored Turtle without compiler edits, preserving exact meaning and pins.
-- G-1330 queued behind C6 core claims: offline classification restore must use
+- G-1330 dispatch-ready after C6 core release (memory admission waiting): offline classification restore must use
   authenticated native maintenance on the product assembler, never /update.
 
 ## Cross-Goal commitments
@@ -110,10 +116,16 @@ After model/native artifact or migration changes: generate, types, committed
 artifacts, shared refresh. Preserve peer dirty files. References must be copied
 into a worktree only after dispatch succeeds; workers cannot read main .temp.
 New dispatches/resumes use default codex until account usage converges; reserve
-xhigh for first-of-kind design. Next checkpoint is C5 landing and C6 delivery acceptance. Full Goal
+xhigh for first-of-kind design. Next checkpoint is combined C6 refresh and exact retained-model acceptance. Full Goal
 completion cannot yet be projected reliably: remaining population queries and
 profile migrations still need slices.
 
 Later work: chapter seek/default-graph qualification, remaining population
 queries, classification capability, external search documents, cold RDF Patch
 history, Jena stats/CLI with program, reply restore, and Discover remeasurement.
+
+Launch owns minimal timing support in the existing Recipe measures route with
+omitted-state preservation and explicit clearing; G-1300 holds change/format.
+Trust-ops G-1342 is lent exact privacy-log sites in Content projection worker
+and rankings, using existing logWorkerFault only. Program requests batched
+landing updates every 30 minutes; urgent blockers/approvals begin URGENT.
