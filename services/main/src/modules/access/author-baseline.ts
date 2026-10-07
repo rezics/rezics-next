@@ -22,15 +22,17 @@ interface AuthorWorkCandidate {
  * candidates. Exact Work keys bound both the lookup and the locked set. Lock
  * membership too: after waiting behind a transfer, an unmarked join row could
  * otherwise retain the former maintainer from the statement snapshot. */
-async function authorWorkCandidates(client: PoolClient, principal: string, actor: string,
+async function authorWorkCandidates(client: PoolClient, principal: string, actor: string | ReadonlyMap<string, string>,
   works: string | readonly string[]): Promise<AuthorWorkCandidate[]> {
   return (await client.query<AuthorWorkCandidate>(`
     SELECT wanted.work AS resource, proof.*
-    FROM unnest(${typeof works === 'string' ? 'ARRAY[$1::text]' : '$1::text[]'}) AS wanted(work)
+    FROM ${typeof actor === 'string'
+      ? `unnest(${typeof works === 'string' ? 'ARRAY[$1::text]' : '$1::text[]'}) AS wanted(work)`
+      : 'unnest($1::text[], $3::text[]) AS wanted(work, actor)'}
     JOIN LATERAL (
       SELECT s.generation::text,s.main_version,s.creation_admission,a.graph_receipt,a.request_digest,a.action,a.scope_id
       FROM access.work_maintainer_set s
-      JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $3
+      JOIN access.work_maintainer m ON m.work = s.work AND m.agent = ${typeof actor === 'string' ? '$3' : 'wanted.actor'}
       JOIN access.admission a ON a.id = s.creation_admission
       JOIN access.representation r ON r.subject_id = m.agent AND r.principal_id = $2
       JOIN access.principal p ON p.id = r.principal_id AND p.active
@@ -40,7 +42,8 @@ async function authorWorkCandidates(client: PoolClient, principal: string, actor
           OR (a.action = 'work.edit' AND a.scope_id LIKE 'work:edit:https://rezics.com/id/%'))
         AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
       ORDER BY r.id LIMIT 1 FOR SHARE OF s, m, r, p, agent
-    ) AS proof ON true`, [works, principal, actor])).rows;
+    ) AS proof ON true`, [works, principal, typeof actor === 'string' ? actor
+      : (works as readonly string[]).map(work => actor.get(work))])).rows;
 }
 
 // Singleton admissions and batch readers use the same receipt/head evaluator.
@@ -59,13 +62,15 @@ function authorWorkPattern(work: string, row: AuthorWorkCandidate): string {
 
 /** One candidate statement and one receipt/current-head proof for at most 65
  * requested Works. The response contains only distinct candidate keys, with a
- * fixed byte ceiling; unrelated author inventory is never enumerated. */
+ * fixed byte ceiling; unrelated author inventory is never enumerated. A per-Work
+ * acting-subject map supports mixed Studio identities without proof fan-out. */
 export async function authorWorkGenerations(client: PoolClient,
-  graph: Pick<FusekiClient, 'query'> | undefined, principal: string, actor: string,
+  graph: Pick<FusekiClient, 'query'> | undefined, principal: string, actor: string | ReadonlyMap<string, string>,
   works: readonly string[]): Promise<Map<string, string>> {
   const allowed = new Map<string, string>();
-  if (!graph || !native.test(actor) || works.length > MAX_AUTHOR_WORKS
-    || works.some(work => !native.test(work))) return allowed;
+  if (!graph || works.length > MAX_AUTHOR_WORKS || works.some(work => !native.test(work))
+    || (typeof actor === 'string' ? !native.test(actor)
+      : works.some(work => !native.test(actor.get(work) ?? '')))) return allowed;
   const unique = [...new Set(works)].sort();
   if (!unique.length) return allowed;
   const candidates = await authorWorkCandidates(client, principal, actor, unique);

@@ -302,7 +302,7 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const principal = await f.account.verifier.verify(new Request('http://main.local',
       { headers: { authorization: `Bearer ${f.account.tokenA}` } }), ['work:read']);
     expect((await chapterAccess.chapterWriters(principal, f.actor, [penChapter.post])).get(penChapter.post))
-      .toEqual({ writer: pen, controlled: true });
+      .toMatchObject({ writer: pen, controlled: true, authoritySubject: pen });
     expect(await chapterAccess.canReadContentVariants(principal, pen, penChapter.post)).toBe(true);
     const disclosed = await chapterRead();
     expect(disclosed.facts).toMatchObject([

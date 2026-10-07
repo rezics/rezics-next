@@ -75,7 +75,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
   const controlled = new Map<string, Awaited<ReturnType<typeof content.listVariantHeads>>>();
   for (const target of targets) {
     if (!liveTargets.has(target) || !writers.get(target)?.controlled) continue;
-    if (!await access.canReadContentVariants(principal, writers.get(target)!.writer, target)) continue;
+    if (!await access.canReadContentVariants(principal, writers.get(target)!.authoritySubject!, target)) continue;
     const listed = await content.listVariantHeads(target, '', 20);
     if (listed.nextCursor) throw new WorkReadLimit('Chapter variants exceed the page budget');
     controlled.set(target, listed);
@@ -138,7 +138,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     throw new WorkReadMoved('Studio chapter control changed');
   }
   for (const target of controlled.keys()) {
-    if (!await access.canReadContentVariants(principal, writers.get(target)!.writer, target)) {
+    if (!await access.canReadContentVariants(principal, writers.get(target)!.authoritySubject!, target)) {
       throw new WorkReadMoved('Studio chapter access changed');
     }
     await fenceStudioVariantHeads(content, target, '', 20, controlled.get(target)!);

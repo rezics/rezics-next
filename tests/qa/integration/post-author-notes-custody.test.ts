@@ -45,8 +45,8 @@ test('A second Person identity reads and edits its own unpublished chapter Post 
         expectedCompositionHead: composition.revision, actingSubject: writer }));
     expect((await stack.accessPool.query(`SELECT id FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id LIKE $2`, [writer, `%${chapter.post}`])).rows).toHaveLength(0);
-    expect(await studio.chapterWriters(principal, writer, [chapter.post]))
-      .toEqual(new Map([[chapter.post, { writer, controlled: true }]]));
+    expect((await studio.chapterWriters(principal, writer, [chapter.post])).get(chapter.post))
+      .toMatchObject({ writer, controlled: true, authoritySubject: writer });
     expect(await stack.access.canReadWork(principal, writer, chapter.post)).toBe(true);
     expect(await studio.canReadContentVariants(principal, writer, chapter.post)).toBe(true);
     expect(await stack.access.canReadWork(principal, sessionIdentity, chapter.post)).toBe(false);

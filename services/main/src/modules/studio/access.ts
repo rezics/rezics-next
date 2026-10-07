@@ -5,8 +5,8 @@ import { ceilingFor, mandateFor, normalizeControlError, requireMandate,
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { authorWorkGeneration } from '../access/author-baseline.ts';
-import { baselineMemberProof } from '../access/baseline.ts';
+import { authorWorkGeneration, authorWorkGenerations } from '../access/author-baseline.ts';
+import { maintainerControllerProof } from '../work/maintainer-proof.ts';
 
 /** Access-owned evidence for private Studio pages, fenced to one read transaction. */
 export class StudioAccess {
@@ -100,18 +100,20 @@ export class StudioAccess {
       const subject = (await client.query<{ generation: string }>(`SELECT generation::text
         FROM access.authority_subject WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [agent])).rows[0];
       if (!subject) throw new WorkReadUnavailable('Studio Agent is unavailable');
+      const generation = await authorWorkGeneration(client, this.graph, actor.id, agent, work);
       const row = (await client.query<{ action: string; created_at: Date; generation: string }>(`
         SELECT a.action, a.registered_at AS created_at, s.generation::text FROM access.work_maintainer_set s
         JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $2
         JOIN access.admission a ON a.id = s.creation_admission
-        WHERE s.work = $1 AND a.acting_subject = $2 AND a.state = 'sealed'
-          AND a.graph_outcome = 'succeeded' FOR SHARE OF s`, [work, agent])).rows[0];
+        WHERE s.work = $1 AND s.generation = $3::bigint AND a.state = 'sealed'
+          AND a.graph_outcome = 'succeeded' FOR SHARE OF s, m`, [work, agent, generation])).rows[0];
       return { row: row ?? null, stamp: JSON.stringify([actor.id, actor.epoch, mandate.id,
         mandate.generation, subject.generation, row?.generation ?? null]) };
     });
   }
 
-  /** One indexed batch of chapter owners and at most twenty Agent-control probes. */
+  /** Creator identity is provenance. One controller-selection batch and one
+   * receipt/head batch prove current chapter stewardship, including other identities. */
   async chapterWriters(principal: VerifiedPrincipal, agent: string, works: readonly string[]) {
     if (works.length > 20 || works.some(work => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work))) {
       throw new WorkReadUnavailable('Studio chapter page exceeds its bound');
@@ -119,19 +121,58 @@ export class StudioAccess {
     return this.transaction(async client => {
       const actor = await requirePrincipal(client, principal);
       await requireMandate(client, actor.id, agent, 'agent.control');
-      const rows = (await client.query<{ work: string; writer: string }>(`
-        SELECT s.work, a.acting_subject AS writer FROM access.work_maintainer_set s
+      const rows = (await client.query<{ work: string; writer: string; subject: string | null;
+        generation: string; control_stamp: string | null; grant_stamp: string | null }>(`
+        SELECT s.work, a.acting_subject AS writer, current.subject, s.generation::text,
+          current.stamp AS control_stamp, explicit.stamp AS grant_stamp
+        FROM access.work_maintainer_set s
         JOIN access.admission a ON a.id = s.creation_admission
+        LEFT JOIN LATERAL (
+          SELECT m.agent AS subject, jsonb_build_array(r.id,r.generation,subject.generation,
+            provision.id,policy.generation)::text AS stamp
+          FROM access.work_maintainer m
+          JOIN access.representation r ON r.subject_id = m.agent AND r.principal_id = $2
+          JOIN access.authority_subject subject ON subject.id = m.agent AND subject.active AND subject.kind = 'agent'
+          JOIN access.agent_provision provision ON provision.agent_id = m.agent AND provision.state = 'active'
+          JOIN access.baseline_member_policy policy ON policy.id = 'baseline-member-v1' AND policy.active
+          WHERE m.work = s.work AND r.action = 'agent.control' AND r.active
+            AND r.valid_until > clock_timestamp()
+          ORDER BY (m.agent = $3) DESC, m.agent, r.id LIMIT 1
+          FOR SHARE OF m, r, subject, policy
+        ) current ON true
+        LEFT JOIN LATERAL (
+          SELECT jsonb_build_array(control.id,control.generation,mandate.id,mandate.generation,
+            ceiling.id,ceiling.generation,gate.authority_epoch,subject.generation)::text AS stamp
+          FROM access.authority_subject subject
+          JOIN access.scope_gate gate ON gate.id = 'content:variants:' || s.work AND gate.open
+          JOIN LATERAL (SELECT id,generation FROM access.representation
+            WHERE principal_id = $2 AND subject_id = subject.id AND action = 'agent.control'
+              AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE) control ON true
+          JOIN LATERAL (SELECT id,generation FROM access.representation
+            WHERE principal_id = $2 AND subject_id = subject.id AND action = 'content.variants.read'
+              AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE) mandate ON true
+          JOIN LATERAL (SELECT id,generation FROM access.permission_grant
+            WHERE recipient_subject = subject.id AND scope_id = gate.id AND action = 'content.variants.read'
+              AND active AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE) ceiling ON true
+          WHERE subject.id = a.acting_subject AND subject.active AND subject.kind = 'agent'
+          FOR SHARE OF subject, gate
+        ) explicit ON true
         WHERE s.work = ANY($1::text[]) AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-        FOR SHARE OF s`, [works])).rows;
+        ORDER BY s.work FOR SHARE OF s`, [works, actor.id, agent])).rows;
       if (rows.length > works.length || new Set(rows.map(row => row.work)).size !== rows.length) {
         throw new WorkReadUnavailable('Studio chapter authors are ambiguous');
       }
-      const control = new Map<string, boolean>();
-      for (const writer of new Set(rows.map(row => row.writer))) {
-        control.set(writer, writer === agent || !!await mandateFor(client, actor.id, writer, 'agent.control'));
-      }
-      return new Map(rows.map(row => [row.work, { writer: row.writer, controlled: control.get(row.writer) === true }]));
+      const subjects = new Map(rows.flatMap(row => row.subject ? [[row.work, row.subject] as const] : []));
+      const generations = principal.emailVerified
+        ? await authorWorkGenerations(client, this.graph, actor.id, subjects, [...subjects.keys()])
+        : new Map<string, string>();
+      return new Map(rows.map(row => {
+        const generation = generations.get(row.work);
+        const authoritySubject = generation !== undefined ? row.subject : row.grant_stamp ? row.writer : null;
+        return [row.work, { writer: row.writer, controlled: authoritySubject !== null, authoritySubject,
+          stamp: JSON.stringify([actor.id, actor.epoch, generation ?? null,
+            generation !== undefined ? row.control_stamp : row.grant_stamp]) }] as const;
+      }));
     });
   }
 
@@ -146,7 +187,7 @@ export class StudioAccess {
         WHERE id = $1 FOR SHARE`, [scope])).rows[0];
       if (gate && !gate.open) return false;
       const actor = await requirePrincipal(client, principal);
-      if (principal.emailVerified && await baselineMemberProof(client, actor.id, actingSubject)
+      if (principal.emailVerified && await maintainerControllerProof(client, actor.id, actingSubject)
         && await authorWorkGeneration(client, this.graph, actor.id, actingSubject, work) !== null) return true;
       if (!gate) return false;
       const mandate = await mandateFor(client, actor.id, actingSubject, 'content.variants.read');
