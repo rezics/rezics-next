@@ -8,12 +8,13 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-**Refresh hold (maintainer and program, 2026-10-07):** run no `dev:refresh`
-until kernel reports the shared stack healthy. The first rights refresh failed
-because Statement upgrade called the intentionally absent raw `/update` route.
-Kernel's native repair owns all shared lifecycle actions and will apply Access
-1650. The second trust-ops refresh had exited before queuing or lifecycle work;
-no trust-ops refresh remains queued/running.
+Shared-stack repair is accepted and the hold is released: kernel's native
+Statement repair `67883e853690`, regeneration `ea78e29c6`, and final refresh on
+`18a969c808a2` retained volumes, aligned generation 9 and passed readiness.
+Access 1650 and Content 1700/1701 are applied. All six services are Healthy.
+Subsequent migration/model merges use the ordinary `dev:refresh -- --wait` queue.
+Kernel C6 remains in progress; its Verification singleton debt is acknowledged
+and being removed by forward migration rather than allowlisted.
 
 Closed and verified since takeover:
 
@@ -49,13 +50,37 @@ above for the inherited verification gaps.
 
 | Task | State / next action |
 | --- | --- |
-| G-1301 | Resolver consolidation reviewed, blocked until held route declarations are all present. Manager's 109 kernel metadata declarations landed in `6b4504057` with kernel consent; worker has rights/reports and released routes. Launch still owns Zone/thread metadata. Resume on current main, prove complete coverage, then merge with reviewed route scope. No fallback inventory. |
-| G-1312 | H3 backchannel logout: reviewed complete five-boundary rejection and legacy dispatch suppression; merge gate running. Close on pass, notify program. Bulk multi-session revocation snapshot follow-up remains to brief. |
-| G-1316 | False Terms automatic-image-hold promise corrected at `a3001325ab0f`, new Terms digest requires current acceptance. Closing. Its About config failures are assigned below. |
-| G-1309 | Sol: private database/alias diagnostics via existing safe logger; Account app is now released by H1. |
-| G-1318 | Sol: production email TLS, signed delivery events and sender-domain evidence using local fakes; no external mail. |
-| G-1319 | Sol: portable production validation imports and default Accounts Storybook config. About failure was introduced/exposed by preflight's heavy Main import; retain actual validation. No temporary-config-only acceptance. |
-| G-1320 | Sol: second outbound destination-filter instance, MCP expanded/special IPv6 forms. No generic transport framework. |
+| G-1321 | Resumed for the qualified bounded implementation: synchronous drain rejected (107 sessions/239 queries). Minimal session-only generation/cleanup fields approved; Account migrations 1750–1751 reserved. Preserve unrelated third-party offline consent; each HTTP and maintenance invocation has fixed work and retryable durable cleanup. Earlier drain is unmerged. |
+| G-1325 | Image-smoke contract landed `e140c7c42385`. Exclusive live qualification is queued from that pinned SHA in its worktree; session result/log `.temp/image-smoke-manager-result.json` / `.temp/image-smoke-manager.log`. It builds the five roles twice itself. Program approved the window; launch browser checks currently precede it. Judge by exit code and per-role evidence, then close. |
+| G-1327 | Sol: reference-disclosure Work author path reuses current-maintainer/controller batch evaluator, removing the creation-principal restriction. |
+| G-1329 | Sol: cancelled safety answers can be replaced; preserve due steps and immutable confirmed effects. Access migrations 1750–1751 reserved only if needed. |
+
+Additional completed contracts:
+
+- Rate-limit declaration consolidation `38f0be2e4c98`: separate inventory gone,
+  route metadata agrees with every operation, unknown/invalid families deny;
+  focused complete coverage and merge-SHA checks passed. Kernel/launch metadata
+  loans are preserved. Gate accepted only existing kernel serialization debt.
+- Bounded author proofs `cd0a36225389`: one candidate SQL and one graph batch
+  for at most 65 Works, unrelated 8192-Work growth, live membership/controller
+  locking and transfer-race proof. G-1327 consumes `authorWorkGenerations`.
+- Safety chain `9a082844f8e2`: deadlines stay due until non-cancelled confirmed
+  effects complete; identical-copy digest suppression is atomic with original
+  restriction and follows bounded copy batches. Seventeen integration/fourteen
+  owner proofs passed, including the inherited G917 recovery-fence fixture fix;
+  manager's portable-validation/G917 follow-up now passes.
+- H3 `c037159f4364` rejects all backchannel metadata writes, suppresses legacy
+  outbound dispatch and marks discovery unsupported. H1–H3 are closed; H4 waits
+  launch route/client enforcement, whose Account contract is already available.
+- Private connection/alias logs `f332b53ecdc9`; email DNS/TLS/event preparation
+  `7d28e5ea15d7`; portable default About/Accounts tooling `db6b3c64ffb3` (59
+  recovery/consent stories); numeric MCP IPv6 policy `76614ce7e924` (165 tests).
+- Active logo capacity `18a969c808a2`: removed languages free active capacity,
+  historic slots remain indexed/bounded, context tombstones still mask fallback;
+  maximum/churn/concurrency owner tests and migration refresh passed.
+- Terms promise correction `a3001325ab0f`: current acceptance digest updated;
+  public renderer reviewed. Program was asked to register the added About test
+  through its existing tier/site convention; later merge guard is green.
 
 Launch's public `POST /v1/zones/{id}/site-publications` exposure/write family is
 approved within the first Zone scope. Launch's moderation preset notice review
