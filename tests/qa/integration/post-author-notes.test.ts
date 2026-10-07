@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { startMediaStack } from './media-support.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { activateMetadataWork, metadataWorkRequestDigest, GRAPHS, RV, iri }
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault }
@@ -146,6 +148,7 @@ test('Post notes stay language-local on exact chapter reads and outside length, 
 
     // Fixed Work releases pin the Work's contribution, never Post augmentations.
     await author.grant(`release:seal:${book.mainVersion}`, 'release.seal');
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, ['commerce']);
     const heads = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?selection WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(book.mainVersion)} rv:head ?head ; rv:selectionHead ?selection } }`))
       .results!.bindings[0]!;
@@ -179,7 +182,8 @@ test('Post spoiler publication and reply draft declarations survive exact storag
     const replies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       content: stack.content, contentAuthoring: stack.content, realmReplies: replies,
-      account: { verify: async () => author.principal } });
+      account: { verify: async () => author.principal },
+      platformAccess: new AccessExposure(stack.accessPool) });
     const call = (method: string, path: string, body?: object, key = randomUUID()) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { authorization: 'Bearer fixture', 'idempotency-key': key,
         ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));

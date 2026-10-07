@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
@@ -30,6 +31,7 @@ import {
   rateLimitBudgets,
 } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
@@ -75,6 +77,7 @@ async function publishedWiki() {
           return principal;
         },
       },
+      platformAccess: new AccessExposure(f.accessPool),
       structureObjects: objects,
       editorialReview: new EditorialReviewStore(f.accessPool),
       wikiEvidence: new WikiEvidenceStore(f.contentPool),
@@ -454,6 +457,7 @@ test('G931-M1: library files consume the principal upload budget before parsing 
 test('G931-M2: wiki candidate matching cannot identify a later alias at the reader default position', async () => {
   const wiki = await publishedWiki();
   try {
+    await grantRecordedPlatformUse(wiki.f.accessPool, wiki.reader.principalId, ['wiki-agents']);
     const { call, work, zone, reader, entity } = wiki;
     expect(
       (

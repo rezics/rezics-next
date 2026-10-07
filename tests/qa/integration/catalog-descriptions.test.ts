@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { catalogDescriptionVariantId } from '../../../services/main/src/modules/catalog/commands.ts';
 import { MANAGED_ORG_ACTION } from '../../../services/main/src/modules/access/managed-org-authority.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('catalog-descriptions');
@@ -13,6 +14,8 @@ test('IAM37: a Realm content editor publishes an Organization description withou
   const organizationOwner = await member('organization-owner');
   const realmEditor = await member('realm-editor');
   const ungrantedEditor = await member('ungranted-editor');
+  await grantRecordedPlatformUse(accessPool, organizationOwner.principalId, ['organization-authority']);
+  await grantRecordedPlatformUse(accessPool, realmEditor.principalId, ['organization-authority']);
   const organization = `https://rezics.com/id/${randomUUID()}`;
   const realm = realmEditor.actor;
   const variantId = catalogDescriptionVariantId(organization, 'en');

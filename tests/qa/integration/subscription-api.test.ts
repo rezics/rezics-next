@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -24,6 +26,7 @@ let pool: Pool;
 let close: () => Promise<void>;
 let provider: ReturnType<typeof startFakePaymentProvider>;
 let app: ReturnType<typeof createMainApp>;
+let settlementSubject = '';
 const seller = iri();
 
 /** Count SQL statements per request to check the fixed-probe cost contract. */
@@ -46,6 +49,11 @@ beforeAll(async () => {
   const databases = await cloneQaAccountAccessDatabases(Bun.env.REZICS_QA_RUN_ID);
   close = databases.close;
   pool = countingPool(new Pool({ connectionString: databases.urls.access, max: 8 }));
+  const settlementPrincipal = randomUUID();
+  settlementSubject = `settlement-${settlementPrincipal}`;
+  await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
+    [settlementPrincipal, issuer, settlementSubject]);
+  await grantRecordedPlatformUse(pool, settlementPrincipal, ['commerce']);
   provider = startFakePaymentProvider(secret);
   await pool.query(`INSERT INTO commerce.payment_provider (id, kind, callback_key_reference)
     VALUES ('fake', 'fake', 'test:fake-callback')`);
@@ -64,6 +72,7 @@ beforeAll(async () => {
     } },
     access: new AccessAdmissionRegistry(pool),
     commerce,
+    platformAccess: new AccessExposure(pool),
   } satisfies MainWorkDependencies & CommerceRouteDependencies;
   app = createMainApp(fuseki, deps);
 }, 60_000);
@@ -111,6 +120,7 @@ async function person() {
   const agent = iri();
   await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
     [principalId, issuer, subject]);
+  await grantRecordedPlatformUse(pool, principalId, ['commerce']);
   await pool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')`, [agent]);
   await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
     VALUES ($1, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), principalId, agent, SUBSCRIBE_ACTION]);
@@ -157,7 +167,8 @@ async function buy(who: { bearer: string; agent: string }, offering: string, pla
 
 async function deliver(delivery: { body: string; signature: string }) {
   const response = await app.handle(new Request('http://main.local/v1/subscriptions/settlements', {
-    method: 'POST', headers: { 'content-type': 'text/plain', 'rezics-provider-signature': delivery.signature },
+    method: 'POST', headers: { 'content-type': 'text/plain', 'rezics-provider-signature': delivery.signature,
+      authorization: `Bearer ${settlementSubject}|${COMMERCE_SCOPE}` },
     body: delivery.body }));
   return { status: response.status, body: await response.json() as Record<string, any> };
 }

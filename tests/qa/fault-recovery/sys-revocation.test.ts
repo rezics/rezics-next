@@ -8,7 +8,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { accessWithBaseline } from '../fixtures/access-baseline.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
@@ -105,6 +107,9 @@ beforeAll(async () => {
   actor = `https://rezics.com/id/${randomUUID()}`;
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3)`, [principalId, account.issuer, account.a.id]);
+  // Semantic-revision exports select dataset-dumps after the plan is built.
+  await grantRecordedPlatformUse(accessPool, principalId,
+    ['catalogue-import', 'developer-extras', 'dataset-dumps']);
   await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
   // Source acquisition keeps G-508's catalogue creation ceiling. This fixture
   // supplies that authority before testing its withdrawal during provider work.
@@ -176,10 +181,13 @@ beforeAll(async () => {
     const value = Reflect.get(target, property, target) as unknown;
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as AccessAdmissionRegistry;
+  // Export delivery asks this owner for the selected profile. A public semantic
+  // type stays public. Source and package routes on the Main app use it too.
+  const platformAccess = new AccessExposure(accessPool);
   const work = { environment, account: account.verifier, access,
     actingContexts: new AccessActingContexts(accessPool),
     sourceAcquisitions, exports, exportRights, packageNpmResolutions: npm, packageLocks: locks,
-    packageInstallations } as MainWorkDependencies;
+    packageInstallations, platformAccess } as MainWorkDependencies;
   app = createMainApp(fuseki, work);
   exportApp = exportRoutes(work);
   semanticApp = semanticRoutes(fuseki, work);
@@ -219,8 +227,12 @@ test('SYS06: revocation during source acquisition withholds delivery and replays
       WHERE r.principal_id = $1 AND r.idempotency_key = $2`, [principalId, key]);
     expect(durable.rows).toEqual([{ id: expect.any(String), outcome: 'completed' }]);
     activePrincipalChecks = 0;
-    expect((await api('GET', `/v1/sources/runs/${durable.rows[0]!.id}`)).status).toBe(403);
-    expect(activePrincipalChecks).toBe(1);
+    const refused = await api('GET', `/v1/sources/runs/${durable.rows[0]!.id}`);
+    expect(refused.status).toBe(403);
+    // An inactive principal has no exposure summary, so this closed read is
+    // refused before the route's active-principal probe.
+    expect(await refused.json()).toMatchObject({ code: 'platform_closed' });
+    expect(activePrincipalChecks).toBe(0);
 
     await setPrincipalActive(true);
     activePrincipalChecks = 0;
@@ -266,7 +278,11 @@ test('SYS06: export delivery revoked during source revalidation returns no priva
     const responseBody = await response.text();
     expect({ status: response.status, leaksDigest: responseBody.includes(created.manifestDigest) })
       .toEqual({ status: 403, leaksDigest: false });
-    expect(activePrincipalChecks).toBe(2);
+    // License revalidation finishes, then the selected dataset-dumps check reads
+    // principal activity. An inactive principal is closed before the delivery's
+    // second active-principal probe.
+    expect(JSON.parse(responseBody)).toMatchObject({ code: 'platform_closed' });
+    expect(activePrincipalChecks).toBe(1);
     expect((await contentPool.query(`SELECT state FROM export.manifest WHERE id = $1`, [created.manifestId]))
       .rows[0]?.state).toBe('sealed');
 

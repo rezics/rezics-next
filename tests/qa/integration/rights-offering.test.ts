@@ -4,6 +4,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
@@ -34,6 +36,7 @@ test('GOV04: ending one offering does not change another recognition or reopen t
     for (const [subject, id] of principals) {
       await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
         [id, account.issuer, subject]);
+      await grantRecordedPlatformUse(accessPool, id, ['commerce']);
     }
     const grant = async (user: { id: string }, subject: string, scope: string, action: string) => {
       await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
@@ -53,7 +56,7 @@ test('GOV04: ending one offering does not change another recognition or reopen t
       { actingSubject: actor, title: 'Rights offering target', idempotencyKey: randomUUID() });
     await grant(account.a, actor, `work:read:${work.work}`, 'work.read');
     const app = createMainApp(fuseki, { environment: env, account: account.verifier,
-      access } as MainWorkDependencies);
+      access, platformAccess: new AccessExposure(accessPool) } as MainWorkDependencies);
     const call = async (method: string, path: string, token: string, body?: Record<string, unknown>) => {
       const response = await app.handle(new Request(`http://main.local${path}`, { method,
         headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json',

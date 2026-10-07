@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { LibraryFileStore } from '../../../services/main/src/modules/library-import/file-store.ts';
@@ -11,6 +12,7 @@ import {
   rateLimitBudgets,
 } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
@@ -132,6 +134,7 @@ test('G922-H2: two source reviewers cannot merge a public Work into a private su
           return principal;
         },
       },
+      platformAccess: new AccessExposure(f.accessPool),
       identityMerge: { accessPool: f.accessPool, contentPool: f.contentPool },
       editorialReview: new EditorialReviewStore(f.accessPool),
     });
@@ -314,6 +317,8 @@ test('G922-M1: library files consume the principal upload budget before parsing 
 test('G922-M2: wiki candidate matching cannot identify a later alias at the reader default position', async () => {
   const wiki = await publishedWiki();
   try {
+    Object.assign(wiki.deps, { platformAccess: new AccessExposure(wiki.f.accessPool) });
+    await grantRecordedPlatformUse(wiki.f.accessPool, wiki.reader.principalId, ['wiki-agents']);
     const { call, work, zone, reader, entity } = wiki;
     expect(
       (

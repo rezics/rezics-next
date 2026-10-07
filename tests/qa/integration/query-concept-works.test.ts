@@ -5,7 +5,11 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { CONCEPT_FACET } from '../../../services/main/src/modules/concept-page/contract.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
+  type ClassifiedConcept } from './work-classification.ts';
 
 const short = (id: string) => id.slice(-36);
 
@@ -14,7 +18,9 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
   const home = await startHomeStack('query-concept-works');
   try {
     const { stack, author } = home;
-    const app = createMainApp(stack.fuseki, { ...home.deps, discovery: new DiscoveryProjection(stack.accessPool) });
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, ['platform-admin']);
+    const app = createMainApp(stack.fuseki, { ...home.deps, discovery: new DiscoveryProjection(stack.accessPool),
+      judgments: new AccessJudgments(stack.accessPool) });
     const call = (method: string, path: string, body?: unknown) => app.handle(new Request(`http://main.local${path}`,
       { method, headers: { ...(body ? { 'content-type': 'application/json', 'idempotency-key': randomUUID() } : {}),
         'accept-language': 'zh-Hans', authorization: `Bearer ${author.token}` },
@@ -22,24 +28,28 @@ test('Query Concept Works and Concept page read the same all, any and exclusion 
     const json = home.json;
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     await author.grant('classification:define:global', 'classification.proposition.define');
-    await author.grant('classification:decide:global', 'classification.decision.set');
+    await author.grant('context:create:root', 'context.create');
+    await author.grant(`statement:speak:${author.actor}`, 'statement.record');
+    await author.grant('classification:decide:global', 'statement.decide');
     const works = [];
     for (const index of [1, 2, 3, 4]) works.push(await stack.publicWork(author.actor, ['en'],
       `Query Concept Work ${index} ${randomUUID()}`));
-    const define = async (label: string) => json<{ concept: string; sense: string }>(await call('POST',
+    const define = async (label: string) => json<ClassifiedConcept>(await call('POST',
       '/v1/classification-propositions', { profile: 'classification-proposition-v1', label,
         actingSubject: author.actor }), 201);
     const fantasy = await define('Fantasy'), magic = await define('Magic'), romance = await define('Romance');
-    const accept = async (work: typeof works[number], sense: string) => json(await call('POST',
-      '/v1/classification-decisions', { profile: 'classification-direct-decision-v1', work: work.work,
-        mainVersion: work.mainVersion, sense, context: { kind: 'global' }, outcome: 'accepted',
-        expectedDecisionHead: null, actingSubject: author.actor }), 201);
-    await accept(works[0]!, fantasy.sense);
-    await accept(works[0]!, magic.sense);
-    await accept(works[1]!, fantasy.sense);
-    await accept(works[1]!, romance.sense);
-    await accept(works[2]!, magic.sense);
-    await accept(works[3]!, fantasy.sense);
+    const interpretation = await shareClassifiedConcepts(call, json, author.actor, [fantasy, magic, romance]);
+    for (const term of [fantasy, magic, romance]) {
+      await discloseConcept(stack.accessPool, author.principal, author.actor, term.concept);
+    }
+    const accept = (work: typeof works[number], term: ClassifiedConcept) => acceptClassifiedWork(
+      call, json, author.actor, work, term, interpretation);
+    await accept(works[0]!, fantasy);
+    await accept(works[0]!, magic);
+    await accept(works[1]!, fantasy);
+    await accept(works[1]!, romance);
+    await accept(works[2]!, magic);
+    await accept(works[3]!, fantasy);
     type Generation = { generation: string; checkpoint: string; complete: boolean; state: string };
     let row = await json<Generation>(await call('POST', '/v1/discovery/generation-builds', {
       profile: 'discovery-generation-build-v1', actingSubject: author.actor,

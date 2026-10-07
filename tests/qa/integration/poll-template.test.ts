@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
@@ -27,6 +29,7 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV19/GOV20/GOV21/GOV22/GO
   try {
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, 'https://vote-template.test', 'administrator')`, [principalId]);
+    await grantRecordedPlatformUse(pool, principalId, ['institutional-voting']);
     for (const subject of [body, administrator, holder]) {
       await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [subject]);
     }
@@ -53,7 +56,8 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV19/GOV20/GOV21/GOV22/GO
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.slice('Bearer '.length) ?? 'stranger';
       return { issuer: 'https://vote-template.test', subject: token };
-    } }, access: new AccessAdmissionRegistry(pool), votes });
+    } }, access: new AccessAdmissionRegistry(pool), votes,
+    platformAccess: new AccessExposure(pool) });
     const request = (method: string, path: string, bearer: string, payload?: object, key?: string) =>
       app.handle(new Request(`http://main.local${path}`, { method,
         headers: { authorization: `Bearer ${bearer}`,
@@ -133,6 +137,7 @@ test('GOV11/GOV12/GOV13/GOV14/GOV15/GOV16/GOV17/GOV18/GOV19/GOV20/GOV21/GOV22/GO
     for (const [principal, subject] of [[repOne, 'representative-one'], [repTwo, 'representative-two']] as const) {
       await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
         VALUES ($1, 'https://vote-template.test', $2)`, [principal, subject]);
+      await grantRecordedPlatformUse(pool, principal, ['institutional-voting']);
     }
     for (const [mandate, principal] of [[mandateOne, repOne], [mandateTwo, repTwo]] as const) {
       await pool.query(`INSERT INTO access.representation

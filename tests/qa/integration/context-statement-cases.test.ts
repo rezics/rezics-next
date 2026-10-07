@@ -10,6 +10,7 @@ import { convertPopulatedStatements, statementUpgradeMarker } from '../../../ser
 import { resolveClassification, ClassificationResolutionUnavailable } from '../../../services/main/src/modules/classification/resolve.ts';
 import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { CATALOGUE_IMPORT_SCOPE, catalogueImportIdentity, prepareCatalogueImport }
   from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { readWorkTerminalReceipt } from '../../../services/main/src/modules/work/receipt.ts';
@@ -215,15 +216,7 @@ test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; popu
     await f.globalAcceptance();
     await f.grant(CATALOGUE_IMPORT_SCOPE,'work.create');
     await f.grant('classification:decide:global','classification.decision.set');
-    const platformGrant = randomUUID();
-    await f.accessPool.query(`INSERT INTO access.principal_permission_grant
-      (id,issuer_subject,principal_id,scope_id,action,valid_until)
-      VALUES ($1,$2,$3,'platform:access','platform:use:catalogue-import',now()+interval '1 hour')`,
-    [platformGrant,f.actorA,f.principalA]);
-    await f.accessPool.query(`INSERT INTO access.platform_grant_episode
-      (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
-      VALUES ($1,$2,$3,'platform:use:catalogue-import','platform:access',$4,$5)`,
-    [randomUUID(),platformGrant,f.actorA,f.principalA,`urn:rezics:access-receipt:${hash(platformGrant)}`]);
+    await grantRecordedPlatformUse(f.accessPool, f.principalA, ['catalogue-import']);
     const principal = await f.account.verifier.verify(new Request('http://main.local',{
       headers: {authorization: `Bearer ${f.account.tokenA}`}}),['work:create']);
     expect((await new AccessExposure(f.accessPool).summary(principal)).groups).toContain('catalogue-import');

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
@@ -64,6 +65,8 @@ test('WIKI04/VIEW05: saved dynamic query and captured Collection retain separate
     return created.work;
   }
   try {
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['saved-views']);
+    await grantRecordedPlatformUse(f.accessPool, f.otherPrincipal, ['saved-views']);
     const firstWork = await publishSearchableWork();
     const definition = nativeId();
     await f.grant(`collection:edit:${definition}`, 'collection.edit');

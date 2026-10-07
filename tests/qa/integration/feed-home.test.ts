@@ -6,6 +6,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { HomePersonalStore } from '../../../services/main/src/modules/feed/personal.ts';
@@ -45,6 +47,9 @@ test('G282: follows and home feed use real receipts, relay progress, public read
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const a = await stack.member('a'), b = await stack.member('b');
+    // Both members call closed Hub or Saved Filter routes on this pool.
+    await grantRecordedPlatformUse(stack.accessPool, a.principalId, ['developer-extras', 'saved-views']);
+    await grantRecordedPlatformUse(stack.accessPool, b.principalId, ['developer-extras', 'saved-views']);
     const principals = new Map([[a.token, { ...a.principal, emailVerified: true }], [b.token, { ...b.principal, emailVerified: true }]]);
     const account = { verify: async (request: Request, scopes: readonly string[]) => {
       const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
@@ -69,7 +74,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     } };
     const realmReplies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
     const realmReplyThreads = new RealmReplyThreadStore(stack.contentPool, stack.accessPool);
-    const deps = { environment: stack.env, access: stack.access, account, feed, follows, realmReplies, realmReplyThreads,
+    const deps = { environment: stack.env, access: stack.access,
+      platformAccess: new AccessExposure(stack.accessPool), account, feed, follows, realmReplies, realmReplyThreads,
       feedViewerState,
       reviews: new ReaderReviews(stack.accessPool),
       homePersonal: new HomePersonalStore(stack.accessPool), libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),

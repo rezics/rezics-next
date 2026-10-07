@@ -8,6 +8,7 @@ import {
   flushTelemetryTraces,
   shutdownTelemetry,
 } from '@rezics/observability/runtime';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import {
   workProfileCorpusApi,
@@ -181,6 +182,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         [randomUUID(), actor.agent, scope, action],
       );
     }
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, ['catalogue-import']);
     const definition = await api.command<{
       concept: string;
       sense: string;
@@ -219,8 +221,8 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
       credits: [{ agent: actor.agent, role: 'author' }],
       classifications: [
         {
-          sense: definition.sense,
-          expectedSenseHead: definition.definitionRevision,
+          concept: definition.concept,
+          definition: definition.definitionRevision,
           expectedDecisionHead: null,
           outcome: 'accepted',
         },

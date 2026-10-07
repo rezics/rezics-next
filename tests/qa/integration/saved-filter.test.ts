@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
+import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
+  type ClassifiedConcept } from './work-classification.ts';
 import { CONCEPT_FACET, conceptFilter } from '../../../services/main/src/modules/concept-page/contract.ts';
 import { resolveFacet } from '../../../services/main/src/modules/facets/registry.ts';
 import { SAVED_FILTER_COST } from '../../../services/main/src/modules/saved-filter/contract.ts';
@@ -24,17 +28,10 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
   try {
     const seeded = await seedHome(home);
     // The route stays platform:saved-views. This reader holds that use grant.
-    Object.assign(home.deps, { platformAccess: new AccessExposure(home.stack.accessPool) });
-    const useGrant = randomUUID();
-    await home.stack.accessPool.query(`INSERT INTO access.principal_permission_grant
-      (id, issuer_subject, principal_id, scope_id, action, valid_until)
-      VALUES ($1, $2, $3, 'platform:access', 'platform:use:saved-views', 'infinity')`,
-    [useGrant, home.reader.actor, home.reader.principalId]);
-    await home.stack.accessPool.query(`INSERT INTO access.platform_grant_episode
-      (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
-      VALUES ($1, $1, $2, 'platform:use:saved-views', 'platform:access', $3, $4)`,
-    [useGrant, home.reader.actor, home.reader.principalId,
-      `urn:rezics:access-receipt:${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`]);
+    // A fresh exposure cache sees the grant; the unsigned call below stays closed.
+    Object.assign(home.deps, { platformAccess: new AccessExposure(home.stack.accessPool),
+      judgments: new AccessJudgments(home.stack.accessPool) });
+    await grantRecordedPlatformUse(home.stack.accessPool, home.reader.principalId, ['saved-views']);
     const { call, json } = home;
     const a = home.author, token = home.reader.token, reader = seeded.reader;
     const signed = seeded.signed;
@@ -58,17 +55,19 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
 
     // Two accepted Concepts on two of Home's Works.
     await a.grant('classification:define:global', 'classification.proposition.define');
-    await a.grant('classification:decide:global', 'classification.decision.set');
-    const define = async (label: string) => json<{ concept: string; sense: string }>(await call('POST',
-      '/v1/classification-propositions', { profile: 'classification-proposition-v1', label, actingSubject: a.actor },
-      a.token), 201);
+    await a.grant('context:create:root', 'context.create');
+    await a.grant(`statement:speak:${a.actor}`, 'statement.record');
+    await a.grant('classification:decide:global', 'statement.decide');
+    const send = (method: string, path: string, body?: unknown) => call(method, path, body, a.token);
+    const define = async (label: string) => json<ClassifiedConcept>(await send('POST',
+      '/v1/classification-propositions', { profile: 'classification-proposition-v1', label, actingSubject: a.actor }), 201);
     const [fantasy, mystery] = [await define('Saved fantasy'), await define('Saved mystery')];
+    const interpretation = await shareClassifiedConcepts(send, json, a.actor, [fantasy, mystery]);
+    for (const term of [fantasy, mystery]) await discloseConcept(home.stack.accessPool, a.principal, a.actor, term.concept);
     // The first Work is also the Home community's pick; that Realm keeps no classification Context of its own.
     const [picked, tagged, other] = [seeded.works[0]!, seeded.works[3]!, seeded.works[4]!];
     for (const [work, term] of [[picked, fantasy], [tagged, fantasy], [other, mystery]] as const) {
-      await json(await call('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
-        work: work.work, mainVersion: work.mainVersion, sense: term.sense, context: { kind: 'global' },
-        outcome: 'accepted', expectedDecisionHead: null, actingSubject: a.actor }, a.token), 201);
+      await acceptClassifiedWork(send, json, a.actor, work, term, interpretation);
     }
     await home.project();
 

@@ -5,6 +5,7 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
@@ -63,21 +64,9 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
     const env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       objectDirectory: '.temp' };
-    const platformUse = async (recipient: string, subject: string) => {
-      for (const group of ['wiki-agents', 'commerce', 'update-subscriptions']) {
-        const grant = randomUUID();
-        await accessPool.query(`INSERT INTO access.principal_permission_grant
-          (id, issuer_subject, principal_id, scope_id, action, valid_until)
-          VALUES ($1, $2, $3, 'platform:access', $4, 'infinity')`,
-        [grant, subject, recipient, `platform:use:${group}`]);
-        await accessPool.query(`INSERT INTO access.platform_grant_episode
-          (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
-          VALUES ($1, $1, $2, $3, 'platform:access', $4, $5)`,
-        [grant, subject, `platform:use:${group}`, recipient,
-          `urn:rezics:access-receipt:${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`]);
-      }
-    };
-    await platformUse(principal, actor);
+    const platformUse = (recipient: string) => grantRecordedPlatformUse(accessPool, recipient,
+      ['wiki-agents', 'commerce', 'update-subscriptions']);
+    await platformUse(principal);
     const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
       platformAccess: new AccessExposure(accessPool),
       verification, notifications: { store: notificationStore, dispatcher,
@@ -255,7 +244,7 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [challenger, account.issuer, account.b.id]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [challengerActor]);
-    await platformUse(challenger, challengerActor);
+    await platformUse(challenger);
     const counterObservation = randomUUID();
     await contentPool.query(`INSERT INTO source.observation
       (id, record_id, principal_id, media_type, retention, coverage, rights_evidence)

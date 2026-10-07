@@ -12,6 +12,8 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { OpenLibraryConversionStore }
   from '../../../services/main/src/modules/source/open-library-conversion.ts';
@@ -105,6 +107,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     await accessPool.query(`INSERT INTO access.principal
       (id, account_issuer, account_subject) VALUES ($1, $2, $3)`,
     [principalId, `${base}/api/auth`, member.id]);
+    await grantRecordedPlatformUse(accessPool, principalId, ['catalogue-import', 'developer-extras']);
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: member.email, password: member.password }),
@@ -250,6 +253,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       (async () => latestGoSumdb) as ConstructorParameters<typeof GoSumdbTrustStore>[4]);
     const app = createMainApp(fuseki, {
       environment: nativeEnvironment,
+      platformAccess: new AccessExposure(accessPool),
       account: mainAccount,
       access: mainAccess, sourceIntake, actingContexts: new AccessActingContexts(accessPool),
       sourceConversions, sourceGraph,
@@ -403,9 +407,12 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     expect((await call('GET', `/v1/works/${randomUUID()}/source-support`, readToken)).status)
       .toBe(404);
     const otherMember = await signUp('other');
+    const otherPrincipalId = randomUUID();
     await accessPool.query(`INSERT INTO access.principal
       (id, account_issuer, account_subject) VALUES ($1,$2,$3)`,
-    [randomUUID(), `${base}/api/auth`, otherMember.id]);
+    [otherPrincipalId, `${base}/api/auth`, otherMember.id]);
+    // Another member's 404 is the handler's, so the closed gate has to admit them.
+    await grantRecordedPlatformUse(accessPool, otherPrincipalId, ['catalogue-import', 'developer-extras']);
     const otherReadToken = await tokenFor('openid source:read', otherMember.cookie);
     const otherAdoptToken = await tokenFor('openid source:adopt', otherMember.cookie);
     const otherAttachmentToken = await tokenFor('openid source:adopt source:read work:edit', otherMember.cookie);

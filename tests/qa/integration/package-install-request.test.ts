@@ -10,7 +10,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { CargoResolutionStore } from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { PackageLockStore } from '../../../services/main/src/modules/package/lock.ts';
@@ -42,6 +44,9 @@ test('WORK07: Main Version recommendations resolve eligible npm and Cargo artifa
     const actor = nativeId();
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3), ($4, $2, $5)`, [owner.id, issuer, owner.subject, other.id, other.subject]);
+    // The other caller is refused by the handler, after the closed gate.
+    await grantRecordedPlatformUse(accessPool, owner.id, ['developer-extras']);
+    await grantRecordedPlatformUse(accessPool, other.id, ['developer-extras']);
     await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')`, [actor]);
     const grant = async (principalId: string, scope: string, action: string) => {
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
@@ -96,6 +101,7 @@ test('WORK07: Main Version recommendations resolve eligible npm and Cargo artifa
     const locks = new PackageLockStore(pool, npm, new PackageArtifactStore(pool, namespaces),
       { fetcher: archiveFetcher, cargo });
     const app = createMainApp(fuseki, { environment: mainEnvironment, account, access: new AccessAdmissionRegistry(accessPool),
+      platformAccess: new AccessExposure(accessPool),
       packageNpmResolutions: npm, packageCargoResolutions: cargo, packageLocks: locks });
     const call = (method: string, path: string, body?: unknown, key = randomUUID(), who = 'owner') => app.handle(
       new Request(`http://main.local${path}`, { method, headers: { authorization: `Bearer ${who}`,

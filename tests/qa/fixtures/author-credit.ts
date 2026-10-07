@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import type { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from './platform-grant.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import {
@@ -219,6 +220,10 @@ export async function authorCreditFixture(
   await accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [
     actor,
   ]);
+  // Both fixture principals call catalogue-import routes. The exposure summary
+  // must be read on this pool after the rows exist.
+  await grantRecordedPlatformUse(accessPool, principalId, ['catalogue-import']);
+  await grantRecordedPlatformUse(accessPool, otherPrincipal, ['catalogue-import']);
   const grant = async (scope: string, action: string) => {
     await accessPool.query(
       'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING',
@@ -267,7 +272,7 @@ export async function authorCreditFixture(
   const catalogueIntake = new CatalogueIntakeStore(accessPool, env);
   const app = createMainApp(fuseki, {
     environment: env,
-    platformAccess: options.platformAccess,
+    platformAccess: options.platformAccess ?? new AccessExposure(accessPool),
     account: account.verifier,
     access,
     ...(options.readingPositions ? { readingPositions: new ReadingPositionStore(pool) } : {}),

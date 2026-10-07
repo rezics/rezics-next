@@ -6,6 +6,7 @@ import { SuitabilityStore } from '../../../services/main/src/modules/suitability
 import type { Assessed } from '../../../services/main/src/modules/suitability/contract.ts';
 import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { WorkReaderStats } from '../../../services/main/src/modules/work/read-stats.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
@@ -31,6 +32,9 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
   }
   try {
     const seeded = await seedHome(home, 3), work = seeded.works[0]!;
+    // Fixed releases are commerce. A fixed-release export selects dataset-dumps,
+    // which the public export route checks before disclosure can fail closed.
+    await grantRecordedPlatformUse(home.stack.accessPool, home.author.principalId, ['commerce', 'dataset-dumps']);
     const suitability = new SuitabilityStore(home.stack.accessPool, home.stack.access);
     const governance = new GovernanceStore(home.stack.accessPool,
       { capture: async () => { throw new Error('Evidence capture is unused in this read test'); } },
@@ -46,6 +50,8 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
       accessPolicy: new AccessPolicyOwner(home.stack.accessPool),
       exports: new ExportStore(home.stack.contentPool),
       contentProjection: { content: home.stack.content, cursor, consumer },
+      // The public statement page refuses until this index covers the graph cut.
+      statementSeek: home.stack.statementSeek,
       governance: { store: governance } });
     await home.author.grant('governance:platform', 'governance.moderate');
     // seedHome provisions a separate author Agent; platform authority belongs
@@ -136,6 +142,8 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
       return call('GET', `${url.pathname}${url.search}`, undefined,
         signed && !path.startsWith('/v1/public-previews/'));
     };
+    // Later writes moved the graph. Coverage has to match that cut before the page is read.
+    await home.stack.statementSeek.rebuild();
     const baselineStatus = new Map<string, number>();
     for (const signed of [false, true]) for (const path of resourceGets) {
       baselineStatus.set(`${signed}:${path}`, (await readResource(path, work.work, signed)).status);

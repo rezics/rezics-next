@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
@@ -72,8 +74,11 @@ test('VIEW09: first-party create, immutable review, host activation, revoke and 
       (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
       VALUES ($1,$2,$2,$3,'theme.review',now() + interval '1 hour')`,
     [randomUUID(), reviewer, `theme:review:${shortId(theme)}`]);
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['executable-themes']);
+    await grantRecordedPlatformUse(f.accessPool, f.otherPrincipal, ['executable-themes']);
     const app = createMainApp(f.env.fuseki, { environment: f.env,
-      account: f.account.verifier, access: f.access });
+      account: f.account.verifier, access: f.access,
+      platformAccess: new AccessExposure(f.accessPool) });
     const call = (method: string, path: string, body: object, token = f.account.tokenA,
       key = randomUUID()) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',

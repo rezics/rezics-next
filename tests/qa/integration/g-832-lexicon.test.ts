@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import {
   renderRelation,
@@ -43,6 +44,7 @@ test('G-832: public lexicon revisions, denied writes, retries, concurrency, exac
     resolve('.temp', `g-832-${randomUUID()}`),
   );
   try {
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['platform-admin']);
     const commands: { bytes: number; focuses: number }[] = [];
     const languageQueries: string[] = [];
     let loseResponse = false;
@@ -531,6 +533,7 @@ test('G-832: public bootstrap and class guard cover every definition, direction 
     resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID),
   );
   try {
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['platform-admin']);
     await f.grant('semantic:create:root', 'semantic.change');
     const shared = await Promise.all(relationLexiconSeed.map(item => readDefinitionByKey(f.env, item.key, systemDisclosure)));
     const data = shared.every(item => item !== null) ? shared.map((item, index) => ({

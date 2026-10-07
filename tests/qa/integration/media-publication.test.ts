@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { png, sha, startMediaStack, type MediaStack } from './media-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { pollScopeId } from '../../../services/main/src/modules/vote/schema.ts';
 
 let started: Promise<MediaStack> | undefined;
@@ -103,6 +104,8 @@ test('BOOK09: a poll-only publication uses the poll owner without creating a tex
   const { member, accessPool, contentPool } = await stack();
   const author = await member('poll-author');
   const stranger = await member('poll-stranger');
+  await grantRecordedPlatformUse(accessPool, author.principalId, ['institutional-voting']);
+  await grantRecordedPlatformUse(accessPool, stranger.principalId, ['institutional-voting']);
   const poll = `${ID}${randomUUID()}`;
   const body = `${ID}${randomUUID()}`;
   const holder = `${ID}${randomUUID()}`;

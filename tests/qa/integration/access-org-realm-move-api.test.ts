@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessOrgRealmParticipation, type OrgRealmMoveInput, type OrgRealmMoveResult }
@@ -14,6 +15,7 @@ import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { seedOrgRealm } from '../support/org-realm.ts';
 import { seedManagedOrganization } from '../support/managed-organization.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history and bounded receipts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL) throw new Error('Use the QA integration tier');
@@ -39,7 +41,8 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const app = createMainApp(fuseki, { environment: { fuseki, objectDirectory: '.temp/move-api-objects',
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! } },
-    account: account.verifier, access, orgRealmParticipation: owner });
+    account: account.verifier, access, orgRealmParticipation: owner,
+    platformAccess: new AccessExposure(pool) });
   const endpoint = '/v1/access/org-realm-moves';
   const post = (path: string, body: object, key = randomUUID(), token = account.tokenB) =>
     app.handle(new Request(`http://main.local${path}`, { method: 'POST',
@@ -52,6 +55,8 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
     post(endpoint, { profile: 'access-org-realm-move-v1', ...input }, key, token);
   try {
     const f = await seedOrgRealm(pool, account.issuer, { realm: account.a.id, org: account.b.id });
+    await grantRecordedPlatformUse(pool, f.orgPrincipalId, ['organization-authority']);
+    await grantRecordedPlatformUse(pool, f.realmPrincipalId, ['organization-authority']);
     const basis = (realm: string, generation = '0', revision = '1') => ({ realm,
       organizationSubject: f.org, expectedGeneration: generation, expectedPolicyRevision: revision });
     const participation = async (realm: string, token = account.tokenA) => must<{

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -13,6 +14,7 @@ import type { McpHttpResponse, McpTransport, McpTransportRequest }
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { startControlledMcpServer } from '../support/mcp-server.ts';
 import { type AccountOwner, qaEnvironment, startAccount } from './account-boundary-fixture.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const allScopes = ['connected-app:observe', 'connected-app:consent',
@@ -70,14 +72,23 @@ afterAll(async () => {
 
 async function fixture(name: string, scopes = standardScope) {
   const client = await account.nativeApp(`Connected app ${name}`, scopes);
+  // Closed connected-app scopes stay on the token only for a first-party
+  // client. This fixture app is that client, so the route can see the scope
+  // it requires. A caller limited to openid and offline_access stays refused.
+  await account.pool.query(
+    'INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
+    [client.client_id],
+  );
   const member = await account.signUp(`connected-${name}`);
   const token = await account.issue(client.client_id, member, scopes);
   const principalId = randomUUID();
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3)`, [principalId, account.issuer, member.id]);
+  await grantRecordedPlatformUse(accessPool, principalId, ['agent-mode']);
   const connectedApps = new ConnectedAppStore(contentPool, new LoopbackMcpTransport());
   const app = createMainApp(fuseki, { environment, account: verifier,
-    access: new AccessAdmissionRegistry(accessPool), connectedApps });
+    access: new AccessAdmissionRegistry(accessPool), connectedApps,
+    platformAccess: new AccessExposure(accessPool) });
   const call = (method: string, path: string, bearer: string, body?: unknown, key?: string,
     signal?: AbortSignal) => app.handle(new Request(`http://main.local${path}`, { method,
     headers: { authorization: `Bearer ${bearer}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }),

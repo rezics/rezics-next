@@ -186,3 +186,83 @@ export async function platformAdministratorSession(env: NodeJS.ProcessEnv = proc
   if (!token) throw new Error('Platform administrator token exchange returned no access token');
   return { mainOrigin, token, actingSubject: saved.actingSubject, principalId: saved.principalId };
 }
+
+/** Issuer recorded for in-process grants. It is an agent the proof can join. */
+const recordedIssuer = 'https://rezics.com/id/00000000-0000-4000-8000-000000001328';
+
+export interface PlatformGrantQuerier {
+  query(text: string, values?: readonly unknown[]): Promise<{ rows?: readonly unknown[] }>;
+}
+
+export interface PlatformGrantDb extends PlatformGrantQuerier {
+  connect?(): Promise<PlatformGrantQuerier & { release(): void }>;
+}
+
+function missingPrincipal(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== '23503') return false;
+  const detail = 'detail' in error && typeof error.detail === 'string' ? error.detail : '';
+  return detail.includes('principal_id') || detail.includes('assigned_by_principal');
+}
+
+async function withGrantClient(db: PlatformGrantDb,
+  write: (sql: PlatformGrantQuerier) => Promise<void>): Promise<void> {
+  if (!db.connect) {
+    await write(db);
+    return;
+  }
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await write(client);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Record platform:use for a principal an in-process test already inserted.
+ * The exposure proof reads the live permission and its episode, so the test
+ * passes AccessExposure on that same access pool to createMainApp. An active
+ * unexpired row for the same group is left in place. The principal row is not
+ * updated, so an exposure summary cached before this grant stays stale. */
+export async function grantRecordedPlatformUse(db: PlatformGrantDb, principalId: string,
+  groups: readonly string[], issuerSubject = recordedIssuer): Promise<void> {
+  if (groups.length === 0) throw new Error('Platform use names an exposure group');
+  const permissions = [...new Set(groups.map(platformUsePermission))];
+  if (!principalIdPattern.test(principalId)) throw new Error('Platform use recipient must be a principal id');
+  if (!agentIri.test(issuerSubject)) throw new Error('Platform grant issuer must be an agent');
+  try {
+    await withGrantClient(db, async sql => {
+      await sql.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
+        ON CONFLICT DO NOTHING`, [issuerSubject]);
+      await sql.query(`INSERT INTO access.scope_gate (id) VALUES ('platform:access') ON CONFLICT DO NOTHING`);
+      for (const permission of permissions) {
+        const existing = await sql.query(
+          `SELECT id FROM access.principal_permission_grant
+           WHERE principal_id = $1 AND scope_id = 'platform:access' AND action = $2
+             AND active AND valid_until > clock_timestamp()
+           LIMIT 1`,
+          [principalId, permission]);
+        if ((existing.rows?.length ?? 0) > 0) continue;
+        const id = randomUUID();
+        const receipt = `urn:rezics:access-receipt:${randomBytes(32).toString('hex')}`;
+        await sql.query(
+          `INSERT INTO access.principal_permission_grant
+             (id, issuer_subject, principal_id, scope_id, action, valid_until)
+           VALUES ($1, $2, $3, 'platform:access', $4, 'infinity')`,
+          [id, issuerSubject, principalId, permission]);
+        await sql.query(
+          `INSERT INTO access.platform_grant_episode
+             (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
+           VALUES ($1, $1, $2, $3, 'platform:access', $4, $5)`,
+          [id, issuerSubject, permission, principalId, receipt]);
+      }
+    });
+  } catch (error) {
+    if (missingPrincipal(error)) throw new Error('Platform use recipient is not an access principal');
+    throw error;
+  }
+}

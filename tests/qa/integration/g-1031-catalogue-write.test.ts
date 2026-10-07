@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '@rezics/observability/runtime';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusCommand } from '../../../scripts/load/work-profile-corpus.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
@@ -101,6 +102,7 @@ test('G1031: disk-backed catalogue exposes public Work/classification write cost
       await stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
         VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), actor.agent, scope, action]);
     }
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, ['catalogue-import']);
     const definition = await api.command<{ concept: string; sense: string; definitionRevision: string }>(`${key}:topic`, {
       method: 'POST', path: '/v1/classification-vocabulary', body: {
         profile: 'classification-proposition-v2', scheme: null,
@@ -129,8 +131,8 @@ test('G1031: disk-backed catalogue exposes public Work/classification write cost
       credits: [{ agent: actor.agent, role: 'author' }],
       classifications: [
         {
-          sense: definition.sense,
-          expectedSenseHead: definition.definitionRevision,
+          concept: definition.concept,
+          definition: definition.definitionRevision,
           expectedDecisionHead: null,
           outcome: 'accepted',
         },

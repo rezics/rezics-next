@@ -5,12 +5,14 @@ import { readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { prideExample } from '../../../packages/wiki-toolkit/skill/examples/pride.ts';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import { RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -38,6 +40,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
     [reviewerB.token, reviewerB.principal],
     [outsider.token, outsider.principal],
   ]);
+  await grantRecordedPlatformUse(f.accessPool, holder.principalId, ['wiki-agents']);
   const objects = f.objects('semantic/structure/');
   await objects.initialize();
   const deps: MainWorkDependencies = {
@@ -52,6 +55,10 @@ test('G-920: published franchise entities, contradictory claims and relations di
         return principal;
       },
     },
+    platformAccess: new AccessExposure(f.accessPool),
+    // The public statement page refuses until this index covers the graph
+    // position. The media stack already owns the seek for this dataset.
+    statementSeek: f.statementSeek,
     structureObjects: objects,
     wikiEvidence: new WikiEvidenceStore(f.contentPool),
     wikiQuotations: new WikiQuotationStore(f.contentPool),
@@ -614,6 +621,10 @@ test('G-920: published franchise entities, contradictory claims and relations di
         deps.account.verify = verify;
       }
     }
+    // Published claims are already in the graph. The page reads them from the
+    // seek index at the current position, so catch that index up before the
+    // first statement page and again after later statement writes.
+    await f.statementSeek.rebuild();
     for (const signed of [false, true]) {
       expect((await at(`/v1/resources/${shortId(entity)}/page`, undefined, signed)).status).toBe(
         404,
@@ -838,7 +849,9 @@ test('G-920: published franchise entities, contradictory claims and relations di
       f.env.fuseki.query = async (sparql, maxBytes) => {
         if (isForegroundOperation()) {
           calls++;
-          if (sparql.includes('MIN(CONCAT(STR(?decision)')) inventories++;
+          // Acceptance now comes from the seek index. One hydration of the
+          // disclosed statements is the inventory this page still performs.
+          if (sparql.includes('GROUP_CONCAT(DISTINCT STR(?evidence)')) inventories++;
         }
         return query(sparql, maxBytes);
       };
@@ -859,6 +872,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
     };
     const beforeProposals = await countRead();
     for (let index = 0; index < 320; index++) await recordProposal(index);
+    await f.statementSeek.rebuild();
     const afterProposals = await countRead();
     expect(afterProposals.inventories).toBe(1);
     expect(afterProposals.calls).toBeLessThanOrEqual(beforeProposals.calls + 2);
@@ -974,6 +988,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
       ),
       201,
     );
+    await f.statementSeek.rebuild();
     const withdrawn = await json<Static<typeof subjectStatementPage>>(
       await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
     );

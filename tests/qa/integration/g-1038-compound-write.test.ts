@@ -11,6 +11,7 @@ import {
   type CatalogueImportInput,
   type CatalogueImportOutcome,
 } from '../../../services/main/src/modules/work/catalogue-import.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
 
 /** Exercises real admission/claims, native staged validation, receipts and relay;
@@ -70,6 +71,7 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
   const bulk = (items: { key: string; input: CatalogueImportInput }[]) =>
     home.call('POST', '/v1/work-imports/bulk', { actingSubject: actor.agent, items }, author.token);
   try {
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, ['catalogue-import']);
     await grant('work:create:root', 'work.create');
     const denied = await single();
     expect(denied.status, await denied.clone().text()).toBe(403); // Ordinary creation never imports or globally curates.
@@ -78,7 +80,7 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
     const topics = [];
     for (let index = 0; index < 2; index++)
       topics.push(
-        await home.json<{ sense: string; definitionRevision: string }>(
+        await home.json<{ concept: string; definitionRevision: string }>(
           await home.call(
             'POST',
             '/v1/classification-vocabulary',
@@ -99,10 +101,10 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
     const classified: CatalogueImportInput = {
       ...base,
       classifications: topics.map((topic) => ({
-        sense: topic.sense,
-        expectedSenseHead: topic.definitionRevision,
+        concept: topic.concept,
+        definition: topic.definitionRevision,
         expectedDecisionHead: null,
-        outcome: 'accepted',
+        outcome: 'accepted' as const,
       })),
     };
     const items = [0, 1, 2].map((index) => ({
@@ -146,13 +148,19 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
     expect(sequences[1]).toBe(sequences[0]! + 1n);
     expect(sequences[2]).toBe(sequences[1]! + 1n);
     const work = created.items[0]!.receipt!.work!;
+    // The import commits a classified statement and its accepted decision, plus
+    // the outbox event later projections consume. It does not write the public
+    // search title graph itself.
     const observed = await stack.fuseki
-      .query(`PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/> ASK {
+      .query(`PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/>
+      PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> ASK {
       GRAPH <urn:rezics:graph:current> { <${work}> rv:catalogueVisible true ; schema:description "A catalogue description"@en .
         ?credit a rv:NativeAgentCredit ; rv:work <${work}> ; rv:agent <${actor.agent}> ; schema:roleName "author" .
-        ?application a rv:ClassificationApplication ; rv:targetMainVersion <${created.items[0]!.receipt!.mainVersion}> ; rv:decisionHead ?decision . }
-      GRAPH <urn:rezics:graph:revisions> { ?decision rv:outcome rv:Accepted }
-      GRAPH <urn:rezics:search:public> { ?name rv:resource <${work}> ; rv:publicTitle "Compound Work 0"@en }
+        ?statement a rdf:Statement ; rdf:subject <${created.items[0]!.receipt!.mainVersion}> ;
+          rdf:predicate <https://rezics.com/vocab/classifiedAs> ; rv:statementState rv:Active .
+        ?slot a rv:DecisionSlot ; rv:decisionHead ?decision . }
+      GRAPH <urn:rezics:graph:revisions> { ?decision a rv:StatementDecision ; rv:outcome rv:Accepted ; rv:support ?statement }
+      GRAPH <urn:rezics:graph:outbox> { ?event a rv:WorkCreatedEvent ; rv:work <${work}> }
     }`);
     expect(observed.boolean).toBe(true);
     const header = await home.json<{ id: string; title: { value: string }; verification: string }>(

@@ -7,6 +7,7 @@ import {
   flushTelemetryTraces,
   shutdownTelemetry,
 } from '@rezics/observability/runtime';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceCard } from '../../../services/main/src/modules/query/resource-contract.ts';
 import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
@@ -105,6 +106,10 @@ test('G1051: Agent Query batches public policy at 1, 16 and 64 cards and fences 
   };
   const cards = () => probe.handle(new Request('http://main.local/g1051/cards'));
   try {
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, [
+      'catalogue-import',
+      'platform-admin',
+    ]);
     for (let index = 0; index < 64; index++)
       agents.push(await home.provision(`${marker} ${index}`, author.token));
     for (const signed of [false, true]) {

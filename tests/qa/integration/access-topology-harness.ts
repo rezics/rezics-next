@@ -12,6 +12,8 @@ import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
@@ -117,7 +119,8 @@ export async function startAuthorityHarness(label: string) {
   };
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const grants = new AccessGrants(accessPool);
-  const main = createMainApp(fuseki, { environment: { fuseki,
+  const main = createMainApp(fuseki, { platformAccess: new AccessExposure(accessPool),
+    environment: { fuseki,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects') },
   account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
@@ -140,6 +143,7 @@ export async function startAuthorityHarness(label: string) {
       if (admitted) {
         await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
           VALUES ($1,$2,$3)`, [principalId, `${base}/api/auth`, account.id]);
+        await grantRecordedPlatformUse(accessPool, principalId, ['agent-mode', 'organization-authority']);
       }
       const token = await tokenFor(account, scope);
       values.user(principalId, token, scope);

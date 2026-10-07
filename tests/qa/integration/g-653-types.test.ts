@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { typeRegistry } from '../../../packages/model/src/generated/types.ts';
 import type { CommandEnvelope, CommandResult } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -34,6 +35,7 @@ import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalog
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { readWorkKindMatches } from '../../../services/main/src/modules/onboarding-interests/read.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 test('G653: HTTP admission and creation, v3 writes and legacy Work edits, facets, retirement and recovery', async () => {
   const directory = resolve('.temp', `g-653-${randomUUID()}`);
@@ -47,6 +49,7 @@ test('G653: HTTP admission and creation, v3 writes and legacy Work edits, facets
   const content = new ContentCore(f.pool);
   const deps = {
     environment: f.env,
+    platformAccess: new AccessExposure(f.accessPool),
     account: f.account.verifier,
     access: f.access,
     accessPolicy: new AccessPolicyOwner(f.accessPool),
@@ -85,6 +88,8 @@ test('G653: HTTP admission and creation, v3 writes and legacy Work edits, facets
     return body as T;
   };
   try {
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['platform-admin']);
+    await grantRecordedPlatformUse(f.accessPool, f.otherPrincipal, ['platform-admin']);
     const before = await json<{ digest: string }>(await call('GET', '/v1/types'));
     const webNovel = 'https://rezics.com/vocab/WebNovel';
     const createBody = {

@@ -8,7 +8,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { CargoResolutionStore } from '../../../services/main/src/modules/package/cargo-resolution.ts';
 import { GoMvsResolutionStore } from '../../../services/main/src/modules/package/go-mvs.ts';
 import { GoProxyCaptureStore } from '../../../services/main/src/modules/package/go-proxy-capture.ts';
@@ -38,6 +40,9 @@ test('PKG14: Go signed ZIP and Cargo index archive locks replay exact bytes acro
     const other = { issuer: owner.issuer, subject: randomUUID(), id: randomUUID() };
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1,$2,$3),($4,$2,$5)`, [owner.id, owner.issuer, owner.subject, other.id, other.subject]);
+    // The other caller is refused by the handler, after the closed gate.
+    await grantRecordedPlatformUse(accessPool, owner.id, ['developer-extras']);
+    await grantRecordedPlatformUse(accessPool, other.id, ['developer-extras']);
     const zip = await readFile(join(root, 'tests/qa/fixtures/go-sumdb-x-sync-v0.3.0.zip'));
     const signedZip = Buffer.from((goFixture.included as IncludedGoSumdbLookup).recordTextBase64,
       'base64').toString().split('\n')[0]!.split(' ')[2]!;
@@ -79,9 +84,11 @@ test('PKG14: Go signed ZIP and Cargo index archive locks replay exact bytes acro
     const app = createMainApp(fuseki, {
       environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!,
         routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! }, objectDirectory: '.temp/package-lock-unused' },
+      platformAccess: new AccessExposure(accessPool),
       account: { verify: async (request: Request, scopes: readonly string[]) => {
         const [who, scope] = (request.headers.get('authorization') ?? '').replace('Bearer ', '').split(' ');
-        if (scope !== scopes[0]) throw new AccountAssertionDenied('wrong package scope');
+        // The exposure gate verifies with an empty scope list; a handler still rejects a mismatch.
+        if (scopes.length > 0 && scope !== scopes[0]) throw new AccountAssertionDenied('wrong package scope');
         if (who === 'owner') return { issuer: owner.issuer, subject: owner.subject };
         if (who === 'other') return { issuer: other.issuer, subject: other.subject };
         throw new AccountAssertionDenied('unknown package token');

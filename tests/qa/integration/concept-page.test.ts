@@ -7,7 +7,10 @@ import { DISCOVERY_CONDITION_COST, DiscoveryProjection,
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
+  type ClassifiedConcept } from './work-classification.ts';
 
 const SKOS = 'http://www.w3.org/2004/02/skos/core#';
 const uuid = () => `https://rezics.com/id/${randomUUID()}`;
@@ -29,6 +32,7 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
     const home = await startHomeStack('concept-page');
     try {
       const { stack, author: a, reader: b } = home;
+      await grantRecordedPlatformUse(stack.accessPool, a.principalId, ['platform-admin']);
       const owner = new DiscoveryProjection(stack.accessPool);
       const app = createMainApp(stack.fuseki, { ...home.deps, discovery: owner,
         judgments: new AccessJudgments(stack.accessPool) });
@@ -43,20 +47,22 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
       // w1 Fantasy+Magic, w2 Fantasy, w3 Fantasy+Romance, w4 Magic.
       await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
       await a.grant('classification:define:global', 'classification.proposition.define');
-      await a.grant('classification:decide:global', 'classification.decision.set');
+      await a.grant('context:create:root', 'context.create');
+      await a.grant(`statement:speak:${a.actor}`, 'statement.record');
+      await a.grant('classification:decide:global', 'statement.decide');
       const works = [];
       for (let index = 1; index <= 4; index++) works.push(await stack.publicWork(a.actor, ['en'], `Concept Work ${index}`));
       const [w1, w2, w3, w4] = works as [typeof works[number], typeof works[number], typeof works[number],
         typeof works[number]];
-      const define = async (label: string) => json<{ concept: string; sense: string }>(await call('POST',
-        '/v1/classification-propositions', { profile: 'classification-proposition-v1', label, actingSubject: a.actor },
-        a.token), 201);
+      const send = (method: string, path: string, body?: unknown) => call(method, path, body, a.token);
+      const define = async (label: string) => json<ClassifiedConcept>(await send('POST',
+        '/v1/classification-propositions', { profile: 'classification-proposition-v1', label, actingSubject: a.actor }), 201);
       const [fantasy, magic, romance] = [await define('Concept fantasy'), await define('Concept magic'),
         await define('Concept romance')];
-      const accept = async (target: typeof w1, term: typeof fantasy) => json(await call('POST',
-        '/v1/classification-decisions', { profile: 'classification-direct-decision-v1', work: target.work,
-          mainVersion: target.mainVersion, sense: term.sense, context: { kind: 'global' }, outcome: 'accepted',
-          expectedDecisionHead: null, actingSubject: a.actor }, a.token), 201);
+      const interpretation = await shareClassifiedConcepts(send, json, a.actor, [fantasy, magic, romance]);
+      for (const term of [fantasy, magic, romance]) await discloseConcept(stack.accessPool, a.principal, a.actor, term.concept);
+      const accept = (target: typeof w1, term: ClassifiedConcept) => acceptClassifiedWork(
+        send, json, a.actor, target, term, interpretation);
       for (const [target, term] of [[w1, fantasy], [w1, magic], [w2, fantasy], [w3, fantasy], [w3, romance],
         [w4, magic]] as const) await accept(target, term);
       // Magic is narrower than Fantasy; a protected narrower Concept stays off the page.

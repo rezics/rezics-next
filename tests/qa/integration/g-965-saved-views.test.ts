@@ -1,20 +1,25 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startHomeStack, type HomeStack } from './feed-read-support.ts';
 import { seedSavedView } from './g-984-saved-view-support.ts';
+import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
+  type ClassifiedConcept, type ConceptContext } from './work-classification.ts';
 import { SavedViewNotifications } from '../../../services/main/src/modules/notification-producers/saved-views.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { discloseNotifications } from '../../../services/main/src/modules/disclosure/notifications.ts';
 
-// Each test is a bounded stage of one owner journey. Keep Bun's default
-// deadline for both the focused fixture and each operation group.
+// Each test is a bounded stage of one owner journey. Each operation group keeps
+// Bun's default deadline. The fixture hook is longer: accepting a Concept is
+// several commands.
 describe('G-965 Concept and saved-view owner journey', () => {
   let home: HomeStack;
   let seeded: Awaited<ReturnType<typeof seedSavedView>>;
   let service: SavedViewNotifications;
-  let term: { concept: string; sense: string };
+  let term: ClassifiedConcept;
+  let concepts: ConceptContext;
   let conceptFollow: { revision: string; level: string };
   let conceptView: string;
   let postPlacement: string;
@@ -31,30 +36,36 @@ describe('G-965 Concept and saved-view owner journey', () => {
     type: 'com.rezics.work.created.v1', data: { receipt: { work } } });
   const input = () => ({ principalId: home.reader.principalId, owner: 'access', ref: saved.id,
     revision: postPlacement, disclosureBasis: 'saved-view-post-v1' });
-  const accept = async (work: string, mainVersion: string) => home.json(await home.call('POST', '/v1/classification-decisions', {
-    profile: 'classification-direct-decision-v1', work, mainVersion, sense: term.sense,
-    context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null,
-    actingSubject: home.author.actor }, home.author.token), 201);
+  const send = (method: string, path: string, body?: unknown) => home.call(method, path, body, home.author.token);
+  const accept = (work: string, mainVersion: string) => acceptClassifiedWork(
+    send, home.json, home.author.actor, { mainVersion }, term, concepts);
 
+  // Recording the Concept is a context, a statement and a decision. That fixture
+  // no longer fits the default five-second hook; each test keeps that deadline.
   beforeAll(async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the integration tier');
     home = await startHomeStack('g-965-saved-views');
+    await grantRecordedPlatformUse(home.stack.accessPool, home.reader.principalId, ['saved-views']);
     seeded = await seedSavedView(home);
     const { stack, call, json } = home;
     const store = new NotificationStore(stack.accessPool);
     service = new SavedViewNotifications(stack.accessPool,
       { ...home.deps, judgments: new AccessJudgments(stack.accessPool) }, store);
     await home.author.grant('classification:define:global', 'classification.proposition.define');
-    await home.author.grant('classification:decide:global', 'classification.decision.set');
-    term = await json<{ concept: string; sense: string }>(await call('POST', '/v1/classification-propositions',
+    await home.author.grant('context:create:root', 'context.create');
+    await home.author.grant(`statement:speak:${home.author.actor}`, 'statement.record');
+    await home.author.grant('classification:decide:global', 'statement.decide');
+    term = await json<ClassifiedConcept>(await call('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label: 'G965 followed topic', actingSubject: home.author.actor }, home.author.token), 201);
+    concepts = await shareClassifiedConcepts(send, json, home.author.actor, [term]);
+    await discloseConcept(stack.accessPool, home.author.principal, home.author.actor, term.concept);
     await accept(seeded.work.work, seeded.work.mainVersion);
     postPlacement = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?placement WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?slot rv:reply ${iri(seeded.discussion.reply)} ; rv:replyPlacementHead ?placement }
     } LIMIT 2`)).results!.bindings[0]!.placement!.value;
     postEvent = { id: `urn:rezics:event:${randomUUID()}`, type: 'com.rezics.realm.reply-placed.v1',
       data: { receipt: { placement: postPlacement } } };
-  });
+  }, 20_000);
   afterAll(async () => { if (home) await home.stop(); });
 
   test('Concept follows default to Off', async () => {

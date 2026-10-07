@@ -23,6 +23,7 @@ import {
   checkedMetadataState,
 } from '../../../services/main/src/modules/work/metadata-schema.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { configureDisclosurePool, disclosurePoolReader } from '../../../services/main/src/modules/disclosure/read.ts';
 
 test('G-866: review journey reaches recipients, triage is independent and revocation hides exact destinations', async () => {
@@ -137,16 +138,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         [randomUUID(), principal, agent],
       );
     }
-    for (const principal of [f.principalId,f.otherPrincipal]) {
-      const grant = randomUUID();
-      await f.accessPool.query(`INSERT INTO access.principal_permission_grant
-        (id,issuer_subject,principal_id,scope_id,action,valid_until)
-        VALUES($1,$2,$3,'platform:access','platform:use:update-subscriptions','infinity')`, [grant,f.actor,principal]);
-      await f.accessPool.query(`INSERT INTO access.platform_grant_episode
-        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
-        VALUES($1,$1,$2,'platform:use:update-subscriptions','platform:access',$3,$4)`,
-      [grant,f.actor,f.principalId,`urn:rezics:access-receipt:${hash(grant)}`]);
-    }
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['update-subscriptions']);
+    await grantRecordedPlatformUse(f.accessPool, f.otherPrincipal, ['update-subscriptions']);
     await createAgentGraph(f.env, {
       id: randomUUID(),
       agent: f.actor,

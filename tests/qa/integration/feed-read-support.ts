@@ -149,7 +149,8 @@ export async function startHomeStack(label: string, options: {
   Object.assign(stack.env, { structureObjects });
   const consumer = `feed-${randomUUID()}`;
   const feed = new FeedStore(stack.accessPool);
-  const deps = { environment: stack.env, access: stack.access, account, feed,
+  const deps = { environment: stack.env, access: stack.access,
+    platformAccess: new AccessExposure(stack.accessPool), account, feed,
     follows: new FollowsStore(stack.accessPool), feedViewerState: new FeedViewerStateReader(),
     realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
     realmReplyThreads: new RealmReplyThreadStore(stack.contentPool, stack.accessPool),

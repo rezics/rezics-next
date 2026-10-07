@@ -5,6 +5,10 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { exposureDeclarations } from '../../../services/main/src/modules/access/exposure-declarations.ts';
+import { bindPlatformExposure } from '../../../services/main/src/modules/access/exposure-routes.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
@@ -36,6 +40,8 @@ export async function identityHarness(options: { realAccount?: boolean;
   const principalId = randomUUID(), otherId = randomUUID();
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1,$2,$3),($4,$2,$5)`, [principalId, issuer, owner.subject, otherId, other.subject]);
+  await grantRecordedPlatformUse(accessPool, principalId, ['catalogue-import']);
+  await grantRecordedPlatformUse(accessPool, otherId, ['catalogue-import']);
   if (options.acquisition) {
     const administrator = iri(randomUUID());
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
@@ -62,15 +68,18 @@ export async function identityHarness(options: { realAccount?: boolean;
   const intake = new SourceIntakeStore(pool);
   const stores = { identity: new ProviderIdentityStore(pool), withdrawal: new SourceFieldWithdrawalStore(pool),
     score: new SourceScoreStore(pool) };
-  const work = { account, access, sourceIntake: intake, sourceProviderIdentity: stores.identity,
+  const platformAccess = new AccessExposure(accessPool);
+  const work = { account, access, platformAccess, sourceIntake: intake, sourceProviderIdentity: stores.identity,
     actingContexts: new AccessActingContexts(accessPool),
     sourceFieldWithdrawals: stores.withdrawal, sourceScores: stores.score,
     ...(options.acquisition ? { sourceAcquisitions: sourceAcquisitionServices(pool,
       { fetcher: options.acquisition === 'live' ? fetch : provider.fetch,
         reserve: options.acquisition === 'live' ? () => intake.reserveOpenLibrarySlot() : async () => {} }) }
       : {}) } as unknown as MainWorkDependencies;
-  const app = new Elysia().use(sourceRoutes(work)).use(sourceRunRoutes(work))
-    .use(sourceSupportRoutes(fuseki, work));
+  // This app mounts source routes directly. Bind the same exposure gate Main
+  // uses so a catalogue-import call is closed until the grant above is visible.
+  const app = bindPlatformExposure(work, exposureDeclarations)(new Elysia()
+    .use(sourceRoutes(work)).use(sourceRunRoutes(work)).use(sourceSupportRoutes(fuseki, work)));
   const headers = (token: string, key?: string) => ({ authorization: `Bearer ${tokens?.[token as keyof typeof tokens] ?? token}`,
     'content-type': 'application/json', ...(key ? { 'idempotency-key': key } : {}) });
   const post = (path: string, token: string, body: unknown, key?: string) => app.handle(

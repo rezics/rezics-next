@@ -9,7 +9,9 @@ import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { GoMvsResolutionStore } from '../../../services/main/src/modules/package/go-mvs.ts';
 import { GoProxyCaptureStore } from '../../../services/main/src/modules/package/go-proxy-capture.ts';
 import { goPrunedFixtureResponse } from '../fixtures/go-pruned-directives.ts';
@@ -71,9 +73,13 @@ test('PKG05/PKG12/PKG13/IAM10: real Account and Access protect pruned Go directi
     const member = await signUp('member');
     const other = await signUp('other');
     const principalId = randomUUID();
+    const otherPrincipalId = randomUUID();
     await accessPool.query(`INSERT INTO access.principal
       (id, account_issuer, account_subject) VALUES ($1,$2,$3),($4,$2,$5)`,
-    [principalId, `${base}/api/auth`, member.id, randomUUID(), other.id]);
+    [principalId, `${base}/api/auth`, member.id, otherPrincipalId, other.id]);
+    // The other member's 404 is the handler's, so the closed gate has to admit them.
+    await grantRecordedPlatformUse(accessPool, principalId, ['developer-extras']);
+    await grantRecordedPlatformUse(accessPool, otherPrincipalId, ['developer-extras']);
     const tokenFor = async (scope: string, cookie: string) => {
       const verifier = randomBytes(32).toString('base64url');
       const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
@@ -114,6 +120,7 @@ test('PKG05/PKG12/PKG13/IAM10: real Account and Access protect pruned Go directi
     const app = createMainApp(fuseki, {
       environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
         routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: '.temp/go-pruned-api-unused' },
+      platformAccess: new AccessExposure(accessPool),
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,

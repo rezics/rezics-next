@@ -11,6 +11,7 @@ import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/coun
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
@@ -128,6 +129,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const templateSeek = new TemplateSeekIndex(accessPool,fuseki);
   await templateSeek.backfill(env.lineage.dataEpoch);
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
+    platformAccess: new AccessExposure(accessPool),
     statementSeek, templateSeek,
     content, contentAuthoring: content, media, votes, erasures,
     ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),

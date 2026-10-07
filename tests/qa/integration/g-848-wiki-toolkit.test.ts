@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
@@ -12,6 +13,7 @@ import { EditorialReviewStore } from '../../../services/main/src/modules/editori
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { prideExample } from '../../../packages/wiki-toolkit/skill/examples/pride.ts';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import { startMediaStack } from './media-support.ts';
@@ -33,10 +35,12 @@ test('G-848: model-free skill units, alignment, candidates and validation produc
     prefix: 'semantic/structure/',
   });
   await objects.initialize();
+  await grantRecordedPlatformUse(f.accessPool, f.principalId, ['wiki-agents']);
   const app = createMainApp(f.env.fuseki, {
     environment: f.env,
     account: f.account.verifier,
     access: f.access,
+    platformAccess: new AccessExposure(f.accessPool),
     structureObjects: objects,
     wikiQuotations: new WikiQuotationStore(f.pool),
     catalogueIntake: new CatalogueIntakeStore(f.accessPool, f.env),
@@ -265,6 +269,7 @@ test('G-848: submit a wiki-bundle, two independent reviewers approve it, and pub
     [reviewerA.token, reviewerA.principal],
     [reviewerB.token, reviewerB.principal],
   ]);
+  await grantRecordedPlatformUse(f.accessPool, holder.principalId, ['wiki-agents']);
   const objects = f.objects('semantic/structure/');
   await objects.initialize();
   const deps: MainWorkDependencies = {
@@ -277,6 +282,7 @@ test('G-848: submit a wiki-bundle, two independent reviewers approve it, and pub
         return principal;
       },
     },
+    platformAccess: new AccessExposure(f.accessPool),
     structureObjects: objects,
     wikiEvidence: new WikiEvidenceStore(f.contentPool),
     wikiQuotations: new WikiQuotationStore(f.contentPool),

@@ -9,7 +9,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { HubStore } from '../../../services/main/src/modules/hub/store.ts';
 import { PackageArtifactStore } from '../../../services/main/src/modules/package/lock-artifacts.ts';
 import { activateMetadataWork, metadataWorkRequestDigest }
@@ -64,6 +66,9 @@ async function fixture(store = hub) {
   const other = { issuer, subject: randomUUID(), id: randomUUID() };
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3), ($4, $2, $5)`, [principal.id, issuer, principal.subject, other.id, other.subject]);
+  // The other caller is refused by the handler, after the closed gate.
+  await grantRecordedPlatformUse(accessPool, principal.id, ['developer-extras']);
+  await grantRecordedPlatformUse(accessPool, other.id, ['developer-extras']);
   await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
   for (const [scope, action] of [
     [`content:draft:${created.work}`, 'content.draft'], [`work:read:${created.work}`, 'work.read'],
@@ -80,12 +85,14 @@ async function fixture(store = hub) {
   }
   const account = { verify: async (request: Request, required: readonly string[]) => {
     const [who, scope] = (request.headers.get('authorization') ?? '').replace('Bearer ', '').split(' ');
-    if (scope !== required[0]) throw new AccountAssertionDenied('wrong Hub scope');
+    // The exposure gate verifies with an empty scope list; a handler still rejects a mismatch.
+    if (required.length > 0 && scope !== required[0]) throw new AccountAssertionDenied('wrong Hub scope');
     if (who === 'owner') return { issuer, subject: principal.subject };
     if (who === 'other') return { issuer, subject: other.subject };
     throw new AccountAssertionDenied('unknown Hub token');
   } };
-  const app = createMainApp(environment.fuseki, { environment, account, access, content, hub: store });
+  const app = createMainApp(environment.fuseki, { environment, account, access, content, hub: store,
+    platformAccess: new AccessExposure(accessPool) });
   const call = (method: string, path: string, who: string, scope: string,
     body?: unknown, key?: string) => app.handle(new Request(`http://main.local${path}`, { method,
     headers: { authorization: `Bearer ${who} ${scope}`, 'content-type': 'application/json',

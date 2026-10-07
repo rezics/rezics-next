@@ -4,6 +4,8 @@ import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessAdmissionRegistry, AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessRoles } from '../../../services/main/src/modules/access/roles.ts';
@@ -53,6 +55,7 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     const intake = new SourceIntakeStore(content);
     intake.reserveOpenLibrarySlot = async () => {};
     const main = createMainApp(h.fuseki, { environment: h.env, account: h.verifier, access,
+      platformAccess: new AccessExposure(h.accessPool),
       actingContexts: contexts, roles: new AccessRoles(h.accessPool),
       agentProvisioning: new AgentProvisioning(h.accessPool, h.env),
       sourceAcquisitions: sourceAcquisitionServices(content, { reserve: async () => {}, fetcher }),
@@ -93,6 +96,9 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
       const token = await tokenFor(user);
       const provision = await json<{ agent: string }>(await request(token, 'POST', '/v1/agents',
         { profile: 'agent-provision-v1', kind: 'person', displayName: name }), 201);
+      const principalId = (await h.accessPool.query<{ id: string }>(
+        'SELECT id FROM access.principal WHERE account_subject = $1', [user.id])).rows[0]!.id;
+      await grantRecordedPlatformUse(h.accessPool, principalId, ['catalogue-import']);
       return { name, token, subject: provision.agent };
     }
     const administrator = await person('administrator');

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startHomeStack } from './feed-read-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessPrivateMemberships } from '../../../services/main/src/modules/access/private-memberships.ts';
 import { AccountAssertionInsufficientScope } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
@@ -102,6 +103,8 @@ test('G-964: private principals self-leave with consent scope through closed/cha
       return originalVerify(request);
     };
     Object.assign(h.deps, { privateMemberships: new AccessPrivateMemberships(h.stack.accessPool) });
+    await grantRecordedPlatformUse(h.stack.accessPool, h.author.principalId, ['organization-authority']);
+    await grantRecordedPlatformUse(h.stack.accessPool, h.reader.principalId, ['organization-authority']);
     const command = { profile: 'access-private-membership-change-v1', kind: 'realm', ownerSubject: created.realm,
       membershipId: membership, action: 'leave', expectedGeneration: '1', expectedPolicyRevision: '0' };
     expect((await h.call('POST', '/v1/access/private-membership-changes', command, h.author.token)).status).toBe(403);

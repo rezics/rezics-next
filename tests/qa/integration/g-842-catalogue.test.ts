@@ -8,6 +8,8 @@ import { graphZeroSnapshot } from '../../../services/main/src/modules/recommenda
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { CatalogueIntakeStore, unverifiedWorks } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { readExportPlan, ExportSourceNotFound } from '../../../services/main/src/modules/export/readers.ts';
@@ -33,6 +35,12 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
   try {
     const editor = await stack.member('new-editor');
     const reviewer = await stack.member('reviewer');
+    // Fixed releases are commerce. Their export plan selects dataset-dumps.
+    // Presentations are platform administration. Ranking generations are recommendations.
+    await grantRecordedPlatformUse(stack.accessPool, editor.principalId,
+      ['commerce', 'dataset-dumps', 'platform-admin', 'recommendations']);
+    await grantRecordedPlatformUse(stack.accessPool, reviewer.principalId,
+      ['commerce', 'platform-admin', 'recommendations']);
     await editor.grant('work:create:root', 'work.create');
     await reviewer.grant('catalogue:verify:root', 'catalogue.verify');
     await reviewer.grant(MANAGE_SCOPE, MANAGE_ACTION);
@@ -47,7 +55,8 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
       unverifiedWorks: works => unverifiedWorks(stack.env, works) });
     const catalogueIntake = new CatalogueIntakeStore(stack.accessPool, stack.env);
     const deps: MainWorkDependencies = { environment: stack.env, access: stack.access,
-      media: stack.media, catalogueIntake, recommendations, account: { verify: async request => {
+      media: stack.media, catalogueIntake, recommendations,
+      platformAccess: new AccessExposure(stack.accessPool), account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = [editor, reviewer].find(member => member.token === token);
         if (!member) throw new AccountAssertionDenied('Unknown test bearer');
@@ -176,7 +185,8 @@ test('G842: multilingual candidate receipts, grain guard, quota races, replay an
       await send('POST', '/v1/fixed-releases', { profile: 'fixed-native-text-release-v1', work: created.work,
         mainVersion: created.mainVersion, expectedMainRevision: selected.mainRevision,
         expectedSelection: selected.selection, actingSubject: editor.actor }), 201);
-    const exportPlan = () => readExportPlan({ env: stack.env, canReadWork: (principal, actor, work) =>
+    const exportPlan = () => readExportPlan({ env: stack.env, platformAccess: deps.platformAccess,
+      canReadWork: (principal, actor, work) =>
       stack.access.canReadWork(principal, actor, work) }, editor.principal, editor.actor,
       { kind: 'fixed-release', reference: release.release, expectedPosition: release.sourcePosition }, 'full');
     await expect(exportPlan()).rejects.toBeInstanceOf(ExportSourceNotFound);

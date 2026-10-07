@@ -12,6 +12,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
@@ -207,6 +209,7 @@ export async function startAgentControlHarness(label: string) {
     return claimed ?? claim(id, digest, principal);
   };
   const main = createMainApp(fuseki, {
+    platformAccess: new AccessExposure(accessPool),
     environment,
     agentProvisioning: new AgentProvisioning(accessPool, environment),
     realmAdmin: new AccessRealmManagement(accessPool),
@@ -253,6 +256,7 @@ export async function startAgentControlHarness(label: string) {
           VALUES ($1,$2,$3)`,
           [principalId, `${base}/api/auth`, account.id],
         );
+        await grantRecordedPlatformUse(accessPool, principalId, ['organization-authority']);
       }
       const token = await tokenFor(account, scope);
       values.user(principalId, token, scope);

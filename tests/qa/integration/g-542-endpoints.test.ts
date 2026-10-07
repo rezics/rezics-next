@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { png } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -29,6 +30,11 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
   const { stack, author: member } = home;
   try {
     const seeded = await seedHome(home, 3), work = seeded.works[0]!;
+    // Fixed releases are commerce. Saved filters are saved-views. A fixed-release
+    // export selects the dataset-dumps profile, which the public export route
+    // still checks after the gate.
+    await grantRecordedPlatformUse(stack.accessPool, member.principalId,
+      ['commerce', 'saved-views', 'dataset-dumps']);
     const principal = member.principal, actor = seeded.author;
     const grant = async (scope: string, action: string) => {
       await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);

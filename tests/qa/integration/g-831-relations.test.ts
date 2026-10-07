@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { authorCreditFixture, author, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
@@ -18,6 +19,7 @@ import type { RelationPageEntry } from '../../../services/main/src/modules/relat
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
@@ -34,6 +36,10 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID),
     'openid agent:create work:create work:edit work:read collection:edit semantic:read source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
   try {
+    // Work intake is catalogue import. Seeding a definition presentation is
+    // platform administration; the shared registry is empty in an isolated shard.
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['catalogue-import', 'platform-admin']);
+    await grantRecordedPlatformUse(f.accessPool, f.otherPrincipal, ['catalogue-import']);
     const queries: string[] = [], commands: { bytes: number; focuses: number }[] = [];
     f.env.fuseki = new Proxy(f.env.fuseki, { get(target, property) {
       if (property === 'query') return async (query: string) => { if (isForegroundOperation()) queries.push(query); return target.query(query); };
@@ -165,6 +171,7 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
     finally { await accountPool.end(); }
     const readerApp = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
+      platformAccess: new AccessExposure(f.accessPool),
       access: f.access, agentProvisioning: new AgentProvisioning(f.accessPool, f.env),
       profiles: new ProfilesAccess(f.accessPool), libraryStatus: statuses,
       libraryRatings: new ReaderLibraryRatings(f.accessPool) });

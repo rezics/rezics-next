@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -27,6 +29,7 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
   // Deliberately omit context:read: Work authority must not admit private Contexts.
   const f = await authorCreditFixture(Bun.env as Record<string, string>, directory,
     'openid work:create work:edit work:read work:protect context:write classification:define');
+  await grantRecordedPlatformUse(f.accessPool, f.principalId, ['commerce']);
   let graphQueries = 0;
   const query = f.env.fuseki.query.bind(f.env.fuseki);
   const graph = new Proxy(f.env.fuseki, { get(target, property) {
@@ -45,7 +48,8 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
   const deps: MainWorkDependencies = { environment, catalogueIntake: f.catalogueIntake, access: f.access, account: f.account.verifier,
-    content, contentAuthoring: content, mediaAccess, structureObjects };
+    content, contentAuthoring: content, mediaAccess, structureObjects,
+    platformAccess: new AccessExposure(f.accessPool) };
   const app = createMainApp(graph, deps);
   const call = (method: string, path: string, body?: object, authenticated = true) => app.handle(new Request(
     `http://main.local${path}`, { method, headers: {

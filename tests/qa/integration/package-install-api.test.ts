@@ -8,8 +8,10 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier }
   from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { PackageInstallationStore, PackageInstallDenied, type HookExecutor, type InstallFault }
   from '../../../services/main/src/modules/package/install.ts';
 import { DockerNodeHookExecutor, NODE_HOOK_PROFILE, validateHookOutput }
@@ -65,6 +67,9 @@ async function fixture(packages: ArchiveRegistry['packages']): Promise<Fixture> 
   const other = { id: randomUUID(), subject: randomUUID() };
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, $2, $3), ($4, $2, $5)`, [owner.id, issuer, owner.subject, other.id, other.subject]);
+  // The other caller is refused by the handler, after the closed gate.
+  await grantRecordedPlatformUse(accessPool, owner.id, ['developer-extras']);
+  await grantRecordedPlatformUse(accessPool, other.id, ['developer-extras']);
   const hookRuns: string[] = [];
   const hookExecutor: HookExecutor = { profile: 'qa-sandbox-hook-runner-v1', run: async input => {
     hookRuns.push(`${input.instanceKey}:${input.hooks.join(',')}`);
@@ -79,7 +84,8 @@ async function fixture(packages: ArchiveRegistry['packages']): Promise<Fixture> 
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL!);
   const fakeAccount = { verify: async (request: Request, required: readonly string[]) => {
     const [who, scope] = (request.headers.get('authorization') ?? '').replace('Bearer ', '').split(' ');
-    if (scope && scope !== required[0]) throw new AccountAssertionDenied('package scope is unavailable');
+    // Empty required is the exposure gate. A bearer that names no scope stays unrestricted.
+    if (required.length > 0 && scope && scope !== required[0]) throw new AccountAssertionDenied('package scope is unavailable');
     if (who === 'owner') return { issuer, subject: owner.subject };
     if (who === 'other') return { issuer, subject: other.subject };
     throw new AccountAssertionDenied('unknown test token');
@@ -88,6 +94,7 @@ async function fixture(packages: ArchiveRegistry['packages']): Promise<Fixture> 
     environment: { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
       objectDirectory: '.temp/package-install-unused' },
     account,
+    platformAccess: new AccessExposure(accessPool),
     access: new AccessAdmissionRegistry(accessPool),
     packageNpmResolutions: npm, packageLocks: locks, packageInstallations: installations,
   });
@@ -529,6 +536,12 @@ test('PKG17: Account consent withdrawal fences a staged rollback through the rea
   try {
     const scopes = 'openid package:read package:install offline_access';
     const client = await account.nativeApp('Package rollback App', scopes);
+    // package:read and package:install are closed-group scopes. They stay on
+    // the token only when this fixture app is first party.
+    await account.pool.query(
+      'INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [client.client_id],
+    );
     const verifierClient = await account.workloadApp('Package Main verifier', ['package:read']);
     const member = await account.signUp('package-consent');
     const issued = await account.issue(client.client_id, member, scopes);

@@ -5,7 +5,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { sourceAcquisitionServices } from '../../../services/main/src/modules/source/acquisition.ts';
 import { SourceIntakeStore, SourceProviderRateLimited } from '../../../services/main/src/modules/source/intake.ts';
 import { OpenLibraryConversionStore } from '../../../services/main/src/modules/source/open-library-conversion.ts';
@@ -107,8 +109,11 @@ export async function runHarness(): Promise<RunHarness> {
   const owner = { issuer, subject: randomUUID() };
   const other = { issuer, subject: randomUUID() };
   const ownerId = randomUUID();
+  const otherId = randomUUID();
   await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
-    VALUES ($1, $2, $3), ($4, $2, $5)`, [ownerId, issuer, owner.subject, randomUUID(), other.subject]);
+    VALUES ($1, $2, $3), ($4, $2, $5)`, [ownerId, issuer, owner.subject, otherId, other.subject]);
+  await grantRecordedPlatformUse(accessPool, ownerId, ['catalogue-import']);
+  await grantRecordedPlatformUse(accessPool, otherId, ['catalogue-import']);
   const administrator = `https://rezics.com/id/${randomUUID()}`;
   await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [administrator]);
   await accessPool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT DO NOTHING");
@@ -131,6 +136,7 @@ export async function runHarness(): Promise<RunHarness> {
     environment: { fuseki,
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
       objectDirectory: '.temp/source-run-unused' },
+    platformAccess: new AccessExposure(accessPool),
     account, access: new AccessAdmissionRegistry(accessPool),
     actingContexts: new AccessActingContexts(accessPool),
     sourceIntake: new SourceIntakeStore(contentPool),
