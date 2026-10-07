@@ -42,6 +42,9 @@ class SingleConnectionOwner {
   deliveringDownload = false;
   checkpoint?: { stream_scope: string; data_epoch: string; sequence: string };
   private transaction = false;
+  private isolation = 'read committed';
+  private transactionSequence = 0n;
+  private transactionId = '0';
   private pendingOpen = false;
   private pendingGeneration = '5';
   readonly queries: { sql: string; values?: unknown[] }[] = [];
@@ -80,6 +83,8 @@ class SingleConnectionOwner {
     if (sql.startsWith('BEGIN')) {
       if (this.transaction) throw new Error(`${this.name} transaction was begun twice`);
       this.transaction = true;
+      this.isolation = sql.includes('REPEATABLE READ') ? 'repeatable read' : 'read committed';
+      this.transactionId = (++this.transactionSequence).toString();
       this.pendingOpen = this.open;
       this.pendingGeneration = this.generation;
     } else if (sql === 'COMMIT') {
@@ -93,6 +98,11 @@ class SingleConnectionOwner {
       this.pendingGeneration = this.generation;
       this.transaction = false;
       this.trace.push(`${this.name}:rollback`);
+    } else if (sql === 'SHOW transaction_isolation') {
+      return { rows: [{ transaction_isolation: this.isolation }], rowCount: 1 };
+    } else if (sql === 'SELECT txid_current()::text AS id') {
+      const id = this.transaction ? this.transactionId : (++this.transactionSequence).toString();
+      return { rows: [{ id }], rowCount: 1 };
     } else if (sql.includes('UPDATE access.recovery_fence')) {
       if (!this.transaction || values?.[0] !== this.pendingGeneration || this.pendingOpen
         || this.deliveringSearch || this.deliveringDownload) {

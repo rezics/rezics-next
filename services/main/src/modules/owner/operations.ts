@@ -278,7 +278,9 @@ export class OwnerOperations {
                 catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
                 const restoredObjects = resources.objectStore.structureObjects
                   ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
-                    resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
+                    resources.contentPool, resources.objectStore.structureObjects),
+                    structureQualifierRoots: new StructureQualifierRootStore(
+                      resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
                 const restored: RestoredOwners = { account: resources.accountPool,
                   access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
                   graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,

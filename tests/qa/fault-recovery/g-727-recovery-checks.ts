@@ -18,7 +18,6 @@ import {
   ReceiptCustody,
 } from '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
-import { StructureGroupRootStore } from '../../../services/main/src/modules/structure/group-root.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -235,13 +234,11 @@ export function recoveryChecks(
     },
     reconcile: async (context, body, idempotencyKey) => {
       expect(verifiedBeforeRelease).toBe(true);
-      const objects: RestoreResources['objectStore'] = objectStore(context.apps, context.budget);
-      if (objects.structureObjects) {
-        objects.structureGroupRoots = new StructureGroupRootStore(
-          context.pools.content,
-          objects.structureObjects,
-        );
-      }
+      const objects: RestoreResources['objectStore'] = objectStore(
+        context.apps,
+        context.budget,
+        context.pools.content,
+      );
       const env = {
         fuseki: context.fuseki,
         lineage: {
