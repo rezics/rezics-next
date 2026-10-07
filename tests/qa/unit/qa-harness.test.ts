@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Script } from 'node:vm';
 import ts from 'typescript-6';
@@ -9,7 +9,7 @@ import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
-import { acquireQaSlots, commandAsync } from '../../../scripts/qa/core.ts';
+import { acquireQaSlots, commandAsync, selfManagedFaultFiles } from '../../../scripts/qa/core.ts';
 import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
@@ -61,7 +61,16 @@ function startupHarness(directory: string) {
           console.log(line);
           if (line.startsWith('Admitted; QA memory:')) writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-admitted'), '');
         }, { runDeadline: Number(process.env.REZICS_QA_MEMORY_DEADLINE) });
+      if (args[0] === 'test') writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-host-finished'), '');
       process.exitCode = result.ok ? 0 : 1;
+    } else if (args[0] === 'scripts/fixture/cli.ts') {
+      await withQaStackStartup(${JSON.stringify(root)}, process.env, undefined, () => {
+        const owner = readFileSync(join(process.env.GOAL_QA_SLOT_DIRECTORY, '0', 'pid'), 'utf8');
+        if (owner !== String(process.ppid)) throw new Error('Fixture preparation started without its lease');
+        writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify({ fixture: 'prepared-source', elapsedMs: 0 }));
+        writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepared'), '');
+      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
+        read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: 0, hostAvailable: 64 * 1024 ** 3 }) });
     } else if (args[0] === 'test') {
       const result = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 10000,
         { ...process.env, QA_HARNESS_SLOT_OWNER: process.env.QA_HARNESS_SLOT_OWNER ?? String(process.ppid) });
@@ -143,9 +152,11 @@ function startupHarness(directory: string) {
   };
   const start = (name: string, tier = 'model', files: string[] = [], extraEnv: NodeJS.ProcessEnv = {}) =>
     launch(name, ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file])], extraEnv);
+  const startArgs = (name: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}) =>
+    launch(name, ['scripts/qa/cli.ts', ...args], extraEnv);
   const startGoal = (name: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}) =>
     launch(name, ['scripts/goal/goalctl.ts', 'test', ...args], extraEnv);
-  return { slots, control, lockFile, start, startGoal, async stop() {
+  return { slots, control, lockFile, start, startArgs, startGoal, async stop() {
     for (const child of children) { if (child.exitCode === null) child.kill(); }
     await Promise.all(children.map(child => child.exited));
   } };
@@ -252,6 +263,75 @@ test('goalctl successive startup processes restart their sequences after a slot 
     slot.release(); holder.kill(); await holder.exited;
     await harness.stop(); rmSync(directory, { recursive: true, force: true });
   }
+}, 20_000);
+
+for (const blockedBy of ['memory', 'startup']) {
+  test(`completed host tier releases its lease before model ${blockedBy} admission`, async () => {
+    const directory = mkdtempSync(join(root, '.temp', 'qa-host-stack-transition-'));
+    const harness = startupHarness(directory);
+    const priorId = `host-stack-${randomUUID().slice(0, 8)}`;
+    const prior = join(directory, 'prior');
+    const priorLink = join(root, '.artifacts', 'qa', priorId);
+    const mutex = new Database(harness.lockFile, { create: true });
+    mkdirSync(prior);
+    mkdirSync(join(root, '.artifacts', 'qa'), { recursive: true });
+    symlinkSync(prior, priorLink, 'dir');
+    writeFileSync(join(prior, 'acceptance.json'), JSON.stringify({ tiers: [
+      { name: 'unit', status: 'failed' }, { name: 'model', status: 'failed' },
+    ] }));
+    writeFileSync(join(prior, 'unit.xml'), '<testsuite><testcase file="tests/qa/unit/memory-admission.test.ts" '
+      + 'name="memory readings sum actual container use, use Docker VM total and host MemAvailable"><failure/></testcase></testsuite>');
+    writeFileSync(join(prior, 'model.xml'), '<testsuite><testcase file="model/tests/native-equivalence.test.ts" '
+      + 'name="QA file did not complete"><failure/></testcase></testsuite>');
+    try {
+      if (blockedBy === 'startup') {
+        mutex.exec('BEGIN IMMEDIATE');
+        writeFileSync(join(harness.control, 'transition-memory'), '');
+      }
+      const run = harness.startArgs('transition', ['--only-failed', priorId], { QA_HARNESS_REAL_HOST_TEST: '1' });
+      await until(() => existsSync(join(harness.control, 'transition-host-finished')), 'completed host tier');
+      await until(() => qaWaitStatusLines(harness.slots).some(line => line.includes(
+        blockedBy === 'memory' ? 'Waiting; QA memory:' : 'Waiting for another QA startup')), 'blocked model startup');
+      expect(existsSync(join(harness.slots, '0'))).toBe(false);
+      const other = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, process.pid, { deadline: Date.now() });
+      other.release();
+      if (blockedBy === 'startup') mutex.exec('ROLLBACK');
+      else writeFileSync(join(harness.control, 'transition-memory'), '');
+      await until(() => existsSync(join(harness.control, 'transition-started')), 'model startup after admission');
+      expect(existsSync(join(harness.slots, '0'))).toBe(true);
+      writeFileSync(join(harness.control, 'transition-finish'), '');
+      expect(await run.child.exited).toBe(1);
+      expect((await run.output).join('\n')).toContain('| unit | passed |');
+      expect(existsSync(join(harness.slots, '0'))).toBe(false);
+    } finally {
+      mutex.close(true); await harness.stop();
+      rmSync(priorLink, { force: true }); rmSync(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+}
+
+test('finished fixture preparation releases its lease before drill startup admission', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-preparation-stack-transition-'));
+  const harness = startupHarness(directory);
+  const drill = [...selfManagedFaultFiles].find(file => file.endsWith('launch-drill.test.ts'))!;
+  try {
+    expect(drill).toBeDefined();
+    const run = harness.startGoal('preparation', [drill], {
+      G727_LAUNCH_PROFILE: 'small', G727_LAUNCH_SOURCE_RUN_ID: '', G727_LAUNCH_FIXTURE: '',
+    });
+    await until(() => existsSync(join(harness.control, 'preparation-prepared')), 'stopped prepared source');
+    await until(() => qaWaitStatusLines(harness.slots).some(line => line.includes('Waiting; QA memory:')), 'drill memory wait');
+    expect(existsSync(join(harness.slots, '0'))).toBe(false);
+    const other = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, process.pid, { deadline: Date.now() });
+    other.release();
+    writeFileSync(join(harness.control, 'preparation-memory'), '');
+    await until(() => existsSync(join(harness.control, 'preparation-started')), 'drill startup after admission');
+    expect(existsSync(join(harness.slots, '0'))).toBe(true);
+    writeFileSync(join(harness.control, 'preparation-finish'), '');
+    expect(await run.child.exited).toBe(1);
+    expect((await run.output).join('\n')).toContain('QA artifacts:');
+    expect(existsSync(join(harness.slots, '0'))).toBe(false);
+  } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
 }, 20_000);
 
 test('real QA CLI retries fresh memory admission while its slot is busy', async () => {

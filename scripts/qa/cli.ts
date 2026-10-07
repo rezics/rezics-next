@@ -221,9 +221,22 @@ async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4])
   runSlots ??= await acquireRunSlots(1, slotOptions);
 }
 
+/** Finished host work and stopped fixture sources must not reserve capacity for later startups. */
+async function withWorkSlot<T>(work: (reserve: typeof reserveRunSlot) => Promise<T>): Promise<T> {
+  let slots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
+  try {
+    return await work(async slotOptions => {
+      // An earlier live stack retains its lease through the run's final cleanup.
+      if (runSlots) return;
+      slots ??= await acquireRunSlots(1, slotOptions);
+    });
+  } finally { slots?.release(); }
+}
+
 /** Host-only tiers also own a lease, but retries never hold one through admission. */
 async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env,
-  reserve = reserveRunSlot): Promise<T> {
+  reserve?: typeof reserveRunSlot): Promise<T> {
+  if (!reserve) return withWorkSlot(reserveWork => admitRun(work, env, reserveWork));
   for (;;) {
     try {
       return await admit('other', async () => {
@@ -590,11 +603,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
   ) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
-    const prepared = await admit('other', () => withStartupSlot(
+    const prepared = await withWorkSlot(reserveWork => admit('other', () => withStartupSlot(
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
       (environment, onLine) => commandAsync(root, 'bun',
         ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
-        LOAD_PREPARATION_BUDGET_MS, environment, onLine, { runDeadline }), reserveRunSlot), qaStackEnvironment(process.env));
+        LOAD_PREPARATION_BUDGET_MS, environment, onLine, { runDeadline }), reserveWork), qaStackEnvironment(process.env)));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
     if (!prepared.ok) {
       errors.push(
