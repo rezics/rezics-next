@@ -2286,6 +2286,146 @@ export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: reado
   return events.find(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))?.before ?? current;
 }
 
+/** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. */
+const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: readonly string[]]> = [
+  ['main', ['services/main/']],
+  ['account', ['services/account/']],
+  ['content', ['services/content/']],
+  ['web', ['apps/web/']],
+  ['accounts', ['apps/accounts/']],
+  ['model', ['packages/model/']],
+  ['ui', ['packages/ui/']],
+  ['document', ['packages/document/']],
+  ['observability', ['packages/observability/', 'scripts/observability/']],
+  ['dataset', ['scripts/datasets/']],
+  ['dev', ['scripts/dev/']],
+  ['apphost', ['apphost/']],
+];
+
+const TYPECHECK_SOURCE = /\.[cm]?tsx?$|(?:^|\/)(?:tsconfig[^/]*|package)\.json$/;
+
+/** Each workspace a changed TypeScript source or its config belongs to, once. */
+export function typecheckWorkspaces(files: readonly string[]): string[] {
+  return TYPECHECK_WORKSPACES
+    .filter(([, roots]) => files.some(file => TYPECHECK_SOURCE.test(file) && roots.some(root => file.startsWith(root))))
+    .map(([workspace]) => workspace);
+}
+
+/** `tsc` diagnostics keyed without line and column, so an edit above an old error does not make it new. */
+export function typecheckDiagnostics(output: string): string[] {
+  const diagnostics: string[] = [];
+  for (const line of output.split('\n')) {
+    const match = /^(\S.*?)\(\d+,\d+\): (error TS\d+: .*)$/.exec(line.trimEnd());
+    if (match) diagnostics.push(`${match[1]}: ${match[2]}`);
+    else if (/^\s+\S/.test(line) && diagnostics.length) diagnostics[diagnostics.length - 1] += ` ${line.trim()}`;
+  }
+  return diagnostics.sort();
+}
+
+/** Branch diagnostics beyond those `main` already has, counting repeats. */
+export function introducedTypecheckDiagnostics(branch: readonly string[], main: readonly string[]): string[] {
+  const inherited = new Map<string, number>();
+  for (const diagnostic of main) inherited.set(diagnostic, (inherited.get(diagnostic) ?? 0) + 1);
+  return branch.filter(diagnostic => {
+    const left = inherited.get(diagnostic) ?? 0;
+    if (left) inherited.set(diagnostic, left - 1);
+    return !left;
+  });
+}
+
+export interface TypecheckRun { done: boolean; status: number | null; output: string }
+export type TypecheckSide = 'branch' | 'main';
+
+/** Branch type checks run together; main is checked only for workspaces whose branch run has diagnostics.
+ * An unfinished run, or a failure with no parsed diagnostic, is inconclusive and refuses the merge. */
+export async function typecheckGate(workspaces: readonly string[],
+  run: (workspace: string, side: TypecheckSide) => Promise<TypecheckRun>): Promise<string | undefined> {
+  if (!workspaces.length) return;
+  const branch = await Promise.all(workspaces.map(async workspace => ({ workspace, result: await run(workspace, 'branch') })));
+  const inconclusive: string[] = [];
+  const failing: { workspace: string; diagnostics: string[] }[] = [];
+  for (const { workspace, result } of branch) {
+    const diagnostics = typecheckDiagnostics(result.output);
+    if (!result.done) inconclusive.push(`${workspace}: the branch type check did not finish`);
+    else if (result.status === 0) console.log(`Type check ${workspace}: passes`);
+    else if (!diagnostics.length) inconclusive.push(`${workspace}: the type check failed without diagnostics:\n${result.output.slice(-2000)}`);
+    else failing.push({ workspace, diagnostics });
+  }
+  const introduced: string[] = [];
+  for (const { workspace, diagnostics } of failing) {
+    const main = await run(workspace, 'main');
+    const inherited = typecheckDiagnostics(main.output);
+    if (!main.done || (main.status !== 0 && !inherited.length)) {
+      inconclusive.push(`${workspace}: the type check on main is inconclusive`);
+      continue;
+    }
+    const added = introducedTypecheckDiagnostics(diagnostics, inherited);
+    console.log(`Type check ${workspace}: ${diagnostics.length} diagnostic(s) on the branch, ${diagnostics.length - added.length} already on main, ${added.length} introduced`);
+    for (const diagnostic of diagnostics.filter(diagnostic => !added.includes(diagnostic))) console.log(`  on main, not blocking: ${diagnostic}`);
+    introduced.push(...added.map(diagnostic => `${workspace}: ${diagnostic}`));
+  }
+  if (introduced.length) return `introduced type errors; not merging:\n  ${introduced.join('\n  ')}`;
+  if (inconclusive.length) return `type check inconclusive; not merging:\n  ${inconclusive.join('\n  ')}`;
+}
+
+async function runTypecheck(cwd: string, workspace: string, deadline: number): Promise<TypecheckRun> {
+  const child = spawn('task', [`${workspace}:typecheck`], {
+    cwd, env: { ...process.env, AGENT: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+  });
+  const chunks: string[] = [];
+  let bytes = 0;
+  for (const stream of [child.stdout, child.stderr]) {
+    stream?.setEncoding('utf8');
+    stream?.on('data', (chunk: string) => { bytes += chunk.length; if (bytes <= UNIT_GATE_OUTPUT_CAP) chunks.push(chunk); });
+  }
+  const closed = new Promise<number | null>(resolve => {
+    child.once('error', error => { chunks.push(`Unable to start the type check: ${error.message}`); resolve(null); });
+    child.once('close', code => resolve(code));
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>(resolve => {
+    timer = setTimeout(() => resolve('timeout'), Math.min(Math.max(0, deadline - Date.now()), 2_147_483_647));
+  });
+  try {
+    const outcome = await Promise.race([closed, timeout]);
+    if (outcome === 'timeout') await stopProcessGroup(child);
+    return { done: outcome !== 'timeout' && outcome !== null, status: outcome === 'timeout' ? null : outcome, output: chunks.join('') };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget. */
+async function preMergeTypecheckGate(worktree: string, mainRoot: string, before: string, files: readonly string[],
+  skip: boolean): Promise<string | undefined> {
+  if (skip) {
+    console.log('Type check skipped: --skip-type-gate explicitly requested by the manager');
+    return;
+  }
+  const workspaces = typecheckWorkspaces(files);
+  console.log(`Pre-merge type check: ${workspaces.length ? workspaces.join(', ') : 'no TypeScript workspace touched'} against main ${before.slice(0, 12)}`);
+  let baseline: string | undefined;
+  try {
+    return await typecheckGate(workspaces, async (workspace, side) => {
+      const deadline = Date.now() + unitGateBudgetMs();
+      if (side === 'branch') return runTypecheck(worktree, workspace, deadline);
+      if (!baseline) {
+        mkdirSync(join(mainRoot, '.temp'), { recursive: true });
+        baseline = mkdtempSync(join(mainRoot, '.temp/type-gate-'));
+        git(mainRoot, ['worktree', 'add', '--detach', baseline, before]);
+        const install = spawnSync('task', ['install'], { cwd: baseline, encoding: 'utf8', timeout: 120_000 });
+        if (install.status !== 0) throw new Error(`Type check baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+      }
+      return runTypecheck(baseline, workspace, deadline);
+    });
+  } finally {
+    if (baseline) {
+      git(mainRoot, ['worktree', 'remove', '--force', baseline], true);
+      rmSync(baseline, { recursive: true, force: true });
+    }
+  }
+}
+
 /** A branch failure is inherited only when main has the same failing test and assertion detail. */
 async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
   if (skip) {
@@ -2417,9 +2557,68 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.sort().join('\n  ')}` : undefined;
 }
 
+export interface PreparedMerge { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] }
+
+/** The git operations a fast-forward needs, so a moving `main` can be played back without a repository. */
+export interface MainSync {
+  head(): string;
+  isAncestor(ancestor: string, descendant: string): boolean;
+  mergeBase(a: string, b: string): string;
+  /** Files touched by any commit in `from..to`, including ones reverted later. */
+  touched(from: string, to: string): string[];
+  /** Files the task changes between `from` and `to`. */
+  changed(from: string, to: string): string[];
+  /** Rebases the task onto the current `main` and normalizes it again; throws on a conflict. */
+  refresh(): string | PreparedMerge | undefined;
+  fastForward(after: string): { status: number | null; stderr: string };
+}
+
+export type FastForward =
+  | { kind: 'merged'; prepared: PreparedMerge }
+  | { kind: 'regate'; prepared: PreparedMerge }
+  | { kind: 'stopped'; message?: string; conflict: boolean };
+
+/** Fast-forwards `main` to the task. A `main` that moved past the gated rebase is rebased onto again and, if that
+ * second rebase conflicts, the merge stops with the conflict. The gate reruns once, and only when the new commits
+ * touch the task's files or the files the gate selected. */
+export function fastForwardMain(sync: MainSync, current: PreparedMerge, gatedFiles: ReadonlySet<string>,
+  regated: boolean, note: (text: string) => void = console.log): FastForward {
+  let prepared = current;
+  // The first rebase answers a moved main; the second answers one that moves again before the fast-forward lands.
+  for (let rebases = 0; ; ) {
+    const head = sync.head();
+    if (!sync.isAncestor(head, prepared.after)) {
+      if (!sync.isAncestor(prepared.before, head)) {
+        return { kind: 'stopped', conflict: true,
+          message: 'main history changed during the unit gate; retry merge to rebase, normalize and test again' };
+      }
+      if (rebases === 2) throw new Error(`Fast-forward failed in the main checkout: main moved again after ${rebases} rebases`);
+      // Inspect every intervening commit: a change reverted later still touched the gated set.
+      const base = sync.mergeBase(head, prepared.after);
+      const protectedFiles = new Set([...sync.changed(base, prepared.after), ...gatedFiles]);
+      const overlap = [...new Set(sync.touched(base, head).filter(file => protectedFiles.has(file)))];
+      if (overlap.length && regated) {
+        return { kind: 'stopped', conflict: true,
+          message: `main touched task or gated files again after the retry unit gate; retry merge:\n  ${overlap.join('\n  ')}` };
+      }
+      const refreshed = sync.refresh();
+      rebases++;
+      if (typeof refreshed === 'string' || !refreshed) return { kind: 'stopped', message: refreshed, conflict: false };
+      prepared = refreshed;
+      note(`Main advanced during the unit gate; rebased onto it${overlap.length ? ', re-running the gate once' : ', existing gate remains valid'}`);
+      if (overlap.length) return { kind: 'regate', prepared };
+      continue;
+    }
+    const merge = sync.fastForward(prepared.after);
+    if (merge.status === 0) return { kind: 'merged', prepared };
+    // A main that moved after the check above is the same case, once more.
+    if (rebases < 2 && !sync.isAncestor(sync.head(), prepared.after)) continue;
+    throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
+  }
+}
+
 async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[]): Promise<void> {
-  type PreparedMerge = { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
@@ -2561,7 +2760,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   // do not touch the task's changes or selected tests; only an overlap consumes the one re-gate.
   const gatedFiles = new Set<string>();
   let regated = false;
-  let unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.baseline, flags.has('--skip-unit-gate'), gatedFiles);
+  const gate = (merge: PreparedMerge) => preMergeTypecheckGate(merge.worktree, root, merge.baseline, merge.committed, flags.has('--skip-type-gate'))
+    .then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.baseline, flags.has('--skip-unit-gate'), gatedFiles));
+  let gateFailure = await gate(preparedMerge);
   for (;;) {
     const current: PreparedMerge = preparedMerge;
     const outcome = await withLedger((ledger): string | PreparedMerge | undefined => {
@@ -2569,9 +2770,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       assertOwner(task);
       reviewGuard?.(task);
       const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
-      if (unitFailure) {
+      if (gateFailure) {
         task.state = 'conflict';
-        return `${task.id} ${unitFailure}`;
+        return `${task.id} ${gateFailure}`;
       }
       if (task.worktree !== current.worktree || task.branch !== current.branch
         || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
@@ -2591,30 +2792,21 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
           return refusal;
         }
       }
-      const mainHead = git(root, ['rev-parse', 'HEAD']);
-      let prepared = current;
-      if (mainHead !== current.before) {
-        if (spawnSync('git', ['merge-base', '--is-ancestor', current.before, mainHead], { cwd: root }).status !== 0) {
-          task.state = 'conflict';
-          return `${task.id} main history changed during the unit gate; retry merge to rebase, normalize and test again`;
-        }
-        // Inspect every intervening commit: a change reverted later still touched the gated set.
-        const touched = git(root, ['log', '--format=', '--name-only', '--no-renames', '-m', `${current.before}..${mainHead}`]).split('\n').filter(Boolean);
-        const changed = git(root, ['diff', '--name-only', '--no-renames', `${current.before}..${current.after}`]).split('\n').filter(Boolean);
-        const protectedFiles = new Set([...changed, ...gatedFiles]);
-        const overlap = touched.filter(file => protectedFiles.has(file));
-        if (overlap.length && regated) {
-          task.state = 'conflict';
-          return `${task.id} main touched task or gated files again after the retry unit gate; retry merge:\n  ${[...new Set(overlap)].join('\n  ')}`;
-        }
-        const refreshed = prepareMerge(ledger);
-        if (typeof refreshed === 'string' || !refreshed) return refreshed;
-        prepared = refreshed;
-        console.log(`Main advanced during the unit gate; rebased ${task.id}${overlap.length ? ', re-running the gate once' : ', existing gate remains valid'}`);
-        if (overlap.length) return prepared;
+      const advance = fastForwardMain({
+        head: () => git(root, ['rev-parse', 'HEAD']),
+        isAncestor: (ancestor, descendant) => spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: root }).status === 0,
+        mergeBase: (a, b) => git(root, ['merge-base', a, b]),
+        touched: (from, to) => git(root, ['log', '--format=', '--name-only', '--no-renames', '-m', `${from}..${to}`]).split('\n').filter(Boolean),
+        changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
+        refresh: () => prepareMerge(ledger),
+        fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
+      }, current, gatedFiles, regated);
+      if (advance.kind === 'stopped') {
+        if (advance.conflict) task.state = 'conflict';
+        return advance.message && advance.conflict ? `${task.id} ${advance.message}` : advance.message;
       }
-      const merge = retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', prepared.after], { cwd: root, encoding: 'utf8' }));
-      if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
+      const prepared = advance.prepared;
+      if (advance.kind === 'regate') return prepared;
       const event: MergeEvent = { before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
         taskIds: prepared.sharers, at: new Date().toISOString() };
       appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
@@ -2627,7 +2819,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (!outcome) return;
     preparedMerge = outcome;
     regated = true;
-    unitFailure = await preMergeUnitGate(outcome.worktree, root, outcome.baseline, flags.has('--skip-unit-gate'), gatedFiles);
+    gateFailure = await gate(outcome);
   }
 }
 
@@ -3584,7 +3776,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
-        + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]'
+        + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate] [--skip-type-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
