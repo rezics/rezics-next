@@ -179,8 +179,14 @@ runs the integration tiers, Storybook and browser journeys once.
 
 ## Capacity and usage
 
-- Up to 25 live workers (`GOAL_MAX_WORKERS`) across all Goals. Merge
-  throughput, not the slot count, sets the useful width.
+- One cap for all Goals: 16 live workers (`task goal` default of
+  `GOAL_MAX_WORKERS`), and no new dispatch while the host has less than 12 GiB
+  available. A worker process holds about 0.2 GiB; memory goes to what workers
+  run, which the QA slots, the heavy lock and the one-dev-server rule already
+  bound. The critical path dispatches first. Merge and review throughput, not
+  the cap, sets the useful width: brief short, keep a worker on its area across
+  slices (`resume` it with the next slice after a merge instead of dispatching
+  afresh), and never put `--heavy` on a worker's own test files.
 - The interactive status line writes `~/.claude/usage/latest.json`. goalctl
   keeps six hours of samples and projects both Claude windows at their resets
   from the recent burn rate. The weekly projection is a low–high range because

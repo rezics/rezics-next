@@ -291,7 +291,7 @@ tasks:
     silent: true
     cmds:
       # Six story workers (about 1.3 GiB of Chromium each) beside eleven agents and the 24 GiB Docker VM left 3 GiB on 2026-10-07.
-      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-8}" STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
+      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-16}" STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
 
   # Checks and tests
 
