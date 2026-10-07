@@ -2,7 +2,7 @@
 
 import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { cn } from '@rezics/ui/utils';
 import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from 'react';
@@ -109,11 +109,9 @@ function LineEditor({ node, store, state, language, t, busy, onDone }: Common & 
     <LineFields line={line} parts={parts} idPrefix={id} t={t} language={language} autoFocus onSubmit={() => void save()} onCancel={onDone}
       onLine={value => { setLine(value); setParts(parseLine(value)); }}
       onParts={value => { setParts(value); setLine(composeLine(value)); }} />
-    {sections.length ? <label className={fieldClass}>{t.moveToSection}
-      <NativeSelect value={section} onChange={event => setSection(event.target.value)} className="w-full">
-        <NativeSelectOption value="">{t.noSection}</NativeSelectOption>
-        {sections.map(group => <NativeSelectOption key={group.occurrence} value={group.occurrence}>{group.label?.value ?? ''}</NativeSelectOption>)}
-      </NativeSelect></label> : null}
+    {sections.length ? <div className={fieldClass}><span>{t.moveToSection}</span>
+      <ChoiceSelect value={section} onValueChange={setSection} label={t.moveToSection} className="w-full" portalled={false}
+        options={[{ value: '', label: t.noSection }, ...sections.map(group => ({ value: group.occurrence, label: group.label?.value ?? '' }))]} /></div> : null}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={Boolean(problem) || busy} className="pointer-coarse:h-11">{t.saveAction}</Button>
       <Button type="button" variant="outline" onClick={onDone} className="pointer-coarse:h-11">{t.cancel}</Button>

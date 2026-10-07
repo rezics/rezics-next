@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { resourceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -10,23 +12,24 @@ import type { RecipeState } from './model.ts';
 import type { NotesState } from './saves.ts';
 
 let current: ReturnType<typeof fakeMain>;
+const muffins = resourceHref('/w/', work.slice(-36));
 
 function Page({ locale, start, notes }: { locale: UiLocale; start: RecipeState; notes?: NotesState }) {
   const [fake] = useState(() => (current = fakeMain({ recipe: start, notes })));
   return <div className="mx-auto max-w-[72rem] px-4 py-6 sm:px-8">
-    <RecipeEditor work={work} mainVersion={mainVersion} language="en" actingSubject={actingSubject} workHref="/w/lemon-muffins"
+    <RecipeEditor work={work} mainVersion={mainVersion} language="en" actingSubject={actingSubject} workHref={muffins}
       locale={locale} messages={messages[locale]} main={fake.main}
       initial={{ recipe: start, notes: notes ?? noNotes, details: { head: id(700), values: detailsValues } }} />
   </div>;
 }
 
 const meta = { title: 'Recipe editor/Editor', component: Page, args: { locale: 'en', start: startRecipe },
-  parameters: { route: { pathname: '/en/w/lemon-muffins/edit/recipe' } } } satisfies Meta<typeof Page>;
+  parameters: { route: { pathname: localizedPath(`${muffins}/edit/recipe`, 'en') } } } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 const t = copyOf('en');
-const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+const noOverflow = async () => { await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth); };
 const changes = () => current.calls.filter(call => call.name === 'changes');
 const ops = (call: { body?: unknown }) => (call.body as { operations: { op: string }[] }).operations;
 const lines = (root: HTMLElement) => [...root.querySelectorAll('[data-line]')].map(item => item.textContent ?? '');
@@ -52,7 +55,7 @@ export const TypesAnIngredientLine: Story = {
       amountLexical: '1½', amount: { numerator: 3, denominator: 2 }, unitText: 'cups', parseStatus: 'parsed' } }] });
     await expect(field).toHaveValue('');
     await expect(field).toHaveFocus();
-    noOverflow();
+    await noOverflow();
   },
 };
 
@@ -186,7 +189,7 @@ export const PublishesWithNotes: Story = {
     await waitFor(() => expect(canvas.getByText('Published. Everyone can read this recipe.')).toBeVisible());
     await expect(current.calls.map(call => call.name).filter(name => ['notes-create', 'publish', 'select'].includes(name)))
       .toEqual(['notes-create', 'publish', 'select']);
-    await expect(canvas.getByRole('link', { name: /View recipe/ })).toHaveAttribute('href', expect.stringContaining('/w/lemon-muffins'));
+    await expect(canvas.getByRole('link', { name: /View recipe/ })).toHaveAttribute('href', expect.stringContaining(muffins));
   },
 };
 
@@ -196,10 +199,10 @@ export const OnAPhone: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: 'Preview' })).toHaveAttribute('aria-pressed', 'false');
-    noOverflow();
+    await noOverflow();
     await userEvent.click(canvas.getByRole('button', { name: 'Preview' }));
     await expect(canvas.getByRole('article')).toBeVisible();
-    noOverflow();
+    await noOverflow();
   },
 };
 
@@ -211,7 +214,7 @@ const sample = (locale: UiLocale): Story => ({
     const words = copyOf(locale);
     await expect(canvas.getByRole('heading', { name: words.ingredientsHeading })).toBeVisible();
     await expect(canvas.getByRole('heading', { name: words.methodHeading })).toBeVisible();
-    noOverflow();
+    await noOverflow();
   },
 });
 export const English = sample('en');
