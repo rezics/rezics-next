@@ -12,7 +12,8 @@ const link = cn('relative flex h-11 items-center whitespace-nowrap rounded-t-lg 
 /**
  * The Realm's views as links, each its own URL, then the Zone's own
  * navigation. It sticks under the site header so a long Zone page keeps them
- * in reach.
+ * in reach, from `sm` up: a phone's header is two rows tall and would cover a
+ * bar stuck at one row's height.
  */
 export function RealmTabs({ locale, realmRef, labels, label, navigation }: {
   locale: UiLocale; realmRef: string; labels: Record<RealmTab, string>; label: string;
@@ -24,7 +25,7 @@ export function RealmTabs({ locale, realmRef, labels, label, navigation }: {
     const href = zoneNavigationHref(item.href, realmRef);
     return repeatsTab(href, realmRef) ? [] : [{ label: item.label, href }];
   });
-  return <nav aria-label={label} className="sticky top-16 z-30 mt-4 border-border/70 border-b bg-(--zone-page)/92
+  return <nav aria-label={label} className="z-30 mt-4 sm:sticky sm:top-16 border-border/70 border-b bg-(--zone-page)/92
     backdrop-blur-md">
     <div className="mx-auto flex max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] sm:px-4 lg:px-8">
       <ul className="flex shrink-0 gap-0.5">

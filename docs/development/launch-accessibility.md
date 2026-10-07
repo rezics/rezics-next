@@ -45,6 +45,20 @@ CJK IME composition is driven in Chromium through the DevTools protocol
 (`composeCjk`); WebKit and the phones have no equivalent, so they are checked by
 hand below.
 
+## Home, Realm and shell walk
+
+[`launch-phone-keyboard.e2e.ts`](../../apps/web/tests/launch-phone-keyboard.e2e.ts)
+walks Home, Discover, a Realm's front page, discussions, About and a thread, and
+the shell's drawer, account sheet and menus, as Pixel 7 touch at 390 px and as a
+keyboard at 1280 px, signed out and signed in, in English and Japanese. It fails on
+sideways scroll, clipped text, controls under 24 px, sticky bars under the header,
+Tab stops without a ring or hidden, lost or trapped focus, and dialogs that do not
+take, keep or return focus. Its eight tests run about six minutes, over the default
+300 s Playwright budget: run it with `REZICS_E2E_PLAYWRIGHT_BUDGET_MS=900000`.
+Joining and the Zone's own pages need a Realm that offers joining and an installed
+Zone, which this stack's seeds cannot write while their platform groups are closed;
+the walk adds the Zone pages when an official Zone exists on the stack.
+
 ## Physical devices
 
 The maintainer runs these on one iPhone (Safari, VoiceOver) and one Android phone

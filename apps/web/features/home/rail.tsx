@@ -101,7 +101,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
             <span className="grid min-w-0 flex-1">
               <LocalizedLink href={localizedPath(spaceHref(data.realmSegments?.[item.realm] ?? item.realm, 'community'), locale)}
                 lang={item.name.language}
-                className="truncate font-medium text-sm hover:underline">{item.name.value}</LocalizedLink>
+                className="truncate py-0.5 font-medium text-sm hover:underline">{item.name.value}</LocalizedLink>
               <span className="truncate text-muted-foreground text-xs">
                 {[reasonLabel(item, t), members].filter(Boolean).join(' · ')}</span>
             </span>
@@ -115,7 +115,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
         {browseMessages[locale].seeAll}</LocalizedLink>
     </Module> : null}
     {data.ranking ? <details className="group rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm">
-      <summary className="cursor-pointer font-medium text-muted-foreground outline-none marker:text-muted-foreground
+      <summary className="-my-1 cursor-pointer py-1 font-medium text-muted-foreground outline-none marker:text-muted-foreground
         focus-visible:ring-2 focus-visible:ring-ring">{t.howHomeWorks}</summary>
       <div className="mt-2 grid gap-2 text-muted-foreground text-xs/relaxed">
         <p>{t.howBest({ hours: String(data.ranking.decayHours) })}</p>
