@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { inAccessTransaction, requireRecoveryOpen } from '../access/policy-transaction.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { authorWorkGeneration } from '../access/author-baseline.ts';
+import { authorWorkGenerations } from '../access/author-baseline.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
 import { readSemanticDisclosure, type SemanticDisclosure } from '../access/semantic-disclosure.ts';
 
@@ -10,8 +10,8 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_RESOURCES = 65;
 
 /** One Access transaction for at most 65 resources. Explicit grants use one
- * indexed batch query; author fallback uses one live receipt ASK per remaining
- * Work, bounded by 65. No grant is cached. */
+ * indexed batch query; author fallback uses one candidate statement and one
+ * bounded live receipt/head proof for the remaining Works. No grant is cached. */
 export class MediaAccessBatchReader {
   constructor(private readonly pool: Pool, private readonly graph?: Pick<FusekiClient, 'query'>) {}
 
@@ -65,12 +65,10 @@ export class MediaAccessBatchReader {
             FROM access.scope_gate WHERE id = ANY($1::text[]) FOR SHARE`,
           [unique.map(work => `work:read:${work}`)])).rows;
           const gateById = new Map(gates.map(gate => [gate.id, gate.open]));
-          for (const work of unique) {
-            if (allowed.has(work) || gateById.get(`work:read:${work}`) === false) continue;
-            if (await authorWorkGeneration(client, this.graph, actor.id, actingSubject, work) !== null) {
-              allowed.add(work);
-            }
-          }
+          const remaining = unique.filter(work => !allowed.has(work)
+            && gateById.get(`work:read:${work}`) !== false);
+          const authored = await authorWorkGenerations(client, this.graph, actor.id, actingSubject, remaining);
+          for (const work of authored.keys()) allowed.add(work);
         }
       }
       return allowed;

@@ -167,9 +167,11 @@ the shared media disclosure gate. These are pages of 64 policy targets, with
 one graph head batch for the distinct owning Works; the batch's
 `cost.disclosureQueries` reports those added policy pages separately.
 The reused Access batch reader has one transaction for explicit private Work
-grants. Its baseline-author fallback still calls `authorWorkGeneration` for each
-remaining Work, adding per-Work SQL and graph proof round trips. The single
-media query does not settle that broader disclosure-path cost.
+grants and baseline-author fallback. Up to 65 requested Works use one indexed
+author candidate statement and one receipt/current-head graph proof with a
+16 KiB response ceiling, sharing the singleton author proof's evaluator. Live
+controller, maintainer, gate and erasure checks are repeated on every batch;
+the proof never enumerates the author's library.
 The integration journey is [showcase-art.test.ts](../../../../../tests/qa/integration/showcase-art.test.ts).
 
 ## Required wiring outside this module
