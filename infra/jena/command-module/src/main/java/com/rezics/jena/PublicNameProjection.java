@@ -17,6 +17,9 @@ final class PublicNameProjection {
     private static final Node CURRENT = uri(CommandPolicy.CURRENT);
     private static final Node PUBLIC = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node POLICY = uri(PREFIX + "policy-state");
+    static final Node REPAIR = uri("urn:rezics:projection:public-name-repair");
+    static final int REPAIR_BATCH_SIZE = 64;
+    private static final Node IN_SCHEME = uri("http://www.w3.org/2004/02/skos/core#inScheme");
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
     static boolean nameMaintenanceQuad(Quad quad) {
@@ -45,14 +48,17 @@ final class PublicNameProjection {
         Node space = one(data, realm, "space");
         return has(data, realm, "realmState", p("Active")) && space != null
             && listedPublic(data, space, true) && listedPublic(data, realm, false)
-            && !has(data, realm, "protectionHead", Node.ANY);
+            && !withdrawn(data, realm) && !withdrawn(data, space);
     }
-    private static String kind(DatasetGraph data, Node resource) {
+    private static boolean withdrawn(DatasetGraph data, Node resource) {
         for (String predicate : Set.of("head", "semanticHead", "conceptHead", "collectionHead", "zoneHead")) {
             Node head = one(data, resource, predicate);
-            if (head != null && data.contains(uri(CommandPolicy.REVISIONS), head, RDF.type.asNode(), p("ErasedRevision"))) return null;
+            if (head != null && data.contains(uri(CommandPolicy.REVISIONS), head, RDF.type.asNode(), p("ErasedRevision"))) return true;
         }
-        if (has(data, resource, "protectionHead", Node.ANY) || has(data, resource, "mergedInto", Node.ANY)) return null;
+        return has(data, resource, "protectionHead", Node.ANY) || has(data, resource, "mergedInto", Node.ANY);
+    }
+    private static String kind(DatasetGraph data, Node resource) {
+        if (withdrawn(data, resource)) return null;
         if (type(data, resource, "http://www.w3.org/2004/02/skos/core#Concept")) {
             Node realm = one(data, resource, "conceptRealm"), scheme = null;
             var rows = data.find(CURRENT, resource, uri("http://www.w3.org/2004/02/skos/core#inScheme"), Node.ANY);
@@ -60,7 +66,7 @@ final class PublicNameProjection {
             finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
             return has(data, resource, "conceptState", p("Active"))
                 && (realm == null || publicRealm(data, realm))
-                && (scheme == null || !has(data, scheme, "schemeState", p("Retired"))) ? "concept" : null;
+                && (scheme == null || !has(data, scheme, "schemeState", p("Retired")) && !withdrawn(data, scheme)) ? "concept" : null;
         }
         if (type(data, resource, RV + "Realm")) return publicRealm(data, resource) ? "realm" : null;
         if (type(data, resource, RV + "Agent")) {
@@ -127,41 +133,148 @@ final class PublicNameProjection {
                 if (resources.size()>64) throw new IllegalArgumentException("name backfill exceeds candidate bound");
             } } finally { org.apache.jena.atlas.iterator.Iter.close(names); }
         }
-        // Visibility and lifecycle transitions remove dependent public names in
-        // the same transaction. Object-index walks stream the owning inventory.
+        // Only forward, single-valued owner links belong to the writing
+        // neighbourhood. Population fan-out is represented by durable cursors.
+        Set<Node> changed = new LinkedHashSet<>(resources);
         for (Node subject : Set.copyOf(resources)) {
-            for (String predicate : Set.of("space")) {
-                var dependents = data.find(CURRENT, Node.ANY, p(predicate), subject);
-                try { while (dependents.hasNext()) resources.add(dependents.next().getSubject()); }
-                finally { org.apache.jena.atlas.iterator.Iter.close(dependents); }
+            for (String predicate : Set.of("work", "space", "realmCapability", "zoneCapability")) {
+                Node neighbour = one(data, subject, predicate);
+                if (neighbour != null) resources.add(neighbour);
             }
-            Node work = one(data, subject, "work");
-            if (work != null) resources.add(work);
-            Node space = one(data, subject, "space");
-            if (space != null) resources.add(space);
-            for (String capability : Set.of("realmCapability", "zoneCapability")) {
-                Node component = one(data, subject, capability);
-                if (component != null) resources.add(component);
-            }
-            if (!has(data, subject, "schemeState", p("Retired"))) continue;
-            var concepts = data.find(CURRENT, Node.ANY, uri("http://www.w3.org/2004/02/skos/core#inScheme"), subject);
-            try { while (concepts.hasNext()) resources.add(concepts.next().getSubject()); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(concepts); }
         }
-        // Space changes also restore/remove the vocabulary of its Realm. Walk
-        // the newly collected capabilities, not only the initial validation focus.
-        for (Node subject : Set.copyOf(resources)) {
-            var concepts = data.find(CURRENT, Node.ANY, p("conceptRealm"), subject);
-            try { while (concepts.hasNext()) resources.add(concepts.next().getSubject()); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(concepts); }
-        }
-        for (Node resource : resources) refresh(data, resource,
+        for (Node resource : changed) if (plan.current().contains(resource.getURI())
+            || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) invalidate(data, resource, uri(receipt));
+        for (Node resource : resources) project(data, resource,
             plan.current().contains(resource.getURI()) || changes.stream().anyMatch(change ->
                 resource.equals(change.work()) || data.contains(PUBLIC, uri(change.unit()), p("work"), resource))
             || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
+        // The existing names-maintenance entry point advances one bounded batch
+        // after the parent write has committed. Receipt replay cannot advance it.
+        if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) repairBatch(data, receipt);
     }
-    static void refresh(DatasetGraph data, Node resource) { refresh(data, resource, true); }
-    private static void refresh(DatasetGraph data, Node resource, boolean changed) {
+    static void refresh(DatasetGraph data, Node resource) {
+        invalidate(data, resource, uri(PREFIX + "generation:" + java.util.UUID.randomUUID()));
+        project(data, resource, true);
+    }
+
+    private static Node state(DatasetGraph data, Node subject, String predicate) {
+        var rows = data.find(REPAIR, subject, p(predicate), Node.ANY);
+        try { return rows.hasNext() ? rows.next().getObject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    private static void state(DatasetGraph data, Node subject, String predicate, Node value) {
+        Node old = state(data, subject, predicate);
+        if (java.util.Objects.equals(old, value)) return;
+        if (old != null) data.delete(REPAIR, subject, p(predicate), old);
+        if (value != null) data.add(REPAIR, subject, p(predicate), value);
+    }
+    /** Each projected dependent adds at most four constant-time adjacency
+     * links. Links are immutable so a cursor survives moves, deletion and new
+     * inserts without a sorted population scan or an offset replay. Historical
+     * links may cause a redundant refresh, never a stale visibility decision.
+     * Existing datasets acquire these links through the names backfill. */
+    private static void dependencies(DatasetGraph data, Node resource) {
+        Set<Node> parents = new LinkedHashSet<>();
+        for (Node predicate : java.util.List.of(p("space"), p("conceptRealm"), IN_SCHEME)) {
+            var rows = data.find(CURRENT, resource, predicate, Node.ANY);
+            try { if (rows.hasNext()) parents.add(rows.next().getObject()); }
+            finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        }
+        // Site admission also depends on its Space's Realm. Keeping this
+        // fixed forward link lets a Realm withdrawal tidy Sites as well as
+        // Concepts, without walking all Spaces or capabilities.
+        if (type(data, resource, RV + "Zone")) {
+            Node space = one(data, resource, "space");
+            Node realm = space == null ? null : one(data, space, "realmCapability");
+            if (realm != null) parents.add(realm);
+        }
+        for (Node parent : parents) {
+            if (!parent.isURI()) continue;
+            Node member = uri(PREFIX + "dependent:" + java.util.UUID.nameUUIDFromBytes(
+                (parent.getURI() + "\n" + resource.getURI()).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            if (state(data, member, "dependentResource") != null) continue;
+            state(data, member, "dependentResource", resource);
+            state(data, member, "dependentNext", state(data, parent, "dependentHead"));
+            state(data, parent, "dependentHead", member);
+        }
+    }
+    /** O(1) per changed parent, independent of its dependent population. The
+     * generation also fences copied names when a public parent is renamed. */
+    private static void invalidate(DatasetGraph data, Node parent, Node generation) {
+        if (generation.equals(state(data, parent, "nameGeneration"))) return;
+        state(data, parent, "nameGeneration", generation);
+        Node head = state(data, parent, "dependentHead");
+        if (head == null) return;
+        state(data, parent, "repairCursor", head);
+    }
+    /** One indexed pending-parent probe; never sort or enumerate the pending
+     * inventory. Each writer stores its own cursor without a global queue head
+     * or tail that would serialize unrelated parent partitions. */
+    private static Node pendingParent(DatasetGraph data) {
+        var rows = data.find(REPAIR, Node.ANY, p("repairCursor"), Node.ANY);
+        try { return rows.hasNext() ? rows.next().getSubject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    /** Called in the maintenance command's write transaction: projection,
+     * checkpoint and replay marker commit or roll back together. Jena permits
+     * one writer, so a newer invalidation atomically resets a pending cursor.
+     * https://jena.apache.org/documentation/tdb/tdb_transactions.html
+     * Cost: <=64 dependent steps, each with constant indexed probes;
+     * individual authored-name/Work-unit recipe costs remain unchanged. */
+    static int repairBatch(DatasetGraph data, String receipt) {
+        Node replay = uri(receipt);
+        if (state(data, replay, "repairApplied") != null) return 0;
+        int processed = 0;
+        for (int step = 0; step < REPAIR_BATCH_SIZE; step++) {
+            Node parent = pendingParent(data);
+            if (parent == null) break;
+            Node cursor = state(data, parent, "repairCursor");
+            if (cursor != null) {
+                Node resource = state(data, cursor, "dependentResource");
+                Node next = state(data, cursor, "dependentNext");
+                if (resource == null) throw new IllegalStateException("name repair cursor has no dependent");
+                // Cascades (Space -> Realm -> Concept) are separate pending work,
+                // never a recursive dependent walk in either transaction.
+                invalidate(data, resource, replay);
+                project(data, resource, false);
+                state(data, parent, "repairCursor", next);
+                processed++;
+            }
+        }
+        state(data, replay, "repairApplied", replay);
+        return processed;
+    }
+    /** Check live parent policy before admitting any stored name candidate.
+     * A fence does not require repair to run: Concept -> Realm -> Space is a
+     * fixed path; retired Schemes and protected name sources also deny reads. */
+    static boolean visible(DatasetGraph data, Node resource) {
+        // Work names have no parent policy dependency and are synchronously
+        // maintained by their own mutation. Do not turn this bounded candidate
+        // gate into a walk of all of a Work's publication units.
+        String kind = type(data, resource, "https://schema.org/CreativeWork")
+            ? (withdrawn(data, resource) ? null : "work") : kind(data, resource);
+        if (kind == null) return false;
+        Node source = Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
+        if (source == null || has(data, source, "protectionHead", Node.ANY)) return false;
+        Node unit = uri(PREFIX + kind + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
+        if (!data.contains(PUBLIC, unit, p("resource"), resource)) return false;
+        return !Set.of("realm", "site").contains(kind) || java.util.Objects.equals(
+            state(data, source, "nameGeneration"), projectedGeneration(data, unit));
+    }
+    private static Node projectedGeneration(DatasetGraph data, Node unit) {
+        var rows = data.find(PUBLIC, unit, p("nameSourceGeneration"), Node.ANY);
+        try { return rows.hasNext() ? rows.next().getObject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    static boolean visibleUnit(DatasetGraph data, String id) {
+        var rows = data.find(PUBLIC, uri(id), p("resource"), Node.ANY);
+        Node resource;
+        try { resource = rows.hasNext() ? rows.next().getObject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        return resource != null && resource.isURI() && visible(data, resource);
+    }
+    private static void project(DatasetGraph data, Node resource, boolean changed) {
+        dependencies(data, resource);
         Set<Quad> prior = new LinkedHashSet<>(), desired = new LinkedHashSet<>();
         String suffix = resource.getURI().substring("https://rezics.com/id/".length());
         Node oldCreated = null, oldUpdated = null;
@@ -215,6 +328,10 @@ final class PublicNameProjection {
         if (!names.isEmpty()) {
             desired.add(new Quad(PUBLIC, unit, RDF.type.asNode(), p("PublicNameMatchUnit")));
             desired.add(new Quad(PUBLIC, unit, p("resource"), resource));
+            if (Set.of("realm", "site").contains(kind)) {
+                Node generation = state(data, source, "nameGeneration");
+                if (generation != null) desired.add(new Quad(PUBLIC, unit, p("nameSourceGeneration"), generation));
+            }
             desired.add(new Quad(PUBLIC, unit, p("disclosure"), p("Public")));
             var sequences = data.find(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("sequence"), Node.ANY);
             try { if (sequences.hasNext()) {

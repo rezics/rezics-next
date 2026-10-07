@@ -118,6 +118,9 @@ export async function backfillCatalogueNames(env: WorkActivationEnvironment): Pr
   }
 }
 
+// Re-run legacy completed inventories to seed the native dependency links.
+export const PUBLIC_NAME_BACKFILL_PROFILE = 'public-names-v3';
+
 /** Online migration batch. Owner heads are derived inside the writer transaction;
  * concurrent edits stay authoritative. Receipts make a lost checkpoint replayable.
  * The same pass seeds receipt-backed rating counters for legacy observations. */
@@ -136,7 +139,7 @@ export async function backfillPublicNameBatch(env: WorkActivationEnvironment, af
       ).results?.bindings ?? [];
     const batch = rows.slice(0, 64).map((row) => row.resource!.value);
     const complete = rows.length <= 64;
-    const identity = hash(JSON.stringify([env.lineage.dataEpoch, 'public-names-v2', batch, complete]));
+    const identity = hash(JSON.stringify([env.lineage.dataEpoch, PUBLIC_NAME_BACKFILL_PROFILE, batch, complete]));
     const receipt = `urn:rezics:receipt:catalogue-search-index:${identity}`,
       digest = hash(receipt);
     const result = await env.fuseki.commandWithReceipt({
@@ -166,14 +169,81 @@ export async function backfillPublicNameBatch(env: WorkActivationEnvironment, af
     return { after: batch.at(-1) ?? after, processed: batch.length, complete };
 }
 
+/** One native repair turn, independent of inventory size. The parent identity
+ * and durable cursor bind the receipt: retry after a lost response either
+ * replays that batch or observes its next cursor, never an offset scan. */
+export const PUBLIC_NAME_REPAIR_COST = {
+  dependents: 64,
+  stateRows: 1,
+  responseBytes: 16_384,
+} as const;
+export async function repairPublicNameBatch(
+  env: WorkActivationEnvironment,
+): Promise<{ complete: boolean }> {
+  const graph = 'urn:rezics:projection:public-name-repair';
+  const rows =
+    (
+      await env.fuseki.query(
+        `PREFIX rv: <${RV}>
+    SELECT ?parent ?cursor ?generation WHERE { GRAPH ${iri(graph)} {
+      ?parent rv:repairCursor ?cursor .
+      OPTIONAL { ?parent rv:nameGeneration ?generation }
+    } } LIMIT 1`,
+        PUBLIC_NAME_REPAIR_COST.responseBytes,
+      )
+    ).results?.bindings ?? [];
+  if (!rows.length) return { complete: true };
+  const row = rows[0]!;
+  if (!row.parent || !row.cursor || !row.generation)
+    throw new PublicQueryUnavailable('Public name repair cursor is incomplete');
+  const identity = hash(
+    JSON.stringify([
+      env.lineage.dataEpoch,
+      'public-name-repair',
+      row.parent.value,
+      row.cursor.value,
+      row.generation.value,
+    ]),
+  );
+  const receipt = `urn:rezics:receipt:catalogue-search-index:${identity}`,
+    digest = hash(receipt);
+  const result = await env.fuseki.commandWithReceipt({
+    receipt,
+    digest,
+    validations: [],
+    deadlineMs: 60_000,
+    update: `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { <urn:rezics:search:name:repair-maintenance> rv:publicTitle "" }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri('urn:rezics:outbox:' + identity)} a rv:OutboxBatch ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 }
+      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        BIND(?n+1 AS ?next) }`,
+  });
+  if (result.status !== 'committed')
+    throw new PublicQueryUnavailable('Public name repair ' + result.status);
+  return { complete: false };
+}
+
 /** Streaming convenience for the existing rebuild recipe; resumable operator
  * migrations persist each batch's cursor in Access and leave writers running. */
 export async function backfillPublicNames(env: WorkActivationEnvironment): Promise<number> {
-  let after = '', refreshed = 0;
+  let after = '',
+    refreshed = 0;
   while (true) {
     const result = await backfillPublicNameBatch(env, after);
     refreshed += result.processed;
-    if (result.complete) return refreshed;
+    if (result.complete) {
+      while (!(await repairPublicNameBatch(env)).complete) {
+        /* Durable native cursor advances each turn. */
+      }
+      return refreshed;
+    }
     after = result.after;
   }
 }

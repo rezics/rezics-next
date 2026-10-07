@@ -179,7 +179,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                         .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
                     var best = searcher.search(entity, 1);
-                    if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc) key = null;
+                    if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc
+                        || !PublicNameProjection.visibleUnit(data, id)) key = null;
                 }
                 if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
                     id, hit.doc, entityField)) key = null;
@@ -384,7 +385,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 Node resource = null;
                 try { if (members.hasNext()) resource = members.next().getObject(); }
                 finally { org.apache.jena.atlas.iterator.Iter.close(members); }
-                hits.add(new RankHit(id, 0f, resource != null && resource.isURI() ? resource.getURI() : null));
+                hits.add(new RankHit(id, 0f, resource != null && resource.isURI() && PublicNameProjection.visible(data, resource) ? resource.getURI() : null));
                 term = iterator.next();
             }
             boolean more = term != null && term.utf8ToString().startsWith(prefix);
