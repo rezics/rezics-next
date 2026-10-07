@@ -133,7 +133,8 @@ function fixture() {
         return { issuer: 'account', subject: 'reader' };
       },
     },
-    access: { canReadSemanticResource: async () => false, canReadWork: async () => false },
+    access: { assertRecoveryOpen: async (): Promise<void> => {},
+      canReadSemanticResource: async () => false, canReadWork: async () => false },
   } as unknown as MainWorkDependencies;
   return { work, env, state, current, queries, app: new Elysia().use(addressRoutes(work)) };
 }

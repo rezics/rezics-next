@@ -322,7 +322,8 @@ function fixture(inventory = chapters, leaves: string[] = []) {
       return { results: { bindings } };
     } } },
     structureObjects: objects,
-    access: { activePrincipalId: async () => active ? 'reader' : null, canReadAsBaselineMember: async () => own },
+    access: { assertRecoveryOpen: async (): Promise<void> => {},
+      activePrincipalId: async () => active ? 'reader' : null, canReadAsBaselineMember: async () => own },
     account: { verify: async (request: Request) => {
       if (request.headers.get('authorization') !== 'Bearer reader') throw new AccountAssertionDenied('Unknown bearer');
       return { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };

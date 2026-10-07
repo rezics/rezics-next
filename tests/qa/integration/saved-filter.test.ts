@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { t } from 'elysia';
+import { Value } from 'typebox/value';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
@@ -7,7 +9,7 @@ import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
   type ClassifiedConcept } from './work-classification.ts';
 import { CONCEPT_FACET, conceptFilter } from '../../../services/main/src/modules/concept-page/contract.ts';
 import { resolveFacet } from '../../../services/main/src/modules/facets/registry.ts';
-import { SAVED_FILTER_COST } from '../../../services/main/src/modules/saved-filter/contract.ts';
+import { SAVED_FILTER_COST, savedFilterItem } from '../../../services/main/src/modules/saved-filter/contract.ts';
 import { encodeSavedFilterCursor, SAVED_FILTER_CURSOR_STAMP, SAVED_FILTER_PINNED_AFTER,
   SAVED_FILTER_PINNED_PAGE, SAVED_FILTER_UNPINNED_OLDER_PAGE, SAVED_FILTER_UNPINNED_PAGE,
   SAVED_FILTER_UNPINNED_TIE_PAGE } from '../../../services/main/src/modules/saved-filter/store.ts';
@@ -20,6 +22,11 @@ interface Receipt { action: string; id: string | null; filterRevision: string | 
 interface FeedPage { items: { target: { work: string | null }; realm: { id: string } | null }[]; nextCursor: string | null }
 
 const language = resolveFacet('language')!.id;
+// Cursor boundary probes use owner timestamps; validate their client input
+// before encoding, just as the listing endpoint validates a received cursor.
+const cursorRow = t.Object({ id: savedFilterItem.properties.id,
+  pin_position: savedFilterItem.properties.position,
+  created_at_text: t.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$' }) });
 
 test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a followed Concept owns its pinned filter; '
   + 'a pinned tab reads Home filtered by it', async () => {
@@ -217,9 +224,16 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
         ORDER BY id LIMIT 2)`, [owner]);
     await json<Receipt>(await create({ name: 'Past the old ceiling', pinned: false,
       filter: { all: [{ facet: 'language', any: ['en'] }] } }), 201);
-    const tail = (await home.stack.accessPool.query<{ id: string; revision: string }>(
-      `SELECT id, revision FROM access.saved_filter WHERE principal_id = $1 AND pin_position IS NULL
-       ORDER BY created_at ASC, id ASC LIMIT 2`, [owner])).rows;
+    const beforeWalk: Item[] = [];
+    let discoveryCursor: string | null = null;
+    for (let index = 0; index < 8; index++) {
+      const discovered = await list(discoveryCursor);
+      beforeWalk.push(...discovered.items);
+      if (!discovered.cursor) break;
+      discoveryCursor = discovered.cursor;
+      if (index === 7) throw new Error('Saved Filter discovery did not terminate');
+    }
+    const tail = beforeWalk.filter(item => item.position === null).slice(-2).reverse();
     // A Concept filter is removed by unfollowing. These two are ordinary named filters.
     await home.stack.accessPool.query('UPDATE access.saved_filter SET concept = NULL WHERE id = ANY($1::uuid[])',
       [tail.map(row => row.id)]);
@@ -271,7 +285,7 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
     const lastPinRow = (await home.stack.accessPool.query<{ id: string; pin_position: number; created_at_text: string }>(
       `SELECT id, pin_position, ${SAVED_FILTER_CURSOR_STAMP} AS created_at_text FROM access.saved_filter
        WHERE principal_id = $1 AND pin_position IS NOT NULL ORDER BY pin_position DESC LIMIT 1`, [owner])).rows[0]!;
-    const afterPins = await list(encodeSavedFilterCursor(lastPinRow));
+    const afterPins = await list(encodeSavedFilterCursor(Value.Parse(cursorRow, lastPinRow)));
     expect(afterPins.items.every(item => item.position === null)).toBe(true);
     const firstUnpinned = (await home.stack.accessPool.query<{ id: string }>(
       `SELECT id FROM access.saved_filter WHERE principal_id = $1 AND pin_position IS NULL
@@ -281,7 +295,7 @@ test('G-431 Saved Filters: create, rename, pin, reorder, unpin and delete; a fol
       `SELECT id, pin_position, ${SAVED_FILTER_CURSOR_STAMP} AS created_at_text FROM access.saved_filter
        WHERE principal_id = $1 AND created_at = timestamptz '2024-06-01+00' ORDER BY id`, [owner])).rows;
     expect(ties).toHaveLength(2);
-    const afterTie = await list(encodeSavedFilterCursor(ties[0]!));
+    const afterTie = await list(encodeSavedFilterCursor(Value.Parse(cursorRow, ties[0]!)));
     expect(afterTie.items[0]?.id).toBe(ties[1]!.id);
     expect(afterTie.items.some(item => item.id === ties[0]!.id || item.position !== null)).toBe(false);
     expect((await call('GET', signed('/v1/me/saved-filters?language=en&cursor=not-a-cursor'), undefined, token)).status)

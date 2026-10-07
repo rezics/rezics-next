@@ -18,8 +18,10 @@ test('seed calls resolve the longest route that has the method', () => {
   expect(seedCallExposure('POST', '/v1/lexicon/presentations')).toBe('platform:platform-admin');
   expect(seedCallExposure('GET', '/v1/lexicon/presentations?definitions=x')).toBe('public');
   expect(seedCallExposure('POST', '/v1/also-enjoyed/generation-builds')).toBe('platform:platform-admin');
-  expect(seedCallExposure('GET', `/v1/recipes/${id}`)).toBe('public');
+  expect(seedCallExposure('GET', `/v1/compositions/${id}`)).toBe('public');
+  expect(seedCallExposure('GET', `/v1/recipes/works/${id}?servings=6`)).toBe('public');
   expect(seedCallExposure('GET', `/v1/recipes/${id}/measures`)).toBe('public');
+  expect(seedCallExposure('GET', `/v1/recipes/${id}`)).toBeUndefined();
   expect(seedCallExposure('GET', '/v1/not-a-route')).toBeUndefined();
 });
 

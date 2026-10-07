@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { Value } from 'typebox/value';
 import { CountingPool, isForegroundOperation } from './support/operation-cost.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -44,6 +45,7 @@ import { RightsStore } from '../../../services/main/src/modules/rights/store.ts'
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
 import { TemplateSeekIndex } from '../../../services/main/src/modules/query/seek-index.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
+import { readUuid } from '../../../services/main/src/modules/work/read-contract.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -207,7 +209,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
         const held = await accessPool.query<{ id: string }>(`SELECT id FROM access.permission_grant
           WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()
           LIMIT 1`, [actor, scope, action]);
-        if (held.rows[0]) return held.rows[0].id;
+        // A reused fixture grant can enter an HTTP request, so admit its owner
+        // value through the same UUID contract as a client-supplied grant id.
+        if (held.rows[0]) return Value.Parse(readUuid, held.rows[0].id);
       }
       const grantId = randomUUID();
       const client = await accessPool.connect();
