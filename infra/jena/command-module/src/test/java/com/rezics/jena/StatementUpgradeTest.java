@@ -15,6 +15,8 @@ import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.sparql.core.Quad;
 import org.apache.jena.update.UpdateAction;
+import org.apache.jena.riot.out.NodeFmtLib;
+import org.apache.jena.vocabulary.RDF;
 import org.junit.Test;
 
 public class StatementUpgradeTest {
@@ -156,12 +158,162 @@ public class StatementUpgradeTest {
         UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
         assertNull(CommandInvariant.check(data, command.receipt(), command.digest(), plan, before));
         assertNull(StatementUpgradePolicy.check(data, snapshot));
-        assertNull(CommandInvariant.advanceRelayStream(data, command.receipt(), plan, before));
+        assertNull(CommandInvariant.advanceRelayStream(data, StatementUpgradePolicy.restoringReceipt(command.receipt())
+            ? StatementRestorePolicy.originalReceipt(plan,command.receipt()) : command.receipt(), plan, before));
     }
     private static Set<Quad> record(DatasetGraph data, String graph, String subject) {
         Set<Quad> result = new HashSet<>();
         data.find(uri(graph), uri(subject), Node.ANY, Node.ANY).forEachRemaining(result::add);
         return result;
+    }
+
+    private static final String RESTORE = "urn:rezics:restore:epoch";
+    private static Command restore(Source source, String nativePredecessor) {
+        return restore(source,nativePredecessor,null,OPERATION,false);
+    }
+    private static Command restore(Source source, String nativePredecessor, String rawPredecessor,
+        String operation, boolean existingStatement) {
+        String admission = "00000000-0000-0000-0000-0000000000%02d".formatted(source.sequence());
+        String original = "urn:rezics:receipt:" + hash(admission + '\0' + "classification-direct-decision");
+        String work = id(50);
+        String originalDigest = hash("{\"family\":\"classification-direct-decision-v1\",\"context\":{\"kind\":\"global\"},\"work\":\""
+            + work + "\",\"mainVersion\":\"" + MAIN + "\",\"sense\":\"" + SENSE
+            + "\",\"expectedDecisionHead\":" + (rawPredecessor == null ? "null" : "\"" + rawPredecessor + "\"")
+            + ",\"outcome\":\"accepted\",\"actingSubject\":\"" + ACTOR + "\"}");
+        String legacySlot = "urn:rezics:classification-slot:" + hash("{\"mainVersion\":\"" + MAIN
+            + "\",\"sense\":\"" + SENSE + "\",\"context\":\"" + GLOBAL + "\",\"channel\":\"curated\"}");
+        String digest = hash("[\"statement-storage-restore-v1\",\"epoch\",\"9\",\"" + original
+            + "\",\"" + originalDigest + "\",\"historical-epoch\",\"" + source.sequence() + "\"]");
+        String receipt = PREFIX + "restore:" + digest;
+        Command converted = conversion(source,nativePredecessor,false);
+        String insert = converted.update().substring(converted.update().indexOf("INSERT { ") + 9,
+            converted.update().indexOf(" } WHERE { "))
+            .replace(converted.receipt(),receipt).replace(converted.digest(),digest)
+            .replace("statement-upgrade-convert-v1","statement-upgrade-restore-v1");
+        if (existingStatement) {
+            var nativeModify = (org.apache.jena.sparql.modify.request.UpdateModify)
+                CommandPolicy.parse(converted.update(),converted.receipt()).request().getOperations().getFirst();
+            StringBuilder nativeInsert = new StringBuilder();
+            for (Quad quad : nativeModify.getInsertQuads()) if (!Set.of(uri(source.statement()),uri(source.revision())).contains(quad.getSubject()))
+                nativeInsert.append(graph(quad.getGraph().getURI(),NodeFmtLib.strNT(quad.getSubject()) + " "
+                    + NodeFmtLib.strNT(quad.getPredicate()) + " " + NodeFmtLib.strNT(quad.getObject()) + " ."));
+            insert = nativeInsert.toString().replace(converted.receipt(),receipt).replace(converted.digest(),digest)
+                .replace("statement-upgrade-convert-v1","statement-upgrade-restore-v1");
+        }
+        insert = insert.replace("<" + OPERATION + ">","<" + operation + ">");
+        String app = "<" + source.app() + "> a rv:ClassificationApplication ; rv:targetMainVersion <" + MAIN
+            + "> ; rv:sense <" + SENSE + "> ; rv:applicationKey <" + legacySlot + "> ; rv:classificationContext <"
+            + GLOBAL + "> ; rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ; rv:proposer <"
+            + source.proposer() + "> ; rv:decisionHead <" + source.source() + "> .";
+        String raw = "<" + source.source() + "> a rv:ClassificationDecision, rv:RevisionAnchor ; rv:component <"
+            + source.app() + "> ; rv:application <" + source.app() + "> ; rv:operation <" + operation
+            + "> ; rv:outcome rv:Accepted ; rv:decisionBasis rv:GlobalCuratorReview ; rv:decidedBy <" + ACTOR
+            + "> ; rv:decisionPolicy <" + CLASSIFICATION + "> ; rv:manifest <urn:rezics:sha256:" + "b".repeat(64)
+            + "> ; rv:modelRevision <" + CLASSIFICATION + "> ; rv:shapeRevision <" + CLASSIFICATION
+            + "> ; rv:datasetId <" + PRODUCT + "> ; rv:dataEpoch \"historical-epoch\" ; rv:sequence " + source.sequence() + " ."
+            + (rawPredecessor == null ? "" : "<" + source.source() + "> rv:predecessor <" + rawPredecessor + "> .");
+        String oldReceipt = "<" + original + "> a rv:OperationReceipt ; rv:operation <" + operation
+            + "> ; rv:requestDigest \"" + originalDigest + "\" ; rv:admissionId \"" + admission
+            + "\" ; rv:authorityEpoch \"3\" ; rv:admittedScope \"classification:decide:global\" ; rv:outcome rv:Succeeded ; "
+            + "rv:work <" + work + "> ; rv:mainVersion <" + MAIN + "> ; rv:sense <" + SENSE
+            + "> ; rv:classificationContext <" + GLOBAL + "> ; rv:slot <" + legacySlot + "> ; rv:application <"
+            + source.app() + "> ; rv:decision <" + source.source() + "> ; rv:decisionOutcome rv:Accepted ; rv:datasetId <"
+            + PRODUCT + "> ; rv:dataEpoch \"historical-epoch\" ; rv:sequence " + source.sequence() + " ."
+            + (rawPredecessor == null ? "" : "<" + original + "> rv:expectedHead <" + rawPredecessor + "> .");
+        String event = "urn:rezics:event:" + hash(operation), batch = "urn:rezics:outbox:" + hash(original);
+        String outbox = "<" + batch + "> a rv:OutboxBatch ; rv:dataEpoch \"historical-epoch\" ; rv:sequence "
+            + source.sequence() + " ; rv:eventCount 1 ; rv:event <" + event + "> . <" + event
+            + "> a rv:ClassificationDecisionChangedEvent ; rv:ordinal 0 ; rv:action \"classification.decision.set\" ; "
+            + "rv:receipt <" + original + "> ; rv:operation <" + operation + "> ; rv:work <" + work
+            + "> ; rv:application <" + source.app() + "> .";
+        String delete = graph(CommandPolicy.CONTROL,"<" + RESTORE + "> rv:reconciledPriorSequence ?last")
+            + graph(CommandPolicy.REVISIONS,"<" + source.app() + "> rv:decisionHead ?historicalHead")
+            + (nativePredecessor == null ? "" : graph(CommandPolicy.CURRENT,"<" + SLOT + "> rv:decisionHead <" + nativePredecessor + ">"));
+        String guards = graph(CommandPolicy.CONTROL,"<" + PRODUCT + "> rv:dataEpoch \"epoch\" ; rv:routingEpoch \"9\" ; "
+            + "rv:sequence ?sequence ; rv:restoreHold true ; rv:restoreCutover <" + RESTORE + "> . <" + RESTORE
+            + "> rv:priorDataEpoch \"historical-epoch\" ; rv:priorSequence ?saved . OPTIONAL { <" + RESTORE
+            + "> rv:reconciledPriorSequence ?last } BIND(COALESCE(?last,?saved) AS ?previous) FILTER(?previous + 1 = " + source.sequence() + ")")
+            + " OPTIONAL { " + graph(CommandPolicy.REVISIONS,"<" + source.app() + "> rv:decisionHead ?historicalHead") + " } "
+            + (nativePredecessor == null ? "" : graph(CommandPolicy.CURRENT,"<" + SLOT + "> rv:decisionHead <" + nativePredecessor + ">"));
+        String update = "PREFIX rv: <" + RV + "> PREFIX rdf: <" + RDF.getURI() + "> DELETE { " + delete + " } INSERT { "
+            + insert + graph(CommandPolicy.REVISIONS,app + raw) + graph(CommandPolicy.RECEIPTS,oldReceipt + "<" + receipt
+                + "> rv:restoredReceipt <" + original + "> .") + graph(CommandPolicy.OUTBOX,outbox)
+            + graph(CommandPolicy.CONTROL,"<" + RESTORE + "> rv:reconciledPriorSequence " + source.sequence())
+            + " } WHERE { " + guards + " }";
+        return new Command(receipt,digest,update);
+    }
+    private static DatasetGraph restoreDataset() {
+        DatasetGraph data = dataset(); data.begin(ReadWrite.WRITE);
+        data.deleteAny(uri(CommandPolicy.CONTROL),uri(PRODUCT),uri(RV + "sequence"),Node.ANY);
+        UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { " + graph(CommandPolicy.CONTROL,
+            "<" + PRODUCT + "> rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover <" + RESTORE
+            + "> . <" + RESTORE + "> rv:priorDataEpoch \"historical-epoch\" ; rv:priorSequence 3 .") + " }",DatasetFactory.wrap(data));
+        data.commit(); data.end(); return data;
+    }
+    @Test public void retainedRestoreReusesExactDefinitionConversionAndRetainedStreamPosition() {
+        Source source = new Source(id(11),id(21),id(31),4); Command restored = restore(source,null);
+        DatasetGraph data = restoreDataset();
+        try {
+            data.begin(ReadWrite.WRITE); apply(data,restored); data.abort(); data.end();
+            data.begin(ReadWrite.WRITE); apply(data,restored);
+            assertEquals("0",CommandInvariant.readControl(data).sequence().toString());
+            assertEquals("4",CommandInvariant.readControl(data).cursor().toString());
+            assertTrue(data.contains(uri(CommandPolicy.CURRENT),uri(source.statement()),uri(RV + "interpretationDefinition"),uri(DEFINITION)));
+            assertFalse(data.contains(uri(CommandPolicy.CURRENT),uri(source.app()),Node.ANY,Node.ANY));
+            assertTrue(data.contains(uri(CommandPolicy.REVISIONS),uri(source.app()),uri(RV + "decisionHead"),uri(source.source())));
+            assertTrue(data.contains(uri(CommandPolicy.OUTBOX),Node.ANY,uri(RV + "streamSequence"),NodeFactory.createLiteralByValue(4,
+                org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger)));
+            data.commit(); data.end();
+        } finally { if (data.isInTransaction()) { data.abort(); data.end(); } data.close(); }
+    }
+    @Test public void retainedRestoreRejectsForgedHistoryReceiptOutboxAndWrongDefinition() {
+        Source source = new Source(id(11),id(21),id(31),4); Command restored = restore(source,null);
+        DatasetGraph data = restoreDataset(); data.begin(ReadWrite.WRITE);
+        try {
+            for (String update : List.of(
+                restored.update().replace("INSERT {", "INSERT { " + graph(CommandPolicy.REVISIONS,"<" + id(88) + "> a rv:Agent .")),
+                restored.update().replace("INSERT {", "INSERT { " + graph(CommandPolicy.RECEIPTS,"<urn:forged> a rv:OperationReceipt .")),
+                restored.update().replace("INSERT {", "INSERT { " + graph(CommandPolicy.OUTBOX,"<urn:forged> a rv:OutboxBatch .")),
+                restored.update().replace("rv:interpretationDefinition <" + DEFINITION + ">","rv:interpretationDefinition <" + id(100) + ">"),
+                restored.update().replace("rv:authorityEpoch \"3\"","rv:authorityEpoch \"bad\""),
+                restored.update().replace("rv:decidedBy <" + ACTOR + ">","rv:decidedBy <" + id(89) + ">"))) {
+                try {
+                    var plan = CommandPolicy.parse(update,restored.receipt());
+                    assertNotNull(StatementUpgradePolicy.capture(data,restored.receipt(),restored.digest(),plan).error());
+                } catch (IllegalArgumentException expected) { /* closed template admission */ }
+            }
+            assertFalse(data.contains(uri(CommandPolicy.RECEIPTS),uri(restored.receipt()),Node.ANY,Node.ANY));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void subsequentSameApplicationRestoreRetainsOriginalStatementRevisionAndRawSnapshot() {
+        Source first = new Source(id(11),id(21),id(31),4), second = new Source(id(11),id(22),id(31),5);
+        for (boolean rawCurrentSnapshot : List.of(false,true)) {
+            DatasetGraph data = restoreDataset(); data.begin(ReadWrite.WRITE);
+            try {
+                apply(data,restore(first,null));
+                Set<Quad> originalRevision = record(data,CommandPolicy.REVISIONS,first.revision());
+                Set<Quad> originalDecision = record(data,CommandPolicy.REVISIONS,first.source());
+                if (rawCurrentSnapshot) {
+                    for (Quad quad : record(data,CommandPolicy.REVISIONS,first.app()))
+                        data.add(new Quad(uri(CommandPolicy.CURRENT),quad.getSubject(),quad.getPredicate(),quad.getObject()));
+                    data.deleteAny(uri(CommandPolicy.REVISIONS),uri(first.app()),Node.ANY,Node.ANY);
+                }
+                Set<Quad> rawSnapshot = record(data,CommandPolicy.CURRENT,first.app());
+                Command next = restore(second,first.decision(),first.source(),id(7),true);
+                String missingCas = next.update().replace("<" + SLOT + "> rv:decisionHead <" + first.decision() + ">", "<" + SLOT + "> rv:decisionHead ?unguarded");
+                try {
+                    assertNotNull(StatementUpgradePolicy.capture(data,next.receipt(),next.digest(),CommandPolicy.parse(missingCas,next.receipt())).error());
+                } catch (IllegalArgumentException expected) { /* concrete predecessor is required */ }
+                apply(data,next);
+                assertEquals(originalRevision,record(data,CommandPolicy.REVISIONS,first.revision()));
+                assertEquals(originalDecision,record(data,CommandPolicy.REVISIONS,first.source()));
+                assertEquals(rawSnapshot,record(data,CommandPolicy.CURRENT,first.app()));
+                assertTrue(data.contains(uri(CommandPolicy.CURRENT),uri(SLOT),uri(RV + "decisionHead"),uri(second.decision())));
+                assertTrue(data.contains(uri(CommandPolicy.REVISIONS),uri(second.decision()),uri(RV + "predecessor"),uri(first.decision())));
+                assertTrue(data.contains(uri(CommandPolicy.REVISIONS),uri(second.decision()),uri(RV + "operation"),uri(id(7))));
+                assertEquals("5",CommandInvariant.readControl(data).cursor().toString());
+            } finally { data.abort(); data.end(); data.close(); }
+        }
     }
 
     @Test public void phaseTransactionsPreserveBothPositionsAndReplayOnlyExactTemplates() throws Exception {
@@ -171,8 +323,9 @@ public class StatementUpgradeTest {
             for (String phase : List.of("acquire", "complete", "release")) {
                 Command command = phase(phase);
                 assertTrue(CommandPolicy.maintenanceReceipt(command.receipt()));
-                assertEquals("committed", run(service, data, command).get("status"));
-                assertEquals("committed", run(service, data, command).get("status"));
+                var committed = run(service, data, command);
+                assertEquals("committed", committed.get("status"));
+                assertEquals(committed, run(service, data, command));
                 Command altered = new Command(command.receipt(), command.digest(), command.update() + "\n");
                 assertEquals("conflict", run(service, data, altered).get("status"));
             }

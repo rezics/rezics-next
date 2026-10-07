@@ -48,11 +48,12 @@ final class StatementUpgradePolicy {
 
     static boolean applies(String receipt) { return receipt.startsWith(PREFIX); }
     static boolean retiringReceipt(String receipt) { return receipt.matches(PREFIX + "retire:[0-9a-f]{64}"); }
+    static boolean restoringReceipt(String receipt) { return receipt.matches(PREFIX + "restore:[0-9a-f]{64}"); }
     static String templateDigest(String update) { return hash(update); }
     static Node templateDigestPredicate() { return rv("statementUpgradeTemplateDigest"); }
 
     private static String phase(String receipt) {
-        if (!receipt.matches(PREFIX + "(acquire|complete|release|retire|convert):[0-9a-f]{64}"))
+        if (!receipt.matches(PREFIX + "(acquire|complete|release|retire|convert|restore):[0-9a-f]{64}"))
             throw new IllegalArgumentException("unknown Statement upgrade phase");
         return receipt.substring(PREFIX.length(), receipt.lastIndexOf(':'));
     }
@@ -60,6 +61,7 @@ final class StatementUpgradePolicy {
     /** Every caller-written value is concrete except the unchanged guarded sequence. */
     static void validateTemplate(CommandPolicy.Plan plan, String receipt) {
         String phase = phase(receipt);
+        if (phase.equals("restore")) { StatementRestorePolicy.validateTemplate(plan, receipt); return; }
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify))
             throw new IllegalArgumentException("Statement upgrade requires a guarded update");
         Node own = uri(receipt), marker = required(modify, RECEIPTS, own, rv("statementUpgrade"));
@@ -166,6 +168,7 @@ final class StatementUpgradePolicy {
             var before = CommandInvariant.readControl(data);
             if (before == null || !CommandInvariant.hasControlGuards(plan, before))
                 return new Snapshot(Map.of(), "Statement upgrade epoch, routing and sequence guards differ");
+            if (restoringReceipt(receipt)) return StatementRestorePolicy.capture(data, receipt, plan, before);
             Node own = uri(receipt), marker = required(modify, RECEIPTS, own, rv("statementUpgrade"));
             String phase = phase(receipt);
             boolean fenced = data.contains(CONTROL, marker, rv("statementUpgradeFence"), TRUE);
@@ -186,7 +189,11 @@ final class StatementUpgradePolicy {
         } catch (IllegalArgumentException ex) { return new Snapshot(Map.of(), ex.getMessage()); }
     }
 
-    private static Snapshot conversion(DatasetGraph data, UpdateModify modify, Node own) {
+    static Snapshot conversion(DatasetGraph data, UpdateModify modify, Node own) {
+        return conversion(data, modify, own, false);
+    }
+
+    static Snapshot conversion(DatasetGraph data, UpdateModify modify, Node own, boolean preserveExistingRevision) {
         Node app = required(modify, RECEIPTS, own, rv("convertedApplication"));
         Node source = required(modify, RECEIPTS, own, rv("convertedDecision"));
         Node statement = required(modify, RECEIPTS, own, rv("statement"));
@@ -243,9 +250,21 @@ final class StatementUpgradePolicy {
             Map.entry(rv("relationDefinition"), uri(PROPOSITION)), Map.entry(rv("interpretationDefinition"), definition),
             Map.entry(rv("speaker"), proposer), Map.entry(rv("meaningKey"), meaning),
             Map.entry(rv("statementState"), rv("Active")), Map.entry(rv("head"), revision), Map.entry(rv("migratedFrom"), app)));
-        Set<Quad> revisionRecord = anchor(REVISIONS, revision, statement, uri(STATEMENT), operation, epoch, sequence,
-            supplied(data, modify, REVISIONS, revision, rv("manifest")), rv("StatementRevision"));
-        revisionRecord.add(new Quad(REVISIONS, revision, rv("recordedBy"), actor));
+        Node statementOperation = operation, statementEpoch = epoch, statementSequence = sequence, statementActor = actor;
+        if (preserveExistingRevision && !stored(data, new Key(REVISIONS, revision)).isEmpty()) {
+            // A later decision for the same application/meaning advances only
+            // its acceptance head. The original Statement revision is immutable.
+            statementOperation = one(data, REVISIONS, revision, rv("operation"));
+            statementEpoch = one(data, REVISIONS, revision, rv("dataEpoch"));
+            statementSequence = one(data, REVISIONS, revision, rv("sequence"));
+            statementActor = one(data, REVISIONS, revision, rv("recordedBy"));
+            if (!nativeId(statementOperation) || !nativeId(statementActor) || statementEpoch == null
+                || !statementEpoch.isLiteral() || number(statementSequence) == null || number(statementSequence).signum() < 1)
+                return new Snapshot(Map.of(), "existing retained Statement revision provenance differs");
+        }
+        Set<Quad> revisionRecord = anchor(REVISIONS, revision, statement, uri(STATEMENT), statementOperation,
+            statementEpoch, statementSequence, supplied(data, modify, REVISIONS, revision, rv("manifest")), rv("StatementRevision"));
+        revisionRecord.add(new Quad(REVISIONS, revision, rv("recordedBy"), statementActor));
         revisionRecord.add(new Quad(REVISIONS, revision, rv("statementState"), rv("Active")));
         Node basis = context.equals(uri("urn:rezics:classification-context:global")) ? rv("GlobalCuratorReview") : rv("RealmManagerReview");
         if (!basis.equals(one(data, REVISIONS, source, rv("decisionBasis"))))
@@ -316,6 +335,7 @@ final class StatementUpgradePolicy {
 
     static String checkControl(DatasetGraph data, String receipt, CommandPolicy.Plan plan,
         CommandInvariant.Control before, CommandInvariant.Control after, Node epoch, BigInteger sequence) {
+        if (restoringReceipt(receipt)) return StatementRestorePolicy.checkControl(data, receipt, plan, before, epoch, sequence);
         if (!CommandInvariant.hasControlGuards(plan, before) || !before.epoch().equals(after.epoch())
             || !before.routing().equals(after.routing()) || !before.sequence().equals(after.sequence())
             || !Objects.equals(before.marker(), after.marker()) || !Objects.equals(before.priorEpoch(), after.priorEpoch())

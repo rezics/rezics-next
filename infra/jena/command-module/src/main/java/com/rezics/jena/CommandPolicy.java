@@ -103,7 +103,7 @@ final class CommandPolicy {
                 source.add(subject.getURI());
             }
             if (name.equals(RECEIPTS) && (!subject.isURI() || !receipt.equals(subject.getURI())
-                && !StatementUpgradePolicy.retiringReceipt(receipt)))
+                && !StatementUpgradePolicy.retiringReceipt(receipt) && !StatementUpgradePolicy.restoringReceipt(receipt)))
                 throw new IllegalArgumentException("command may write only its own receipt");
         }
         if (delete.stream().anyMatch(quad -> RECEIPTS.equals(quad.getGraph().getURI())))

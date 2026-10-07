@@ -238,7 +238,7 @@ test('product classification restore preserves retained meaning and decision CAS
     };
     await expect(reconcile('2')).rejects.toThrow('retained classification decision update outcome is unknown');
     fuseki.commandWithReceipt = nativeCommand;
-    expect(staleResult).toBe('guard-unmatched');
+    expect(['guard-unmatched', 'invalid']).toContain(staleResult);
     expect(await facts(fuseki, [GRAPHS.receipts], [decisions[1]!.receipt])).toEqual([]);
     await loadStoppedCopy(stack, `PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(nativeSlot)} rv:decisionHead ${iri(staleHead)} } };

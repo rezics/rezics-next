@@ -774,7 +774,11 @@ final class CommandService extends ActionService {
                         .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest"))))
                     return Map.of("status", "conflict");
                 Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
-                if (!slim) replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan)); return replay;
+                // Native maintenance does not retain a template-directory delta
+                // on its initial commit; replay returns that same receipt result.
+                if (!slim && !StatementUpgradePolicy.applies(receipt))
+                    replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan));
+                return replay;
             }
             String legacySlim = slim ? null : CommandInvariant.legacySlimMutation(dataset, plan);
             if (legacySlim != null) return invalid(legacySlim);
@@ -913,7 +917,11 @@ final class CommandService extends ActionService {
         if (invariant != null) return invalid(invariant);
         String conversion = StatementUpgradePolicy.check(dataset, before);
         if (conversion != null) return invalid(conversion);
-        Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, Set.of());
+        boolean restoring = StatementUpgradePolicy.restoringReceipt(receipt);
+        CommandPolicy.Plan validationPlan = restoring ? StatementRestorePolicy.nativePlan(plan, receipt) : plan;
+        if (restoring && validations.stream().anyMatch(entry -> !Set.of("statement-v1", "statement-decision-v1")
+            .contains(entry.profileId()))) return invalid("classification restore validates only native representation profiles");
+        Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of());
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -933,7 +941,13 @@ final class CommandService extends ActionService {
         dataset.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
             StatementUpgradePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(StatementUpgradePolicy.templateDigest(update)));
         if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
-        // No outbox batch, dataset sequence or relay-stream watermark changes during representation conversion.
+        if (restoring) {
+            String stream = CommandInvariant.advanceRelayStream(dataset,
+                StatementRestorePolicy.originalReceipt(plan, receipt), plan, control);
+            if (stream != null) return invalid(stream);
+        }
+        // Upgrade conversion leaves both positions unchanged; restore stamps only
+        // the exact retained batch while the new dataset position remains zero.
         return committed(dataset, receipt);
     }
 

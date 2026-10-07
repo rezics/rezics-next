@@ -1,5 +1,6 @@
 import { CATALOGUE_IMPORT_SCOPE, catalogueImportInput, catalogueImportDigest, catalogueImportIdentity, prepareCatalogueImport, type CatalogueImportInput } from './catalogue-import.ts';
-import { prepareRetainedClassification, retainedClassificationConcept } from '../statement/populated-conversion.ts';
+import { prepareRetainedClassification, retainedClassificationConcept, statementUpgradeMarker,
+  STATEMENT_CONVERSION_COST } from '../statement/populated-conversion.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { languagePrior, readMainLanguageHeads } from './selection-heads.ts';
 import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
@@ -2275,10 +2276,6 @@ export async function reconcileRetainedClassificationDecision(
     throw new RetainedEffectConflict('retained classification decision payload differs');
   }
   const concept = await retainedClassificationConcept(env,state);
-  const prepared = await prepareRetainedClassification(env,{application,decision,manifest: receipt.decisionManifest,
-    main: receipt.mainVersion,concept,context,proposer,decidedBy: decider,
-    outcome: receipt.decisionOutcome!,contextRevision: receipt.contextRevision ?? null,
-    operation: receipt.operation,dataEpoch: coverage.dataEpoch,sequence});
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -2296,7 +2293,7 @@ export async function reconcileRetainedClassificationDecision(
       expectedDecisionHead: predecessor, outcome: receipt.decisionOutcome!,
       actingSubject: admitted?.acting_subject ?? '',
     };
-    if (!admitted || admitted.action !== 'classification.decision.set'
+    if (access.rows.length !== 1 || !admitted || admitted.action !== 'classification.decision.set'
       || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
       || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
@@ -2307,6 +2304,38 @@ export async function reconcileRetainedClassificationDecision(
       throw new RetainedEffectConflict('current Access admission does not prove retained decision');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const maintenanceDigest = hash(JSON.stringify(['statement-storage-restore-v1',
+      env.lineage.dataEpoch, env.lineage.routingEpoch, receipt.id, receipt.requestDigest,
+      coverage.dataEpoch, sequence]));
+    const maintenanceReceipt = `urn:rezics:name-migration:statement-upgrade:restore:${maintenanceDigest}`;
+    const existing = await readClassificationDecisionReceipt(env, receipt.admissionId);
+    // A replay uses the committed conversion identity. Preparing against a later
+    // slot head would manufacture a different predecessor and orphan manifest.
+    const saved = existing ? (await env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?statement ?revision ?slot ?decision ?meaningKey WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(maintenanceReceipt)}
+          rv:requestDigest ${lit(maintenanceDigest)} ; rv:outcome rv:Succeeded ;
+          rv:restoredReceipt ${iri(receipt.id)} ; rv:convertedApplication ${iri(application)} ;
+          rv:convertedDecision ${iri(decision)} ; rv:statement ?statement ;
+          rv:statementRevision ?revision ; rv:decisionSlot ?slot ; rv:statementDecision ?decision }
+        GRAPH ${iri(GRAPHS.current)} { ?statement rv:meaningKey ?meaningKey ;
+          rv:interpretationDefinition ${iri(senseRevision)} ;
+          <http://www.w3.org/1999/02/22-rdf-syntax-ns#object> ${iri(concept)} }
+      } LIMIT 2`, STATEMENT_CONVERSION_COST.responseBytes)).results?.bindings ?? [] : [];
+    if (existing && (saved.length !== 1
+      || ['statement', 'revision', 'slot', 'decision', 'meaningKey'].some(key => !saved[0]?.[key]))) {
+      throw new RetainedEffectConflict('retained classification conversion proof is unavailable');
+    }
+    const prepared = existing ? {
+      statement: saved[0]!.statement!.value, revision: saved[0]!.revision!.value,
+      slot: saved[0]!.slot!.value, decision: saved[0]!.decision!.value,
+      meaningKey: saved[0]!.meaningKey!.value, current: '', revisions: '',
+      nativeRevisions: '', nativePredecessor: null, validations: [],
+    } : await prepareRetainedClassification(env, { application, decision,
+      manifest: receipt.decisionManifest, main: receipt.mainVersion, concept, context,
+      proposer, decidedBy: decider, outcome: receipt.decisionOutcome!,
+      contextRevision: receipt.contextRevision ?? null,
+      operation: receipt.operation, dataEpoch: coverage.dataEpoch, sequence });
     const contextGuard = realm
       ? `?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
          ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -2322,20 +2351,24 @@ export async function reconcileRetainedClassificationDecision(
         GRAPH ${iri(GRAPHS.current)} { ?priorSlot a rv:DecisionSlot ;
           rv:acceptanceContext ${iri(context)} ; rv:decisionHead ?priorConverted }
         GRAPH ${iri(GRAPHS.revisions)} { ?priorConverted rv:component ?priorSlot ; rv:convertedFrom ${iri(predecessor)} }`
-      : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} ?p ?o } }`;
+      : '';
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(application)} rv:decisionHead ?historicalHead }
-        ${predecessor ? `GRAPH ${iri(GRAPHS.current)} {
-          ${iri(prepared.slot)} rv:decisionHead ?replacedHead }` : ''}
+        ${prepared.nativePredecessor ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(prepared.slot)} rv:decisionHead ${iri(prepared.nativePredecessor)} }` : ''}
       }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
         GRAPH ${iri(GRAPHS.current)} { ${prepared.current} }
         GRAPH ${iri(GRAPHS.revisions)} {
-          ${prepared.revisions}
-          ${iri(application)} a rv:ClassificationApplication .
+          ${prepared.nativeRevisions}
+          ${iri(application)} a rv:ClassificationApplication ;
+            rv:targetMainVersion ${iri(receipt.mainVersion)} ; rv:sense ${iri(receipt.sense)} ;
+            rv:applicationKey ${iri(receipt.slot)} ; rv:classificationContext ${iri(context)} ;
+            rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
+            rv:proposer ${iri(proposer)} ; rv:decisionHead ${iri(decision)} .
           ${iri(decision)} a rv:ClassificationDecision, rv:RevisionAnchor ;
             rv:component ${iri(application)} ; rv:application ${iri(application)} ;
             rv:operation ${iri(receipt.operation)} ;
@@ -2352,6 +2385,15 @@ export async function reconcileRetainedClassificationDecision(
             rv:sequence ${sequence} .
         }
         GRAPH ${iri(GRAPHS.receipts)} {
+          ${iri(maintenanceReceipt)} a rv:OperationReceipt ;
+            rv:commandFamily "statement-upgrade-restore-v1" ;
+            rv:requestDigest ${lit(maintenanceDigest)} ; rv:outcome rv:Succeeded ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+            rv:sequence ?sequence ; rv:statementUpgrade ${iri(statementUpgradeMarker(env.lineage.dataEpoch))} ;
+            rv:restoredReceipt ${iri(receipt.id)} ; rv:convertedApplication ${iri(application)} ;
+            rv:convertedDecision ${iri(decision)} ; rv:statement ${iri(prepared.statement)} ;
+            rv:statementRevision ${iri(prepared.revision)} ; rv:decisionSlot ${iri(prepared.slot)} ;
+            rv:statementDecision ${iri(prepared.decision)} .
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(receipt.operation)} ;
             rv:requestDigest ${lit(receipt.requestDigest)} ;
             rv:admissionId ${lit(receipt.admissionId)} ;
@@ -2381,6 +2423,7 @@ export async function reconcileRetainedClassificationDecision(
         GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+            rv:sequence ?sequence ;
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
@@ -2393,8 +2436,7 @@ export async function reconcileRetainedClassificationDecision(
             rv:mainVersion ${iri(receipt.mainVersion)} .
           ${iri(receipt.mainVersion)} a rv:MainVersion ; rv:work ${iri(receipt.work)} .
           ${iri(receipt.sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
-            rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-            rv:head ${iri(senseRevision)} .
+            rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} .
           ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
             rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
             rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
@@ -2408,25 +2450,37 @@ export async function reconcileRetainedClassificationDecision(
         ${priorGuard}
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} rv:decisionHead ?replacedHead } }
         ${prepared.nativePredecessor
-          ? `FILTER(?replacedHead = ${iri(prepared.nativePredecessor)})
+          ? `GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} rv:decisionHead ${iri(prepared.nativePredecessor)} }
+             FILTER(?replacedHead = ${iri(prepared.nativePredecessor)})
              FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} rv:decisionHead ?otherNativeHead .
                FILTER(?otherNativeHead != ${iri(prepared.nativePredecessor)}) } }`
           : `FILTER(!BOUND(?replacedHead))`}
         OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ${iri(application)} rv:decisionHead ?historicalHead } }
+        ${predecessor ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(application)} rv:decisionHead ?retainedRawHead } }
+          FILTER(COALESCE(?historicalHead, ?retainedRawHead) = ${iri(predecessor)})
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(application)} rv:decisionHead ?otherHistoricalHead .
+            FILTER(?otherHistoricalHead != ${iri(predecessor)}) } }` : 'FILTER(!BOUND(?historicalHead))'}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(maintenanceReceipt)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
           ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
-    const existing = await readClassificationDecisionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
       // Offline representation recovery preserves the sealed raw expectedHead.
       // It differs from the native predecessor, so the live command CAS cannot
       // describe this transition. Both fences and both predecessors are guarded
       // in this single maintenance transaction; no new admission is created.
-      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
+      try {
+        const result = await env.fuseki.commandWithReceipt({ receipt: maintenanceReceipt,
+          digest: maintenanceDigest, update,
+          validations: prepared.validations.filter(validation =>
+            validation.profile !== 'classification-direct-decision-v1'),
+          deadlineMs: STATEMENT_CONVERSION_COST.deadlineMs });
+        if (result.status !== 'committed') throw new Error(`retained classification maintenance ${result.status}`);
+      } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationDecisionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
@@ -2436,7 +2490,16 @@ export async function reconcileRetainedClassificationDecision(
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ClassificationDecision, rv:RevisionAnchor ;
         rv:component ${iri(application)} ; rv:application ${iri(application)} ;
         rv:manifest ${iri(receipt.decisionManifest)} ;
-        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+        ${iri(prepared.revision)} a rv:StatementRevision ; rv:component ${iri(prepared.statement)} .
+        ${iri(prepared.decision)} a rv:StatementDecision ; rv:component ${iri(prepared.slot)} ;
+          rv:convertedFrom ${iri(decision)} ; rv:support ${iri(prepared.statement)} ;
+          rv:decidedBy ${iri(decider)} ; rv:operation ${iri(receipt.operation)} ;
+          rv:outcome rv:${receipt.decisionOutcome === 'accepted' ? 'Accepted' : 'Rejected'} ;
+          rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(maintenanceReceipt)} rv:requestDigest ${lit(maintenanceDigest)} ;
+        rv:outcome rv:Succeeded ; rv:restoredReceipt ${iri(receipt.id)} ;
+        rv:statement ${iri(prepared.statement)} ; rv:statementDecision ${iri(prepared.decision)} . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
         rv:event ${iri(eventId)} ; rv:sequence ${sequence} .
         ${iri(eventId)} a rv:ClassificationDecisionChangedEvent ; rv:receipt ${iri(receipt.id)} . }
