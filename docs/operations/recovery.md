@@ -136,7 +136,7 @@ replaced by a recovery-command assertion.
 The default CLI cannot create a physical held copy without authenticated
 checks. The QA drills supply an in-process Main route adapter with test
 authentication; they require no listening Main or environment-selected
-verification Task. Replay uses the independently retained current relay, not the
+verification Task. The release adapter must replay against the independently retained current relay, not the
 restored backup's own journal. Keep the graph and Access holds closed throughout
 retained erasure replay. Held erasure replay must authenticate exact target/epoch
 and original receipt evidence while preserving diagnostic sequence zero,

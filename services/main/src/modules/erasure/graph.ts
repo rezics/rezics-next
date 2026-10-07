@@ -406,7 +406,7 @@ export interface HeldGraphErasureProof {
 export interface HeldGraphErasureReplay extends HeldGraphErasureProof {
   signingKey: string;
   maintenance: Pick<FusekiClient, 'command'>;
-  /** G-1343 owns this authorization: current independent journal/exact entry,
+  /** The outer owner provides current independent journal/exact entry,
    * original proof, allocator lock, and both holds at the captured generation.
    * Its borrowed transactions remain held through send/probe/release. */
   assertCurrent: (entry: HeldGraphErasureAuthorization) => Promise<void>;
