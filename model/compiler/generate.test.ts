@@ -9,6 +9,7 @@ import { authoredFacets, authoredProfiles, buildArtifacts, commandModuleVersion,
 import { profileSnapshot, renderProfile, type ProfileDefinition } from './ir.ts';
 import { buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, canonicalTypeOrder, shapeRole, type RegistryOptions } from './registry.ts';
+import { profileSource } from './shacl.ts';
 
 const repo = resolve(import.meta.dir, '../..');
 const temporary: string[] = [];
@@ -104,7 +105,7 @@ test('P0.3: authored constraints emit current profiles with recorded candidate c
   for (const [id, recorded] of evidence) {
     const profile = authoredProfiles.find(item => item.id === id);
     if (!profile) throw new Error(`evidence names unknown profile ${id}`);
-    const rendered = renderProfile(profile);
+    const rendered = profileSource(profile);
     const published = manifest.profiles.find(entry => entry.id === id);
     expect(published).toBeDefined();
     expect(recorded.profile_sha256).toMatch(/^[0-9a-f]{64}$/);
