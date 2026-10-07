@@ -1,3 +1,5 @@
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -68,7 +70,9 @@ export async function classificationCostProfile() {
     );
   try {
     await author.grant('classification:define:global', 'classification.proposition.define');
-    await author.grant('classification:decide:global', 'classification.decision.set');
+    await author.grant('classification:decide:global', 'statement.decide');
+    await author.grant('context:create:root', 'context.create');
+    await author.grant(`statement:speak:${author.actor}`, 'statement.record');
     await author.grant('work:create:catalogue-import', 'work.create');
     // Catalogue import is closed until the caller holds that platform use.
     const platformGrant = randomUUID();
@@ -120,8 +124,8 @@ export async function classificationCostProfile() {
               credits: [{ agent: creditedAuthor, role: 'author' }],
               classifications: [
                 {
-                  sense: definitions[0]!.sense,
-                  expectedSenseHead: definitions[0]!.definitionRevision,
+                  concept: definitions[0]!.concept,
+                  definition: definitions[0]!.definitionRevision,
                   expectedDecisionHead: null,
                   outcome: 'accepted',
                 },
@@ -148,8 +152,8 @@ export async function classificationCostProfile() {
           credits: [],
           classifications: [
             {
-              sense: definitions[0]!.sense,
-              expectedSenseHead: definitions[0]!.definitionRevision,
+              concept: definitions[0]!.concept,
+              definition: definitions[0]!.definitionRevision,
               expectedDecisionHead: null,
               outcome: 'accepted',
             },
@@ -158,16 +162,21 @@ export async function classificationCostProfile() {
       },
     );
     const target = importedTarget.receipt;
-    for (const definition of definitions.slice(1))
-      await command('/v1/classification-decisions', {
-        profile: 'classification-direct-decision-v1',
-        work: target.work,
-        mainVersion: target.mainVersion,
-        sense: definition.sense,
-        context: { kind: 'global' },
-        expectedDecisionHead: null,
-        outcome: 'accepted',
-      });
+    const classificationPost: ClassificationPost = async (path, body, bearer, key) =>
+      home.json(await home.call('POST', path, body, bearer, key), 201);
+    const interpretation = await shareClassificationContext(classificationPost, author.token,
+      author.actor, definitions, randomUUID());
+    for (const [index, definition] of definitions.entries()) {
+      // Current catalogue backups already retain these Concepts' hint generations.
+      if (index >= (corpus?.definitions.length ?? 0))
+        await discloseClassificationConcept(classificationPost, author.token, author.actor,
+          definition.concept, randomUUID());
+      if (definition === definitions[0]) continue;
+      await acceptClassifiedStatement(classificationPost, author.token, author.actor, target,
+        definition.concept, interpretation, { kind: 'global' },
+        { state: 'absent', source: 'none', decision: null },
+        { statement: randomUUID(), decision: randomUUID() });
+    }
     let selection: string[] | undefined;
     const probe = new Elysia()
       .use(httpTelemetry())

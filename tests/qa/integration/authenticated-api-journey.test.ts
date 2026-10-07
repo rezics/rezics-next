@@ -1,3 +1,7 @@
+import { discloseClassificationConcept, recordClassifiedStatement, shareClassificationContext,
+  statementDecisionBody, type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -26,7 +30,7 @@ import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/act
 import { assertCommandRace } from '../support/command-race.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const scope = 'openid work:create work:edit work:read comment:create space:create realm:classify realm:adopt realm:reject classification:define classification:decide';
+const scope = 'openid work:create work:edit work:read comment:create space:create realm:classify realm:adopt realm:reject classification:define classification:decide context:write statement:write statement:decide';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -117,6 +121,18 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       finally { client.release(); }
     };
     await grant('work:create:root', 'work.create');
+    for (const operation of ['postV1Fixed-releases', 'getV1Fixed-releasesByRelease']) {
+      const permission = `platform:use:${operation}`, platformGrant = randomUUID();
+      await accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access',$4,now() + interval '1 hour')`,
+      [platformGrant, actor, principalId, permission]);
+      await accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,$3,'platform:access',$4,$5)`,
+      [platformGrant, actor, permission, principalId,
+        `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
+    }
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: member.email, password: member.password }),
@@ -157,7 +173,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
-      access,
+      access, judgments: new AccessJudgments(accessPool), platformAccess: new AccessExposure(accessPool),
       content, contentAuthoring: content, comments,
       contentProjection: { content, cursor, consumer } });
     const send = (path: string, body: object, protectedCommand = true,
@@ -201,7 +217,8 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: 'http://127.0.0.1:1/jwks',
         introspectUrl: 'http://127.0.0.1:1/introspect',
-        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access });
+        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access,
+      platformAccess: new AccessExposure(accessPool) });
     const noAccount = await accountUnavailable.handle(unavailableRequest());
     expect(noAccount.status).toBe(503);
     expect((await noAccount.json() as { code: string }).code).toBe('dependency_unavailable');
@@ -448,28 +465,36 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect((await realmAlternative(realmA.realm)).total).toBe(0);
     expect((await realmAlternative(realmB.realm)).results).toMatchObject([{ work: work.work }]);
     await grant('classification:define:global', 'classification.proposition.define');
-    const proposition = await post<{ sense: string }>('/v1/classification-propositions', {
+    const proposition = await post<{ sense: string; concept: string; definitionRevision: string }>('/v1/classification-propositions', {
       profile: 'classification-proposition-v1', label: `S2 ${marker}`, actingSubject: actor });
+    await grant('context:create:root', 'context.create');
+    await grant(`statement:speak:${actor}`, 'statement.record');
+    const classificationPost: ClassificationPost = (path, body, _bearer, key) =>
+      post(path, body as object, true, key);
+    const interpretation = await shareClassificationContext(classificationPost, token,
+      actor, [proposition], randomUUID());
+    const statement = await recordClassifiedStatement(classificationPost, token, actor,
+      work.mainVersion, proposition.concept, interpretation, randomUUID());
     const decide = async (context: { kind: 'global' } | { kind: 'realm-classification'; id: string },
       outcome: 'accepted' | 'rejected') => {
       const decisionScope = context.kind === 'global' ? 'classification:decide:global'
         : `classification:decide:${context.id}`;
-      await grant(decisionScope, 'classification.decision.set');
-      return post<{ decision: string }>('/v1/classification-decisions', {
-        profile: 'classification-direct-decision-v1', context,
-        work: work.work, mainVersion: work.mainVersion, sense: proposition.sense,
-        expectedDecisionHead: null, outcome, actingSubject: actor });
+      await grant(decisionScope, 'statement.decide');
+      await discloseClassificationConcept(classificationPost, token, actor, proposition.concept,
+        randomUUID(), context.kind === 'global' ? { kind: 'global' } : { kind: 'realm', realm: context.id });
+      return post<{ decision: string }>('/v1/statement-decisions',
+        statementDecisionBody(actor, statement, context, outcome, null));
     };
     await decide({ kind: 'global' }, 'accepted');
     await decide({ kind: 'realm-classification', id: realmA.realm }, 'rejected');
-    await grant(`classification:decide:${realmB.realm}`, 'classification.decision.set');
-    const realmBDecision = { profile: 'classification-direct-decision-v1',
-      context: { kind: 'realm-classification', id: realmB.realm },
-      work: work.work, mainVersion: work.mainVersion, sense: proposition.sense,
-      expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor };
+    await grant(`classification:decide:${realmB.realm}`, 'statement.decide');
+    await discloseClassificationConcept(classificationPost, token, actor, proposition.concept,
+      randomUUID(), { kind: 'realm', realm: realmB.realm });
+    const realmBDecision = statementDecisionBody(actor, statement,
+      { kind: 'realm-classification', id: realmB.realm }, 'accepted', null);
     const concurrentDecisionsCommands = [
-      send.bind(null, '/v1/classification-decisions', realmBDecision, true, randomUUID()),
-      send.bind(null, '/v1/classification-decisions', realmBDecision, true, randomUUID()),
+      send.bind(null, '/v1/statement-decisions', realmBDecision, true, randomUUID()),
+      send.bind(null, '/v1/statement-decisions', realmBDecision, true, randomUUID()),
     ];
     const concurrentDecisions = await assertCommandRace(
       await Promise.all(concurrentDecisionsCommands.map((send) => send())),
@@ -652,7 +677,8 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
-        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access });
+        clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }), access,
+      platformAccess: new AccessExposure(accessPool) });
     const restartedRead = await restartedMain.handle(new Request(
       `http://main.local/v1/fixed-releases/${release.release.split('/').at(-1)}`
         + `?actingSubject=${encodeURIComponent(actor)}`,

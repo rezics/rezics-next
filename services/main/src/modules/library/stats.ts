@@ -1,5 +1,5 @@
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { CLASSIFICATION_DIRECT_DECISION_PROFILE } from '../classification/decision.ts';
+import { readVisibleOnboardingConcepts } from '../onboarding/classifications.ts';
+import { readWorkClassificationBatch } from '../work/read-classifications.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { workRead, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -49,25 +49,35 @@ export async function readRichReadingYear(work: MainWorkDependencies, request: R
         if (!work.libraryRatings) throw new WorkReadUnavailable('Reader ratings are unavailable');
         const ratings = await work.libraryRatings.read(session,
           mains.map(row => ({ work: row.work!.value, main: row.main!.value })));
-        const classified = await session.query(`SELECT DISTINCT ?work ?concept WHERE {
-          VALUES ?work { ${ids.map(iri).join(' ')} }
-          GRAPH ${iri(GRAPHS.current)} {
-            ?work rv:mainVersion ?main .
-            ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
-              rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-              rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
-              rv:decisionHead ?decision ; rv:sense ?sense .
-            ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
-            ?expression rv:expressionState rv:Active ; rv:assertedConcept ?concept .
+        // Follow every Work-keyed continuation through the shared acceptance and
+        // disclosure read; hidden proposals must not crowd out a recorded genre.
+        const classified = new Map<string, Set<string>>();
+        let conceptPairs = 0;
+        let pending = new Map<string | undefined, { work: string; mainVersion: string }[]>([[undefined,
+          mains.map(row => ({ work: row.work!.value, mainVersion: row.main!.value }))]]);
+        while (pending.size) {
+          const next = new Map<string | undefined, { work: string; mainVersion: string }[]>();
+          for (const [after, targets] of pending) {
+            const batch = await readWorkClassificationBatch(session, targets, undefined, after);
+            for (const target of targets) {
+              const page = batch.get(target.work)!;
+              const concepts = classified.get(target.work) ?? new Set<string>();
+              for (const item of page.items) {
+                if (!concepts.has(item.concept)) { concepts.add(item.concept); conceptPairs++; }
+              }
+              if (conceptPairs > ids.length * READING_STATS_COST.conceptPairsPerWork) {
+                throw new WorkReadLimit('Reading Concepts exceed the yearly budget');
+              }
+              classified.set(target.work, concepts);
+              if (page.after) next.set(page.after, [...next.get(page.after) ?? [], target]);
+            }
           }
-          GRAPH ${iri(GRAPHS.revisions)} {
-            ?decision a rv:ClassificationDecision ; rv:component ?application ;
-              rv:outcome rv:Accepted ; rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-          }
-        } LIMIT ${ids.length * READING_STATS_COST.conceptPairsPerWork + 1}`,
-        ids.length * READING_STATS_COST.conceptPairsPerWork + 1);
-        if (classified.length > ids.length * READING_STATS_COST.conceptPairsPerWork) {
-          throw new WorkReadLimit('Reading Concepts exceed the yearly budget');
+          pending = next;
+        }
+        const eligible = await readVisibleOnboardingConcepts(session,
+          [...new Set([...classified.values()].flatMap(values => [...values]))]);
+        for (const values of classified.values()) {
+          for (const concept of values) if (!eligible.has(concept)) values.delete(concept);
         }
         const chapters = await work.serialStats?.batch(ids, session.position.sequence);
         return { summaries, ratings, classified, chapters };
@@ -83,13 +93,8 @@ export async function readRichReadingYear(work: MainWorkDependencies, request: R
         const chapters = part.chapters?.get(item.reference)?.chapterCount;
         if (chapters !== null && chapters !== undefined) { knownChapters += chapters; booksWithChapters++; }
       }
-      const pairs = new Set<string>();
-      for (const row of part.classified) {
-        if (!row.work || !row.concept) throw new WorkReadUnavailable('Concept relation is incomplete');
-        const key = `${row.work.value}\0${row.concept.value}`;
-        if (pairs.has(key)) continue;
-        pairs.add(key);
-        concepts.set(row.concept.value, (concepts.get(row.concept.value) ?? 0) + 1);
+      for (const values of part.classified.values()) {
+        for (const concept of values) concepts.set(concept, (concepts.get(concept) ?? 0) + 1);
       }
     }
     const top = [...concepts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5);

@@ -1,5 +1,7 @@
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '@rezics/observability/runtime';
@@ -46,12 +48,25 @@ test.skipIf(Bun.env.G1038_REUSE === '1')('G1038: disk-backed single, compound an
     actor = await home.provision('Catalogue import author', home.author.token);
     for (const [scope, action] of [[CATALOGUE_IMPORT_SCOPE, 'work.create'],
       ['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set']]) {
+      ['classification:decide:global', 'statement.decide'],
+      ['context:create:root', 'context.create'], [`statement:speak:${actor}`, 'statement.record']]) {
       await home.stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
       await home.stack.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
         VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), home.author.principalId, actor, action]);
       await home.stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
         VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
+    }
+    for (const operation of ['postV1Work-imports', 'postV1Work-importsBulk']) {
+      const permission = `platform:use:${operation}`, platformGrant = randomUUID();
+      await home.stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access',$4,now() + interval '1 hour')`,
+      [platformGrant, actor, home.author.principalId, permission]);
+      await home.stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,$3,'platform:access',$4,$5)`,
+      [platformGrant, actor, permission, home.author.principalId,
+        `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
     }
     api = workProfileCorpusApi('http://main.local', home.author.token, { signal,
       fetch: (async (input, init) => { const response = await home.app.handle(new Request(input, init));
@@ -60,8 +75,8 @@ test.skipIf(Bun.env.G1038_REUSE === '1')('G1038: disk-backed single, compound an
   const input = (index: number): CatalogueImportInput => ({ profile: 'work-catalogue-import-v1', expectedWorkHead: null,
     title: `Catalogue common Work ${index}`, language: index % 20 === 0 ? 'ja' : 'en', evidence: 'G1038 catalogue scale fixture',
     aliases: [], semanticTypes: [], credits: [{ agent: actor, role: 'author' }],
-    classifications: [{ sense: definitions[index % 10 === 0 ? 1 : 0]!.sense,
-      expectedSenseHead: definitions[index % 10 === 0 ? 1 : 0]!.definitionRevision, expectedDecisionHead: null, outcome: 'accepted' }] });
+    classifications: [{ concept: definitions[index % 10 === 0 ? 1 : 0]!.concept,
+      definition: definitions[index % 10 === 0 ? 1 : 0]!.definitionRevision, expectedDecisionHead: null, outcome: 'accepted' }] });
   const grow = async (target: number) => {
     while (works.length < target) {
       signal.throwIfAborted();
@@ -90,6 +105,13 @@ test.skipIf(Bun.env.G1038_REUSE === '1')('G1038: disk-backed single, compound an
     for (let index = 0; index < 8; index++) definitions.push(await api.command(`${key}:topic:${index}`, {
       method: 'POST', path: '/v1/classification-vocabulary', body: { profile: 'classification-proposition-v2',
         scheme: null, labels: [{ value: `Catalogue topic ${index}`, language: 'en' }], alternativeLabels: [], broader: [], narrower: [], actingSubject: actor } }));
+    const classificationPost: ClassificationPost = (path, body, _bearer, commandKey) =>
+      api.command(commandKey, { method: 'POST', path: path as `/v1/${string}`, body });
+    const interpretation = await shareClassificationContext(classificationPost, home.author.token,
+      actor, definitions, `${key}:context`);
+    for (const definition of definitions)
+      await discloseClassificationConcept(classificationPost, home.author.token, actor,
+        definition.concept, `${key}:hint:${definition.concept.slice(-36)}`);
     for (const scale of scales) {
       await grow(scale);
       const beforeSingle = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
@@ -106,15 +128,18 @@ test.skipIf(Bun.env.G1038_REUSE === '1')('G1038: disk-backed single, compound an
       };
       const single = await seedPublicProfileWork(measuredApi, `${key}:single:${scale}`, { actingSubject: actor,
         title: `Single catalogue Work ${scale}`, body: 'Selected native text' });
-      await measuredApi.command(`${key}:single:${scale}:classification`, { method: 'POST', path: '/v1/classification-decisions',
-        body: { profile: 'classification-direct-decision-v1', work: single.work, mainVersion: single.mainVersion,
-          context: { kind: 'global' }, sense: definitions[0]!.sense, expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor } });
+      const measuredPost: ClassificationPost = (path, body, _bearer, commandKey) =>
+        measuredApi.command(commandKey, { method: 'POST', path: path as `/v1/${string}`, body });
+      await acceptClassifiedStatement(measuredPost, home.author.token, actor, single,
+        definitions[0]!.concept, interpretation, { kind: 'global' },
+        { state: 'absent', source: 'none', decision: null },
+        { statement: `${key}:single:${scale}:statement`, decision: `${key}:single:${scale}:decision` });
       const ordinaryCommits = singleProfiles.reduce((sum, profile) => sum + profile.fusekiCalls.reduce((value, call) => value + (call.nativeWork?.durable_commits ?? 0), 0), 0);
       (evidence.samples as unknown[]).push({ name: 'single-publication-work', catalogueWorks: scale, count: 1,
         durableCommits: ordinaryCommits, latencyMsPerWork: singleProfiles.reduce((sum, profile) => sum + profile.totalLatencyMs, 0),
         growth: tdbGrowth(beforeSingle, qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!), 1),
         profiles: singleProfiles.map(profile => Object.fromEntries(Object.entries(profile).filter(([key]) => key !== 'spans'))) });
-      save(); expect(ordinaryCommits).toBe(5);
+      save(); expect(ordinaryCommits).toBe(6);
       const compoundCommits = await measured('compound-catalogue-work', 1, async headers => {
         const result = await home.app.handle(new Request('http://main.local/v1/work-imports', { method: 'POST',
           headers: { ...Object.fromEntries(headers), authorization: `Bearer ${home.author.token}`, 'content-type': 'application/json', 'idempotency-key': `${key}:compound:${scale}` },

@@ -6,7 +6,9 @@ type Routes = MainApp['~Routes']['v1'];
 type _Works = Assert<'post' extends keyof Routes['works'] ? true : false>;
 type _ContributionDraft = Assert<'get' extends keyof Routes['contributions'][':contribution']['drafts'][':revision'] ? true : false>;
 type _MainSelection = Assert<'get' extends keyof Routes['main-versions'][':mainVersion']['selection'] ? true : false>;
-type _Classification = Assert<'post' extends keyof Routes['classification-decisions'] ? true : false>;
+type _Statement = Assert<'post' extends keyof Routes['statements'] ? true : false>;
+type _StatementDecision = Assert<'post' extends keyof Routes['statement-decisions'] ? true : false>;
+type _Context = Assert<'post' extends keyof Routes['contexts'] ? true : false>;
 type _Rating = Assert<'post' extends keyof Routes['rating-aggregates'] ? true : false>;
 type _Space = Assert<'post' extends keyof Routes['spaces'] ? true : false>;
 type _Query = Assert<'post' extends keyof Routes['queries'] ? true : false>;
@@ -19,7 +21,9 @@ type AllOperations = [
   Routes['rating-contexts']['post'],
   Routes['rating-contexts'][':id']['get'],
   Routes['classification-resolutions']['post'],
-  Routes['classification-decisions']['post'],
+  Routes['contexts']['post'],
+  Routes['statements']['post'],
+  Routes['statement-decisions']['post'],
   Routes['classification-propositions']['post'],
   Routes['classification-propositions'][':sense']['get'],
   Routes['classification-contexts']['post'],
@@ -39,7 +43,7 @@ type AllOperations = [
   Routes['content-edits']['post'],
   Routes['revisions'][':revision']['get'],
 ];
-type _AllInstalled = Assert<AllOperations['length'] extends 25 ? true : false>;
+type _AllInstalled = Assert<AllOperations['length'] extends 27 ? true : false>;
 
 const client = treaty<MainApp>('http://127.0.0.1:1');
 type CreateWork = Parameters<typeof client.v1.works.post>[0];

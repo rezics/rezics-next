@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { shareClassificationContext, recordClassifiedStatement, statementDecisionBody,
+  discloseClassificationConcept, acceptClassifiedStatement, type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -13,7 +15,7 @@ interface Page<T> { items: T[]; nextCursor: string | null;
   count: { value: number; total: null; kind: 'exact-page' } }
 
 test('Realm reads: public home, scoped Works, indexed decisions, privacy and stale pages', async () => {
-  const stack = await startMediaStack('realm-read');
+  const stack = await startMediaStack('realm-read', { library: true, agents: true });
   try {
     const editor = await stack.member('realm-reader');
     const first = await stack.publicWork(editor.actor, ['en'], 'Realm first');
@@ -63,26 +65,89 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
     expect((await get(`${root}/works?cursor=broken`)).status).toBe(400);
 
     await editor.grant(`classification:context:${realm.realm}`, 'classification.context.configure');
-    await editor.grant(`classification:decide:${realm.realm}`, 'classification.decision.set');
+    await editor.grant(`classification:decide:${realm.realm}`, 'statement.decide');
     await editor.grant('classification:define:global', 'classification.proposition.define');
     await json(await editor.send('POST', '/v1/classification-contexts', {
       profile: 'classification-context-v1', realm: realm.realm, actingSubject: editor.actor }), 201);
-    const concept = await json<{ sense: string }>(await editor.send('POST', '/v1/classification-propositions', {
-      profile: 'classification-proposition-v1', label: 'Realm reading', actingSubject: editor.actor }), 201);
-    await json(await editor.send('POST', '/v1/classification-decisions', {
-      profile: 'classification-direct-decision-v1', context: { kind: 'realm-classification', id: realm.realm },
-      work: first.work, mainVersion: first.mainVersion, sense: concept.sense,
-      outcome: 'accepted', expectedDecisionHead: null, actingSubject: editor.actor }), 201);
+    await editor.grant('context:create:root', 'context.create');
+    await editor.grant(`statement:speak:${editor.actor}`, 'statement.record');
+    await editor.grant('classification:decide:global', 'statement.decide');
+    const post: ClassificationPost = (path, body, _token, key) =>
+      editor.send('POST', path, body, key).then(response => json(response, 201));
+    const concept = await json<{ sense: string; concept: string; definitionRevision: string }>(
+      await editor.send('POST', '/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: 'Realm reading', actingSubject: editor.actor }), 201);
+    const interpretation = await shareClassificationContext(post, editor.token, editor.actor, [concept], 'realm-topic-context');
+    const statement = await recordClassifiedStatement(post, editor.token, editor.actor,
+      first.mainVersion, concept.concept, interpretation, 'realm-topic-statement');
+    await discloseClassificationConcept(post, editor.token, editor.actor, concept.concept, 'realm-topic-hint',
+      { kind: 'realm', realm: realm.realm });
+    const accepted = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor,
+      statement, { kind: 'realm-classification', id: realm.realm }, 'accepted', null), editor.token, 'realm-topic-decision');
     const beforeDecisions = stack.fuseki.queries;
     const decisions = await json<Page<{ kind: string; work: string | null; subject: string | null;
       outcome: string | null }>>(await get(`${root}/decisions?limit=1`));
-    expect(stack.fuseki.queries - beforeDecisions).toBeLessThanOrEqual(8);
+    expect(stack.fuseki.queries - beforeDecisions).toBeLessThanOrEqual(24);
     expect(decisions.items).toMatchObject([{ kind: 'classification', work: first.work,
       subject: concept.sense, outcome: 'accepted' }]);
     expect(decisions.nextCursor).toBeString();
     const rest = await json<Page<{ kind: string }>>(await get(`${root}/decisions?limit=1&cursor=${decisions.nextCursor}`));
     expect(rest.items).toMatchObject([{ kind: 'adoption' }]);
     expect((await get(`/v1/realms/${short(other.realm)}/decisions?cursor=${decisions.nextCursor}`)).status).toBe(400);
+
+    const exact = await json<{ id: string; kind: string; subject: string }>(
+      await get(`${root}/decisions/${short(accepted.decision)}`));
+    expect(exact).toMatchObject({ id: accepted.decision, kind: 'classification', subject: concept.sense });
+
+    // The reader's totals and genre enrichment consume Global Statement acceptance.
+    const reader = await json<{ agent: string }>(await editor.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Realm stats reader' }), 201);
+    await json(await editor.send('PUT', `/v1/works/${short(first.work)}/reader-status`, {
+      actingSubject: reader.agent, status: 'read', finishedOn: '2026-06-01', expectedVersion: 0 }));
+    const stats = () => stack.call('GET', `/v1/me/reading-stats?year=2026&actingSubject=${encodeURIComponent(reader.agent)}`,
+      { token: editor.token }).then(response =>
+      json<{ books: number; detailsAvailability: string; topConcepts: { name: string; count: number }[] }>(response));
+    expect(await stats()).toMatchObject({ books: 1, detailsAvailability: 'complete', topConcepts: [] });
+    await discloseClassificationConcept(post, editor.token, editor.actor, concept.concept, 'global-topic-hint');
+    const global = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor,
+      statement, { kind: 'global' }, 'accepted', null), editor.token, 'global-topic-decision');
+    expect(await stats()).toMatchObject({ books: 1, topConcepts: [{ name: 'Realm reading', count: 1 }] });
+    const rejected = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor, statement, { kind: 'global' },
+      'rejected', global.decision), editor.token, 'global-topic-rejection');
+    expect(await stats()).toMatchObject({ books: 1, topConcepts: [] });
+    await post('/v1/statement-decisions', statementDecisionBody(editor.actor, statement, { kind: 'global' },
+      'accepted', rejected.decision), editor.token, 'global-topic-reaccepted');
+    await post(`/v1/concepts/${short(concept.concept)}/spoiler-hints`, {
+      profile: 'concept-spoiler-hint-v1', context: { kind: 'global' }, hint: 'major',
+      expectedGeneration: '1', actingSubject: editor.actor }, editor.token, 'global-topic-spoiler');
+    expect(await stats()).toMatchObject({ books: 1, topConcepts: [] });
+    await post(`/v1/concepts/${short(concept.concept)}/spoiler-hints`, {
+      profile: 'concept-spoiler-hint-v1', context: { kind: 'realm', realm: realm.realm }, hint: 'major',
+      expectedGeneration: '1', actingSubject: editor.actor }, editor.token, 'realm-topic-spoiler');
+    expect((await json<Page<{ kind: string }>>(await get(`${root}/decisions`))).items
+      .some(item => item.kind === 'classification')).toBe(false);
+    expect((await get(`${root}/decisions/${short(accepted.decision)}`)).status).toBe(404);
+
+    // The detail budget is shared across finished Works. One book can carry
+    // more than eight genres when the whole batch still fits its pair bound.
+    await json(await editor.send('PUT', `/v1/works/${short(second.work)}/reader-status`, {
+      actingSubject: reader.agent, status: 'read', finishedOn: '2026-06-02', expectedVersion: 0 }));
+    const genres: { concept: string; definitionRevision: string }[] = [];
+    for (let index = 0; index < 9; index++) {
+      genres.push(await json(await editor.send('POST', '/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: `Reading genre ${index}`, actingSubject: editor.actor }), 201));
+    }
+    const genreContext = await shareClassificationContext(post, editor.token, editor.actor, genres, 'reading-genre-context');
+    for (const [index, genre] of genres.entries()) {
+      await discloseClassificationConcept(post, editor.token, editor.actor, genre.concept, `reading-genre-hint-${index}`);
+      await acceptClassifiedStatement(post, editor.token, editor.actor, first, genre.concept, genreContext,
+        { kind: 'global' }, { state: 'absent', source: 'none', decision: null },
+        { statement: `reading-genre-statement-${index}`, decision: `reading-genre-decision-${index}` });
+    }
+    const varied = await stats();
+    expect(varied).toMatchObject({ books: 2, detailsAvailability: 'complete' });
+    expect(varied.topConcepts).toHaveLength(5);
+    expect(varied.topConcepts.every(item => item.name.startsWith('Reading genre ') && item.count === 1)).toBe(true);
 
     // A public semantic Context rule revision is visible without its actor or manifest.
     const rule = `https://rezics.com/id/${randomUUID()}`;

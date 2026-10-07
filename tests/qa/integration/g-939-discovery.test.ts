@@ -1,5 +1,7 @@
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect, test } from 'bun:test';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { backfillPublicNameProjections } from '../../../services/main/src/modules/search/backfill.ts';
 import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
@@ -116,14 +118,14 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     const disclosure = new DisclosureStore(stack.accessPool);
     configureDisclosurePool(stack.accessPool, disclosure);
     configureDisclosure(stack.env, disclosure);
-    const call = (path: string, body?: unknown, bearer?: string, method = body ? 'POST' : 'GET') =>
+    const call = (path: string, body?: unknown, bearer?: string, method = body ? 'POST' : 'GET', key = randomUUID()) =>
       app.handle(
         new Request(`http://main.local${path}`, {
           method,
           headers: {
             'accept-language': 'en',
             ...(body
-              ? { 'content-type': 'application/json', 'idempotency-key': randomUUID() }
+              ? { 'content-type': 'application/json', 'idempotency-key': key }
               : {}),
             ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
           },
@@ -253,26 +255,20 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       ),
       201,
     );
-    await author.grant('classification:decide:global', 'classification.decision.set');
-    for (const work of [publicWork, privateWork]) {
-      await home.json(
-        await call(
-          '/v1/classification-decisions',
-          {
-            profile: 'classification-direct-decision-v1',
-            context: { kind: 'global' },
-            work: work.work,
-            mainVersion: work.mainVersion,
-            sense: child.sense,
-            expectedDecisionHead: null,
-            outcome: 'accepted',
-            actingSubject: author.actor,
-          },
-          author.token,
-        ),
-        201,
-      );
-    }
+    await author.grant('classification:decide:global', 'statement.decide');
+    await author.grant('context:create:root', 'context.create');
+    await author.grant(`statement:speak:${author.actor}`, 'statement.record');
+    const classificationPost: ClassificationPost = async (path, body, bearer, key) =>
+      home.json(await call(path, body, bearer, 'POST', key), 201);
+    const interpretation = await shareClassificationContext(classificationPost, author.token,
+      author.actor, [child], randomUUID());
+    await discloseClassificationConcept(classificationPost, author.token, author.actor,
+      child.concept, randomUUID());
+    for (const work of [publicWork, privateWork])
+      await acceptClassifiedStatement(classificationPost, author.token, author.actor, work,
+        child.concept, interpretation, { kind: 'global' },
+        { state: 'absent', source: 'none', decision: null },
+        { statement: randomUUID(), decision: randomUUID() });
     // Every Concept uses the public owner command, including the large fixture.
     const bulk: string[] = [];
     for (let i = 0; i < 270; i++) {
@@ -334,6 +330,19 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     expect(workSearch.results.map((item) => item.work)).toEqual([publicWork.work]);
     expect(workSearch.count).toEqual({ value: 1, precision: 'exact' });
     expect(workSearch.next).toBeNull();
+    for (const operation of ['postV1DiscoveryGeneration-builds', 'getV1DiscoveryGenerationsByGeneration',
+      'postV1DiscoveryGenerationsByGenerationAdvance', 'postV1DiscoveryGeneration-activations']) {
+      const permission = `platform:use:${operation}`, platformGrant = randomUUID();
+      await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access',$4,now() + interval '1 hour')`,
+      [platformGrant, author.actor, author.principalId, permission]);
+      await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,$3,'platform:access',$4,$5)`,
+      [platformGrant, author.actor, permission, author.principalId,
+        `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
+    }
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const refresh = async () => {
       let row = await home.json<{

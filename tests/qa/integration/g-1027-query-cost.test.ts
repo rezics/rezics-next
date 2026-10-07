@@ -1,5 +1,7 @@
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -80,7 +82,7 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     headers.set('accept-language', 'en');
     if (body) {
       headers.set('content-type', 'application/json');
-      headers.set('idempotency-key', randomUUID());
+      if (!headers.has('idempotency-key')) headers.set('idempotency-key', randomUUID());
     }
     if (bearer) headers.set('authorization', `Bearer ${bearer}`);
     return app.handle(
@@ -128,9 +130,24 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     );
   };
   try {
+    for (const operation of ['postV1Work-importsBulk', 'postV1DiscoveryGeneration-builds',
+      'getV1DiscoveryGenerationsByGeneration', 'postV1DiscoveryGeneration-activations']) {
+      const permission = `platform:use:${operation}`, platformGrant = randomUUID();
+      await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access',$4,now() + interval '1 hour')`,
+      [platformGrant, author.actor, author.principalId, permission]);
+      await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,$3,'platform:access',$4,$5)`,
+      [platformGrant, author.actor, permission, author.principalId,
+        `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
+    }
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     await author.grant('classification:define:global', 'classification.proposition.define');
-    await author.grant('classification:decide:global', 'classification.decision.set');
+    await author.grant('classification:decide:global', 'statement.decide');
+    await author.grant('context:create:root', 'context.create');
+    await author.grant(`statement:speak:${author.actor}`, 'statement.record');
     await author.grant('work:create:catalogue-import', 'work.create');
     for (let i = 0; i < 8; i++)
       definitions.push(
@@ -222,8 +239,8 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
                   ? definitions.slice(0, 1)
                   : []
               ).map((term) => ({
-                sense: term.sense,
-                expectedSenseHead: term.definitionRevision,
+                concept: term.concept,
+                definition: term.definitionRevision,
                 expectedDecisionHead: null,
                 outcome: 'accepted',
               })),
@@ -273,25 +290,17 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
       ).toBe('succeeded');
     }
     const privateWork = await stack.privateWork(author.actor, `${token} common hidden`);
-    {
-      const work = works[0]!,
-        term = definitions[0]!;
-      await json(
-        '/v1/classification-decisions',
-        {
-          profile: 'classification-direct-decision-v1',
-          context: { kind: 'global' },
-          work: work.work,
-          mainVersion: work.mainVersion,
-          sense: term.sense,
-          expectedDecisionHead: null,
-          outcome: 'accepted',
-          actingSubject: author.actor,
-        },
-        author.token,
-        201,
-      );
-    }
+    const classificationPost: ClassificationPost = async (path, body, bearer, key) =>
+      home.json(await call(path, body, bearer, new Headers({ 'idempotency-key': key })), 201);
+    const interpretation = await shareClassificationContext(classificationPost, author.token,
+      author.actor, definitions, randomUUID());
+    for (const term of definitions)
+      await discloseClassificationConcept(classificationPost, author.token, author.actor,
+        term.concept, randomUUID());
+    await acceptClassifiedStatement(classificationPost, author.token, author.actor, works[0]!,
+      definitions[0]!.concept, interpretation, { kind: 'global' },
+      { state: 'absent', source: 'none', decision: null },
+      { statement: randomUUID(), decision: randomUUID() });
     const workType = { facet: 'type', any: ['https://schema.org/CreativeWork'] };
     const base: ResourceListQuery = {
       profile: 'resource-list-v1',

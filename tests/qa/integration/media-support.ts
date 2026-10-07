@@ -23,6 +23,7 @@ import { AccessPolicyOwner } from '../../../services/main/src/modules/access/pol
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
 import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
 import { AccessVotes } from '../../../services/main/src/modules/vote/access.ts';
@@ -134,7 +135,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   // The running Main carries the same exposure, so a fixture principal's grant is visible here.
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     platformAccess: new AccessExposure(accessPool),
-    statementSeek, templateSeek,
+    statementSeek, templateSeek, judgments: new AccessJudgments(accessPool),
     content, contentAuthoring: content, media, votes, erasures,
     ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,

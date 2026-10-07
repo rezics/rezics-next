@@ -1,3 +1,6 @@
+import { readVisibleOnboardingConcepts } from '../onboarding/classifications.ts';
+import { readWorkClassificationBatch, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
+import { CLASSIFIED_AS } from '../statement/schema.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import {
@@ -8,7 +11,7 @@ import {
   WorkReadMissing,
   WorkReadUnavailable,
   type ReadRow,
-  type WorkReadSession,
+  WorkReadSession,
 } from '../work/read-session.ts';
 import { readRealmBasis } from './read-realm.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
@@ -26,7 +29,34 @@ async function admittedDecisions(session: WorkReadSession, rows: ReadRow[], real
     })),
     'read',
   );
-  return rows.filter((_, index) => decisions[index] === 'visible');
+  const admitted = rows.filter((_, index) => decisions[index] === 'visible');
+  const classified = admitted.filter(row => row.kind?.value === 'classification');
+  const disclosed = new Set<string>();
+  const targets = [...new Map(classified.map(row => [row.work!.value,
+    { work: row.work!.value, mainVersion: row.main!.value }])).values()];
+  const scoped = new WorkReadSession(session.deps, session.request,
+    { ...session.options, scope: 'realm', realm, limit: WORK_CLASSIFICATION_BATCH_COST.senses },
+    session.position);
+  for (let start = 0; start < targets.length; start += WORK_CLASSIFICATION_BATCH_COST.works) {
+    let pending = new Map<string | undefined, typeof targets>([[undefined,
+      targets.slice(start, start + WORK_CLASSIFICATION_BATCH_COST.works)]]);
+    while (pending.size) {
+      const next = new Map<string | undefined, typeof targets>();
+      for (const [after, own] of pending) {
+        const batch = await readWorkClassificationBatch(scoped, own, undefined, after);
+        const eligible = await readVisibleOnboardingConcepts(scoped,
+          [...batch.values()].flatMap(page => page.items.map(item => item.concept)));
+        for (const target of own) {
+          const page = batch.get(target.work)!;
+          for (const item of page.items.filter(item => eligible.has(item.concept))) disclosed.add(`${target.work}\0${item.sense}\0${item.decision}`);
+          if (page.after) next.set(page.after, [...next.get(page.after) ?? [], target]);
+        }
+      }
+      pending = next;
+    }
+  }
+  return admitted.filter(row => row.kind?.value !== 'classification'
+    || disclosed.has(`${row.work!.value}\0${row.subject!.value}\0${row.id!.value}`));
 }
 
 function decisionRelation(realm: string) {
@@ -40,14 +70,16 @@ function decisionRelation(realm: string) {
       ${publicWork('?work', '?main')}
       BIND("adoption" AS ?kind)
     } UNION {
-      GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ;
-        rv:classificationContext ?context ; rv:targetMainVersion ?main ; rv:sense ?subject .
+      GRAPH ${iri(GRAPHS.current)} {
         ?context a rv:ClassificationContext ; rv:realm ${iri(realm)} .
+        ?slot a rv:DecisionSlot ; rv:acceptanceContext ?context ; rv:decisionHead ?id .
+        ?support rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ;
+          rv:interpretationDefinition ?definition .
+        ?subject a rv:ClassificationSense ; rv:head ?definition .
         ?main rv:work ?work . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ClassificationDecision, rv:RevisionAnchor ;
-        rv:component ?application ; rv:outcome ?outcome ;
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:StatementDecision, rv:RevisionAnchor ;
+        rv:component ?slot ; rv:support ?support ; rv:outcome ?outcome ;
         rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
-      FILTER(?outcome IN (rv:Accepted, rv:Rejected))
       ${publicWork('?work', '?main')}
       BIND("classification" AS ?kind)
     } UNION {
@@ -89,8 +121,8 @@ function decisionItem(row: ReadRow) {
 
 /** Public graph revision index: no receipts, private actors or Access roster rows enter this relation.
  * One keyset page is chosen across all event families before any response mapping.
- * One lineage read, at most 64 identity/admission batches, two basis probes and two position fences
- * bound graph round trips. Jena can scan/sort D eligible revisions (O(D log D));
+ * One lineage read, at most 64 admission batches with Work-keyed classification
+ * continuations, two basis probes and two position fences bound graph round trips. Jena can scan/sort D eligible revisions (O(D log D));
  * a materialized seek index needs its own writer/retention owner before large-scale use. */
 export async function readRealmDecisions(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
@@ -119,7 +151,7 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
     key: (row) => row.id!.value,
     fetch: async (after, size) => {
       const rows = await session.query(
-        `SELECT DISTINCT ?id ?kind ?work ?subject ?outcome
+        `SELECT DISTINCT ?id ?kind ?work ?main ?subject ?outcome
     ?revisionEpoch ?sequence ?epochOrder WHERE {
     ${epochs}
     ${decisionRelation(realm)}
@@ -180,7 +212,7 @@ export async function readRealmDecision(session: WorkReadSession, realm: string,
   // Same policy probe as the page: no cut means there is no older publication to exclude.
   const origin = history ? await realmHistoryOriginFilter(session, realm, 'selection', '?work') : '';
   const rows = await session.query(
-    `SELECT DISTINCT ?id ?kind ?work ?subject ?outcome
+    `SELECT DISTINCT ?id ?kind ?work ?main ?subject ?outcome
     ?revisionEpoch ?sequence WHERE {
     ${decisionRelation(realm)}
     ${history}
