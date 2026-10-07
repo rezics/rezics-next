@@ -109,7 +109,8 @@ function fixture(options: { own?: boolean; originalSequence?: string; originalEp
       priorDataEpoch: released.effective.dataEpoch, priorSequence: released.effective.graphSequence }));
   add(graph.releaseRows, GRAPHS.control, DATASET, { dataEpoch: literal(captured.cut.dataEpoch),
     routingEpoch: literal('2'), sequence: literal('0', 'integer'), restoreCutover: uri(captured.cut.restoreCutover) });
-  add(graph.releaseRows, GRAPHS.control, MAIN_RELAY_STREAM_SCOPE, {
+  // The reader selects the Main stream subject only for paired releases; legacy v1 has none.
+  if (paired) add(graph.releaseRows, GRAPHS.control, MAIN_RELAY_STREAM_SCOPE, {
     dataEpoch: literal(captured.cut.dataEpoch), streamSequence: literal('0', 'integer'),
     legacyThroughSequence: literal('0', 'integer') });
   add(graph.releaseRows, GRAPHS.control, captured.cut.restoreCutover, {
