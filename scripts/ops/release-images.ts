@@ -48,6 +48,7 @@ const runtimeWorkspaceRoots = [
 ];
 const runtimeArtifacts = [
   'scripts/ops/migrate.ts',
+  'scripts/ops/postgres-preflight.ts',
   'scripts/ops/production-env.ts',
   'scripts/lib/migration-order.ts',
   'scripts/dev/release-manifest.ts',

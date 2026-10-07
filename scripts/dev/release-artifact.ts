@@ -16,6 +16,7 @@ const migrationDirectories = ['services/main/migrations/access',
   'services/main/migrations/relay', 'services/content/migrations', 'services/account/migrations'] as const;
 const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.json',
   'infra/release/Dockerfile',
+  'infra/release/postgres-provision.sql', 'scripts/ops/postgres-preflight.ts',
   '.yarnrc.yml', 'yarn.lock',
   // Main imports this adapter even when local fixture fetching is disabled.
   'scripts/dev/seed/open-library-fixtures.ts', 'scripts/ops/migrate.ts',

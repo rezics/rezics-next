@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../lib/migration-order.ts';
 import { Pool, type PoolClient } from 'pg';
+import { checkPostgresOwners } from './postgres-preflight.ts';
 import { migrateContent } from '../../services/content/src/migrate.ts';
 
 export const migrationDirectories = {
@@ -176,6 +177,7 @@ export async function migrateOwners(
   env: Record<string, string | undefined>,
   root = repositoryRoot,
 ): Promise<string[]> {
+  if (env.NODE_ENV === 'production') await checkPostgresOwners(env);
   for (const name of [
     'ACCESS_DATABASE_URL',
     'CONTENT_DATABASE_URL',
@@ -200,7 +202,7 @@ if (import.meta.main) {
     checkProductionEnv(env, ['migrate']);
     await assertNoPaymentProvider(env.ACCESS_DATABASE_URL!, true);
   }
-  const applied = await migrateOwners(env);
+  const applied = await migrateOwners(process.argv[2] ? { ...env, NODE_ENV: 'production' } : env);
   if (process.argv[2] || env.NODE_ENV === 'production')
     await assertNoPaymentProvider(env.ACCESS_DATABASE_URL!);
   console.log(JSON.stringify({ applied }));

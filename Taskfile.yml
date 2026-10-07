@@ -499,6 +499,11 @@ tasks:
     cmds:
       - bun scripts/ops/production-env.ts {{.CLI_ARGS}}
 
+  ops:postgres-preflight:
+    desc: Verify production owner diagnostic grants and disabled prepared transactions without writes.
+    cmds:
+      - bun scripts/ops/postgres-preflight.ts {{.CLI_ARGS}}
+
   ops:platform-governance:
     desc: Refuse production opening without an active permanent platform grant holder; warn until two hold it.
     cmds:

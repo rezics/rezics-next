@@ -5,6 +5,50 @@ before starting the release. The bootstrap consumes the public Main APIs; it
 does not connect to owner databases or reuse demo identities, Works, posts or
 ratings. Its command is `task ops:bootstrap`.
 
+## Provision PostgreSQL before migrations
+
+Create the existing `account`, `access`, `content` and `relay` login roles and
+their owner databases first. As the cluster administrator, apply the release's
+[provisioning SQL](../../infra/release/postgres-provision.sql) once per PostgreSQL
+cluster. Use a libpq service named `rezics-production-admin` with credentials in
+the operator's protected service/password files, then run:
+
+```sh
+psql -X --dbname=service=rezics-production-admin --set=ON_ERROR_STOP=1 \
+  --file=infra/release/postgres-provision.sql
+```
+
+The SQL is safe to repeat. It grants only `pg_read_all_stats` to `access` and
+`content`, with inheritance enabled so their horizon lag probes can read other
+sessions' statistics. It grants no superuser or application-table access.
+Account and Relay need no diagnostic grant.
+
+Run the file without `--single-transaction`: [ALTER SYSTEM](https://www.postgresql.org/docs/18/sql-altersystem.html)
+writes the cluster configuration outside a transaction. Restart PostgreSQL
+before continuing; a reload cannot activate
+[`max_prepared_transactions=0`](https://www.postgresql.org/docs/18/runtime-config-resource.html#GUC-MAX-PREPARED-TRANSACTIONS).
+If the host configuration supplies command-line PostgreSQL settings, also set
+the value to zero there, because command-line values override `ALTER SYSTEM`.
+
+Put the four owner connection URLs in `.temp/production.env` using
+`ACCOUNT_DATABASE_URL`, `ACCESS_DATABASE_URL`, `CONTENT_DATABASE_URL` and
+`MAIN_RELAY_DATABASE_URL`. Verify with the actual owner credentials:
+
+```sh
+task ops:postgres-preflight -- .temp/production.env
+task ops:migrate -- .temp/production.env
+```
+
+The read-only preflight requires the matching non-superuser role on every
+connection, an active zero prepared-transaction setting on every server, and
+inherited diagnostic access for Access and Content. Connections time out after
+five seconds; queries have a five-second server timeout and a six-second client
+timeout. Failures
+identify the owner and prerequisite without printing credentials or driver
+errors. Production migrations repeat this gate before any migration writes;
+keep the release and bootstrap stopped if it fails. Re-run the preflight after
+a restart, credential change, failover or diagnostic grant change.
+
 ## Operator and authority
 
 Boot Account and Main with `PLATFORM_FIRST_ADMIN_ACCOUNT` unset. Register the

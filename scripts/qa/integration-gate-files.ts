@@ -2,6 +2,7 @@
 // integration tier. Parallel Goal branches append one path per line and git's
 // union merge driver keeps both sides (see .gitattributes), so never reorder.
 export const integrationGateFiles = [
+  'scripts/ops/tests/postgres-preflight.integration.test.ts',
   'services/account/tests/account.integration.test.ts',
   'services/account/tests/consent-revocation.integration.test.ts',
   'services/account/tests/oidc-authorization.integration.test.ts',

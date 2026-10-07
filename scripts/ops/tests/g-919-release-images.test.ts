@@ -86,6 +86,7 @@ function fixture() {
   write(repository, '.yarn/patches/runtime.patch', 'pinned resolver patch');
   for (const path of [
     'scripts/ops/migrate.ts',
+    'scripts/ops/postgres-preflight.ts',
     'scripts/ops/production-env.ts',
     'scripts/lib/migration-order.ts',
     'scripts/dev/seed/open-library-fixtures.ts',
@@ -96,6 +97,7 @@ function fixture() {
     'yarn.lock',
     '.yarnrc.yml',
     'infra/release/Dockerfile',
+    'infra/release/postgres-provision.sql',
   ]) {
     write(repository, path, '{}');
   }
@@ -176,6 +178,8 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
+  expect(existsSync(join(options.context, 'scripts/ops/postgres-preflight.ts'))).toBe(true);
+  expect(existsSync(join(options.context, 'infra/release/postgres-provision.sql'))).toBe(true);
   expect(readFileSync(join(options.context, '.yarn/patches/runtime.patch'), 'utf8')).toBe(
     'pinned resolver patch',
   );
