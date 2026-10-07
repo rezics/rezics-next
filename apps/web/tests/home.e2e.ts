@@ -1,13 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { openPlatformGroup } from './platform-grant.ts';
 
 // Home in a real browser against a fresh QA stack. The stack's feed may be
 // empty or full, so these check the frame and the rules that hold either way:
 // the sort is always in view, filters live in the URL and survive the simple
 // choices, an empty filtered view names its cause without widening itself,
 // a new person is invited to set up Home instead of meeting an empty Following,
-// and Home's current Filters become a pinned tab that can be taken off again.
+// saved views stay closed until granted, and then Home's current Filters
+// become a pinned tab that can be taken off again.
 
 function member(): { email: string; password: string } {
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
@@ -76,6 +79,7 @@ test('signed out, notifications ask for sign-in and return there', async ({ page
 });
 
 test('G-431: a new person is invited to set up Home, can put it off, and pins the current filters as a tab', async ({ page }) => {
+  test.setTimeout(180_000);
   await signInAtAccounts(page, '/en', member());
   const invite = page.getByRole('region', { name: 'Make Home yours' });
   if (await invite.getByRole('button', { name: 'Not now' }).isVisible()) {
@@ -89,9 +93,23 @@ test('G-431: a new person is invited to set up Home, can put it off, and pins th
     await page.reload();
     await expect(page.getByRole('region', { name: 'Make Home yours' })).toContainText('Pin topics as tabs');
   }
-  // Following or All is one tap away either way.
+  // Without saved views, Home is Following and All. The pin control and tab menus stay absent,
+  // and a closed read does not become an error.
   const tabs = posts(page).getByRole('navigation', { name: 'Feed' });
+  await expect(tabs.getByRole('link', { name: 'Following' })).toBeVisible();
   await expect(tabs.getByRole('link', { name: 'All' })).toBeVisible();
+  await expect(tabs.getByRole('button', { name: /^Pin a topic/ })).toHaveCount(0);
+  await expect(tabs.getByRole('button', { name: /^Options for / })).toHaveCount(0);
+  await expect(posts(page).getByText('Couldn’t change your tabs')).toHaveCount(0);
+  await expect(posts(page).getByText('Couldn’t pin')).toHaveCount(0);
+  await expect(posts(page).getByText('platform_closed')).toHaveCount(0);
+
+  // An address kept for a pinned tab says the tab is gone and offers All.
+  await page.goto(`/en?tab=${randomUUID()}`);
+  await expect(posts(page).getByRole('heading', { name: 'This tab isn’t on your Home any more' })).toBeVisible();
+  await expect(posts(page).getByRole('link', { name: 'Browse All' })).toBeVisible();
+
+  await openPlatformGroup('saved-views');
 
   // The Filters Home shows now become a named tab after Following and All, with its own address.
   await page.goto('/en?tab=all&lang=ja');
