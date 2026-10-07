@@ -97,4 +97,5 @@ export default {
   specialsNote: 'Specials werden getrennt geführt: Wenn du eines markierst, ändert sich dein Stand in den Hauptfolgen nicht.',
   trackedUnavailable: 'Dein Stand in dieser Serie konnte nicht geladen werden.',
   episodeSaving: 'Wird gespeichert …',
+  findingEpisode: insert('Folge {{number}} wird gesucht …', { number: String }),
 } satisfies TrackingMessages;

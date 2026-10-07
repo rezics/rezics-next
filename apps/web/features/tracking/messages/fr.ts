@@ -97,4 +97,5 @@ export default {
   specialsNote: 'Les spéciaux sont comptés à part : en marquer un ne change pas votre avancement dans les épisodes principaux.',
   trackedUnavailable: 'Votre avancement dans cette série n’a pas pu être chargé.',
   episodeSaving: 'Enregistrement…',
+  findingEpisode: insert('Recherche de l’épisode {{number}}…', { number: String }),
 } satisfies TrackingMessages;

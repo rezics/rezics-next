@@ -32,6 +32,7 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
   const [failed, setFailed] = useState(false);
   const [typed, setTyped] = useState('');
   const [missing, setMissing] = useState<number | null>(null);
+  const [finding, setFinding] = useState<number | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -72,8 +73,10 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     if (typedNumber === null) return;
     setMissing(null);
     setFailed(false);
+    setFinding(typedNumber);
     let found: Episode | null = null;
-    try { found = await reach(api, read!.mains, typedNumber); } catch { setFailed(true); return; }
+    try { found = await reach(api, read!.mains, typedNumber); } catch { setFinding(null); setFailed(true); return; }
+    setFinding(null);
     if (!found) { setMissing(typedNumber); setSelected(null); return; }
     await select(found);
   }
@@ -106,8 +109,9 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
         <Input id={jumpId} size="sm" inputMode="numeric" className="h-11 w-32 sm:h-8" value={typed}
           onChange={event => { setTyped(event.target.value); setMissing(null); }} />
       </Field>
-      <Button type="submit" variant="outline" className="min-h-11 sm:min-h-8" disabled={saving || typedNumber === null}>{t.jumpGo}</Button>
+      <Button type="submit" variant="outline" className="min-h-11 sm:min-h-8" disabled={saving || finding !== null || typedNumber === null}>{t.jumpGo}</Button>
     </form>
+    {finding !== null ? <p role="status" className="text-muted-foreground text-sm" data-finding>{t.findingEpisode({ number: String(finding) })}</p> : null}
     {missing !== null ? <p role="status" className="text-muted-foreground text-sm">{t.noSuchEpisode({ number: String(missing) })}</p> : null}
 
     {read.specials.length ? <div className="grid gap-3 border-border/60 border-t pt-3" data-specials>

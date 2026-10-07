@@ -35,19 +35,24 @@ export interface EpisodeApi {
   mark(episode: EpisodeRef, change: { completed: boolean; position?: string | null }): Promise<Loaded<EpisodeProgress>>;
 }
 
-/** Main's own page size for a Structure read. */
-export const EPISODE_PAGE = 100;
-/** A read Main asked to restart (its graph moved under it) is restarted this many times, waiting twice as long after each. */
+/**
+ * Main bounds a Work read at 20 items and 160 graph calls, and each episode's target is disclosed
+ * with calls of its own, so a Structure is read 20 at a time.
+ */
+export const EPISODE_PAGE = 20;
+/** A read Main asked to restart (its graph moved under it) or could not answer is tried this many more times, waiting twice as long after each. */
 const MOVED_RESTARTS = 4;
 const MOVED_DELAY_MS = 250;
 /** Attempts at a write that another device, or the graph moving, got in front of. */
 const MARK_ATTEMPTS = 5;
+/** Times one write is sent when Main cannot answer it. */
+const SEND_ATTEMPTS = 3;
 const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
 
 async function restarted<T>(read: () => Promise<Loaded<T>>): Promise<Loaded<T>> {
   for (let attempt = 0; ; attempt++) {
     const answer = await read();
-    if (answer.ok || answer.failure !== 'moved' || attempt === MOVED_RESTARTS) return answer;
+    if (answer.ok || answer.failure !== 'moved' && answer.failure !== 'unavailable' || attempt === MOVED_RESTARTS) return answer;
     await wait(MOVED_DELAY_MS * 2 ** attempt);
   }
 }
@@ -81,16 +86,24 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
       for (let attempt = 0; attempt < MARK_ATTEMPTS; attempt++) {
         const current = await read(episode);
         if (!current.ok) return current;
-        try {
-          const { data, error } = await progress(episode).put({ actingSubject, expectedVersion: current.data.version,
-            completed: change.completed, position: change.position === undefined ? current.data.position : change.position },
-          { headers: { 'idempotency-key': commandKey() } });
-          if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
-          if (error.status !== 409) return { ok: false, failure: failureOf(error.status, error.value) };
-          // Main moving under the write asks for a pause; another device's write asks to read again.
-          if ((error.value as { code?: string } | null)?.code === 'read_basis_changed') await wait(MOVED_DELAY_MS * 2 ** attempt);
-        } catch {
-          return { ok: false, failure: 'unavailable' };
+        const body = { actingSubject, expectedVersion: current.data.version, completed: change.completed,
+          position: change.position === undefined ? current.data.position : change.position };
+        // One key per intent: a write Main could not answer is sent again as the same command, and replays.
+        const key = commandKey();
+        for (let tries = 0; tries < SEND_ATTEMPTS; tries++) {
+          try {
+            const { data, error } = await progress(episode).put(body, { headers: { 'idempotency-key': key } });
+            if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
+            if (error.status === 409) {
+              // Main moving under the write asks for a pause; another device's write asks to read again.
+              if ((error.value as { code?: string } | null)?.code === 'read_basis_changed') await wait(MOVED_DELAY_MS * 2 ** attempt);
+              break;
+            }
+            if (error.status < 500 || tries === SEND_ATTEMPTS - 1) return { ok: false, failure: failureOf(error.status, error.value) };
+          } catch {
+            if (tries === SEND_ATTEMPTS - 1) return { ok: false, failure: 'unavailable' };
+          }
+          await wait(MOVED_DELAY_MS * 2 ** tries);
         }
       }
       return { ok: false, failure: 'moved' };

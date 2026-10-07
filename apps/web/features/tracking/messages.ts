@@ -107,6 +107,7 @@ const en = {
   specialsNote: 'Specials are kept apart: marking one does not change where you are in the main episodes.',
   trackedUnavailable: 'Your place in this series could not be loaded.',
   episodeSaving: 'Saving…',
+  findingEpisode: insert('Finding episode {{number}}…', { number: String }),
 };
 
 export const englishMessages = en;

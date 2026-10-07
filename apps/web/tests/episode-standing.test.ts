@@ -142,7 +142,7 @@ describe('Main behind the episode api', () => {
   test('a Structure of episodes is the Work\'s own, and one that places Works is the series panel\'s', async () => {
     const episodes = main({ parts: () => ({ data: { structure, parts: [{ role: 'group', occurrence: group }], next: null }, error: null }) });
     expect(await episodes.api.structure(saoOne)).toEqual({ ok: true, data: { structure, placesWorks: false } });
-    expect(episodes.asked.parts).toEqual([{ actingSubject: 'https://rezics.com/id/agent', limit: 100 }]);
+    expect(episodes.asked.parts).toEqual([{ actingSubject: 'https://rezics.com/id/agent', limit: 20 }]);
     const volumes = main({ parts: () => ({ data: { structure, parts: [{ role: 'part', occurrence: at('1'), work: at('2') }], next: null }, error: null }) });
     expect(await volumes.api.structure(saoOne)).toEqual({ ok: true, data: { structure, placesWorks: true } });
   });
@@ -160,7 +160,7 @@ describe('Main behind the episode api', () => {
       { occurrence: group, role: 'group', labels: [{ value: 'Specials', language: 'en' }] },
     ] }, error: null }) });
     const page = await api.page(structure, { parent: group, after: 'cursor-1' });
-    expect(asked.pages).toEqual([{ actingSubject: 'https://rezics.com/id/agent', limit: 100, parent: group, after: 'cursor-1' }]);
+    expect(asked.pages).toEqual([{ actingSubject: 'https://rezics.com/id/agent', limit: 20, parent: group, after: 'cursor-1' }]);
     expect(page).toEqual({ ok: true, data: { next: 'cursor-2',
       parts: [{ occurrence: at('e11'), label: 'Episode 1' }, { occurrence: at('e12'), label: 'Two' }],
       groups: [{ occurrence: group, label: 'Specials' }] } });
@@ -184,6 +184,30 @@ describe('Main behind the episode api', () => {
     const { api, asked } = main({ put: () => ({ data: null, error: { status: 409, value: { code: 'stale_progress' } } }) });
     expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'moved' });
     expect(asked.puts).toHaveLength(5);
+  });
+
+  test('a write Main could not answer is sent again as the same command', async () => {
+    let attempt = 0;
+    const { api, asked } = main({ put: body => (attempt++ === 0 ? { data: null, error: { status: 503, value: { code: 'dependency_unavailable' } } }
+      : { data: { ...(body as object), version: 1 }, error: null }) });
+    expect((await api.mark({ structure, occurrence: at('e17') }, { completed: true })).ok).toBe(true);
+    expect(asked.puts).toHaveLength(2);
+    expect(asked.puts[1]!.key).toBe(asked.puts[0]!.key);
+    expect(asked.puts[1]!.body).toEqual(asked.puts[0]!.body);
+  });
+
+  test('a write refused for what it asks is not sent again', async () => {
+    const { api, asked } = main({ put: () => ({ data: null, error: { status: 404, value: {} } }) });
+    expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'missing' });
+    expect(asked.puts).toHaveLength(1);
+  });
+
+  test('a read that Main could not answer is tried again', async () => {
+    let asks = 0;
+    const { api } = main({ page: () => (asks++ === 0 ? { data: null, error: { status: 503, value: {} } }
+      : { data: { occurrences: [], next: null }, error: null }) });
+    expect(await api.page(structure)).toMatchObject({ ok: true });
+    expect(asks).toBe(2);
   });
 
   test('a read Main asks to restart is restarted', async () => {

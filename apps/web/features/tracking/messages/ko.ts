@@ -94,4 +94,5 @@ export default {
   specialsNote: '스페셜은 따로 집계합니다. 스페셜을 표시해도 본편에서의 진행 위치는 바뀌지 않습니다.',
   trackedUnavailable: '이 시리즈의 진행 위치를 불러오지 못했습니다.',
   episodeSaving: '저장하는 중…',
+  findingEpisode: insert('{{number}}화를 찾는 중…', { number: String }),
 } satisfies TrackingMessages;

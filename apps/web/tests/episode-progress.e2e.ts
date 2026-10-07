@@ -2,9 +2,9 @@ import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
+import { type Browser, type BrowserContext, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
-import type { Series, SeriesKey } from './episode-progress-seed.ts';
+import type { Series } from './episode-progress-seed.ts';
 
 // A viewer marks episodes watched, sees where they are with the specials apart, and resumes the same
 // place on a second device. Two browser contexts are two devices of one reader: a desktop and a
@@ -13,13 +13,12 @@ import type { Series, SeriesKey } from './episode-progress-seed.ts';
 
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
-let short: Series;
-let long: Promise<Series>;
+let seeded: Series;
 
-/** Seeds one series in its own process, which writes through Main's routes into this run's stack. */
-function seed(key: SeriesKey): Promise<Series> {
+/** Seeds the series in its own process, which writes through Main's routes into this run's stack. */
+function seed(): Promise<Series> {
   return new Promise((resolve, reject) => {
-    const child = spawn('bun', ['apps/web/tests/episode-progress-seed.ts', key], { cwd: process.cwd(), env: process.env });
+    const child = spawn('bun', ['apps/web/tests/episode-progress-seed.ts'], { cwd: process.cwd(), env: process.env });
     let out = '';
     let err = '';
     child.stdout.on('data', chunk => { out += chunk; });
@@ -27,13 +26,13 @@ function seed(key: SeriesKey): Promise<Series> {
     child.on('error', reject);
     child.on('close', code => {
       console.log(err);
-      if (code !== 0) reject(new Error(`episode progress seed (${key}) failed: ${err || code}`));
+      if (code !== 0) reject(new Error(`episode progress seed failed: ${err || code}`));
       else resolve(JSON.parse(out.trim().split('\n').at(-1)!) as Series);
     });
   });
 }
 
-/** Main keeps processing a seed's events for a while, moving the graph under every read (409). */
+/** Main keeps processing the seed's events for a while, moving the graph under every read (409). */
 async function settle(series: Series) {
   const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(series.work)}`;
   let last = '';
@@ -52,10 +51,8 @@ async function settle(series: Series) {
 test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  // The thousand-episode series takes minutes to compose; it is written while the first journey runs.
-  long = seed('long');
-  long.catch(() => undefined);
-  short = await seed('short');
+  seeded = await seed();
+  await settle(seeded);
 });
 
 const uuid = (iri: string) => iri.slice(-36);
@@ -69,9 +66,11 @@ function member() {
 }
 
 /** A device: its own browser context, signed in as the reader, then on the series' progress page. */
-async function device(browser: Browser, info: TestInfo, viewport: { width: number; height: number }, series: { work: string }): Promise<Page> {
+async function device(browser: Browser, info: TestInfo, viewport: { width: number; height: number }, series: { work: string },
+  prepare?: (context: BrowserContext) => Promise<void>): Promise<Page> {
   const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport,
     hasTouch: viewport.width < 600, isMobile: viewport.width < 600 });
+  await prepare?.(context);
   const page = await context.newPage();
   // The sign-in lands on the Work's canonical address, so it is asked for the Work itself.
   await signInAtAccounts(page, home(series), member());
@@ -109,7 +108,7 @@ async function jumpTo(panel: Locator, number: number) {
 
 test('episodes marked on one device resume on another, with specials kept apart', async ({ browser }, info) => {
   test.setTimeout(300_000);
-  const series = short;
+  const series = seeded;
   // One after the other: two sign-ins at once sometimes stall on the Account service.
   const a = await device(browser, info, desktop, series);
   const b = await device(browser, info, phone, series);
@@ -171,16 +170,51 @@ test('episodes marked on one device resume on another, with specials kept apart'
   await expect(episodes(a).getByText('You have watched every episode.')).toBeVisible();
 });
 
+/**
+ * A series of a thousand episodes, served by a fake Main that both devices share. The real stack
+ * reads a Structure twenty targets at a time, each disclosed with calls of its own, so a thousand
+ * placements are not written or walked inside this journey's budget; this proves the panel's side:
+ * the number takes the reader to episode 1000 whatever page it is on, and a second device sees it.
+ */
+function fakeSeries(total: number) {
+  const structure = 'https://rezics.com/id/00000000-0000-7000-8000-00000000f000';
+  const occurrence = (number: number) => `https://rezics.com/id/00000000-0000-7000-8000-${String(number).padStart(12, '0')}`;
+  const rows = new Map<string, { completed: boolean; position: string | null; version: number }>();
+  const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
+  return async (context: BrowserContext) => {
+    await context.route('**/api/main/v1/resources/*/parts*', route => route.fulfill(json({ structure, parts: [], next: null })));
+    await context.route(`**/api/main/v1/compositions/${structure.slice(-36)}?*`, route => {
+      const query = new URL(route.request().url()).searchParams;
+      const from = Number(query.get('after') ?? 0);
+      const limit = Number(query.get('limit') ?? 20);
+      const numbers = Array.from({ length: Math.max(0, Math.min(limit, total - from)) }, (_, index) => from + index + 1);
+      return route.fulfill(json({ structure, next: from + limit < total ? String(from + limit) : null,
+        occurrences: numbers.map(number => ({ occurrence: occurrence(number), role: 'part', parent: structure,
+          target: occurrence(number + 100_000), labels: [], qualifier: { type: 'work-part', displayLabel: `Episode ${number}`, inclusion: 'required' } })) }));
+    });
+    await context.route('**/api/main/v1/compositions/*/occurrences/*/progress*', async route => {
+      const request = route.request();
+      const id = new URL(request.url()).pathname.split('/').at(-2)!;
+      const row = rows.get(id) ?? { completed: false, position: null, version: 0 };
+      if (request.method() === 'GET') return route.fulfill(json({ structure, occurrence: id, selectedRevision: null, ...row }));
+      const body = request.postDataJSON() as { expectedVersion: number; completed: boolean; position: string | null };
+      if (body.expectedVersion !== row.version) return route.fulfill(json({ code: 'stale_progress' }, 409));
+      const saved = { completed: body.completed, position: body.position, version: row.version + 1 };
+      rows.set(id, saved);
+      return route.fulfill(json({ structure, occurrence: id, selectedRevision: null, ...saved }));
+    });
+  };
+}
+
 test('episode 1000 of a thousand is reached by its number and shows watched on another device', async ({ browser }, info) => {
-  test.setTimeout(300_000);
-  const series = await long;
-  await settle(series);
-  const a = await device(browser, info, desktop, series);
+  test.setTimeout(240_000);
+  const prepare = fakeSeries(1000);
+  const a = await device(browser, info, desktop, seeded, prepare);
   const panelA = episodes(a);
   await loaded(a);
   await expect(panelA.getByText('No episode watched yet')).toBeVisible();
 
-  // Episode 1000 is ten pages in; its number takes the reader there.
+  // Episode 1000 is fifty pages in; its number takes the reader there.
   await expect(async () => {
     await jumpTo(panelA, 1000);
     await expect(panelA.locator('[data-selected="main"]')).toContainText('Episode 1000', { timeout: 5_000 });
@@ -191,7 +225,7 @@ test('episode 1000 of a thousand is reached by its number and shows watched on a
   await expect(panelA.getByText('There is no episode 1001 in this series.')).toBeVisible();
 
   // The phone finds episode 1000 watched, and the run from the first still starts at episode 1.
-  const b = await device(browser, info, phone, series);
+  const b = await device(browser, info, phone, seeded, prepare);
   const panelB = episodes(b);
   await loaded(b);
   await expect(panelB.getByText('No episode watched yet')).toBeVisible();

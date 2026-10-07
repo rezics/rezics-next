@@ -94,4 +94,5 @@ export default {
   specialsNote: '特别篇单独计算：标记特别篇不会改变你在正片中的进度。',
   trackedUnavailable: '无法载入你在这部作品中的进度。',
   episodeSaving: '正在保存…',
+  findingEpisode: insert('正在查找第 {{number}} 集…', { number: String }),
 } satisfies TrackingMessages;

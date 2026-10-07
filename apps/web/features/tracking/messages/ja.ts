@@ -94,4 +94,5 @@ export default {
   specialsNote: 'スペシャルは別に数えます。スペシャルを記録しても、本編の進み具合は変わりません。',
   trackedUnavailable: 'このシリーズの進み具合を読み込めませんでした。',
   episodeSaving: '保存中…',
+  findingEpisode: insert('第{{number}}話を探しています…', { number: String }),
 } satisfies TrackingMessages;

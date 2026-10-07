@@ -97,4 +97,5 @@ export default {
   specialsNote: 'Los especiales van aparte: marcar uno no cambia por dónde vas en los episodios principales.',
   trackedUnavailable: 'No se pudo cargar por dónde vas en esta serie.',
   episodeSaving: 'Guardando…',
+  findingEpisode: insert('Buscando el episodio {{number}}…', { number: String }),
 } satisfies TrackingMessages;

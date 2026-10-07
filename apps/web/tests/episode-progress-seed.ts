@@ -1,8 +1,7 @@
-// Seeds one series the episode-progress journey reads into the isolated QA stack the e2e harness
-// started, and prints its IDs as JSON: `short` is twelve episodes with two specials, `long` a thousand
-// episodes. They are seeded by separate processes so the long one runs beside the first journey.
-// Every record goes in through Main's routes; the signed-in web member reads them by explicit grants,
-// like the other journey seeds.
+// Seeds the series the episode-progress journey reads into the isolated QA stack the e2e harness
+// started, and prints its IDs as JSON: twelve episodes and a group of two specials. Every record
+// goes in through Main's routes; the signed-in web member reads them by explicit grants, like the
+// other journey seeds.
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -14,13 +13,7 @@ const types = ['https://schema.org/TVSeries'];
 const OPERATIONS = 16;
 
 export interface Series { work: string; title: string; episodes: number; specials: number }
-export const plans = {
-  short: { title: 'Moonlit Courier', episodes: 12, specials: 2 },
-  long: { title: 'Harbor Lights Chronicle', episodes: 1000, specials: 0 },
-} as const;
-export type SeriesKey = keyof typeof plans;
-/** Episode resources a series' placements are spread over. */
-const SHARED = 16;
+export const series = { title: 'Moonlit Courier', episodes: 12, specials: 2 } as const;
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -37,7 +30,7 @@ async function settled(send: () => Promise<Response>): Promise<Response> {
   }
 }
 
-export async function seedSeries(stack: MediaStack, reader: { principalId: string; actor: string }, plan: Series): Promise<Series> {
+export async function seedSeries(stack: MediaStack, reader: { principalId: string; actor: string }, plan: typeof series): Promise<Series> {
   const editor = await stack.member('episodes');
   const structureObjects = stack.objects('semantic/structure/');
   await structureObjects.initialize();
@@ -71,12 +64,10 @@ export async function seedSeries(stack: MediaStack, reader: { principalId: strin
   const started = performance.now();
   const lap = (name: string) => console.error(`[episode seed ${plan.title}] ${name}: ${Math.round(performance.now() - started)} ms`);
 
-  // Occurrences carry each episode's number and label, so a long series shares a few Episode resources
-  // between its placements instead of writing a thousand: Main takes writes one at a time, and the
-  // journey is about the reader's place in the series, not about the resources behind it.
+  // Main takes writes one at a time, so the episodes are written one after the other.
   const total = plan.episodes + plan.specials;
   const resources: string[] = [];
-  for (let index = 0; index < Math.min(total, SHARED); index++) {
+  for (let index = 0; index < total; index++) {
     const special = index >= plan.episodes;
     const number = special ? index - plan.episodes + 1 : index + 1;
     const episode = await json<{ component: string }>(await settled(() => editor.send('POST', '/v1/semantic/changes', {
@@ -90,7 +81,7 @@ export async function seedSeries(stack: MediaStack, reader: { principalId: strin
   await grantEditor('semantic.read', scopes);
   await grantReader('semantic.read', scopes);
   lap('episode resources');
-  const resourceAt = (index: number) => resources[index % resources.length]!;
+  const resourceAt = (index: number) => resources[index]!;
 
   /** The series' Structure: the main run in order, then a Specials group. */
   const composition = await json<{ structure: string; revision: string }>(await settled(() => editor.send('POST', '/v1/compositions', {
@@ -120,8 +111,6 @@ export async function seedSeries(stack: MediaStack, reader: { principalId: strin
 }
 
 if (import.meta.main) {
-  const key = process.argv[2] as SeriesKey;
-  if (!(key in plans)) throw new Error('Name the series to seed: short or long');
   if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
     throw new Error('The episode seed writes only into an isolated QA run');
   }
@@ -129,12 +118,12 @@ if (import.meta.main) {
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
   if (!objectDirectory || !path) throw new Error('MAIN_OBJECT_DIRECTORY and REZICS_WEB_AUTH_PRIVATE_PATH must name the running stack');
   const { principalId, actingSubject } = JSON.parse(readFileSync(path, 'utf8')) as { principalId: string; actingSubject: string };
-  const stack = await startMediaStack(`episodes-${key}-e2e`);
+  const stack = await startMediaStack('episodes-e2e');
   const workObjects = stack.objects('semantic/work/');
   await workObjects.initialize();
   Object.assign(stack.env, { objectDirectory, workObjects });
   try {
-    console.log(JSON.stringify(await seedSeries(stack, { principalId, actor: actingSubject }, { ...plans[key], work: '' })));
+    console.log(JSON.stringify(await seedSeries(stack, { principalId, actor: actingSubject }, series)));
   } finally {
     await stack.stop();
   }
