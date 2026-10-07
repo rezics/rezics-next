@@ -11,6 +11,24 @@ import { StatementSeek } from './seek.ts';
 
 export const STATEMENT_CONVERSION_COST = { applicationsPerBatch: 32,
   responseBytes: 1024*1024, deadlineMs: 30_000 } as const;
+export const statementUpgradeMarker = (epoch: string) => `urn:rezics:maintenance:statement-upgrade:${hash(epoch)}`;
+
+/** The native policy admits only these representation-conversion phases. All
+ * receipts retain the current position; they do not describe new product events. */
+export function statementUpgradeEnvelope(env: WorkActivationEnvironment,
+  phase: 'acquire'|'complete'|'release'|'retire'|'convert', identity: readonly string[] = []) {
+  const digest = hash(JSON.stringify(['statement-storage-upgrade-v1',env.lineage.dataEpoch,
+    env.lineage.routingEpoch,phase,...identity]));
+  const receipt = `urn:rezics:name-migration:statement-upgrade:${phase}:${digest}`;
+  const marker = statementUpgradeMarker(env.lineage.dataEpoch);
+  return {receipt,digest,marker,
+    facts: `${iri(receipt)} a rv:OperationReceipt ; rv:commandFamily ${lit(`statement-upgrade-${phase}-v1`)} ;
+      rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
+      rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ; rv:statementUpgrade ${iri(marker)} .`,
+    control: `${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .`,
+    absent: `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }`};
+}
 const identity = (source: string,role: string) => {
   const value = hash(`${source}\0${role}`).slice(0,32);
   return `${ID}${value.slice(0,8)}-${value.slice(8,12)}-${value.slice(12,16)}-${value.slice(16,20)}-${value.slice(20)}`;
@@ -85,11 +103,11 @@ export async function prepareRetainedClassification(env: WorkActivationEnvironme
     rv:acceptanceContext ${iri(input.context)} ; rv:decisionHead ${iri(decision)} .`;
   // Recovery retains a complete historical snapshot for canonical validation;
   // it creates no current Application or legacy decision head.
-  const revisions = `${historicalApplication.boolean ? `${iri(input.application)} rv:decisionHead ${iri(input.decision)} .` : `${iri(input.application)} a rv:ClassificationApplication ;
+  const historical = `${historicalApplication.boolean ? `${iri(input.application)} rv:decisionHead ${iri(input.decision)} .` : `${iri(input.application)} a rv:ClassificationApplication ;
     rv:targetMainVersion ${iri(input.main)} ; rv:sense ${iri(payload.sense)} ; rv:applicationKey ${iri(legacySlot)} ;
     rv:classificationContext ${iri(input.context)} ; rv:applicationChannel rv:Curated ;
-    rv:applicationState rv:Active ; rv:proposer ${iri(input.proposer)} ; rv:decisionHead ${iri(input.decision)} .`}
-    ${present.boolean ? '' : `${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ; rv:component ${iri(statement)} ;
+    rv:applicationState rv:Active ; rv:proposer ${iri(input.proposer)} ; rv:decisionHead ${iri(input.decision)} .`}`;
+  const nativeRevisions = `${present.boolean ? '' : `${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ; rv:component ${iri(statement)} ;
     rv:statementState rv:Active ; rv:recordedBy ${iri(input.decidedBy)} ; rv:operation ${iri(input.operation)} ;
     rv:modelRevision ${iri(STATEMENT_PROFILE)} ; rv:shapeRevision ${iri(STATEMENT_PROFILE)} ;
     rv:manifest ${iri(`urn:rezics:sha256:${statementManifest}`)} ; rv:dataEpoch ${lit(input.dataEpoch)} ; rv:sequence ${input.sequence} .`}
@@ -122,7 +140,8 @@ export async function prepareRetainedClassification(env: WorkActivationEnvironme
     Object.entries({work: payload.work,main: input.main,sense: payload.sense,context: input.context,
       application: input.application,decision: input.decision}).map(([role,focus]) => ({
       shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/${role}-shape`,focus: [focus],graphs: [GRAPHS.current,GRAPHS.revisions]})),binding));
-  return {statement,revision,slot,decision,meaningKey,current,revisions,validations,nativePredecessor};
+  return {statement,revision,slot,decision,meaningKey,current,revisions: `${historical}\n${nativeRevisions}`,
+    nativeRevisions,validations,nativePredecessor};
 }
 
 /** Explicit offline step, never an API or startup backfill. Both writer fences
@@ -138,20 +157,46 @@ export async function convertPopulatedStatements(env: WorkActivationEnvironment,
     ('classification.decision.set','work.create','statement.migrate','statement.cutover') AND state <> 'sealed' LIMIT 1`);
   if (pending.rowCount) throw new Error('Settle pending catalogue/classification admissions before conversion');
   const graph = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
-    ${iri(DATASET)} rv:dataEpoch ${lit(epoch)} ; rv:restoreHold true } }`);
+    ${iri(DATASET)} rv:dataEpoch ${lit(epoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:restoreHold true .
+    ${iri(statementUpgradeMarker(epoch))} rv:statementUpgradeFence true } }`);
   if (!graph.boolean) throw new Error('Graph writer fence must be held for Statement conversion');
   // Readers immediately refuse an old inventory while conversion is incomplete.
   await pool.query(`INSERT INTO access.statement_seek_coverage VALUES ($1,0,false)
     ON CONFLICT (data_epoch) DO UPDATE SET complete=false`,[epoch]);
-  let after = '',converted = 0,replayed = 0;
+  let after = '',afterSequence = '-2',converted = 0,replayed = 0;
   for (;;) {
-    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?application ?head WHERE {
+    // Shared acceptance slots are rebuilt oldest first. The source position and
+    // application identity form a bounded keyset, including equal positions.
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?application ?head ?sourceSequence WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ; rv:applicationChannel rv:Curated ;
         rv:applicationState rv:Active ; rv:decisionHead ?head . }
-      FILTER(STR(?application)>${lit(after)}) } ORDER BY STR(?application) LIMIT ${STATEMENT_CONVERSION_COST.applicationsPerBatch}`,
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:sequence ?retainedSequence } }
+      BIND(COALESCE(IF(DATATYPE(?retainedSequence) = <http://www.w3.org/2001/XMLSchema#integer>
+        && ?retainedSequence > 0, ?retainedSequence, -1), -1) AS ?sourceSequence)
+      FILTER(?sourceSequence > ${afterSequence} || (?sourceSequence = ${afterSequence} && STR(?application)>${lit(after)}))
+      } ORDER BY ?sourceSequence STR(?application) LIMIT ${STATEMENT_CONVERSION_COST.applicationsPerBatch}`,
     STATEMENT_CONVERSION_COST.responseBytes)).results?.bindings ?? [];
     for (const row of rows) {
       const application = row.application!.value,head = row.head!.value;
+      const envelope = statementUpgradeEnvelope(env,'convert',[application,head]);
+      const {receipt,digest,marker} = envelope;
+      const existing = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded } }`);
+      if (existing.boolean) {
+        // Replay the durable conversion identity. Preparing against today's
+        // shared slot head would rewrite its predecessor in a new orphan manifest.
+        const proof = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
+            rv:convertedApplication ${iri(application)} ; rv:convertedDecision ${iri(head)} ;
+            rv:statement ?statement ; rv:statementRevision ?revision ; rv:decisionSlot ?slot ; rv:statementDecision ?decision }
+          GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} ; rv:meaningKey ?key }
+          GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:StatementRevision ; rv:component ?statement .
+            ?decision a rv:StatementDecision ; rv:component ?slot ; rv:convertedFrom ${iri(head)} ; rv:support ?statement }
+        }`,STATEMENT_CONVERSION_COST.responseBytes);
+        if (!proof.boolean) throw new Error('Statement conversion receipt or current head is unavailable');
+        replayed++;
+        continue;
+      }
       const retained = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?main ?sense ?concept ?context ?proposer
         ?manifest ?outcome ?decidedBy ?contextRevision ?operation ?epoch ?sequence WHERE {
         GRAPH ${iri(GRAPHS.current)} { ${iri(application)} rv:targetMainVersion ?main ; rv:sense ?sense ;
@@ -170,10 +215,6 @@ export async function convertPopulatedStatements(env: WorkActivationEnvironment,
         main: value.main!.value,concept,context: value.context!.value,proposer: value.proposer!.value,
         decidedBy: value.decidedBy!.value,outcome,contextRevision: value.contextRevision?.value ?? null,
         operation: value.operation!.value,dataEpoch: value.epoch!.value,sequence: value.sequence!.value});
-      const digest = hash(JSON.stringify(['populated-statement-conversion-v1',epoch,application,head]));
-      const receipt = `urn:rezics:maintenance:statement-conversion:${digest}`;
-      const existing = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
-        ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded } }`);
       const covered = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision ?decision WHERE {
         GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} ;
           rv:meaningKey ${iri(prepared.meaningKey)} ; rv:speaker ${iri(value.proposer!.value)} . }
@@ -184,20 +225,31 @@ export async function convertPopulatedStatements(env: WorkActivationEnvironment,
       if (covered.length > 1) throw new Error('Retained conversion identity is ambiguous');
       const proof = covered[0] ? {statement: covered[0].statement!.value,revision: covered[0].revision!.value,
         decision: covered[0].decision!.value} : prepared;
-      // Maintenance preserves the dataset position. The normal command service
-      // requires a new outbox position (or a retained recovery cursor), neither
-      // of which describes this offline representation conversion.
-      if (!existing.boolean) await env.fuseki.update(`PREFIX rv: <${RV}>
+      const predecessor = prepared.nativePredecessor;
+      const result = await env.fuseki.commandWithReceipt({receipt,digest,
+          // A retained Sense revision can differ from its current head. Native
+          // maintenance proves the immutable source; live legacy bindings would
+          // reinterpret that historical definition through today's Sense head.
+          validations: covered.length ? [] : prepared.validations.filter(validation =>
+            validation.profile !== 'classification-direct-decision-v1'),deadlineMs: STATEMENT_CONVERSION_COST.deadlineMs,
+          update: `PREFIX rv: <${RV}>
         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        ${!covered.length && predecessor ? `DELETE { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(prepared.slot)} rv:decisionHead ${iri(predecessor)} } }` : ''}
         INSERT { ${covered.length ? '' : `GRAPH ${iri(GRAPHS.current)} { ${prepared.current} }
-          GRAPH ${iri(GRAPHS.revisions)} { ${prepared.revisions} }`}
-          GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
-            rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(epoch)} ; rv:sequence ?sequence ;
-            rv:convertedApplication ${iri(application)} ; rv:convertedDecision ${iri(head)} . } }
-        WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(epoch)} ; rv:restoreHold true ; rv:sequence ?sequence }
+          GRAPH ${iri(GRAPHS.revisions)} { ${prepared.nativeRevisions} }`}
+          GRAPH ${iri(GRAPHS.receipts)} { ${envelope.facts}
+            ${iri(receipt)} rv:convertedApplication ${iri(application)} ; rv:convertedDecision ${iri(head)} ;
+              rv:statement ${iri(proof.statement)} ; rv:statementRevision ${iri(proof.revision)} ;
+              rv:decisionSlot ${iri(prepared.slot)} ; rv:statementDecision ${iri(proof.decision)} . } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ${envelope.control}
+          ${iri(DATASET)} rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true }
           GRAPH ${iri(GRAPHS.current)} { ${iri(application)} rv:decisionHead ${iri(head)} }
-          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-          ${covered.length ? '' : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} ?p ?o } }`} }`);
+          ${envelope.absent}
+          ${covered.length ? '' : predecessor ? `GRAPH ${iri(GRAPHS.current)} {
+            ${iri(prepared.slot)} rv:decisionHead ${iri(predecessor)} }` :
+        `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} ?p ?o } }`} }`});
+      if (result.status !== 'committed') throw new Error(`Statement conversion command ${result.status}; writer fences retained`);
       const committed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded }
         GRAPH ${iri(GRAPHS.current)} { ${iri(proof.statement)} rv:meaningKey ${iri(prepared.meaningKey)} }
@@ -205,10 +257,11 @@ export async function convertPopulatedStatements(env: WorkActivationEnvironment,
           ${iri(proof.decision)} a rv:StatementDecision ; rv:convertedFrom ${iri(head)} }
       }`);
       if (!committed.boolean) throw new Error('Statement conversion receipt or current head is unavailable');
-      if (existing.boolean) replayed++; else converted++;
+      converted++;
     }
     if (rows.length < STATEMENT_CONVERSION_COST.applicationsPerBatch) break;
     after = rows.at(-1)!.application!.value;
+    afterSequence = rows.at(-1)!.sourceSequence!.value;
   }
   await new StatementSeek(pool,env).rebuild();
   return {converted,replayed};

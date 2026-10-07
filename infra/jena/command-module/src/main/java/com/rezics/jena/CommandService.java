@@ -402,9 +402,14 @@ final class CommandService extends ActionService {
                                         long deadline, SearchDeltaJournal.Capture delta) {
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
             String existing = receiptValue(dataset, receipt, "requestDigest");
-            if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
+            if (existing != null) return existing.equals(digest)
+                && (!StatementUpgradePolicy.applies(receipt) || StatementUpgradePolicy.templateDigest(update)
+                    .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest")))
+                ? committed(dataset, receipt) : Map.of("status", "conflict");
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
+            if (StatementUpgradePolicy.applies(receipt))
+                return evaluateStatementUpgrade(dataset, receipt, digest, update, plan, validations, deadline, delta);
             String erasure = ErasurePolicy.preflight(dataset, plan, receipt);
             if (erasure != null) return invalid(erasure);
             String authorCredit = AuthorCreditPolicy.preflight(dataset, plan);
@@ -507,6 +512,48 @@ final class CommandService extends ActionService {
         String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
         return result;
+    }
+
+    /** Maintenance has its own closed write footprint, while canonical shapes still validate every native subject. */
+    private Map<String, Object> evaluateStatementUpgrade(DatasetGraph dataset, String receipt, String digest,
+        String update, CommandPolicy.Plan plan, List<Validation> validations, long deadline,
+        SearchDeltaJournal.Capture delta) {
+        var control = CommandInvariant.readControl(dataset);
+        var before = StatementUpgradePolicy.capture(dataset, receipt, digest, plan);
+        if (before.error() != null) return invalid(before.error());
+        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        CommandWork.enter("update");
+        UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(delta == null ? dataset : delta.observed())));
+        String stored = receiptValue(dataset, receipt, "requestDigest");
+        if (stored == null) return Map.of("status", "guard-unmatched");
+        if (!digest.equals(stored)) return Map.of("status", "conflict");
+        CommandWork.enter("invariants");
+        String invariant = CommandInvariant.check(dataset, receipt, digest, plan, control);
+        if (invariant != null) return invalid(invariant);
+        String conversion = StatementUpgradePolicy.check(dataset, before);
+        if (conversion != null) return invalid(conversion);
+        Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, Set.of());
+        if (scope != null) return scope;
+        record Instance(String profile, Map<String, String> binding) {}
+        Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
+        for (Validation entry : validations) grouped.computeIfAbsent(new Instance(entry.profileId(), entry.binding()),
+            ignored -> new ArrayList<>()).add(entry);
+        for (var group : grouped.entrySet()) {
+            String report = BindingPolicy.check(dataset, group.getKey().profile(),
+                profiles.get(group.getKey().profile()).binding(), group.getValue());
+            if (report != null) return invalid(report);
+        }
+        for (Validation validation : validations) {
+            Map<String, Object> invalid = validateOne(dataset, validation);
+            if (invalid != null) return invalid;
+            if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        }
+        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        dataset.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
+            StatementUpgradePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(StatementUpgradePolicy.templateDigest(update)));
+        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+        // No outbox batch, dataset sequence or relay-stream watermark changes during representation conversion.
+        return committed(dataset, receipt);
     }
 
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,

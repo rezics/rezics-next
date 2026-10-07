@@ -102,7 +102,8 @@ final class CommandPolicy {
                 if (!subject.isURI()) throw new IllegalArgumentException("variable source subject not admitted");
                 source.add(subject.getURI());
             }
-            if (name.equals(RECEIPTS) && (!subject.isURI() || !receipt.equals(subject.getURI())))
+            if (name.equals(RECEIPTS) && (!subject.isURI() || !receipt.equals(subject.getURI())
+                && !StatementUpgradePolicy.retiringReceipt(receipt)))
                 throw new IllegalArgumentException("command may write only its own receipt");
         }
         if (delete.stream().anyMatch(quad -> RECEIPTS.equals(quad.getGraph().getURI())))
@@ -207,8 +208,10 @@ final class CommandPolicy {
         }
         if (current.size() + revisions.size() + source.size() > 100 || all.size() > 5_000)
             throw new IllegalArgumentException("update footprint too large");
-        return new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
+        Plan plan = new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
             Set.copyOf(revisions), Set.copyOf(source), bootstrap, rebuild, !delete.isEmpty());
+        if (StatementUpgradePolicy.applies(receipt)) StatementUpgradePolicy.validateTemplate(plan, receipt);
+        return plan;
     }
 
     private static boolean isAnalyzerProbe(Quad quad) {

@@ -159,6 +159,8 @@ final class CommandInvariant {
             return null;
         }
         if (before == null) return "product control record was absent";
+        if (StatementUpgradePolicy.applies(receipt))
+            return StatementUpgradePolicy.checkControl(data, receipt, plan, before, after, epoch, sequence);
         boolean activation = receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:");
         boolean analyzerProfile = receipt.startsWith("urn:rezics:receipt:content-rebuild:profile:");
         if (plan.rebuild() && data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR,
@@ -355,7 +357,7 @@ final class CommandInvariant {
         return inserted;
     }
 
-    private static boolean hasControlGuards(CommandPolicy.Plan plan, Control before) {
+    static boolean hasControlGuards(CommandPolicy.Plan plan, Control before) {
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return false;
         Set<Node> guards = new HashSet<>();
         collectGuards(modify.getWherePattern(), false, before, guards);

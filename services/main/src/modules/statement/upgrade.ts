@@ -4,12 +4,11 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
   type RegisteredAdmission } from '../access/admission.ts';
 import { sealClassificationDecisionAdmission } from '../classification/decision.ts';
 import { commandReceiptIri, readCommandReceipt } from '../context/command.ts';
-import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { sealMetadataWorkAdmission } from '../work/seal.ts';
-import { convertPopulatedStatements } from './populated-conversion.ts';
+import { convertPopulatedStatements, statementUpgradeEnvelope, statementUpgradeMarker } from './populated-conversion.ts';
 import { StatementSeek } from './seek.ts';
 
-const upgrade = (epoch: string) => `urn:rezics:maintenance:statement-upgrade:${hash(epoch)}`;
 export const STATEMENT_UPGRADE_COST = { admissionsPerBatch: 32, responseBytes: 64 * 1024 } as const;
 
 /** Model alignment may append a zero-event graph position after conversion.
@@ -38,9 +37,9 @@ export async function statementUpgradeCurrent(fuseki: FusekiClient, epoch: strin
   if (!coverage.rowCount) return false;
   return (await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
     ${iri(DATASET)} rv:dataEpoch ${lit(epoch)} .
-    ${iri(upgrade(epoch))} rv:outcome rv:Succeeded .
+    ${iri(statementUpgradeMarker(epoch))} rv:outcome rv:Succeeded .
     FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
-    FILTER NOT EXISTS { ${iri(upgrade(epoch))} rv:statementUpgradeFence true }
+    FILTER NOT EXISTS { ${iri(statementUpgradeMarker(epoch))} rv:statementUpgradeFence true }
   } }`, STATEMENT_UPGRADE_COST.responseBytes)).boolean === true;
 }
 
@@ -50,14 +49,24 @@ export async function statementUpgradeCurrent(fuseki: FusekiClient, epoch: strin
 async function sealRetiredAdmission(env: WorkActivationEnvironment, client: PoolClient, admission: RegisteredAdmission) {
   const family = admission.action === 'statement.migrate' ? 'statement-migrate-v1' : 'statement-cutover-v1';
   const receipt = commandReceiptIri(admission.id, family);
-  await env.fuseki.update(`PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.receipts)} {
+  let proof = await readCommandReceipt(env, admission.id, family);
+  if (!proof) {
+    const envelope = statementUpgradeEnvelope(env,'retire',[admission.id,family,admission.requestDigest,
+      admission.authorityEpoch,admission.scope]);
+    const result = await env.fuseki.commandWithReceipt({receipt: envelope.receipt,digest: envelope.digest,
+      validations: [],deadlineMs: 30_000,update: `PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.receipts)} {
+    ${envelope.facts} ${iri(envelope.receipt)} rv:retiredReceipt ${iri(receipt)} .
     ${iri(receipt)} a rv:OperationReceipt ; rv:commandFamily ${lit(family)} ; rv:outcome rv:Cancelled ;
       rv:reason rv:Unavailable ; rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
       rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
       rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence .
-  } } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }`);
-  const proof = await readCommandReceipt(env, admission.id, family);
+  } } WHERE { GRAPH ${iri(GRAPHS.control)} { ${envelope.control} }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+    ${envelope.absent}
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }`});
+    if (result.status !== 'committed') throw new Error(`Retired Statement admission command ${result.status}`);
+    proof = await readCommandReceipt(env, admission.id, family);
+  }
   if (!proof || proof.admissionId !== admission.id || proof.scope !== admission.scope
     || proof.requestDigest !== admission.requestDigest || proof.authorityEpoch !== admission.authorityEpoch
     || (proof.outcome === 'succeeded' && admission.state !== 'claimed'))
@@ -104,7 +113,7 @@ async function settleAdmissions(env: WorkActivationEnvironment, pool: Pool, clie
  * durable marker belonging to this upgrade permits a retry to release them. */
 export async function upgradeStoredStatements(env: WorkActivationEnvironment, pool: Pool) {
   const client = await pool.connect();
-  const marker = upgrade(env.lineage.dataEpoch);
+  const marker = statementUpgradeMarker(env.lineage.dataEpoch);
   const lockKey = `rezics-statement-upgrade:${env.lineage.dataEpoch}`;
   try {
     await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lockKey]);
@@ -122,10 +131,15 @@ export async function upgradeStoredStatements(env: WorkActivationEnvironment, po
       const access = await client.query<{open: boolean}>('SELECT open FROM access.recovery_fence WHERE id');
       if (held || access.rows[0]?.open !== true) throw new Error('Statement upgrade cannot take an unrelated recovery fence');
       await settleAdmissions(env,pool,client);
-      await env.fuseki.update(`PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.control)} {
+      const envelope = statementUpgradeEnvelope(env,'acquire');
+      const acquiredCommand = await env.fuseki.commandWithReceipt({receipt: envelope.receipt,digest: envelope.digest,
+        validations: [],deadlineMs: 30_000,update: `PREFIX rv: <${RV}> INSERT { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true .
-      } } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } } }`);
+      } GRAPH ${iri(GRAPHS.receipts)} { ${envelope.facts} } }
+      WHERE { GRAPH ${iri(GRAPHS.control)} { ${envelope.control} }
+        ${envelope.absent}
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } } }`});
+      if (acquiredCommand.status !== 'committed') throw new Error(`Statement upgrade fence command ${acquiredCommand.status}`);
       const acquired = (await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
         ${iri(marker)} rv:statementUpgradeFence true . ${iri(DATASET)} rv:restoreHold true } }`)).boolean;
       if (!acquired) throw new Error('Statement upgrade graph fence was not acquired');
@@ -139,13 +153,25 @@ export async function upgradeStoredStatements(env: WorkActivationEnvironment, po
     const coverage = await new StatementSeek(pool,env).coverage();
     if (position.length !== 1 || !coverage?.complete || coverage.through_sequence !== position[0]?.sequence?.value)
       throw new Error('Statement upgrade seek coverage is incomplete; writer fences retained');
-    await env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
-      ${iri(marker)} rv:outcome rv:Succeeded } }`);
+    const complete = statementUpgradeEnvelope(env,'complete');
+    const completed = await env.fuseki.commandWithReceipt({receipt: complete.receipt,digest: complete.digest,
+      validations: [],deadlineMs: 30_000,update: `PREFIX rv: <${RV}> INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:outcome rv:Succeeded }
+        GRAPH ${iri(GRAPHS.receipts)} { ${complete.facts} }
+      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${complete.control}
+        ${iri(DATASET)} rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true }
+        ${complete.absent} }`});
+    if (completed.status !== 'committed') throw new Error(`Statement upgrade completion command ${completed.status}; writer fences retained`);
     await releaseAccessRecoveryFence(pool,generation);
-    await env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
+    const release = statementUpgradeEnvelope(env,'release');
+    const released = await env.fuseki.commandWithReceipt({receipt: release.receipt,digest: release.digest,
+      validations: [],deadlineMs: 30_000,update: `PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true }
-    } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-      rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true ; rv:outcome rv:Succeeded } }`);
+    } INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${release.facts} } }
+    WHERE { GRAPH ${iri(GRAPHS.control)} { ${release.control} ${iri(DATASET)}
+      rv:restoreHold true . ${iri(marker)} rv:statementUpgradeFence true ; rv:outcome rv:Succeeded }
+        ${release.absent} }`});
+    if (released.status !== 'committed') throw new Error(`Statement upgrade release command ${released.status}`);
     if (!await statementUpgradeCurrent(env.fuseki,env.lineage.dataEpoch,pool))
       throw new Error('Statement upgrade fence release is incomplete');
     return {status: 'complete' as const,...result,noop: false};

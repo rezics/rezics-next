@@ -6,7 +6,7 @@ import { classificationDecisionSlotIri, classificationDecisionDigest, classifica
   from '../../../services/main/src/modules/classification/decision.ts';
 import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
-import { convertPopulatedStatements } from '../../../services/main/src/modules/statement/populated-conversion.ts';
+import { convertPopulatedStatements, statementUpgradeMarker } from '../../../services/main/src/modules/statement/populated-conversion.ts';
 import { resolveClassification, ClassificationResolutionUnavailable } from '../../../services/main/src/modules/classification/resolve.ts';
 import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
@@ -294,9 +294,12 @@ test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; popu
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(first)} a rv:ClassificationDecision,rv:RevisionAnchor ; rv:component ${iri(application)} ; rv:outcome rv:Accepted .
         ${iri(head)} a rv:ClassificationDecision,rv:RevisionAnchor ; rv:component ${iri(application)} ; rv:predecessor ${iri(first)} ;
+          rv:application ${iri(application)} ; rv:decisionPolicy <https://rezics.com/definition/classification-direct-decision-v1> ;
+          rv:decisionBasis rv:GlobalCuratorReview ; rv:modelRevision <https://rezics.com/definition/classification-direct-decision-v1> ;
           rv:manifest ${iri('urn:rezics:sha256:'+manifest)} ; rv:outcome rv:Rejected ; rv:decidedBy ${iri(f.actorB)} ;
           rv:operation ${iri(operation)} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence 1 . }
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true . }
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true .
+        ${iri(statementUpgradeMarker(f.env.lineage.dataEpoch))} rv:statementUpgradeFence true . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
         rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?sequence . }
       } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`);
@@ -316,7 +319,8 @@ test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; popu
       GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} } }`)).results!.bindings[0]!.statement!.value;
     // Release only this isolated copy's fences, then verify public attribution.
     const releaseDigest = hash(receipt+'release');
-    await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+    await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true .
+        ${iri(statementUpgradeMarker(f.env.lineage.dataEpoch))} rv:statementUpgradeFence true } }
         INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt+':release')} rv:requestDigest ${lit(releaseDigest)} ;
           rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?sequence } }
         WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`);
