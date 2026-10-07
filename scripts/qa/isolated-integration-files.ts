@@ -158,6 +158,7 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-1056-occurrence-projection.test.ts',
   'tests/qa/integration/g-842-catalogue.test.ts',
   'tests/qa/integration/discovery-rating-effects.test.ts',
+  'tests/qa/integration/model-custody-backfill.test.ts',
   // A thousand Studio chapter commands need their own wall budget and exact Work/Post inventory.
   'tests/qa/integration/post-catalogue-scale.test.ts',
   // Designates the first platform administrator on a fresh stack.
