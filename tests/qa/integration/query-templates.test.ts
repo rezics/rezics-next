@@ -60,7 +60,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
         ...(options.etag?{'if-none-match':options.etag}:{}),...(options.authenticated?{authorization:`Bearer ${a.token}`}:{})},
         body:JSON.stringify({profile:'template-query-v1',query:`https://rezics.com/query/work-${kind}`,revision:1,
           parameters:{roots:[root],...(options.language?{contentLanguage:options.language}:{})},
-          presentation:options.authenticated?{actingSubject:a.actor}:undefined,page:{size:options.size ?? 64,cursor}})}));
+          presentation:options.authenticated?{actingSubject:a.actor}:undefined,limit:options.size ?? 64,cursor})}));
     expect((await stack.call('GET',`/v1/works/${work.work.slice(-36)}/credits`)).status).toBe(404);
     const firstResponse=await query('credits');
     const etag=firstResponse.headers.get('etag')!;

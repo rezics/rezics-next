@@ -256,7 +256,7 @@ export async function readVersions(id: string, _locale: UiLocale, filter: Versio
   const { main, actingSubject } = await reader();
   return settle(async () => {
     const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-versions',revision:1,
-      parameters:{roots:[iriOf(id)],kind:filter.kind,contentLanguage:filter.language},presentation:{actingSubject},page:{cursor:filter.cursor}});
+      parameters:{roots:[iriOf(id)],kind:filter.kind,contentLanguage:filter.language},presentation:{actingSubject},cursor:filter.cursor});
     return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-versions' ? result.data.result:null};
   },filter.cursor);
 }

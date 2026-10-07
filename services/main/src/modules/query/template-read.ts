@@ -54,9 +54,9 @@ async function admit(session:WorkReadSession, rootKind:Template['root'], roots:s
 export async function executeTemplate(deps:MainWorkDependencies,request:Request,input:TemplateInput):Promise<Response> {
   const template=templates.find(template=>template.query===input.query && template.revision===input.revision) as Template|undefined;
   if(!template || !Value.Check(template.request,input)) throw new WorkReadInvalid('Unknown or invalid reviewed template');
-  const roots=[...input.parameters.roots].sort(),limit=input.page?.size ?? TEMPLATE_COST.page;
+  const roots=[...input.parameters.roots].sort(),limit=input.limit ?? TEMPLATE_COST.page;
   if(roots.length>TEMPLATE_COST.roots || limit>TEMPLATE_COST.maxPage) throw new WorkReadLimit('Template input exceeds its budget');
-  const options={...input.presentation,limit,cursor:input.page?.cursor,localBasis:true,readOnlyTemplate:true};
+  const options={...input.presentation,limit,cursor:input.cursor,localBasis:true,readOnlyTemplate:true};
   const operation=async(session:WorkReadSession)=> {
     const admission=await admit(session,template.root,roots);
     const normalized={query:template.query,revision:template.revision,text:readDependencyToken(template.sparql),roots,
@@ -106,7 +106,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       };
     }
     const position={...session.position,dependencyToken:readDependencyToken([admission.token,membership,refs])};
-    const cursor=decodeReadCursor(input.page?.cursor,normalized,position);
+    const cursor=decodeReadCursor(input.cursor,normalized,position);
     const after=cursor?{key:cursor.order,id:cursor.after}:null;
     let candidates=await candidateRead(after);
     const confirmed=refs.length ? await deps.templateSeek!.confirmed(session.position.dataEpoch,refs.map(ref=>ref.work),refs.map(ref=>ref.key)) : new Set<string>();
@@ -187,7 +187,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     return {payload,etag};
   };
   const result=template.scope==='public'
-    ? await publicWorkRead(deps,request,{limit,cursor:input.page?.cursor,language:input.presentation?.language,localBasis:true,readOnlyTemplate:true},operation)
+    ? await publicWorkRead(deps,request,{limit,cursor:input.cursor,language:input.presentation?.language,localBasis:true,readOnlyTemplate:true},operation)
     : await workRead(deps,request,options,operation);
   const headers={'cache-control':'private, no-store',etag:result.etag};
   return request.headers.get('if-none-match')?.split(',').map(value=>value.trim()).some(value=>value===result.etag || value==='*')

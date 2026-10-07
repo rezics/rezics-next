@@ -40,6 +40,10 @@ describe('Native template term transport', () => {
       const fixture=JSON.parse(readFileSync(resolve(directory,`${name}.fixture.json`),'utf8'));
       const template=templates.find(template=>template.sparql===readFileSync(resolve(directory,`${name}.rq`),'utf8'))!;
       expect(Value.Check(template.request,{profile:'template-query-v1',query:template.query,revision:1,parameters:fixture.parameters})).toBe(true);
+      const request={profile:'template-query-v1',query:template.query,revision:1,parameters:fixture.parameters};
+      expect(Value.Check(template.request,{...request,limit:64,cursor:'retained-cursor'})).toBe(true);
+      for(const limit of [0,65,1.5]) expect(Value.Check(template.request,{...request,limit})).toBe(false);
+      expect(Value.Check(template.request,{...request,page:{size:20}})).toBe(false);
     }
     const adapter=readFileSync(resolve(import.meta.dir,'../src/modules/query/template-read.ts'),'utf8');
     expect(adapter).not.toContain('https://rezics.com/query/');

@@ -165,10 +165,10 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdExtend',
     'postV1MeLibrary-loansByIdReturn',
   ];
-  // Recipe create, change and read now use the existing Composition operations.
+  // Recipe reads use Composition; Work versions, adoptions and credits use the public query transport.
   // Approved public by trust-ops on 2026-10-07 within the first public Zone scope.
   expect(publicOperations).toContain('postV1ZonesByIdSite-publications');
-  expect(publicOperations).toHaveLength(522);
+  expect(publicOperations).toHaveLength(519);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
@@ -202,7 +202,7 @@ test('the complete lockout foundation remains public on a stack with no platform
       ),
     ),
   );
-  expect(platformFoundationOperations).toHaveLength(181);
+  expect(platformFoundationOperations).toHaveLength(178);
   for (const [method, path] of platformFoundationOperations) {
     expect(declarations.get(`${method} ${path}`)).toBe('public');
     const concrete = path.replace(/\{[^}]+\}/g, '00000000-0000-4000-8000-000000000001');
