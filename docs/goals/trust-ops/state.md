@@ -8,11 +8,12 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 17:31 UTC. Kernel's required native recovery refresh
-completed at `c9b53e93dbbc`, image `906d1f549ffc`, unchanged model `ab6d394`.
-All six shared applications are healthy; retained volumes, membership and
-catalogue are current. Launch and kernel now hold further Main runtime code gates through their
-coalesced migration/native checkpoints. Trust has no queued refresh. G-1330's mixed retained repair/cutover is active; positive restore
+Checkpoint 2026-10-07 17:56 UTC. Launch reports a successful shared refresh at
+`2e394b95f`, including long-series progress and onboarding Statement reads.
+Content1490–1492 applied; concurrent-index rehearsal and migration execution
+passed. Launch released its code hold. Kernel's C4/C2 union hold remains active;
+Trust has no refresh ticket and holds further Main runtime gates until that
+checkpoint. The prior accepted native/model pins were906d1f549ffc/ab6d394. G-1330's mixed retained repair/cutover is active; positive restore
 release and the remaining Claim/source-projection unions are unqualified.
 
 G-1343 borrowed reconciliation and retained-native-event component landed at
