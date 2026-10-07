@@ -97,7 +97,7 @@ async function fixture(grouped = false, reverseNumbers = false) {
         const limit = Number(query.match(/LIMIT (\d+)$/)! [1]!);
         rows = records.filter(record => record.parent === parent && (record.role === 'group' || numbers.get(record.target!) === number)
           && (!after || record.segmentKey! > after[1]! || record.segmentKey === after[1] && record.orderKey! > after[2]!))
-          .sort((a, b) => orderTreeKey(a).localeCompare(orderTreeKey(b))).slice(0, limit).map(record => ({
+          .sort((a, b) => `${a.segmentKey!}\0${a.orderKey!}`.localeCompare(`${b.segmentKey!}\0${b.orderKey!}`)).slice(0, limit).map(record => ({
             occurrence: binding(record.occurrence), parent: binding(parent), segmentKey: binding(record.segmentKey!),
             orderKey: binding(record.orderKey!), matches: binding(String(record.role !== 'group' && numbers.get(record.target!) === number)),
           }));
