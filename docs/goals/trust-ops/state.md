@@ -240,8 +240,7 @@ until those inputs are supplied. No production action is authorized.
 The reviewed curator batch component landed at270ad81bf7f8 after selected unit
 and repository guards. It reuses only existing semantic authority in the same
 fenced client; Work-read paths remain independent. Launch's original import
-regression still needs to run on its producer candidate. Kernel's sole C4/C2
-refresh is active; backend activation is pending its terminal checkpoint.
+regression still needs to run on its producer candidate. The component is active in the currentf7a frozen healthy checkpoint.
 
 G-1394 landed a8952cebf55c with all85 affected unit/guard files green.
 It pairs viewer and anonymous classification in the final owner statement; no
@@ -258,8 +257,8 @@ the limit12. Launch G-1391 retains the real signed-in/out regression. Kernel
 coordinates any minimal request seam. G-1289 has the exact one-line restored
 Content pool verification-store hook loan; G-1351 composition remains its owner.
 
-G-1398 now owns the fixed Access verification.claim-assess admission-history
-reader and reserved Access1774 partial(id) index. Its32raw-plus-lookahead window
+G-1398 closed/verified the fixed Access verification.claim-assess admission-history
+reader and applied Access1774 partial(id) index. Its32raw-plus-lookahead window
 must include every state and scope, keep malformed/oversized admission IDs
 explicitly unresolved, and use a genuine existing Access cut/quiescence. Content
 EOF or null graph fields do not prove missing original input or producer
@@ -410,3 +409,12 @@ passed; mandatory refresh completed atf7a340611d0c with all six resources health
 Evidence is retained under.temp/trust-ops/assessment-history-accepted-f7a; kernel
 has the exact export and cut/unknown-original/EOF limitations. No inferred
 original C/R/tail or native/Content completeness is introduced.
+
+Program's legacy Work/recovery assertion alignment is accepted with an explicit
+limit: successful release coordinates both owners, but no distributed atomicity
+or successful interrupted restart is proved. Genuine retained callback/custody
+is still required; no placeholder bridge or dropped interruption case is allowed.
+Kernel has the exact original-generation one-line Work-contents fixture loan
+(SHA20a14603...) with all assertions/old-generation semantics preserved. Its new
+Assessment native readerff332 is landed, but ancestry confirms it is outside
+servingf7a; it awaits the next normal activation rather than a duplicate refresh.
