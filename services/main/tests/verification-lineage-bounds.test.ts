@@ -231,7 +231,17 @@ test('a refused Access claim cannot advance a previously claimed continuation', 
 
 
 test('the assessment API returns an explicit 202 continuation with incomplete support', async () => {
-  const requested: AssessClaimInput & { idempotencyKey: string } = { ...deniedIntent, method: 'human-review', judgment: 'supported' };
+  // Retain the original HTTP contract order: the established digest keeps property order.
+  const requested: AssessClaimInput & { idempotencyKey: string } = {
+    claimRevision: deniedIntent.claimRevision, evidenceSetRevision: deniedIntent.evidenceSetRevision,
+    lineageContinuation: deniedIntent.lineageContinuation, sourceAssessments: deniedIntent.sourceAssessments,
+    method: 'human-review', judgment: 'supported', evaluationContext: deniedIntent.evaluationContext,
+    adoptedRevision: deniedIntent.adoptedRevision, scorePerMillion: deniedIntent.scorePerMillion,
+    calibration: deniedIntent.calibration, evaluationReference: null,
+    limitations: deniedIntent.limitations, expectedSummary: deniedIntent.expectedSummary,
+    resolvesChallenges: deniedIntent.resolvesChallenges, actingSubject: deniedIntent.actingSubject,
+    idempotencyKey: deniedIntent.idempotencyKey,
+  };
   const { deps, snapshot, forbidden } = admittedDependencies(requested);
   const app = claimRoutes({ environment: deps.env, account: deps.account, access: deps.access,
     verification: deps.store } as unknown as MainWorkDependencies);
