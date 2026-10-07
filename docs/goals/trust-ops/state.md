@@ -59,8 +59,13 @@ native539/model fa, graph generatorv4 and429migration inputs:566.405s active,
 1,000Agents,10,000public units and400,000objects, with allowner counts,
 readiness, exact samples and clean stop passed. The first isolated restore fixture-quiet-medium-a passed273.668s active;
 all seven owners, unchanged native index, migration compatibility and three
-exact samples passed. Its source backup is unchanged. CopyB is queued; the
-manager-exclusive campaign/peak/destruction checks remain required. Program
+exact samples passed. Its source backup is unchanged. CopyB fixture-quiet-medium-b passed352.561s active,4.931s admission;
+all seven owners and exact samples are ready. The campaign fixture currently
+adds the combined947.344s external wall span to one600s setup check; even
+active restore sum626.229s exceeds that combined gate. Program is asked to
+resolve per-routine versus combined accounting before the exclusive campaign.
+No timing or backup evidence is edited, and campaign/peak/destruction remain
+unqualified. Program
 released the quiet window; normal QA admission has resumed. Frozen prior
 backups are unchanged; this background population is not command-cost evidence. Manager-exclusive100k
 qualification remains required.
