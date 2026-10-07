@@ -980,6 +980,19 @@ WHERE note <> 'CONCURRENTLY;';`;
       .toThrow('exactly one CREATE INDEX CONCURRENTLY');
   });
 
+  test.each(['CREATE INDEX CONCURRENTLY other ON access.event(epoch);',
+    'CREATE INDEX CONCURRENTLY probe ON content.event(epoch);'])('the recovery marker must name the index being created: %s', sql => {
+    expect(() => sqlMigration(`-- migrate: concurrent-index access.probe\n${sql}`, 'probe.sql'))
+      .toThrow('marker does not match its CREATE INDEX target');
+  });
+
+  test('quoted targets retain their identity and duplicate markers are rejected', () => {
+    const sql = '-- migrate: concurrent-index access.probe\nCREATE INDEX CONCURRENTLY "probe" ON "access"."event"(epoch);';
+    expect(sqlMigration(sql, 'probe.sql').concurrentIndex).toBe('access.probe');
+    expect(() => sqlMigration(`-- migrate: concurrent-index content.other\n${sql}`, 'probe.sql'))
+      .toThrow('exactly one marker');
+  });
+
   test('only pending files run in migration order with one rollback per owner database', async () => {
     const { dir, first, second, content } = fixture();
     const events: string[] = [];
