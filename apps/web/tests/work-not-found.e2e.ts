@@ -16,6 +16,46 @@ function normalizeAddress(value: string, ref: string): string {
   return value.replaceAll(encodeURIComponent(ref), 'work-ref').replaceAll(ref, 'work-ref');
 }
 
+async function responseBody(page: Page, body: string, ref: string): Promise<string> {
+  return page.evaluate(html => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // The shell's community navigation can finish before the first flush or in a later React segment.
+    // Expand the streamed segment, retaining its content and all serialized RSC data.
+    for (const segment of doc.querySelectorAll('div[hidden][id^="S:"]')) {
+      const slot = doc.getElementById(`B:${segment.id.slice(2)}`);
+      if (!slot) continue;
+      let next = slot.nextSibling;
+      let depth = 0;
+      while (next) {
+        if (next.nodeType === Node.COMMENT_NODE) {
+          if (next.nodeValue === '/$') {
+            if (depth === 0) break;
+            depth--;
+          } else if (next.nodeValue?.startsWith('$')) depth++;
+        }
+        const following = next.nextSibling;
+        next.remove();
+        next = following;
+      }
+      slot.replaceWith(...segment.childNodes);
+      segment.remove();
+    }
+    // These are React's segment insertion/timing helpers, never application bootstrap data.
+    for (const script of doc.querySelectorAll('script')) {
+      if (script.textContent?.startsWith('$RB=[];$RV=function')
+        || script.textContent?.startsWith('requestAnimationFrame(function(){$RT=')) script.remove();
+    }
+    const comments = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
+    const markers: Node[] = [];
+    while (comments.nextNode()) if (/^(?:\$[?!~]?|\/\$)$/.test(comments.currentNode.nodeValue ?? '')) markers.push(comments.currentNode);
+    for (const marker of markers) marker.parentNode?.removeChild(marker);
+    // Preload locations/order follow segment timing. Compare their complete tags in a fixed location.
+    const preloads = [...doc.querySelectorAll('link[rel="modulepreload"]')].sort((a, b) => a.outerHTML.localeCompare(b.outerHTML));
+    for (const preload of preloads) doc.head.append(preload);
+    return doc.documentElement.outerHTML;
+  }, normalizeAddress(body, ref));
+}
+
 async function missingPage(page: Page, address: string, tail: string) {
   const ref = address.split('/').at(-1)!;
   const response = await page.goto(`${localizedPath(address, 'en')}${tail}`);
@@ -29,7 +69,7 @@ async function missingPage(page: Page, address: string, tail: string) {
     status: response!.status(),
     text: await page.locator('main').innerText(),
     title: await page.title(),
-    body: normalizeAddress(await response!.text(), ref),
+    body: await responseBody(page, await response!.text(), ref),
     headers: Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, normalizeAddress(value, ref)])),
   };
 }
@@ -98,11 +138,12 @@ test('signed-out private and missing Works have the same 404 across Work, read a
           const privatePage = await missingPage(page, privateAddress, tail);
           const missing = await missingPage(page, missingAddress, tail);
           expect(privatePage.text).not.toContain(title);
+          expect(privatePage.body).not.toContain(title);
           if (missing.body !== privatePage.body) {
             await info.attach('private-work-response', { body: privatePage.body, contentType: 'text/html' });
             await info.attach('missing-work-response', { body: missing.body, contentType: 'text/html' });
           }
-          expect(missing).toEqual(privatePage);
+          expect.soft(missing).toEqual(privatePage);
           expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
           if (!tail || tail === '/read' || tail === '/edit/parts') {
             await page.screenshot({ path: info.outputPath(`work-not-found-${width}-${tail ? tail.replaceAll('/', '-') : 'overview'}.png`), fullPage: true });
