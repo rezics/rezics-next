@@ -23,7 +23,11 @@ function focusWindow() {
     clearTimeout(id: number) { timers.delete(id); },
   } };
   const child = {};
-  const target = { ownerDocument: document, contains: (element: unknown) => element === child };
+  const target = {
+    ownerDocument: document,
+    isConnected: true,
+    contains: (element: unknown) => element === child,
+  };
   return { document, child, target: target as unknown as HTMLElement, frames, timers,
     frame() {
       const callbacks = [...frames.values()];

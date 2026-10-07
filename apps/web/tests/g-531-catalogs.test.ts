@@ -8,16 +8,16 @@ import { languageName } from '../features/work-page/format.ts';
 import { strings as fictionStrings } from '../zones/official/fiction/strings.ts';
 
 describe('per-locale catalogs keep the previous English and zh-Hans text', () => {
-  test('community and post adapters keep both languages and fall back key by key', () => {
+  test('community and post adapters keep English, Chinese and Japanese', () => {
     expect(communityText.title.en).toBe('Communities');
     expect(communityText.title['zh-Hans']).toBe('社区');
-    expect(communityText.title.ja).toBe('Communities');
+    expect(communityText.title.ja).toBe('コミュニティ');
     expect(communityText.agentNeeded['zh-Hans']).toBe('请先选择个人资料，再创建社区。');
     expect(postText.title.en).toBe('Create a post');
     expect(postText.title['zh-Hans']).toBe('发布帖子');
     expect(postText.createWork['zh-Hans']).toBe('创建作品');
     expect(postText.createWork.de).toBe('Werk erstellen');
-    expect(postText.createWork.ja).toBe('Create a Work');
+    expect(postText.createWork.ja).toBe('作品を作成');
   });
 
   test('shell navigation, search conditions, unknown languages and fiction intervals moved intact', () => {
@@ -35,11 +35,11 @@ describe('per-locale catalogs keep the previous English and zh-Hans text', () =>
     expect(searchZh.conditionSearch).toBe('搜索标签');
     expect(searchZh.conditionRemove({ name: '科幻' })).toBe('移除科幻');
     expect(searchEn.conditionFull({ count: '8' })).toBe('Choose up to 8 tags here.');
-    expect(searchMessages.ja.conditionHeading).toBe('Conditions');
+    expect(searchMessages.ja.conditionHeading).toBe('条件');
 
     expect(languageName('und', 'en')).toBe('Unknown language');
     expect(languageName('und', 'zh-Hans')).toBe('未知语言');
-    expect(languageName('und', 'ja')).toBe('Unknown language');
+    expect(languageName('und', 'ja')).toBe('不明な言語');
 
     expect(fictionStrings('en').day).toBe('Today');
     expect(fictionStrings('zh-Hans').week).toBe('周榜');

@@ -117,8 +117,7 @@ describe('search result hydration', () => {
     seen);
     const read = await readSearchPage({ search: main, names: main }, { ...global, scope: { kind: 'realm', realm }, term },
       { language: 'zh-Hans' });
-    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept, iri(term)],
-      language: 'zh-Hans' }]);
+    expect(seen).toEqual([{ profile: 'resource-summary-batch-v1', resources: [work, concept, iri(term)] }]);
     expect(read.ok && read.page.titles).toBe(true);
     expect(read.ok && read.page.facets?.terms.precision).toBe('lower-bound');
     expect(read.ok && read.page.hits[0]).toMatchObject({ title: { value: '西游记' }, reasons: { language: 'zh-Hans',

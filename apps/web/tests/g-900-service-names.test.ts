@@ -11,10 +11,13 @@ const domainPhrases = [
   'Main Version',
   'Main navigation',
   'Main characters',
+  'Main entry',
   'Content moderation',
   'Content languages',
+  'Content preferences',
   'Access given',
   'Access removed',
+  'Access and discovery',
 ];
 
 /** A label whose whole text is the domain word, not the service. */
@@ -55,12 +58,15 @@ describe('G-900 catalogs do not name an internal service', () => {
     expect(serviceNames('story (Main Version)')).toEqual([]);
     expect(serviceNames('Main navigation')).toEqual([]);
     expect(serviceNames('Main characters')).toEqual([]);
+    expect(serviceNames('Main entry')).toEqual([]);
     expect(serviceNames('Content')).toEqual([]);
     expect(serviceNames('Content languages')).toEqual([]);
     expect(serviceNames('Content moderation')).toEqual([]);
+    expect(serviceNames('Content preferences')).toEqual([]);
     expect(serviceNames('The Content service didn’t answer')).toEqual(['Content']);
     expect(serviceNames('Access given {{date}}')).toEqual([]);
     expect(serviceNames('Access removed')).toEqual([]);
+    expect(serviceNames('Access and discovery')).toEqual([]);
     expect(serviceNames('Access refused this change')).toEqual(['Access']);
     expect(serviceNames('Account relay timed out')).toEqual(['Account relay']);
     expect(serviceNames('Fuseki is down')).toEqual(['Fuseki']);

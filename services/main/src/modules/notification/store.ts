@@ -131,6 +131,8 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'post-vote' },
   { purpose: 'subscription', topic: 'followed-chapter' },
   { purpose: 'subscription', topic: 'new-work' },
+  { purpose: 'subscription', topic: 'new-release' },
+  { purpose: 'subscription', topic: 'collection-change' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
   ...REVIEW_NOTIFICATION_TOPICS.map((topic) => ({ purpose: 'governance' as const, topic })),

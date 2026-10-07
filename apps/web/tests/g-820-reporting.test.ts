@@ -317,6 +317,7 @@ test('G-820 an upload is never assumed visible: an answer without a state reads 
 });
 
 const png = () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+const representation = '11111111-1111-4111-8111-111111111111';
 function media(options: { clearance?: string; limitedAt?: 'reserve' | 'bytes' } = {}) {
   const calls: string[] = [];
   const send = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -336,9 +337,12 @@ function media(options: { clearance?: string; limitedAt?: 'reserve' | 'bytes' } 
         ? limited()
         : Response.json({
             status: 'activated',
+            representation,
             ...(options.clearance ? { clearance: options.clearance } : {}),
           });
     }
+    // Activated bytes are recorded before the image is selected. A rejected or limited upload never gets here.
+    if (url.includes('/inferences')) return new Response(null, { status: 204 });
     if (url.endsWith('/avatar')) return Response.json({ selection: 'sel' });
     return new Response(null, { status: 404 });
   }) as typeof fetch;

@@ -12,6 +12,8 @@ import { kindLabel, stateKey } from '../features/proposals/labels.ts';
 import { messages } from '../features/proposals/messages.ts';
 import { ProposalPage, reviseSeed } from '../features/proposals/proposal-page.tsx';
 import { blockerText } from '../features/proposals/parts.tsx';
+import { messages as shellMessages } from '../features/shell/messages.ts';
+import { ShellProvider } from '../features/shell/shell-provider.tsx';
 import { metadataComponent, checkedMetadataState } from '../../../services/main/src/modules/work/metadata-schema.ts';
 import { materializeData } from 'native-i18n';
 import type { AllowedAction, MainClient } from '../features/proposals/types.ts';
@@ -47,8 +49,11 @@ describe('API parity', () => {
 
   test('the rendered page offers exactly the allowed actions', () => {
     for (const [name, view] of Object.entries(views)) {
-      const html = renderToStaticMarkup(createElement(ProposalPage, { initial: view, target, agents,
-        actingSubject: ids.steward, now, locale: 'en', messages, api: proposalApi(view) }));
+      const html = renderToStaticMarkup(createElement(ShellProvider, {
+        locale: 'en', messages: shellMessages, initialTheme: 'light', initialCollapsed: false,
+        children: createElement(ProposalPage, { initial: view, target, agents,
+          actingSubject: ids.steward, now, locale: 'en', messages, api: proposalApi(view) }),
+      }));
       const offered = [...html.matchAll(/data-action="([a-z-]+)"/g)].map(match => match[1]);
       // `revise` also needs an editor for the candidate; the fixtures' header corrections have one.
       expect({ name, offered: offered.sort() }).toEqual({ name, offered: [...view.allowedActions].sort() });

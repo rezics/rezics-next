@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { createElement } from 'react';
@@ -309,6 +309,8 @@ describe('interface copy', () => {
   });
 });
 
+const workPageRead = { ...(await import('../features/work-page/read.ts')) };
+
 describe('the writes the editor asks Main for', () => {
   type Call = { path: string; body: Record<string, unknown>; key: string | undefined };
   const calls: Call[] = [];
@@ -319,7 +321,14 @@ describe('the writes the editor asks Main for', () => {
     configuration: { put: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => { calls.push({ path: `${id}/configuration`, body, key: init.headers['idempotency-key'] }); return answer; } },
     'campaign-art': { post: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => { calls.push({ path: `${id}/campaign-art`, body, key: init.headers['idempotency-key'] }); return answer; } },
   }) } };
-  void mock.module('../features/work-page/read.ts', () => ({ reader: async () => ({ main, actingSubject: acting, signedIn: Boolean(acting) }) }));
+  // Installed only while these tests run, then put back, so a later file in the same process still reads wiki data.
+  const installReader = () => mock.module('../features/work-page/read.ts', () => ({
+    reader: async () => ({ main, actingSubject: acting, signedIn: Boolean(acting) }),
+  }));
+  const restoreReader = () => mock.module('../features/work-page/read.ts', () => workPageRead);
+  beforeEach(() => { void installReader(); });
+  afterEach(() => { void restoreReader(); });
+  afterAll(() => { void restoreReader(); });
   const zone = '5a1d0000-0000-4000-8000-000000000001';
   const head = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000e1';
   const realm = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000aa';

@@ -43,36 +43,62 @@ test('G-1047: backfilled history is replayed through the old last post without a
   expect(api.calls).toEqual(['page:fresh-2']);
 });
 
-test('G-1047: a source cut above the reader watermark or a restored epoch cannot be appended', async () => {
-  for (const sourcePosition of [
-    { dataEpoch: 'story', sequence: '41' },
-    { dataEpoch: 'restored', sequence: '40' },
-  ]) {
-    const result = await recoverProjection(
-      memoryFeed(),
-      query,
-      { ...page([d]), sourcePosition },
-      previous,
-      4,
-      () => true,
-    );
-    expect(result).toEqual({ ok: false, failure: 'moved' });
-  }
+test('G-1047: a projection past the reader watermark, a changed review or a restored epoch cannot replace the view', async () => {
+  const anchored = page([a, c]);
   const huge = '90071992547409930000000000000';
+  const hugeNext = '90071992547409930000000000001';
+  // Membership follows the epoch. Graph sequences past Number.MAX_SAFE_INTEGER stay in the same projection.
   expect(
     sameProjection(
-      { ...page([]), sourcePosition: { dataEpoch: 'story', sequence: huge } },
-      {
-        ...page([]),
-        sourcePosition: { dataEpoch: 'story', sequence: '90071992547409930000000000001' },
-      },
+      { ...anchored, sourcePosition: { dataEpoch: 'story', sequence: huge } },
+      { ...anchored, sourcePosition: { dataEpoch: 'story', sequence: hugeNext } },
     ),
+  ).toBe(true);
+  expect(
+    sameProjection(anchored, {
+      ...anchored,
+      sourcePosition: { dataEpoch: 'restored', sequence: '40' },
+    }),
   ).toBe(false);
+  // The watermark compares the fresh projection cut with the loaded source cut, and the anchor is present.
   expect(
     await recoverProjection(
       memoryFeed(),
       query,
-      { ...page([d]), projection: { ...page([]).projection, reviewSequence: '8' } },
+      { ...anchored, projection: { ...anchored.projection, sequence: '41' } },
+      previous,
+      4,
+      () => true,
+    ),
+  ).toEqual({ ok: false, failure: 'moved' });
+  expect(
+    await recoverProjection(
+      memoryFeed(),
+      query,
+      { ...anchored, projection: { ...anchored.projection, sequence: hugeNext } },
+      {
+        ...previous,
+        page: { ...previous.page, sourcePosition: { dataEpoch: 'story', sequence: huge } },
+      },
+      4,
+      () => true,
+    ),
+  ).toEqual({ ok: false, failure: 'moved' });
+  expect(
+    await recoverProjection(
+      memoryFeed(),
+      query,
+      { ...anchored, sourcePosition: { dataEpoch: 'restored', sequence: '40' } },
+      previous,
+      4,
+      () => true,
+    ),
+  ).toEqual({ ok: false, failure: 'moved' });
+  expect(
+    await recoverProjection(
+      memoryFeed(),
+      query,
+      { ...anchored, projection: { ...anchored.projection, reviewSequence: '8' } },
       previous,
       4,
       () => true,
@@ -80,14 +106,17 @@ test('G-1047: a source cut above the reader watermark or a restored epoch cannot
   ).toEqual({ ok: false, failure: 'moved' });
 });
 
-test('G-1047: partial, changed, denied and failed replay pages do not replace the old list', async () => {
+test('G-1047: denied, failed, still-projecting and different-epoch replay pages do not replace the old list', async () => {
   const first = page([a, b], { nextCursor: 'fresh-2' });
   for (const next of [
     { ok: false, failure: 'moved' },
     { ok: false, failure: 'sign-in' },
     { ok: false, failure: 'unavailable' },
     { ok: true, data: lagging },
-    { ok: true, data: { ...page([c]), projection: { ...first.projection, reviewSequence: '8' } } },
+    {
+      ok: true,
+      data: { ...page([c]), sourcePosition: { dataEpoch: 'restored', sequence: '40' } },
+    },
   ] as const) {
     const result = await recoverProjection(
       memoryFeed({ pages: { 'fresh-2': next } }),
@@ -102,7 +131,31 @@ test('G-1047: partial, changed, denied and failed replay pages do not replace th
   }
 });
 
-test('G-1047: missing/deleted last posts finish at exhaustion; loops and excessive sparse work are bounded', async () => {
+test('G-1047: a replay that reaches the loaded anchor may advance projection and review sequences', async () => {
+  const first = page([a, b], { nextCursor: 'fresh-2' });
+  const result = await recoverProjection(
+    memoryFeed({
+      pages: {
+        'fresh-2': {
+          ok: true,
+          data: {
+            ...page([c]),
+            projection: { ...first.projection, sequence: '41', reviewSequence: '8' },
+          },
+        },
+      },
+    }),
+    query,
+    first,
+    previous,
+    4,
+    () => true,
+  );
+  expect(result).toMatchObject({ ok: true, data: { items: [a, b, c] } });
+  expect(previous.items).toEqual([a, c]);
+});
+
+test('G-1047: a chain that never reaches the loaded anchor does not replace the view; loops and sparse work stay bounded', async () => {
   const first = page([a, b], { nextCursor: 'fresh-2' });
   const exhausted = await recoverProjection(
     memoryFeed({ pages: { 'fresh-2': { ok: true, data: page([d]) } } }),
@@ -112,10 +165,7 @@ test('G-1047: missing/deleted last posts finish at exhaustion; loops and excessi
     4,
     () => true,
   );
-  expect(exhausted).toMatchObject({
-    ok: true,
-    data: { items: [a, b, d], page: { nextCursor: null } },
-  });
+  expect(exhausted).toEqual({ ok: false, failure: 'moved' });
   const api = memoryFeed({
     pages: { 'fresh-2': { ok: true, data: page([], { nextCursor: 'fresh-2' }) } },
   });

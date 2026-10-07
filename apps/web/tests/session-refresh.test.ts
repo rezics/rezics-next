@@ -238,6 +238,10 @@ function configure(fetcher: typeof fetch) {
         canonical: { prefix: '/w/', key: 'book', suffixSource: 'Book' },
       } satisfies ResolvedAddress);
     }
+    // A Work page asks Main which Agent reads after a refresh. That read is not an Account token grant.
+    if (url.pathname === '/v1/me/session-agent') {
+      return Response.json({ sessionAgent: { eligible: false } });
+    }
     return fetcher(input, init);
   }) as typeof fetch;
 }
