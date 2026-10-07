@@ -45,11 +45,9 @@ export const chapterRead = t.Object({ profile: t.Literal('work-chapter-v1'), wor
 
 /**
  * One parent page, one exact body; no descendant flattening or unbounded sibling walk.
- * Numbering reads the Book's top-level placements once (at most `numberingPlacements`), and each
- * page counts its groups' children with two order-tree descents per group.
+ * Numbering reads at most 200 top-level groups, independent of chapter population,
+ * and counts their children with two order-tree descents per group.
  */
 export const WORK_CONTENTS_COST = { pageSize: 20, bodyBytes: 1024 * 1024,
   navigationCandidates: 20, navigationSteps: 256, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5,
-  numberingPlacements: 200,
-  /** Compatibility bound for Feed's older group-only numbering adapter. */
   topGroups: 200 } as const;

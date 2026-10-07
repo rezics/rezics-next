@@ -193,6 +193,9 @@ export const StructureManifest = Type.Object({
   pageFormat: Type.Literal(STRUCTURE_PAGE_FORMAT),
   records: treeRoot,
   order: treeRoot,
+  /** Active top-level groups, ordered by the same keys as `order`. Absent in
+   * legacy authored roots; absence requires preparation, never means empty. */
+  topGroups: Type.Optional(treeRoot),
   placementCount: Type.Integer({ minimum: 0, maximum: STRUCTURE_LIMITS.maxPlacements }),
   measures: Type.Array(RecipeMeasure, { maxItems: STRUCTURE_LIMITS.measures }),
   completion: Type.Optional(WorkCompletion),
@@ -259,6 +262,9 @@ export function checkStructureManifest(bytes: Uint8Array): StructureManifest {
   catch { throw new InvalidStructureObject('Structure manifest is not UTF-8 JSON'); }
   if (!Value.Check(StructureManifest, manifest)) {
     throw new InvalidStructureObject('Structure manifest format differs');
+  }
+  if (manifest.topGroups && manifest.topGroups.count > manifest.order.count) {
+    throw new InvalidStructureObject('Structure group count exceeds its order count');
   }
   return manifest;
 }

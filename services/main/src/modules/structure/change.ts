@@ -703,7 +703,9 @@ export async function createComposition(env: WorkActivationEnvironment,
   const manifest = await writeManifest(objects, { format: STRUCTURE_MANIFEST_FORMAT, structure,
     structureOf: component, profile: profile.id, generation,
     pageFormat: STRUCTURE_PAGE_FORMAT, records: await recordTree(objects).empty(cost),
-    order: await orderTree(objects).empty(cost), placementCount: 0, measures: [],
+    order: await orderTree(objects).empty(cost),
+    ...(profile.id === 'book-composition' ? { topGroups: await orderTree(objects).empty(cost) } : {}),
+    placementCount: 0, measures: [],
     model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE }, cost);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
   const occupied = `GRAPH ${iri(GRAPHS.current)} { ?existing rv:structureOf ${iri(component)} ;
@@ -1329,6 +1331,9 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const objects = structureObjects(env);
   const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0, rebalanced: 0 };
   const manifest = await readManifest(objects, header, cost);
+  if (header.profile === 'book-composition' && !manifest.topGroups) {
+    throw new StructureObjectUnavailable('composition group root requires bounded preparation');
+  }
   const w = new Working(env, header, `${intent.admission.id}\0composition`, revision, manifest, cost);
   const profile = structureProfileFor(header.profile);
   let targetInvariant: { guard: string; rejection: string; invalid?: boolean } | undefined;
@@ -1346,6 +1351,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   cost.rebalanced = w.rebalanced;
   const records = new Map<string, OccurrenceRecord | null>();
   const order = new Map<string, OrderEntry | null>();
+  const groups = new Map<string, OrderEntry | null>();
   const deletes: string[] = [];
   const inserts: string[] = [];
   const qualifierEdits = new Set(operations.flatMap(operation => operation.op === 'update' && operation.qualifier
@@ -1371,7 +1377,11 @@ export async function changeComposition(env: WorkActivationEnvironment,
     records.set(occurrence, record);
     if (old) {
       changedExisting.push(old);
-      if (old.active) order.set(orderTreeKey(old as Required<PlacementState>), null);
+      if (old.active) {
+        const key = orderTreeKey(old as Required<PlacementState>);
+        order.set(key, null);
+        if (old.role === 'group' && old.parent === header.structure) groups.set(key, null);
+      }
     } else {
       inserts.push(`${iri(occurrence)} a <https://schema.org/ListItem> ; rv:structure ${iri(header.structure)} ;
         rv:introducedBy ${iri(revision)} .`);
@@ -1386,8 +1396,11 @@ export async function changeComposition(env: WorkActivationEnvironment,
   for (const occurrence of records.keys()) {
     const state = w.placements.get(occurrence)!;
     if (state.active) {
-      order.set(orderTreeKey(state as Required<PlacementState>), { parent: state.parent,
-        segmentKey: state.segmentKey!, orderKey: state.orderKey!, occurrence: state.occurrence });
+      const entry = { parent: state.parent, segmentKey: state.segmentKey!,
+        orderKey: state.orderKey!, occurrence: state.occurrence };
+      const key = orderTreeKey(entry);
+      order.set(key, entry);
+      if (state.role === 'group' && state.parent === header.structure) groups.set(key, entry);
     }
   }
   for (const [id, segment] of w.segments) {
@@ -1428,6 +1441,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const next = await writeManifest(objects, { ...manifest,
     ...(operations[0]?.op === 'completion' ? { completion: operations[0].completion } : {}),
     records: await recordTree(objects).apply(manifest.records, records, cost),
+    ...(manifest.topGroups ? { topGroups: await orderTree(objects).apply(manifest.topGroups, groups, cost) } : {}),
     order: await orderTree(objects).apply(manifest.order, order, cost), placementCount: count }, cost);
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
@@ -1937,7 +1951,25 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   // A stage replaces placements, not owner metadata that its upload API cannot edit.
   const completion = intent.stage && header.profile === 'work-composition'
     ? (await readManifest(objects, header, cost)).completion : sourceManifest.completion;
+  // This restore already materialized and validated the bounded source. Retain
+  // its authored bytes, and add the group root only to the new revision.
+  const groupEntries = active.filter(record => record.role === 'group' && record.parent === header.structure)
+    .map(record => ({ parent: record.parent, segmentKey: record.segmentKey!,
+      orderKey: record.orderKey!, occurrence: record.occurrence }));
+  if (sourceManifest.topGroups) {
+    const retainedGroups = await orderTree(objects).range(sourceManifest.topGroups,
+      `${header.structure}\u0001`, `${header.structure}\u0002`, materializationLimit + 1, cost);
+    const expected = new Map(groupEntries.map(entry => [orderTreeKey(entry), entry.occurrence]));
+    if (retainedGroups.length !== sourceManifest.topGroups.count || retainedGroups.length !== expected.size
+      || retainedGroups.some(entry => expected.get(orderTreeKey(entry)) !== entry.occurrence)) {
+      throw new StructureObjectCorrupt('retained Structure group root differs from records');
+    }
+  }
+  const topGroups = header.profile === 'book-composition'
+    ? sourceManifest.topGroups ?? await orderTree(objects).apply(await orderTree(objects).empty(cost),
+      new Map(groupEntries.map(entry => [orderTreeKey(entry), entry])), cost) : undefined;
   const next = await writeManifest(objects, { ...sourceManifest, generation,
+    ...(topGroups ? { topGroups } : {}),
     ...(completion ? { completion } : {}),
     ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) }, cost);
   const segments = new Map<string, SegmentState & { firstIndex: number }>();

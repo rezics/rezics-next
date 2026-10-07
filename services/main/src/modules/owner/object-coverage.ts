@@ -261,6 +261,9 @@ export async function captureObjectRecoveryCoverage(
     }
     await tree(manifest.records.page, 'record', manifest.records.level, manifest.records.count);
     await tree(manifest.order.page, 'order', manifest.order.level, manifest.order.count);
+    if (manifest.topGroups) {
+      await tree(manifest.topGroups.page, 'order', manifest.topGroups.level, manifest.topGroups.count);
+    }
     checkedStructureRoots.add(key);
   };
   // Unique Work manifests share payload promises; Structure's paged traversal

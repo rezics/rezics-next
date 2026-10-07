@@ -69,26 +69,35 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 type Book = Awaited<ReturnType<typeof book>>;
 const contentRevision = () => `urn:rezics:content:revision:${randomUUID()}`;
 
-/** Use the existing immutable format, counted tree writer and current placement
- * projection. The fixture installs no additional navigation index. */
-async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
+function bookIdentities() {
   const salt = randomUUID().slice(0, 8);
   const id = (index: number) => `${ID}${salt}-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
-  const structure = id(1), owner = id(2), component = id(3), historical = id(4), current = id(5);
+  return { salt, id, structure: id(1), owner: id(2), component: id(3), historical: id(4), current: id(5) };
+}
+
+function bookRecords(ids: ReturnType<typeof bookIdentities>) {
   const records: OccurrenceRecord[] = [];
   let identity = 100;
   const record = (parent: string, index: number, role: 'chapter' | 'group',
-    division?: 'volume' | 'extras'): OccurrenceRecord => {
-    const occurrence = id(identity++);
+    division?: 'volume' | 'part' | 'extras'): OccurrenceRecord => {
+    const occurrence = ids.id(identity++);
     const value: OccurrenceRecord = { occurrence, state: 'active', parent,
       segmentKey: Math.floor(index / 32).toString(36).padStart(6, '0'),
-      orderKey: (index % 32).toString(36).padStart(2, '0'), role, introducedBy: historical,
+      orderKey: (index % 32).toString(36).padStart(2, '0'), role, introducedBy: ids.historical,
       labels: [{ value: role === 'chapter' ? 'Chapter' : 'Volume', language: 'en' }],
-      ...(role === 'chapter' ? { target: id(1_000_000 + identity), selection: { mode: 'follow-context' as const } }
+      ...(role === 'chapter' ? { target: ids.id(1_000_000 + identity), selection: { mode: 'follow-context' as const } }
         : { qualifier: { type: 'book-group' as const, division: division ?? 'volume' } }) };
     records.push(value);
     return value;
   };
+  return { records, record };
+}
+
+/** Use the existing immutable format, counted tree writer and current placement
+ * projection. The fixture installs no additional navigation index. */
+async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
+  const ids = bookIdentities(), { structure } = ids;
+  const { records, record } = bookRecords(ids);
   const first = record(structure, 0, 'chapter');
   const groups: OccurrenceRecord[] = [], children: OccurrenceRecord[][] = [];
   for (let group = 0; group < groupCount; group++) {
@@ -103,6 +112,15 @@ async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
   const oldPin = contentRevision(), newPin = contentRevision();
   fixed.selection = { mode: 'fixed-revision', revision: oldPin };
   const last = record(structure, groupCount + 2, 'chapter');
+  const currentFixed: OccurrenceRecord = { ...fixed, selection: { mode: 'fixed-revision', revision: newPin } };
+  const installed = await installBook(f, ids, records, currentFixed);
+  return { ...installed, first, groups, children, extras,
+    denied, unpublished, fixed, currentFixed, last, oldPin, newPin };
+}
+
+async function installBook(f: Fixture, ids: ReturnType<typeof bookIdentities>,
+  records: OccurrenceRecord[], currentFixed?: OccurrenceRecord) {
+  const { salt, id, structure, owner, component, historical, current } = ids;
   const cost = newCost(), recordIndex = recordTree(f.objects), orderIndex = orderTree(f.objects);
   const immutableRecords = await recordIndex.apply(await recordIndex.empty(cost),
     new Map(records.map(value => [value.occurrence, value])), cost);
@@ -110,9 +128,16 @@ async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
     ({ parent, segmentKey: segmentKey!, orderKey: orderKey!, occurrence }));
   const immutableOrder = await orderIndex.apply(await orderIndex.empty(cost),
     new Map(ordered.map(value => [orderTreeKey(value), value])), cost);
+  const groups = records.filter(value => value.state === 'active' && value.parent === structure && value.role === 'group');
+  const topGroups = await orderIndex.apply(await orderIndex.empty(cost),
+    new Map(groups.map(value => {
+      const entry: OrderEntry = { parent: value.parent, segmentKey: value.segmentKey!,
+        orderKey: value.orderKey!, occurrence: value.occurrence };
+      return [orderTreeKey(entry), entry];
+    })), cost);
   const manifest: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure,
     structureOf: component, profile: 'book-composition', generation: id(6), pageFormat: STRUCTURE_PAGE_FORMAT,
-    records: immutableRecords, order: immutableOrder, placementCount: records.length, measures: [],
+    records: immutableRecords, order: immutableOrder, topGroups, placementCount: records.length, measures: [],
     model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
   const store = async (value: StructureManifest) => {
     const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -120,8 +145,8 @@ async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
     return `urn:rezics:sha256:${await f.objects.put(bytes)}`;
   };
   const historicalManifest = await store(manifest);
-  const currentFixed: OccurrenceRecord = { ...fixed, selection: { mode: 'fixed-revision', revision: newPin } };
-  const currentRecords = await recordIndex.apply(immutableRecords, new Map([[fixed.occurrence, currentFixed]]), cost);
+  const currentRecords = currentFixed
+    ? await recordIndex.apply(immutableRecords, new Map([[currentFixed.occurrence, currentFixed]]), cost) : immutableRecords;
   const currentManifest = await store({ ...manifest, generation: id(7), records: currentRecords });
   await f.graph.update(`PREFIX rv: <${RV}> INSERT DATA {
     GRAPH ${iri(GRAPHS.current)} {
@@ -155,7 +180,7 @@ async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
     const segment = segments.get(`${value.parent}\u0001${value.segmentKey}`)!;
     const list = itemListIri(id(7), value.parent);
     const qualifier = value.qualifier?.type === 'book-group' ? bookGroupQualifierId(placement) : null;
-    const selection = value.occurrence === fixed.occurrence ? currentFixed.selection : value.selection;
+    const selection = currentFixed && value.occurrence === currentFixed.occurrence ? currentFixed.selection : value.selection;
     projection.push(`${iri(placement)} a rv:OccurrencePlacement, <https://schema.org/ListItem> ;
       rv:generation ${iri(id(7))} ; rv:occurrence ${iri(value.occurrence)} ;
       rv:occurrenceRole rv:${value.role === 'chapter' ? 'ChapterRole' : 'GroupRole'} ;
@@ -174,13 +199,42 @@ async function book(f: Fixture, groupCount: number, childrenPerGroup: number) {
     await f.graph.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${projection.slice(offset, offset + 250).join('\n')} } }`);
   }
-  return { structure, owner, component, historical, current, first, groups, children, extras,
-    denied, unpublished, fixed, currentFixed, last, oldPin, newPin, placementCount: records.length };
+  return { structure, owner, component, historical, current, placementCount: records.length };
+}
+
+/** Keep a traversal oracle while authoring mixed sibling order. The oracle
+ * counts chapters through volumes/parts and excludes extras, independently of
+ * the reader's rank/subtree arithmetic. */
+async function numberedBook(f: Fixture, chapterCount: number, divisions: Array<{
+  after: number; division: 'volume' | 'part' | 'extras'; chapters: number;
+}> = []) {
+  const ids = bookIdentities(), { records, record } = bookRecords(ids);
+  const direct: OccurrenceRecord[] = [], grouped: OccurrenceRecord[][] = [];
+  const numbers = new Map<string, number | null>();
+  let sibling = 0, story = 0;
+  for (let at = 0; at <= chapterCount; at++) {
+    for (const division of divisions.filter(value => value.after === at)) {
+      const group = record(ids.structure, sibling++, 'group', division.division);
+      const children: OccurrenceRecord[] = [];
+      for (let child = 0; child < division.chapters; child++) {
+        const chapter = record(group.occurrence, child, 'chapter');
+        numbers.set(chapter.occurrence, division.division === 'extras' ? null : ++story);
+        children.push(chapter);
+      }
+      grouped.push(children);
+    }
+    if (at < chapterCount) {
+      const chapter = record(ids.structure, sibling++, 'chapter');
+      numbers.set(chapter.occurrence, ++story);
+      direct.push(chapter);
+    }
+  }
+  return { ...await installBook(f, ids, records), direct, grouped, numbers, groupCount: divisions.length };
 }
 
 /** Every measured graph read names the selected immutable root or its owner
  * component. Returned rows alone would not disprove a population sort/SUM. */
-function expectExactGraph(f: Fixture, b: Book, revision: string) {
+function expectExactGraph(f: Fixture, b: Awaited<ReturnType<typeof installBook>>, revision: string) {
   expect(f.graph.reads).toHaveLength(3);
   const [header, owner, exact] = f.graph.reads;
   expect(header!.query).toContain(`${iri(b.structure)} a rv:Structure`);
@@ -193,7 +247,7 @@ function expectExactGraph(f: Fixture, b: Book, revision: string) {
   expect(f.observed().graphBytes).toBeLessThan(8_192);
 }
 
-async function snapshot(f: Fixture, b: Book, revision?: string) {
+async function snapshot(f: Fixture, b: Awaited<ReturnType<typeof installBook>>, revision?: string) {
   const session = f.session(), cache = new ReadingOrderIndex(session, f.objects);
   const header = await readCompositionHeader(f.env, b.structure);
   if (!header) throw new Error('fixture header missing');
@@ -210,7 +264,7 @@ test('chapter neighbourhood: 1,000/5,000/10,000 actual children stay local acros
   for (const b of books) {
     f.reset();
     const { selected } = await snapshot(f, b);
-    expect(selected.manifest.placementCount).toBe(b.placementCount);
+  expect(selected.manifest.placementCount).toBe(b.placementCount);
     expect(selected.manifest.order.count).toBe(b.placementCount);
     expect(selected.manifest.records.count).toBe(b.placementCount);
     const accepted: string[] = [];
@@ -244,6 +298,7 @@ test('chapter neighbourhood: 1,000/5,000/10,000 actual children stay local acros
   }
   // All roots have the same height: population growth must not add a leaf walk.
   expect(measurements.map(value => value.gets)).toEqual([measurements[0]!.gets, measurements[0]!.gets, measurements[0]!.gets]);
+  console.info('chapter neighbourhood physical work', JSON.stringify({ chapters: [1000, 5000, 10_000], measurements }));
 
   const selectedBook = books[0]!;
   const measure = async () => {
@@ -283,8 +338,9 @@ test('chapter numbering: exact child counts number 10,000 chapters; 3,000 groups
   const before = f.objects.gets;
   expect(await chapterStoryNumber(large.session, large.selected.header, manyGroups.first,
     { ordinal: 1, path: [] }, large.selected)).toBeNull();
-  // Manifest + two counted order descents, with no record-tree hydration.
-  expect(f.objects.gets - before).toBeLessThanOrEqual(3);
+  expect(large.selected.manifest.topGroups?.count).toBe(3_001);
+  // The retained group-root count refuses numbering without reading any tree.
+  expect(f.objects.gets - before).toBe(0);
   expect(f.objects.gets).toBeLessThanOrEqual(4);
   expect(f.objects.bytes).toBeLessThan(200_000);
   expectExactGraph(f, manyGroups, manyGroups.current);
@@ -302,4 +358,54 @@ test('chapter numbering: exact child counts number 10,000 chapters; 3,000 groups
   expectExactGraph(f, manyGroups, manyGroups.current);
   await expect(seekChapter(f.env, { structure: manyGroups.structure, snapshot: large.selected,
     from: manyGroups.first, maxSteps: 1, canReadTarget: async () => false })).rejects.toBeInstanceOf(WorkReadLimit);
+}, 600_000);
+
+test('chapter numbering keeps 201/10,000 direct chapters and sparse interspersed groups eligible', async () => {
+  const preparation = performance.now(), f = await fixture();
+  const cases = [
+    await numberedBook(f, 201),
+    await numberedBook(f, 10_000),
+    await numberedBook(f, 200, [{ after: 0, division: 'volume', chapters: 3 }]),
+    await numberedBook(f, 10_000, [
+      { after: 1, division: 'volume', chapters: 3 },
+      { after: 5_000, division: 'extras', chapters: 2 },
+      { after: 9_999, division: 'part', chapters: 4 },
+    ]),
+  ];
+  expect(performance.now() - preparation).toBeLessThan(600_000);
+  for (const b of cases) {
+    const measurements: ReturnType<typeof f.observed>[] = [];
+    const indices = [...new Set([0, 99, 199, 200, Math.floor(b.direct.length / 2), b.direct.length - 1])]
+      .filter(index => index < b.direct.length);
+    const targets = b.direct.length === 201 ? b.direct : [...indices.map(index => b.direct[index]!), ...b.grouped.flat()];
+    const reads = [...targets.map(chapter => ({ chapter, revision: b.current })),
+      { chapter: b.direct.at(-1)!, revision: b.historical }];
+    for (const { chapter, revision } of reads) {
+      f.reset();
+      const { session, selected } = await snapshot(f, b, revision);
+      expect(selected.manifest.topGroups?.count).toBe(b.groupCount);
+      expect(selected.manifest.placementCount).toBe(b.placementCount);
+      const exact = await readCompositionPage(f.env, { structure: b.structure, snapshot: selected,
+        occurrence: chapter.occurrence, limit: 1, canReadTarget: async () => true });
+      expect(exact.occurrences[0]?.occurrence).toBe(chapter.occurrence);
+      expect(exact.occurrenceContext).toBeDefined();
+      expect(await chapterStoryNumber(session, selected.header, chapter,
+        exact.occurrenceContext!, selected)).toBe(b.numbers.get(chapter.occurrence)!);
+      expectExactGraph(f, b, revision);
+      expect(f.objects.gets).toBeLessThanOrEqual(b.groupCount ? 16 : 8);
+      expect(f.objects.bytes).toBeLessThan(b.groupCount ? 1_600_000 : 500_000);
+      measurements.push(f.observed());
+    }
+    console.info('chapter numbering physical work', JSON.stringify({ directChapters: b.direct.length,
+      groups: b.groupCount, reads: measurements.length,
+      maximumGets: Math.max(...measurements.map(value => value.gets)),
+      maximumBytes: Math.max(...measurements.map(value => value.bytes)),
+      maximumQueries: Math.max(...measurements.map(value => value.queries)),
+      maximumBindings: Math.max(...measurements.map(value => value.bindings)),
+      maximumGraphBytes: Math.max(...measurements.map(value => value.graphBytes)) }));
+  }
+  expect(cases[0]!.numbers.get(cases[0]!.direct[200]!.occurrence)).toBe(201);
+  expect(cases[1]!.numbers.get(cases[1]!.direct[9_999]!.occurrence)).toBe(10_000);
+  expect(cases[2]!.numbers.get(cases[2]!.direct[199]!.occurrence)).toBe(203);
+  expect(cases[3]!.numbers.get(cases[3]!.direct[9_999]!.occurrence)).toBe(10_007);
 }, 600_000);

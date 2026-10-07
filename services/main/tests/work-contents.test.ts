@@ -43,7 +43,7 @@ test('Reader routes expose bounded, typed Work contents and exact chapter bodies
   expect(typedReader).toBeFunction();
   expect(WORK_CONTENTS_COST).toEqual({ pageSize: 20, bodyBytes: 1024 * 1024,
     navigationCandidates: 20, navigationSteps: 256, legacyTitleBatch: 4, legacyTitleOwnerCalls: 5,
-    numberingPlacements: 200, topGroups: 200 });
+    topGroups: 200 });
   const graph = new FusekiClient('http://127.0.0.1:1/rezics');
   const app = createMainApp(graph, { environment: { fuseki: graph,
     lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/work-contents' },
@@ -90,7 +90,7 @@ const placedChapterRecord = (n: number, parent: string, at: number,
     : { target: chapterTestId(n + 100_000), selection: { mode: 'follow-context' as const } }),
 });
 
-async function chapterTreeFixture(records: OccurrenceRecord[]) {
+async function chapterTreeFixture(records: OccurrenceRecord[], includeTopGroups = true) {
   const objects = new CountedChapterObjects();
   const cost = newCost();
   const recordRoot = await recordTree(objects).apply(await recordTree(objects).empty(cost),
@@ -101,10 +101,16 @@ async function chapterTreeFixture(records: OccurrenceRecord[]) {
   }));
   const orderRoot = await orderTree(objects).apply(await orderTree(objects).empty(cost),
     new Map(entries.map(entry => [orderTreeKey(entry), entry])), cost);
+  const groupOccurrences = new Set(records.filter(record => record.state === 'active'
+    && record.role === 'group' && record.parent === chapterTestId(1)).map(record => record.occurrence));
+  const groupEntries = entries.filter(entry => groupOccurrences.has(entry.occurrence));
+  const topGroups = includeTopGroups ? await orderTree(objects).apply(await orderTree(objects).empty(cost),
+    new Map(groupEntries.map(entry => [orderTreeKey(entry), entry])), cost) : undefined;
   const manifest: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT,
     structure: chapterTestId(1), structureOf: chapterTestId(2), profile: 'book-composition',
     generation: chapterTestId(3), pageFormat: STRUCTURE_PAGE_FORMAT, records: recordRoot,
-    order: orderRoot, placementCount: records.length, measures: [], model: STRUCTURE_PROFILE,
+    order: orderRoot, ...(topGroups ? { topGroups } : {}),
+    placementCount: records.length, measures: [], model: STRUCTURE_PROFILE,
     shape: STRUCTURE_PROFILE };
   const digest = await objects.put(chapterTestBytes(manifest));
   const header: CompositionHeader = { structure: manifest.structure, component: manifest.structureOf,
@@ -262,6 +268,11 @@ test('Exact historical chapter seeks reuse their revision when the current gener
     from: f.volumeChapters[10], canReadTarget: readableChapterTarget });
   expect(result?.record.occurrence).toBe(f.volumeChapters[11]!.occurrence);
   expect(result?.page.revision).toBe(historical);
+  const historicalChapter = f.partChapters[100]!;
+  const historicalPage = await readCompositionPage(f.env, { structure: f.header.structure, snapshot,
+    occurrence: historicalChapter.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+  expect(await chapterStoryNumber(f.session, currentHeader, historicalChapter,
+    historicalPage.occurrenceContext!, snapshot)).toBe(f.volumeChapters.length + 101);
   expect(f.graphQueries).toHaveLength(0);
   await expect(readCompositionPage(f.env, { structure: f.header.structure, snapshot,
     revision: currentHeader.head, limit: 1, canReadTarget: readableChapterTarget }))
@@ -300,16 +311,106 @@ test('Story numbering includes volume and part children, excludes extras, and co
   expect(f.graphQueries).toHaveLength(1);
 });
 
-test('Books exceeding the physical top-level numbering budget return no invented chapter number', async () => {
-  const records = Array.from({ length: 10_000 }, (_, i) => placedChapterRecord(i + 1000, chapterTestId(1), i + 1));
-  const f = await chapterTreeFixture(records);
+for (const chapters of [201, 10_000]) {
+  test(`All ${chapters} ungrouped chapters retain story numbers with constant numbering I/O`, async () => {
+    const records = Array.from({ length: chapters }, (_, i) => placedChapterRecord(i + 1000, chapterTestId(1), i + 1));
+    const f = await chapterTreeFixture(records);
+    for (const [record, number] of [[records[0]!, 1], [records.at(-1)!, chapters]] as const) {
+      const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
+        occurrence: record.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+      expect(page.occurrenceContext?.ordinal).toBe(number);
+      f.reset();
+      expect(await chapterStoryNumber(f.session, f.header, record, page.occurrenceContext!)).toBe(number);
+      expect(f.graphQueries).toHaveLength(1);
+      expect(f.objects.gets).toBeLessThanOrEqual(12);
+      expect(f.objects.bytes).toBeLessThan(500_000);
+    }
+  });
+}
+
+test('A volume and 200 top-level chapters retain exact child and later chapter numbers', async () => {
+  const volume = placedChapterRecord(10, chapterTestId(1), 1, 'volume');
+  const children = Array.from({ length: 500 }, (_, i) => placedChapterRecord(i + 30_000, volume.occurrence, i + 1));
+  const chapters = Array.from({ length: 200 }, (_, i) => placedChapterRecord(i + 1000, chapterTestId(1), i + 2));
+  const f = await chapterTreeFixture([volume, ...children, ...chapters]);
+  for (const [record, number] of [[children[0]!, 1], [children.at(-1)!, 500],
+    [chapters[0]!, 501], [chapters.at(-1)!, 700]] as const) {
+    const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
+      occurrence: record.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+    f.reset();
+    expect(await chapterStoryNumber(f.session, f.header, record, page.occurrenceContext!)).toBe(number);
+    expect(f.graphQueries).toHaveLength(1);
+    expect(f.objects.gets).toBeLessThanOrEqual(20);
+    expect(f.objects.bytes).toBeLessThan(500_000);
+  }
+});
+
+test('Sparse groups interspersed through 10000 top-level chapters number from bounded group-tree work', async () => {
+  const root = chapterTestId(1);
+  const volume = placedChapterRecord(10, root, 10_005, 'volume');
+  const part = placedChapterRecord(11, root, 50_005, 'part');
+  const extras = placedChapterRecord(12, root, 90_005, 'extras');
+  const chapters = Array.from({ length: 10_000 }, (_, i) => placedChapterRecord(i + 1000, root, (i + 1) * 10));
+  const volumeChapters = Array.from({ length: 500 }, (_, i) => placedChapterRecord(i + 30_000, volume.occurrence, i + 1));
+  const partChapters = Array.from({ length: 300 }, (_, i) => placedChapterRecord(i + 40_000, part.occurrence, i + 1));
+  const extra = placedChapterRecord(50_000, extras.occurrence, 1);
+  const f = await chapterTreeFixture([...chapters, volume, part, extras, ...volumeChapters, ...partChapters, extra]);
+  for (const [record, number] of [[chapters[0]!, 1], [chapters[999]!, 1000],
+    [volumeChapters[0]!, 1001], [volumeChapters.at(-1)!, 1500], [chapters[1000]!, 1501],
+    [partChapters[0]!, 5501], [chapters[5000]!, 5801], [extra, null], [chapters.at(-1)!, 10_800]] as const) {
+    const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
+      occurrence: record.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+    f.reset();
+    expect(await chapterStoryNumber(f.session, f.header, record, page.occurrenceContext!)).toBe(number);
+    expect(f.graphQueries).toHaveLength(1);
+    expect(f.objects.gets).toBeLessThanOrEqual(35);
+    expect(f.objects.bytes).toBeLessThan(1_200_000);
+  }
+});
+
+for (const groups of [200, 201, 10_000]) {
+  test(`A Book with ${groups} groups preserves the 200-group numbering eligibility with bounded I/O`, async () => {
+    const groupRecords = Array.from({ length: groups }, (_, i) =>
+      placedChapterRecord(i + 1000, chapterTestId(1), i + 1, 'volume'));
+    const chapter = placedChapterRecord(30_000, chapterTestId(1), groups + 1);
+    const f = await chapterTreeFixture([...groupRecords, chapter]);
+    const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
+      occurrence: chapter.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+    f.reset();
+    expect(await chapterStoryNumber(f.session, f.header, chapter, page.occurrenceContext!))
+      .toBe(groups > WORK_CONTENTS_COST.topGroups ? null : 1);
+    expect(f.graphQueries).toHaveLength(1);
+    expect(f.objects.gets).toBeLessThanOrEqual(12);
+    expect(f.objects.bytes).toBeLessThan(500_000);
+  });
+}
+
+test('A retained manifest without its group root needs explicit preparation, not invented no-number output', async () => {
+  const chapter = placedChapterRecord(1000, chapterTestId(1), 1);
+  const f = await chapterTreeFixture([chapter], false);
   const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
-    occurrence: records[0]!.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+    occurrence: chapter.occurrence, limit: 1, canReadTarget: readableChapterTarget });
   f.reset();
-  expect(await chapterStoryNumber(f.session, f.header, records[0]!, page.occurrenceContext!)).toBeNull();
+  await expect(chapterStoryNumber(f.session, f.header, chapter, page.occurrenceContext!))
+    .rejects.toThrow('composition group root requires bounded preparation');
   expect(f.graphQueries).toHaveLength(1);
-  expect(f.objects.gets).toBeLessThanOrEqual(12);
-  expect(f.objects.bytes).toBeLessThan(500_000);
+  expect(f.objects.gets).toBe(1);
+  expect(f.objects.bytes).toBeLessThan(20_000);
+  const snapshot = await f.snapshot();
+  await expect(chapterStoryNumber(f.session, f.header, chapter, page.occurrenceContext!, snapshot))
+    .rejects.toBeInstanceOf(StructureObjectUnavailable);
+});
+
+test('Group numbering refuses a retained group absent from the exact all-role order root', async () => {
+  const f = await populatedChapterFixture(1000);
+  const snapshot = await f.snapshot();
+  const exact = await readCompositionPage(f.env, { structure: f.header.structure, snapshot,
+    occurrence: f.end.occurrence, limit: 1, canReadTarget: readableChapterTarget });
+  const order = await orderTree(f.objects).apply(snapshot.manifest.order,
+    new Map([[orderTreeKey(f.volume as OrderEntry), null]]), newCost());
+  const broken = { ...snapshot, cost: newCost(), manifest: { ...snapshot.manifest, order } };
+  await expect(chapterStoryNumber(f.session, f.header, f.end, exact.occurrenceContext!, broken))
+    .rejects.toBeInstanceOf(StructureObjectCorrupt);
 });
 
 test('Missing, corrupt and order/record-mismatched immutable neighbourhoods fail explicitly', async () => {

@@ -1,10 +1,11 @@
 import { CompositionCorrupt, CompositionUnavailable, compositionForMainVersion,
   readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage, readCompositionSnapshot, type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
-import { orderTree, structureObjects } from '../structure/change.ts';
+import { orderTree, recordTree, structureObjects } from '../structure/change.ts';
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
-import type { OccurrenceRecord } from '../structure/format.ts';
+import { checkOccurrenceRecord, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
+import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
@@ -150,29 +151,41 @@ async function neighbourhood(session: WorkReadSession, header: CompositionHeader
   return snapshot;
 }
 
-/** Numbering admits a bounded top-level placement neighbourhood. Counts reject
- * an oversized root before its records are hydrated; child totals use subtree
- * counts, so a small outline can number thousands of chapters exactly. */
+/** Only groups consume the original numbering budget. The retained group-only
+ * root locates interspersed groups without walking arbitrary top-level chapters;
+ * child totals still come from the all-role order tree's subtree counts. */
 async function topGroups(session: WorkReadSession, header: CompositionHeader, selected?: CompositionSnapshot) {
   const snapshot = selected ?? await neighbourhood(session, header);
+  const root = snapshot.manifest.topGroups;
+  if (!root) throw new StructureObjectUnavailable('composition group root requires bounded preparation');
+  if (root.count > WORK_CONTENTS_COST.topGroups) return null;
+  session.checkDeadline();
   const tree = orderTree(snapshot.objects);
-  const count = await tree.countBefore(snapshot.manifest.order, `${header.structure}\u0002`, snapshot.cost)
-    - await tree.countBefore(snapshot.manifest.order, `${header.structure}\u0001`, snapshot.cost);
-  if (count > WORK_CONTENTS_COST.numberingPlacements) return null;
+  const entries = await tree.range(root, `${header.structure}\u0001`, `${header.structure}\u0002`,
+    WORK_CONTENTS_COST.topGroups + 1, snapshot.cost);
+  if (entries.length !== root.count) throw new StructureObjectCorrupt('composition group root count differs');
+  const records = await recordTree(snapshot.objects).lookup(snapshot.manifest.records,
+    entries.map(entry => entry.occurrence), snapshot.cost);
+  const ordered = await tree.lookup(snapshot.manifest.order, entries.map(orderTreeKey), snapshot.cost);
   const groups: Array<{ occurrence: string; position: string; division: Division; chapters: number }> = [];
-  let after: string | undefined;
-  do {
+  for (const entry of entries) {
     session.checkDeadline();
-    const page = await readCompositionPage(session.deps.environment, { structure: header.structure,
-      header, snapshot, limit: 100, ...(after ? { after } : {}), outline: true,
-      canReadTarget: async () => true });
-    for (const record of page.occurrences) {
-      if (record.role !== 'group') continue;
-      groups.push({ occurrence: record.occurrence, position: position(record.segmentKey!, record.orderKey!),
-        division: recordDivision(record)!, chapters: page.childCounts![record.occurrence]! });
+    const record = records.get(entry.occurrence);
+    if (!record || record.role !== 'group' || record.state !== 'active'
+      || record.parent !== header.structure || orderTreeKey(record as typeof entry) !== orderTreeKey(entry)
+      || ordered.get(orderTreeKey(entry))?.occurrence !== entry.occurrence) {
+      throw new StructureObjectCorrupt('composition group record differs from retained order');
     }
-    after = page.next ?? undefined;
-  } while (after);
+    try { checkOccurrenceRecord(record, snapshot.manifest.profile); }
+    catch (error) {
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      throw error;
+    }
+    const chapters = await tree.countBefore(snapshot.manifest.order, `${record.occurrence}\u0002`, snapshot.cost)
+      - await tree.countBefore(snapshot.manifest.order, `${record.occurrence}\u0001`, snapshot.cost);
+    groups.push({ occurrence: record.occurrence, position: position(record.segmentKey!, record.orderKey!),
+      division: recordDivision(record)!, chapters });
+  }
   return groups;
 }
 type TopGroups = NonNullable<Awaited<ReturnType<typeof topGroups>>>;

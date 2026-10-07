@@ -188,6 +188,7 @@ export class StructureStageStore {
     if (byId.size !== records.length) throw new StructureStageInvalid('stage repeats an occurrence');
     const segments = new Map<string, number>();
     const order = new Map<string, OrderEntry>();
+    const groups = new Map<string, OrderEntry>();
     // Authorization belongs to this seal request, not each use of the target.
     // Activation makes a fresh decision so revocation between requests is seen.
     const readableTargets = new Set<string>();
@@ -219,6 +220,7 @@ export class StructureStageStore {
       const key = orderTreeKey(entry);
       if (order.has(key)) throw new StructureStageInvalid('stage order position repeats');
       order.set(key, entry);
+      if (record.role === 'group' && record.parent === stage.structure) groups.set(key, entry);
     }
     if ([...segments.values()].some(count => count > STRUCTURE_LIMITS.segmentMembers)) {
       throw new StructureStageInvalid('stage order segment exceeds its bound');
@@ -228,10 +230,12 @@ export class StructureStageStore {
       new Map(records.map(record => [recordTreeKey(record), record])), cost);
     const orderRoot = await orderTree(this.objects).apply(await orderTree(this.objects).empty(cost),
       order, cost);
+    const groupRoot = await orderTree(this.objects).apply(await orderTree(this.objects).empty(cost),
+      groups, cost);
     const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: stage.structure,
       structureOf: input.mainVersion, profile: 'book-composition' as const,
       generation: stage.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
-      records: recordRoot, order: orderRoot, placementCount: order.size, measures: [],
+      records: recordRoot, order: orderRoot, topGroups: groupRoot, placementCount: order.size, measures: [],
       ...(stage.sourceRef && stage.sourceRevision && stage.mappingPolicy
         ? { source: { ref: stage.sourceRef, revision: stage.sourceRevision,
           mappingPolicy: stage.mappingPolicy } } : {}),

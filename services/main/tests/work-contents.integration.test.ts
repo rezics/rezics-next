@@ -255,3 +255,139 @@ test('Reader: chapter Posts and independently maintained anthology Works retain 
     expect(publicHeader.partOf).toBeUndefined();
   } finally { await stack.stop(); }
 }, 180_000);
+
+test('Structure group order: admitted deltas, historical roots, restoration and durable staging', async () => {
+  const { readCompositionSnapshot } = await import('../src/modules/structure/read.ts');
+  const { orderTree, recordTree } = await import('../src/modules/structure/change.ts');
+  const { checkStructureManifest } = await import('../src/modules/structure/format.ts');
+  const { StructureStageStore } = await import('../src/modules/structure/stage.ts');
+  const { newCost } = await import('../src/modules/structure/tree.ts');
+  const stack = await startMediaStack('structure-group-order');
+  try {
+    const owner = await stack.member('structure-group-order-owner');
+    const objects = stack.objects('semantic/structure/');
+    await objects.initialize();
+    (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
+    const title = `Group order lifecycle ${randomUUID()}`;
+    const types = ['https://schema.org/Book'];
+    const book = await activateMetadataWork(stack.env, { title, semanticTypes: types,
+      admission: stack.admission(owner.actor, 'work:create:root', 'work.create',
+        metadataWorkRequestDigest(title, types)) });
+    if (!book.work || !book.mainVersion) throw new Error('Book was not created');
+    await owner.grant(`work:edit:${book.work}`, 'work.edit');
+    await owner.grant(`work:read:${book.work}`, 'work.read');
+    const target = await stack.privateWork(owner.actor, 'Group order chapter target');
+    await owner.grant(`work:read:${target.work}`, 'work.read');
+    const created = await json<{ structure: string; revision: string }>(await owner.send('POST',
+      '/v1/compositions', { profile: 'book-composition', work: book.work,
+        mainVersion: book.mainVersion, actingSubject: owner.actor }), 201);
+    const structure = created.structure;
+    const snapshot = (revision?: string) => readCompositionSnapshot(stack.env, {
+      structure, ...(revision ? { revision } : {}) });
+    const groups = async (read: Awaited<ReturnType<typeof snapshot>>) => {
+      const root = read.manifest.topGroups;
+      if (!root) throw new Error('Book manifest has no retained group order root');
+      const entries = await orderTree(read.objects).range(root, `${structure}\u0001`,
+        `${structure}\u0002`, 201, read.cost);
+      expect(entries).toHaveLength(root.count);
+      return entries.map(entry => entry.occurrence);
+    };
+    expect(await groups(await snapshot())).toEqual([]);
+    let head = created.revision;
+    const change = async (operations: object[]) => {
+      const result = await json<{ revision: string; occurrences: string[] }>(await owner.send('POST',
+        `/v1/compositions/${short(structure)}/changes`, { profile: 'book-composition',
+          expectedHead: head, actingSubject: owner.actor, operations }), 200);
+      head = result.revision;
+      return result;
+    };
+    const inserted = await change([
+      { op: 'insert', parent: structure, position: 'last', role: 'group', division: 'volume',
+        label: { value: 'First volume', language: 'en' } },
+      { op: 'insert', parent: structure, position: 'last', role: 'chapter', target: target.work },
+      { op: 'insert', parent: structure, position: 'last', role: 'chapter', target: target.work },
+      { op: 'insert', parent: structure, position: 'last', role: 'group', division: 'extras',
+        label: { value: 'Empty extras', language: 'en' } },
+    ]);
+    const volume = inserted.occurrences[0]!;
+    const empty = inserted.occurrences[3]!;
+    expect(await groups(await snapshot())).toEqual([volume, empty]);
+    const child = await change([{ op: 'insert', parent: volume, position: 'last', role: 'chapter',
+      target: target.work, label: { value: 'Grouped chapter', language: 'en' } }]);
+    const historicalRevision = head;
+    const historical = await snapshot(historicalRevision);
+    const historicalManifestDigest = historical.header.manifest.slice(-64);
+    const historicalBytes = await objects.get(historicalManifestDigest);
+    const historicalGroupRoot = historical.manifest.topGroups;
+    expect(await groups(historical)).toEqual([volume, empty]);
+    await change([{ op: 'move', occurrence: volume, parent: structure, position: 'last' }]);
+    const moved = await snapshot();
+    expect(await groups(moved)).toEqual([empty, volume]);
+    const rootOrder = await orderTree(objects).range(moved.manifest.order,
+      `${structure}\u0001`, `${structure}\u0002`, 10, moved.cost);
+    expect(rootOrder.map(entry => entry.occurrence)).toEqual([
+      inserted.occurrences[1], inserted.occurrences[2], empty, volume,
+    ]);
+    await change([{ op: 'remove', occurrence: empty }]);
+    expect(await groups(await snapshot())).toEqual([volume]);
+    await change([{ op: 'remove', occurrence: child.occurrences[0]! }]);
+    await change([{ op: 'remove', occurrence: volume }]);
+    expect(await groups(await snapshot())).toEqual([]);
+    // Reopening the exact root after later mutations models a reader restart:
+    // no request-local cache or today's placements can supply its group order.
+    const reopened = await snapshot(historicalRevision);
+    expect(await groups(reopened)).toEqual([volume, empty]);
+    expect(reopened.manifest.topGroups).toEqual(historicalGroupRoot);
+    expect(await objects.get(historicalManifestDigest)).toEqual(historicalBytes);
+    const restored = await json<{ revision: string }>(await owner.send('POST',
+      `/v1/compositions/${short(structure)}/restorations`, { expectedHead: head,
+        restoredFrom: historicalRevision, actingSubject: owner.actor }), 200);
+    head = restored.revision;
+    const restoredSnapshot = await snapshot();
+    expect(restoredSnapshot.revision).toBe(head);
+    expect(restoredSnapshot.revision).not.toBe(historicalRevision);
+    expect(restoredSnapshot.header.manifest.slice(-64)).not.toBe(historicalManifestDigest);
+    expect(restoredSnapshot.manifest.restoredFrom).toBe(historicalRevision);
+    expect(restoredSnapshot.manifest.placementCount).toBe(historical.manifest.placementCount);
+    expect(restoredSnapshot.manifest.topGroups).toEqual(historicalGroupRoot);
+    expect(await groups(restoredSnapshot)).toEqual([volume, empty]);
+    expect(await objects.get(historicalManifestDigest)).toEqual(historicalBytes);
+
+    const principalId = randomUUID();
+    const stages = new StructureStageStore(stack.contentPool, objects);
+    let stage = await stages.create({ principalId, idempotencyKey: `groups:${randomUUID()}`,
+      scope: `work:edit:${book.work}`, structure, baseHead: head });
+    const records = await recordTree(objects).range(restoredSnapshot.manifest.records,
+      '', '\uffff', 20, newCost());
+    expect(records).toHaveLength(restoredSnapshot.manifest.records.count);
+    stage = await stages.upload({ id: stage.id, principalId, structure,
+      holder: stage.holder!, fence: stage.fence, ordinal: 0, entries: records });
+    const resumedStages = new StructureStageStore(stack.contentPool, stack.objects('semantic/structure/'));
+    // A retry after upload acknowledgement loss resumes the same durable page.
+    stage = await resumedStages.upload({ id: stage.id, principalId, structure,
+      holder: stage.holder!, fence: stage.fence, ordinal: 0, entries: records });
+    expect(stage.pages).toBe(1);
+    stage = await resumedStages.seal({ id: stage.id, principalId, structure,
+      mainVersion: book.mainVersion, holder: stage.holder!, fence: stage.fence,
+      canReadTarget: async resource => resource === target.work });
+    expect(stage.status).toBe('sealed');
+    if (!stage.manifest) throw new Error('Stage manifest was not persisted');
+    const stageBytes = await objects.get(stage.manifest);
+    const stageManifest = checkStructureManifest(stageBytes);
+    expect(stageManifest.topGroups?.count).toBe(2);
+    if (!stageManifest.topGroups) throw new Error('Stage has no retained group order root');
+    const stagedGroups = await orderTree(objects).range(stageManifest.topGroups,
+      `${structure}\u0001`, `${structure}\u0002`, 10, newCost());
+    expect(stagedGroups.map(entry => entry.occurrence)).toEqual([volume, empty]);
+    const restartedStages = new StructureStageStore(stack.contentPool, stack.objects('semantic/structure/'));
+    const persisted = await restartedStages.read(stage.id, principalId, structure);
+    expect(persisted).toMatchObject({ status: 'sealed', manifest: stage.manifest, pages: 1,
+      placementCount: restoredSnapshot.manifest.placementCount });
+    expect(await objects.get(persisted.manifest!)).toEqual(stageBytes);
+    expect((await restartedStages.seal({ id: stage.id, principalId, structure,
+      mainVersion: book.mainVersion, holder: stage.holder!, fence: stage.fence,
+      canReadTarget: async () => { throw new Error('sealed retry must reuse the original root'); } })).manifest)
+      .toBe(stage.manifest);
+    await restartedStages.cancel(stage.id, principalId, structure);
+  } finally { await stack.stop(); }
+}, 180_000);
