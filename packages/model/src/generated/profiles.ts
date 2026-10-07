@@ -1185,7 +1185,7 @@ export const profileRegistry = {
     ]
   },
   "space-realm-v1": {
-    "sha256": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
+    "sha256": "cccf212a73f4816603b0a1e55c1b0eb9b037f8794e576105e38fab65cb99218c",
     "file": "shapes/space-realm-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/space-realm-v1/space-shape",
@@ -1197,7 +1197,7 @@ export const profileRegistry = {
     ]
   },
   "space-realm-v2": {
-    "sha256": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
+    "sha256": "07a64922bd1042a99e98310f1e3e1068d348fbcd38380923917755a417e1f235",
     "file": "shapes/space-realm-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/space-realm-v2/space-shape",
@@ -1209,7 +1209,7 @@ export const profileRegistry = {
     ]
   },
   "space-realm-v3": {
-    "sha256": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
+    "sha256": "ba178e0738b1c3f0a59c85dd85f044a3c00cadecb52874a66d838e75bbec510b",
     "file": "shapes/space-realm-v3.ttl",
     "shapes": [
       "https://rezics.com/definition/space-realm-v3/space-shape",
@@ -1675,7 +1675,7 @@ export const profileRegistry = {
     ]
   },
   "zone-capability-v1": {
-    "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
+    "sha256": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "file": "shapes/zone-capability-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/zone-capability-v1/navigation-link-shape",
@@ -1691,7 +1691,7 @@ export const profileRegistry = {
     ]
   },
   "zone-presentation-v1": {
-    "sha256": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
+    "sha256": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "file": "shapes/zone-presentation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/zone-presentation-v1/zone-shape"
@@ -1701,7 +1701,7 @@ export const profileRegistry = {
     ]
   },
   "zone-presentation-v2": {
-    "sha256": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+    "sha256": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
     "file": "shapes/zone-presentation-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/zone-presentation-v2/zone-shape"

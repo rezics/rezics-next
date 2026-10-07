@@ -21,3 +21,5 @@
     sh:property [ sh:path rv:visibility ; sh:maxCount 1 ; sh:in ( "public" "restricted" "private" ) ] ;
     sh:property [ sh:path rv:reviewMode ; sh:maxCount 1 ; sh:in ( "mandatory" "trusted-members" "open" ) ] ;
     sh:property [ sh:path rv:realmPolicyHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+# Authored SHACL constraints for Space, Realm and Zone capabilities.

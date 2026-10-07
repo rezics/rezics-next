@@ -8,3 +8,5 @@
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Zone ] ;
     sh:property [ sh:path rv:presentation ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/zone-presentation-v1> ] .
+
+# Authored SHACL constraints for Space, Realm and Zone capabilities.

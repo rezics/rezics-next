@@ -988,17 +988,17 @@
     },
     {
       "id": "space-realm-v1",
-      "sha256": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
+      "sha256": "cccf212a73f4816603b0a1e55c1b0eb9b037f8794e576105e38fab65cb99218c",
       "file": "shapes/space-realm-v1.ttl"
     },
     {
       "id": "space-realm-v2",
-      "sha256": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
+      "sha256": "07a64922bd1042a99e98310f1e3e1068d348fbcd38380923917755a417e1f235",
       "file": "shapes/space-realm-v2.ttl"
     },
     {
       "id": "space-realm-v3",
-      "sha256": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
+      "sha256": "ba178e0738b1c3f0a59c85dd85f044a3c00cadecb52874a66d838e75bbec510b",
       "file": "shapes/space-realm-v3.ttl"
     },
     {
@@ -1299,17 +1299,17 @@
     },
     {
       "id": "zone-capability-v1",
-      "sha256": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
+      "sha256": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
       "file": "shapes/zone-capability-v1.ttl"
     },
     {
       "id": "zone-presentation-v1",
-      "sha256": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
+      "sha256": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
       "file": "shapes/zone-presentation-v1.ttl"
     },
     {
       "id": "zone-presentation-v2",
-      "sha256": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+      "sha256": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
       "file": "shapes/zone-presentation-v2.ttl"
     }
   ],
@@ -4114,9 +4114,9 @@
     "shapes/source-field-statement-v1.ttl": "bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7",
     "shapes/source-open-library-work-v1.ttl": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
     "shapes/source-reification-v1.ttl": "70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c",
-    "shapes/space-realm-v1.ttl": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
-    "shapes/space-realm-v2.ttl": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
-    "shapes/space-realm-v3.ttl": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
+    "shapes/space-realm-v1.ttl": "cccf212a73f4816603b0a1e55c1b0eb9b037f8794e576105e38fab65cb99218c",
+    "shapes/space-realm-v2.ttl": "07a64922bd1042a99e98310f1e3e1068d348fbcd38380923917755a417e1f235",
+    "shapes/space-realm-v3.ttl": "ba178e0738b1c3f0a59c85dd85f044a3c00cadecb52874a66d838e75bbec510b",
     "shapes/space-zone-v1.ttl": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
@@ -4154,11 +4154,11 @@
     "shapes/work-type-v1.ttl": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4",
     "shapes/work-type-v2.ttl": "94ef660d31ca8af44f51d5ecc6ad767ea97c6c39d1dcbf7db4321b1152632b2f",
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
-    "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
-    "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "shapes/zone-presentation-v2.ttl": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
+    "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
+    "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
+    "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
     "packages/model/src/generated/arbitraries.ts": "2e3d6a1a082ab0131fdf5fdee2c5828ad73e60bb129607bcd0afb2b68e3686d3",
-    "packages/model/src/generated/profiles.ts": "3d6c79983c6fe031272cfe3492bd4652ae0a1c089e7f87e1efca18ada41a0566",
+    "packages/model/src/generated/profiles.ts": "45373885fa02e9e0a20bfaff5bd9db57d81e15ceb75639ebefb55ec22438c684",
     "packages/model/src/generated/schemas.ts": "fb259520e8ab30187ef0f8599309e4744ce49002906db0712beaba5d22d88d6f",
     "packages/model/src/generated/vocabulary.ts": "b58a12a5ec25fa18261289b7adec589d48154dd8d535939bd845de1ce8b6123e"
   }
