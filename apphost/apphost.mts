@@ -15,9 +15,10 @@
 // process receives only the variables its envalid spec declares; secrets are
 // Aspire secret parameters, and service addresses flow through endpoint
 // references so ports can be fixed or random.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { mainSpec, relaySpec } from '../services/main/src/config.ts';
+import { appHostSourceHash, backendExecutable, ensureBackend } from '../scripts/dev/refresh.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
 import { accountsSpec } from '../apps/accounts/features/config/env.ts';
@@ -78,22 +79,36 @@ if (mode === 'frontend') {
   // its own listening port. A worktree stack already assigned these ports, and
   // its issuer URL is built from them, so they bind directly.
   const fixed = mode === 'main';
+  const stack = resolve(envFile, '..');
+  if (fixed) ensureBackend(root, stack);
+  if (fixed) writeFileSync(join(stack, 'apphost-hash'), appHostSourceHash(root));
+  const executable = (preload: string, entry: string) =>
+    backendExecutable(mode, stack, preload, entry);
+  const accountCommand = executable(
+    './services/account/src/telemetry.ts',
+    'services/account/src/index.ts',
+  );
+  const mainCommand = executable('./services/main/src/telemetry.ts', 'services/main/src/index.ts');
+  const relayCommand = executable(
+    './services/main/src/relay-telemetry.ts',
+    'services/main/src/relay.ts',
+  );
   const serviceEndpoint = (port: number, variable: string) => fixed
     ? { port, env: variable }
     : { port: Number(env[variable]), isProxied: false };
-  const account = configure(builder.addExecutable('account', 'bun', root,
-    ['--preload', './services/account/src/telemetry.ts', '--watch', 'services/account/src/index.ts']), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
+  const account = configure(builder.addExecutable('account', accountCommand.executable, root,
+    accountCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3002, 'ACCOUNT_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' });
-  const main = configure(builder.addExecutable('main', 'bun', root,
-    ['--preload', './services/main/src/telemetry.ts', '--watch', 'services/main/src/index.ts']), mainSpec, fixed ? ['MAIN_PORT'] : [])
+  const main = configure(builder.addExecutable('main', mainCommand.executable, root,
+    mainCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), mainSpec, fixed ? ['MAIN_PORT'] : [])
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' })
     .waitFor(account);
-  await configure(builder.addExecutable('main-relay', 'bun', root,
-    ['--preload', './services/main/src/relay-telemetry.ts', 'services/main/src/relay.ts']), relaySpec)
+  await configure(builder.addExecutable('main-relay', relayCommand.executable, root,
+    relayCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), relaySpec)
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf }).waitFor(main);
   accountUrl = account.getEndpoint('http');
   mainUrl = main.getEndpoint('http');

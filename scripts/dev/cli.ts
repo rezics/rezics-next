@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { createServer } from 'node:net';
-import { Client } from 'pg';
+import { Client, Pool } from 'pg';
+import { ensureStatementSeekCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
@@ -15,7 +16,8 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
-import { refreshSharedStack } from './refresh-stack.ts';
+import { ensureBackend, backendCommand, activeBackend, storageBackend } from './refresh.ts';
+import { expectedRefreshEnvironment, refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
@@ -506,7 +508,18 @@ async function devStart(args: string[]): Promise<void> {
     if (options!.rawUpdate) throw new Error('--raw-update cannot run with task dev');
     if (mode === 'backend') rememberDevStack(root, options!);
     envFile = join(stackDirectory(root, options!), 'dev.env');
-    replacePrivate(envFile, await prepareDev(options!));
+    if (mode === 'main') {
+      const backend = ensureBackend(root, stackDirectory(root, options!));
+      if (existsSync(envFile)) {
+        // Existing owners already match the last successful refresh. Starting
+        // AppHost must not apply newer main's migrations implicitly.
+        const storage = storageBackend(stackDirectory(root, options!)) ?? activeBackend(stackDirectory(root, options!))!;
+        run('docker', ['compose', '--env-file', join(stackDirectory(root, options!), 'compose.env'),
+          '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '-d', '--wait'],
+          composeProcessEnvironment(process.env, readEnv(join(stackDirectory(root, options!), 'compose.env'))), 180_000);
+        replacePrivate(envFile, expectedRefreshEnvironment(root));
+      } else backendCommand(backend, 'task', ['dev:prepare']);
+    } else replacePrivate(envFile, await prepareDev(options!));
   }
   aspireCli(['start', '--format', 'Json', ...(mode === 'main' ? [] : ['--isolated'])],
     { ...process.env, REZICS_DEV_ENV: envFile, REZICS_DEV_MODE: mode });
@@ -581,7 +594,7 @@ async function main(): Promise<void> {
   if (command === 'dev:stop') { devStop(args); return; }
   if (command === 'dev:reset') { await devReset(args); return; }
   if (command === 'dev:refresh') {
-    await refreshSharedStack(root, args, { prepare: onMigrations => prepareDev({ profile: 'dev' }, onMigrations) });
+    await refreshSharedStack(root, args);
     return;
   }
   if (command === 'dev:urls') { devUrls(); return; }
@@ -590,7 +603,35 @@ async function main(): Promise<void> {
   if (command === 'dev:prepare') {
     // A worker can prepare an already-running shared stack from a private local
     // environment copy, without recreating its containers or writing its config.
-    if (args[0] === '--existing-env') {
+    if (args[0] === '--seek-only') {
+      if (args.length !== 2)
+        throw new Error('dev:prepare --seek-only requires one environment file');
+      const env = readEnv(resolve(root, args[1]!));
+      const pool = new Pool({
+        connectionString: env.ACCESS_DATABASE_URL,
+        max: 2,
+        connectionTimeoutMillis: 5_000,
+      });
+      try {
+        await ensureStatementSeekCurrent(
+          {
+            fuseki: new FusekiClient(
+              env.FUSEKI_URL!,
+              env.FUSEKI_MAINTENANCE_TOKEN,
+              env.FUSEKI_COMMAND_TOKEN,
+            ),
+            lineage: {
+              dataEpoch: env.MAIN_DATA_EPOCH!,
+              routingEpoch: env.MAIN_ROUTING_EPOCH!,
+            },
+            objectDirectory: env.MAIN_OBJECT_DIRECTORY!,
+          },
+          pool,
+        );
+      } finally {
+        await pool.end();
+      }
+    } else if (args[0] === '--existing-env') {
       if (args.length !== 2) throw new Error('dev:prepare --existing-env requires one environment file');
       await prepareDevOwners(readEnv(resolve(root, args[1]!)));
       console.log('Existing stack owner migrations complete');

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export type Profile = 'dev' | 'qa';
@@ -206,6 +206,9 @@ function firstPlatformAdministrator(compose: Record<string, string>): Record<str
 }
 
 export function appEnvironment(compose: Record<string, string>, dir: string): Record<string, string> {
+  // A pinned backend reaches this directory through its private worktree link.
+  // Runtime object paths and fixture sources belong to the shared stack.
+  if (existsSync(dir)) dir = realpathSync(dir);
   const service = `http://127.0.0.1:${compose.ACCOUNT_PORT}`;
   // Browsers, products and the OAuth issuer use the public Account origin;
   // Main still reads JWKS and introspection from the service directly.
