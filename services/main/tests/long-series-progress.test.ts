@@ -12,7 +12,8 @@ import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
-const binding = (value: string) => ({ value });
+const binding = (value: string) => ({ value,
+  type: value.startsWith('https://') || value.startsWith('urn:') ? 'uri' : 'literal' });
 
 async function fixture() {
   const work = id(), structure = id(), revision = id(), generation = id(), specials = id();
