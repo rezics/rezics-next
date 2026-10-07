@@ -54,7 +54,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
       sense: term.definitions!.sense,senseRevision: term.revision,context: GLOBAL_CLASSIFICATION_CONTEXT,
       proposer: f.actorA,decider: f.actorB,outcome: 'accepted',application,decision: head,slot,
       policy: CLASSIFICATION_DIRECT_DECISION_PROFILE},CLASSIFICATION_DIRECT_DECISION_PROFILE);
-    // Retained data predates migration 1300. No operator conversion or fence
+    // Retained data predates migration 1389. No operator conversion or fence
     // command is called; refresh's real owner-preparation pipeline owns both.
     await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage');
     // QA installs owner DDL directly. Reconstruct the pre-upgrade Access
