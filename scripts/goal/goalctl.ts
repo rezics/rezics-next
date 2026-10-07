@@ -1653,12 +1653,20 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
 
 /** Files a failing bun run names: in AGENT mode bun prints a `path:` header only for files with failures or errors. */
 export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
+  // bun prints a `path:` header before each file's results, including passing files next to a failure, so a
+  // file counts only when a `(fail)` line or an unhandled error appears in its own section.
   const known = new Set(candidates);
   const found = new Set<string>();
-  for (const match of output.matchAll(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/gm)) {
-    let file = match[1]!.replace(/^\.\//, '');
-    if (root && isAbsolute(file)) file = relative(root, file);
-    if (known.has(file)) found.add(file);
+  let current: string | undefined;
+  for (const line of output.split('\n')) {
+    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+    if (header) {
+      let file = header[1]!.replace(/^\.\//, '');
+      if (root && isAbsolute(file)) file = relative(root, file);
+      current = known.has(file) ? file : undefined;
+    } else if (current && (/^\(fail\) /.test(line) || /^# Unhandled error/.test(line))) {
+      found.add(current);
+    }
   }
   return [...found].sort();
 }

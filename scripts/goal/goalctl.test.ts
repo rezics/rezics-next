@@ -789,6 +789,14 @@ process.exit(await child.exited);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  test('a passing file printed beside a failure is not counted as failing', () => {
+    // From a trust-ops merge: bun printed dev-seed-plan's header before the run summary although it passed.
+    const output = ['scripts/static/list-convention.test.ts:', '(fail) collection read contracts introduce no new list convention debt [97.20ms]',
+      'tests/qa/unit/dev-seed-plan.test.ts:', ' 130 pass', ' 1 fail'].join('\n');
+    expect(failingTestFiles(output, ['scripts/static/list-convention.test.ts', 'tests/qa/unit/dev-seed-plan.test.ts']))
+      .toEqual(['scripts/static/list-convention.test.ts']);
+  });
+
   test('the unit gate reads failing files from one bun run instead of rerunning each file', () => {
     const output = ['bun test v1.4.2', 'services/main/tests/a.test.ts:', '(fail) a > breaks',
       '/repo/scripts/b.test.ts:', '# Unhandled error between tests', 'services/main/tests/unlisted.test.ts:', ' 1 pass'].join('\n');
