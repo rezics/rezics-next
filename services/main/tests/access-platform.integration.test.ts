@@ -1,3 +1,4 @@
+// sql-relations-allow: access.platform_administrator -- The setup inserts the pre-grant singleton before migration 1290 so the upgrade preserves that holder, then proves migration 1291 removed the table.
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
