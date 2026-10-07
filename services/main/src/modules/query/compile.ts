@@ -203,9 +203,17 @@ export function compileQuery(query: AdmittedQuery | ResourceListQuery): Compiled
 }
 
 /** Exposure follows the admitted execution plan, never the input profile's name.
- * Filters are ordinary public reads; persisting a saved view is a different operation. */
+ * Filters are ordinary public reads; persisting a saved view is a different operation.
+ * A release inventory stays public unless a positive type Condition selects a closed capability.
+ * `none` excludes a type and does not select that type's grant. */
 export function compiledQueryCapabilities(plan: CompiledQuery): Exposure[] {
-  if (plan.template === 'release-works') return ['platform:commerce'];
+  if (plan.template === 'release-works') {
+    const types = plan.request.conditions.flatMap(condition =>
+      resolveFacet(condition.facet)?.name === 'type'
+        ? [condition.any, condition.all].flat().filter((value): value is string => typeof value === 'string')
+        : []);
+    return semanticTypeCapabilities(types);
+  }
   const types = plan.template === 'resource-list' ? plan.request.conditions.flatMap(condition =>
     condition.facet === 'type' && condition.operator !== 'none' ? condition.values : [])
     : plan.template === 'search' || plan.template === 'search-concepts' ? plan.request.includeTypes ?? []

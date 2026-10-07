@@ -5,6 +5,11 @@ import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts
 import { AdmissionDenied } from '../src/modules/access/admission.ts';
 import { exposureAllows, PlatformClosed, type Exposure } from '../src/modules/access/exposure.ts';
 import { compileQuery, compiledQueryCapabilities } from '../src/modules/query/compile.ts';
+import { WORK_SEMANTIC_TYPES } from '../src/modules/work/activate.ts';
+import { resolveFacet } from '../src/modules/facets/registry.ts';
+import { openApiOperations as rightsOperations } from '../src/routes/rights.ts';
+import { openApiOperations as workOperations } from '../src/routes/works.ts';
+import { openApiOperations as commerceOperations } from '../src/routes/commerce.ts';
 import { admittedRelationChange, admittedSemanticChange, resolvedSemanticCapabilities } from '../src/modules/semantic/admitted.ts';
 import { admittedSemanticBulkChange } from '../src/modules/semantic/staging.ts';
 import { prepareComponent } from '../src/modules/work/activate.ts';
@@ -68,7 +73,8 @@ function fixture(groups: string[] = [], operations: string[] = []) {
     environment: { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: '0' }, objectDirectory: '.temp' },
     account: { verify: async () => principal }, platformAccess: gate.owner,
     access: { register: async () => { admissions++; throw new AdmissionDenied('resource grant missing'); },
-      canReadSemanticResource: async () => false, canReadWork: async () => false, canReadReferences: async () => new Set() },
+      canReadSemanticResource: async () => false, canReadWork: async () => false, canReadReferences: async () => new Set(),
+      assertRecoveryOpen: async () => undefined },
     semanticStages: {}, contentPrivateSearch: { settlement: { sweep: async () => undefined } },
   } as unknown as MainWorkDependencies;
   return { work, graph, ...gate, admissions: () => admissions };
@@ -76,18 +82,124 @@ function fixture(groups: string[] = [], operations: string[] = []) {
 const resourceQuery = { profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest',
   filter: { all: [{ facet: 'type', any: [event] }] } };
 
-test('Query selects Event exposure from admitted type conditions, and release exposure from the compiled template', async () => {
+const releaseBrowse = (scope: { kind: 'all' } | { kind: 'realm'; realm: string },
+  type?: { any?: string[]; all?: string[]; none?: string[] }) => ({
+  context: scope.kind === 'realm' ? { realm: scope.realm } : 'global' as const,
+  scope, sort: 'newest' as const, page: { size: 20 },
+  filter: { all: [
+    { facet: 'release', where: { all: [
+      { facet: 'releaseLanguage', any: ['en'] },
+      { facet: 'releasePlatform', any: ['Windows'] },
+      { facet: 'releaseCompleteness', any: ['complete'] },
+    ] } },
+    ...type ? [{ facet: 'type', ...type }] : [],
+  ] },
+});
+function emptyReleaseCatalogue(graph: SelectedGraph) {
+  graph.query = async (query: string) => {
+    graph.reads++;
+    if (query.includes('SELECT ?epoch ?sequence')) return { results: { bindings: [
+      { epoch: { type: 'literal', value: 'epoch' }, sequence: { type: 'literal', value: '1' } }] } };
+    if (query.includes('a rv:Realm')) return { results: { bindings: [{
+      space: { type: 'uri', value: id(9) }, realmRevision: { type: 'uri', value: id(8) },
+      disclosure: { type: 'uri', value: 'https://rezics.com/vocab/Public' } }] } };
+    if (query.includes('RestoreCutover') || query.includes('schema:CreativeWork')) return { results: { bindings: [] } };
+    throw new Error(`unexpected release query: ${query.slice(0, 240)}`);
+  };
+}
+
+test('Query selects Event exposure from admitted type conditions, and public release browse from the compiled plan', async () => {
   const f = fixture();
   const app = queryRoutes(f.graph, f.work);
   const denied = await app.handle(call('/v1/query', resourceQuery));
   expect(denied.status).toBe(403);
   expect(await denied.json()).toMatchObject({ code: 'platform_closed' });
   expect(f.graph.reads).toBe(0);
-  const release = compileQuery({ context: 'global', scope: { kind: 'all' }, sort: 'newest', page: { size: 20 },
-    filter: { all: [{ facet: 'release', where: { all: [{ facet: 'releaseLanguage', any: ['en'] }] } }] } });
-  expect(compiledQueryCapabilities(release)).toEqual(['platform:commerce']);
+  const release = compileQuery(releaseBrowse({ kind: 'all' }));
+  expect(compiledQueryCapabilities(release)).toEqual(['public']);
   const publicPlan = compileQuery({ ...resourceQuery, filter: { all: [{ facet: 'type', none: [event] }] } } as Parameters<typeof compileQuery>[0]);
   expect(compiledQueryCapabilities(publicPlan)).toEqual(['public']);
+});
+
+test('Public release browse in all and Realm scope succeeds without a commerce grant', async () => {
+  for (const scope of [{ kind: 'all' } as const, { kind: 'realm' as const, realm: id(1) }]) {
+    const f = fixture();
+    emptyReleaseCatalogue(f.graph);
+    const body = releaseBrowse(scope);
+    expect(compiledQueryCapabilities(compileQuery(body))).toEqual(['public']);
+    const response = await queryRoutes(f.graph, f.work).handle(call('/v1/query', body));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ profile: 'query-v1', template: 'release-works-v1',
+      result: { profile: 'release-works-v1', items: [] } });
+    expect(f.calls).toEqual([]);
+    expect(f.graph.reads).toBeGreaterThan(0);
+  }
+});
+
+test('A positive closed semantic type on a release plan stays denied without its grant', async () => {
+  const product = 'https://schema.org/Product';
+  installRegisteredTypes([{ definition: { ...compiledType('https://schema.org/Book')!, type: product },
+    revision: '1', lifecycle: 'active' }]);
+  // Release discovery admits only Work types. Event is a resource type; admit it
+  // for this assertion so the compiled plan reaches the existing events gate.
+  const eventAdded = !WORK_SEMANTIC_TYPES.includes(event);
+  if (eventAdded) WORK_SEMANTIC_TYPES.push(event);
+  try {
+    for (const [type, operator, exposure] of [
+      [product, 'any', 'platform:commerce'], [product, 'all', 'platform:commerce'],
+      [event, 'any', 'platform:events'], [event, 'all', 'platform:events'],
+    ] as const) {
+      const f = fixture();
+      const body = releaseBrowse({ kind: 'all' }, { [operator]: [type] });
+      expect(compiledQueryCapabilities(compileQuery(body))).toEqual([exposure]);
+      const response = await queryRoutes(f.graph, f.work).handle(call('/v1/query', body));
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: 'platform_closed' });
+      expect(f.graph.reads).toBe(0);
+      expect(f.calls).toEqual([{ exposure, operationId: 'postV1Query' }]);
+    }
+    const byId = releaseBrowse({ kind: 'all' }, { any: [product] });
+    byId.filter.all[1] = { facet: resolveFacet('type')!.id, any: [product] };
+    expect(compiledQueryCapabilities(compileQuery(byId))).toEqual(['platform:commerce']);
+  } finally {
+    const index = WORK_SEMANTIC_TYPES.indexOf(event);
+    if (eventAdded && index >= 0) WORK_SEMANTIC_TYPES.splice(index, 1);
+    installRegisteredTypes([]);
+  }
+});
+
+test('A negative-only type filter on a release plan does not request a grant', async () => {
+  const product = 'https://schema.org/Product';
+  installRegisteredTypes([{ definition: { ...compiledType('https://schema.org/Book')!, type: product },
+    revision: '1', lifecycle: 'active' }]);
+  const eventAdded = !WORK_SEMANTIC_TYPES.includes(event);
+  if (eventAdded) WORK_SEMANTIC_TYPES.push(event);
+  try {
+    for (const type of ['https://schema.org/Book', product, event]) {
+      const f = fixture();
+      emptyReleaseCatalogue(f.graph);
+      const body = releaseBrowse({ kind: 'all' }, { none: [type] });
+      expect(compiledQueryCapabilities(compileQuery(body))).toEqual(['public']);
+      const response = await queryRoutes(f.graph, f.work).handle(call('/v1/query', body));
+      expect(response.status).toBe(200);
+      expect(f.calls).toEqual([]);
+    }
+  } finally {
+    const index = WORK_SEMANTIC_TYPES.indexOf(event);
+    if (eventAdded && index >= 0) WORK_SEMANTIC_TYPES.splice(index, 1);
+    installRegisteredTypes([]);
+  }
+});
+
+test('Offerings, sales and fixed-release commands stay commerce gated', () => {
+  expect(rightsOperations['/v1/rights/offerings'].post.exposure).toBe('platform:commerce');
+  expect(rightsOperations['/v1/rights/offerings/{offering}/changes'].post.exposure).toBe('platform:commerce');
+  expect(workOperations['/v1/fixed-releases'].post.exposure).toBe('platform:commerce');
+  expect(workOperations['/v1/fixed-releases/{release}'].get.exposure).toBe('platform:commerce');
+  for (const path of ['/v1/subscriptions/changes', '/v1/subscriptions/gifts', '/v1/subscriptions/quotes',
+    '/v1/subscriptions/reconciliations', '/v1/subscriptions/settlements'] as const) {
+    expect(commerceOperations[path].post.exposure).toBe('platform:commerce');
+  }
 });
 
 test('An operation grant opens only its selected query operation; public queries require no platform read', async () => {

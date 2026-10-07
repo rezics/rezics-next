@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import type { ResourceQuery, FilterCondition } from '../../../model/definitions/filter-document-v1.ts';
-import { compileQuery, QueryRejected } from '../src/modules/query/compile.ts';
+import { compileQuery, compiledQueryCapabilities, QueryRejected } from '../src/modules/query/compile.ts';
 import { checkedFilter, InvalidFilter } from '../src/modules/facets/schema.ts';
 import { facetDefinition } from '../src/modules/facets/contract.ts';
 import { resolveFacet } from '../src/modules/facets/registry.ts';
@@ -28,6 +28,9 @@ const compiled = () => {
 
 test('G851: release group compiles one bound node and includes every child in admission', () => {
   expect(compiled()).toMatchObject({ template: 'release-works', graphReads: 2, request: { groups: [group] } });
+  expect(compiledQueryCapabilities(compiled())).toEqual(['public']);
+  expect(compiledQueryCapabilities(compileQuery({ ...base, scope: { kind: 'realm', realm: id(1) },
+    context: { realm: id(1) } }))).toEqual(['public']);
   expect(compiled().facets).toHaveLength(5);
   const pattern = releaseGroupPattern(group, '?oneRelease', 'group');
   for (const predicate of ['contentLanguage', 'platform', 'completeness', 'releaseStatus']) {
