@@ -8,6 +8,7 @@ import {
   CommandOutcomeUnknown,
   FusekiClient,
   fusekiReadBudget,
+  FusekiReadBudgetExceeded,
   type CommandEnvelope,
   type SparqlResult,
 } from '../src/infrastructure/fuseki.ts';
@@ -62,6 +63,8 @@ import {
 import {
   assessAdmittedClaim,
   assessmentDigest,
+  AssessmentHistoryAuditRefused,
+  auditAssessmentHistoryWindow,
   createAdmittedClaim,
   PendingVerification,
   readOriginalAssessmentProducerNative,
@@ -2747,4 +2750,522 @@ test('the native scope obeys parent cancellation and a shared ten-second deadlin
       expect(cancellationReason).toBe(reason);
     } finally { timeout.mockRestore(); }
   } finally { transport.mockRestore(); }
+});
+
+// ---------------------------------------------------- original history audit
+
+const AUDIT_EPOCH = 'audit-data-epoch';
+const historyRow = (producer: AssessmentProducerRecord, patch: Record<string, unknown> = {}) => ({
+  id: producer.admission,
+  principal_id: producer.principal,
+  acting_subject: producer.actingSubject,
+  scope_id: producer.scope,
+  action: ADMISSIONS['claim-assess'].action,
+  idempotency_key: producer.idempotencyKey,
+  request_digest: producer.requestDigest,
+  state: 'sealed',
+  graph_receipt: receiptIri(producer.admission, 'claim-assess'),
+  graph_outcome: producer.terminal?.status === 'cancelled' ? 'cancelled' : 'succeeded',
+  graph_data_epoch: AUDIT_EPOCH,
+  graph_sequence: '42',
+  authority_epoch: producer.authorityEpoch,
+  registered_at: new Date(1000),
+  expires_at: new Date(2000),
+  claimed_at: new Date(1500),
+  sealed_at: new Date(1600),
+  oversized_fields: false,
+  ...patch,
+});
+
+/** A SQL seam for the real history reader: it filters the id keyset only, never owner state. */
+function auditAccessClient(rows: Record<string, unknown>[], isolation = 'read committed') {
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const client = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT)\b/.test(sql)) return { rows: [], rowCount: 0 };
+      if (sql === 'SHOW transaction_isolation')
+        return { rows: [{ transaction_isolation: isolation }], rowCount: 1 };
+      if (/FROM access\.recovery_fence/.test(sql))
+        return { rows: [{ open: false, generation: '7' }], rowCount: 1 };
+      if (/FROM access\.admission/.test(sql)) {
+        const after = values[0] as string;
+        const found = rows
+          .filter((row) =>
+            sql.includes('a.id >=') ? (row.id as string) >= after : (row.id as string) > after,
+          )
+          .slice(0, 33);
+        return { rows: found, rowCount: found.length };
+      }
+      throw new Error(`Audit attempted unexpected Access SQL: ${sql}`);
+    },
+  } as unknown as PoolClient;
+  return { client, queries };
+}
+
+function auditContentClient(
+  rows: Record<string, unknown>[],
+  isolation = 'repeatable read',
+  gateGeneration = '8',
+) {
+  const permit = auditPermit();
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const client = {
+    query: async (sql: string, values: unknown[] = []) => {
+      queries.push({ sql, values });
+      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT)\b/.test(sql)) return { rows: [], rowCount: 0 };
+      if (sql === 'SHOW transaction_isolation')
+        return { rows: [{ transaction_isolation: isolation }], rowCount: 1 };
+      if (/\bFROM reading_position\.generation\b/.test(sql))
+        return { rows: [{ epoch: permit.restoreEpoch }], rowCount: 1 };
+      if (/\bFROM verification\.assessment_producer_gate\b/.test(sql)) {
+        return {
+          rows: [
+            {
+              mode: permit.mode,
+              job: permit.job,
+              generation: gateGeneration,
+              restore_epoch: permit.restoreEpoch,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/\bFROM verification\.assessment_producer\b/.test(sql)) {
+        const wanted = new Set(values[0] as string[]);
+        const found = rows.filter((row) => wanted.has(row.admission_id as string));
+        return { rows: found, rowCount: found.length };
+      }
+      throw new Error(`Audit attempted unexpected Content SQL: ${sql}`);
+    },
+  } as unknown as PoolClient;
+  return { client, queries, permit };
+}
+
+type NativeAuditMode = 'succeeded' | 'cancelled' | 'absent';
+/** Serves only the fixed original subjects and charges the shared budget like the real client does. */
+function auditNativeEnv(modes: Map<string, NativeAuditMode>, bytesPerRead = 1000) {
+  const calls: string[] = [];
+  const fuseki = new FusekiClient('http://unused.invalid');
+  fuseki.query = async (text) => {
+    const budget = fusekiReadBudget.getStore();
+    if (budget) {
+      if (budget.callsLeft <= 0 || budget.bytesLeft < bytesPerRead)
+        throw new FusekiReadBudgetExceeded('Fuseki read budget exceeded');
+      budget.callsLeft--;
+      budget.bytesLeft -= bytesPerRead;
+    }
+    budget?.signal.throwIfAborted();
+    calls.push(text);
+    for (const [admission, mode] of modes) {
+      const producer = assessmentAuditRow(Number(admission.slice(-4)) - 3000, null).producer;
+      if (text.includes(`<${receiptIri(admission, 'claim-assess')}>`)) {
+        return {
+          results: {
+            bindings:
+              mode === 'absent'
+                ? []
+                : nativeAssessmentReceiptRows({
+                    admission,
+                    digest: producer.requestDigest,
+                    dataEpoch: AUDIT_EPOCH,
+                    outcome: mode,
+                    assessment: mode === 'succeeded' ? id(545) : null,
+                  }),
+          },
+        };
+      }
+    }
+    if (text.includes(`<${id(545)}>`)) {
+      const producer = assessmentAuditRow(1, null).producer;
+      return {
+        results: {
+          bindings: nativeAssessmentRecordRows({
+            claim: producer.claim,
+            input: producer.intent,
+            representation: 'claim',
+            dataEpoch: AUDIT_EPOCH,
+          }),
+        },
+      };
+    }
+    throw new Error('Audit native read retargeted away from its original subjects');
+  };
+  return { env: { fuseki } as unknown as WorkActivationEnvironment, calls };
+}
+
+const contentRow = (
+  ordinal: number,
+  status: AssessmentProducerTerminal['status'] | null,
+  patch: Record<string, unknown> = {},
+) => ({ ...assessmentAuditRow(ordinal, status).row, oversized: false, ...patch });
+
+test('the borrowed original lookup refuses a missing transaction, wrong isolation, bad permit and unbounded input before reading', async () => {
+  const { permit } = auditContentClient([]);
+  const store = new VerificationStore({} as Pool);
+  const ids = [auditAdmission(1)];
+  const refused = async (client: PoolClient, request = ids, given = permit) => {
+    await expect(
+      store.readAssessmentProducerOriginals(client, given, request),
+    ).rejects.toBeInstanceOf(VerificationInvalid);
+  };
+  const autocommit = {
+    query: async (sql: string) => {
+      if (sql.startsWith('SAVEPOINT'))
+        throw new Error('SAVEPOINT can only be used in transaction blocks');
+      throw new Error(`Autocommit read ${sql}`);
+    },
+  } as unknown as PoolClient;
+  await refused(autocommit);
+  const readCommitted = auditContentClient([], 'read committed');
+  await refused(readCommitted.client);
+  expect(
+    readCommitted.queries.some((query) =>
+      /\bFROM verification\.assessment_producer\b/.test(query.sql),
+    ),
+  ).toBe(false);
+  const ready = auditContentClient([]);
+  await refused(ready.client, ids, { ...permit, mode: 'ordinary', job: null });
+  await refused(ready.client, ids, { ...permit, job: 'bad job' });
+  await refused(ready.client, ids, { ...permit, generation: '08' });
+  await refused(
+    ready.client,
+    Array.from({ length: 33 }, (_, index) => auditAdmission(index + 1)),
+  );
+  await refused(ready.client, [auditAdmission(1), auditAdmission(1)]);
+  await refused(ready.client, ['not-a-uuid']);
+  expect(ready.queries).toEqual([]);
+  await expect(
+    store.readAssessmentProducerOriginals(
+      auditContentClient([], 'repeatable read', '9').client,
+      permit,
+      ids,
+    ),
+  ).rejects.toBeInstanceOf(VerificationStale);
+});
+
+test('the borrowed original lookup is one unlocked exact-key read that bounds transport and keeps order and unknowns', async () => {
+  const found = contentRow(2, 'activated');
+  const pending = contentRow(3, null);
+  const invalid = contentRow(4, 'cancelled', {
+    terminal: {
+      status: 'cancelled',
+      receipt: 'urn:forged',
+      assessment: null,
+      activation: { status: 'cancelled' },
+    },
+  });
+  const oversized = contentRow(5, 'activated', {
+    oversized: true,
+    intent_json: null,
+    terminal: null,
+    request_digest: null,
+    scope: null,
+  });
+  const f = auditContentClient([oversized, found, invalid, pending]);
+  const store = new VerificationStore({} as Pool);
+  const wanted = [
+    auditAdmission(2),
+    auditAdmission(1),
+    auditAdmission(5),
+    auditAdmission(4),
+    auditAdmission(3),
+  ];
+  const lookups = await store.readAssessmentProducerOriginals(f.client, f.permit, wanted);
+  expect(lookups).toEqual([
+    { status: 'found', producer: assessmentAuditRow(2, 'activated').producer },
+    { status: 'absent' },
+    { status: 'invalid-original' },
+    { status: 'invalid-original' },
+    { status: 'found', producer: assessmentAuditRow(3, null).producer },
+  ]);
+  const reads = f.queries.filter((query) =>
+    /\bFROM verification\.assessment_producer\b/.test(query.sql),
+  );
+  expect(reads).toHaveLength(1);
+  expect(reads[0]!.values.slice(0, 1)).toEqual([wanted]);
+  expect(reads[0]!.sql).toMatch(/admission_id = ANY\(\$1::uuid\[\]\)/);
+  expect(reads[0]!.sql).toMatch(/octet_length\(p\.intent_json\) > \$2/);
+  expect(reads[0]!.sql).not.toMatch(
+    /FOR\s+(?:SHARE|UPDATE)|SKIP LOCKED|COUNT\s*\(|ORDER BY|LIMIT/i,
+  );
+  // The two permit reads bracket the one data read; no transaction control is issued.
+  const order = f.queries.map((query) =>
+    /assessment_producer_gate/.test(query.sql)
+      ? 'gate'
+      : /\bFROM verification\.assessment_producer\b/.test(query.sql)
+        ? 'read'
+        : 'other',
+  );
+  expect(order.filter((kind) => kind !== 'other')).toEqual(['gate', 'read', 'gate']);
+  expect(f.queries.some((query) => /^(?:BEGIN|COMMIT|ROLLBACK|SET)\b/.test(query.sql))).toBe(false);
+});
+
+test('an audit turn classifies only retained Access, Content and native facts and never reconstructs missing custody', async () => {
+  const sealed = (
+    ordinal: number,
+    status: AssessmentProducerTerminal['status'] | null,
+    patch: Record<string, unknown> = {},
+  ) => historyRow(assessmentAuditRow(ordinal, status).producer, patch);
+  const access = [
+    sealed(1, 'activated'),
+    sealed(2, 'cancelled'),
+    sealed(3, 'activated', { request_digest: 'b'.repeat(64) }),
+    sealed(4, null),
+    sealed(5, 'activated'),
+    sealed(6, 'activated'),
+    sealed(7, 'activated', {
+      state: 'claimed',
+      graph_receipt: null,
+      graph_outcome: null,
+      graph_data_epoch: null,
+      graph_sequence: null,
+      sealed_at: null,
+    }),
+    sealed(8, 'activated', { registered_at: new Date(Number.NaN) }),
+    sealed(9, 'activated', { graph_sequence: '43' }),
+    sealed(10, 'cancelled'),
+    sealed(11, 'activated', { authority_epoch: '2', idempotency_key: 'another-key' }),
+    sealed(12, 'activated', { scope_id: 'verification:assess:unexpected' }),
+  ];
+  const content = [
+    contentRow(1, 'activated'),
+    contentRow(2, 'cancelled'),
+    contentRow(3, 'activated'),
+    contentRow(4, null),
+    contentRow(5, 'activated'),
+    contentRow(9, 'activated'),
+    // A Content terminal that contradicts the native success is a mismatch, not a repair.
+    contentRow(10, 'cancelled'),
+    contentRow(11, 'activated'),
+    contentRow(12, 'activated'),
+  ];
+  const native = auditNativeEnv(
+    new Map<string, NativeAuditMode>([
+      [auditAdmission(1), 'succeeded'],
+      [auditAdmission(2), 'cancelled'],
+      [auditAdmission(3), 'succeeded'],
+      [auditAdmission(4), 'succeeded'],
+      [auditAdmission(5), 'absent'],
+      [auditAdmission(6), 'succeeded'],
+      [auditAdmission(9), 'succeeded'],
+      [auditAdmission(10), 'succeeded'],
+      [auditAdmission(11), 'succeeded'],
+    ]),
+  );
+  const accessSide = auditAccessClient(access);
+  const contentSide = auditContentClient(content);
+  const store = new VerificationStore({} as Pool);
+  const forbidden = async (): Promise<never> => {
+    throw new Error('Audit attempted current analysis or an effect');
+  };
+  store.analysisSnapshot = forbidden;
+  store.evidenceHead = forbidden;
+  store.resolveChallenges = forbidden;
+  store.activateSummary = forbidden;
+  store.withAssessmentProducerEffects = forbidden;
+  native.env.fuseki.commandWithReceipt = forbidden;
+  const page = await auditAssessmentHistoryWindow(
+    { env: native.env, store },
+    { access: accessSide.client, content: contentSide.client, permit: contentSide.permit },
+  );
+  const outcome = (ordinal: number) =>
+    page.entries.find((entry) => entry.id === auditAdmission(ordinal))!.outcome;
+  expect(outcome(1)).toEqual({
+    status: 'bound',
+    terminal: 'activated',
+    native: 'succeeded',
+    receipt: receiptIri(auditAdmission(1), 'claim-assess'),
+    assessment: id(545),
+    position: { dataEpoch: AUDIT_EPOCH, sequence: '42' },
+  });
+  expect(outcome(2)).toEqual({
+    status: 'bound',
+    terminal: 'cancelled',
+    native: 'cancelled',
+    receipt: receiptIri(auditAdmission(2), 'claim-assess'),
+    assessment: null,
+    position: { dataEpoch: AUDIT_EPOCH, sequence: '42' },
+  });
+  expect(outcome(3)).toEqual({ status: 'mismatch', fields: ['requestDigest'] });
+  expect(outcome(4)).toEqual({ status: 'unresolved', reason: 'content-pending' });
+  expect(outcome(5)).toEqual({ status: 'unresolved', reason: 'native-pending' });
+  // Native success cannot stand in for a Content intent that was never retained.
+  expect(outcome(6)).toEqual({ status: 'unresolved', reason: 'content-missing' });
+  expect(outcome(7)).toEqual({ status: 'unresolved', reason: 'access-unsealed' });
+  expect(outcome(8)).toEqual({ status: 'unresolved', reason: 'access-malformed' });
+  expect(outcome(9)).toEqual({ status: 'mismatch', fields: ['graphSequence'] });
+  expect(outcome(10)).toEqual({ status: 'mismatch', fields: ['native'] });
+  expect(outcome(11)).toEqual({ status: 'mismatch', fields: ['idempotencyKey', 'authorityEpoch'] });
+  expect(outcome(12)).toEqual({ status: 'unresolved', reason: 'access-unexpected-scope' });
+  expect(page.entries.map((entry) => entry.id)).toEqual(access.map((row) => row.id as string));
+  expect(page).toMatchObject({
+    scope: 'original-assessment-history-window',
+    complete: false,
+    access: {
+      next: null,
+      windowExhausted: true,
+      cut: { state: 'unresolved', reason: 'access-not-quiesced' },
+      endOfHistory: false,
+    },
+  });
+  expect(page).not.toHaveProperty('release');
+  // Only sealed rows with exact facts reach Content; unsealed, malformed and unexpected rows keep their UUID only.
+  const lookup = contentSide.queries.find((query) =>
+    /\bFROM verification\.assessment_producer\b/.test(query.sql),
+  )!;
+  expect(lookup.values[0]).toEqual([1, 2, 3, 4, 5, 6, 9, 10, 11].map(auditAdmission));
+  // Rows that never prove a terminal (mismatch, pending, missing) never read native facts.
+  const subjects = native.calls
+    .map((text) =>
+      [...text.matchAll(/<(urn:rezics:receipt:[0-9a-f]{64})>/g)].map((match) => match[1]!),
+    )
+    .flat();
+  expect(subjects).toEqual(
+    [1, 2, 5, 9, 10].map((ordinal) => receiptIri(auditAdmission(ordinal), 'claim-assess')),
+  );
+  expect(accessSide.queries.every((query) => !/^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(query.sql))).toBe(
+    true,
+  );
+  expect(
+    contentSide.queries.every((query) => !/^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(query.sql)),
+  ).toBe(true);
+});
+
+test('an audit turn leaves lookahead and later pages unread and pins the same Access cut', async () => {
+  const producers = Array.from(
+    { length: 34 },
+    (_, index) => assessmentAuditRow(index + 1, 'activated').producer,
+  );
+  const access = producers.map((producer) => historyRow(producer));
+  const content = producers.map((_, index) => contentRow(index + 1, 'activated'));
+  const native = auditNativeEnv(
+    new Map(producers.map((producer): [string, NativeAuditMode] => [producer.admission, 'absent'])),
+  );
+  const store = new VerificationStore({} as Pool);
+  const accessSide = auditAccessClient(access);
+  const contentSide = auditContentClient(content);
+  const first = await auditAssessmentHistoryWindow(
+    { env: native.env, store },
+    {
+      access: accessSide.client,
+      content: contentSide.client,
+      permit: contentSide.permit,
+      history: { recoveryGeneration: '7' },
+    },
+  );
+  expect(first.entries.map((entry) => entry.id)).toEqual(
+    producers.slice(0, 32).map((producer) => producer.admission),
+  );
+  expect(first.access).toEqual({
+    next: { after: producers[31]!.admission, recoveryGeneration: '7' },
+    windowExhausted: false,
+    cut: { state: 'held', recoveryGeneration: '7' },
+    endOfHistory: false,
+  });
+  const firstLookup = contentSide.queries.find((query) =>
+    /\bFROM verification\.assessment_producer\b/.test(query.sql),
+  )!;
+  expect(firstLookup.values[0]).toEqual(
+    producers.slice(0, 32).map((producer) => producer.admission),
+  );
+  expect(native.calls).toHaveLength(32);
+  const second = await auditAssessmentHistoryWindow(
+    { env: native.env, store },
+    {
+      access: accessSide.client,
+      content: contentSide.client,
+      permit: contentSide.permit,
+      history: { cursor: first.access.next! },
+    },
+  );
+  expect(second.entries.map((entry) => entry.id)).toEqual(
+    producers.slice(32).map((producer) => producer.admission),
+  );
+  expect(second.access).toEqual({
+    next: null,
+    windowExhausted: true,
+    cut: { state: 'held', recoveryGeneration: '7' },
+    endOfHistory: true,
+  });
+  expect(second).toMatchObject({ complete: false });
+  // One independent transaction is required per owner.
+  await expect(
+    auditAssessmentHistoryWindow(
+      { env: native.env, store },
+      { access: accessSide.client, content: accessSide.client, permit: contentSide.permit },
+    ),
+  ).rejects.toBeInstanceOf(VerificationInvalid);
+  await expect(
+    auditAssessmentHistoryWindow(
+      { env: native.env, store },
+      {
+        access: accessSide.client,
+        content: auditContentClient(content, 'read committed').client,
+        permit: contentSide.permit,
+      },
+    ),
+  ).rejects.toBeInstanceOf(VerificationInvalid);
+  await expect(
+    auditAssessmentHistoryWindow(
+      { env: native.env, store },
+      {
+        access: accessSide.client,
+        content: auditContentClient(content, 'repeatable read', '9').client,
+        permit: contentSide.permit,
+      },
+    ),
+  ).rejects.toBeInstanceOf(VerificationStale);
+});
+
+test('one audit turn shares its native call, byte and deadline scope and never replenishes it per row', async () => {
+  const producers = [1, 2, 3].map((ordinal) => assessmentAuditRow(ordinal, 'activated').producer);
+  const access = producers.map((producer) => historyRow(producer));
+  const content = producers.map((_, index) => contentRow(index + 1, 'activated'));
+  const modes = new Map(
+    producers.map((producer): [string, NativeAuditMode] => [producer.admission, 'succeeded']),
+  );
+  const store = new VerificationStore({} as Pool);
+  const turn = (
+    env: WorkActivationEnvironment,
+    outer: { signal: AbortSignal; callsLeft: number; bytesLeft: number },
+  ) => {
+    const accessSide = auditAccessClient(access),
+      contentSide = auditContentClient(content);
+    return fusekiReadBudget.run(outer, () =>
+      auditAssessmentHistoryWindow(
+        { env, store },
+        { access: accessSide.client, content: contentSide.client, permit: contentSide.permit },
+      ),
+    );
+  };
+  // Three exact proofs need six native calls. The default scope fits them and refunds what it did not spend.
+  const fits = { signal: AbortSignal.timeout(10_000), callsLeft: 100, bytesLeft: 10_000_000 };
+  const complete = auditNativeEnv(modes);
+  expect((await turn(complete.env, fits)).entries.map((entry) => entry.outcome.status)).toEqual([
+    'bound',
+    'bound',
+    'bound',
+  ]);
+  expect(complete.calls).toHaveLength(6);
+  expect(fits.callsLeft).toBe(94);
+  expect(fits.bytesLeft).toBe(10_000_000 - 6000);
+  // A tighter caller call budget stops the whole turn after the first rows completed; nothing is returned.
+  const calls = { signal: AbortSignal.timeout(10_000), callsLeft: 3, bytesLeft: 10_000_000 };
+  const exhausted = auditNativeEnv(modes);
+  await expect(turn(exhausted.env, calls)).rejects.toBeInstanceOf(AssessmentHistoryAuditRefused);
+  expect(exhausted.calls).toHaveLength(3);
+  expect(calls.callsLeft).toBe(0);
+  const bytes = { signal: AbortSignal.timeout(10_000), callsLeft: 100, bytesLeft: 2500 };
+  await expect(turn(auditNativeEnv(modes).env, bytes)).rejects.toBeInstanceOf(
+    AssessmentHistoryAuditRefused,
+  );
+  expect(bytes.bytesLeft).toBe(500);
+  const expired = new AbortController();
+  expired.abort(new DOMException('deadline', 'TimeoutError'));
+  const late = auditNativeEnv(modes);
+  await expect(
+    turn(late.env, { signal: expired.signal, callsLeft: 100, bytesLeft: 10_000_000 }),
+  ).rejects.toBeInstanceOf(AssessmentHistoryAuditRefused);
+  expect(late.calls).toEqual([]);
 });

@@ -3,7 +3,18 @@
 // effects (challenge resolution, summary activation, invalidation) run after the
 // graph receipt and are idempotent per admission, so a lost response or crash
 // between stores resolves by replaying the same request.
+import type { PoolClient } from 'pg';
+import {
+  fusekiReadBudget,
+  FusekiReadBudgetExceeded,
+  type FusekiReadBudget,
+} from '../../infrastructure/fuseki.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import {
+  readVerificationAssessmentHistory,
+  type AssessmentHistoryPage,
+  type AssessmentHistoryRequest,
+} from '../access/assessment-history.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
 import { CancelledActivation, IdempotencyConflict, PendingActivation, hash,
@@ -14,6 +25,7 @@ import { analyzeClaimSupport, currentVerificationHead, HUMAN_REVIEW_METHOD, SUMM
 import { ADMISSIONS, claimDigest, createClaim, graphHeads, InvalidVerificationInput, native,
   readAcceptance, readAssessment, readClaimHead, readClaimRevisions, readReliability, readReceipt, recordAssessment,
   readAssessmentProducerNative, OriginalAssessmentNativeUnavailable,
+  ORIGINAL_ASSESSMENT_NATIVE_COST,
   receiptIri,
   validateVerificationReference,
   recordReliability, reliabilityDigest, sealVerificationAdmission,
@@ -311,13 +323,33 @@ export async function readOriginalAssessmentProducerNative(
   const original = await deps.store.readAssessmentProducer(admission);
   if (!original)
     throw new VerificationMissing('original assessment producer intent is unavailable');
+  return proveOriginalAssessmentNative(deps, original);
+}
+
+/** The shared native budget or deadline, not this admission's own facts, stopped the read. */
+class NativeBudgetRefused extends PendingVerification {}
+
+/** Prove an already retained original intent against its native receipt and assessment. */
+async function proveOriginalAssessmentNative(
+  deps: Pick<VerificationDependencies, 'env'>,
+  original: AssessmentProducerRecord,
+) {
+  const admission = original.admission;
   if (assessmentDigest(original.claim, original.intent) !== original.requestDigest) {
     throw new IdempotencyConflict('assessment producer differs from its original digest');
   }
   let retainedNative: Awaited<ReturnType<typeof readAssessmentProducerNative>>;
   try { retainedNative = await readAssessmentProducerNative(deps.env, admission); }
   catch (error) {
-    if (error instanceof OriginalAssessmentNativeUnavailable) throw new PendingVerification(admission);
+    if (error instanceof OriginalAssessmentNativeUnavailable) {
+      if (
+        error.cause instanceof FusekiReadBudgetExceeded ||
+        fusekiReadBudget.getStore()?.signal.aborted
+      ) {
+        throw new NativeBudgetRefused(admission);
+      }
+      throw new PendingVerification(admission);
+    }
     throw error;
   }
   if (!retainedNative) throw new PendingVerification(admission);
@@ -351,6 +383,229 @@ export async function readOriginalAssessmentProducerNative(
     throw new IdempotencyConflict('recorded assessment differs from original producer pins');
   }
   return { original, receipt, recorded };
+}
+
+// ------------------------------------------------- original history audit
+
+/** One turn shares this parent scope: 32 rows, each at most one native proof. */
+export const ASSESSMENT_HISTORY_AUDIT_COST = {
+  rows: 32,
+  nativeCalls: 32 * ORIGINAL_ASSESSMENT_NATIVE_COST.calls,
+  nativeBytes: 32 * ORIGINAL_ASSESSMENT_NATIVE_COST.responseBytes,
+  deadlineMs: ORIGINAL_ASSESSMENT_NATIVE_COST.deadlineMs,
+} as const;
+
+/** The whole turn stopped on its shared native call, byte or deadline scope; no row is returned. */
+export class AssessmentHistoryAuditRefused extends Error {}
+
+export type AssessmentHistoryAuditOutcome =
+  | {
+      status: 'bound';
+      /** Original Content terminal, proven against the exact original native receipt and assessment. */
+      terminal: AssessmentProducerTerminal['status'];
+      native: 'succeeded' | 'cancelled';
+      receipt: string;
+      assessment: string | null;
+      position: { dataEpoch: string; sequence: string };
+    }
+  | {
+      status: 'unresolved';
+      reason:
+        | 'access-malformed'
+        | 'access-oversized'
+        | 'access-unexpected-scope'
+        | 'access-unsealed'
+        | 'content-missing'
+        | 'content-invalid'
+        | 'content-pending'
+        | 'native-pending';
+    }
+  | { status: 'mismatch'; fields: readonly string[] };
+
+export interface AssessmentHistoryAuditPage {
+  scope: 'original-assessment-history-window';
+  entries: { id: string; outcome: AssessmentHistoryAuditOutcome }[];
+  /** The same Access position the history reader returned; the caller owns resuming it. */
+  access: Pick<AssessmentHistoryPage, 'next' | 'windowExhausted' | 'cut' | 'endOfHistory'>;
+  /** Never an owner closure, native inventory, C/R/B/E proof or release marker. */
+  complete: false;
+}
+
+export interface AssessmentHistoryAuditRequest {
+  /** Caller-owned READ COMMITTED Access transaction, closed generation and quiesced operator repair. */
+  access: PoolClient;
+  /** A different caller-owned REPEATABLE READ Content transaction under the closed maintenance permit. */
+  content: PoolClient;
+  permit: AssessmentProducerPermit;
+  history?: AssessmentHistoryRequest;
+}
+
+/** Classify one saved Access window against the retained original Content intent and native terminal.
+ * Only retained facts are compared: no current intent, analysis, reconcile, dispatch or Content effect runs,
+ * and no Content-to-Access inventory is implied. */
+export async function auditAssessmentHistoryWindow(
+  deps: Pick<VerificationDependencies, 'env' | 'store'>,
+  request: AssessmentHistoryAuditRequest,
+): Promise<AssessmentHistoryAuditPage> {
+  if (request.access === request.content) {
+    throw new VerificationInvalid(
+      'assessment history audit needs independent Access and Content transactions',
+    );
+  }
+  const outer = fusekiReadBudget.getStore();
+  const deadline = AbortSignal.timeout(ASSESSMENT_HISTORY_AUDIT_COST.deadlineMs);
+  const budget: FusekiReadBudget = {
+    signal: outer ? AbortSignal.any([outer.signal, deadline]) : deadline,
+    callsLeft: Math.max(
+      0,
+      Math.min(ASSESSMENT_HISTORY_AUDIT_COST.nativeCalls, outer?.callsLeft ?? Infinity),
+    ),
+    bytesLeft: Math.max(
+      0,
+      Math.min(ASSESSMENT_HISTORY_AUDIT_COST.nativeBytes, outer?.bytesLeft ?? Infinity),
+    ),
+  };
+  const reservedCalls = budget.callsLeft,
+    reservedBytes = budget.bytesLeft;
+  if (outer) {
+    outer.callsLeft -= reservedCalls;
+    outer.bytesLeft -= reservedBytes;
+  }
+  try {
+    return await fusekiReadBudget.run(budget, () => auditWindow(deps, request, budget));
+  } finally {
+    if (outer) {
+      outer.callsLeft += Math.max(0, Math.min(reservedCalls, budget.callsLeft));
+      outer.bytesLeft += Math.max(0, Math.min(reservedBytes, budget.bytesLeft));
+    }
+  }
+}
+
+const ACCESS_UNRESOLVED = {
+  'malformed-fields': 'access-malformed',
+  'oversized-fields': 'access-oversized',
+  'unexpected-scope': 'access-unexpected-scope',
+  'in-flight': 'access-unsealed',
+} as const;
+
+async function auditWindow(
+  deps: Pick<VerificationDependencies, 'env' | 'store'>,
+  request: AssessmentHistoryAuditRequest,
+  budget: FusekiReadBudget,
+): Promise<AssessmentHistoryAuditPage> {
+  const alive = () => {
+    if (budget.signal.aborted) {
+      throw new AssessmentHistoryAuditRefused(
+        'assessment history audit exhausted its shared deadline',
+        { cause: budget.signal.reason },
+      );
+    }
+  };
+  alive();
+  const page = await readVerificationAssessmentHistory(request.access, request.history ?? {});
+  const outcomes = new Map<string, AssessmentHistoryAuditOutcome>();
+  const lookups: AssessmentHistoryPage['rows'] = [];
+  for (const row of page.rows) {
+    const unresolved = row.unresolved[0];
+    if (unresolved || !row.facts) {
+      outcomes.set(row.id, {
+        status: 'unresolved',
+        reason: unresolved ? ACCESS_UNRESOLVED[unresolved] : 'access-malformed',
+      });
+    } else lookups.push(row);
+  }
+  alive();
+  // Always validates the caller's Content cut, even when no row needs a lookup.
+  const found = await deps.store.readAssessmentProducerOriginals(
+    request.content,
+    request.permit,
+    lookups.map((row) => row.id),
+  );
+  for (const [index, row] of lookups.entries()) {
+    const lookup = found[index]!;
+    if (lookup.status !== 'found') {
+      outcomes.set(row.id, {
+        status: 'unresolved',
+        reason: lookup.status === 'absent' ? 'content-missing' : 'content-invalid',
+      });
+      continue;
+    }
+    const { producer: original } = lookup;
+    const facts = row.facts!;
+    const fields = [
+      ['principal', facts.principalId, original.principal],
+      ['actingSubject', facts.actingSubject, original.actingSubject],
+      ['scope', facts.scope, original.scope],
+      ['action', facts.action, ADMISSIONS['claim-assess'].action],
+      ['idempotencyKey', facts.idempotencyKey, original.idempotencyKey],
+      ['requestDigest', facts.requestDigest, original.requestDigest],
+      ['authorityEpoch', facts.authorityEpoch, original.authorityEpoch],
+    ]
+      .filter(([, access, content]) => access !== content)
+      .map(([name]) => name!);
+    if (fields.length) {
+      outcomes.set(row.id, { status: 'mismatch', fields });
+      continue;
+    }
+    if (original.terminal === null) {
+      outcomes.set(row.id, { status: 'unresolved', reason: 'content-pending' });
+      continue;
+    }
+    alive();
+    let proof: Awaited<ReturnType<typeof proveOriginalAssessmentNative>>;
+    try {
+      proof = await proveOriginalAssessmentNative(deps, original);
+    } catch (error) {
+      if (error instanceof NativeBudgetRefused) {
+        throw new AssessmentHistoryAuditRefused(
+          'assessment history audit exhausted its shared native budget',
+          { cause: error },
+        );
+      }
+      if (error instanceof PendingVerification) {
+        outcomes.set(row.id, { status: 'unresolved', reason: 'native-pending' });
+        continue;
+      }
+      if (error instanceof IdempotencyConflict) {
+        outcomes.set(row.id, { status: 'mismatch', fields: ['native'] });
+        continue;
+      }
+      throw error;
+    }
+    const { receipt } = proof;
+    const sealed = [
+      ['graphReceipt', facts.graphReceipt, receipt.receipt],
+      ['graphOutcome', facts.graphOutcome, receipt.outcome],
+      ['graphDataEpoch', facts.graphDataEpoch, receipt.dataEpoch],
+      ['graphSequence', facts.graphSequence, receipt.sequence],
+    ]
+      .filter(([, access, native]) => access !== native)
+      .map(([name]) => name!);
+    outcomes.set(
+      row.id,
+      sealed.length
+        ? { status: 'mismatch', fields: sealed }
+        : {
+            status: 'bound',
+            terminal: original.terminal.status,
+            native: receipt.outcome,
+            receipt: receipt.receipt,
+            assessment: receipt.result.assessment ?? null,
+            position: { dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
+          },
+    );
+  }
+  return {
+    scope: 'original-assessment-history-window',
+    entries: page.rows.map((row) => ({ id: row.id, outcome: outcomes.get(row.id)! })),
+    access: {
+      next: page.next,
+      windowExhausted: page.windowExhausted,
+      cut: page.cut,
+      endOfHistory: page.endOfHistory,
+    },
+    complete: false,
+  };
 }
 
 async function reconcileAssessmentEffects(

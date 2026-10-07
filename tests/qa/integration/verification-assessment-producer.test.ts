@@ -1,8 +1,10 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import {
+  VerificationInvalid,
+  VerificationStale,
   VerificationStore,
   nativeId,
   uuidOf,
@@ -1318,4 +1320,123 @@ test('a changed restore epoch refuses the saved cut and leaves the original inte
   expect(retained?.intent).toEqual(stage.intent);
   expect(retained?.restoreEpoch).toBe(staged.row.restoreEpoch);
   expect(retained?.terminal).toBeNull();
+});
+
+test('the borrowed original lookup reads exact keys under a caller snapshot without locks, checkouts or inference', async () => {
+  const terminal = fixture('00000000-0000-0000-0000-00000000a001');
+  const waiting = fixture('00000000-0000-0000-0000-00000000a002');
+  const invalid = fixture('00000000-0000-0000-0000-00000000a003');
+  const absent = '00000000-0000-0000-0000-00000000a004';
+  const done = await terminal.store.stageAssessmentProducer(originalIntent(terminal));
+  await terminal.store.withAssessmentProducerEffects(
+    terminal.admission,
+    done.row.requestDigest,
+    done.permit,
+    async () => terminal.terminal,
+  );
+  const pending = await waiting.store.stageAssessmentProducer(originalIntent(waiting));
+  await seedProducerRows(invalid, [invalid.admission], 'unreviewed:assessment');
+  const permit = await terminal.store.closeAssessmentProducerGate(
+    randomUUID(),
+    pending.permit.generation,
+  );
+  const wanted = [absent, invalid.admission, waiting.admission, terminal.admission];
+  const snapshot = async <T>(
+    work: (client: PoolClient) => Promise<T>,
+    isolation = 'REPEATABLE READ',
+  ) => {
+    const client = await pool.connect();
+    try {
+      await client.query(`BEGIN ISOLATION LEVEL ${isolation}`);
+      return await work(client);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  };
+  // A writer holding the earliest pending row never blocks or hides it from the exact-key read.
+  const writer = await pool.connect();
+  try {
+    await writer.query('BEGIN');
+    await writer.query(
+      'SELECT admission_id FROM verification.assessment_producer WHERE admission_id = $1 FOR UPDATE',
+      [waiting.admission],
+    );
+    const read = await snapshot((client) =>
+      terminal.store.readAssessmentProducerOriginals(client, permit, wanted),
+    );
+    expect(read).toEqual([
+      { status: 'absent' },
+      { status: 'invalid-original' },
+      { status: 'found', producer: pending.row },
+      { status: 'found', producer: { ...done.row, terminal: terminal.terminal } },
+    ]);
+  } finally {
+    await writer.query('ROLLBACK');
+    writer.release();
+  }
+  // Only the exact caller contract is accepted; nothing is read otherwise.
+  await expect(
+    snapshot(
+      (client) => terminal.store.readAssessmentProducerOriginals(client, permit, wanted),
+      'READ COMMITTED',
+    ),
+  ).rejects.toBeInstanceOf(VerificationInvalid);
+  const autocommit = await pool.connect();
+  try {
+    await expect(
+      terminal.store.readAssessmentProducerOriginals(autocommit, permit, wanted),
+    ).rejects.toBeInstanceOf(VerificationInvalid);
+  } finally {
+    autocommit.release();
+  }
+  await expect(
+    snapshot((client) =>
+      terminal.store.readAssessmentProducerOriginals(client, done.permit, wanted),
+    ),
+  ).rejects.toBeInstanceOf(VerificationInvalid);
+  await expect(
+    snapshot((client) =>
+      terminal.store.readAssessmentProducerOriginals(
+        client,
+        { ...permit, generation: String(BigInt(permit.generation) + 1n) },
+        wanted,
+      ),
+    ),
+  ).rejects.toBeInstanceOf(VerificationStale);
+  // A snapshot keeps the cut it opened under; a new snapshot sees the reopened gate and refuses the permit.
+  const early = await pool.connect();
+  try {
+    await early.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    await early.query('SELECT mode FROM verification.assessment_producer_gate');
+    await pool.query(
+      "UPDATE verification.assessment_producer_gate SET mode = 'ordinary', job = NULL WHERE singleton",
+    );
+    await expect(
+      terminal.store.readAssessmentProducerOriginals(early, permit, wanted),
+    ).resolves.toHaveLength(4);
+  } finally {
+    await early.query('ROLLBACK');
+    early.release();
+  }
+  await expect(
+    snapshot((client) => terminal.store.readAssessmentProducerOriginals(client, permit, wanted)),
+  ).rejects.toBeInstanceOf(VerificationStale);
+  const epoch = (
+    await pool.query('SELECT version::text FROM reading_position.generation WHERE singleton')
+  ).rows[0].version;
+  await pool.query(
+    "UPDATE verification.assessment_producer_gate SET mode = 'maintenance', job = $1 WHERE singleton",
+    [permit.job],
+  );
+  await pool.query('UPDATE reading_position.generation SET version = version + 1 WHERE singleton');
+  try {
+    await expect(
+      snapshot((client) => terminal.store.readAssessmentProducerOriginals(client, permit, wanted)),
+    ).rejects.toBeInstanceOf(VerificationStale);
+  } finally {
+    await pool.query('UPDATE reading_position.generation SET version = $1 WHERE singleton', [
+      epoch,
+    ]);
+  }
 });

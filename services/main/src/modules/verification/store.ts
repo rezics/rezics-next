@@ -11,6 +11,7 @@ import {
   type AssessmentProducerAuditFrontier,
   type AssessmentProducerAuditEntry,
   type AssessmentProducerAuditPage,
+  type AssessmentProducerOriginalLookup,
   type AssessmentProducerRecord,
   type AssessmentProducerStage,
   type AssessmentProducerTerminal,
@@ -21,6 +22,7 @@ export type {
   AssessmentProducerAuditFrontier,
   AssessmentProducerAuditEntry,
   AssessmentProducerAuditPage,
+  AssessmentProducerOriginalLookup,
   AssessmentProducerRecord,
   AssessmentProducerStage,
   AssessmentProducerTerminal,
@@ -107,6 +109,20 @@ const producerRecord = (row: AssessmentProducerRow): AssessmentProducerRecord =>
   }
 };
 const nonnegative = (value: string) => /^(0|[1-9][0-9]*)$/.test(value);
+/** A stored producer whose generation and terminal also pass the audit checks. */
+function checkedProducer(row: AssessmentProducerRow): AssessmentProducerRecord {
+  const producer = producerRecord(row);
+  if (
+    typeof producer.stageGeneration !== 'string' ||
+    !nonnegative(producer.stageGeneration) ||
+    typeof producer.restoreEpoch !== 'string' ||
+    !nonnegative(producer.restoreEpoch)
+  ) {
+    throw new VerificationUnavailable('stored assessment producer generation is invalid');
+  }
+  if (producer.terminal !== null) checkProducerTerminal(producer.admission, producer.terminal);
+  return producer;
+}
 const producerJob = (value: string) => /^[A-Za-z0-9:_-]{1,128}$/.test(value);
 // Compare replay values independently of property order, without changing
 // arrays or lexical values. The retained text separately preserves digest order.
@@ -786,13 +802,8 @@ export class VerificationStore {
       const consumed = rows.slice(0, limit);
       const entries: AssessmentProducerAuditEntry[] = consumed.map(row => {
         try {
-          const producer = producerRecord(row);
-          if (typeof producer.stageGeneration !== 'string' || !nonnegative(producer.stageGeneration)
-            || typeof producer.restoreEpoch !== 'string' || !nonnegative(producer.restoreEpoch)) {
-            throw new VerificationUnavailable('stored assessment producer generation is invalid');
-          }
+          const producer = checkedProducer(row);
           if (producer.terminal === null) return { status: 'unresolved', reason: 'pending', producer };
-          checkProducerTerminal(producer.admission, producer.terminal);
           return { status: 'terminal', producer: { ...producer, terminal: producer.terminal } };
         } catch {
           return { status: 'unresolved', reason: 'invalid-original', admission: row.admission_id };
@@ -803,6 +814,102 @@ export class VerificationStore {
       return { scope: 'content-assessment-producer', entries, eof,
         frontier: eof ? null : { after: consumed[consumed.length - 1]!.admission_id, job,
           generation, restoreEpoch } };
+    });
+  }
+
+  /** Exact primary-key lookups for one saved audit window on the caller's own
+   * REPEATABLE READ client. It never opens, ends or releases a transaction and
+   * takes no row locks; the maintenance permit is checked before and after the
+   * read. Absence and malformed originals stay unknown, never reconstructed. */
+  async readAssessmentProducerOriginals(
+    client: PoolClient,
+    permit: AssessmentProducerPermit,
+    admissions: readonly string[],
+  ): Promise<AssessmentProducerOriginalLookup[]> {
+    const { mode, job, generation, restoreEpoch } = permit;
+    if (
+      mode !== 'maintenance' ||
+      typeof job !== 'string' ||
+      !producerJob(job) ||
+      typeof generation !== 'string' ||
+      !nonnegative(generation) ||
+      typeof restoreEpoch !== 'string' ||
+      !nonnegative(restoreEpoch) ||
+      !Array.isArray(admissions) ||
+      admissions.length > ASSESSMENT_PRODUCER_COST.page ||
+      new Set(admissions).size !== admissions.length ||
+      admissions.some((admission) => typeof admission !== 'string' || !UUID.test(admission))
+    ) {
+      throw new VerificationInvalid('invalid assessment producer original lookup or permit');
+    }
+    const expected: AssessmentProducerPermit = { mode, job, generation, restoreEpoch };
+    try {
+      // SAVEPOINT fails in autocommit without starting or ending a transaction.
+      await client.query('SAVEPOINT assessment_producer_original_read');
+      await client.query('RELEASE SAVEPOINT assessment_producer_original_read');
+    } catch {
+      throw new VerificationInvalid('assessment producer originals need a caller transaction');
+    }
+    const isolation = (
+      await client.query<{ transaction_isolation: string }>('SHOW transaction_isolation')
+    ).rows[0]?.transaction_isolation;
+    if (isolation !== 'repeatable read') {
+      throw new VerificationInvalid(
+        'assessment producer originals need a caller REPEATABLE READ transaction',
+      );
+    }
+    await this.assessmentProducerPermit(client, expected);
+    // Bound transport in SQL before the driver parses jsonb or this process
+    // parses intent text; an oversized original keeps only its UUID.
+    const rows =
+      admissions.length === 0
+        ? []
+        : (
+            await client.query<AssessmentProducerRow & { oversized: boolean }>(
+              `WITH wanted AS (SELECT p.*,
+        (octet_length(p.intent_json) > $2 OR COALESCE(octet_length(p.terminal::text), 0) > $3
+          OR (octet_length(p.scope)::bigint + octet_length(p.authority_epoch) + octet_length(p.idempotency_key)
+            + octet_length(p.acting_subject) + octet_length(p.claim) + octet_length(p.claim_revision)
+            + octet_length(p.request_digest)) > $4) AS oversized
+        FROM verification.assessment_producer AS p WHERE p.admission_id = ANY($1::uuid[]))
+      SELECT admission_id, oversized,
+        ${[
+          'request_digest',
+          'principal_id',
+          'acting_subject',
+          'scope',
+          'authority_epoch',
+          'idempotency_key',
+          'claim',
+          'claim_revision',
+          'intent_json',
+          'terminal',
+        ]
+          .map((column) => `CASE WHEN oversized THEN NULL ELSE ${column} END AS ${column}`)
+          .join(', ')},
+        CASE WHEN oversized THEN NULL ELSE stage_generation::text END AS stage_generation,
+        CASE WHEN oversized THEN NULL ELSE restore_epoch::text END AS restore_epoch
+      FROM wanted`,
+              [
+                admissions,
+                ASSESSMENT_PRODUCER_COST.intentBytes,
+                ASSESSMENT_PRODUCER_COST.terminalBytes,
+                2048,
+              ],
+            )
+          ).rows;
+    await this.assessmentProducerPermit(client, expected);
+    const byAdmission = new Map(rows.map((row) => [row.admission_id, row]));
+    return admissions.map((admission): AssessmentProducerOriginalLookup => {
+      const row = byAdmission.get(admission);
+      if (!row) return { status: 'absent' };
+      try {
+        if (row.oversized)
+          throw new VerificationUnavailable('stored assessment producer is oversized');
+        return { status: 'found', producer: checkedProducer(row) };
+      } catch {
+        return { status: 'invalid-original' };
+      }
     });
   }
 

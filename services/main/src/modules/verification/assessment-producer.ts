@@ -60,6 +60,11 @@ export type AssessmentProducerAuditEntry =
     }
   | { status: 'unresolved'; reason: 'pending'; producer: AssessmentProducerRecord }
   | { status: 'unresolved'; reason: 'invalid-original'; admission: string };
+/** One exact primary-key lookup. Absence says only that this table has no row. */
+export type AssessmentProducerOriginalLookup =
+  | { status: 'found'; producer: AssessmentProducerRecord }
+  | { status: 'absent' }
+  | { status: 'invalid-original' };
 export interface AssessmentProducerAuditPage {
   scope: 'content-assessment-producer';
   entries: AssessmentProducerAuditEntry[];

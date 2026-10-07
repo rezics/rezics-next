@@ -47,11 +47,20 @@ import {
   type CreateClaimInput,
   type GraphReceipt,
 } from '../../../services/main/src/modules/verification/graph.ts';
-import { HUMAN_REVIEW_METHOD, SUMMARY_POLICY } from '../../../services/main/src/modules/verification/analysis.ts';
-import { assessmentDigest, reconcileAssessmentProducerEffects,
-  PendingVerification, type AssessClaimInput } from '../../../services/main/src/modules/verification/operations.ts';
-import { VerificationStore, type StagedAssessmentProducer,
-  type AssessmentProducerRecord } from '../../../services/main/src/modules/verification/store.ts';
+import { HUMAN_REVIEW_METHOD, SUMMARY_POLICY,
+} from '../../../services/main/src/modules/verification/analysis.ts';
+import { assessmentDigest,
+  AssessmentHistoryAuditRefused,
+  auditAssessmentHistoryWindow,
+  reconcileAssessmentProducerEffects,
+  PendingVerification, type AssessClaimInput,
+  type AssessmentHistoryAuditPage,
+} from '../../../services/main/src/modules/verification/operations.ts';
+import {
+  VerificationStale,
+  VerificationStore, type StagedAssessmentProducer,
+  type AssessmentProducerRecord,
+} from '../../../services/main/src/modules/verification/store.ts';
 import {
   readMainOutboxEnvelope,
   readNextMainOutboxBatch,
@@ -90,6 +99,18 @@ const assessmentProducers: {
   receipt: GraphReceipt;
 }[] = [];
 let historicalAssessment: RegisteredAdmission;
+let auditFixture: {
+  claim: string;
+  claimRevision: string;
+  original: AssessClaimInput;
+  digest: string;
+  principal: string;
+  // Native terminals recorded before the fold: C is later B, so a fresh R-pinned command would be refused.
+  native: {
+    mismatched: { admitted: RegisteredAdmission; receipt: GraphReceipt };
+    claimed: { admitted: RegisteredAdmission; receipt: GraphReceipt };
+  };
+};
 const native = () => `${ID}${Bun.randomUUIDv7()}`;
 function admission(
   scope: string,
@@ -261,6 +282,26 @@ beforeAll(async () => {
     });
     assessmentProducers.push({ staged, terminal, receipt });
   }
+  const extraNative = async () => {
+    const admitted = {
+      ...admission(
+        ADMISSIONS['claim-assess'].scope,
+        ADMISSIONS['claim-assess'].action,
+        digest,
+        original.actingSubject,
+      ),
+      principalId: principal,
+    };
+    return { admitted, receipt: await nativeAssessment(admitted) };
+  };
+  auditFixture = {
+    claim,
+    claimRevision,
+    original,
+    digest,
+    principal,
+    native: { mismatched: await extraNative(), claimed: await extraNative() },
+  };
   // This native terminal represents historical custody with no retained Content
   // intent. Recovery must report it missing rather than backfill from a retry.
   historicalAssessment = admission(ADMISSIONS['claim-assess'].scope, ADMISSIONS['claim-assess'].action,
@@ -834,4 +875,496 @@ test('native complete/release remain refused and pending admissions stop an unto
 }, 120_000);
 
 test('native assessment and exact Content terminal replay after C becomes B without a current analysis basis',
-  replayNativeAssessmentTerminal, 120_000);
+  replayNativeAssessmentTerminal, 120_000,
+);
+
+test('real closed Access and Content cuts classify original assessment history from retained facts only', async () => {
+  const f = auditFixture;
+  const actor = f.original.actingSubject;
+  const assess = ADMISSIONS['claim-assess'];
+  const unexpectedScope = 'verification:assess:unexpected';
+  const staging = new VerificationStore(contentPool);
+  const stage = (admitted: RegisteredAdmission) =>
+    staging.stageAssessmentProducer({
+      admission: admitted.id,
+      requestDigest: f.digest,
+      principal: admitted.principalId,
+      actingSubject: actor,
+      scope: admitted.scope,
+      authorityEpoch: admitted.authorityEpoch,
+      idempotencyKey: admitted.idempotencyKey,
+      claim: f.claim,
+      claimRevision: f.claimRevision,
+      intent: f.original,
+    });
+  const original = (id: string = randomUUID()): RegisteredAdmission => ({
+    ...admission(assess.scope, assess.action, f.digest, actor),
+    id,
+    principalId: f.principal,
+  });
+  const settle = (
+    staged: StagedAssessmentProducer,
+    status: 'no-activation' | 'cancelled',
+    assessment: string | null,
+    receipt = `urn:rezics:receipt:${hash(`${staged.row.admission}\0claim-assess`)}`,
+  ) =>
+    staging.withAssessmentProducerEffects(
+      staged.row.admission,
+      f.digest,
+      staged.permit,
+      async () => ({
+        status,
+        receipt,
+        assessment,
+        activation: status === 'cancelled' ? { status: 'cancelled' } : { status: 'not-reproduced' },
+      }),
+    );
+  await pool.query(
+    'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+    [f.principal, 'https://fixture.example', randomUUID()],
+  );
+  const otherPrincipal = randomUUID(),
+    otherActor = native();
+  await pool.query(
+    'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+    [otherPrincipal, 'https://fixture.example', randomUUID()],
+  );
+  for (const subject of [actor, otherActor]) {
+    await pool.query(
+      "INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent') ON CONFLICT DO NOTHING",
+      [subject],
+    );
+  }
+  await pool.query('INSERT INTO access.scope_gate(id) VALUES ($1),($2) ON CONFLICT DO NOTHING', [
+    assess.scope,
+    unexpectedScope,
+  ]);
+  interface AccessFacts {
+    state?: 'registered' | 'claimed' | 'sealed';
+    scope?: string;
+    registeredAt?: string;
+    receipt?: { receipt: string; outcome: string; dataEpoch: string; sequence: string };
+    dataEpoch?: string;
+  }
+  const insertAccess = async (admitted: RegisteredAdmission, facts: AccessFacts = {}) => {
+    await pool.query(
+      'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+      [admitted.principalId, 'https://fixture.example', randomUUID()],
+    );
+    const state = facts.state ?? 'sealed';
+    const sealed =
+      state === 'sealed'
+        ? (facts.receipt ?? {
+            receipt: `urn:rezics:receipt:${hash(`${admitted.id}\0claim-assess`)}`,
+            outcome: 'succeeded',
+            dataEpoch: 'synthetic-epoch',
+            sequence: '1',
+          })
+        : null;
+    return pool.query(
+      `INSERT INTO access.admission(id,principal_id,acting_subject,scope_id,action,idempotency_key,request_digest,
+      authority_epoch,registered_at,expires_at,state,claimed_at,graph_receipt,graph_outcome,graph_data_epoch,graph_sequence,sealed_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8::timestamptz,'2030-01-01',$9,
+        CASE WHEN $9 <> 'registered' THEN '2020-01-01'::timestamptz END,$10,$11,$12,$13,
+        CASE WHEN $9 = 'sealed' THEN '2020-01-01'::timestamptz END)`,
+      [
+        admitted.id,
+        admitted.principalId,
+        admitted.actingSubject,
+        facts.scope ?? assess.scope,
+        assess.action,
+        admitted.idempotencyKey,
+        admitted.requestDigest,
+        facts.registeredAt ?? '2020-01-01',
+        state,
+        sealed?.receipt ?? null,
+        sealed?.outcome ?? null,
+        facts.dataEpoch ?? sealed?.dataEpoch ?? null,
+        sealed?.sequence ?? null,
+      ],
+    );
+  };
+  const exact = (producer: { receipt: GraphReceipt }) => ({
+    receipt: producer.receipt.receipt,
+    outcome: producer.receipt.outcome,
+    dataEpoch: producer.receipt.dataEpoch,
+    sequence: producer.receipt.sequence,
+  });
+  const [success, cancelled] = assessmentProducers as [
+    (typeof assessmentProducers)[number],
+    (typeof assessmentProducers)[number],
+  ];
+
+  // Original Content intents are retained while ordinary writers are still open.
+  const synthetic = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+  const retainedSynthetic = new Map<number, RegisteredAdmission>();
+  for (const n of [3, 7, 33, 34]) {
+    const admitted = original(synthetic(n));
+    retainedSynthetic.set(n, admitted);
+    await settle(await stage(admitted), 'no-activation', native());
+  }
+  const { admitted: mismatched, receipt: mismatchedNative } = f.native.mismatched;
+  const mismatchedStage = await stage(mismatched);
+  await settle(mismatchedStage, 'cancelled', null, mismatchedNative.receipt);
+  const absentNative = original();
+  await settle(await stage(absentNative), 'no-activation', native());
+  const pending = original();
+  const pendingStage = await stage(pending);
+  const claimedNative = f.native.claimed.admitted;
+  const orphan = original();
+  await settle(await stage(orphan), 'cancelled', null);
+  const generation = pendingStage.permit.generation;
+  const permit = await staging.closeAssessmentProducerGate(`audit-${randomUUID()}`, generation);
+  const fence = (
+    await pool.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text FROM access.recovery_fence WHERE id=true',
+    )
+  ).rows[0]!;
+  expect(fence.open).toBe(false);
+
+  // Each owner has exactly one connection: a nested checkout would deadlock this turn.
+  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, max: 1 });
+  const contentOnly = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 1 });
+  const forbidden = async (): Promise<never> => {
+    throw new Error('Audit attempted a native write, current basis or effect');
+  };
+  const reader = new FusekiClient(
+    Bun.env.FUSEKI_URL!,
+    Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
+    Bun.env.FUSEKI_COMMAND_TOKEN!,
+  );
+  reader.commandWithReceipt = forbidden;
+  reader.update = forbidden;
+  const store = new VerificationStore(contentOnly);
+  store.analysisSnapshot = forbidden;
+  store.evidenceHead = forbidden;
+  store.resolveChallenges = forbidden;
+  store.activateSummary = forbidden;
+  store.withAssessmentProducerEffects = forbidden;
+  const lookups: string[][] = [];
+  const lookup = store.readAssessmentProducerOriginals.bind(store);
+  store.readAssessmentProducerOriginals = async (client, given, ids) => {
+    lookups.push([...ids]);
+    return lookup(client, given, ids);
+  };
+  async function turn(
+    history?: Parameters<typeof auditAssessmentHistoryWindow>[1]['history'],
+    given = permit,
+    budget?: { signal: AbortSignal; callsLeft: number; bytesLeft: number },
+  ) {
+    const access = await accessPool.connect(),
+      content = await contentOnly.connect();
+    try {
+      await access.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await content.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const run = () =>
+        auditAssessmentHistoryWindow(
+          { env: { ...env, fuseki: reader }, store },
+          { access, content, permit: given, history },
+        );
+      return await (budget ? fusekiReadBudget.run(budget, run) : run());
+    } finally {
+      await access.query('ROLLBACK');
+      await content.query('ROLLBACK');
+      access.release();
+      content.release();
+    }
+  }
+  const outcomes = (page: AssessmentHistoryAuditPage) =>
+    new Map(page.entries.map((entry) => [entry.id, entry.outcome]));
+  const nativeBefore = await facts(
+    [GRAPHS.revisions, GRAPHS.receipts],
+    [
+      success.receipt.result.assessment!,
+      success.receipt.receipt,
+      cancelled.receipt.receipt,
+      mismatchedNative.receipt,
+    ],
+  );
+  const contentBefore = (
+    await contentPool.query('SELECT * FROM verification.assessment_producer ORDER BY admission_id')
+  ).rows;
+  let mutationCount = 0;
+  try {
+    // Two real pages over 34 raw rows: the 33rd is lookahead on page one and stays unread there.
+    const ids = Array.from({ length: 34 }, (_, index) => synthetic(index + 1));
+    for (const [index, id] of ids.entries()) {
+      const n = index + 1;
+      const admitted = retainedSynthetic.get(n) ?? original(id);
+      await insertAccess(
+        admitted,
+        n <= 2
+          ? { registeredAt: 'infinity' }
+          : n === 6
+            ? { scope: unexpectedScope }
+            : n === 4 || n === 5
+              ? { dataEpoch: 'x'.repeat(17_000) }
+              : {},
+      );
+    }
+    const first = await turn({ recoveryGeneration: fence.generation });
+    expect(first.entries.map((entry) => entry.id)).toEqual(ids.slice(0, 32));
+    expect(first.access).toEqual({
+      next: { after: ids[31]!, recoveryGeneration: fence.generation },
+      windowExhausted: false,
+      cut: { state: 'held', recoveryGeneration: fence.generation },
+      endOfHistory: false,
+    });
+    expect(first.complete).toBe(false);
+    const byId = outcomes(first);
+    expect([1, 2].map((n) => byId.get(ids[n - 1]!))).toEqual(
+      Array(2).fill({ status: 'unresolved', reason: 'access-malformed' }),
+    );
+    expect([4, 5].map((n) => byId.get(ids[n - 1]!))).toEqual(
+      Array(2).fill({ status: 'unresolved', reason: 'access-oversized' }),
+    );
+    expect(byId.get(ids[5]!)).toEqual({ status: 'unresolved', reason: 'access-unexpected-scope' });
+    // Native is absent for these retained originals, so their terminals stay unresolved, never bound.
+    expect(byId.get(ids[2]!)).toEqual({ status: 'unresolved', reason: 'native-pending' });
+    expect(byId.get(ids[6]!)).toEqual({ status: 'unresolved', reason: 'native-pending' });
+    expect(byId.get(ids[7]!)).toEqual({ status: 'unresolved', reason: 'content-missing' });
+    expect(lookups).toHaveLength(1);
+    expect(lookups[0]).toEqual(
+      [2, 6, ...Array.from({ length: 25 }, (_, index) => index + 7)].map((n) => ids[n]!),
+    );
+    expect(lookups[0]!.length).toBeLessThanOrEqual(32);
+    expect(lookups[0]).not.toContain(ids[32]);
+    const second = await turn({ cursor: first.access.next! });
+    expect(second.entries.map((entry) => entry.id)).toEqual(ids.slice(32));
+    expect(second.entries.map((entry) => entry.outcome)).toEqual(
+      Array(2).fill({ status: 'unresolved', reason: 'native-pending' }),
+    );
+    expect(second.access).toEqual({
+      next: null,
+      windowExhausted: true,
+      cut: { state: 'held', recoveryGeneration: fence.generation },
+      endOfHistory: true,
+    });
+    expect(second.complete).toBe(false);
+    expect(lookups[1]).toEqual(ids.slice(32));
+
+    // Retained and native facts classify every real owner outcome; the orphan Content intent has no Access row.
+    const retained = (row: AssessmentProducerRecord): RegisteredAdmission => ({
+      ...original(row.admission),
+      principalId: row.principal,
+      actingSubject: row.actingSubject,
+      idempotencyKey: row.idempotencyKey,
+      requestDigest: row.requestDigest,
+      authorityEpoch: row.authorityEpoch,
+      scope: row.scope,
+    });
+    await insertAccess(retained(success.staged.row), { receipt: exact(success) });
+    await insertAccess(retained(cancelled.staged.row), { receipt: exact(cancelled) });
+    await insertAccess(historicalAssessment, {
+      receipt: exact({
+        receipt: (await readReceipt(env, historicalAssessment.id, 'claim-assess', ['assessment']))!,
+      }),
+    });
+    await insertAccess(claimedNative, { state: 'claimed' });
+    await insertAccess(mismatched, { receipt: exact({ receipt: mismatchedNative }) });
+    await insertAccess(absentNative);
+    await insertAccess(pending);
+    const matrix = [
+      success.staged.row.admission,
+      cancelled.staged.row.admission,
+      historicalAssessment.id,
+      claimedNative.id,
+      mismatched.id,
+      absentNative.id,
+      pending.id,
+    ];
+    const page = await turn({ cursor: { after: ids[33]!, recoveryGeneration: fence.generation } });
+    expect(page.entries.map((entry) => entry.id).sort()).toEqual([...matrix].sort());
+    const result = outcomes(page);
+    expect(result.get(success.staged.row.admission)).toMatchObject({
+      status: 'bound',
+      terminal: 'activated',
+      native: 'succeeded',
+      receipt: success.receipt.receipt,
+      assessment: success.receipt.result.assessment,
+      position: { dataEpoch: success.receipt.dataEpoch, sequence: success.receipt.sequence },
+    });
+    expect(result.get(cancelled.staged.row.admission)).toMatchObject({
+      status: 'bound',
+      terminal: 'cancelled',
+      native: 'cancelled',
+      assessment: null,
+    });
+    // A committed native success without retained Content custody stays unknown, claimed or sealed.
+    expect(result.get(historicalAssessment.id)).toEqual({
+      status: 'unresolved',
+      reason: 'content-missing',
+    });
+    expect(result.get(claimedNative.id)).toEqual({
+      status: 'unresolved',
+      reason: 'access-unsealed',
+    });
+    expect(result.get(mismatched.id)).toEqual({ status: 'mismatch', fields: ['native'] });
+    expect(result.get(absentNative.id)).toEqual({ status: 'unresolved', reason: 'native-pending' });
+    expect(result.get(pending.id)).toEqual({ status: 'unresolved', reason: 'content-pending' });
+    expect(result.has(orphan.id)).toBe(false);
+
+    // Every retained Access field is compared exactly; the same row is repaired after each refusal.
+    const stored = success.staged.row;
+    const mutations: {
+      name: string;
+      sql: string;
+      value: unknown;
+      expected: string[] | { reason: 'access-unexpected-scope' };
+    }[] = [
+      { name: 'principal', sql: 'principal_id=$1', value: otherPrincipal, expected: ['principal'] },
+      { name: 'actor', sql: 'acting_subject=$1', value: otherActor, expected: ['actingSubject'] },
+      {
+        name: 'key',
+        sql: 'idempotency_key=$1',
+        value: 'another-key',
+        expected: ['idempotencyKey'],
+      },
+      {
+        name: 'digest',
+        sql: 'request_digest=$1',
+        value: 'c'.repeat(64),
+        expected: ['requestDigest'],
+      },
+      { name: 'epoch', sql: 'authority_epoch=$1', value: 7, expected: ['authorityEpoch'] },
+      {
+        name: 'scope',
+        sql: 'scope_id=$1',
+        value: unexpectedScope,
+        expected: { reason: 'access-unexpected-scope' },
+      },
+      { name: 'outcome', sql: 'graph_outcome=$1', value: 'cancelled', expected: ['graphOutcome'] },
+      {
+        name: 'epoch-position',
+        sql: 'graph_data_epoch=$1',
+        value: 'another-epoch',
+        expected: ['graphDataEpoch'],
+      },
+      { name: 'sequence', sql: 'graph_sequence=$1', value: '999999', expected: ['graphSequence'] },
+    ];
+    const restore = async (sql: string, value: unknown) =>
+      pool.query(`UPDATE access.admission SET ${sql} WHERE id=$2`, [value, stored.admission]);
+    const column = (sql: string) => sql.split('=')[0]!;
+    const originalRow = (
+      await pool.query('SELECT * FROM access.admission WHERE id=$1', [stored.admission])
+    ).rows[0]!;
+    mutationCount = mutations.length;
+    for (const mutation of mutations) {
+      await restore(mutation.sql, mutation.value);
+      const changed = (
+        await turn({ cursor: { after: ids[33]!, recoveryGeneration: fence.generation } })
+      ).entries.find((entry) => entry.id === stored.admission)!.outcome;
+      expect(changed, mutation.name).toEqual(
+        Array.isArray(mutation.expected)
+          ? { status: 'mismatch' as const, fields: mutation.expected }
+          : { status: 'unresolved' as const, reason: mutation.expected.reason },
+      );
+      await restore(mutation.sql, originalRow[column(mutation.sql)]);
+    }
+    expect(
+      (await pool.query('SELECT * FROM access.admission WHERE id=$1', [stored.admission])).rows[0],
+    ).toEqual(originalRow);
+    expect(stored.requestDigest).toBe(f.digest);
+
+    // A whole turn that exhausts its shared native call, byte or deadline scope returns no row at all.
+    const matrixPage = { cursor: { after: ids[33]!, recoveryGeneration: fence.generation } };
+    const calls = { signal: AbortSignal.timeout(10_000), callsLeft: 2, bytesLeft: 10_000_000 };
+    await expect(turn(matrixPage, permit, calls)).rejects.toBeInstanceOf(
+      AssessmentHistoryAuditRefused,
+    );
+    expect(calls.callsLeft).toBe(0);
+    const bytes = { signal: AbortSignal.timeout(10_000), callsLeft: 100, bytesLeft: 10 };
+    await expect(turn(matrixPage, permit, bytes)).rejects.toBeInstanceOf(
+      AssessmentHistoryAuditRefused,
+    );
+    const stopper = new AbortController();
+    const query = reader.query.bind(reader);
+    let reads = 0;
+    reader.query = async (text, cap) => {
+      const response = await query(text, cap);
+      if (++reads === 1) stopper.abort(new DOMException('deadline', 'TimeoutError'));
+      return response;
+    };
+    await expect(
+      turn(matrixPage, permit, { signal: stopper.signal, callsLeft: 100, bytesLeft: 10_000_000 }),
+    ).rejects.toBeInstanceOf(AssessmentHistoryAuditRefused);
+    expect(reads).toBe(1);
+    reader.query = query;
+    // An unconstrained caller spends only what its proofs used and every unused reservation returns.
+    const spare = { signal: AbortSignal.timeout(10_000), callsLeft: 100, bytesLeft: 10_000_000 };
+    const spent = await turn(matrixPage, permit, spare);
+    expect(spent.entries).toHaveLength(matrix.length);
+    // Four exact proofs: success (receipt, assessment), cancelled (receipt), forged terminal and absent receipt.
+    expect(spare.callsLeft).toBe(100 - 6);
+    expect(spare.bytesLeft).toBeLessThan(10_000_000);
+    expect(spare.bytesLeft).toBeGreaterThan(10_000_000 - 4 * 81_920);
+
+    // A changed Content cut refuses the saved permit rather than reading under a new meaning.
+    await expect(
+      turn(
+        { recoveryGeneration: fence.generation },
+        { ...permit, generation: String(BigInt(permit.generation) + 1n) },
+      ),
+    ).rejects.toBeInstanceOf(VerificationStale);
+    const epoch = (
+      await contentPool.query(
+        'SELECT version::text FROM reading_position.generation WHERE singleton',
+      )
+    ).rows[0].version;
+    await contentPool.query(
+      'UPDATE reading_position.generation SET version = version + 1 WHERE singleton',
+    );
+    try {
+      await expect(turn()).rejects.toBeInstanceOf(VerificationStale);
+    } finally {
+      await contentPool.query(
+        'UPDATE reading_position.generation SET version = $1 WHERE singleton',
+        [epoch],
+      );
+    }
+    await pool.query('UPDATE access.recovery_fence SET generation = generation + 1 WHERE id=true');
+    try {
+      await expect(turn({ recoveryGeneration: fence.generation })).rejects.toThrow(
+        /Access cut changed/u,
+      );
+    } finally {
+      await pool.query('UPDATE access.recovery_fence SET generation = $1 WHERE id=true', [
+        fence.generation,
+      ]);
+    }
+    expect((await turn({ recoveryGeneration: fence.generation })).entries.length).toBeGreaterThan(
+      0,
+    );
+  } finally {
+    await accessPool.end();
+    await contentOnly.end();
+  }
+  expect(
+    await facts(
+      [GRAPHS.revisions, GRAPHS.receipts],
+      [
+        success.receipt.result.assessment!,
+        success.receipt.receipt,
+        cancelled.receipt.receipt,
+        mismatchedNative.receipt,
+      ],
+    ),
+  ).toEqual(nativeBefore);
+  expect(
+    (
+      await contentPool.query(
+        'SELECT * FROM verification.assessment_producer ORDER BY admission_id',
+      )
+    ).rows,
+  ).toEqual(contentBefore);
+  console.log(
+    JSON.stringify({
+      case: 'original-assessment-history-window',
+      turns: lookups.length,
+      accessGeneration: fence.generation,
+      contentGeneration: permit.generation,
+      mutations: mutationCount,
+      lookups: lookups.map((ids) => ids.length),
+    }),
+  );
+}, 180_000);
