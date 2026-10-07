@@ -49,6 +49,9 @@ async function shoot(page: Page, name: string, info: TestInfo) {
   await page.setViewportSize(desktop);
 }
 
+/** Every field written so far has reached Main; the editor says so. */
+const settled = (page: Page) => expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
+
 const lines = (scope: Page | Locator) => scope.locator('[data-line]');
 const steps = (scope: Page | Locator) => scope.locator('[data-step]');
 
@@ -83,7 +86,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await page.getByRole('textbox', { name: 'Description' }).fill('Bright and tender, with a little crunch.');
   await page.getByRole('textbox', { name: 'Notes' }).fill('Best the day after baking.');
   await page.getByRole('textbox', { name: 'Notes' }).blur();
-  await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
+  await settled(page);
 
   // Yield and times.
   await page.getByRole('textbox', { name: 'Makes', exact: true }).fill('12');
@@ -93,6 +96,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await page.getByRole('textbox', { name: 'Cook time' }).fill('25');
   await page.getByRole('textbox', { name: 'Total time' }).fill('45');
   await page.getByRole('textbox', { name: 'Total time' }).blur();
+  await settled(page);
 
   // Two sections that each hold butter; a quantity written as "1½" keeps its written form.
   await page.getByRole('textbox', { name: 'Section name' }).fill('Cake');
