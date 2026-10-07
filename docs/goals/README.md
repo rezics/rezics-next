@@ -179,7 +179,7 @@ runs the integration tiers, Storybook and browser journeys once.
 
 ## Capacity and usage
 
-- One cap for all Goals: 16 live workers (`task goal` default of
+- One cap for all Goals: 24 live workers (`task goal` default of
   `GOAL_MAX_WORKERS`), and no new dispatch while the host has less than 12 GiB
   available. A worker process holds about 0.2 GiB; memory goes to what workers
   run, which the QA slots, the heavy lock and the one-dev-server rule already
