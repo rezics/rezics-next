@@ -1,6 +1,6 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,9 +19,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
   }
@@ -61,7 +60,7 @@ test('WORK10: ambiguous, active and rejected Content publication pins reconcile 
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const apps = readEnv(join(stackDirectory(root, options), 'apps.env'));
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -197,6 +196,6 @@ test('WORK10: ambiguous, active and rejected Content publication pins reconcile 
       expect(events.filter(event => event.eventType === 'content.publication.rejected')).toHaveLength(1);
     } finally { await Promise.all([pool.end(), accessPool.end()]); }
   } finally {
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

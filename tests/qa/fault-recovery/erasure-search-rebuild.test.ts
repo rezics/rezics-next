@@ -1,6 +1,6 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -34,9 +34,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
   }
@@ -65,7 +64,7 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
   let relayPool: Pool | undefined;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const apps = readEnv(join(stackDirectory(root, options), 'apps.env'));
     await migrateOwner(apps.ACCESS_DATABASE_URL!, 'access');
     await migrateOwner(apps.ACCOUNT_RELAY_DATABASE_URL!, 'relay');
@@ -249,7 +248,7 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
       body: `DELETE WHERE { GRAPH <urn:rezics:search:public> {
         ${iri(lostUnit)} ?p ?o . } }`, signal: AbortSignal.timeout(10_000) });
     expect(dropped.ok).toBe(true);
-    const resultText = rootCommand(['search:rebuild', '--job', jobId, ...stackArgs], 420_000);
+    const resultText = await rootCommand(['search:rebuild', '--job', jobId, ...stackArgs], 420_000);
     const rebuilt = JSON.parse(resultText.trim().split(/\r?\n/).at(-1) ?? '') as {
       job: string; replayed: number; generation: string };
     expect(rebuilt.job).toBe(jobId);
@@ -292,6 +291,6 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
       { phrase: nextBody, language: 'en' })).rejects.toBeInstanceOf(SearchIndexUnavailable);
   } finally {
     await Promise.allSettled([contentPool?.end(), accessPool?.end(), relayPool?.end()]);
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

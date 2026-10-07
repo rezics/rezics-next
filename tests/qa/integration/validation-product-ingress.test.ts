@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -10,8 +11,11 @@ import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function stack(action: 'stack:up' | 'stack:reset', runId: string) {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId, '--persistent'], {
+async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId, '--persistent'],
+      {
     cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 1_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`${action} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-3000)}`);
@@ -47,7 +51,7 @@ test('MODEL24: product Fuseki ingress rejects raw Update and Graph Store writes'
   let generated: { configPath: string; overridePath: string } | undefined;
   try {
     // Persistent QA uses the product assembler; add only the documented report endpoint in this disposable project.
-    stack('stack:up', runId);
+    await stack('stack:up', runId);
     generated = installReportEndpoint(runId);
     const apps = readEnv(resolve(stackDirectory(root, { profile: 'qa', runId, persistent: true }), 'apps.env'));
     const base = new URL(apps.FUSEKI_URL!);
@@ -81,10 +85,10 @@ test('MODEL24: product Fuseki ingress rejects raw Update and Graph Store writes'
     expect([400, 404, 405]).toContain(graphStore.status);
     expect((await client.query(`ASK { GRAPH <${graph}> { ${triple} } }`)).boolean).toBe(false);
   } finally {
-    stack('stack:reset', runId);
+    await stack('stack:reset', runId);
     if (generated) {
       rmSync(generated.configPath, { force: true });
       rmSync(generated.overridePath, { force: true });
     }
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -35,9 +36,8 @@ const root = resolve(import.meta.dir, '../../..');
 const LUCENE = '/fuseki/databases/rezics/lucene';
 const LUCENE_BEFORE_COMMIT = '/fuseki/databases/rezics/lucene-search15';
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
   }
@@ -79,7 +79,7 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const apps = readEnv(join(stack, 'apps.env'));
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -239,7 +239,7 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       await expect(queryPublicContentPhrase(env, content, cursor, consumer, newInput))
         .rejects.toBeInstanceOf(SearchIndexUnavailable);
 
-      const operation = rootCommand(['search:rebuild', ...stackArgs], 420_000);
+      const operation = await rootCommand(['search:rebuild', ...stackArgs], 420_000);
       const result = JSON.parse(operation.trim().split(/\r?\n/).at(-1) ?? '') as { job: string;
         removed: number; replayed: number; generation: string; logPath: string };
       expect(result.removed).toBe(1);
@@ -268,6 +268,6 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       await Promise.all([contentPool.end(), accessPool.end()]);
     }
   } finally {
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

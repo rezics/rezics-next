@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -18,7 +19,7 @@ test('OPS13: a second JVM on the active TDB2 directory is refused and the owner 
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const fuseki = stack.fuseki;
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: stack.apps.MAIN_ROUTING_EPOCH! };
     await initializeFreshGraph(fuseki, lineage);
@@ -78,6 +79,6 @@ test('OPS13: a second JVM on the active TDB2 directory is refused and the owner 
       bypassLock: bypass.output.match(/[^\n]*lock[^\n]*/i)?.[0] ?? null,
       instanceId: before.serverInstanceId, generation: before.generation }, null, 2) + '\n');
   } finally {
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

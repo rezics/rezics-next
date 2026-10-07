@@ -1,6 +1,6 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -21,9 +21,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 const root = resolve(import.meta.dir, '../../..');
 const PROFILE = 'https://rezics.com/definition/translation-link-v1';
 
-function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -37,7 +36,7 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   let accessPool: Pool | undefined;
   try {
-    rootCommand(['stack:up', '--profile', 'qa', '--run-id', liveRunId], 180_000);
+    await rootCommand(['stack:up', '--profile', 'qa', '--run-id', liveRunId], 180_000);
     const liveApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveRunId }), 'apps.env'));
     const liveFuseki = new FusekiClient(liveApps.FUSEKI_URL!,
       liveApps.FUSEKI_MAINTENANCE_TOKEN!, liveApps.FUSEKI_COMMAND_TOKEN!);
@@ -168,7 +167,7 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
       thirdPartyTarget.mainRevision)).toEqual(originalThirdParty);
   } finally {
     await accessPool?.end();
-    rootCommand(['stack:reset', '--profile', 'qa', '--run-id', liveRunId], 120_000);
+    await rootCommand(['stack:reset', '--profile', 'qa', '--run-id', liveRunId], 120_000);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 300_000);
+}, qaStartupTestTimeout(300_000));

@@ -1,5 +1,6 @@
+import { runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -21,9 +22,8 @@ export function requireFaultTier(): { runId: string; artifacts: string } {
   return { runId: Bun.env.REZICS_QA_RUN_ID, artifacts: Bun.env.REZICS_QA_ARTIFACT_DIR };
 }
 
-export function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+export async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
   }
@@ -31,28 +31,17 @@ export function rootCommand(args: string[], timeout: number): string {
 }
 
 /** A root command that must fail; returns its combined output. */
-export function refusedRootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+export async function refusedRootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status === 0) throw new Error(`yarn ${args[0]} unexpectedly succeeded`);
   return `${result.stdout}${result.stderr}`;
 }
 
 /** Runs a root command without blocking, so a test can probe the API meanwhile. */
-export function backgroundRootCommand(args: string[]): Promise<string> {
-  return new Promise((done, fail) => {
-    const child = spawn(...scriptCommand(args), { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', chunk => { stdout += chunk; });
-    child.stderr.on('data', chunk => { stderr += chunk; });
-    const timer = setTimeout(() => child.kill('SIGTERM'), 420_000);
-    child.on('exit', code => {
-      clearTimeout(timer);
-      if (code === 0) done(stdout);
-      else fail(new Error(`yarn ${args[0]} failed: ${(stderr || stdout).slice(-4000)}`));
-    });
-  });
+export async function backgroundRootCommand(args: string[]): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), 420_000);
+  if (!result.ok) throw new Error(`yarn ${args[0]} failed: ${result.output.slice(-4000)}`);
+  return result.stdout;
 }
 
 export function lastJson<T>(output: string): T {

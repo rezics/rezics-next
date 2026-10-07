@@ -1,8 +1,8 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ObjectUnavailable, S3ImmutableObjects, type ImmutableObjects }
@@ -28,9 +28,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout = 180_000): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 1_000_000 });
+async function rootCommand(args: string[], timeout = 180_000): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -62,7 +61,7 @@ test('MODEL07/MODEL12/SYS08/COMP07: verified move retains Work and Structure his
     routingEpoch: Bun.env.MAIN_ROUTING_EPOCH };
   let targetStarted = false;
   try {
-    rootCommand(['stack:up', ...targetArgs]);
+    await rootCommand(['stack:up', ...targetArgs]);
     targetStarted = true;
     const targetApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: targetRun,
       persistent: true, rawUpdate: true }), 'apps.env'));
@@ -276,7 +275,7 @@ test('MODEL07/MODEL12/SYS08/COMP07: verified move retains Work and Structure his
       objectDirectory: targetDirectory }, created.workRevision, async () => true)).title).toBe(title);
   } finally {
     await Promise.allSettled([access.end(), relay.end()]);
-    if (targetStarted) rootCommand(['stack:reset', ...targetArgs]);
+    if (targetStarted) await rootCommand(['stack:reset', ...targetArgs]);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

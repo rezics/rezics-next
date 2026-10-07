@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -22,9 +23,11 @@ const root = resolve(import.meta.dir, '../../..');
 const manifestKey = 'e5'.repeat(32);
 const emptyDigest = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
-function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<void> {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) {
     throw new Error(`${action}: ${(result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
   }
@@ -39,7 +42,7 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
   let started = false;
   try {
     started = true;
-    stack('stack:up', runId);
+    await stack('stack:up', runId);
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId }), 'apps.env'));
     const compose = readEnv(join(stackDirectory(root, { profile: 'qa', runId }), 'compose.env'));
     const contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
@@ -190,8 +193,8 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
   } finally {
     try { await Promise.allSettled(pools.map(pool => pool.end())); }
     finally {
-      try { if (started) stack('stack:reset', runId); }
+      try { if (started) await stack('stack:reset', runId); }
       finally { rmSync(directory, { recursive: true, force: true }); }
     }
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

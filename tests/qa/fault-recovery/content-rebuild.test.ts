@@ -1,5 +1,5 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -23,9 +23,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
   }
@@ -38,7 +37,7 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
+    await rootCommand(['stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
     const apps = readEnv(join(stackDirectory(root, options), 'apps.env'));
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -135,6 +134,6 @@ test('SEARCH20/OPS16: native quarantine survives restart and erased exact Conten
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toThrow();
     } finally { await pool.end(); }
   } finally {
-    if (started) rootCommand(['stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
+    if (started) await rootCommand(['stack:reset', '--profile', 'qa', '--run-id', runId], 120_000);
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

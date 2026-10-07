@@ -21,6 +21,7 @@ import { root } from '../../../scripts/fixture/stack.ts';
 import { backupRecoverySet } from '../../../scripts/ops/backup.ts';
 import { administratorUrl } from '../../../scripts/ops/recovery-set.ts';
 import { restoreRecoverySet } from '../../../scripts/ops/restore.ts';
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import {
   captureRecoveryProbes,
   closeRecoveryTestCustody,
@@ -28,8 +29,10 @@ import {
   recoveryTestCustody,
 } from './g-727-recovery-checks.ts';
 
-function task(name: string, args: string[], timeout = 120_000): void {
-  const result = spawnSync('task', [name, '--', ...args], {
+async function task(name: string, args: string[], timeout = 120_000): Promise<void> {
+  const result = name === 'fixture:restore'
+    ? await runQaAdmissionChildAsync(root, 'task', [name, '--', ...args], timeout)
+    : spawnSync('task', [name, '--', ...args], {
     cwd: root,
     env: process.env,
     encoding: 'utf8',
@@ -93,7 +96,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       const preparedMs = Number(Bun.env.G727_LAUNCH_PREPARATION_MS ?? '0');
       if (!Number.isFinite(preparedMs) || preparedMs < 0 || preparedMs >= 600_000)
         throw new Error('Small-fixture preparation exhausted its 600-second budget');
-      task(
+      await task(
         'fixture:restore',
         ['--fixture', manifest.id, '--run-id', sourceId],
         600_000 - preparedMs,
@@ -225,12 +228,12 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
     await Promise.allSettled(pools.map((pool) => pool.end()));
     const cleanupErrors: unknown[] = [];
     // Large-volume deletion is outside both 600-second command timers. Keep
-    // the existing whole-test deadline and preserve a primary verification error.
+    // the active command budgets and preserve a primary verification error.
     for (const cleanup of [
       () => task('stack:reset', ['--profile', 'qa', '--run-id', targetId, '--persistent'], 300_000),
-      () => {
+      async () => {
         if (!preparedSource)
-          task('stack:reset', ['--profile', 'qa', '--run-id', sourceId, '--persistent'], 300_000);
+          await task('stack:reset', ['--profile', 'qa', '--run-id', sourceId, '--persistent'], 300_000);
       },
       () => {
         if (custody) {
@@ -241,7 +244,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       },
     ]) {
       try {
-        cleanup();
+        await cleanup();
       } catch (error) {
         cleanupErrors.push(error);
       }
@@ -253,4 +256,4 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
         { cause: failure ?? cleanupErrors[0] },
       );
   }
-}, 1_260_000);
+}, qaStartupTestTimeout(1_260_000));

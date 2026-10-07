@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -15,7 +16,7 @@ test('MODEL25: offline TDB2 compaction preserves exact old Work revision and ide
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const fuseki = stack.fuseki;
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: stack.apps.MAIN_ROUTING_EPOCH! };
     const env = { fuseki, lineage, objectDirectory: stack.apps.MAIN_OBJECT_DIRECTORY! };
@@ -94,6 +95,6 @@ test('MODEL25: offline TDB2 compaction preserves exact old Work revision and ide
       smallGenerationKiB: smallSize, scaledGenerationKiB: scaledSize,
       activeRefusal: active.status }, null, 2) + '\n');
   } finally {
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

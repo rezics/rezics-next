@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -31,7 +32,7 @@ test('OPS10/SEARCH08/SEARCH20/WORK10: offline sanitized graph and Lucene copy ex
   let candidate: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     relay = new Pool({ connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL });
     const migrations = join(root, 'services/main/migrations/relay');
     for (const file of schemaFiles(root, 'relay')) {
@@ -236,6 +237,6 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
     await relay?.end();
     candidate?.remove();
     spawnSync('docker', ['rm', '-f', candidateName], { env: stack.dockerEnv, timeout: 60_000 });
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

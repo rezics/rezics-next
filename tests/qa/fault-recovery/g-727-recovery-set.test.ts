@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 // sql-relations-allow: access.g727_inflight -- G727 creates a disposable writer table to verify maintenance fencing and backup capture.
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -55,15 +56,15 @@ test('G-727: encrypted small owner cut replays WAL, retains deletion/revocation,
   try {
     custody = recoveryTestCustody(directory, nonce);
     const { offhost, publicOnly, recipient: fingerprint } = custody;
-    run('bun', [
-      'scripts/dev/cli.ts',
+    const startup = await runQaStartupChildAsync(root, [
       'stack:up',
       '--profile',
       'qa',
       '--run-id',
       sourceId,
       '--persistent',
-    ]);
+    ], 180_000);
+    if (!startup.ok) throw new Error(`stack:up failed: ${startup.output.slice(-2000)}`);
     const sourceDirectory = stackDirectory(root, source);
     const apps = readEnv(join(sourceDirectory, 'apps.env'));
     const saved = readEnv(join(sourceDirectory, 'compose.env'));
@@ -294,4 +295,4 @@ process.exit(result.exitCode);
     if (custody) closeRecoveryTestCustody(custody);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

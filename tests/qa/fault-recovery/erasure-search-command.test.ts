@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { graphErasureSuppressed, suppressGraphContentRevisions }
@@ -18,7 +19,7 @@ test('OPS10/SEARCH20/WORK10: graph command suppresses exact public and private u
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!,
       routingEpoch: stack.apps.MAIN_ROUTING_EPOCH! };
     await initializeFreshGraph(stack.fuseki, lineage);
@@ -67,6 +68,6 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       data: { receipt: { action: 'erasure.graph', systemProof: { kind: 'relay-erasure',
         erasureId, erasureEpoch: '7' } } } });
   } finally {
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

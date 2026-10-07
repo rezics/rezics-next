@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -41,7 +42,7 @@ test('OPS15/OPS16: a crash retains the TDB2 receipt, fences text, and a pinned r
   let pool: Pool | undefined;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const fuseki = stack.fuseki;
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: stack.apps.MAIN_ROUTING_EPOCH! };
     const env = { fuseki, lineage, objectDirectory: stack.apps.MAIN_OBJECT_DIRECTORY! };
@@ -87,7 +88,7 @@ test('OPS15/OPS16: a crash retains the TDB2 receipt, fences text, and a pinned r
     const cut = await content.ownerPosition();
     const cursor = new ContentProjectionCursor(pool);
     await cursor.initialize(stack.apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1');
-    const operation = rootCommand(['search:rebuild', ...stack.args, '--reserve-bytes', '0'], 420_000);
+    const operation = await rootCommand(['search:rebuild', ...stack.args, '--reserve-bytes', '0'], 420_000);
     const result = JSON.parse(operation.trim().split(/\r?\n/).at(-1) ?? '') as {
       generation: string; pins: { stateVolume: string }; storage: { freeBytes: number; requiredBytes: number } };
     expect(result.storage.freeBytes).toBeGreaterThanOrEqual(result.storage.requiredBytes);
@@ -139,6 +140,6 @@ test('OPS15/OPS16: a crash retains the TDB2 receipt, fences text, and a pinned r
     const { spawnSync } = await import('node:child_process');
     spawnSync('docker', ['volume', 'rm', '-f', restoredVolume], { env: stack.dockerEnv, timeout: 60_000 });
     if (pool) await pool.end();
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

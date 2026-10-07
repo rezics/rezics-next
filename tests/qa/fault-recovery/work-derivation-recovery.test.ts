@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -26,9 +27,11 @@ import { cutoverRestoredGraphLineage }
 
 const root = resolve(import.meta.dir, '../../..');
 
-function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
-  const command = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<void> {
+  const command = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (command.status !== 0 || command.error) throw new Error(`${action} failed: ${(
     command.stderr || command.stdout || command.error?.message || '').slice(-2000)}`);
 }
@@ -53,7 +56,7 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
   try {
     for (const runId of [liveId, restoredId]) {
       started.push(runId);
-      stack('stack:up', runId);
+      await stack('stack:up', runId);
     }
     const liveApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveId }), 'apps.env'));
     const restoreApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
@@ -356,7 +359,7 @@ test('WORK04/OPS03: graph loss replays only the original admitted multi-source, 
     }`)).boolean).toBe(true);
   } finally {
     await Promise.all([accessPool?.end(), relayPool?.end()]);
-    for (const runId of started.reverse()) stack('stack:reset', runId);
+    for (const runId of started.reverse()) await stack('stack:reset', runId);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 300_000);
+}, qaStartupTestTimeout(300_000));

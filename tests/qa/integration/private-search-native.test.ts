@@ -1,6 +1,7 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -43,9 +44,8 @@ import { ObservedFuseki } from './support/observed-fuseki.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-4000)}`);
@@ -106,7 +106,7 @@ beforeAll(async () => {
   settlement = new PrivateSearchSettlement(pool);
   secondSettlement = new PrivateSearchSettlement(secondPool);
   stackStarted = true;
-  rootCommand(['stack:up', ...stackArgs], 180_000);
+  await rootCommand(['stack:up', ...stackArgs], 180_000);
   const apps = readEnv(join(stackDirectory(root, stackOptions), 'apps.env'));
   fuseki = new ObservedFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
     apps.FUSEKI_COMMAND_TOKEN!);
@@ -128,7 +128,7 @@ beforeAll(async () => {
       VALUES ($1, $2, $3, 'contribution.read', now() + interval '1 hour')`,
     [randomUUID(), id, actor]);
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));
 
 afterAll(async () => {
   await secondPool?.end();
@@ -137,7 +137,7 @@ afterAll(async () => {
     if (postgresStarted) execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
   } finally {
     rmSync(state, { recursive: true, force: true });
-    if (stackStarted) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (stackStarted) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
 }, 180_000);
 

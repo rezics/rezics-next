@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
@@ -17,13 +18,10 @@ function reset(options: StackOptions): void {
   if (result.error || result.status !== 0) throw new Error(`install fixture cleanup failed: ${result.stderr}`);
 }
 
-function release(args: string[], timeout = 240_000): string {
-  const result = spawnSync(...scriptCommand(args),
-    { cwd: root, encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
-  if (result.error || result.status !== 0) {
-    throw new Error(`Release command failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-1500)}`);
-  }
-  return result.stdout.trim();
+async function release(args: string[], timeout = 240_000): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
+  if (!result.ok) throw new Error(`Release command failed: ${result.output.slice(-1500)}`);
+  return result.output.replace(/^QA_MEMORY_WAIT_(?:BEGIN \d+-\d+|END \d+-\d+ \d+)\r?\n/gm, '').trim();
 }
 
 test('OPS01: pinned release provisions four owners and re-provisions without changing their data', async () => {
@@ -33,12 +31,12 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
   const options: StackOptions = { profile: 'qa', runId: `${Bun.env.REZICS_QA_RUN_ID}-ins`, persistent: true };
   try {
     assertReleasePins();
-    const artifact = release(['release:build']);
+    const artifact = await release(['release:build']);
     expect(verifyReleaseArtifact(artifact).digest).toBe(artifact.split('/').at(-1));
-    expect(release(['release:build'])).toBe(artifact);
+    expect(await release(['release:build'])).toBe(artifact);
     const installArgs = ['release:install', '--artifact', artifact, '--profile', 'qa',
       '--run-id', options.runId!, '--persistent'];
-    const first = JSON.parse(release(installArgs)) as Awaited<ReturnType<typeof import('../../../scripts/dev/install.ts').installRelease>>;
+    const first = JSON.parse(await release(installArgs)) as Awaited<ReturnType<typeof import('../../../scripts/dev/install.ts').installRelease>>;
     expect(first.ready).toEqual(['account', 'access', 'content', 'relay', 'fuseki']);
     expect(first.appliedMigrations.length).toBeGreaterThan(0);
     expect(first.releaseDigest).toBe(releaseDigest());
@@ -53,7 +51,7 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
     const before = await access.query<{ n: string }>(
       'SELECT count(*)::text AS n FROM public.rezics_local_migration');
     await access.end();
-    const second = JSON.parse(release(installArgs)) as typeof first;
+    const second = JSON.parse(await release(installArgs)) as typeof first;
     expect(second.appliedMigrations).toEqual([]);
     expect(readFormatMarker(options)).toEqual(saved);
     const accessAgain = new Client({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -110,4 +108,4 @@ test('OPS01: pinned release provisions four owners and re-provisions without cha
       if (account.exitCode === null) account.kill('SIGKILL');
     }
   } finally { reset(options); }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

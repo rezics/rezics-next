@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -25,9 +26,11 @@ import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/sel
 import { organizationPublicationFixture } from '../support/organization-publication.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-function stack(action: 'stack:up' | 'stack:reset', runId: string) {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-1500)}`);
 }
 async function migrate(pool: Pool, owner: 'access' | 'relay') {
@@ -46,7 +49,7 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
   const started: string[] = [];
   let pool: Pool | undefined, relay: Pool | undefined, before: Pool | undefined, after: Pool | undefined;
   try {
-    for (const id of [liveId, restoreId]) { started.push(id); stack('stack:up', id); }
+    for (const id of [liveId, restoreId]) { started.push(id); await stack('stack:up', id); }
     const liveDirectory = stackDirectory(root, { profile: 'qa', runId: liveId });
     const apps = readEnv(join(liveDirectory, 'apps.env'));
     const compose = readEnv(join(liveDirectory, 'compose.env'));
@@ -158,7 +161,7 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
       async () => true)).body).toBe(s.body);
   } finally {
     await Promise.all([pool?.end(), relay?.end(), before?.end(), after?.end()]);
-    for (const id of started.reverse()) stack('stack:reset', id);
+    for (const id of started.reverse()) await stack('stack:reset', id);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 300_000);
+}, qaStartupTestTimeout(300_000));

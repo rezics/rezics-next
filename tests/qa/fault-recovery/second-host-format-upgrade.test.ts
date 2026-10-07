@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -83,11 +84,14 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
     const artifact = command('bun', ['scripts/dev/release-artifact.ts', 'build'], 240_000);
     const installArgs = (target: StackOptions) => ['scripts/dev/release-artifact.ts', 'install', '--artifact', artifact,
       '--profile', 'qa', '--run-id', target.runId!, '--persistent'];
-    command('bun', installArgs(source));
+    const installed = await runQaAdmissionChildAsync(root, 'bun', installArgs(source), 120_000);
+    if (!installed.ok) throw new Error(`release:install failed: ${installed.output.slice(-1200)}`);
     const samples = await seedOwners(source);
     stack('stack:down', source);
     await createStoppedRecoveryCut(id, source, samples);
-    command('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', source.runId!, '--persistent']);
+    const up = await runQaStartupChildAsync(root,
+      ['stack:up', '--profile', 'qa', '--run-id', source.runId!, '--persistent'], 120_000);
+    if (!up.ok) throw new Error(`stack:up failed: ${up.output.slice(-1200)}`);
     const outage = capturePrincipalHost(source);
     await restoreRecoveryCut(id, second);
     await expect(qualifyManualFailover(outage, second)).rejects.toThrow('Principal is still live');
@@ -131,10 +135,13 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
     await expect(assertGraphAdmissionOpen(fuseki, { dataEpoch: secondApps.MAIN_DATA_EPOCH!,
       routingEpoch: secondApps.MAIN_ROUTING_EPOCH! })).rejects.toThrow();
     await expect(installRelease(second)).rejects.toThrow('unqualified or differs');
-    expect(() => command('bun', installArgs(second)))
-      .toThrow('unqualified or differs');
-    expect(() => command('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa',
-      '--run-id', second.runId!, '--persistent'])).toThrow('pending');
+    const refusedInstall = await runQaAdmissionChildAsync(root, 'bun', installArgs(second), 120_000);
+    expect(refusedInstall.ok).toBe(false);
+    expect(refusedInstall.output).toContain('unqualified or differs');
+    const refused = await runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa',
+      '--run-id', second.runId!, '--persistent'], 120_000);
+    expect(refused.ok).toBe(false);
+    expect(refused.output).toContain('pending');
     crashAndFence(second);
     await restoreRecoveryCut(id, rollback);
     await startRestoredHost(beforeUpgrade, rollback);
@@ -160,4 +167,4 @@ test('OPS02/OPS04: principal crash requires manual second-host restore; failed b
     }
     try { removeRecoveryCut(id); } catch { /* Retain primary failure and QA logs. */ }
   }
-}, 330_000);
+}, qaStartupTestTimeout(330_000));

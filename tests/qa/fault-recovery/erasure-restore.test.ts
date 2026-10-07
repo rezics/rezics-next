@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
@@ -40,9 +41,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'c5'.repeat(32);
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -83,7 +83,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const stack = stackDirectory(root, { profile: 'qa', runId });
     const apps = readEnv(join(stack, 'apps.env'));
     const compose = readEnv(join(stack, 'compose.env'));
@@ -223,7 +223,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         (BigInt(lineage.routingEpoch) + 1n).toString() };
       await cutoverRestoredGraphLineage(fuseki, {
         prior: { ...lineage, sequence: '0' }, next });
-      const backup = rootCommand(['stack:backup', ...stackArgs], 100_000);
+      const backup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
       execFileSync('pg_verifybackup', ['--no-parse-wal', backup], { cwd: state, timeout: 15_000 });
       const restored = await restore(backup, name);
       await releaseRestoredGraphHold(fuseki, restored.access, relay, next,
@@ -597,8 +597,8 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         }
       }
     } finally {
-      try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
+      try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
       finally { rmSync(state, { recursive: true, force: true }); }
     }
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

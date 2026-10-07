@@ -1,5 +1,5 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -13,9 +13,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): void {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<void> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -30,7 +29,7 @@ test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a b
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const apps = readEnv(resolve(stackDirectory(root, options), 'apps.env'));
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -76,6 +75,6 @@ test('SEARCH02/SEARCH10: 513 real text hits with no eligible relation return a b
       await accessPool.end();
     }
   } finally {
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

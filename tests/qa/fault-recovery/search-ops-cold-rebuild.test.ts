@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,7 +40,7 @@ test('OPS09: a cold public Content body read and exact RDF/Lucene rebuild stay w
   let accessPool: Pool | undefined;
   try {
     started = true;
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const apps = stack.apps;
     const fuseki = new CountingFusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -103,14 +104,14 @@ test('OPS09: a cold public Content body read and exact RDF/Lucene rebuild stay w
     // refusal independent of their cleanup while staying inside the CLI's cap.
     const impossible = 1_000_000_000_000_000;
     expect(impossible).toBeGreaterThan(storage.freeBytes);
-    const denied = refusedRootCommand(['search:rebuild', ...stack.args,
+    const denied = await refusedRootCommand(['search:rebuild', ...stack.args,
       '--reserve-bytes', String(impossible)], 120_000);
     expect(denied).toContain('insufficient storage headroom');
     const still = await queryPublicContentPhrase(env, content, cursor, consumer, input);
     expect(still).toMatchObject({ complete: true, total: 1,
       indexGeneration: before.indexGeneration });
 
-    const operation = rootCommand(['search:rebuild', ...stack.args, '--reserve-bytes', '0'], 420_000);
+    const operation = await rootCommand(['search:rebuild', ...stack.args, '--reserve-bytes', '0'], 420_000);
     const result = JSON.parse(operation.trim().split(/\r?\n/).at(-1) ?? '') as {
       generation: string; removed: number; replayed: number;
       logPath: string; storage: { freeBytes: number; requiredBytes: number };
@@ -134,6 +135,6 @@ test('OPS09: a cold public Content body read and exact RDF/Lucene rebuild stay w
     }, null, 2) + '\n');
   } finally {
     await Promise.all([contentPool?.end(), accessPool?.end()]);
-    if (started) rootCommand(['stack:reset', ...stack.args], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

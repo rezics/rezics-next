@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
@@ -33,9 +34,13 @@ const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = '13'.repeat(32);
 const id = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 
-function stack(action: 'stack:up' | 'stack:down' | 'stack:reset', runId: string) {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId,
-    '--persistent'], { cwd: root, encoding: 'utf8', timeout: action === 'stack:reset' ? 45_000 : 180_000,
+async function stack(action: 'stack:up' | 'stack:down' | 'stack:reset', runId: string) {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId,
+    '--persistent'], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId,
+    '--persistent'],
+      { cwd: root, encoding: 'utf8', timeout: action === 'stack:reset' ? 45_000 : 180_000,
       maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(
     result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
@@ -117,7 +122,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
   const pools: Pool[] = [];
   let account: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   try {
-    stack('stack:up', sourceId); started.push(sourceId);
+    await stack('stack:up', sourceId); started.push(sourceId);
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: sourceId,
       persistent: true }), 'apps.env'));
     const compose = readEnv(join(stackDirectory(root, { profile: 'qa', runId: sourceId,
@@ -179,7 +184,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     await grant(0, `work:read:${work}`, 'work.read');
     // The graph owner cut is stopped and copied before the later correction commits.
     stopGraph(sourceId); docker(['volume', 'create', cutVolume]);
-    copyVolume(sourceVolume, cutVolume); stack('stack:up', sourceId);
+    copyVolume(sourceVolume, cutVolume); await stack('stack:up', sourceId);
     await grant(0, `work:protect:${work}`, 'work.protection.tighten');
     await grant(0, `work:correct:${work}`, 'work.correction.propose');
     await grant(1, `work:review:${work}`, 'work.correction.review');
@@ -236,7 +241,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       'graph-recovery-coverage'));
     await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
     stopGraph(sourceId); copyVolume(cutVolume, sourceVolume, true);
-    stack('stack:up', sourceId);
+    await stack('stack:up', sourceId);
     const graphOldReceipt = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <urn:rezics:graph:receipts> { <${approved.receipt}> a rv:OperationReceipt } }`);
     expect(graphOldReceipt.boolean).toBe(false);
@@ -345,10 +350,10 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     if (restoredStarted) execFileSync('pg_ctl', ['-D', restoredData, '-m', 'immediate', '-w', 'stop'],
       { cwd: recoveryDir, timeout: 25_000 });
     for (const runId of started.reverse()) {
-      try { stack('stack:reset', runId); }
+      try { await stack('stack:reset', runId); }
       catch (error) { console.error('SYS13 stack cleanup failed:', error); }
     }
     try { docker(['volume', 'rm', '-f', cutVolume]); } catch { /* preserve test error */ }
     rmSync(recoveryDir, { recursive: true, force: true });
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

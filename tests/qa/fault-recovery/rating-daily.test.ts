@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
@@ -33,11 +34,14 @@ import { exerciseRatingAggregates } from '../support/rating-aggregate.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<number> {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(
     result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
+  return 'admissionWaitMs' in result ? result.admissionWaitMs : 0;
 }
 interface Opinion {
   observation: string; observationRevision: string; predecessor: string | null;
@@ -58,7 +62,8 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
   let identity: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   try {
     const preparationStart = Date.now();
-    for (const id of [liveId, restoredId]) { started.push(id); stack('stack:up', id); }
+    let admissionWaitMs = 0;
+    for (const id of [liveId, restoredId]) { started.push(id); admissionWaitMs += await stack('stack:up', id); }
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveId }), 'apps.env'));
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
     accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 5 });
@@ -131,7 +136,7 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     }
     await grant('work:create:root', 'work.create');
     await grant('space:create:root', 'space.create');
-    const preparationMs = Date.now() - preparationStart;
+    const preparationMs = Date.now() - preparationStart - admissionWaitMs;
     expect(preparationMs).toBeLessThan(600_000);
     const title = `Daily target ${nonce}`;
     const { candidateReceipt } = await success<{ candidateReceipt: string }>(await post('/v1/catalogue/candidates', {
@@ -436,7 +441,7 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     const restoredDirectory = join(directory, 'restored-objects');
     cpSync(env.objectDirectory, backupDirectory, { recursive: true, errorOnExist: true });
     cpSync(backupDirectory, restoredDirectory, { recursive: true, errorOnExist: true });
-    expect(Date.now() - preparationStart).toBeLessThan(600_000);
+    expect(Date.now() - preparationStart - admissionWaitMs).toBeLessThan(600_000);
     await initializeFreshGraph(restoredFuseki, lineage);
     const nextLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(restoredFuseki, { prior: { ...lineage, sequence: '0' }, next: nextLineage });
@@ -483,12 +488,12 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     await expect(reconcileRetainedStandingRating(recovered, accessPool, relayPool, coverage, first.sourcePosition.sequence))
       .rejects.toBeInstanceOf(RetainedEffectConflict);
     if (Bun.env.REZICS_QA_ARTIFACT_DIR) writeFileSync(join(Bun.env.REZICS_QA_ARTIFACT_DIR, 'rating-daily-costs.json'),
-      JSON.stringify({ preparationMs, costs,
+      JSON.stringify({ preparationMs, admissionWaitMs, costs,
         scope: 'Real Main-to-Fuseki read attempts and response bytes; native operator work and host capacity unmeasured.' }, null, 2));
   } finally {
     await identity?.close();
     await accessPool?.end(); await relayPool?.end();
-    for (const id of started.reverse()) stack('stack:reset', id);
+    for (const id of started.reverse()) await stack('stack:reset', id);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 360_000);
+}, qaStartupTestTimeout(360_000));

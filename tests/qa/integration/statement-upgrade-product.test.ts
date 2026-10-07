@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
@@ -68,7 +69,7 @@ test('product Statement upgrade retains populated history, replays a lost acknow
   let pool: Pool | undefined;
   let env: WorkActivationEnvironment | undefined;
   try {
-    rootCommand(['stack:up', ...stack.args], 180_000);
+    await rootCommand(['stack:up', ...stack.args], 180_000);
     const apps = stack.apps;
     const fuseki = stack.fuseki;
     expect(stack.composeEnv.REZICS_STACK_RAW_UPDATE).toBe('0');
@@ -330,6 +331,6 @@ test('product Statement upgrade retains populated history, replays a lost acknow
   } finally {
     await pool?.end();
     if (env) rmSync(env.objectDirectory, { recursive: true, force: true });
-    rootCommand(['stack:reset', ...stack.args], 120_000);
+    await rootCommand(['stack:reset', ...stack.args], 120_000);
   }
-}, 360_000);
+}, qaStartupTestTimeout(360_000));

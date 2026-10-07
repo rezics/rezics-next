@@ -1,6 +1,6 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -31,9 +31,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 4_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
   }
@@ -62,7 +61,7 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const apps = readEnv(join(stackDirectory(root, options), 'apps.env'));
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
       apps.FUSEKI_COMMAND_TOKEN!);
@@ -210,14 +209,14 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
           (?unit ?score) text:query (rv:searchBody '"replacement content lighthouse"' 10) .
           FILTER(?unit = ${iri(lostUnit)}) } }`);
       expect(staleIndex.results?.bindings.length).toBe(1);
-      rootCommand(['stack:down', ...stackArgs], 120_000);
-      rootCommand(['stack:up', ...stackArgs], 180_000);
+      await rootCommand(['stack:down', ...stackArgs], 120_000);
+      await rootCommand(['stack:up', ...stackArgs], 180_000);
       expect(await quarantinePublicContentSearch(env, content, jobId)).toEqual(job);
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);
 
       // Simulate interruption after the durable quarantine receipt. The root
       // operator command resumes this job and performs the actual offline pass.
-      const operation = rootCommand(['search:rebuild', '--job', jobId, ...stackArgs], 420_000);
+      const operation = await rootCommand(['search:rebuild', '--job', jobId, ...stackArgs], 420_000);
       const line = operation.trim().split(/\r?\n/).at(-1);
       const result = JSON.parse(line ?? '') as { job: string; removed: number;
         replayed: number; generation: string; logPath: string };
@@ -284,6 +283,6 @@ test('SEARCH20/OPS16: lost RDF and erased old Content rebuild from the changed c
       await Promise.all([contentPool.end(), accessPool.end()]);
     }
   } finally {
-    if (started) rootCommand(['stack:reset', ...stackArgs], 120_000);
+    if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000);
   }
-}, 600_000);
+}, qaStartupTestTimeout(600_000));

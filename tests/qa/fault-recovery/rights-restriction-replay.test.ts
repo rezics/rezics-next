@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { claimFixture, fixtureReasons } from '../integration/g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
@@ -20,9 +21,8 @@ const root = resolve(import.meta.dir, '../../..');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const agent = () => `https://rezics.com/id/${randomUUID()}`;
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -62,7 +62,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const stack = stackDirectory(root, { profile: 'qa', runId });
     const apps = readEnv(join(stack, 'apps.env'));
     const compose = readEnv(join(stack, 'compose.env'));
@@ -139,7 +139,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     await engageAccessRecoveryFence(access);
     const nextLineage = { dataEpoch: randomUUID(), routingEpoch: (BigInt(lineage.routingEpoch) + 1n).toString() };
     await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '0' }, next: nextLineage });
-    const backup = rootCommand(['stack:backup', ...stackArgs], 100_000);
+    const backup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', backup], { cwd: state, timeout: 15_000 });
     restoredData = join(state, 'restored');
     copyRecoveryTree(backup, restoredData);
@@ -183,7 +183,7 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
       execFileSync('pg_ctl', ['-D', restoredData, '-m', 'immediate', '-t', '10', '-w', 'stop'],
         { cwd: state, timeout: 15_000 });
     }
-    try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
+    try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
     finally { rmSync(state, { recursive: true, force: true }); }
   }
-}, 420_000);
+}, qaStartupTestTimeout(420_000));

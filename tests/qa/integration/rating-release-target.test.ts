@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { assertCommandRace } from '../support/command-race.ts';
@@ -32,9 +33,11 @@ import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-function stack(action: 'stack:up' | 'stack:reset', runId: string): void {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<void> {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(
     result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
 }
@@ -347,7 +350,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     const finalLive = await success<Aggregate>(await aggregate(releaseContext,
       'realm-release-latest-mean-v1', { release: first }), 200);
     const fenceGeneration = await engageAccessRecoveryFence(accessPool);
-    stack('stack:up', restoredId);
+    await stack('stack:up', restoredId);
     restoredStarted = true;
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!,
@@ -400,7 +403,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     await contentPool.end();
     await relayPool.end();
     await databases.close();
-    if (restoredStarted) stack('stack:reset', restoredId);
+    if (restoredStarted) await stack('stack:reset', restoredId);
     rmSync(state, { recursive: true, force: true });
   }
-}, 240_000);
+}, qaStartupTestTimeout(240_000));

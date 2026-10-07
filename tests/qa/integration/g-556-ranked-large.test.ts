@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -327,7 +328,7 @@ test('G-556: restored >20k units and >2k bilingual phrase matches traverse 200 H
     }
     writeFileSync(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   }
-}, 470_000);
+}, qaStartupTestTimeout(470_000));
 
 function readFileSyncSafe(path: string) {
   try {

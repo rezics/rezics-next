@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
@@ -25,9 +26,11 @@ import { SourceFieldWithdrawalStore } from '../../../services/main/src/modules/s
 import { readAuthorCreditRetirement } from '../../../services/main/src/modules/work/author-credit-retirement.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-function stack(action: 'stack:up' | 'stack:reset', runId: string) {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-    { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
+  const result = action === 'stack:up'
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
 }
 
@@ -38,7 +41,7 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
   let fixture: Awaited<ReturnType<typeof authorCreditFixture>> | undefined, relay: Pool | undefined;
   try {
     const start = Date.now();
-    for (const run of [liveId, restoredId]) { started.push(run); stack('stack:up', run); }
+    for (const run of [liveId, restoredId]) { started.push(run); await stack('stack:up', run); }
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveId }), 'apps.env'));
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
     const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -195,7 +198,7 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
       GRAPH <urn:rezics:graph:current> { ?credit a <https://rezics.com/vocab/AuthorCredit> } }`)).results?.bindings[0]?.n?.value).toBe('1');
   } finally {
     await fixture?.close(); await relay?.end();
-    for (const run of started.reverse()) stack('stack:reset', run);
+    for (const run of started.reverse()) await stack('stack:reset', run);
     rmSync(directory, { recursive: true, force: true });
   }
-}, 300_000);
+}, qaStartupTestTimeout(300_000));

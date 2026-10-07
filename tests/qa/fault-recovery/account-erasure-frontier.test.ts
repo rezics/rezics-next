@@ -1,3 +1,4 @@
+import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
@@ -45,9 +46,8 @@ import { scriptCommand } from '../../../scripts/dev/commands.ts';
 const root = resolve(import.meta.dir, '../../..');
 const recoveryKey = 'b7'.repeat(32);
 
-function rootCommand(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root,
-    encoding: 'utf8', timeout, maxBuffer: 2_000_000 });
+async function rootCommand(args: string[], timeout: number): Promise<string> {
+  const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout
       || result.error?.message || '').slice(-2000)}`);
@@ -88,7 +88,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
   let started = false;
   try {
     started = true;
-    rootCommand(['stack:up', ...stackArgs], 180_000);
+    await rootCommand(['stack:up', ...stackArgs], 180_000);
     const stack = stackDirectory(root, { profile: 'qa', runId });
     const apps = readEnv(join(stack, 'apps.env'));
     const compose = readEnv(join(stack, 'compose.env'));
@@ -328,7 +328,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const firstLineage = { dataEpoch: randomUUID(), routingEpoch: '2' };
     await cutoverRestoredGraphLineage(fuseki, {
       prior: { ...initial, sequence: publication.graphSequence }, next: firstLineage });
-    const oldBackup = rootCommand(['stack:backup', ...stackArgs], 100_000);
+    const oldBackup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', oldBackup],
       { cwd: state, timeout: 15_000 });
     const old = await restore(oldBackup, 'older');
@@ -383,7 +383,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const finalLineage = { dataEpoch: randomUUID(), routingEpoch: '3' };
     await cutoverRestoredGraphLineage(fuseki, {
       prior: { ...firstLineage, sequence: '0' }, next: finalLineage });
-    const finalBackup = rootCommand(['stack:backup', ...stackArgs], 100_000);
+    const finalBackup = await rootCommand(['stack:backup', ...stackArgs], 100_000);
     execFileSync('pg_verifybackup', ['--no-parse-wal', finalBackup],
       { cwd: state, timeout: 15_000 });
     const current = await restore(finalBackup, 'current');
@@ -477,7 +477,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
           { cwd: state, timeout: 15_000 });
       }
     }
-    try { if (started) rootCommand(['stack:reset', ...stackArgs], 120_000); }
+    try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
     finally { rmSync(state, { recursive: true, force: true }); }
   }
-}, 300_000);
+}, qaStartupTestTimeout(300_000));
