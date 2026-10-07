@@ -2286,8 +2286,9 @@ export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: reado
   return events.find(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))?.before ?? current;
 }
 
-/** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. */
-const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: readonly string[]]> = [
+/** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
+ * TypeScript project: Task stops at the first failing command, so a second project would hide its errors. */
+export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: readonly string[]]> = [
   ['main', ['services/main/']],
   ['account', ['services/account/']],
   ['content', ['services/content/']],
@@ -2296,7 +2297,8 @@ const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, roots: re
   ['model', ['packages/model/']],
   ['ui', ['packages/ui/']],
   ['document', ['packages/document/']],
-  ['observability', ['packages/observability/', 'scripts/observability/']],
+  ['observability', ['packages/observability/']],
+  ['observability-scripts', ['scripts/observability/']],
   ['dataset', ['scripts/datasets/']],
   ['dev', ['scripts/dev/']],
   ['apphost', ['apphost/']],

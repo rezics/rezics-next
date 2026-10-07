@@ -315,9 +315,13 @@ tasks:
   # Checks and tests
 
   observability:typecheck:
-    desc: Type-check the shared telemetry runtime and probes.
+    desc: Type-check the shared telemetry runtime.
     cmds:
       - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
+
+  observability-scripts:typecheck:
+    desc: Type-check the telemetry probes.
+    cmds:
       - bun scripts/qa/host-admission.ts --gib 0.5 -- bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
 
   observability:aspire-smoke:

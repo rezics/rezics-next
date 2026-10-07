@@ -14,7 +14,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
-import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, unclassifiedTypecheckLines,
+import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 
 const brief = `---
@@ -3086,9 +3086,22 @@ describe('pre-merge type check', () => {
     expect(typecheckWorkspaces(['services/main/tests/list.test.ts', 'services/main/src/app.ts', 'apps/web/src/a.tsx']))
       .toEqual(['main', 'web']);
     expect(typecheckWorkspaces(['packages/model/package.json', 'scripts/observability/probe.ts', 'apphost/apphost.mts']))
-      .toEqual(['model', 'observability', 'apphost']);
+      .toEqual(['model', 'observability-scripts', 'apphost']);
+    expect(typecheckWorkspaces(['packages/observability/src/a.ts'])).toEqual(['observability']);
     expect(typecheckWorkspaces(['docs/goals/README.md', 'services/main/README.md', 'services/main/migrations/001.sql', 'scripts/goal/goalctl.ts']))
       .toEqual([]);
+  });
+
+  test('every mapped workspace is a Task type check of exactly one command', () => {
+    const { tasks } = Bun.YAML.parse(readFileSync(join(import.meta.dir, '../../Taskfile.yml'), 'utf8')) as
+      { tasks: Record<string, { cmds?: unknown[] } | undefined> };
+    for (const [workspace] of TYPECHECK_WORKSPACES) {
+      const task = tasks[`${workspace}:typecheck`];
+      expect(task, `${workspace}:typecheck is not a Task task`).toBeDefined();
+      // Task stops at the first failing command, so a second project would hide the errors of the next.
+      expect(task!.cmds?.length, `${workspace}:typecheck must check one TypeScript project`).toBe(1);
+      expect(typeof task!.cmds![0]).toBe('string');
+    }
   });
 
   test('keys diagnostics without positions and keeps repeats and continuation lines', () => {
