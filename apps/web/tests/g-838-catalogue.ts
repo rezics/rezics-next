@@ -6,14 +6,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { grantPlatformUse, platformAdministratorSession, type PlatformGrantSession }
+import { grantPlatformResource, grantPlatformUse, platformAdministratorSession, type PlatformGrantSession }
   from '../../../tests/qa/fixtures/platform-grant.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
-import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
-import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
-import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
-import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import type { MediaStack } from '../../../tests/qa/integration/media-support.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -24,7 +20,8 @@ const types = ['https://schema.org/Book'];
 let administrator: Promise<PlatformGrantSession> | undefined;
 
 function administratorSession(): Promise<PlatformGrantSession> {
-  administrator ??= platformAdministratorSession().catch(error => {
+  administrator ??= platformAdministratorSession(process.env,
+    'openid access:grant agent:create work:create work:edit work:read').catch(error => {
     administrator = undefined;
     throw error;
   });
@@ -48,10 +45,16 @@ interface Work { work: string; mainVersion: string; mainRevision: string; title:
 interface Written { revision: string }
 interface Composition { structure: string; revision: string }
 
+export interface CataloguePort {
+  actor: string;
+  read(path: string): Promise<Response>;
+  send(method: string, path: string, body?: unknown, key?: string): Promise<Response>;
+}
+
 /** A cancelled basis is a new edit: read the current head and reapply the
  * ordered append intent with a new command key, rather than replay cancellation. */
 export async function appendCatalogueParts(
-  editor: Pick<Awaited<ReturnType<MediaStack['member']>>, 'actor' | 'send' | 'read'>,
+  editor: CataloguePort,
   structure: string,
   parts: { work: string; label: string }[],
 ): Promise<void> {
@@ -75,14 +78,46 @@ async function retryBasisChanged(response: Response, attempt: number): Promise<b
   if (response.status !== 409 || attempt === 3) return false;
   const problem = await response.clone().json() as { code?: string };
   if (problem.code !== 'read_basis_changed') return false;
-  // Allow the publication relay that cancelled this basis to finish its batch.
-  await new Promise(done => setTimeout(done, 1_000));
   return true;
+}
+
+async function readCatalogue<T>(editor: CataloguePort, path: string): Promise<T> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const response = await editor.read(path);
+    if (await retryBasisChanged(response, attempt)) continue;
+    return json<T>(response);
+  }
+  throw new Error(`Catalogue read did not expose its current basis: ${path}`);
+}
+
+/** Controller and author baselines come from the public provisioning and
+ * authoring operations; selected publication makes the fixture publicly readable. */
+export async function createCatalogueWork(editor: CataloguePort, title: string): Promise<Work> {
+  const created = await json<Omit<Work, 'title'>>(await editor.send('POST', '/v1/works', {
+    profile: 'metadata-only-v1', authoring: 'own-work', title, language: 'en',
+    semanticTypes: types, actingSubject: editor.actor,
+  }), 201);
+  const draft = await json<{ contribution: string; draftRevision: string }>(await editor.send('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work: created.work, language: 'ja',
+    body: `${title}（本文）`, actingSubject: editor.actor,
+  }), 201);
+  const published = await json<{ publicationDecision: string }>(await editor.send('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: draft.contribution,
+    expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: editor.actor,
+  }), 201);
+  await json(await editor.send('POST', '/v1/publication-selections', {
+    profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: created.mainVersion },
+    work: created.work, contribution: draft.contribution, publicationDecision: published.publicationDecision,
+    expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: editor.actor,
+  }), 201);
+  return { ...created, title };
 }
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
-  if (response.status !== status) throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
+  const replayed = status === 201 && response.status === 200 && body.includes('"replayed":true');
+  if (response.status !== status && !replayed) throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
   return JSON.parse(body) as T;
 }
 
@@ -93,35 +128,36 @@ export interface Catalogue {
 }
 
 export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scratch: string): Promise<Catalogue> {
-  const editor = await stack.member('catalogue');
+  // Downstream Zone fixtures share this app and need its storage dependency;
+  // catalogue records themselves are created by the running public API.
   const structureObjects = stack.objects('semantic/structure/');
   await structureObjects.initialize();
   Object.assign(stack.env, { structureObjects });
-
-  const grantReader = async (scope: string, action: string) => {
-    await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-    await stack.accessPool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), reader.principalId, reader.actor, action]);
-    await stack.accessPool.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), reader.actor, scope, action]);
+  const session = await administratorSession();
+  const send: CataloguePort['send'] = async (method, path, body, key = randomUUID()) => {
+    for (let attempt = 0; attempt < 64; attempt++) {
+      const response = await fetch(new URL(path, session.mainOrigin), {
+        method, headers: { authorization: `Bearer ${session.token}`, 'idempotency-key': key,
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      // A pending command is observed again with its original key until its
+      // terminal response is visible. A cancelled command is handled separately.
+      if (response.status !== 202 || attempt === 63) return response;
+      await response.text();
+    }
+    throw new Error(`Catalogue command did not settle: ${method} ${path}`);
   };
-
-  /** A public Work the signed-in member may read: a selected native text, and their explicit Work grant. */
-  const work = async (title: string): Promise<Work> => {
-    const created = await activateMetadataWork(stack.env, { title, semanticTypes: types, admission: stack.admission(
-      editor.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types)) });
-    const text = await stack.contribution(created.work, editor.actor, 'ja', `${title}（本文）`);
-    const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion }, work: created.work,
-      contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
-      selectionBasis: 'main-maintainer' as const, actingSubject: editor.actor };
-    const selected = await selectMainDefault(stack.env, stack.admission(editor.actor,
-      `publication:select:${created.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection);
-    if (selected.outcome !== 'succeeded') throw new Error(`Main selection failed for ${title}`);
-    await editor.grant(`work:edit:${created.work}`, 'work.edit');
-    await editor.grant(`work:read:${created.work}`, 'work.read');
-    await grantReader(`work:read:${created.work}`, 'work.read');
-    return { work: created.work, mainVersion: created.mainVersion, mainRevision: created.mainRevision, title };
-  };
+  const provisioned = await json<{ agent: string }>(await send('POST', '/v1/agents', {
+    profile: 'agent-provision-v1', kind: 'person', displayName: 'Catalogue fixture',
+  }), 201);
+  const editor: CataloguePort = { actor: provisioned.agent, send,
+    read: path => {
+      const url = new URL(path, session.mainOrigin);
+      url.searchParams.set('actingSubject', provisioned.agent);
+      return send('GET', `${url.pathname}${url.search}`);
+    } };
+  const work = (title: string) => createCatalogueWork(editor, title);
 
   const compose = async (whole: Work, parts: { work: Work; label: string }[]) => {
     const composition = await json<Composition>(await editor.send('POST', '/v1/compositions', { profile: 'work-composition',
@@ -139,40 +175,37 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       const response = await editor.send('PUT', `/v1/works/${short(target.work)}/realizations/${short(body.id)}`, body);
       return { id: body.id, response };
     };
-    let attempt = await write();
-    // A composition still moving the graph cancels the command. The problem asks for a new key.
-    if (attempt.response.status === 409 && (await attempt.response.clone().text()).includes('realization_basis_changed')) {
-      await new Promise(done => setTimeout(done, 1_000));
-      attempt = await write();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await readCatalogue(editor, `/v1/works/${short(target.work)}`);
+      const written = await write();
+      if (written.response.status === 409 && attempt < 3
+        && (await written.response.clone().json() as { code?: string }).code === 'realization_basis_changed') continue;
+      const result = await json<Written>(written.response);
+      return { id: written.id, revision: result.revision };
     }
-    const result = await json<Written>(attempt.response);
-    return { id: attempt.id, revision: result.revision };
+    throw new Error('Catalogue realization did not settle');
   };
 
   // The one correspondence kind the panel offers "also mark as read" for.
-  await editor.grant('semantic:create:root', 'semantic.change');
   mkdirSync(scratch, { recursive: true });
-  const current = await readDefinitionByKey(stack.env,'correspondence-equivalent',systemDisclosure);
+  const definition = await editor.read('/v1/lexicon/definitions/correspondence-equivalent');
+  const current = definition.status === 404 ? null
+    : await json<{ definition: string; revision: string }>(definition);
   // Other launch fixtures may already have admitted this stable meaning.
   // Presentation writes are closed to platform-admin; only this editor posts them.
-  if (!current) await openActorPlatformGroup(editor.principalId, 'platform-admin');
-  if (current) {
-    await editor.grant(`semantic:read:${current.definition}`,'semantic.read');
-    await grantReader(`semantic:read:${current.definition}`,'semantic.read');
-  }
+  if (!current) await openActorPlatformGroup(session.principalId, 'platform-admin');
   const definitions = current ? new Map([['correspondence-equivalent',current]]) : new Map((await seedRelationLexicon({
     post: async <T>(path: string, body: object, key: string) => json<T>(await editor.send('POST', path, body, key), 201),
-    authorizeDefinition: async receipt => {
-      await editor.grant(`semantic:read:${receipt.component}`, 'semantic.read');
-      await editor.grant(`semantic:edit:${receipt.component}`, 'lexicon.presentation.change');
-      await grantReader(`semantic:read:${receipt.component}`, 'semantic.read');
-    } }, editor.actor, `g838-${randomUUID()}`, relationLexiconSeed.filter(item => item.key === 'correspondence-equivalent'),
+    // Provisioned controller and definition-creator policy supply stewardship.
+    authorizeDefinition: async () => {},
+  }, editor.actor, `catalogue-${randomUUID()}`, relationLexiconSeed.filter(item => item.key === 'correspondence-equivalent'),
   resolve(scratch, 'lexicon.json'))).map(item => [item.key, item]));
 
   // Sword Art Online: three volumes, each in English.
   const publisher = id();
   const saoSeries = await work('Sword Art Online');
-  const saoVolumes = await Promise.all([1, 2, 3].map(number => work(`Sword Art Online, Vol. ${number}`)));
+  const saoVolumes: Work[] = [];
+  for (const number of [1, 2, 3]) saoVolumes.push(await work(`Sword Art Online, Vol. ${number}`));
   await compose(saoSeries, saoVolumes.map((volume, index) => ({ work: volume, label: String(index + 1) })));
   // One write at a time: each moves the graph the next one is checked against (409 realization_basis_changed).
   const english = [];
@@ -183,16 +216,16 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       publisher: 'Yen Press', publicationYear: 2014, isbn13: null, originalUrl: null, fixedRelease: null, evidence: null,
       identifiers: [], platform, territory: 'US',
       coverage: coverage.map(entry => ({ realization: entry.id, revision: entry.revision, completeness: 'complete' })) };
-    const send = () => editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body);
-    let response = await send();
-    // The same graph movement that cancels a realization cancels the release. The problem asks for a new key.
-    if (response.status === 409 && (await response.clone().text()).includes('release_basis_changed')) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await readCatalogue(editor, `/v1/works/${short(saoVolumes[0]!.work)}`);
       body.id = id();
-      await new Promise(done => setTimeout(done, 1_000));
-      response = await editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body);
+      const response = await editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body);
+      if (response.status === 409 && attempt < 3
+        && (await response.clone().json() as { code?: string }).code === 'release_basis_changed') continue;
+      await json(response);
+      return body.id;
     }
-    await json(response);
-    return body.id;
+    throw new Error('Catalogue release did not settle');
   };
   const paperback = await release('Sword Art Online 1: Aincrad', 'paperback', [english[0]!]);
   const audiobook = await release('Sword Art Online 1: Aincrad (audiobook)', 'audiobook', [english[0]!]);
@@ -200,7 +233,8 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
 
   // Index: volumes 1 and 2 are available in Traditional Chinese, volume 3 is not.
   const indexSeries = await work('A Certain Magical Index');
-  const indexVolumes = await Promise.all([1, 2, 3].map(number => work(`A Certain Magical Index, Vol. ${number}`)));
+  const indexVolumes: Work[] = [];
+  for (const number of [1, 2, 3]) indexVolumes.push(await work(`A Certain Magical Index, Vol. ${number}`));
   await compose(indexSeries, indexVolumes.map((volume, index) => ({ work: volume, label: String(index + 1) })));
   for (const volume of indexVolumes.slice(0, 2)) await text(volume, 'zh-Hant', publisher);
 
@@ -213,7 +247,8 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       { role: 'target', participant: { kind: 'resource', ref: book.work } }],
     evidence: 'https://example.com/relation', actingSubject: editor.actor }), 201);
   // Main withholds a relation whose occurrence the reader may not read, so the panel never hears of the counterpart.
-  await grantReader(`semantic:read:${relation.occurrence}`, 'semantic.read');
+  await grantPlatformResource(session, reader.principalId, 'semantic.read',
+    `semantic:read:${relation.occurrence}`, new Date(Date.now() + 8 * 60 * 60 * 1_000).toISOString());
 
   return { sao: { series: saoSeries, volumes: saoVolumes, paperback, audiobook, omnibus },
     index: { series: indexSeries, volumes: indexVolumes }, spider: { web, book } };

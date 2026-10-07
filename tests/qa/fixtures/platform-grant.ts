@@ -28,6 +28,15 @@ export interface PlatformUseGrant {
   group: string;
 }
 
+export interface PlatformResourceGrant {
+  grantId: string;
+  generation: string;
+  authorityEpoch: string;
+  permission: string;
+  principalId: string;
+  scopeId: string;
+}
+
 interface WebAuthPublic {
   authorizationEndpoint: string;
   tokenEndpoint: string;
@@ -99,6 +108,37 @@ export async function grantPlatformUse(session: PlatformGrantSession, principalI
   }
   return { grantId, generation: result.grant.generation, authorityEpoch: result.authorityEpoch,
     permission, principalId, group };
+}
+
+/** Grant one exact resource capability through the public Access operation.
+ * The owner checks the administrator's resource assignment ceiling. */
+export async function grantPlatformResource(session: PlatformGrantSession, principalId: string,
+  action: string, scopeId: string, validUntil: string | null = null): Promise<PlatformResourceGrant> {
+  if (!principalIdPattern.test(principalId)) throw new Error('Platform resource recipient must be a principal id');
+  if (!agentIri.test(session.actingSubject)) throw new Error('Platform grant issuer must be an agent');
+  if (!/^[a-z][a-z0-9.-]{0,99}$/.test(action)) throw new Error('Platform resource action is invalid');
+  if (!/^[^\s\0*]{1,256}$/.test(scopeId)) throw new Error('Platform resource grant needs an exact scope');
+  const permission = `platform:resource:${action}`;
+  const grantId = randomUUID();
+  const response = await grantChange(session, {
+    profile: 'platform-grant-change-v1',
+    issuerSubject: session.actingSubject,
+    expectedAuthorityEpoch: await authorityEpoch(session),
+    action: 'create',
+    grantId,
+    permission,
+    scopeId,
+    recipient: { principalId },
+    validUntil,
+  });
+  const result = await grantBody(response) as {
+    authorityEpoch?: string; grant?: { id?: string; generation?: string };
+  };
+  if (result.grant?.id !== grantId || !result.grant.generation || !result.authorityEpoch) {
+    throw new Error('Platform grant response did not confirm the issued resource grant');
+  }
+  return { grantId, generation: result.grant.generation, authorityEpoch: result.authorityEpoch,
+    permission, principalId, scopeId };
 }
 
 /** Revoke a platform:use grant issued by grantPlatformUse. The authority epoch
