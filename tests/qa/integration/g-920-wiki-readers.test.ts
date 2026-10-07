@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import type { PoolClient } from 'pg';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
@@ -844,13 +845,40 @@ test('G-920: published franchise entities, contradictory claims and relations di
     // candidates. Page cost stays independent of this subject's proposal count.
     const countRead = async () => {
       const query = f.env.fuseki.query.bind(f.env.fuseki);
+      const seek = f.statementSeek.seek.bind(f.statementSeek);
       let calls = 0,
         inventories = 0;
+      const rawBatches: { after: Parameters<typeof seek>[2]; rows: number; visited: number }[] = [];
+      const rawSql: { text: string; values: unknown[] }[] = [];
+      const originalQueries = new Map<PoolClient,PoolClient['query']>();
+      const acquire = (client: PoolClient) => {
+        const original = client.query;
+        originalQueries.set(client,original);
+        client.query = ((...args: unknown[]) => {
+          if (isForegroundOperation() && typeof args[0] === 'string'
+            && args[0].includes('FROM access.statement_seek WHERE')) {
+            rawSql.push({text: args[0],values: [...args[1] as unknown[]]});
+          }
+          return Reflect.apply(original,client,args);
+        }) as PoolClient['query'];
+      };
+      const release = (_error: Error | undefined,client: PoolClient) => {
+        const original = originalQueries.get(client);
+        if (original) client.query = original;
+        originalQueries.delete(client);
+      };
+      f.accessPool.on('acquire',acquire);
+      f.accessPool.on('release',release);
+      f.statementSeek.seek = async (...args) => {
+        const result = await seek(...args);
+        if (isForegroundOperation()) rawBatches.push({ after: args[2], rows: result.candidates.length, visited: result.visitedRows });
+        return result;
+      };
       f.env.fuseki.query = async (sparql, maxBytes) => {
         if (isForegroundOperation()) {
           calls++;
-          // Acceptance now comes from the seek index. One hydration of the
-          // disclosed statements is the inventory this page still performs.
+          // Hydration is bounded to accepted or readable published claims.
+          // Raw StatementSeek work is measured separately below.
           if (sparql.includes('GROUP_CONCAT(DISTINCT STR(?evidence)')) inventories++;
         }
         return query(sparql, maxBytes);
@@ -865,9 +893,16 @@ test('G-920: published franchise entities, contradictory claims and relations di
             .flatMap((item) => (item.kind === 'statement' ? [item.statement] : []))
             .sort(),
         ).toEqual([statement, laterStatement].sort());
-        return { calls, inventories };
+        return { calls, inventories, rawBatches, rawSql,
+          rawRows: rawBatches.reduce((sum,batch) => sum+batch.rows,0),
+          rawVisited: rawBatches.reduce((sum,batch) => sum+batch.visited,0),
+        };
       } finally {
         f.env.fuseki.query = query;
+        f.statementSeek.seek = seek;
+        f.accessPool.off('acquire',acquire);
+        f.accessPool.off('release',release);
+        for (const [client,original] of originalQueries) client.query = original;
       }
     };
     const beforeProposals = await countRead();
@@ -876,6 +911,30 @@ test('G-920: published franchise entities, contradictory claims and relations di
     const afterProposals = await countRead();
     expect(afterProposals.inventories).toBe(1);
     expect(afterProposals.calls).toBeLessThanOrEqual(beforeProposals.calls + 2);
+    // Two published claims plus the two proposals from the earlier GET/POST races.
+    expect(beforeProposals.rawRows).toBe(4);
+    expect(afterProposals.rawRows).toBe(324);
+    expect(afterProposals.rawVisited).toBe(324);
+    expect(afterProposals.rawBatches).toHaveLength(17);
+    expect(afterProposals.rawSql).toHaveLength(17);
+
+    // This leaf eliminates hydration debt, not the raw physical inventory scan.
+    // Probe the same real SQL pages outside the measured API read, with the
+    // planner's natural choices and without forcing an index or changing costs.
+    const rawPlans: unknown[] = [];
+    for (const sql of afterProposals.rawSql) {
+      const result = await f.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${sql.text}`,sql.values);
+      rawPlans.push(result.rows[0]!['QUERY PLAN']);
+    }
+    mkdirSync(resolve(root,'.temp/goal'),{recursive: true});
+    const locality = { before: { graphCalls: beforeProposals.calls, hydrations: beforeProposals.inventories,
+        seekBatches: beforeProposals.rawBatches.length, rawRows: beforeProposals.rawRows, visitedRows: beforeProposals.rawVisited },
+      after: { graphCalls: afterProposals.calls, hydrations: afterProposals.inventories,
+        seekBatches: afterProposals.rawBatches.length, rawRows: afterProposals.rawRows, visitedRows: afterProposals.rawVisited },
+      rawPlans };
+    // Persist outside the fixture directory, which its finally block removes.
+    writeFileSync(resolve(root,'.temp/goal/statement-subject-locality.json'),JSON.stringify(locality,null,2));
+    console.log(`subject Statement locality ${JSON.stringify({before: locality.before,after: locality.after})}`);
 
     const statementPath = `/v1/resources/${shortId(entity)}/statements?limit=1`;
     const first = await json<Static<typeof subjectStatementPage>>(

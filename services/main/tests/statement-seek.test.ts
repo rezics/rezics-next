@@ -43,6 +43,62 @@ test('Statement seek pages every same-meaning speaker separately with a fixed vi
   expect(seen).toEqual(rows.map(row => row.statement_id));
   expect(visits).toBe(rows.length);
 });
+
+/** Exercise the real seek and tuple cursor with a raw-reference SQL harness.
+ * Returned rows are observable here; physical database visits need EXPLAIN. */
+function rawSubjectSeek(proposals: number, eligible: number) {
+  const rows = Array.from({length: proposals + eligible}, (_, index) => ({
+    subject: id(1), predicate: 'https://rezics.com/vocab/classifiedAs',
+    meaning_key: `urn:rezics:meaning:${index.toString(16).padStart(64, '0')}`,
+    statement_id: id(index + 10), frame_refs: [],
+  }));
+  const eligibleIds = new Set(rows.slice(proposals).map(row => row.statement_id));
+  const work = {sqlCalls: 0, candidateCalls: 0, returnedRows: 0};
+  const client = {query: async (sql: string, values: string[] = []) => {
+    work.sqlCalls++;
+    if (sql.includes('through_sequence')) return {rows: [{complete: true, through_sequence: '9'}]};
+    if (!sql.includes('FROM access.statement_seek WHERE')) return {rows: []};
+    work.candidateCalls++;
+    expect(sql).toContain('data_epoch=$1 AND subject=$2 AND frame_key=$3');
+    const selected = rows.filter(row => {
+      if (values.length === 3) return true;
+      const predicate = Buffer.compare(Buffer.from(row.predicate), Buffer.from(values[3]!));
+      return predicate > 0 || predicate === 0 && (row.meaning_key > values[4]!
+        || row.meaning_key === values[4]! && row.statement_id > values[5]!);
+    }).slice(0, STATEMENT_SEEK_COST.candidates);
+    work.returnedRows += selected.length;
+    return {rows: selected};
+  }, release: () => {}};
+  return {
+    seek: new StatementSeek({connect: async () => client} as unknown as Pool,
+      {lineage: {dataEpoch: 'epoch'}} as WorkActivationEnvironment),
+    rows, eligibleIds, work,
+  };
+}
+
+for (const eligible of [0, 2]) {
+  test(`Statement raw seek advances past 320 proposal references to ${eligible ? 'late eligible rows' : 'exhaustion'}`, async () => {
+    const run = rawSubjectSeek(320, eligible);
+    const seen: string[] = [], disclosed: string[] = [];
+    let after: Parameters<StatementSeek['seek']>[2] = null;
+    for (;;) {
+      const page = await run.seek.seek({dataEpoch: 'epoch', sequence: '9'}, id(1), after);
+      expect(page.visitedRows).toBe(page.candidates.length);
+      expect(page.visitedRows).toBeLessThanOrEqual(STATEMENT_SEEK_COST.candidates);
+      seen.push(...page.candidates.map(row => row.statementId));
+      disclosed.push(...page.candidates.filter(row => run.eligibleIds.has(row.statementId))
+        .map(row => row.statementId));
+      // A full raw page can disclose nothing; its final tuple still advances.
+      if (page.candidates.length < STATEMENT_SEEK_COST.candidates) break;
+      after = page.candidates.at(-1)!;
+    }
+    expect(seen).toEqual(run.rows.map(row => row.statement_id));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(disclosed).toEqual([...run.eligibleIds]);
+    expect(run.work).toEqual({sqlCalls: 68, candidateCalls: 17, returnedRows: 320 + eligible});
+  });
+}
+
 test('Statement frame postings preserve dimension AND, alternative OR and exact specificity', () => {
   const work = id(1),position = id(2),continuity = id(3);
   const keys = statementFrameKeys([{slot: 'structure',iri: work},{slot: 'structure',iri: position},

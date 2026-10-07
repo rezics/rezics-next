@@ -288,35 +288,64 @@ export async function readSubjectStatements(
         ? { predicate: after.predicate!, meaningKey: after.meaningKey!, statementId: cursor.after, score: after.score ?? 0,
           }
         : null;
+    let rawExhausted = false;
+    const pending: { row: ReadRow; evidence: WikiEvidenceRow[] }[] = [];
     while (items.length <= limit) {
       session.checkDeadline();
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
-      const sought = await seek.seek(session.position,resource,statementAfter,frames);
-      const rows: ReadRow[] = sought.candidates.map((row) => ({
-        statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
-        key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
-      }));
-      if (scope && rows.length) {
-        const acceptance = scope.realm ? {kind: 'realm' as const,realm: scope.realm} : {kind: 'global' as const};
-        const exact = await resolveStatementAcceptancesAt(session.deps.environment,
-          rows.map((row) => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position,
-        );
-        const qualified = await resolveStatementAcceptancesAt(session.deps.environment,
-          [...new Set(rows.map((row) => row.key!.value))].map((meaningKey) => ({kind: 'qualified-fact',meaningKey,
-          })),
-          acceptance,session.position,
-        );
-        for (const row of rows) {
-          const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result,
-          ];
-          if (results.some((result) => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
-          const result = results.find((result) => result.state === 'accepted');
-          if (result?.state === 'accepted') row.acceptance = {type: 'literal',value: result.decision+'|'+result.source};
+      const page: ReadRow[] = [];
+      const wikiClaims = new Map<string,WikiEvidenceRow[]>();
+      // Coalesce eligible claims across raw batches without hydrating proposals
+      // or increasing the existing hydration/candidate bound.
+      while (page.length < batchSize && (pending.length || !rawExhausted)) {
+        if (!pending.length) {
+          session.checkDeadline();
+          const sought = await seek.seek(session.position,resource,statementAfter,frames);
+          const rows: ReadRow[] = sought.candidates.map((row) => ({
+            statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
+            key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
+          }));
+          if (scope && rows.length) {
+            const acceptance = scope.realm ? {kind: 'realm' as const,realm: scope.realm} : {kind: 'global' as const};
+            const exact = await resolveStatementAcceptancesAt(session.deps.environment,
+              rows.map((row) => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position,
+            );
+            const qualified = await resolveStatementAcceptancesAt(session.deps.environment,
+              [...new Set(rows.map((row) => row.key!.value))].map((meaningKey) => ({kind: 'qualified-fact',meaningKey,
+              })),
+              acceptance,session.position,
+            );
+            for (const row of rows) {
+              const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result,
+              ];
+              if (results.some((result) => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
+              const result = results.find((result) => result.state === 'accepted');
+              if (result?.state === 'accepted') row.acceptance = {type: 'literal',value: result.decision+'|'+result.source};
+            }
+          }
+          if (rows.some((row) => !row.statement || !row.predicate)) {
+            throw new WorkReadUnavailable('Statement inventory is incomplete');
+          }
+          const disclosed = rows.length
+            ? await readWikiClaimEvidence(session,rows.map((row) => row.statement!.value),'statement')
+            : new Map<string,WikiEvidenceRow[]>();
+          for (const row of rows) {
+            const evidence = disclosed.get(row.statement!.value) ?? [];
+            if (row.acceptance?.value || evidence.length) pending.push({row,evidence});
+          }
+          rawExhausted = rows.length < batchSize;
+          if (rows.length) {
+            const last = rows.at(-1)!;
+            statementAfter = { predicate: last.predicate!.value, meaningKey: last.key!.value, statementId: last.statement!.value,
+              score: Number(last.specificity?.value ?? 0),
+            };
+          }
         }
-      }
-      const page = rows;
-      if (page.some((row) => !row.statement || !row.predicate)) {
-        throw new WorkReadUnavailable('Statement inventory is incomplete');
+        while (page.length < batchSize && pending.length) {
+          const next = pending.shift()!;
+          page.push(next.row);
+          if (next.evidence.length) wikiClaims.set(next.row.statement!.value,next.evidence);
+        }
       }
       if (page.length) {
         const hydrated = await session.query(
@@ -371,8 +400,6 @@ export async function readSubjectStatements(
               throw error;
             }
           }),
-        );
-        const wikiClaims = await readWikiClaimEvidence(session,page.map((row) => row.statement!.value),'statement',
         );
         const allowed = await checkReferences(
           hydrated.flatMap((row) => {
@@ -519,11 +546,7 @@ export async function readSubjectStatements(
           positions.push(batchPositions[index]!);
         }
       }
-      if (rows.length < batchSize) break;
-      const last = rows.at(-1)!;
-      statementAfter = { predicate: last.predicate!.value, meaningKey: last.key!.value, statementId: last.statement!.value,
-        score: Number(last.specificity?.value ?? 0),
-      };
+      if (rawExhausted && !pending.length) break;
     }
   }
   if (frames && items.length <= limit) await appendProperties();
