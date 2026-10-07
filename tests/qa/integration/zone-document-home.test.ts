@@ -280,6 +280,45 @@ test('Realm-less site binds exact revisions; drafts stay outside and republishin
   } finally { await f.close(); }
 }, 120_000);
 
+test('local Showcase delivery applies existing schedule and live Work disclosure while exact Content stays unchanged', async () => {
+  const f = await fixture();
+  try {
+    const work = await f.json<{ work: string }>(await f.call('POST', '/v1/works',
+      await f.authoredBody({ profile: 'metadata-only-v1', title: 'Live Showcase Work', language: 'en', actingSubject: f.actor })), 201);
+    const slides: ZonePresentation['slides'] = [
+      { id: 'live-link', href: '/', title: 'Live link' },
+      { id: 'live-work', work: work.work, title: 'Live Work' },
+      { id: 'future-link', href: '/', startsAt: '2099-01-01T00:00:00.000Z' },
+      { id: 'ended-link', href: '/', endsAt: '2000-01-01T00:00:00.000Z' },
+    ];
+    const document = showcaseDocument(slides);
+    const initial = f.selection.pages[0]!;
+    const page = await f.save(document, initial.revisionId, initial.variantId);
+    await f.json(await f.publish([page]), 201);
+    const read = async () => f.json<{ presentation: ZonePresentation; home: NonNullable<Home['page']> }>(
+      await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
+    const visible = await read();
+    expect(visible.presentation.slides.map(slide => slide.id)).toEqual(['live-link', 'live-work']);
+    const exported = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(await f.exact(page.revisionId), 200);
+    expect(exported.body.document).toEqual(document);
+    // Controlled fixture preparation changes the live target's disclosure;
+    // the immutable Content revision and its publication pin never move.
+    await f.env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:disclosure ?before } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:disclosure rv:Private } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} a ?type . OPTIONAL { ${iri(work.work)} rv:disclosure ?before } } }`);
+    const hidden = await read();
+    expect(hidden.presentation.slides.map(slide => slide.id)).toEqual(['live-link']);
+    expect(hidden.home.showcases.find(showcase => showcase.id === 'block:document-showcase')?.slides)
+      .toEqual([slides[0]!]);
+    expect((await f.home()).page?.showcases.find(showcase => showcase.id === 'block:document-showcase')?.slides)
+      .toEqual([slides[0]!]);
+    expect(hidden.home.document).toEqual(document);
+    expect((await f.json<{ serializedJson: string }>(await f.exact(page.revisionId), 200)).serializedJson)
+      .toBe(exported.serializedJson);
+  } finally { await f.close(); }
+}, 120_000);
+
 test('anonymous home language preferences select only exact variants in the published bundle', async () => {
   const f = await fixture();
   try {

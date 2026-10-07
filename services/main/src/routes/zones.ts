@@ -306,11 +306,11 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: { actingSubject?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
-        return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer) => {
+        return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer, visibleSlides) => {
           let moduleData = await readZoneModuleData(work.environment, state.configuration);
           let slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
             state.presentation.slides, { environment: work.environment, zone });
-          const home = await readZoneHomeDocument(work, request, state, moduleData, slideMedia);
+          const home = await readZoneHomeDocument(work, request, state, moduleData, slideMedia, visibleSlides);
           const presentation = zonePagePresentation(home, state.presentation);
           const local = home?.showcases.find(showcase => showcase.slides !== undefined);
           if (local?.module) {

@@ -476,6 +476,24 @@ describe('the writes the editor asks Main for', () => {
     expect(calls[3]!.body.expectedHead).toBe('5a1d0000-0000-4000-8000-0000000000e2');
   });
 
+  test('rebuilding a new hero after a lost response keeps its collision-free identity and original CAS', async () => {
+    const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
+    const base = { ...document(), contentDraft: contentContext(),
+      modules: ['picks', 'showcase', 'showcase-2'].map(id => ({ id, type: 'shelf' })) };
+    const slides = stored.map(slide => draftOf(slide));
+    const first = documentFor(base, slides, 'glow', { title: 'Featured' });
+    reset({ data: { revisionId: '5a1d0000-0000-4000-8000-0000000000e2', replayed: true }, error: null });
+    loseResponse = true;
+    expect(await saveShowcase({ zone, expectedHead: head, presentation: first })).toMatchObject({ refusal: 'unavailable' });
+    const retry = documentFor(base, slides, 'glow', { title: 'Featured' });
+    expect(retry.modules[0]!.id).toBe('showcase-3');
+    expect(retry.modules).toEqual(first.modules);
+    expect(await saveShowcase({ zone, expectedHead: head, presentation: retry })).toMatchObject({ status: 'done', replayed: true });
+    expect(calls[1]).toEqual(calls[0]);
+    expect(calls[1]!.body.expectedHead).toBe(head.slice(-36));
+    expect(base.modules.map(module => module.id)).toEqual(['picks', 'showcase', 'showcase-2']);
+  });
+
   test('the Content envelope retains embeds and notes around a Showcase edit', async () => {
     const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
     const presentation = contentPresentation();

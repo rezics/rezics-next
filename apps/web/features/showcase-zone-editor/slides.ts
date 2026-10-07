@@ -268,7 +268,9 @@ export function documentFor(base: PresentationDocument, slides: readonly SlideDr
   const next: PresentationDocument = { ...base, slides: slides.map(storedSlideOf), tokens: { ...base.tokens, titleEffect: effect } };
   if (slides.length && !next.modules.some(module => module.type === 'hero-carousel')) {
     const ids = new Set(next.modules.map(module => module.id));
-    const id = ['picks', 'showcase'].find(candidate => !ids.has(candidate)) ?? newSlideId(ids);
+    let id = ['picks', 'showcase'].find(candidate => !ids.has(candidate)) ?? 'showcase-2';
+    // A retry rebuilds from the same base before setBase; its payload must keep the same identity.
+    for (let index = 3; ids.has(id); index++) id = `showcase-${index}`;
     next.modules = [{ id, type: 'hero-carousel', title: hero.title, source: { kind: 'query-block', block: 'new-adoptions' } }, ...next.modules];
   }
   if (base.contentDraft) {

@@ -252,6 +252,10 @@ test('version 2 Showcase resolves its own module, slides and effect without foll
   expect(JSON.stringify(result.document)).toBe(original);
   expect(Value.Check(ZonePageDocument, result)).toBe(true);
   expect(result.cost.responseBytes).toBe(Buffer.byteLength(JSON.stringify(result), 'utf8'));
+  const hidden = resolveZonePageDocument(document, shell, [], [], { ...data, slides: [], slideMedia: [] });
+  expect(hidden.showcases[0]!.slides).toEqual([]);
+  expect(zonePagePresentation(hidden, shell).slides).toEqual([]);
+  expect(JSON.stringify(hidden.document)).toBe(original);
 });
 
 test('local payload cardinality and slide meaning fail to opaque placeholders with unchanged exports', () => {

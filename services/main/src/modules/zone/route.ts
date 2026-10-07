@@ -243,11 +243,13 @@ async function navigationHeader(read: RouteRead, state: Publication) {
  * current disclosure reader as routes, including localized Collection names. */
 export function readZonePresentation<T>(work: MainWorkDependencies, request: Request,
   zone: string, actingSubject: string | undefined,
-  present: (state: Publication, navigation: ZoneNavigationItem[], viewer: ZoneRouteViewer) => Promise<T>) {
+  present: (state: Publication, navigation: ZoneNavigationItem[], viewer: ZoneRouteViewer,
+    visibleSlides: (slides: Publication['presentation']['slides']) => Promise<Publication['presentation']['slides']>) => Promise<T>) {
   return boundedRead(work, request, actingSubject, async read => {
     const state = await readZonePublication(work.environment, zone);
     await read.zone(state);
-    if (state.documentSite && !state.bundle) return present(state, [], read.viewer);
+    if (state.documentSite && !state.bundle) return present(state, [], read.viewer,
+      slides => visibleZoneSlides(read, slides));
     const header = await navigationHeader(read, state);
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
       ...(state.bundle ? { revision: state.bundle.navigationRevision } : {}),
@@ -268,15 +270,19 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
     }
     await read.targets([...new Set(items.map(item => item.target))]);
     return present(await visibleZonePresentation(read, state),
-      items.filter(item => read.summaries.get(item.target)), read.viewer);
+      items.filter(item => read.summaries.get(item.target)), read.viewer,
+      slides => visibleZoneSlides(read, slides));
   });
 }
 
 async function visibleZonePresentation(read: RouteRead, state: Publication): Promise<Publication> {
-  const currentSlides = state.presentation.slides.filter(slide => slideIsCurrent(slide));
+  return { ...state, presentation: { ...state.presentation, slides: await visibleZoneSlides(read, state.presentation.slides) } };
+}
+
+async function visibleZoneSlides(read: RouteRead, selected: Publication['presentation']['slides']) {
+  const currentSlides = selected.filter(slide => slideIsCurrent(slide));
   await read.targets([...new Set(currentSlides.flatMap(slide => 'work' in slide ? [slide.work] : []))]);
-  const slides = currentSlides.filter(slide => !('work' in slide) || read.summaries.get(slide.work)?.type === 'work');
-  return { ...state, presentation: { ...state.presentation, slides } };
+  return currentSlides.filter(slide => !('work' in slide) || read.summaries.get(slide.work)?.type === 'work');
 }
 
 async function mountAt(read: RouteRead, state: Publication, header: CompositionHeader, segment: string) {
@@ -419,7 +425,8 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       throw new ZoneRouteMissing('Zone site has not been published');
     }
     if (path.kind === 'home') {
-      const page = await readZoneHomeDocument(work, request, await visibleZonePresentation(read, state));
+      const page = await readZoneHomeDocument(work, request, await visibleZonePresentation(read, state),
+        undefined, undefined, slides => visibleZoneSlides(read, slides));
       return { ...basis, kind: 'home', ...(page ? { page } : {}) };
     }
     if (path.kind === 'work') {

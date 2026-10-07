@@ -129,7 +129,8 @@ export { readZoneCampaignArt } from './campaign-art.ts';
 export async function readZoneHomeDocument(work: MainWorkDependencies, request: Request,
   state: Awaited<ReturnType<typeof readZonePublication>>,
   moduleData?: Awaited<ReturnType<typeof readZoneModuleData>>,
-  slideMedia?: Awaited<ReturnType<typeof readZoneCampaignArt>>): Promise<ZonePublicPage | null> {
+  slideMedia?: Awaited<ReturnType<typeof readZoneCampaignArt>>,
+  visibleSlides?: (slides: typeof state.presentation.slides) => Promise<typeof state.presentation.slides>): Promise<ZonePublicPage | null> {
   if (!state.bundle || state.disclosure !== 'public') return null;
   const pages = state.bundle.pages.filter(page => page.page === state.zone);
   const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
@@ -153,16 +154,18 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
   const local = zoneDocumentShowcase(document);
   let localData: Parameters<typeof resolveZonePageDocument>[4];
   if (local) {
+    if (!visibleSlides) throw new ZoneUnavailable('Zone slide disclosure reader is unavailable');
+    const slides = await visibleSlides(local.payload['rv:slides']);
     // The payload owns curated choices. Live definitions, collection members and
     // media still pass through the same bounded disclosure owners as legacy Zones.
     const presentation = { ...state.presentation, modules: local.payload['rv:module'],
-      slides: local.payload['rv:slides'] };
+      slides };
     const [modules, media] = await Promise.all([
       readZoneModuleData(work.environment, { ...state.configuration, presentation }),
       readZoneCampaignArt(work.media?.store, state.realm, presentation.slides,
         { environment: work.environment, zone: state.zone }),
     ]);
-    localData = { sources: modules[0]?.sources ?? [], slideMedia: media };
+    localData = { sources: modules[0]?.sources ?? [], slideMedia: media, slides };
   }
   const resolved = resolveZonePageDocument(document, state.presentation,
     moduleData ?? await readZoneModuleData(work.environment, state.configuration),

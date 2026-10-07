@@ -142,7 +142,8 @@ export type ZonePageDocument = Static<typeof ZonePageDocument>;
  * or executed, and the original body survives unchanged for export. */
 export function resolveZonePageDocument(document: DocumentSnapshot,
   presentation: ZonePresentation, moduleData: ModuleData, slideMedia: SlideMedia,
-  localData?: { sources: ModuleData[number]['sources']; slideMedia: SlideMedia }): ZonePageDocument {
+  localData?: { sources: ModuleData[number]['sources']; slideMedia: SlideMedia;
+    slides?: ZonePresentation['slides'] }): ZonePageDocument {
   const local = zoneDocumentShowcase(document);
   if (presentation.modules.length > ZONE_DOCUMENT_COST.maxShowcases - 1
     || presentation.slides.length > ZONE_DOCUMENT_COST.maxSlides
@@ -179,7 +180,7 @@ export function resolveZonePageDocument(document: DocumentSnapshot,
         // Block identity keeps this independent of a retained v1 module with the same slug.
         const id = `block:${identity.id}`;
         showcases.set(id, { id, module: payload['rv:module'][0]!, sources: localData?.sources ?? [],
-          slides: payload['rv:slides'], titleEffect: payload['rv:titleEffect'][0]!,
+          slides: localData?.slides ?? payload['rv:slides'], titleEffect: payload['rv:titleEffect'][0]!,
           slideMedia: localData?.slideMedia ?? [] });
         blocks.push({ ...identity, status: 'resolved', kind: 'showcase', showcase: id });
       }
