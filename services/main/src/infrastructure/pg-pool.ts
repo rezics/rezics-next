@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 
 /**
  * Session defaults for every request-serving PostgreSQL pool. Request paths
@@ -99,7 +100,7 @@ function trackNestedCheckout(pool: Pool): void {
         }
         return Promise.reject(error);
       }
-      console.error(error);
+      logWorkerFault('main.database.nested-checkout', error);
     }
     if (typeof callback === 'function') {
       // pool.query checks a client out and releases it before resolving, so
@@ -153,7 +154,7 @@ export function boundedPool(config: PoolConfig, bounds: ConnectionBounds = CONNE
     connectionTimeoutMillis: checkoutWait(config.connectionTimeoutMillis),
     options: connectionBoundOptions(config.options, bounds),
   });
-  const failed = (error: Error) => console.error('Database connection failed:', error.message);
+  const failed = (error: Error) => logWorkerFault('main.database.connection', error);
   pool.on('error', failed);
   pool.on('connect', client => { client.on('error', failed); });
   trackNestedCheckout(pool);

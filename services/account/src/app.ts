@@ -1,5 +1,6 @@
 import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
 import { httpTelemetry } from '@rezics/observability/elysia';
+import { logWorkerFault } from '@rezics/observability/log';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
 import { Pool } from 'pg';
@@ -68,7 +69,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   // the pending query and emit an unhandled client error before the caller
   // returns its unavailable response. Keep one listener for each client.
   const idleConnectionError = (error: Error) => {
-    console.error('Account database idle connection failed:', error.message);
+    logWorkerFault('account.database.idle_connection', error);
   };
   const observePool = (databasePool: Pool): Pool => {
     const observed = new WeakSet<object>();
@@ -78,7 +79,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       observed.add(client);
       client.on('error', (error: Error) => {
         if (client.listenerCount('error') === 1) {
-          console.error('Account database active connection failed:', error.message);
+          logWorkerFault('account.database.active_connection', error);
         }
       });
     });

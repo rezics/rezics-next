@@ -51,12 +51,10 @@ test('a caller checkout wait is kept and a non-positive wait cannot wait forever
 
 test('a second checkout of a held pool is reported and a finished checkout is not', async () => {
   const previous = nestedPoolCheckoutMode();
-  const logged: unknown[] = [];
+  const logged: string[] = [];
   const original = console.error;
   console.error = (...args: unknown[]) => {
-    logged.push(args[0]);
-    if (args[0] instanceof NestedPoolCheckoutError || args[0] === 'Database connection failed:') return;
-    original(...args);
+    logged.push(args.map(String).join(' '));
   };
   const refused = { connectionString: 'postgres://u@127.0.0.1:1/none', max: 2, connectionTimeoutMillis: 200 };
   const callbackPool = boundedPool(refused);
@@ -76,13 +74,17 @@ test('a second checkout of a held pool is reported and a finished checkout is no
     const held = throwPool.connect();
     await expect(throwPool.connect()).rejects.toBeInstanceOf(NestedPoolCheckoutError);
     await expect(throwPool.query('SELECT 1')).rejects.toBeInstanceOf(NestedPoolCheckoutError);
-    expect(logged.some(item => item instanceof NestedPoolCheckoutError)).toBe(false);
+    expect(logged.some(item => JSON.parse(item)['error.class'] === 'NestedPoolCheckoutError')).toBe(false);
     await held.catch(() => undefined);
 
     setNestedPoolCheckoutMode('log');
     const first = logPool.connect();
     const second = logPool.connect();
-    expect(logged.some(item => item instanceof NestedPoolCheckoutError)).toBe(true);
+    expect(logged.map(item => JSON.parse(item))).toContainEqual({
+      level: 'error', event: 'worker_fault',
+      'rezics.worker.name': 'main.database.nested-checkout',
+      'error.class': 'NestedPoolCheckoutError',
+    });
     const loggedError = await second.then(() => undefined, (error: unknown) => error);
     expect(loggedError).not.toBeInstanceOf(NestedPoolCheckoutError);
     await first.catch(() => undefined);

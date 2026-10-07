@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { normalizeAddressAlias, InvalidAddressAlias } from '@rezics/model/address/aliases';
 import {
   DATASET,
@@ -40,7 +41,7 @@ export async function migrateGraphAliases(env: WorkActivationEnvironment) {
     await importGraphAliases(env);
     return { status: 'complete' as const };
   } catch (error) {
-    console.warn('Alias import deferred; identity addresses remain available', error);
+    logWorkerFault('main.address.alias-import', error);
     return { status: 'deferred' as const };
   }
 }
@@ -232,11 +233,7 @@ async function importAliasRows(
           throw error;
         await client.query('ROLLBACK TO SAVEPOINT import_name');
         const reason = error instanceof Error ? error.message : String(error);
-        console.warn('Skipped legacy alias; holder uses its identity address', {
-          source: row.source?.value,
-          key: row.key?.value,
-          reason,
-        });
+        logWorkerFault('main.address.alias-import.skip', error);
         await client.query(
           `INSERT INTO access.alias_graph_import_report(data_epoch,source,reason,legacy_alias,attempted_at)
           VALUES ($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(data_epoch,source) DO UPDATE SET
