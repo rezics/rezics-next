@@ -1,3 +1,4 @@
+// sql-relations-allow: verification.lineage_change_head -- Isolated upgrade fixture restores the applied 1520 cut and proves its singleton is dropped by the forward migration.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
