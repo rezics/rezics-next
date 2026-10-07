@@ -211,7 +211,8 @@ export async function seedShowcaseSlides(state: SeedState) {
   await grantOfficialZoneSeed({ ...operatorInput, ownerAccountSubject: realm.steward.accountId,
     actingSubject: realm.steward.actingSubject }, zone);
   const head = await readOrCreateOfficialZone(state.api, { zone, space: realm.receipt.space,
-    actor: realm.steward.actingSubject, token: realm.steward.token, key: seedKey('zone', showcaseZone) });
+    actor: realm.steward.actingSubject, token: realm.steward.token, key: seedKey('zone', showcaseZone),
+    operatorApi: operatorSession.api, operatorToken: operatorSession.token });
   const campaignArt = await seedCampaignArt(state, realm.steward, operatorInput, zone, realm.receipt.realm,
     retainedSlides(head.configuration.presentation));
   const slides = showcaseSlides(id => state.created.get(id)?.work ?? state.publicWorks.get(id)?.work.work, campaignArt);

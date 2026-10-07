@@ -42,6 +42,10 @@ function client(respond: (call: Call, calls: Call[]) => unknown) {
     async get<T>(path: string, token: string): Promise<T> {
       const call = { method: 'GET', path, token };
       calls.push(call);
+      if (path === '/v1/themes/execution-control') {
+        if (token === 'denied') throw problem(403, 'theme_approval_denied');
+        return { disabled: false } as T;
+      }
       return (await respond(call, calls)) as T;
     },
     async post<T>(path: string, body: unknown, token: string, key: string): Promise<T> {
@@ -55,7 +59,8 @@ function client(respond: (call: Call, calls: Call[]) => unknown) {
       return (await respond(call, calls)) as T;
     },
   } satisfies ZoneSeedApi;
-  return { api, calls, writes: () => calls.filter((call) => call.method !== 'GET') };
+  return { api, calls, writes: () => calls.filter((call) => call.method !== 'GET'),
+    operator: { operatorApi: api, operatorToken: 'operator' as const } };
 }
 
 const identity = { zone, actor, token: 'steward' };
@@ -65,6 +70,7 @@ describe('Official Zone placement on a persistent stack', () => {
     const fixture = client(() => head(layout));
     const found = await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:zone:fiction',
     });
@@ -80,7 +86,7 @@ describe('Official Zone placement on a persistent stack', () => {
       ],
       key: (current, variant) => `config:${current.slice(-4)}${variant}`,
     });
-    expect(fixture.calls.map((call) => call.method)).toEqual(['GET']);
+    expect(fixture.calls.map((call) => call.method)).toEqual(['GET', 'GET']);
     expect(fixture.writes()).toEqual([]);
   });
 
@@ -93,6 +99,7 @@ describe('Official Zone placement on a persistent stack', () => {
     });
     const found = await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:zone:fiction',
     });
@@ -125,6 +132,7 @@ describe('Official Zone placement on a persistent stack', () => {
     const before = fixture.calls.length;
     const again = await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:zone:fiction',
     });
@@ -139,7 +147,7 @@ describe('Official Zone placement on a persistent stack', () => {
       ],
       key: () => 'unused',
     });
-    expect(fixture.calls.slice(before).map((call) => call.method)).toEqual(['GET']);
+    expect(fixture.calls.slice(before).map((call) => call.method)).toEqual(['GET', 'GET']);
   });
 
   test('a missing Zone is created with the original body, then its layout is written', async () => {
@@ -158,6 +166,7 @@ describe('Official Zone placement on a persistent stack', () => {
     });
     const found = await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:zone:books',
     });
@@ -191,6 +200,7 @@ describe('Official Zone placement on a persistent stack', () => {
     });
     await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:wiki-zone:franchise-wiki',
       name: 'Franchise Wiki',
@@ -226,6 +236,7 @@ describe('Official Zone placement on a persistent stack', () => {
     });
     const found = await readOrCreateOfficialZone(fixture.api, {
       ...identity,
+      ...fixture.operator,
       space,
       key: 'dev-seed:v1:zone:mods',
     });
@@ -239,7 +250,7 @@ describe('Official Zone placement on a persistent stack', () => {
     expect(fixture.writes().map((call) => [call.method, call.path])).toEqual([
       ['POST', '/v1/zones'],
     ]);
-    expect(fixture.calls.filter((call) => call.method === 'GET')).toHaveLength(2);
+    expect(fixture.calls.filter((call) => call.method === 'GET')).toHaveLength(3);
   });
 
   test('a create conflict leaves the failure in place when the Zone is still absent', async () => {
@@ -248,8 +259,30 @@ describe('Official Zone placement on a persistent stack', () => {
       throw problem(409, 'idempotency_conflict');
     });
     await expect(
-      readOrCreateOfficialZone(fixture.api, { ...identity, space, key: 'dev-seed:v1:zone:games' }),
+      readOrCreateOfficialZone(fixture.api, {
+        ...identity,
+        ...fixture.operator,
+        space,
+        key: 'dev-seed:v1:zone:games',
+      }),
     ).rejects.toThrow('idempotency_conflict');
+  });
+
+  test('a denied operator is not treated as an absent Zone', async () => {
+    const fixture = client((call) => {
+      if (call.method === 'GET') throw problem(404, 'zone_unavailable');
+      return { zone };
+    });
+    await expect(
+      readOrCreateOfficialZone(fixture.api, {
+        ...identity,
+        operatorApi: fixture.api,
+        operatorToken: 'denied',
+        space,
+        key: 'dev-seed:v1:zone:denied',
+      }),
+    ).rejects.toThrow('Seed operator is not authorized');
+    expect(fixture.writes()).toEqual([]);
   });
 
   test('other create and read failures propagate without a second write', async () => {
@@ -259,6 +292,7 @@ describe('Official Zone placement on a persistent stack', () => {
     await expect(
       readOrCreateOfficialZone(refused.api, {
         ...identity,
+        ...refused.operator,
         space,
         key: 'dev-seed:v1:zone:kitchen',
       }),
@@ -272,6 +306,7 @@ describe('Official Zone placement on a persistent stack', () => {
     await expect(
       readOrCreateOfficialZone(rejected.api, {
         ...identity,
+        ...rejected.operator,
         space,
         key: 'dev-seed:v1:zone:software',
       }),

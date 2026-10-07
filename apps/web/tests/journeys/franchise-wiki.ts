@@ -271,9 +271,13 @@ export function registerFranchiseWikiJourney(viewports: readonly { name: 'phone'
     await expect(search).toBeEnabled();
     await search.focus();
     await page.keyboard.type('Chapter 2');
-    const option = page.getByRole('option', { name: 'Chapter 2' });
+    // The same search also lists Chapter 20 and the rest of that page.
+    const option = page.getByRole('option', { name: 'Chapter 2', exact: true });
     await expect(option).toBeVisible({ timeout: 60_000 });
-    await page.keyboard.press('ArrowDown');
+    for (let step = 0; step < 8 && (await option.getAttribute('data-highlighted')) === null; step++) {
+      await page.keyboard.press('ArrowDown');
+    }
+    await expect(option).toHaveAttribute('data-highlighted', '');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\?position=[0-9a-f-]{36}$/);
     await expect(page.locator('[data-position-current]')).toContainText('Up to: Chapter 2');

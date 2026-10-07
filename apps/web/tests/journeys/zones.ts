@@ -218,20 +218,45 @@ export function registerZonesJourney(viewports: readonly { name: 'phone' | 'desk
     test.setTimeout(120_000);
     await page.goto(localizedPath(spaceHref('visual-novels', 'site', ['browse']), 'en'));
     await ready(page);
-    // Native selects take letters; Tab moves on and Enter submits.
+    // Each field is an Ark combobox. ArrowDown opens it, arrows move to the
+    // option, Enter commits it, and Tab leaves for the next field.
     const form = page.getByRole('form', { name: 'Find a playable release' });
-    await form.getByLabel('Language').focus();
-    await page.keyboard.type('English');
-    await page.keyboard.press('Tab');
-    await expect(form.getByLabel('Platform')).toBeFocused();
-    await page.keyboard.type('Windows');
-    await page.keyboard.press('Tab');
-    await expect(form.getByLabel('Completeness')).toBeFocused();
-    await page.keyboard.type('Complete');
-    await page.keyboard.press('Tab');
-    await expect(form.getByLabel('Translation')).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(form.getByRole('button', { name: 'Show matching novels' })).toBeFocused();
+    const pick = async (name: string, option: string) => {
+      const combo = form.getByRole('combobox', { name, exact: true });
+      // Focus and the opening key must not share one turn: a key sent while the
+      // control is still idle is ignored, and the list stays closed.
+      await expect(async () => {
+        await combo.focus();
+        await expect(combo).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(combo).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 });
+      }).toPass();
+      const item = page.getByRole('option', { name: option, exact: true });
+      await expect(item).toBeVisible();
+      for (let step = 0; step < 16 && (await item.getAttribute('data-highlighted')) === null; step++) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await expect(item).toHaveAttribute('data-highlighted', '');
+      await page.keyboard.press('Enter');
+      await expect(combo).toContainText(option);
+    };
+    const nextField = async (from: string, to: string, role: 'combobox' | 'button' = 'combobox') => {
+      const current = form.getByRole('combobox', { name: from, exact: true });
+      const target = form.getByRole(role, { name: to, exact: true });
+      // A Tab sent while the list is still closing stays on the field that just closed.
+      await expect(async () => {
+        await current.focus();
+        await page.keyboard.press('Tab');
+        await expect(target).toBeFocused({ timeout: 1_000 });
+      }).toPass();
+    };
+    await pick('Language', 'English');
+    await nextField('Language', 'Platform');
+    await pick('Platform', 'Windows');
+    await nextField('Platform', 'Completeness');
+    await pick('Completeness', 'Complete');
+    await nextField('Completeness', 'Translation');
+    await nextField('Translation', 'Show matching novels', 'button');
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(
       /releaseLanguage=en&releasePlatform=Windows&releaseCompleteness=complete/,

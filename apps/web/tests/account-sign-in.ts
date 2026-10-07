@@ -8,8 +8,11 @@ export async function signInAtAccounts(
   member: { email: string; password: string },
   onboard = false,
 ): Promise<void> {
+  const target = next.split(/[?#]/)[0] ?? next;
+  // A canonical Work address keeps the id and appends -{title}. That is the same destination.
   const finished = (url: URL) =>
-    url.pathname === next || (onboard && url.pathname === '/en/onboarding');
+    url.pathname === target || url.pathname.startsWith(`${target}-`)
+    || (onboard && url.pathname === '/en/onboarding');
   // Dispose an auth/start document reached by an expired-session navigation
   // before its mount effect can compete with this sign-in.
   await page.goto('about:blank');

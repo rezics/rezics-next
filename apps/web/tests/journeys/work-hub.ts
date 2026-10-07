@@ -13,6 +13,7 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import { axeViolations, formatViolations } from '../a11y-axe.ts';
+import { signInAtAccounts } from '../account-sign-in.ts';
 import type { Hub } from '../g-850-seed.ts';
 import { chooseOption } from '../g-934-choose.ts';
 
@@ -79,29 +80,15 @@ export function registerWorkHubJourney(phone: { width: number; height: number } 
   }
 
   /**
-   * The sign-in journey of `account-sign-in.ts`, bounded and retried: on a loaded host the Accounts site is
-   * sometimes slow to answer. The Accounts origin is whatever the web app redirects to.
+   * Either the Accounts sign-in page, or a direct return when this browser already has a session.
+   * `account-sign-in.ts` continues the journey in both cases.
    */
   async function signIn(
     page: Page,
     next: string,
     member: { email: string; password: string },
   ): Promise<void> {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
-        await page.waitForURL((url) => url.pathname === '/sign-in', { timeout: 40_000 });
-        await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
-        await page.getByRole('textbox', { name: 'Email' }).fill(member.email);
-        await page.getByRole('button', { name: 'Next' }).click();
-        await page.getByLabel('Enter your password').fill(member.password);
-        await page.getByRole('button', { name: 'Next' }).click();
-        await expect(page).toHaveURL(next, { timeout: 40_000 });
-        return;
-      } catch (error) {
-        if (attempt === 2) throw error;
-      }
-    }
+    await signInAtAccounts(page, next, member);
   }
 
   /** A device: its own browser context, signed in as the reader, at the first page it is asked for. */
@@ -166,9 +153,11 @@ export function registerWorkHubJourney(phone: { width: number; height: number } 
 
     // Volume 1 has an audiobook and a paperback in English: choose the audiobook and save it.
     await choose.click();
-    await expect(page).toHaveURL(
-      new RegExp(localizedPath(`${resourceHref('/w/', uuid(one!.work))}#availability$`, 'en')),
-    );
+    const volumeAddress = (id: string, tail = '') => {
+      const base = localizedPath(resourceHref('/w/', id), 'en').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`${base}(?:-[^/?#]+)?${tail}$`);
+    };
+    await expect(page).toHaveURL(volumeAddress(uuid(one!.work), '#availability'));
     const availability = page.getByRole('region', { name: 'Your edition and availability' });
     await expect(availability).toBeVisible();
     await chooseOption(availability, page, 'Edition', 'Sword Art Online 1: Aincrad (audiobook)');
@@ -223,7 +212,7 @@ export function registerWorkHubJourney(phone: { width: number; height: number } 
     });
     await info.attach('series-phone', { body: await page.screenshot(), contentType: 'image/png' });
     await primary(page).click();
-    await expect(page).toHaveURL(localizedPath(resourceHref('/w/', uuid(two!.work)), 'en'));
+    await expect(page).toHaveURL(volumeAddress(uuid(two!.work)));
     await expect(
       page.getByRole('heading', { level: 1, name: 'Sword Art Online, Vol. 2' }),
     ).toBeVisible();

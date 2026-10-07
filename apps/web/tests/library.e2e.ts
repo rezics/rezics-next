@@ -77,7 +77,7 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
   page,
   context,
 }, info) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   await signInAtAccounts(page, '/en/library', member());
   await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
   if (await page.getByRole('heading', { name: 'This identity has no library' }).isVisible()) {
@@ -86,6 +86,25 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
       `/en/identity?next=${encodeURIComponent('/en/library')}`,
     );
     return;
+  }
+  // An import journey in the same stack shelves books for this member first.
+  // The overview has no selection control; each status shelf does.
+  if (!(await page.getByRole('heading', { level: 2, name: 'Your library starts here' }).isVisible())) {
+    for (const shelf of ['want-to-read', 'read', 'reading']) {
+      await page.goto(`/en/library?shelf=${shelf}`);
+      const select = page.getByRole('button', { name: 'Select', exact: true });
+      try {
+        await select.waitFor({ state: 'visible', timeout: 8_000 });
+      } catch {
+        continue;
+      }
+      await select.click();
+      await page.getByRole('checkbox', { name: 'Select all on this page' }).check();
+      await page.getByRole('toolbar', { name: 'Selected works' })
+        .getByRole('button', { name: 'Remove from library' }).click();
+      await expect(page.getByText(/Removed \d+ works?\./)).toBeVisible({ timeout: 30_000 });
+    }
+    await page.goto('/en/library');
   }
   await expect(
     page.getByRole('heading', { level: 2, name: 'Your library starts here' }),
@@ -99,7 +118,11 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
   // Shelved on its page, the Work is in Library under Want to read.
   await page.goto(localizedPath(resourceHref('/w/', seed.work.slice(-36)), 'en'));
   await page.getByRole('button', { name: 'Want to read', exact: true }).click();
-  await expect(page.getByRole('button', { name: /^Want to read — Shelve/ })).toBeVisible();
+  const shelved = page.getByRole('button', { name: /^Want to read — Shelve/ });
+  // The label appears while the save is still in flight. Leave only after it has settled.
+  await expect(shelved).toBeVisible();
+  await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 30_000 });
+  await expect(shelved).toBeVisible();
   await page.goto('/en/library');
   await expect(shelves(page).getByRole('link', { name: 'Want to read 1' })).toHaveAttribute(
     'href',
@@ -122,8 +145,11 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
   });
 
   // On Read, reading dates are set in place and survive a reload.
-  await shelves(page).getByRole('link', { name: 'Read 1' }).click();
-  await expect(page).toHaveURL(/\/en\/library\?shelf=read$/);
+  // The move refreshes this page; a click during that refresh does not change the address.
+  await expect(async () => {
+    await shelves(page).getByRole('link', { name: 'Read 1' }).click();
+    await expect(page).toHaveURL(/\/en\/library\?shelf=read$/, { timeout: 4_000 });
+  }).toPass({ timeout: 20_000 });
   await page.getByRole('button', { name: `Add dates — ${seed.title}` }).click();
   const dates = page.getByRole('dialog', { name: `Reading dates for “${seed.title}”` });
   await dates.getByLabel('Started').fill('2026-01-02');
@@ -133,16 +159,16 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
   await page.reload();
   await expect(page.getByText('Read Jan 2 – 12, 2026')).toBeVisible();
 
-  // Who can see the shelves is chosen here and kept by Main.
-  await page.getByRole('button', { name: 'Who can see your reading shelves: Everyone' }).click();
-  await page.getByRole('menuitemradio', { name: /^Only you/ }).click();
+  // Status shelves stay private until the reader publishes them, and that choice is kept by Main.
+  await page.getByRole('button', { name: 'Who can see your reading shelves: Only you' }).click();
+  await page.getByRole('menuitemradio', { name: /^Everyone/ }).click();
   await expect(
-    page.getByRole('button', { name: 'Who can see your reading shelves: Only you' }),
+    page.getByRole('button', { name: 'Who can see your reading shelves: Everyone' }),
   ).toBeVisible();
   await expect(async () => {
     await page.reload();
     await expect(
-      page.getByRole('button', { name: 'Who can see your reading shelves: Only you' }),
+      page.getByRole('button', { name: 'Who can see your reading shelves: Everyone' }),
     ).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 

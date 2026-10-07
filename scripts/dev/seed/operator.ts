@@ -4,6 +4,9 @@ import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
 import { PLATFORM_ACTION, PLATFORM_SCOPE } from '../../../services/main/src/modules/suitability/store.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
+import { proveOperatorAuthority } from './zones.ts';
+
+export { proveOperatorAuthority };
 
 export interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
   accountDatabaseUrl: string; accountSecret: string; accessDatabaseUrl: string;

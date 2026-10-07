@@ -25,7 +25,12 @@ type Stack = Awaited<ReturnType<typeof startMediaStack>>;
 const ID = 'https://rezics.com/id/';
 const short = (iri: string) => iri.slice(-36);
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
-const id = () => `${ID}${randomUUID()}`;
+function fixtureUuid(name: string): string {
+  const hex = createHash('sha256').update(`rezics-wiki-fixture:${name}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+const fixtureId = (name: string) => `${ID}${fixtureUuid(name)}`;
+const fixtureKey = (name: string) => `wiki-fixture:${name}`;
 const root = resolve(import.meta.dir, '../../..');
 
 interface Manifest {
@@ -113,23 +118,25 @@ export type SeededWiki = WikiSeed & { read: (path: string, token?: string | null
 
 export async function seedWiki(stack: Stack, reader: Reader | null): Promise<SeededWiki> {
   const spec = manifest();
-  const holder = await stack.member('wiki-holder');
-  const steward = await stack.member('wiki-steward');
-  const reviewer = await stack.member('wiki-theme-reviewer');
+  const holder = await stack.member('wiki-holder', { stable: true });
+  const steward = await stack.member('wiki-steward', { stable: true });
+  const reviewer = await stack.member('wiki-theme-reviewer', { stable: true });
   const tokens = new Map([[holder.token, holder.principal], [steward.token, steward.principal]]);
   const { objects, app } = wikiApp(stack, tokens);
   await objects.initialize();
   const json = async <T>(response: Response, status = 200, label = response.url): Promise<T> => {
     const text = await response.text();
-    if (response.status !== status) throw new Error(`${label}: expected ${status}, got ${response.status}: ${text.slice(0, 600)}`);
+    // A stable key replays the first admission as 200 instead of creating the resource again.
+    const replayed = status === 201 && response.status === 200 && text.includes('"replayed":true');
+    if (response.status !== status && !replayed) throw new Error(`${label}: expected ${status}, got ${response.status}: ${text.slice(0, 600)}`);
     return JSON.parse(text) as T;
   };
-  const wiki = (method: string, path: string, body?: object, token = holder.token, key = randomUUID()) => app.handle(
+  const wiki = (method: string, path: string, body?: object, token = holder.token, key = fixtureKey(path)) => app.handle(
     new Request(`http://main.local${path}`, { method, headers: { authorization: `Bearer ${token}`, 'idempotency-key': key,
       ...body ? { 'content-type': 'application/json' } : {} }, ...body ? { body: JSON.stringify(body) } : {} }));
   /** Commands Main settles in the background answer 202 until they finish. */
   const settle = async <T>(send: (key: string) => Promise<Response>, status: number, label: string): Promise<T> => {
-    const key = randomUUID();
+    const key = fixtureKey(label.replace(/[^A-Za-z0-9:_./-]/g, '-'));
     for (let attempt = 0; attempt < 120; attempt++) {
       const response = await send(key);
       if (response.status !== 202) return json<T>(response, status, label);
@@ -154,14 +161,14 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   const types = ['https://schema.org/Book'];
   const title = 'Pride and Prejudice';
   const created = await activateMetadataWork(stack.env, { title, language: 'en', semanticTypes: types,
-    admission: stack.admission(holder.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types, 'en')) });
-  const english = await stack.contribution(created.work, holder.actor, 'en', 'Pride and Prejudice, chapters 1–3');
-  await stack.contribution(created.work, holder.actor, 'fr', 'Orgueil et Préjugés, chapitres 1–3');
+    admission: stack.stableAdmission(holder.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types, 'en'), 'wiki-work') });
+  const english = await stack.contribution(created.work, holder.actor, 'en', 'Pride and Prejudice, chapters 1–3', 'wiki-en');
+  await stack.contribution(created.work, holder.actor, 'fr', 'Orgueil et Préjugés, chapitres 1–3', 'wiki-fr');
   const selection = { context: { kind: 'main-version-default' as const, id: created.mainVersion }, work: created.work,
     contribution: english.contribution, publicationDecision: english.decision, expectedSelectionHead: null,
     selectionBasis: 'main-maintainer' as const, actingSubject: holder.actor };
-  await selectMainDefault(stack.env, stack.admission(holder.actor, `publication:select:${created.mainVersion}`,
-    'publication.select', mainSelectionDigest(selection)), selection);
+  await selectMainDefault(stack.env, stack.stableAdmission(holder.actor, `publication:select:${created.mainVersion}`,
+    'publication.select', mainSelectionDigest(selection), 'wiki-selection'), selection);
   const work = created.work;
   await holder.grant(`work:read:${work}`, 'work.read'); await holder.grant(`work:edit:${work}`, 'work.edit');
   await steward.grant(`work:read:${work}`, 'work.read'); await steward.grant(`work:review:${work}`, 'work.review');
@@ -178,24 +185,35 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   await holder.grant('space:create:root', 'space.create');
   const space = await json<{ space: string; realm: string }>(await wiki('POST', '/v1/spaces', { profile: 'space-realm-v2',handle: spec.routeSegment,
     name: spec.name, capabilities: ['realm'], actingSubject: holder.actor }), 201);
-  const zone = id();
+  const zone = fixtureId('wiki-zone');
   await holder.grant(`zone:edit:${zone}`, 'zone.edit'); await holder.grant(`semantic:read:${zone}`, 'semantic.read');
   await holder.grant(`zone:official:${zone}`, 'zone.official');
   let navigation = await json<{ revision: string }>(await wiki('POST', '/v1/zones', { zone, space: space.space,
     disclosure: 'public', name: spec.name, language: spec.language, actingSubject: holder.actor }), 201);
   const collections: Record<string, string> = {};
   for (const mount of spec.mounts) {
-    const collection = id();
+    const collection = fixtureId(`wiki-collection:${mount.id}`);
     collections[mount.id] = collection;
     await holder.grant(`collection:edit:${collection}`, 'collection.edit'); await steward.grant(`collection:edit:${collection}`, 'collection.edit');
     await holder.grant(`semantic:read:${collection}`, 'semantic.read');
     const made = await json<{ structure: string; revision: string }>(await wiki('POST', '/v1/collections', { collection,
-      name: mount.name, language: spec.language, disclosure: 'public', actingSubject: holder.actor }), 201);
-    if (mount.id === 'franchise') await json(await wiki('POST', `/v1/collections/${short(collection)}/changes`, {
-      expectedHead: made.revision, actingSubject: holder.actor, operations: [{ op: 'insert', parent: made.structure, role: 'member',
-        position: 'last', target: work }] }));
+      name: mount.name, language: spec.language, disclosure: 'public', actingSubject: holder.actor }, holder.token,
+    fixtureKey(`collection:${mount.id}`)), 201);
+    if (mount.id === 'franchise') {
+      const membersBody = { expectedHead: made.revision, actingSubject: holder.actor, operations: [{ op: 'insert', parent: made.structure, role: 'member',
+        position: 'last', target: work }] };
+      const membersPath = `/v1/collections/${short(collection)}/changes`;
+      // A write still moving the graph cancels this insert. The same key would replay that cancellation.
+      let members = await wiki('POST', membersPath, membersBody, holder.token, fixtureKey('franchise-members'));
+      if (members.status === 409 && (await members.clone().text()).includes('read_basis_changed')) {
+        await new Promise(done => setTimeout(done, 1_000));
+        members = await wiki('POST', membersPath, membersBody, holder.token, fixtureKey('franchise-members-again'));
+      }
+      await json(members);
+    }
     navigation = await json(await wiki('POST', `/v1/zones/${short(zone)}/mounts`, { expectedHead: navigation.revision,
-      target: collection, routeSegment: mount.routeSegment, position: 'last', disclosure: 'public', actingSubject: holder.actor }));
+      target: collection, routeSegment: mount.routeSegment, position: 'last', disclosure: 'public', actingSubject: holder.actor },
+    holder.token, fixtureKey(`mount:${mount.id}`)));
   }
 
   // Definitions the bundle's claims use: a property, and two relations with labels in English and Japanese.
@@ -203,17 +221,18 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   await steward.grant('relation:create:root', 'relation.change');
   await steward.grant(`statement:speak:${steward.actor}`, 'statement.record');
   await steward.grant(`statement:speak:${steward.actor}`, 'statement.withdraw');
-  const stamp = randomUUID().slice(0, 8);
+  const stamp = 'fixture';
   const property = await json<{ component: string; revision: string }>(await wiki('POST', '/v1/semantic/changes', {
     profile: 'semantic-change-v1', expectedHead: null, actingSubject: holder.actor,
-    state: { component: 'definition', kind: 'property' } }), 201);
+    state: { component: 'definition', kind: 'property' } }, holder.token, fixtureKey('property')), 201);
   await holder.grant(`semantic:read:${property.component}`, 'semantic.read');
   const relation = async (key: string, labels: Record<string, [string, string]>) => {
     const made = await json<{ component: string; revision: string }>(await wiki('POST', '/v1/semantic/changes', {
       profile: 'semantic-change-v1', expectedHead: null, actingSubject: holder.actor,
       state: { component: 'definition', kind: 'relation', notation: `wiki-${key}-${stamp}`, roles: [
         { key: 'subject', minParticipants: 1, maxParticipants: 1, ordered: false },
-        { key: 'object', minParticipants: 1, maxParticipants: 1, ordered: false }] } }), 201);
+        { key: 'object', minParticipants: 1, maxParticipants: 1, ordered: false }] } }, holder.token,
+    fixtureKey(`relation:${key}`)), 201);
     await holder.grant(`semantic:read:${made.component}`, 'semantic.read');
     await holder.grant(`semantic:edit:${made.component}`, 'lexicon.presentation.change');
     for (const [language, [noun, heading]] of Object.entries(labels)) {
@@ -222,7 +241,8 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
           expectedHead: null, state: { definition: made.component, meaningRevision: made.revision, fromRole, toRole, language,
             noun, heading, plurals: { ...language === 'en' ? { one: noun } : {}, other: heading }, grammaticalForms: [],
             source: 'https://rezics.com/definition/relation-lexicon-seed-v1',
-            licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'draft' } }), 201);
+            licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'draft' } }, holder.token,
+        fixtureKey(`lexicon:${key}:${language}:${fromRole}:${toRole}`)), 201);
       }
     }
     return made;
@@ -259,7 +279,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
     baseHeads: [{ component: work, head }], evidence: [], actingSubject: holder.actor }), 201);
   await json(await wiki('POST', `/v1/editorial/proposals/${proposal.proposal}/reviews`, { profile: 'editorial-proposal-review-v1',
     revision: 1, outcome: 'approve', message: 'Checked the chapter citations', actingSubject: steward.actor }, steward.token));
-  const applyKey = randomUUID();
+  const applyKey = fixtureKey('wiki-bundle-apply');
   let receipt: OwnerReceipt | null = null;
   for (let attempt = 0; attempt < 200 && !receipt; attempt++) {
     const response = await wiki('POST', `/v1/editorial/proposals/${proposal.proposal}/decisions`, { profile: 'editorial-proposal-decide-v1',
@@ -278,7 +298,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   }
 
   // The Zone is official under its route segment, and its package runs once Main reports the approval.
-  const theme = id();
+  const theme = fixtureId('wiki-theme');
   const digest = await sourceDigest(spec.routeSegment);
   for (const [scope, action] of [['theme:create:root', 'theme.create'], [`theme:revise:${short(theme)}`, 'theme.revise'],
     [`theme:activate:${short(theme)}`, 'theme.activate']] as const) await holder.grant(scope, action);
@@ -294,16 +314,38 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   await settle(key => stack.call('POST', `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
     token: reviewer.token, key, body: { decision: 'approved', reviewEvidenceDigest: sha(`reviewed ${digest}`),
       actingSubject: reviewer.actor, idempotencyKey: key } }), 201, 'theme review');
-  await post(`/v1/themes/${short(theme)}/first-party-activations`, { revision: revision.operation, expectedActivation: null,
-    approvalExpiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), actingSubject: holder.actor });
+  const activationKey = fixtureKey('theme-activation');
+  // Approval must fall inside 90 days of admission, and both seeds of one run must send the same instant.
+  const noon = new Date();
+  noon.setUTCHours(12, 0, 0, 0);
+  const activationBody = { revision: revision.operation, expectedActivation: null,
+    approvalExpiresAt: new Date(noon.getTime() + 30 * 86_400_000).toISOString(),
+    actingSubject: holder.actor, idempotencyKey: activationKey };
+  const activation = await stack.call('POST', `/v1/themes/${short(theme)}/first-party-activations`, {
+    token: holder.token, body: activationBody, key: activationKey });
+  const activationText = await activation.text();
+  const replayedActivation = activation.status === 200 && activationText.includes('"replayed":true');
+  if (activation.status !== 201 && !replayedActivation) {
+    throw new Error(`theme activation: expected 201, got ${activation.status}: ${activationText.slice(0, 400)}`);
+  }
   const current = await json<{ revision: string }>(await wiki('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(holder.actor)}`));
-  // The configuration write accepts the current presentation. A stored older document is only adapted when it is read.
-  await post(`/v1/zones/${short(zone)}/configuration`, { expectedHead: current.revision, actingSubject: holder.actor,
+  // The head moves when the presentation is first stored, so a second seed's body is not the first request.
+  // The same key then conflicts; the stored presentation is the one this fixture already wrote.
+  const configPath = `/v1/zones/${short(zone)}/configuration`;
+  const configKey = fixtureKey('zone-configuration');
+  const configBody = { expectedHead: current.revision, actingSubject: holder.actor,
     name: spec.name, language: spec.language, defaultRealm: space.realm, official: {},
     presentation: { profile: 'zone-presentation-v2', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
       navigation: spec.navigation, slides: [], official: { theme },
       modules: [{ id: 'works', type: 'shelf', title: 'Works', source: { kind: 'collection', collection: collections.franchise! },
-        options: { layout: 'covers', limit: 12 } }] } }, 200, 'PUT', false);
+        options: { layout: 'covers', limit: 12 } }] } };
+  const configured = await stack.call('PUT', configPath, { token: holder.token, body: configBody, key: configKey });
+  const configuredText = await configured.text();
+  if (configured.status === 202) {
+    await settle(key => stack.call('PUT', configPath, { token: holder.token, body: configBody, key }), 200, 'PUT configuration');
+  } else if (!(configured.status === 200 || (configured.status === 409 && configuredText.includes('idempotency_conflict')))) {
+    throw new Error(`PUT configuration: expected 200, got ${configured.status}: ${configuredText.slice(0, 400)}`);
+  }
 
   return { realm: space.realm, zone, work, structure: composition.structure, chapters: inserted.occurrences, entities,
     evidence: (receipt.owner as { evidence: string[] }).evidence, holderToken: holder.token, holderActor: holder.actor, tokens,

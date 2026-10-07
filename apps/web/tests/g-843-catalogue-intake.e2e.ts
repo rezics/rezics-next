@@ -115,13 +115,15 @@ test('a contributor searches first, adds a translation to an existing volume, an
   mark('japanese and romaji');
   // "Translation" of volume 1 goes to its realizations; no Work is made.
   await search(page, volumeOne.title);
-  await expect(titles(page).filter({ hasText: volumeOne.title })).toHaveCount(1);
-  await shoot(page, 'search-volume', info);
+  // Another journey in this stack may have recorded the same title. This volume is the one the seed wrote.
   const row = page.locator(`[data-candidate="${uuid(volumeOne.work)}"]`);
+  await expect(row).toHaveCount(1);
+  const existingTitles = await titles(page).count();
+  await shoot(page, 'search-volume', info);
   await row.getByRole('button', { name: 'Add a translation or edition' }).click();
-  await page.waitForURL(
-    new RegExp(localizedPath(`${resourceHref('/w/', uuid(volumeOne.work))}/edit/editions$`, 'en')),
-  );
+  const editions = localizedPath(resourceHref('/w/', uuid(volumeOne.work)), 'en')
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.waitForURL(new RegExp(`${editions}(?:-[^/?#]+)?/edit/editions$`), { timeout: 30_000 });
   mark('editions page');
   const realization = page.getByRole('form', { name: 'Add a realization' });
   await realization.getByRole('textbox', { name: 'Language', exact: true }).fill('zh-Hans');
@@ -136,7 +138,8 @@ test('a contributor searches first, adds a translation to an existing volume, an
   mark('realization listed');
   await page.goto('/en/catalogue/new');
   await search(page, volumeOne.title);
-  await expect(titles(page)).toHaveCount(1);
+  await expect(titles(page)).toHaveCount(existingTitles);
+  await expect(page.locator(`[data-candidate="${uuid(volumeOne.work)}"]`)).toHaveCount(1);
 
   mark('no new work');
   // A new record: step two asks what it is; the record shows as unverified with its provenance.
@@ -150,7 +153,7 @@ test('a contributor searches first, adds a translation to an existing volume, an
   await expect(page.locator('[data-provenance-fields]').getByText('Title')).toBeVisible();
   await shoot(page, 'created', info);
   await page.getByRole('link', { name: 'Open the record' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: first })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: first })).toBeVisible({ timeout: 30_000 });
   await expect(
     page.locator('[data-provisional]').getByText('Unverified', { exact: true }),
   ).toBeVisible();

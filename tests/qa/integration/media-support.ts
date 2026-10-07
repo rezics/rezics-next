@@ -45,6 +45,12 @@ import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/ma
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 
+/** Deterministic UUID for a fixture identity that must survive a second run on the same database. */
+function fixtureUuid(name: string): string {
+  const hex = createHash('sha256').update(`rezics-fixture:${name}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 /** A PNG signature and IHDR with the given size, followed by opaque payload bytes. */
 export function png(width: number, height: number, payload = 64): Uint8Array {
   const header = Buffer.alloc(33);
@@ -162,20 +168,37 @@ export async function startMediaStack(label: string, options: { contentProjectio
     return response;
   };
 
-  /** One Account principal, represented Agent and bearer token; grants are explicit per scope. */
-  const member = async (name: string) => {
-    const principalId = randomUUID();
-    const principal = { issuer, subject: `${name}-${randomUUID()}` };
-    const actor = `${ID}${randomUUID()}`;
+  /** One Account principal, represented Agent and bearer token; grants are explicit per scope.
+   * `stable` keeps the same issuer, subject and Agent across processes so a later run replays
+   * instead of claiming a handle the first run already owns. */
+  const member = async (name: string, memberOptions?: { stable?: boolean }) => {
+    const stable = memberOptions?.stable === true;
+    const principal = stable
+      ? { issuer: 'https://qa-wiki-fixture.test', subject: name }
+      : { issuer, subject: `${name}-${randomUUID()}` };
+    const actor = stable ? `${ID}${fixtureUuid(`actor:${name}`)}` : `${ID}${randomUUID()}`;
     const token = randomUUID();
     tokens.set(token, principal);
-    await accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+    const existing = stable ? await accessPool.query<{ id: string }>(
+      `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2 AND active`,
+      [principal.issuer, principal.subject]) : { rows: [] as { id: string }[] };
+    const principalId = existing.rows[0]?.id ?? (stable ? fixtureUuid(`principal:${name}`) : randomUUID());
+    if (!existing.rows[0]) await accessPool.query(
+      'INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [principalId, principal.issuer, principal.subject]);
-    await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
+    await accessPool.query(stable
+      ? "INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent') ON CONFLICT (id) DO NOTHING"
+      : "INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [actor]);
     if (options.profileCredits) await createAgentGraph(env, {
       id: randomUUID(), agent: actor, kind: 'person', displayName: name, digest: sha(actor),
     });
     const grant = async (scope: string, action: string) => {
+      if (stable) {
+        const held = await accessPool.query<{ id: string }>(`SELECT id FROM access.permission_grant
+          WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > now()
+          LIMIT 1`, [actor, scope, action]);
+        if (held.rows[0]) return held.rows[0].id;
+      }
       const grantId = randomUUID();
       const client = await accessPool.connect();
       // Controller mandates are rejected unless they are open-ended.
@@ -224,6 +247,14 @@ export async function startMediaStack(label: string, options: { contentProjectio
       expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'claimed',
       dispatchEligible: true, replayed: false };
   };
+  /** The same admission id on a later run replays the graph receipt instead of writing another resource. */
+  const stableAdmission = (actor: string, scope: string, action: string, requestDigest: string,
+    name: string): RegisteredAdmission => ({
+    id: fixtureUuid(`admission:${name}`), principalId: fixtureUuid(`admission-principal:${name}`),
+    actingSubject: actor, scope, action, idempotencyKey: `fixture:${name}`, requestDigest,
+    authorityEpoch: '0', expiresAt: new Date(Date.now() + 3_600_000).toISOString(), state: 'claimed',
+    dispatchEligible: true, replayed: false,
+  });
   /** Catalogue metadata carries no invented native authorship or publication. */
   const catalogueWork = async (actor: string, title: string) => {
     const created = await activateMetadataWork(env, { title, language: 'en',
@@ -241,16 +272,19 @@ export async function startMediaStack(label: string, options: { contentProjectio
         metadataWorkRequestDigest(title, undefined, 'en', { authorAgent: actor })) });
     return { work: created.work, mainVersion: created.mainVersion, title };
   };
-  const contribution = async (work: string, actor: string, language: string, body: string) => {
+  const contribution = async (work: string, actor: string, language: string, body: string, stableName?: string) => {
     const draftInput = { work, language, body, actingSubject: actor };
-    const draft = await activateTextContribution(env, admission(actor, `contribution:create:${work}`,
-      'contribution.create', textContributionDigest(draftInput)), draftInput);
+    const admit = (scope: string, action: string, digest: string, part: string) => stableName
+      ? stableAdmission(actor, scope, action, digest, `${stableName}:${part}`)
+      : admission(actor, scope, action, digest);
+    const draft = await activateTextContribution(env, admit(`contribution:create:${work}`,
+      'contribution.create', textContributionDigest(draftInput), 'draft'), draftInput);
     if (draft.outcome !== 'succeeded' || !draft.contribution || !draft.draftRevision) throw new Error('draft failed');
     const publishInput = { contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
       expectedPublicationHead: null, rightsBasis: 'original-contribution' as const,
       disclosure: 'public' as const, actingSubject: actor };
-    const publication = await publishTextContribution(env, admission(actor,
-      `contribution:publish:${draft.contribution}`, 'contribution.publish', textPublicationDigest(publishInput)),
+    const publication = await publishTextContribution(env, admit(
+      `contribution:publish:${draft.contribution}`, 'contribution.publish', textPublicationDigest(publishInput), 'publish'),
     publishInput);
     if (publication.outcome !== 'succeeded' || !publication.publicationDecision) throw new Error('publish failed');
     return { contribution: draft.contribution, decision: publication.publicationDecision, language };
@@ -275,7 +309,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
     await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };
-  return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content,
+  return { env, fuseki, main, call, member, stableAdmission, access, mediaAccess, accessPool, contentPool, content,
     contentCursor, contentConsumer, store, objects,
     media, admission, catalogueWork, privateWork, publicWork, contribution, stop };
 }

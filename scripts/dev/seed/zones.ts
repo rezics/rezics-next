@@ -48,6 +48,22 @@ function problemCode(error: unknown): { status: number; code: string } | null {
 
 const missingZone = (error: unknown) => problemCode(error)?.status === 404;
 
+/** Theme execution control answers only to an operator. Zone configuration reports a
+ * missing grant as "not found", so that 404 means absence only after this read succeeds. */
+export async function proveOperatorAuthority(
+  api: Pick<ZoneSeedApi, 'get'>,
+  token: string,
+): Promise<void> {
+  try {
+    await api.get('/v1/themes/execution-control', token);
+  } catch (error) {
+    const status = error instanceof SeedApiError ? error.status : 0;
+    throw new Error(
+      `Seed operator is not authorized (HTTP ${status}); a masked Zone denial will not be treated as absence`,
+    );
+  }
+}
+
 function idempotencyConflict(error: unknown): boolean {
   const problem = problemCode(error);
   return problem?.status === 409 && problem.code === 'idempotency_conflict';
@@ -57,8 +73,17 @@ function idempotencyConflict(error: unknown): boolean {
  * create means the Zone already exists under an older request body. */
 export async function readOrCreateOfficialZone(
   api: Pick<ZoneSeedApi, 'get' | 'post'>,
-  input: ZoneIdentity & { space: string; key: string; name?: string; language?: string },
+  input: ZoneIdentity & {
+    space: string;
+    key: string;
+    name?: string;
+    language?: string;
+    /** Proves operator authority before a 404 is treated as an absent Zone. */
+    operatorApi: Pick<ZoneSeedApi, 'get'>;
+    operatorToken: string;
+  },
 ): Promise<OfficialZoneHead> {
+  await proveOperatorAuthority(input.operatorApi, input.operatorToken);
   const path = configurationPath(input.zone, input.actor);
   const read = () => api.get<OfficialZoneHead>(path, input.token);
   try {

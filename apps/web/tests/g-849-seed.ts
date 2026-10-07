@@ -20,7 +20,12 @@ const workObjects = stack.objects('semantic/work/');
 await workObjects.initialize();
 Object.assign(stack.env, { objectDirectory, workObjects });
 try {
-  const { read: _read, tokens: _tokens, holderToken: _holder, holderActor: _actor, ...seed } = await seedWiki(stack, reader);
+  const seeded = await seedWiki(stack, reader);
+  const again = await seedWiki(stack, reader);
+  if (again.zone !== seeded.zone || again.work !== seeded.work || again.realm !== seeded.realm) {
+    throw new Error('Wiki fixture did not keep its identity on the second seed');
+  }
+  const { read: _read, tokens: _tokens, holderToken: _holder, holderActor: _actor, ...seed } = seeded;
   console.log(JSON.stringify(seed));
 } finally {
   await stack.stop();

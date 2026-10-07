@@ -159,9 +159,12 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
     /^22 \(rev\.\)\s*New Testament 22$/,
     /^22 Reverse\s*New Testament 22 Reverse/,
   ]);
+  // The address may carry the title suffix; the id is still this Work, and the link still opens its parts editor.
+  const partsEditor = localizedPath(resourceHref('/w/', uuid(index.newTestament.work)), 'en')
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute(
     'href',
-    localizedPath(`${resourceHref('/w/', uuid(index.newTestament.work))}/edit/parts`, 'en'),
+    new RegExp(`^${partsEditor}(?:-[^/?#]+)?/edit/parts$`),
   );
 
   // Relations: Genesis Testament is a Sequel of New Testament, with evidence. Main words every label.

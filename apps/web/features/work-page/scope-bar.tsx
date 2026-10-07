@@ -98,7 +98,8 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
       <li><ScopeLink href={workHref(workRef, tab, { kind: 'mine' })} current={sameScope(scope, { kind: 'mine' })}
         icon={UserRoundIcon}>{t.mine}</ScopeLink></li>
       {target || load ? <li><Sheet open={open} onOpenChange={details => setOpen(details.open)}>
-        <SheetTrigger asChild><Button size="sm" variant="ghost" pill disabled={!hydrated}
+        <SheetTrigger asChild><Button size="sm" variant="ghost" pill
+          className="text-foreground disabled:opacity-100" disabled={!hydrated}
           data-hydrated={hydrated ? 'true' : undefined}>{words.otherCommunities}</Button></SheetTrigger>
         <SheetContent placement="bottom" className="max-h-[85svh] sm:mx-auto sm:max-w-lg">
           <SheetHeader title={words.otherCommunities} />

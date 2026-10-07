@@ -77,12 +77,22 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   };
 
   const text = async (target: Work, language: string, publisher: string) => {
-    const body = { profile: 'realization-v1', expectedHead: null, actingSubject: editor.actor, id: id(), language,
-      kind: language === 'ja' ? 'original' : 'translation', translators: language === 'ja' ? [] : [editor.actor], publishers: [publisher],
-      source: { kind: 'unresolved', work: target.work }, status: 'official', verification: 'verified',
-      evidence: 'https://example.com/evidence' };
-    const result = await json<Written>(await editor.send('PUT', `/v1/works/${short(target.work)}/realizations/${short(body.id)}`, body));
-    return { id: body.id, revision: result.revision };
+    const write = async () => {
+      const body = { profile: 'realization-v1', expectedHead: null, actingSubject: editor.actor, id: id(), language,
+        kind: language === 'ja' ? 'original' : 'translation', translators: language === 'ja' ? [] : [editor.actor], publishers: [publisher],
+        source: { kind: 'unresolved', work: target.work }, status: 'official', verification: 'verified',
+        evidence: 'https://example.com/evidence' };
+      const response = await editor.send('PUT', `/v1/works/${short(target.work)}/realizations/${short(body.id)}`, body);
+      return { id: body.id, response };
+    };
+    let attempt = await write();
+    // A composition still moving the graph cancels the command. The problem asks for a new key.
+    if (attempt.response.status === 409 && (await attempt.response.clone().text()).includes('realization_basis_changed')) {
+      await new Promise(done => setTimeout(done, 1_000));
+      attempt = await write();
+    }
+    const result = await json<Written>(attempt.response);
+    return { id: attempt.id, revision: result.revision };
   };
 
   // The one correspondence kind the panel offers "also mark as read" for.
@@ -117,7 +127,15 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       publisher: 'Yen Press', publicationYear: 2014, isbn13: null, originalUrl: null, fixedRelease: null, evidence: null,
       identifiers: [], platform, territory: 'US',
       coverage: coverage.map(entry => ({ realization: entry.id, revision: entry.revision, completeness: 'complete' })) };
-    await json(await editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body));
+    const send = () => editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body);
+    let response = await send();
+    // The same graph movement that cancels a realization cancels the release. The problem asks for a new key.
+    if (response.status === 409 && (await response.clone().text()).includes('release_basis_changed')) {
+      body.id = id();
+      await new Promise(done => setTimeout(done, 1_000));
+      response = await editor.send('PUT', `/v1/works/${short(saoVolumes[0]!.work)}/releases/${short(body.id)}`, body);
+    }
+    await json(response);
     return body.id;
   };
   const paperback = await release('Sword Art Online 1: Aincrad', 'paperback', [english[0]!]);

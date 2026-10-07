@@ -171,6 +171,8 @@ export async function applyOfficialWiki(port: WikiPort) {
     key: seedKey('wiki-zone', slug),
     name: spec.name,
     language: spec.language,
+    operatorApi: port.official,
+    operatorToken: port.officialToken,
   });
   const story = await publish(
     port,

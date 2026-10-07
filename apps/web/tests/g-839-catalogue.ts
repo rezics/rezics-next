@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -71,13 +73,23 @@ export async function seedEditCatalogue(stack: MediaStack, reader: SeedReader, s
     'correspondence-partial', 'correspondence-revised']);
   await editor.grant('semantic:create:root', 'semantic.change');
   mkdirSync(scratch, { recursive: true });
-  await seedRelationLexicon({
+  const wanted = relationLexiconSeed.filter(item => kinds.has(item.key));
+  const missing: typeof wanted = [];
+  for (const item of wanted) {
+    const current = await readDefinitionByKey(stack.env, item.key, systemDisclosure);
+    if (!current) { missing.push(item); continue; }
+    // Another journey in this stack already admitted the meaning. Reuse it.
+    await editor.grant(`semantic:read:${current.definition}`, 'semantic.read');
+    await editor.grant(`semantic:edit:${current.definition}`, 'lexicon.presentation.change');
+    await grantReader(`semantic:read:${current.definition}`, 'semantic.read');
+  }
+  if (missing.length) await seedRelationLexicon({
     post: async <T>(path: string, body: object, key: string) => json<T>(await editor.send('POST', path, body, key), 201),
     authorizeDefinition: async receipt => {
       await editor.grant(`semantic:read:${receipt.component}`, 'semantic.read');
       await editor.grant(`semantic:edit:${receipt.component}`, 'lexicon.presentation.change');
       await grantReader(`semantic:read:${receipt.component}`, 'semantic.read');
-    } }, editor.actor, `g839-${randomUUID()}`, relationLexiconSeed.filter(item => kinds.has(item.key)),
+    } }, editor.actor, `g839-${randomUUID()}`, missing,
   resolve(scratch, 'lexicon.json'));
 
   // Index: New Testament holds volumes 1, 2 and 22; "22 Reverse" exists but is not a part yet.

@@ -131,7 +131,15 @@ export function registerWikiClaimsJourney(viewports: readonly { width: number; h
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
       await clean(page, info, `inventory-1000-${viewport.width}`);
-      await expect(dialog.getByRole('link', { name: 'Chapter 1000', exact: true })).toBeVisible();
+      // A thousand chapters are paged; the reader searches for the last one instead of scanning a full list.
+      const search = dialog.getByRole('combobox', { name: 'Search chapters' });
+      await expect(search).toBeEnabled();
+      await search.fill('Chapter 1000');
+      const chapter = page.getByRole('option', { name: 'Chapter 1000', exact: true });
+      await expect(chapter).toBeVisible();
+      await chapter.click();
+      await expect.poll(() => new URL(page.url()).searchParams.get('position')).toMatch(/^[0-9a-f-]{36}$/);
+      await expect(page.getByRole('button', { name: /^Up to:/ })).toContainText('Chapter 1000');
     });
     test(`G856 ${viewport.width}: Thai and Arabic names survive an English interface`, async ({
       page,

@@ -24,6 +24,24 @@ import {
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { seedWiki } from './g-849-records.ts';
 
+/** A proposal read can be cancelled while this seed is still moving the graph. The route says to start again. */
+async function publishFact(
+  submitter: Parameters<typeof publishCatalogueFact>[0],
+  steward: Parameters<typeof publishCatalogueFact>[1],
+  input: Parameters<typeof publishCatalogueFact>[2],
+) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await publishCatalogueFact(submitter, steward, input);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!message.includes('read_basis_changed') || attempt === 3) throw error;
+      await new Promise(done => setTimeout(done, 1_000));
+    }
+  }
+  throw new Error('Wiki fact publication did not settle');
+}
+
 if (!process.env.REZICS_QA_RUN_ID || !process.env.REZICS_WEB_AUTH_PRIVATE_PATH)
   throw new Error('Use the browser QA stack');
 const reader = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH, 'utf8')) as {
@@ -141,7 +159,7 @@ try {
     ['Synthetic claim: she lives in Longbourn', seed.chapters.slice(0, 1)],
     ['Synthetic contrary claim: she does not live in Longbourn', seed.chapters],
   ] as const) {
-    const statement = await publishCatalogueFact(holder, reviewer, {
+    const statement = await publishFact(holder, reviewer, {
       work: seed.work,
       zone: seed.zone,
       subject: seed.entities.elizabeth!,
@@ -226,7 +244,7 @@ try {
   });
   const alternateChapters = await cataloguePositions(holder, alternate.work, alternate.mainVersion);
   const alternateText = 'Synthetic alternate claim: she never lives in Longbourn';
-  const alternateStatement = await publishCatalogueFact(holder, reviewer, {
+  const alternateStatement = await publishFact(holder, reviewer, {
     work: alternate.work,
     zone: seed.zone,
     subject: seed.entities.elizabeth!,

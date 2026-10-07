@@ -145,7 +145,8 @@ export async function seedRealms(state: SeedState) {
     await grantOfficialZoneSeed(stewardInput, zone);
     const currentZone = await readOrCreateOfficialZone(api, {
       zone, space: parent.receipt.space, actor: parent.steward.actingSubject,
-      token: parent.steward.token, key: seedKey('zone', realm.id) });
+      token: parent.steward.token, key: seedKey('zone', realm.id),
+      operatorApi: operatorSession.api, operatorToken: operatorSession.token });
     // The layout lives with the official Zones' content (official-plan.ts), which fills it later in the run.
     // A Main without localized tab labels gets the same layout with default labels.
     const context = realm.id === 'mods'

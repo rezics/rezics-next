@@ -3,6 +3,7 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantOfficialZoneSe
 import { seedKey, zoneSites } from './plan.ts';
 import { stableId, type ContributionReceipt, type PublicationReceipt, type SeedState, type Session, type WorkReceipt,
   afterCatchUp, refreshSeedTokens } from './state.ts';
+import { proveOperatorAuthority } from './zones.ts';
 
 // The Books Zone's own pages, made as its steward would: a guide document and a long Collection, each mounted in
 // the Zone's navigation so `/r/books/guide` and `/r/books/picks` exist on a fresh seed. Every write is an API
@@ -112,6 +113,11 @@ export async function seedZoneSites(state: SeedState) {
   const zone = `https://rezics.com/id/${stableId('zone:books')}`;
   const site: Site = { state, steward: realm.steward, zone, actor: realm.steward.actingSubject };
   await refreshSeedTokens(state);
+  if (!state.operatorSession) {
+    state.findings.add('Zone sites: the local fixture operator is unavailable');
+    return;
+  }
+  await proveOperatorAuthority(state.operatorSession.api, state.operatorSession.token);
   await grantOfficialZoneSeed({ ...state.operatorInput, ownerAccountSubject: realm.steward.accountId,
     actingSubject: site.actor }, zone);
   await state.optional('Zone sites: Books guide', () => guide(site));
