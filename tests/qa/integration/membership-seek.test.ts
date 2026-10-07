@@ -82,11 +82,13 @@ test('MODEL13: API-only membership remains prepared across unrelated commands an
         position: 'last', target: work.work }],
     }));
     const root = `/v1/zones/${short(zone)}`;
-    const first = await json<{ revision: string; occurrences: string[] }>(
-      await editor.send('POST', `${root}/mounts`, {
-        expectedHead: navigation.revision, target: franchise.id, routeSegment: 'franchise',
-        position: 'last', disclosure: 'public', actingSubject: editor.actor,
-      }));
+    const firstMountKey = randomUUID();
+    const firstMountBody = {
+      expectedHead: navigation.revision, target: franchise.id, routeSegment: 'franchise',
+      position: 'last', disclosure: 'public', actingSubject: editor.actor,
+    };
+    const first = await json<{ revision: string; occurrences: string[]; receipt: string }>(
+      await editor.send('POST', `${root}/mounts`, firstMountBody, firstMountKey));
     const proof = () => stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?proof WHERE {
       GRAPH <urn:rezics:graph:template-index> {
         <urn:rezics:membership-preparation> rv:membershipCompletedForm ?proof }
@@ -94,11 +96,13 @@ test('MODEL13: API-only membership remains prepared across unrelated commands an
     const afterFirst = await proof();
     // This ordinary admitted write does not change the existing navigation list.
     const characters = await collection('Characters');
-    const second = await json<{ revision: string; occurrences: string[] }>(
-      await editor.send('POST', `${root}/mounts`, {
-        expectedHead: first.revision, target: characters.id, routeSegment: 'characters',
-        position: 'last', disclosure: 'public', actingSubject: editor.actor,
-      }));
+    const secondMountKey = randomUUID();
+    const secondMountBody = {
+      expectedHead: first.revision, target: characters.id, routeSegment: 'characters',
+      position: 'last', disclosure: 'public', actingSubject: editor.actor,
+    };
+    const second = await json<{ revision: string; occurrences: string[]; receipt: string }>(
+      await editor.send('POST', `${root}/mounts`, secondMountBody, secondMountKey));
     expect(second.occurrences).toHaveLength(1);
     expect(second.revision).not.toBe(first.revision);
     const mounted = await json<{ mounts: Array<{ target: string }> }>(await editor.read(root));
@@ -109,10 +113,111 @@ test('MODEL13: API-only membership remains prepared across unrelated commands an
     expect(await hasUnnormalizedMembership(stack.fuseki)).toBe(false);
     expect(afterFirst.results?.bindings).toHaveLength(1);
     expect(await proof()).toEqual(afterFirst);
+    type RecipeChange = { revision: string; occurrences: string[]; receipt: string; replayed: boolean };
+    const ingredient = {
+      type: 'ingredient-line',
+      originalText: { value: '1 1/2 cups flour', language: 'en' },
+      amountLexical: '1 1/2', amount: { numerator: 3, denominator: 2 },
+      unitText: 'cups', optional: false, scaling: 'linear', substituteFor: [], parseStatus: 'parsed',
+    };
+    const step = {
+      type: 'recipe-step', instructionText: { value: 'Cook for 5 minutes.', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear',
+    };
+    const recipeOperations: Array<{ role: 'ingredient' | 'group' | 'step'; qualifier?: object }> = [
+      { role: 'ingredient', qualifier: ingredient },
+      { role: 'group' },
+      { role: 'step', qualifier: step },
+    ];
+    const recipeEvidence: object[] = [];
+    const recipe = await json<{ work: string; mainVersion: string }>(
+      await editor.send('POST', '/v1/works', {
+        profile: 'metadata-only-v1', authoring: 'own-work', title: 'Separate Recipe inserts',
+        language: 'en', semanticTypes: ['https://schema.org/Recipe'], actingSubject: editor.actor,
+      }), 201);
+    await editor.grant(`work:edit:${recipe.work}`, 'recipe.edit');
+    await editor.grant(`work:read:${recipe.work}`, 'work.read');
+    const composition = await json<{ structure: string; revision: string }>(
+      await editor.send('POST', '/v1/compositions', {
+        profile: 'recipe-composition', work: recipe.work, mainVersion: recipe.mainVersion,
+        actingSubject: editor.actor,
+      }), 201);
+    const path = `/v1/compositions/${short(composition.structure)}`;
+    const firstBody = { profile: 'recipe-composition', expectedHead: composition.revision,
+      actingSubject: editor.actor, operations: [{ op: 'insert', parent: composition.structure,
+        position: 'first', role: 'ingredient', qualifier: ingredient }] };
+    const firstKey = `recipe-first-${randomUUID()}`;
+    const firstInsert = await json<RecipeChange>(await editor.send('POST', `${path}/changes`, firstBody, firstKey));
+    expect(firstInsert.occurrences).toHaveLength(1);
+    expect(await proof()).toEqual(afterFirst);
+    // Persist an unrelated admitted owner between writes to the populated root.
+    const unrelatedRecipeCollection = await collection('Unrelated Recipe Collection');
+    let recipeHead = firstInsert.revision;
+    const expectedRecipeOccurrences = [firstInsert.occurrences[0]!];
+    const expectedRecipeRoles = ['ingredient'];
+    for (const counterpart of recipeOperations) {
+      const secondBody = { profile: 'recipe-composition', expectedHead: recipeHead,
+        actingSubject: editor.actor, operations: [{ op: 'insert', parent: composition.structure,
+          position: 'first', role: counterpart.role,
+          ...(counterpart.qualifier ? { qualifier: counterpart.qualifier } : {}) }] };
+      const secondKey = `recipe-second-${randomUUID()}`;
+      const secondInsert = await json<RecipeChange>(await editor.send('POST', `${path}/changes`, secondBody, secondKey));
+      expect(secondInsert.occurrences).toHaveLength(1);
+      expect(secondInsert.occurrences[0]).not.toBe(firstInsert.occurrences[0]);
+      const secondReplay = await json<RecipeChange>(await editor.send('POST', `${path}/changes`, secondBody, secondKey));
+      expect(secondReplay).toMatchObject({ revision: secondInsert.revision, receipt: secondInsert.receipt,
+        occurrences: secondInsert.occurrences, replayed: true });
+      recipeHead = secondInsert.revision;
+      expectedRecipeOccurrences.unshift(secondInsert.occurrences[0]!);
+      expectedRecipeRoles.unshift(counterpart.role);
+      const page = await json<{ revision: string; occurrences: Array<{ occurrence: string; role: string;
+        parent: string; qualifier?: object }> }>(await editor.read(path));
+      expect(page.revision).toBe(recipeHead);
+      expect(page.occurrences.map(item => item.occurrence)).toEqual(expectedRecipeOccurrences);
+      expect(page.occurrences.map(item => item.role)).toEqual(expectedRecipeRoles);
+      expect(page.occurrences.every(item => item.parent === composition.structure)).toBe(true);
+      expect(page.occurrences.at(-1)!.qualifier).toEqual(ingredient);
+      if (counterpart.qualifier) expect(page.occurrences[0]!.qualifier).toEqual(counterpart.qualifier);
+      expect(await hasUnnormalizedMembership(stack.fuseki)).toBe(false);
+      expect(await proof()).toEqual(afterFirst);
+      recipeEvidence.push({ counterpart: counterpart.role,
+        secondBody, secondInsert, secondReplay,
+        occurrences: page.occurrences });
+    }
+    // Replay the exact original insert after three later heads have committed.
+    const firstReplay = await json<RecipeChange>(await editor.send('POST', `${path}/changes`, firstBody, firstKey));
+    expect(firstReplay).toMatchObject({ revision: firstInsert.revision, receipt: firstInsert.receipt,
+      occurrences: firstInsert.occurrences, replayed: true });
+    const finalRecipe = await json<{ revision: string; occurrences: Array<{ occurrence: string }> }>(await editor.read(path));
+    expect(finalRecipe.revision).toBe(recipeHead);
+    expect(finalRecipe.occurrences.map(item => item.occurrence)).toEqual(expectedRecipeOccurrences);
+    expect(await proof()).toEqual(afterFirst);
+    recipeEvidence.push({ recipe, composition, unrelatedRecipeCollection, firstBody, firstInsert, firstReplay });
+    const sequence = () => stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?n WHERE {
+      GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:sequence ?n }
+    }`);
+    const beforeMountReplay = await sequence();
+    for (const replay of [
+      { body: firstMountBody, key: firstMountKey, original: first },
+      { body: secondMountBody, key: secondMountKey, original: second },
+    ]) {
+      const result = await json<{ revision: string; occurrences: string[]; receipt: string; replayed: boolean }>(
+        await editor.send('POST', `${root}/mounts`, replay.body, replay.key));
+      expect(result).toMatchObject({ revision: replay.original.revision,
+        receipt: replay.original.receipt, replayed: true });
+    }
+    expect(await sequence()).toEqual(beforeMountReplay);
+    expect(await proof()).toEqual(afterFirst);
+    const replayedNavigation = await json<{ mounts: Array<{ target: string; occurrence: string }> }>(await editor.read(root));
+    expect(replayedNavigation.mounts.map(mount => mount.target)).toEqual([franchise.id, characters.id]);
+    expect(replayedNavigation.mounts.map(mount => mount.occurrence)).toEqual([
+      first.occurrences[0], second.occurrences[0],
+    ]);
     const artifact = Bun.env.REZICS_QA_ARTIFACT_DIR;
     if (artifact) writeFileSync(join(artifact, 'membership-api-mounts.json'), JSON.stringify({
       zone, franchise: franchise.id, characters: characters.id,
-      first, second, mounts: mounted.mounts, members: members.occurrences,
+      first, second, firstMountBody, secondMountBody, recipeEvidence,
+      mounts: mounted.mounts, members: members.occurrences,
       completion: afterFirst.results?.bindings,
       qualification: 'Actual Main API handlers, native HTTP Fuseki and isolated owner storage; no preparation between admitted writes.',
     }, null, 2));
