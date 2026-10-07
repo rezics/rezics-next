@@ -1,5 +1,6 @@
 import { direction } from '@rezics/main/language';
-import type { Episode } from './episode-api.ts';
+import { EPISODE_PAGE } from './episode-api.ts';
+import type { MemoryStructure } from './episode-memory.ts';
 import type { Editions, Realization, Release, Relations, SeriesSummary, Session, WorkSummary } from './types.ts';
 
 // Records in the shape Main answers, for stories and tests: Sword Art Online volume 1 with a print
@@ -104,14 +105,11 @@ export const standaloneSummary = (status: WorkSummary['status']) => ({
 
 export const spider = { web, book };
 
-/** A series' episodes as Main lists them in reading order: the main run, then a Specials group. */
-export function episodeSeries(options: { mains: number; specials?: number; role?: 'part' | 'chapter' }): Episode[] {
-  const structure = iri('e00');
-  const group = iri('e01');
-  const role = options.role ?? 'part';
-  const main = Array.from({ length: options.mains }, (_, index): Episode => ({ occurrence: iri(`e1${index + 1}`), structure,
-    parent: structure, role, ordinal: index + 1, label: null, special: false }));
-  const extra = Array.from({ length: options.specials ?? 0 }, (_, index): Episode => ({ occurrence: iri(`e2${index + 1}`), structure,
-    parent: group, role: 'part', ordinal: index + 1, label: `Special ${index + 1}`, special: true }));
-  return [...main, ...extra];
+/** A series' Structure as Main lists it: the main run of episodes, then a group of specials. */
+export function episodeSeries(options: { mains: number; specials?: number }): MemoryStructure {
+  const label = (prefix: string, number: number) => `${prefix} ${number}`;
+  return { structure: iri('e00'), page: EPISODE_PAGE,
+    mains: Array.from({ length: options.mains }, (_, index) => ({ occurrence: iri(`e1${index + 1}`), label: label('Episode', index + 1) })),
+    groups: options.specials ? [{ occurrence: iri('e01'), label: 'Specials',
+      parts: Array.from({ length: options.specials }, (_, index) => ({ occurrence: iri(`e2${index + 1}`), label: label('Special', index + 1) })) }] : [] };
 }
