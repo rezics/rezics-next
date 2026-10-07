@@ -3269,3 +3269,78 @@ test('one audit turn shares its native call, byte and deadline scope and never r
   ).rejects.toBeInstanceOf(AssessmentHistoryAuditRefused);
   expect(late.calls).toEqual([]);
 });
+
+test('a deadline that expires while Content originals are read refuses the whole turn even when no row needs native proof', async () => {
+  const producers = [1, 2].map((ordinal) => assessmentAuditRow(ordinal, null).producer);
+  const access = producers.map((producer) => historyRow(producer));
+  // Row 1 has no Content original; row 2 is pending. Neither continues into a per-row deadline check.
+  const content = [contentRow(2, null)];
+  const modes = new Map(
+    producers.map((producer): [string, NativeAuditMode] => [producer.admission, 'succeeded']),
+  );
+  const run = async (expire: (local: AbortController) => void, outer?: { signal: AbortSignal }) => {
+    const local = new AbortController();
+    const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => local.signal);
+    try {
+      const native = auditNativeEnv(modes);
+      const store = new VerificationStore({} as Pool);
+      const forbidden = async (): Promise<never> => {
+        throw new Error('Expired audit attempted current analysis or an effect');
+      };
+      store.analysisSnapshot = forbidden;
+      store.withAssessmentProducerEffects = forbidden;
+      const lookup = store.readAssessmentProducerOriginals.bind(store);
+      let expiredDuringLookup = false;
+      store.readAssessmentProducerOriginals = async (client, permit, ids) => {
+        const found = await lookup(client, permit, ids);
+        expire(local);
+        expiredDuringLookup = true;
+        return found;
+      };
+      const accessSide = auditAccessClient(access),
+        contentSide = auditContentClient(content);
+      const turn = () =>
+        auditAssessmentHistoryWindow(
+          { env: native.env, store },
+          { access: accessSide.client, content: contentSide.client, permit: contentSide.permit },
+        );
+      const budget = {
+        signal: outer?.signal ?? new AbortController().signal,
+        callsLeft: 100,
+        bytesLeft: 10_000_000,
+      };
+      const outcome = await fusekiReadBudget.run(budget, turn).then(
+        (page) => ({ page }),
+        (error: unknown) => ({ error }),
+      );
+      expect(expiredDuringLookup).toBe(true);
+      expect(outcome).not.toHaveProperty('page');
+      expect((outcome as { error: unknown }).error).toBeInstanceOf(AssessmentHistoryAuditRefused);
+      // No native read, and both borrowed clients saw only reads: no transaction control, no release.
+      expect(native.calls).toEqual([]);
+      expect(budget.callsLeft).toBe(100);
+      expect(budget.bytesLeft).toBe(10_000_000);
+      for (const side of [accessSide, contentSide]) {
+        expect(
+          side.queries.every(
+            (query) => !/^(?:BEGIN|COMMIT|ROLLBACK|INSERT|UPDATE|DELETE)\b/.test(query.sql),
+          ),
+        ).toBe(true);
+      }
+      return { durations: timeout.mock.calls.map((call) => call[0]), local };
+    } finally {
+      timeout.mockRestore();
+    }
+  };
+  // The shared ten-second deadline itself expires during the lookup.
+  const own = await run((local) => local.abort(new DOMException('deadline', 'TimeoutError')));
+  expect(own.durations).toEqual([10_000]);
+  // A tighter caller deadline expires first; the turn's own fresh deadline is never renewed past it.
+  const caller = new AbortController();
+  const tighter = await run(
+    () => caller.abort(new DOMException('caller deadline', 'TimeoutError')),
+    caller,
+  );
+  expect(tighter.local.signal.aborted).toBe(false);
+  expect(tighter.durations).toEqual([10_000]);
+});

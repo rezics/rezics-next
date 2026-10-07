@@ -521,6 +521,7 @@ async function auditWindow(
     request.permit,
     lookups.map((row) => row.id),
   );
+  alive();
   for (const [index, row] of lookups.entries()) {
     const lookup = found[index]!;
     if (lookup.status !== 'found') {
@@ -595,6 +596,8 @@ async function auditWindow(
           },
     );
   }
+  // Every continue path above skips the per-row check; no page outlives the shared deadline.
+  alive();
   return {
     scope: 'original-assessment-history-window',
     entries: page.rows.map((row) => ({ id: row.id, outcome: outcomes.get(row.id)! })),
