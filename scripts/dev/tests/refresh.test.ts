@@ -10,6 +10,7 @@ import { GiB } from '../../qa/memory-admission.ts';
 import { appEnvironment, readEnv } from '../config.ts';
 import { activeBackend,
   activateBackend,
+  appHostSourceHash,
   backendCommand,
   backendExecutable,
   ensureBackend,
@@ -19,7 +20,7 @@ import { activeBackend,
   storageBackend,
   AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
-import { inspectRefresh, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
+import { inspectRefresh, inspectRefreshAppHost, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
   refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
 import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones } from '../refresh-stack.ts';
@@ -40,6 +41,8 @@ describe('pinned shared backend', () => {
     const dir = mkdtempSync(join(root, '.temp/pinned-backend-'));
     mkdirSync(join(dir, '.temp/stack/rezics-dev'), { recursive: true });
     mkdirSync(join(dir, 'services/main/src'), { recursive: true });
+    mkdirSync(join(dir, 'apphost'), { recursive: true });
+    writeFileSync(join(dir, 'apphost/apphost.mts'), `export const topology = 'original';`);
     mkdirSync(join(dir, 'scripts/dev'), { recursive: true });
     cpSync(join(root, 'scripts/dev/refresh.ts'), join(dir, 'scripts/dev/refresh.ts'));
     mkdirSync(join(dir, 'scripts/qa'), { recursive: true });
@@ -561,22 +564,52 @@ if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(proces
     }
   }, 30_000);
 
-  test('a target frozen before a later main commit stays the recorded and serving revision', async () => {
-    const events: string[] = [];
-    let head = 'frozen-target';
-    let checkpoint = 'previous';
-    const target = head;
-    const operations = actions(events);
-    operations.restartResources = async () => {
-      head = 'later-main';
-    };
-    operations.recordSuccess = async () => {
-      checkpoint = target;
-    };
-    await executeRefresh(refreshPlan({ ...current, revision: target }), operations);
-    expect(head).toBe('later-main');
-    expect(checkpoint).toBe(target);
-  });
+  for (const loadedStamp of [true, false]) {
+    test(`a topology merge during model maintenance cannot invalidate the frozen refresh (${loadedStamp ? 'loaded stamp' : 'session checkpoint'})`, async () => {
+      const { dir, stack, revision } = repository();
+      const events: string[] = [];
+      const session = 'http://127.0.0.1:17000';
+      try {
+        const candidate = stageBackend(dir, stack, revision);
+        activateBackend(stack, candidate);
+        const frozenHash = appHostSourceHash(candidate);
+        writeFileSync(join(stack, 'refresh.json'), JSON.stringify({ revision,
+          appHostHash: frozenHash, appHostSession: session }));
+        if (loadedStamp) writeFileSync(join(stack, 'apphost-hash'), frozenHash);
+        const initial = inspectRefreshAppHost(candidate, dir, session);
+        expect(initial.appHostChanged).toBe(false);
+        const operations = actions(events);
+        operations.beforeMutation = async () => { events.push('beforeMutation'); };
+        operations.restartResources = async () => {
+          events.push('restartResources');
+          writeFileSync(join(dir, 'apphost/apphost.mts'), `export const topology = 'later';`);
+          backendCommand(dir, 'git', ['add', 'apphost/apphost.mts']);
+          backendCommand(dir, 'git', ['commit', '-m', 'Advance topology while refresh runs']);
+        };
+        operations.recordSuccess = async () => {
+          const checked = inspectRefreshAppHost(candidate, dir, session);
+          if (!refreshIsCurrent({ ...current, revision, previousRevision: revision,
+            appHostChanged: checked.appHostChanged })) throw new Error('Final inspection rejected frozen topology');
+          writeFileSync(checked.checkpointPath, JSON.stringify({ revision,
+            appHostHash: checked.appHostHash, appHostSession: session }));
+          events.push('recordSuccess');
+        };
+        await executeRefresh(refreshPlan({ ...current, revision, previousRevision: revision,
+          modelCurrent: false, appHostChanged: initial.appHostChanged }), operations);
+        expect(events).toContain('beforeMutation');
+        expect(events.at(-1)).toBe('recordSuccess');
+        expect(events.filter(event => event === 'stopWriters')).toHaveLength(1);
+        expect(JSON.parse(readFileSync(join(stack, 'refresh.json'), 'utf8'))).toEqual({ revision,
+          appHostHash: frozenHash, appHostSession: session });
+        expect(backendCommand(activeBackend(stack)!, 'git', ['rev-parse', 'HEAD'])).toBe(revision);
+        expect(backendCommand(dir, 'git', ['rev-parse', 'HEAD'])).not.toBe(revision);
+        // The next refresh must still demand a restart for that later topology.
+        expect(inspectRefreshAppHost(dir, dir, session).appHostChanged).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 30_000);
+  }
 
   test('a newer maintenance code fix retains the previous generation intent and audit checkpoint', () => {
     const { dir, stack, revision } = repository();

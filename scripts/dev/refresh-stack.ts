@@ -277,6 +277,21 @@ export async function refreshMembershipCurrent(storageChanged: boolean, fusekiRe
   return !storageChanged && fusekiReady && !await hasUnnormalizedMembership(fuseki);
 }
 
+/** Inspect topology from the frozen candidate against the shared AppHost's
+ * loaded stamp/session. Later main merges belong to the next refresh. */
+export function inspectRefreshAppHost(candidate: string, stackRoot: string, appHostSession: string) {
+  const dir = stackDirectory(stackRoot, { profile: 'dev' });
+  const checkpointPath = join(dir, 'refresh.json');
+  const checkpoint = existsSync(checkpointPath)
+    ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as Checkpoint : undefined;
+  const appHostHash = appHostSourceHash(candidate);
+  const loadedHashFile = join(dir, 'apphost-hash');
+  const loadedAppHostHash = existsSync(loadedHashFile) ? readFileSync(loadedHashFile, 'utf8') : undefined;
+  const appHostChanged = loadedAppHostHash ? loadedAppHostHash !== appHostHash :
+    checkpoint?.appHostSession === appHostSession && checkpoint.appHostHash !== appHostHash;
+  return { checkpointPath, checkpoint, appHostHash, appHostChanged };
+}
+
 export async function inspectRefresh(root: string, stackRoot = root) {
   const dir = stackDirectory(stackRoot, { profile: 'dev' });
   const env = readEnv(join(dir, 'dev.env'));
@@ -305,12 +320,8 @@ export async function inspectRefresh(root: string, stackRoot = root) {
   const dashboard = described.resources?.find(resource => resource.dashboardUrl)?.dashboardUrl;
   if (!dashboard) throw new Error(`Shared AppHost session is unavailable. ${appHostRestartInstruction}`);
   const appHostSession = new URL(dashboard).origin;
-  const checkpointPath = join(dir, 'refresh.json');
-  const checkpoint = existsSync(checkpointPath)
-    ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as Checkpoint : undefined;
-  const appHostHash = appHostSourceHash(stackRoot);
-  const loadedHashFile = join(dir, 'apphost-hash');
-  const loadedAppHostHash = existsSync(loadedHashFile) ? readFileSync(loadedHashFile, 'utf8') : undefined;
+  const { checkpointPath, checkpoint, appHostHash, appHostChanged } =
+    inspectRefreshAppHost(root, stackRoot, appHostSession);
   const pinned = activeBackend(dir);
   const pinnedRevision = pinned ? command(pinned, 'git', ['rev-parse', 'HEAD']) : undefined;
   const unpinned = refreshResources.some((name) => {
@@ -376,8 +387,7 @@ export async function inspectRefresh(root: string, stackRoot = root) {
     unhealthyResources: refreshResources.filter(name => resources[name].state !== 'Running'
       || resources[name].healthStatus !== 'Healthy'),
     environmentChanges: [...new Set(environmentChanges)].sort(),
-    appHostChanged: unpinned || (loadedAppHostHash ? loadedAppHostHash !== appHostHash :
-      checkpoint?.appHostSession === appHostSession && checkpoint.appHostHash !== appHostHash),
+    appHostChanged: unpinned || appHostChanged,
     lostResources, zoneApprovals };
   return { input, plan: refreshPlan(input), image, active, targetGeneration, resources,
     checkpointPath, checkpoint: { revision, appHostHash, appHostSession } satisfies Checkpoint };
