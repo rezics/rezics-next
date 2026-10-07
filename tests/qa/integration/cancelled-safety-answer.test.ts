@@ -41,6 +41,19 @@ for (const state of ['accepted', 'failed', 'partial'] as const) {
           ),
         );
       }
+      const index = await f.stack.accessPool.query<{ definition: string }>(
+        "SELECT pg_get_indexdef('access.moderation_decision_answers_step'::regclass) AS definition",
+      );
+      if (!index.rows[0]!.definition.includes('case_sequence DESC'))
+        await f.stack.accessPool.query(
+          readFileSync(
+            new URL(
+              '../../../services/main/migrations/access/1751_current_safety_answer.sql',
+              import.meta.url,
+            ),
+            'utf8',
+          ),
+        );
       const first = await f.author.upload(png(121, 121));
       const second = await f.author.upload(png(122, 122));
       const receipt = await f.report(first, 'ncii', nciiDeclaration);

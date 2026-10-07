@@ -9,6 +9,7 @@ import type { ReviewReportOwner } from './report-review.ts';
 import { DisclosureStore, configureDisclosurePool } from '../disclosure/read.ts';
 import { operationOutcome, type OperationOutcome, type EffectState } from '../operation/outcome.ts';
 import { SafetyQueue } from '../safety-queue/store.ts';
+import { latestSafetyAnswerSql } from '../safety-queue/answered-step.ts';
 import { prepareDecisionNotices } from './notices.ts';
 import { validateDecisionEvidence } from './decision-evidence.ts';
 import { validContentLanguage } from '../public-report/contract.ts';
@@ -568,7 +569,10 @@ export class GovernanceStore {
       if (releasing.has(input.outcome)) {
         // A cancelled restoration may be the head. Eligibility still belongs
         // to the original restriction, as it does during owner confirmation.
-        const restriction = input.reversesDecisionId ?? (await client.query<{ id: string }>(`
+        const stepRestriction = input.answersStepId && (await client.query<{ decision_id: string | null }>(`
+          SELECT decision_id FROM access.governance_process_step WHERE id = $1 AND case_id = $2`,
+        [input.answersStepId, caseRow.id])).rows[0]?.decision_id;
+        const restriction = input.reversesDecisionId ?? stepRestriction ?? (await client.query<{ id: string }>(`
           SELECT id FROM access.moderation_decision WHERE case_id = $1
             AND outcome IN ('reject','restrict','interim_restrict','final_restrict')
           ORDER BY case_sequence DESC LIMIT 1`, [caseRow.id])).rows[0]?.id;
@@ -614,10 +618,10 @@ export class GovernanceStore {
         if (!step.rowCount) throw new GovernanceInvalid('answer step is outside this case');
         // Decisions and receipts are immutable. Only explicit cancellation
         // frees a step for a new answer; failed effects remain resumable.
-        if ((await client.query(`SELECT 1 FROM access.moderation_decision d
-          WHERE d.answers_step_id = $1 AND NOT EXISTS (
-            SELECT 1 FROM access.safety_decision_operation o WHERE o.decision_id = d.id AND o.cancelled)
-          LIMIT 1`, [input.answersStepId])).rowCount) {
+        if ((await client.query(`SELECT 1 FROM (${latestSafetyAnswerSql('$1')}) d
+          WHERE NOT EXISTS (
+            SELECT 1 FROM access.safety_decision_operation o WHERE o.decision_id = d.id AND o.cancelled)`,
+        [input.answersStepId])).rowCount) {
           throw new GovernanceStale('step already has a live answer');
         }
       }
@@ -999,6 +1003,7 @@ export class GovernanceStore {
             authority_scope_id: string;
             outcome: DecisionOutcome;
             reverses_decision_id: string | null;
+            answers_step_id: string | null;
             kind: string;
             urgent: boolean;
           }>(`SELECT d.*,c.urgent FROM access.moderation_decision d
@@ -1065,7 +1070,10 @@ export class GovernanceStore {
           await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 512))',
             [canonical([target.owner, target.resource, target.component])]);
           if (releasing.has(decision.outcome)) {
-            const source = decision.reverses_decision_id ?? (await client.query<{ id: string }>(`
+            const stepRestriction = decision.answers_step_id && (await client.query<{ decision_id: string | null }>(`
+              SELECT decision_id FROM access.governance_process_step WHERE id = $1 AND case_id = $2`,
+            [decision.answers_step_id, decision.case_id])).rows[0]?.decision_id;
+            const source = decision.reverses_decision_id ?? stepRestriction ?? (await client.query<{ id: string }>(`
               SELECT prior.id FROM access.moderation_decision prior JOIN access.moderation_decision current
                 ON current.case_id = prior.case_id AND prior.case_sequence < current.case_sequence
               WHERE current.id = $1 AND prior.outcome IN ('reject','restrict','interim_restrict','final_restrict')
@@ -1377,11 +1385,10 @@ export class GovernanceStore {
       if (!row || !row.not_before || this.clock() < row.not_before) throw new GovernanceStale('Restoration is not due');
       const originalKey = `rights-deadline:${stepId}`;
       const prior = (await client.query<{ id: string; cancelled: boolean }>(`
-        SELECT d.id,COALESCE(o.cancelled,false) AS cancelled FROM access.moderation_decision d
+        SELECT d.id,COALESCE(o.cancelled,false) AS cancelled FROM (${latestSafetyAnswerSql('$2')}) d
         LEFT JOIN access.safety_decision_operation o ON o.decision_id = d.id
-        WHERE d.principal_id = $1 AND d.kind = 'rights_disposition' AND d.answers_step_id = $2
-          AND (d.idempotency_key = $3 OR d.idempotency_key LIKE $3 || ':%')
-        ORDER BY d.case_sequence DESC LIMIT 1`,
+        WHERE d.principal_id = $1 AND d.kind = 'rights_disposition'
+          AND (d.idempotency_key = $3 OR d.idempotency_key LIKE $3 || ':%')`,
       [row.principal_id, stepId, originalKey])).rows[0];
       // Preserve the original retry identity. A cancelled attempt gets a new
       // key bound to the generation reviewed under the same case lock.

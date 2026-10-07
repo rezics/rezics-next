@@ -34,6 +34,19 @@ async function dueCounter(f: Fixture, size: number) {
         'utf8',
       ),
     );
+  const index = await f.stack.accessPool.query<{ definition: string }>(
+    "SELECT pg_get_indexdef('access.moderation_decision_answers_step'::regclass) AS definition",
+  );
+  if (!index.rows[0]!.definition.includes('case_sequence DESC'))
+    await f.stack.accessPool.query(
+      readFileSync(
+        new URL(
+          '../../../services/main/migrations/access/1751_current_safety_answer.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
   const image = await f.author.upload(png(size, size));
   const receipt = await f.report(image, 'copyright', {
     contactEmail: 'claimant@example.test',
