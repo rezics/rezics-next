@@ -268,10 +268,65 @@ export function topicContinuation(failure: ReadFailure): 'restart' | 'retry' {
   return failure === 'moved' || failure === 'invalid' ? 'restart' : 'retry';
 }
 
-/** Identity of one template read, so a retry replaces the page instead of keeping the failed one. */
+/**
+ * The mode after one attempt. A restart that fails stays a restart, including
+ * when the failure is offline or unavailable, so the next try is the first
+ * page again and never the cursor that was rejected.
+ */
+export function nextContinuation(fromStart: boolean, failure: ReadFailure): 'restart' | 'retry' {
+  return fromStart ? 'restart' : topicContinuation(failure);
+}
+
+/** The cursor one attempt sends. Restart omits it: that is the first page. */
+export function continuationRequest(fromStart: boolean, cursor: string | null): string | undefined {
+  return fromStart ? undefined : cursor ?? undefined;
+}
+
+/**
+ * Which page a read is. It is not a hash of the page's fields: the same works
+ * and cursor are the same page, and a correction arrives on the read itself.
+ */
 export function conceptFeedIdentity(read: Loaded<ConceptFeedPage>): string {
   if (!read.ok) return `unread:${read.failure}:${read.reference ?? ''}`;
   return `page:${read.data.nextCursor ?? ''}:${read.data.items.map(item => item.id).join(' ')}`;
+}
+
+/**
+ * Pages the reader loaded after the server read. They belong to that read
+ * only. A restart replaces the server page until the next server read.
+ */
+export interface TopicClientPages {
+  read: Loaded<ConceptFeedPage>;
+  appended: readonly ConceptWork[];
+  cursor: string | null;
+  restart: ConceptFeedPage | null;
+}
+
+/** The server read, plus client pages only while that same read is showing. */
+export function topicPageShown(read: Loaded<ConceptFeedPage>, client: TopicClientPages | null): {
+  items: ConceptWork[]; cursor: string | null;
+} {
+  if (!client || client.read !== read) {
+    const opened = topicFeedFrom(read);
+    return { items: opened.items, cursor: opened.cursor };
+  }
+  const base = client.restart ? client.restart.items : topicFeedFrom(read).items;
+  const seen = new Set(base.map(item => item.id));
+  return { items: [...base, ...client.appended.filter(item => !seen.has(item.id))], cursor: client.cursor };
+}
+
+/** Remember a successful Show more or restart against the server read it belongs to. */
+export function rememberTopicPage(read: Loaded<ConceptFeedPage>, client: TopicClientPages | null, page: ConceptFeedPage,
+  fromStart: boolean): TopicClientPages {
+  const current = client && client.read === read ? client : null;
+  const requested = fromStart ? null : current?.cursor ?? topicFeedFrom(read).cursor;
+  const base = fromStart ? page.items : current?.restart?.items ?? topicFeedFrom(read).items;
+  const applied = applyConceptWorks(fromStart ? base : [...base, ...(current?.appended ?? [])], page, requested);
+  const seen = new Set(base.map(item => item.id));
+  return {
+    read, restart: fromStart ? page : current?.restart ?? null,
+    appended: applied.items.filter(item => !seen.has(item.id)), cursor: applied.cursor,
+  };
 }
 
 /** The list and cursor one read shows, before any Show more. */

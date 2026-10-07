@@ -30,9 +30,9 @@ import { droppedOn, filterTitle, moved } from '../saved-filter/tabs.ts';
 import type { CommandResult, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
 import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import {
-  appendConceptTabs, applyConceptWorks, type ConceptFeedPage, type ConceptTabList, type ConceptWork,
-  conceptFeedIdentity, conceptTabsThatFit, conceptWorksExhausted, type FollowedConceptTab, filtersBesideTopics,
-  readConceptFeed, readConceptFollows, topicContinuation, topicFeedFrom, visibleConceptTabs,
+  appendConceptTabs, type ConceptFeedPage, type ConceptTabList, conceptTabsThatFit,
+  conceptWorksExhausted, continuationRequest, type FollowedConceptTab, filtersBesideTopics, nextContinuation,
+  readConceptFeed, readConceptFollows, rememberTopicPage, type TopicClientPages, topicPageShown, visibleConceptTabs,
 } from './followed-concept-feed.ts';
 import type { HomeMessages } from './messages.ts';
 
@@ -171,11 +171,12 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     if (!fromStart && !followsCursor) return;
     topicsBusy.current = true;
     setTopicsLoading(true);
-    const requested = fromStart ? undefined : followsCursor!;
+    const requested = continuationRequest(fromStart, followsCursor);
     const read = await (loadTopics ?? (next => readConceptFollows(browserMainApi(), actingSubject, next)))(requested);
     topicsBusy.current = false;
     setTopicsLoading(false);
-    if (!read.ok) { setTopicsNotice(topicContinuation(read.failure)); return; }
+    // A failed restart stays one: Show more must not ask for the rejected cursor.
+    if (!read.ok) { setTopicsNotice(nextContinuation(fromStart, read.failure)); return; }
     if (fromStart) {
       setLoaded(read.data.tabs);
       setTopicCursor(read.data.nextCursor);
@@ -431,41 +432,35 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
   messages: { home: HomeMessages }; load?: ConceptLoader;
 }) {
   const home = materializeData(messages.home, { locale });
-  const identity = conceptFeedIdentity(initial);
-  const opened = topicFeedFrom(initial);
-  const [seen, setSeen] = useState(identity);
-  const [items, setItems] = useState<ConceptWork[]>(opened.items);
-  const [cursor, setCursor] = useState<string | null>(opened.cursor);
+  const [client, setClient] = useState<TopicClientPages | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<'retry' | 'restart' | null>(null);
   const busy = useRef(false);
-  // A new read (retry, refresh) replaces the page. The previous cursor is not kept.
-  if (seen !== identity) {
-    setSeen(identity);
-    setItems(opened.items);
-    setCursor(opened.cursor);
+  const active = client && client.read === initial ? client : null;
+  // The server read is the page. Client pages belong to that read and go when it does.
+  if (client && !active) {
+    setClient(null);
     setNotice(null);
     setLoading(false);
     busy.current = false;
   }
+  const shown = topicPageShown(initial, active);
   const label = topic?.name?.value ?? home.untitledTab;
   async function more(fromStart = false) {
     if (!topic || busy.current) return;
-    if (!fromStart && !cursor) return;
+    if (!fromStart && !shown.cursor) return;
     busy.current = true;
     setLoading(true);
-    const requested = fromStart ? undefined : cursor!;
+    const requested = continuationRequest(fromStart, shown.cursor);
     const read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested);
     busy.current = false;
     setLoading(false);
-    if (!read.ok) { setNotice(topicContinuation(read.failure)); return; }
-    const applied = applyConceptWorks(fromStart ? [] : items, read.data, fromStart ? null : cursor);
-    setItems(applied.items);
-    setCursor(applied.cursor);
+    if (!read.ok) { setNotice(nextContinuation(fromStart, read.failure)); return; }
+    setClient(rememberTopicPage(initial, active, read.data, fromStart));
     setNotice(null);
   }
   if (!initial.ok) return <TopicFailure failure={initial.failure} reference={initial.reference} />;
-  if (conceptWorksExhausted(items, cursor)) {
+  if (notice !== 'restart' && conceptWorksExhausted(shown.items, shown.cursor)) {
     return <EmptyState icon={TagIcon} title={home.emptyPinned({ topic: label })} description={home.emptyTopicBody}
       className="m-3 sm:m-4">
       {topic ? <Link href={localizedPath(conceptPath(topic.id), locale)}
@@ -474,14 +469,14 @@ export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
   }
   return <div>
     <ul>
-      {items.map(item => <li key={item.id} className="border-border/60 border-b">
+      {shown.items.map(item => <li key={item.id} className="border-border/60 border-b">
         <Link href={localizedPath(resourceHref('/w/', item.id), locale)} lang={item.name.language}
           dir={item.name.direction} className={cn(postRhythm.row, postRhythm.title, 'block text-balance outline-none',
             'hover:bg-foreground/[0.03] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset')}>
           {item.name.value}</Link>
       </li>)}
     </ul>
-    {notice === 'restart' || cursor ? <div className="grid justify-items-center gap-2 px-4 py-3">
+    {notice === 'restart' || shown.cursor ? <div className="grid justify-items-center gap-2 px-4 py-3">
       {notice === 'restart' ? <p role="status" className="text-center text-sm">{home.topicMoved}</p> : null}
       {notice === 'retry' ? <p role="status" className="text-destructive-foreground text-sm">{home.topicMoreFailed}</p> : null}
       {notice === 'restart'

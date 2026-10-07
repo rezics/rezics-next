@@ -2,8 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   addressConceptTab, appendConceptTabs, appendConceptWorks, applyConceptWorks, conceptFeedIdentity,
   conceptFeedPage, conceptFeedQuery, conceptTabList, conceptTabsFromFollows, conceptTabsThatFit,
-  conceptWorksExhausted, CONCEPT_FEED_MAX_PAGE, CONCEPT_FEED_QUERY, filtersBesideTopics, readConceptFeed,
-  readFirstConceptPage, tabFromFollowState, topicContinuation, topicFeedFrom, visibleConceptTabs, withOpenedConcept,
+  conceptWorksExhausted, CONCEPT_FEED_MAX_PAGE, CONCEPT_FEED_QUERY, continuationRequest, filtersBesideTopics,
+  nextContinuation, readConceptFeed, readFirstConceptPage, rememberTopicPage, tabFromFollowState,
+  topicContinuation, topicFeedFrom, topicPageShown, visibleConceptTabs, withOpenedConcept,
 } from '../features/home/followed-concept-feed.ts';
 const concept = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uuid = (n: number) => concept(n).slice(-36);
@@ -168,6 +169,32 @@ describe('followed topic tabs', () => {
     const restarted = applyConceptWorks(stale.items, newest, null);
     expect(restarted).toEqual({ items: newest.items, cursor: null });
     expect(restarted.items.map(item => item.id)).not.toEqual(stale.items.map(item => item.id));
+  });
+
+  test('a restart that fails stays a restart and asks for the first page again', () => {
+    expect(nextContinuation(true, 'offline')).toBe('restart');
+    expect(nextContinuation(true, 'unavailable')).toBe('restart');
+    expect(continuationRequest(true, 'dead')).toBeUndefined();
+    expect(nextContinuation(false, 'offline')).toBe('retry');
+    expect(continuationRequest(false, 'dead')).toBe('dead');
+    const server = { ok: true as const, data: conceptFeedPage(envelope([work(1)], 'dead'))! };
+    const newest = conceptFeedPage(envelope([work(9)], null))!;
+    const restarted = rememberTopicPage(server, null, newest, true);
+    expect(topicPageShown(server, restarted)).toEqual({ items: newest.items, cursor: null });
+  });
+
+  test('a refreshed page shows the server read and drops the pages the client appended', () => {
+    const server = { ok: true as const, data: conceptFeedPage(envelope([work(1)], 'older'))! };
+    const corrected = { ok: true as const, data: {
+      ...server.data,
+      items: [{ ...server.data.items[0]!, name: { ...server.data.items[0]!.name, value: 'Corrected' } }],
+    } };
+    expect(conceptFeedIdentity(server)).toBe(conceptFeedIdentity(corrected));
+    const kept = rememberTopicPage(server, null, conceptFeedPage(envelope([work(3)], null))!, false);
+    expect(topicPageShown(server, kept).items.map(item => item.id)).toEqual([concept(201), concept(203)]);
+    const refreshed = topicPageShown(corrected, kept);
+    expect(refreshed.items.map(item => item.name.value)).toEqual(['Corrected']);
+    expect(refreshed.cursor).toBe('older');
   });
 
   test('a topic tab does not depend on Saved Filters, and it replaces only the filter that named that topic', () => {
