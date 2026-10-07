@@ -973,17 +973,17 @@
     },
     {
       "id": "source-field-statement-v1",
-      "sha256": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
+      "sha256": "bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7",
       "file": "shapes/source-field-statement-v1.ttl"
     },
     {
       "id": "source-open-library-work-v1",
-      "sha256": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
+      "sha256": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
       "file": "shapes/source-open-library-work-v1.ttl"
     },
     {
       "id": "source-reification-v1",
-      "sha256": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
+      "sha256": "70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c",
       "file": "shapes/source-reification-v1.ttl"
     },
     {
@@ -4111,9 +4111,9 @@
     "shapes/semantic-model-generation-v1.ttl": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
     "shapes/semantic-rule-v1.ttl": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
-    "shapes/source-field-statement-v1.ttl": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
-    "shapes/source-open-library-work-v1.ttl": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
-    "shapes/source-reification-v1.ttl": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
+    "shapes/source-field-statement-v1.ttl": "bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7",
+    "shapes/source-open-library-work-v1.ttl": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
+    "shapes/source-reification-v1.ttl": "70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c",
     "shapes/space-realm-v1.ttl": "74a39bad65c0fd259f557146bed386843c5919fac3491b7503032d1ce9e370c2",
     "shapes/space-realm-v2.ttl": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
     "shapes/space-realm-v3.ttl": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
@@ -4158,7 +4158,7 @@
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
     "shapes/zone-presentation-v2.ttl": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
     "packages/model/src/generated/arbitraries.ts": "2e3d6a1a082ab0131fdf5fdee2c5828ad73e60bb129607bcd0afb2b68e3686d3",
-    "packages/model/src/generated/profiles.ts": "fb1dc235b76a1a02386c9750f01970f775f56376414354130f43fe17e70df297",
+    "packages/model/src/generated/profiles.ts": "266a117a3ac4dc1e211ee4ee2dfc073333b38a972d267161f7e3490305206975",
     "packages/model/src/generated/schemas.ts": "fb259520e8ab30187ef0f8599309e4744ce49002906db0712beaba5d22d88d6f",
     "packages/model/src/generated/vocabulary.ts": "b58a12a5ec25fa18261289b7adec589d48154dd8d535939bd845de1ce8b6123e"
   }

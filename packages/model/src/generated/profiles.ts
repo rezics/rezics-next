@@ -1151,7 +1151,7 @@ export const profileRegistry = {
     ]
   },
   "source-field-statement-v1": {
-    "sha256": "ef3347dcf04ad576bb156afcfcbb8b35316abaeb3700dc30f2d4827e686594d2",
+    "sha256": "bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7",
     "file": "shapes/source-field-statement-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/source-field-statement-v1/statement-shape"
@@ -1161,7 +1161,7 @@ export const profileRegistry = {
     ]
   },
   "source-open-library-work-v1": {
-    "sha256": "708b975233ceb3e4dc670ff4821011ba91c938a73c9739cfe94052ebdf22ce07",
+    "sha256": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
     "file": "shapes/source-open-library-work-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/source-open-library-work-v1/record-shape",
@@ -1175,7 +1175,7 @@ export const profileRegistry = {
     ]
   },
   "source-reification-v1": {
-    "sha256": "57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100",
+    "sha256": "70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c",
     "file": "shapes/source-reification-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/source-reification-v1/statement-shape"

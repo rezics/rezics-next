@@ -8,152 +8,41 @@
 
 <https://rezics.com/definition/source-field-statement-v1/statement-shape>
     a sh:NodeShape ;
-    sh:property [
-        sh:path rdf:type ;
-        sh:hasValue rv:SourceStatement ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceConversion ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-        sh:class rv:SourceConversion ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceMappingRevision ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ;
-        sh:maxLength 100 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceGrain ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ;
-        sh:maxLength 64 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceField ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:minLength 1 ;
-        sh:maxLength 200 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceOccurrence ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceOrdinal ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:integer ;
-        sh:minInclusive 0 ;
-        sh:maxInclusive 65535 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceStatementRole ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:in ( "main" "qualifier" "reference" ) ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceQualifies ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-        sh:class rv:SourceStatement ;
-    ] ;
-    sh:property [
-        sh:path rv:fieldDisposition ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:in ( "native" "structured-source-only" "lossy" "excluded" "unsupported" ) ;
-    ] ;
-    sh:property [
-        sh:path rv:dispositionReason ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:minLength 1 ;
-        sh:maxLength 500 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceValueKind ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:in ( "value" "somevalue" "novalue" "null" "unknown" ) ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceLexical ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:maxLength 65536 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceDatatype ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceLanguage ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:pattern "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$" ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceRank ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:in ( "preferred" "normal" "deprecated" ) ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceTimePrecision ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:integer ;
-        sh:minInclusive 0 ;
-        sh:maxInclusive 14 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceCalendar ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceQuantityUnit ;
-        sh:maxCount 1 ;
-        sh:nodeKind sh:IRI ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceQuantityLower ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:maxLength 200 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceQuantityUpper ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:maxLength 200 ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceStatisticKind ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:in ( "score-average" "score-count" "score-distribution" "user-count" "popularity" "rank" ) ;
-    ] ;
-    sh:property [
-        sh:path rv:sourceByteDigest ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-        sh:datatype xsd:string ;
-        sh:pattern "^[0-9a-f]{64}$" ;
-    ] .
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceStatement ] ;
+    sh:property [ sh:path rv:sourceConversion ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ; sh:class rv:SourceConversion ] ;
+    sh:property [ sh:path rv:sourceMappingRevision ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:maxLength 100 ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ] ;
+    sh:property [ sh:path rv:sourceGrain ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:maxLength 64 ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ] ;
+    sh:property [ sh:path rv:sourceField ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:sourceOccurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceOrdinal ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 65535 ] ;
+    sh:property [ sh:path rv:sourceStatementRole ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:in ( "main" "qualifier" "reference" ) ] ;
+    sh:property [ sh:path rv:sourceQualifies ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:class rv:SourceStatement ] ;
+    sh:property [ sh:path rv:fieldDisposition ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:in ( "native" "structured-source-only" "lossy" "excluded" "unsupported" ) ] ;
+    sh:property [ sh:path rv:dispositionReason ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 500 ] ;
+    sh:property [ sh:path rv:sourceValueKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:in ( "value" "somevalue" "novalue" "null" "unknown" ) ] ;
+    sh:property [ sh:path rv:sourceLexical ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 65536 ] ;
+    sh:property [ sh:path rv:sourceDatatype ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceLanguage ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:pattern "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$" ] ;
+    sh:property [ sh:path rv:sourceRank ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:in ( "preferred" "normal" "deprecated" ) ] ;
+    sh:property [ sh:path rv:sourceTimePrecision ; sh:maxCount 1 ; sh:datatype xsd:integer ;
+        sh:minInclusive 0 ; sh:maxInclusive 14 ] ;
+    sh:property [ sh:path rv:sourceCalendar ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceQuantityUnit ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:sourceQuantityLower ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:sourceQuantityUpper ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 200 ] ;
+    sh:property [ sh:path rv:sourceStatisticKind ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:in ( "score-average" "score-count" "score-distribution" "user-count" "popularity" "rank" ) ] ;
+    sh:property [ sh:path rv:sourceByteDigest ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] .
