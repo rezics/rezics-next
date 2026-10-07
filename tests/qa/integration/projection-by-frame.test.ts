@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { isForegroundOperation } from './support/operation-cost.ts';
 import { ProjectionStore, projectionFrameListSql } from '../../../services/main/src/modules/projection/store.ts';
 import { PROJECTION_CREATION_QUOTA, projectionKey } from '../../../services/main/src/modules/projection/schema.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
@@ -116,14 +119,64 @@ interface Plan {
 }
 const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes)];
 
+/** workRead opens and closes on this control query. Summary rows select more variables. */
+function workReadPosition(sparql: string): boolean {
+  const compact = sparql.replace(/\s+/g, ' ');
+  const selected = compact.match(/SELECT (\?[\w]+(?: \?[\w]+)*) WHERE/u);
+  if (!selected || !compact.includes('rv:routingEpoch')) return false;
+  return selected[1]!.split(' ').every((name) => name === '?epoch' || name === '?sequence');
+}
+
+/** A moved graph replays the read. Cost is the attempt whose fences agree, not
+ * the discarded ones or another operation sharing the client. */
+function settledAttemptQueries(samples: { fence: boolean; sequence: string | null }[]): number {
+  const fences = samples.flatMap((sample, index) => (sample.fence ? [index] : []));
+  let chosen: { from: number; to: number } | null = null;
+  for (let pair = 0; pair + 1 < fences.length; pair += 2) {
+    const open = fences[pair]!;
+    const close = fences[pair + 1]!;
+    const sequence = samples[open]!.sequence;
+    if (!sequence || sequence !== samples[close]!.sequence) continue;
+    chosen = { from: open, to: fences[pair + 2] ?? samples.length };
+  }
+  return chosen ? chosen.to - chosen.from : samples.length;
+}
+
+const projectionRead = new AsyncLocalStorage<true>();
+
+async function settledGraphQueries(action: () => Promise<void>): Promise<number> {
+  const samples: { fence: boolean; sequence: string | null }[] = [];
+  const native = stack.fuseki.query.bind(stack.fuseki);
+  stack.fuseki.query = async (sparql: string, maxBytes?: number): Promise<SparqlResult> => {
+    const result = await native(sparql, maxBytes);
+    if (projectionRead.getStore() && isForegroundOperation()) {
+      const fence = workReadPosition(sparql);
+      samples.push({
+        fence,
+        sequence: fence ? (result.results?.bindings?.[0]?.sequence?.value ?? null) : null,
+      });
+    }
+    return result;
+  };
+  try {
+    await projectionRead.run(true, action);
+  } finally {
+    stack.fuseki.query = native;
+  }
+  return settledAttemptQueries(samples);
+}
+
 test('frame candidate seeks and graph cost stay bounded as unrelated and same-frame inventories grow', async () => {
   const store = new ProjectionStore(stack.accessPool);
   const subject = (await json<Page>(await read(null, match))).items[0]!.subject;
   const graphCost = async () => {
-    const before = stack.fuseki.queries;
-    expect(await json<Page>(await read(null, match))).toMatchObject({ items: [{ id: first }], nextCursor: expect.any(String) });
-    expect(await json<Page>(await read(null, match, { subject }))).toMatchObject({ items: [{ id: first }], nextCursor: null });
-    return stack.fuseki.queries - before;
+    const listed = await settledGraphQueries(async () => {
+      expect(await json<Page>(await read(null, match))).toMatchObject({ items: [{ id: first }], nextCursor: expect.any(String) });
+    });
+    const narrowed = await settledGraphQueries(async () => {
+      expect(await json<Page>(await read(null, match, { subject }))).toMatchObject({ items: [{ id: first }], nextCursor: null });
+    });
+    return listed + narrowed;
   };
   const before = await graphCost();
   // The inventory below is fixture SQL, but the creation quota still applies per principal: spread it over creators

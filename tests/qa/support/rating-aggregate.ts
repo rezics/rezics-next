@@ -14,6 +14,7 @@ import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from '../../../services/main/src/m
 import { DATASET, GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { accessStateTables, type AccessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { ratingAggregateBackground } from './rating-aggregate-background.ts';
+import { isForegroundOperation } from '../integration/support/operation-cost.ts';
 
 interface Opinion { observation: string; observationRevision: string; context: string; value: number | null;
   sourcePosition: { sequence: string }; replayed: boolean }
@@ -57,7 +58,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
     const query = client.query;
     client.query = function (...args: unknown[]) {
       const meter = sqlMeter.getStore();
-      if (meter) meter.calls++;
+      if (meter && isForegroundOperation()) meter.calls++;
       return Reflect.apply(query, this, args);
     } as typeof client.query;
   });

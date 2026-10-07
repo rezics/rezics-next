@@ -160,6 +160,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/discovery-rating-effects.test.ts',
   // A thousand Studio chapter commands need their own wall budget and exact Work/Post inventory.
   'tests/qa/integration/post-catalogue-scale.test.ts',
+  // Designates the first platform administrator on a fresh stack.
+  'tests/qa/integration/platform-bootstrap.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

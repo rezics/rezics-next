@@ -354,6 +354,8 @@ test('a shared rendition retains the requesting Use target, private media access
   expect(privateCandidates).toHaveLength(2);
   expect((await call('GET', privateCandidates[0].url)).status).toBe(404);
   expect((await owner.read(privateCandidates[0].url)).status).toBe(200);
+  const publishedUse = new URL(privateCandidates[0].url, 'http://main.local').searchParams.get('use');
+  expect(publishedUse).toBe(privateUse);
   const sourceLabels = await owner.send(
     'POST',
     `/v1/media/representations/${image.representation}/labels`,
@@ -374,7 +376,7 @@ test('a shared rendition retains the requesting Use target, private media access
   expect(metadata?.metadata.nsfw).toBe('nsfw');
   expect(metadata?.metadata.nsfwSourceId).toContain(image.representation);
   expect(metadata?.target).toBe(privateTarget.work);
-  const conceal = await owner.send('POST', `/v1/media/uses/${privateUse}/conceal`, {
+  const conceal = await owner.send('POST', `/v1/media/uses/${publishedUse}/conceal`, {
     actingSubject: owner.actor,
     expectedValueHead: null,
     basis: { head: null, epoch: '0', protection: null },

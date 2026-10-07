@@ -62,7 +62,7 @@ test('a listed group member shares its leader vote, revision and stable retry re
         [stack.env.lineage.dataEpoch, leader!.group.key],
       )
     ).rows;
-    const member = groupRows.find((row) => !row.group_leader)!.id;
+    const storedMember = groupRows.find((row) => !row.group_leader)!.id;
     expect(groupRows.find((row) => row.group_leader)!.id).toBe(leader!.id);
     const vote = (value: -1 | 0 | 1, expectedRevision: string | null = null) => ({
       profile: 'feed-vote-command-v1',
@@ -81,8 +81,12 @@ test('a listed group member shares its leader vote, revision and stable retry re
     const hide = { actingSubject: reader, kind: 'activity', target: leader!.id, strength: 'hide' };
     await json(await call('POST', '/v1/me/feed-feedback', hide, home.reader.token));
     const [visible] = await listed();
+    // Votes name the id the feed returned. The owner row only proves that id is
+    // the non-leader; it does not become a request path.
+    const member = visible!.id;
+    expect(member).toBe(storedMember);
     expect(visible).toMatchObject({
-      id: member,
+      id: storedMember,
       group: { count: 1 },
       score: 1,
       vote: 1,

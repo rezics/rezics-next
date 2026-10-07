@@ -8,6 +8,7 @@ import {
   shutdownTelemetry,
 } from '@rezics/observability/runtime';
 import { assertWorkCost, profileRequest, startWorkProfileSink } from './work-profile.ts';
+import { isForegroundOperation } from '../integration/support/operation-cost.ts';
 
 /** The same page/build cohort runs at 100, then isolated restores of 1000 and
  * 10000 command-created Works. Before implementations are retained in .temp. */
@@ -227,7 +228,9 @@ export async function classificationCostProfile() {
     const native = stack.fuseki.query.bind(stack.fuseki);
     stack.fuseki.query = async (...args) => {
       const result = await native(...args);
-      if (args[0].includes('SELECT ?index ?epoch ?sequence')) {
+      // Background probes share this client. A moved sequence is the foreground
+      // read's fault, so a scheduler query must keep the sequence it observed.
+      if (isForegroundOperation() && args[0].includes('SELECT ?index ?epoch ?sequence')) {
         for (const row of result.results?.bindings ?? []) row.sequence!.value = '999999999';
       }
       return result;

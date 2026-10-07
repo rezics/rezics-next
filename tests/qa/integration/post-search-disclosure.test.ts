@@ -24,7 +24,25 @@ for (const nativeBookText of [false, true]) {
 test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue-only'} Book use and restores hits without reprojecting Content`, async () => {
   const stack = await startMediaStack('post-search-disclosure', { contentProjection: true });
   try {
+    const baseline = await stack.content.ownerPosition();
     await stack.contentCursor.initialize(stack.contentConsumer);
+    // Public search counts every eligible variant. This consumer is new, so it
+    // starts at sequence 0; skipping earlier publications leaves them unprojected
+    // and the shared graph refuses the query. Catch up to the head taken before
+    // this test's writes. The loop below still bounds only those writes.
+    for (;;) {
+      const checkpoint = await stack.contentCursor.read(stack.contentConsumer);
+      if (checkpoint.dataEpoch !== baseline.dataEpoch) {
+        throw new Error('Content owner epoch changed before chapter search preparation');
+      }
+      const at = BigInt(checkpoint.sequence);
+      const head = BigInt(baseline.sequence);
+      if (at === head) break;
+      if (at > head) throw new Error('Content projection passed the shared owner head');
+      if (!await relayContentProjectionOnce(stack.env, stack.content, stack.contentCursor, stack.contentConsumer)) {
+        throw new Error('Content projection stopped before the shared owner head');
+      }
+    }
     const actor = await stack.member('chapter-author');
     const objects = stack.objects('semantic/structure/');
     await objects.initialize();

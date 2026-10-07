@@ -76,9 +76,10 @@ test('Rating question presentations preserve meaning across locales, permission 
       outsider = await s.member('reader'),
       drafter = await s.member('draft-delegate');
     const members = [owner, manager, outsider, drafter];
-    // Reuse the project's designated account with a fresh controlled persona
-    // when an earlier file already bootstrapped it. Never replace its role or
-    // designation receipt just to make this fixture the first administrator.
+    // A prior platform:grant is read from the grant episode, not the dropped
+    // administrator table. It only chooses the expected designation status.
+    // This fixture's own member stays the request principal, so that row never
+    // enters a client request.
     const designated = (
       await s.accessPool.query<{ id: string; issuer: string; subject: string }>(`
       SELECT p.id,p.account_issuer AS issuer,p.account_subject AS subject
@@ -87,43 +88,7 @@ test('Rating question presentations preserve meaning across locales, permission 
       JOIN access.principal p ON p.id = g.principal_id AND p.active
       WHERE e.permission = 'platform:grant' AND g.active AND g.valid_until = 'infinity'
       ORDER BY e.created_at,e.id LIMIT 1`)
-    ).rows[0];
-    if (designated) {
-      owner.principal = { issuer: designated.issuer, subject: designated.subject };
-      owner.principalId = designated.id;
-      owner.grant = async (scope: string, action: string) => {
-        const grantId = randomUUID(),
-          client = await s.accessPool.connect();
-        try {
-          await client.query('BEGIN');
-          await client.query(
-            'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
-            [scope],
-          );
-          const expiry =
-            action === 'agent.control'
-              ? 'infinity'
-              : new Date(Date.now() + 3_600_000).toISOString();
-          await client.query(
-            `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-            VALUES($1,$2,$3,$4,$5)`,
-            [randomUUID(), owner.principalId, owner.actor, action, expiry],
-          );
-          await client.query(
-            `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-            VALUES($1,$2,$2,$3,$4,$5)`,
-            [grantId, owner.actor, scope, action, expiry],
-          );
-          await client.query('COMMIT');
-          return grantId;
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        } finally {
-          client.release();
-        }
-      };
-    }
+    ).rows[0] !== undefined;
     await owner.grant('work:create:root', 'agent.control');
     expect(
       (

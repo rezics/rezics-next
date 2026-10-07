@@ -27,14 +27,14 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
       throw new Error('Fixture relay exceeded its batch bound');
     };
     await drain();
-    const inputs = new DiscoveryRefreshInputs(relay, consumer);
-    const projection = new DiscoveryProjection(f.accessPool), store = new DiscoveryRefreshStore(f.accessPool);
+    const store = new DiscoveryRefreshInputs(relay, consumer);
+    const projection = new DiscoveryProjection(f.accessPool), refresh = new DiscoveryRefreshStore(f.accessPool);
     const basis = { scope: 'global' as const, realm: null, context: null, owner: null };
     const key = discoveryScopeKey(basis);
     const deps = { environment: f.env, access: f.access, discovery: projection,
-      discoveryRefreshInputs: inputs, account: { verify: async () => writer.principal },
+      discoveryRefreshInputs: store, account: { verify: async () => writer.principal },
       relayPosition: new RelayHandoffPositions(relay, consumer) };
-    await store.enroll([basis]);
+    await refresh.enroll([basis]);
     const originalCommit = projection.commitBatch.bind(projection);
     // One original per batch creates six durable checkpoints in this small
     // fixture. Projection reads, SQL rows and source fences remain real.
@@ -48,7 +48,7 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
       await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 second'
         WHERE scope_key=$1`, [key]);
       const before = f.fuseki.queries, started = performance.now();
-      const outcome = await new DiscoveryRefreshWorker(deps, store, projection).tick();
+      const outcome = await new DiscoveryRefreshWorker(deps, refresh, projection).tick();
       ticks++; maxCalls = Math.max(maxCalls, f.fuseki.queries - before);
       maxMs = Math.max(maxMs, performance.now() - started);
       expect(f.fuseki.queries - before).toBeLessThanOrEqual(DISCOVERY_REFRESH_COST.graphCalls);
@@ -158,15 +158,15 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     expect(await tick()).toBe('activated');
     // A stale refresh claim cannot overwrite validation evidence.
     await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 second' WHERE scope_key=$1`, [key]);
-    const old = await store.claim();
+    const old = await refresh.claim();
     await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 second' WHERE scope_key=$1`, [key]);
-    await store.claim();
-    await expect(store.validated(old!, await projection.view(automaticDiscovery(null), active.generation_id),
+    await refresh.claim();
+    await expect(refresh.validated(old!, await projection.view(automaticDiscovery(null), active.generation_id),
       '999')).rejects.toBeInstanceOf(RecommendationStale);
     // A missing batch remains a hard restart boundary, never an optimistic
     // partial relation. Corrupt only the isolated fixture's retained evidence.
     await relay.query('DELETE FROM relay.delivered_event WHERE data_epoch=$1 AND sequence=$2',
       [f.env.lineage.dataEpoch, pending.validated]);
-    expect(await inputs.read({ dataEpoch: f.env.lineage.dataEpoch, sequence: pending.validated }, pending.source_sequence)).toBeNull();
+    expect(await store.read({ dataEpoch: f.env.lineage.dataEpoch, sequence: pending.validated }, pending.source_sequence)).toBeNull();
   } finally { await relay.end(); await f.stop(); }
 }, 240_000);

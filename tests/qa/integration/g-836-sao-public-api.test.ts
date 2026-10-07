@@ -21,6 +21,7 @@ import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuse
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { readNextMainOutboxBatch, readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
+import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
 const scopes = 'openid work:create work:edit work:read work:correct work:review work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read address:claim agent:create space:create rating:configure rating:submit follow:write follow:read';
@@ -346,8 +347,12 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     afterCapture('library',actorA,async () => { await status(survivor.work,actorA,'reading',f.account.tokenA,Number(libraryVersion)); });
     const followRevision = (await f.accessPool.query<{ revision: string }>('SELECT revision::text FROM access.follow WHERE principal_id=$1 AND target=$2',[f.principalId,survivor.work])).rows[0]!.revision;
     afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,followRevision); });
-    const ratingRevision = (await f.accessPool.query<{ revision: string }>('SELECT revision FROM access.rating_aggregate_head WHERE context=$1 AND work=$2 AND principal_id=$3',
-      [context,survivor.work,f.principalId])).rows[0]!.revision;
+    // The write compares the graph observation head, which is the value a client
+    // retries with. The aggregate table is only that head's private witness.
+    const ratingSlot = standingRatingSlotIri(f.principalId, context, survivor.mainVersion);
+    const ratingRevision = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?prior WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?observation a rv:GlobalRatingObservation ; rv:ratingSlot ${iri(ratingSlot)} ;
+        rv:observationHead ?prior } } LIMIT 1`)).results!.bindings[0]!.prior!.value;
     afterCapture('rating',`${f.principalId}|${context}`,async () => {
       await json(await call('POST','/v1/global-rating-observations',{ profile: 'global-rating-standing-observation-v1',context,
         work: survivor.work,mainVersion: survivor.mainVersion,expectedRevisionHead: ratingRevision,value: 3,actingSubject: actorA }),201);

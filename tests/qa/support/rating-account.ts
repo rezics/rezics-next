@@ -26,6 +26,17 @@ export async function ratingAccount(apps: Record<string, string>,
   scopes = 'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read',
   deletionFence?: (issuer: string, subject: string) => Promise<void>) {
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
+  // Migration and the live auth share this pool. A second driver must not
+  // close it while the fixture's server is still answering introspection.
+  let releasePool = false;
+  const endPool = pool.end.bind(pool);
+  pool.end = ((callback?: () => void) => {
+    if (!releasePool) {
+      callback?.();
+      return Promise.resolve();
+    }
+    return endPool(callback);
+  }) as typeof pool.end;
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -93,6 +104,7 @@ export async function ratingAccount(apps: Record<string, string>,
     const a = await signUp('a'), b = await signUp('b');
     let stopped = false;
     const stop = async () => { if (!stopped) { stopped = true; await account.stop(true); } };
+    const closePool = async () => { releasePool = true; await endPool(); };
     return { issuer: `${base}/api/auth`, a, b, tokenFor,
       expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
       stop,
@@ -101,6 +113,6 @@ export async function ratingAccount(apps: Record<string, string>,
         audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
-      close: async () => { await stop(); await pool.end(); } };
-  } catch (error) { await account.stop(true); await pool.end(); throw error; }
+      close: async () => { await stop(); await closePool(); } };
+  } catch (error) { await account.stop(true); releasePool = true; await endPool(); throw error; }
 }

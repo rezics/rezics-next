@@ -45,6 +45,7 @@ async function fixture() {
   const pool = new Pool({ connectionString: databases.urls.access });
   const principalId = randomUUID(), actor = native();
   const principal = { issuer: 'https://scope-gate.test', subject: randomUUID() };
+  let workCreateGrant = '';
   try {
     await pool.query(`INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)`,
       [principalId, principal.issuer, principal.subject]);
@@ -52,10 +53,12 @@ async function fixture() {
     await pool.query(`INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING`, [scope]);
     for (const action of ['work.create', 'access.grant.assign.work.create', 'access.membership.consent',
       'access.membership.manage.realm', 'access.role.manage', 'access.revoke', POLICY_SET_ADMISSION]) {
+      const grantId = randomUUID();
+      if (action === 'work.create') workCreateGrant = grantId;
       await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
         VALUES ($1,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [randomUUID(), principalId, actor, action]);
       await pool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-        VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
+        VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '1 hour')`, [grantId, actor, scope, action]);
     }
   } catch (error) { await pool.end(); await databases.close(); throw error; }
   const registry = new AccessAdmissionRegistry(pool);
@@ -68,7 +71,7 @@ async function fixture() {
     receipt: `urn:rezics:receipt:${createHash('sha256').update(`${row.id}\0${receiptFamilyFor(row.action)}`).digest('hex')}`,
     outcome: 'cancelled', dataEpoch: 'scope-gate-fixture', sequence: '1',
   });
-  return { pool, url: databases.urls.access, registry, actor, principal, principalId, request, epoch, cancelled,
+  return { pool, url: databases.urls.access, registry, actor, principal, principalId, workCreateGrant, request, epoch, cancelled,
     close: async () => { await pool.end(); await databases.close(); } };
 }
 
@@ -632,7 +635,7 @@ test('A strong source cut keeps its pending admissions stable while terminal ack
   try {
     const row = await f.registry.register(f.request());
     await f.registry.claim(row.id, row.requestDigest);
-    const grantId = (await f.pool.query('SELECT represented_grant_id FROM access.admission WHERE id = $1', [row.id])).rows[0].represented_grant_id;
+    const grantId = f.workCreateGrant;
     const revocations = new AccessRevocations(writer);
     const changing = revocations.revoke(f.principal, { revocationId: randomUUID(), issuerSubject: f.actor,
       scopeId: scope, expectedAuthorityEpoch: '0', mode: 'strong',
@@ -668,7 +671,7 @@ test('Claim takes selected sources before its admission row so concurrent strong
   });
   try {
     const row = await f.registry.register(f.request());
-    const grantId = (await f.pool.query('SELECT represented_grant_id FROM access.admission WHERE id = $1', [row.id])).rows[0].represented_grant_id;
+    const grantId = f.workCreateGrant;
     const pid = (await writer.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
     const claiming = new AccessAdmissionRegistry(claimant).claim(row.id, row.requestDigest);
     pending.push(claiming); await within(rowLocked.promise);
