@@ -79,6 +79,8 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
     'zone.edit': { prefix: 'zone:edit:', kind: 'zone' },
     'media.campaign': { prefix: 'zone:edit:', kind: 'zone' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
+    // A cook who authored a recipe writes its Composition without a separate grant.
+    'recipe.edit': { prefix: 'work:edit:', kind: 'author-work' },
     // Work and Post stay on author authority. A Zone page is not a scope prefix:
     // Content passes the server-resolved zone, and the proof below requires zone.edit.
     'content.publish': { prefix: 'content:publish:', kind: 'author-work' },
