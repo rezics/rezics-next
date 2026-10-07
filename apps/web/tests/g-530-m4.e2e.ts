@@ -411,12 +411,14 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     );
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
-  await expect(
-    page.getByRole('dialog').getByRole('heading', { name: 'Frame the cover' }),
-  ).toBeVisible();
+  const frame = page.getByRole('dialog').getByRole('heading', { name: 'Frame the cover' });
+  // The file input's change handler is attached after hydration. Set the image again until the frame opens.
+  await expect(async () => {
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
+    await expect(frame).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 45_000 });
   await page.getByRole('dialog').getByRole('button', { name: 'Use this cover' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cover updated.' })).toBeVisible({
     timeout: 60_000,
