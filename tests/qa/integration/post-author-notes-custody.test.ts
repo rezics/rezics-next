@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { contentTargetGuard, ContentDraftUnavailable, resolveContentTarget }
+  from '../../../services/main/src/modules/content-publication/draft.ts';
 
 const short = (value: string) => value.slice(-36);
 async function json<T>(response: Response, expected = 200): Promise<T> {
@@ -71,6 +73,41 @@ test('A second Person identity reads and edits its own unpublished chapter Post 
     expect(await json(await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(writer)}`)))
       .toMatchObject({ body: { body: draft.body, notes: draft.notes } });
     expect((await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(sessionIdentity)}`)).status).toBe(404);
+    const readsBefore = stack.fuseki.queries;
+    const target = await resolveContentTarget(stack.env, chapter.post);
+    expect(stack.fuseki.queries - readsBefore).toBe(1);
+    const dispatchCurrent = () => stack.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${contentTargetGuard(chapter.post, target)} } }`);
+    expect((await dispatchCurrent()).boolean).toBe(true);
+    for (const epoch of ['dataEpoch', 'routingEpoch'] as const) {
+      await expect(resolveContentTarget({ ...stack.env,
+        lineage: { ...stack.env.lineage, [epoch]: randomUUID() } }, chapter.post))
+        .rejects.toBeInstanceOf(ContentDraftUnavailable);
+    }
+    const head = (await stack.fuseki.query(`SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(chapter.post)} <https://rezics.com/vocab/head> ?head } }`)).results!.bindings[0]!.head!.value;
+    try {
+      await stack.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(chapter.post)} <https://rezics.com/vocab/head> ${iri(head)} } }`);
+      await expect(resolveContentTarget(stack.env, chapter.post)).rejects.toBeInstanceOf(ContentDraftUnavailable);
+      expect((await dispatchCurrent()).boolean).toBe(false);
+      expect((await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(writer)}`)).status).toBe(404);
+    } finally {
+      await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(chapter.post)} <https://rezics.com/vocab/head> ${iri(head)} } }`);
+    }
+    try {
+      await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} <https://rezics.com/vocab/restoreHold> true } }`);
+      await expect(resolveContentTarget(stack.env, chapter.post)).rejects.toBeInstanceOf(ContentDraftUnavailable);
+      expect((await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(writer)}`)).status).toBe(503);
+    } finally {
+      await stack.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} <https://rezics.com/vocab/restoreHold> true } }`);
+    }
+    expect((await dispatchCurrent()).boolean).toBe(true);
+    expect(await json(await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(writer)}`)))
+      .toMatchObject({ body: { body: draft.body, notes: draft.notes } });
     expect((await call('POST', '/v1/content-drafts', { ...draft, expectedHead: saved.revisionId,
       actingSubject: sessionIdentity })).status).toBe(403);
     const updated = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
