@@ -1,6 +1,9 @@
 # Current reviewed profiles
 
-The authored `definitions/*.ts` files are the current reviewed SHACL basis. `task gen` renders their reviewed Turtle bytes into
+Authored `definitions/*.ttl` and the remaining TypeScript profile definitions
+are the current reviewed SHACL basis. Turtle companions carry command metadata
+and may expose named readers of the exact authored source. `task gen` publishes
+their reviewed Turtle bytes into
 `generated/model/shapes/`, computes profile SHA-256 digests, and
 publishes the profile registry with shape IRIs and focus roles used by Main and
 the Fuseki command module.
@@ -19,8 +22,6 @@ The same run generates:
   TypeScript types for each named shape's node-local JSON-LD value envelope;
 - `packages/model/src/generated/vocabulary.ts`: namespace and expanded IRI
   constants from the authored predicates and fixed terms;
-- `packages/model/src/generated/arbitraries.ts`: fast-check candidates for each
-  named shape, sampled with an explicit seed in tests;
 - `generated/model/manifest.json`: the current profile shape digests and a
   SHA-256 entry for every other generated artifact except Facets;
 - `packages/model/src/generated/facets.ts`: the admitted
@@ -34,16 +35,16 @@ preflight and fixture construction. It checks local cardinality, fixed and
 enumerated values, integer bounds, current language and pattern constraints,
 and the rating revision disjunction. Its JSON-LD representation uses compact
 predicate keys, arrays of values, `@id` for the node, and `@value` plus
-`@language` for language literals. Shapes remain open to additional properties,
-as in the authored SHACL.
+`@language` for language literals. Each shape retains the authored open or
+closed property boundary.
 
 **Jena's transactional SHACL check remains authoritative.** The TypeBox schema
 cannot establish `sh:class` links to other nodes, reciprocal relationships,
 distinct focus identities, caller authority, current heads, or full RDF lexical
 validity. Its date-time pattern is lexical, and its current language tags use
 the authored spelling; it may disagree with SHACL on other RDF lexical variants.
-The generated arbitraries satisfy the node-local envelope; they are
-not guaranteed to form a conforming multi-node graph. The command module
+Tests use explicit domain fixtures and boundary cases. A valid node-local
+fixture does not establish a conforming multi-node graph. The command module
 validates the poststate graph before commit.
 
 The 66 previously recorded valid and rejected candidates are now static
@@ -67,8 +68,8 @@ bound focus when a command changes a subject governed by one of the five bound
 profiles. SHACL remains authoritative for the authored static constraints.
 
 The isolated and merged 0.4.0 command image reproduced all 66 recorded outcomes
-and every expected report path. The handwritten `definitions/*.ttl` profiles and
-Python validators are retired. Their recorded SHA-256 digests, candidate payloads, conforming/rejected outcomes
+and every expected report path. The original validation scripts are retired.
+Their recorded SHA-256 digests, candidate payloads, conforming/rejected outcomes
 and historical reports remain in `tests/fixtures/native/` plus `tests/evidence/`.
 The generated manifest describes current bytes; native qualification reruns the
 recorded candidates against the installed current shapes. QA records the
@@ -77,8 +78,9 @@ strict native matrix as a separate model tier.
 The profile set covers Work metadata, draft Contribution and publication,
 Main and Realm selection, Space/Realm creation, shared classification,
 Realm classification contexts and decisions, and standing rating contexts and
-observations. The rating revision profile is the only current `sh:or`: an
-available revision has a 1–10 value, while a withdrawn revision has none. Optional properties and relaxed constraints refine the same profile or Facet.
+observations. For example, a rating revision's `sh:or` admits an available
+revision with a 1–10 value or a withdrawn revision with none. Optional
+properties and relaxed constraints refine the same profile or Facet.
 Tightened constraints need a new constraint revision and an admission coverage
 check; different meaning needs a new term. Block payload changes version only
 that block. Review covers both the authored and generated diffs; there is no

@@ -259,6 +259,7 @@ test('P0.3: invalid or changed authored constraints cannot silently reuse the pr
 interface ManifestProfile { sha256: string; binding?: { required: string[]; optional?: string[]; roles: string[] } }
 type Manifest = {
   commandModule: string;
+  artifacts: Record<string, string>;
   profiles: { id: string; sha256: string; file: string; binding?: ManifestProfile['binding'] }[];
   canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[];
   bindingDemands: { type: string; profile: string }[];
@@ -377,6 +378,32 @@ async function copiedProject(mutate: (root: string) => void): Promise<{ root: st
   const loaded = await import(join(root, 'model/compiler/generate.ts')) as { generate: typeof generate };
   return { root, generate: loaded.generate };
 }
+
+test('generation removes retired arbitrary output and check mode rejects its reintroduction', async () => {
+  const { root, generate: copied } = await copiedProject(() => {});
+  const relative = 'packages/model/src/generated/arbitraries.ts';
+  const retired = join(root, relative);
+  mkdirSync(join(root, 'packages/model/src/generated'), { recursive: true });
+  writeFileSync(retired, 'export const retiredSample = {};\n');
+  copied(root, false);
+  expect(existsSync(retired)).toBe(false);
+  expect(() => copied(root, true)).not.toThrow();
+  const manifest = JSON.parse(
+    readFileSync(join(root, 'generated/model/manifest.json'), 'utf8'),
+  ) as Manifest;
+  expect(manifest.artifacts).not.toHaveProperty(relative);
+  const profiles = structuredClone(manifest.profiles);
+  writeFileSync(retired, 'export const reintroducedSample = {};\n');
+  expect(() => copied(root, true)).toThrow(`Unexpected generated artifact: ${relative}`);
+  expect(existsSync(retired)).toBe(true);
+  copied(root, false);
+  expect(existsSync(retired)).toBe(false);
+  expect(() => copied(root, true)).not.toThrow();
+  expect(
+    (JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest)
+      .profiles,
+  ).toEqual(profiles);
+});
 
 function replaceIn(root: string, relative: string, from: string, to: string): void {
   const path = join(root, relative);

@@ -157,6 +157,13 @@ export function buildArtifacts(_root: string): Map<string, string> {
 
 export function generate(root: string, check: boolean): void {
   const artifacts = buildArtifacts(root);
+  // This retired output must disappear even when an older checkout left it
+  // beside the current schemas; check mode must also detect its reintroduction.
+  const retired = 'packages/model/src/generated/arbitraries.ts';
+  if (existsSync(join(root, retired))) {
+    if (check) throw new Error(`Unexpected generated artifact: ${retired}; run task gen`);
+    unlinkSync(join(root, retired));
+  }
   // Definitions may be removed in review; their old generated shapes and contexts
   // must not remain available beside the current manifest.
   for (const directory of ['generated/model/shapes', 'generated/model/contexts']) {

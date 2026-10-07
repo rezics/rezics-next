@@ -1,28 +1,156 @@
 import { expect, test } from 'bun:test';
-import * as fc from 'fast-check';
-import { checkNodeLocalCandidate, profileRegistry, shapeArbitraries } from '../../../packages/model/src/index.ts';
+import { checkNodeLocalCandidate, profileRegistry } from '../../../packages/model/src/index.ts';
 import { governanceBodyScopeId, proposalGraphProfile } from '../src/modules/proposal/schema.ts';
 import { pollScopeId, voteGraphProfiles } from '../src/modules/vote/schema.ts';
 
 // Node-local checks of the vote owner profiles. Jena's transactional SHACL and
 // the command guards remain authoritative for links, heads and unit conservation.
 const rv = (name: string) => `https://rezics.com/vocab/${name}`;
-const shape = (profile: string, role: string) => `https://rezics.com/definition/${profile}/${role}-shape`;
+const shape = (profile: string, role: string) =>
+  `https://rezics.com/definition/${profile}/${role}-shape`;
 type Candidate = Record<string, unknown>;
 
-function sample(shapeIri: string, overrides: Candidate, removed: readonly string[] = []): Candidate {
-  const arbitrary = shapeArbitraries[shapeIri as keyof typeof shapeArbitraries] as fc.Arbitrary<Candidate>;
-  const [base] = fc.sample(arbitrary, { seed: 53, numRuns: 1 });
-  const candidate: Candidate = { ...base, ...overrides };
-  for (const key of removed) delete candidate[key];
-  return candidate;
+const iri = (n: number) =>
+  `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const operation = `urn:rezics:operation:${'a'.repeat(64)}`;
+const digest = 'b'.repeat(64);
+const at = '2026-10-07T00:00:00.000Z';
+
+function holderCharterRevision(): Candidate {
+  return {
+    '@id': iri(1),
+    'rdf:type': [rv('VotingCharterRevision'), rv('HolderCharterRevision')],
+    'rv:charter': [iri(2)],
+    'rv:ruleRevision': [iri(3)],
+    'rv:charterDigest': [digest],
+    'rv:operation': [operation],
+    'rv:revisedAt': [at],
+    'rv:mandateRule': [rv('DesignatedRepresentative')],
+    'rv:aggregationMode': [rv('WholeBallot')],
+  };
 }
-const valid = (shapeIri: string, candidate: Candidate) => checkNodeLocalCandidate(shapeIri, candidate);
+
+function electorateCharterRevision(): Candidate {
+  return {
+    '@id': iri(4),
+    'rdf:type': [rv('VotingCharterRevision'), rv('ElectorateCharterRevision')],
+    'rv:charter': [iri(5)],
+    'rv:ruleRevision': [iri(3)],
+    'rv:charterDigest': [digest],
+    'rv:operation': [operation],
+    'rv:revisedAt': [at],
+    'rv:unitScale': [100],
+    'rv:countingUnit': [rv('WeightUnits')],
+    'rv:admittedSeatClass': [rv('PersonSeat')],
+    'rv:personCountingBasis': [rv('AccessPrincipalCounting')],
+    'rv:allocationPolicy': [rv('ExplicitSeatAllocation')],
+    'rv:proxyPolicy': [rv('OneHopProxy')],
+    'rv:holderOverridePolicy': [rv('HolderOverrideAllowed')],
+    'rv:proxyRoutingPolicy': [rv('FrozenAtOpening')],
+    'rv:quorumThreshold': [1],
+    'rv:abstentionPolicy': [rv('AbstentionCountsForQuorum')],
+    'rv:uncastPolicy': [rv('UncastNotCounted')],
+    'rv:passNumerator': [1],
+    'rv:passDenominator': [2],
+    'rv:invalidationPolicy': [rv('DeclaredInvalidationDecision')],
+  };
+}
+
+function draftPoll(): Candidate {
+  return {
+    '@id': iri(6),
+    'rdf:type': [rv('Poll')],
+    'rv:governingBody': [iri(7)],
+    'rv:electorateCharter': [iri(4)],
+    'rv:questionHead': [iri(8)],
+    'rv:pollState': [rv('PollDraft')],
+  };
+}
+
+function castBallotRevision(): Candidate {
+  return {
+    '@id': iri(9),
+    'rdf:type': [rv('BallotRevision')],
+    'rv:ballot': [iri(10)],
+    'rv:pollOpening': [iri(11)],
+    'rv:ballotAvailability': [rv('BallotCast')],
+    'rv:castRoute': [rv('HolderCast')],
+    'rv:ballotDigest': [digest],
+    'rv:countedUnits': [100],
+    'rv:ballotShare': [iri(12)],
+    'rv:operation': [operation],
+    'rv:submittedAt': [at],
+  };
+}
+
+function proxyRouteRevision(): Candidate {
+  return {
+    '@id': iri(13),
+    'rdf:type': [rv('ProxyRouteRevision')],
+    'rv:proxyRoute': [iri(14)],
+    'rv:routeState': [rv('RouteActive')],
+    'rv:proxyHopLimit': [1],
+    'rv:redelegation': [rv('RedelegationForbidden')],
+    'rv:electorateCharter': [iri(4)],
+    'rv:operation': [operation],
+    'rv:revisedAt': [at],
+  };
+}
+
+function noQuorumResolution(): Candidate {
+  return {
+    '@id': iri(15),
+    'rdf:type': [rv('PollResolution')],
+    'rv:poll': [iri(6)],
+    'rv:pollOpening': [iri(11)],
+    'rv:electorateCharter': [iri(4)],
+    'rv:electorateSnapshot': [iri(16)],
+    'rv:tallyDigest': [digest],
+    'rv:countedSeats': [0],
+    'rv:castUnits': [0],
+    'rv:abstainUnits': [0],
+    'rv:uncastUnits': [100],
+    'rv:quorumOutcome': [rv('QuorumNotMet')],
+    'rv:resolutionOutcome': [rv('ResolutionNoQuorum')],
+    'rv:operation': [operation],
+    'rv:finalizedAt': [at],
+  };
+}
+
+function adoptedProposal(): Candidate {
+  return {
+    '@id': iri(17),
+    'rdf:type': [rv('Proposal')],
+    'rv:governingBody': [iri(7)],
+    'rv:proposalHead': [iri(18)],
+    'rv:proposalState': [rv('ProposalAdopted')],
+  };
+}
+
+function proposalRevision(): Candidate {
+  return {
+    '@id': iri(18),
+    'rdf:type': [rv('ProposalRevision')],
+    'rv:proposal': [iri(17)],
+    'rv:ruleRevision': [iri(3)],
+    'rv:effectDigest': [digest],
+    'rv:effectTarget': [iri(7)],
+    'rv:effectCapability': ['governance.charter.set'],
+    'rv:expectedTargetState': ['c'.repeat(64)],
+    'rv:operation': [operation],
+    'rv:revisedAt': [at],
+  };
+}
+const valid = (shapeIri: string, candidate: Candidate) =>
+  checkNodeLocalCandidate(shapeIri, candidate);
 
 test('vote schema: graph profiles publish their focus roles', () => {
   // Generated by the integration wave's `task gen`; absent profiles fail here, not in tsc.
-  const registry: Readonly<Record<string, { focusRoles: readonly string[] } | undefined>> = profileRegistry;
-  expect([...voteGraphProfiles, proposalGraphProfile].map(id => [id, registry[id]?.focusRoles])).toEqual([
+  const registry: Readonly<Record<string, { focusRoles: readonly string[] } | undefined>> =
+    profileRegistry;
+  expect(
+    [...voteGraphProfiles, proposalGraphProfile].map((id) => [id, registry[id]?.focusRoles]),
+  ).toEqual([
     ['charter-revision-v1', ['charter', 'electorate-revision', 'holder-revision']],
     ['poll-snapshot-v1', ['poll', 'question', 'option', 'snapshot', 'entitlement', 'opening']],
     ['poll-allocation-v1', ['plan', 'leaf', 'activation']],
@@ -36,108 +164,207 @@ test('vote schema: graph profiles publish their focus roles', () => {
 
 test('vote schema (GOV16/GOV17): holder charter binds k-of-n threshold and aggregation mode', () => {
   const holder = shape('charter-revision-v1', 'holder-revision');
+  const charter = holderCharterRevision();
   const rule = (name: string) => ({ 'rv:mandateRule': [rv(name)] });
-  expect(valid(holder, sample(holder, { ...rule('KOfNApproval'), 'rv:approvalThreshold': [2] }))).toBe(true);
-  expect(valid(holder, sample(holder, rule('KOfNApproval'), ['rv:approvalThreshold']))).toBe(false);
-  expect(valid(holder, sample(holder, { ...rule('KOfNApproval'), 'rv:approvalThreshold': [0] }))).toBe(false);
-  expect(valid(holder, sample(holder, rule('DesignatedRepresentative'), ['rv:approvalThreshold']))).toBe(true);
-  expect(valid(holder, sample(holder, { ...rule('DesignatedRepresentative'), 'rv:approvalThreshold': [1] })))
-    .toBe(false);
-  expect(valid(holder, sample(holder, { ...rule('InternalDecision'), 'rv:aggregationMode': [rv('Multiplied')] },
-    ['rv:approvalThreshold']))).toBe(false);
+  expect(valid(holder, charter)).toBe(true);
+  for (const threshold of [1, 2, 64]) {
+    expect(
+      valid(holder, { ...charter, ...rule('KOfNApproval'), 'rv:approvalThreshold': [threshold] }),
+    ).toBe(true);
+  }
+  expect(valid(holder, { ...charter, ...rule('KOfNApproval') })).toBe(false);
+  for (const threshold of [0, 65]) {
+    expect(
+      valid(holder, { ...charter, ...rule('KOfNApproval'), 'rv:approvalThreshold': [threshold] }),
+    ).toBe(false);
+  }
+  for (const mandate of [
+    'DesignatedRepresentative',
+    'AnyAdmittedRepresentative',
+    'InternalDecision',
+  ]) {
+    const withoutThreshold = { ...charter, ...rule(mandate) };
+    expect(valid(holder, withoutThreshold)).toBe(true);
+    expect(valid(holder, { ...withoutThreshold, 'rv:approvalThreshold': [1] })).toBe(false);
+  }
+  const internalDecision = { ...charter, ...rule('InternalDecision') };
+  expect(
+    valid(holder, { ...internalDecision, 'rv:aggregationMode': [rv('ProportionalSplit')] }),
+  ).toBe(true);
+  expect(valid(holder, { ...internalDecision, 'rv:aggregationMode': [rv('Multiplied')] })).toBe(
+    false,
+  );
 });
 
 test('vote schema (GOV15/GOV20/GOV21): electorate charter fixes counting basis, frozen routing and uncast', () => {
   const electorate = shape('charter-revision-v1', 'electorate-revision');
-  expect(valid(electorate, sample(electorate, {}))).toBe(true);
-  for (const [key, value] of [['rv:proxyRoutingPolicy', 'LiveRerouting'], ['rv:uncastPolicy', 'UncastAsAbstain'],
-    ['rv:personCountingBasis', 'NaturalPersonProof'], ['rv:admittedSeatClass', 'ProxySeat']] as const) {
-    expect(valid(electorate, sample(electorate, { [key]: [rv(value)] }))).toBe(false);
+  const charter = electorateCharterRevision();
+  expect(valid(electorate, charter)).toBe(true);
+  for (const [key, value] of [
+    ['rv:proxyRoutingPolicy', 'LiveRerouting'],
+    ['rv:uncastPolicy', 'UncastAsAbstain'],
+    ['rv:personCountingBasis', 'NaturalPersonProof'],
+    ['rv:admittedSeatClass', 'ProxySeat'],
+  ] as const) {
+    expect(valid(electorate, { ...charter, [key]: [rv(value)] })).toBe(false);
   }
-  expect(valid(electorate, sample(electorate, { 'rv:passDenominator': [0] }))).toBe(false);
+  expect(valid(electorate, { ...charter, 'rv:passDenominator': [1000] })).toBe(true);
+  for (const denominator of [0, 1001]) {
+    expect(valid(electorate, { ...charter, 'rv:passDenominator': [denominator] })).toBe(false);
+  }
 });
 
 test('vote schema (GOV13): poll state requires an opening before counting and a resolution when final', () => {
   const poll = shape('poll-snapshot-v1', 'poll');
-  const opening = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
-  const resolution = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+  const draft = draftPoll();
+  const opening = iri(11);
+  const resolution = iri(15);
   const state = (name: string) => ({ 'rv:pollState': [rv(name)] });
-  expect(valid(poll, sample(poll, state('PollDraft'), ['rv:pollOpening', 'rv:pollResolution']))).toBe(true);
-  expect(valid(poll, sample(poll, { ...state('PollDraft'), 'rv:pollOpening': [opening] }, ['rv:pollResolution'])))
-    .toBe(false);
-  expect(valid(poll, sample(poll, state('PollOpen'), ['rv:pollOpening', 'rv:pollResolution']))).toBe(false);
-  expect(valid(poll, sample(poll, { ...state('PollOpen'), 'rv:pollOpening': [opening] }, ['rv:pollResolution'])))
-    .toBe(true);
-  expect(valid(poll, sample(poll, { ...state('PollFinalized'), 'rv:pollOpening': [opening] },
-    ['rv:pollResolution']))).toBe(false);
-  expect(valid(poll, sample(poll, { ...state('PollFinalized'), 'rv:pollOpening': [opening],
-    'rv:pollResolution': [resolution] }))).toBe(true);
+  expect(valid(poll, draft)).toBe(true);
+  expect(valid(poll, { ...draft, 'rv:pollOpening': [opening] })).toBe(false);
+  for (const countingState of ['PollOpen', 'PollClosed']) {
+    expect(valid(poll, { ...draft, ...state(countingState) })).toBe(false);
+    const counting = { ...draft, ...state(countingState), 'rv:pollOpening': [opening] };
+    expect(valid(poll, counting)).toBe(true);
+    expect(valid(poll, { ...counting, 'rv:pollResolution': [resolution] })).toBe(false);
+  }
+  expect(valid(poll, { ...draft, ...state('PollFinalized'), 'rv:pollOpening': [opening] })).toBe(
+    false,
+  );
+  expect(
+    valid(poll, {
+      ...draft,
+      ...state('PollFinalized'),
+      'rv:pollOpening': [opening],
+      'rv:pollResolution': [resolution],
+    }),
+  ).toBe(true);
 });
 
 test('vote schema (GOV12/GOV14/GOV18): ballot revisions conserve bounded units by availability', () => {
   const revision = shape('ballot-v1', 'revision');
-  const share = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
-  const decision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
-  const cast = { 'rv:ballotAvailability': [rv('BallotCast')], 'rv:ballotShare': [share], 'rv:countedUnits': [100] };
-  expect(valid(revision, sample(revision, cast, ['rv:invalidationDecision']))).toBe(true);
-  expect(valid(revision, sample(revision, { ...cast, 'rv:countedUnits': [0] }, ['rv:invalidationDecision'])))
-    .toBe(false);
-  expect(valid(revision, sample(revision, { ...cast, 'rv:countedUnits': [1000001] },
-    ['rv:invalidationDecision']))).toBe(false);
-  expect(valid(revision, sample(revision, { 'rv:ballotAvailability': [rv('BallotCast')], 'rv:countedUnits': [40] },
-    ['rv:ballotShare', 'rv:invalidationDecision']))).toBe(false);
-  const withdrawn = { 'rv:ballotAvailability': [rv('BallotWithdrawn')], 'rv:countedUnits': [0] };
-  expect(valid(revision, sample(revision, withdrawn, ['rv:ballotShare', 'rv:invalidationDecision']))).toBe(true);
-  expect(valid(revision, sample(revision, { ...withdrawn, 'rv:countedUnits': [60] },
-    ['rv:ballotShare', 'rv:invalidationDecision']))).toBe(false);
-  const invalidated = { 'rv:ballotAvailability': [rv('BallotInvalidated')], 'rv:countedUnits': [0] };
-  expect(valid(revision, sample(revision, invalidated, ['rv:ballotShare', 'rv:invalidationDecision']))).toBe(false);
-  expect(valid(revision, sample(revision, { ...invalidated, 'rv:invalidationDecision': [decision] },
-    ['rv:ballotShare']))).toBe(true);
+  const cast = castBallotRevision();
+  const share = iri(12);
+  const decision = iri(19);
+  expect(valid(revision, cast)).toBe(true);
+  for (const units of [1, 1000000]) {
+    expect(valid(revision, { ...cast, 'rv:countedUnits': [units] })).toBe(true);
+  }
+  for (const units of [0, 1000001]) {
+    expect(valid(revision, { ...cast, 'rv:countedUnits': [units] })).toBe(false);
+  }
+  expect(valid(revision, { ...cast, 'rv:invalidationDecision': [decision] })).toBe(false);
+  const withoutShare = { ...cast };
+  delete withoutShare['rv:ballotShare'];
+  expect(valid(revision, { ...withoutShare, 'rv:countedUnits': [40] })).toBe(false);
+  const withdrawn = {
+    ...withoutShare,
+    'rv:ballotAvailability': [rv('BallotWithdrawn')],
+    'rv:countedUnits': [0],
+  };
+  expect(valid(revision, withdrawn)).toBe(true);
+  expect(valid(revision, { ...withdrawn, 'rv:countedUnits': [60] })).toBe(false);
+  expect(valid(revision, { ...withdrawn, 'rv:ballotShare': [share] })).toBe(false);
+  const invalidated = {
+    ...withdrawn,
+    'rv:ballotAvailability': [rv('BallotInvalidated')],
+    'rv:invalidationDecision': [decision],
+  };
+  expect(valid(revision, invalidated)).toBe(true);
+  const withoutDecision: Candidate = { ...invalidated };
+  delete withoutDecision['rv:invalidationDecision'];
+  expect(valid(revision, withoutDecision)).toBe(false);
+  expect(valid(revision, { ...invalidated, 'rv:countedUnits': [1] })).toBe(false);
 });
 
 test('vote schema (GOV19/GOV20): proxy routes are one hop and never redelegable', () => {
   const route = shape('ballot-proxy-v1', 'revision');
-  expect(valid(route, sample(route, {}))).toBe(true);
-  expect(valid(route, sample(route, { 'rv:proxyHopLimit': [2] }))).toBe(false);
-  expect(valid(route, sample(route, { 'rv:redelegation': [rv('RedelegationAllowed')] }))).toBe(false);
-  expect(valid(route, sample(route, { 'rv:routeState': [rv('RouteLive')] }))).toBe(false);
+  const revision = proxyRouteRevision();
+  expect(valid(route, revision)).toBe(true);
+  expect(valid(route, { ...revision, 'rv:routeState': [rv('RouteRevoked')] })).toBe(true);
+  expect(valid(route, { ...revision, 'rv:proxyHopLimit': [2] })).toBe(false);
+  expect(valid(route, { ...revision, 'rv:redelegation': [rv('RedelegationAllowed')] })).toBe(false);
+  expect(valid(route, { ...revision, 'rv:routeState': [rv('RouteLive')] })).toBe(false);
 });
 
 test('vote schema (GOV21): resolutions separate quorum, outcome and winning option', () => {
   const resolution = shape('poll-resolution-v1', 'resolution');
-  const option = 'https://rezics.com/id/00000000-0000-4000-8000-000000000005';
-  const outcome = (result: string, quorum: string) =>
-    ({ 'rv:resolutionOutcome': [rv(result)], 'rv:quorumOutcome': [rv(quorum)] });
-  expect(valid(resolution, sample(resolution, { ...outcome('ResolutionAdopted', 'QuorumMet'),
-    'rv:winningOption': [option] }))).toBe(true);
-  expect(valid(resolution, sample(resolution, outcome('ResolutionAdopted', 'QuorumMet'), ['rv:winningOption'])))
-    .toBe(false);
-  expect(valid(resolution, sample(resolution, outcome('ResolutionNoQuorum', 'QuorumMet'), ['rv:winningOption'])))
-    .toBe(false);
-  expect(valid(resolution, sample(resolution, { ...outcome('ResolutionNoQuorum', 'QuorumNotMet'),
-    'rv:winningOption': [option] }))).toBe(false);
+  const noQuorum = noQuorumResolution();
+  const option = iri(20);
+  const outcome = (result: string, quorum: string) => ({
+    'rv:resolutionOutcome': [rv(result)],
+    'rv:quorumOutcome': [rv(quorum)],
+  });
+  expect(valid(resolution, noQuorum)).toBe(true);
+  const adopted = {
+    ...noQuorum,
+    ...outcome('ResolutionAdopted', 'QuorumMet'),
+    'rv:countedSeats': [1],
+    'rv:castUnits': [100],
+    'rv:uncastUnits': [0],
+    'rv:winningOption': [option],
+  };
+  expect(valid(resolution, adopted)).toBe(true);
+  const withoutWinner: Candidate = { ...adopted };
+  delete withoutWinner['rv:winningOption'];
+  expect(valid(resolution, withoutWinner)).toBe(false);
+  expect(valid(resolution, { ...adopted, 'rv:quorumOutcome': [rv('QuorumNotMet')] })).toBe(false);
+  expect(valid(resolution, { ...noQuorum, ...outcome('ResolutionNoQuorum', 'QuorumMet') })).toBe(
+    false,
+  );
+  expect(valid(resolution, { ...noQuorum, 'rv:winningOption': [option] })).toBe(false);
+  const rejected = {
+    ...noQuorum,
+    ...outcome('ResolutionRejected', 'QuorumMet'),
+    'rv:countedSeats': [1],
+    'rv:castUnits': [100],
+    'rv:uncastUnits': [0],
+  };
+  expect(valid(resolution, rejected)).toBe(true);
+  expect(valid(resolution, { ...rejected, 'rv:winningOption': [option] })).toBe(false);
 });
 
 test('vote schema (GOV23): only an executed proposal names its execution', () => {
   const proposal = shape('proposal-v1', 'proposal');
-  const execution = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
+  const adopted = adoptedProposal();
+  const execution = iri(21);
   const state = (name: string) => ({ 'rv:proposalState': [rv(name)] });
-  expect(valid(proposal, sample(proposal, { ...state('ProposalExecuted'), 'rv:proposalExecution': [execution] })))
-    .toBe(true);
-  expect(valid(proposal, sample(proposal, state('ProposalExecuted'), ['rv:proposalExecution']))).toBe(false);
-  expect(valid(proposal, sample(proposal, { ...state('ProposalAdopted'), 'rv:proposalExecution': [execution] })))
-    .toBe(false);
+  expect(valid(proposal, adopted)).toBe(true);
+  expect(
+    valid(proposal, {
+      ...adopted,
+      ...state('ProposalExecuted'),
+      'rv:proposalExecution': [execution],
+    }),
+  ).toBe(true);
+  expect(valid(proposal, { ...adopted, ...state('ProposalExecuted') })).toBe(false);
+  for (const unexecuted of [
+    'ProposalOpen',
+    'ProposalAdopted',
+    'ProposalRejected',
+    'ProposalWithdrawn',
+  ]) {
+    const withoutExecution = { ...adopted, ...state(unexecuted) };
+    expect(valid(proposal, withoutExecution)).toBe(true);
+    expect(valid(proposal, { ...withoutExecution, 'rv:proposalExecution': [execution] })).toBe(
+      false,
+    );
+  }
   const revision = shape('proposal-v1', 'revision');
-  expect(valid(revision, sample(revision, { 'rv:effectDigest': ['not-a-digest'] }))).toBe(false);
+  const effect = proposalRevision();
+  expect(valid(revision, effect)).toBe(true);
+  expect(valid(revision, { ...effect, 'rv:effectDigest': ['not-a-digest'] })).toBe(false);
 });
 
 test('vote schema: Access scope gates derive only from canonical poll and body IRIs', () => {
   const id = '0a1b2c3d-0000-4000-8000-00000000000f';
   expect(pollScopeId(`https://rezics.com/id/${id}`)).toBe(`vote:poll:${id}`);
   expect(governanceBodyScopeId(`https://rezics.com/id/${id}`)).toBe(`governance:body:${id}`);
-  for (const bad of [`https://rezics.com/id/${id.toUpperCase()}`, `https://example.org/id/${id}`,
-    `https://rezics.com/id/${id}/x`]) {
+  for (const bad of [
+    `https://rezics.com/id/${id.toUpperCase()}`,
+    `https://example.org/id/${id}`,
+    `https://rezics.com/id/${id}/x`,
+  ]) {
     expect(() => pollScopeId(bad)).toThrow('canonical');
     expect(() => governanceBodyScopeId(bad)).toThrow('canonical');
   }

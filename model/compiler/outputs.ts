@@ -111,105 +111,12 @@ function nameFor(iri: string): string {
   return iri.split('/').slice(-2).join('-').split('-').map(part => part.slice(0, 1).toUpperCase() + part.slice(1)).join('');
 }
 
-function arbitraryValue(property: PropertyDefinition, prefixes: ReadonlyMap<string, string>): string {
-  const kind = valueKind(property, prefixes);
-  if (property.hasValue) return `fc.constant(${quote(kind === 'integer' ? Number(expand(property.hasValue, prefixes)) : expand(property.hasValue, prefixes))})`;
-  if (property.in) return `fc.constantFrom(${property.in.map(term => quote(expand(term, prefixes))).join(', ')})`;
-  if (kind === 'integer') return `fc.integer({ min: ${property.minInclusive ?? 0}, max: ${property.maxInclusive ?? 100} })`;
-  if (kind === 'boolean') return 'fc.boolean()';
-  if (kind === 'dateTime') return `fc.integer({ min: 0, max: 4102444800000 }).map(value => new Date(value).toISOString())`;
-  if (kind === 'langString') {
-    if (!property.languageIn?.length) {
-      return `fc.constant({ "@value": "sample", "@language": "en" })`;
-    }
-    return `fc.record({ "@value": fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} }), "@language": fc.constantFrom(${property.languageIn.map(quote).join(', ')}) })`;
-  }
-  if (property.pattern) {
-    const examples: Record<string, string> = {
-      '^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
-        'agent-00000000-0000-4000-8000-000000000001',
-      '^\\d{4}-\\d{2}-\\d{2}$': '2026-03-08',
-      '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$': 'en',
-      '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$': 'en',
-      '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$': 'en-US',
-      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
-        '00000000-0000-4000-8000-000000000001',
-      '^[0-9a-f-]{36}$': '00000000-0000-4000-8000-000000000001',
-      '^(0|[1-9][0-9]*)$': '1',
-      '^https://[^\\s<>"{}|\\^`]{1,2040}$': 'https://publisher.example/translation',
-      '^https://rezics\\.com/id/[0-9a-f-]{36}$':
-        'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
-      '^https://[^\\s/?#]{1,500}$': 'https://themes.example.test',
-      '^[0-9a-f]{64}$': 'a'.repeat(64),
-      '^OL[1-9][0-9]{0,11}W$': 'OL1W',
-      '^/works/OL[1-9][0-9]{0,11}W$': '/works/OL1W',
-      '^/authors/OL[1-9][0-9]{0,11}A$': '/authors/OL1A',
-      '^[a-z0-9]+(-[a-z0-9]+)*$': 'sample-work',
-      '^[a-z][a-z0-9-]{0,63}$': 'rewrite',
-      '^urn:rezics:operation:[0-9a-f]{64}$': `urn:rezics:operation:${'a'.repeat(64)}`,
-      '^urn:rezics:rating-occasion:[0-9a-f]{64}$': `urn:rezics:rating-occasion:${'a'.repeat(64)}`,
-      '^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$':
-        'urn:rezics:content:revision:00000000-0000-4000-8000-000000000001',
-    };
-    const example = examples[property.pattern];
-    if (!example) throw new Error(`No arbitrary for pattern ${property.pattern}`);
-    return `fc.constant(${quote(example)})`;
-  }
-  if (kind === 'iri') return `fc.integer({ min: 0, max: 1000000 }).map(value => ${quote(`urn:rezics:sample:${property.path}:`)} + value)`;
-  if (kind === 'mixed') return 'fc.constant("sample")';
-  return `fc.string({ minLength: ${property.minLength ?? 1}, maxLength: ${property.maxLength ?? 20} })`;
-}
-
-function arbitraryProperties(properties: readonly PropertyDefinition[], prefixes: ReadonlyMap<string, string>): string[] {
-  const grouped = new Map<string, PropertyDefinition[]>();
-  for (const property of properties.filter(property => property.maxCount !== 0 && (property.minCount || property.hasValue))) {
-    grouped.set(property.path, [...grouped.get(property.path) ?? [], property]);
-  }
-  return [...grouped.values()].map(constraints => {
-      const property = constraints[0]!;
-      if (constraints.length > 1) {
-        if (!constraints.every(constraint => constraint.hasValue && constraint.maxCount === undefined)) {
-          throw new Error(`No arbitrary for repeated non-fixed constraints on ${property.path}`);
-        }
-        return `${quote(property.path)}: fc.constant(${quote([...new Set(constraints.map(constraint => expand(constraint.hasValue!, prefixes)))])})`;
-      }
-      if (property.minCount && property.minCount > 1 && property.in
-        && property.in.length === property.minCount && property.maxCount === property.minCount) {
-        return `${quote(property.path)}: fc.constant(${quote(property.in.map(term => expand(term, prefixes)))})`;
-      }
-      return `${quote(property.path)}: ${arbitraryValue(property, prefixes)}.map(value => [value])`;
-    });
-}
-
-function arbitraryExpression(shape: ProfileDefinition['shapes'][number], prefixes: ReadonlyMap<string, string>): string {
-  const base = arbitraryProperties(shape.properties, prefixes);
-  const id = `"@id": fc.integer({ min: 0, max: 1000000 }).map(value => ${quote(`urn:rezics:sample:${nameFor(shape.iri)}:`)} + value)`;
-  if (!shape.or) return `fc.record({ ${[id, ...base].join(', ')} })`;
-  const branches = shape.or.map(branch => {
-    const overrides = new Map(base.map(entry => [entry.split(': ')[0], entry]));
-    for (const property of branch) {
-      if (property.maxCount === 0) {
-        overrides.delete(quote(property.path));
-        continue;
-      }
-      const baseProperty = shape.properties.find(candidate => candidate.path === property.path);
-      const merged = baseProperty ? { ...baseProperty, ...property } : property;
-      const entry = arbitraryProperties([merged], prefixes)[0];
-      if (entry) overrides.set(quote(property.path), entry);
-    }
-    return `fc.record({ ${[id, ...overrides.values()].join(', ')} })`;
-  });
-  return `fc.oneof(${branches.join(', ')})`;
-}
-
 export function buildModelOutputs(profiles: readonly ProfileDefinition[]): Map<string, string> {
   const artifacts = new Map<string, string>();
   const namespaceEntries = new Map<string, string>();
   const iriEntries = new Map<string, string>();
   const schemaLines: string[] = [];
-  const arbitraryLines: string[] = [];
   const registrySchemas: string[] = [];
-  const registryArbitraries: string[] = [];
   for (const authored of profiles) {
     const profile = profileSnapshot(authored);
     const prefixes = new Map(profile.prefixes);
@@ -248,16 +155,13 @@ export function buildModelOutputs(profiles: readonly ProfileDefinition[]): Map<s
       const name = nameFor(shape.iri);
       schemaLines.push(`export const ${name}Schema = ${shapeExpression(shape, prefixes)};`);
       schemaLines.push(`export type ${name} = Static<typeof ${name}Schema>;`);
-      arbitraryLines.push(`export const ${name}Arbitrary = ${arbitraryExpression(shape, prefixes)};`);
       registrySchemas.push(`${quote(shape.iri)}: ${name}Schema`);
-      registryArbitraries.push(`${quote(shape.iri)}: ${name}Arbitrary`);
     }
   }
   const namespaces = Object.fromEntries([...namespaceEntries].sort(([a], [b]) => a.localeCompare(b)));
   const iris = Object.fromEntries([...iriEntries].sort(([a], [b]) => a.localeCompare(b)));
   artifacts.set('packages/model/src/generated/vocabulary.ts', `${header}export const namespaces = ${JSON.stringify(namespaces, null, 2)} as const;\nexport const iri = ${JSON.stringify(iris, null, 2)} as const;\n`);
   artifacts.set('packages/model/src/generated/schemas.ts', `${header}import { Type, type Static } from 'typebox';\n\n/** Node-local JSON-LD value envelopes. Jena performs graph-wide SHACL validation. */\n${schemaLines.join('\n\n')}\n\nexport const shapeSchemas = {\n  ${registrySchemas.join(',\n  ')}\n} as const;\n`);
-  artifacts.set('packages/model/src/generated/arbitraries.ts', `${header}import * as fc from 'fast-check';\n\n/** Valid node-local candidates; linked-node/class validity must be established in Jena. */\n${arbitraryLines.join('\n\n')}\n\nexport const shapeArbitraries = {\n  ${registryArbitraries.join(',\n  ')}\n} as const;\n`);
   return artifacts;
 }
 
