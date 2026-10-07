@@ -8,13 +8,12 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 16:35 UTC. Kernel's native recovery refresh is active;
-**Main code gates remain held through its successful checkpoint**. Trust has
-no queued refresh. The last accepted shared checkpoint was `3b6aa69533e8`
-(native `eeaa550c0acc`, model `ab6d394`): Access1769–1772 and relay021 applied,
-retained volumes, all six services healthy. The pending wave includes G-1330's
-mixed retained repair/cutover and regenerated native `906d1f549ffc`; positive
-restore release remains unqualified.
+Checkpoint 2026-10-07 16:42 UTC. Kernel's required native recovery refresh
+completed at `c9b53e93dbbc`, image `906d1f549ffc`, unchanged model `ab6d394`.
+All six shared applications are healthy; retained volumes, membership and
+catalogue are current. The Main code hold is released and Trust has no queued
+refresh. G-1330's mixed retained repair/cutover is active; positive restore
+release and the remaining Claim/source-projection unions are unqualified.
 
 G-1343 borrowed reconciliation/release component `b642d98fa` passed independent
 review, twelve real integration cases, forty-seven owner cases and a102.1second
