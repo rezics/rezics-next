@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
 import { requireAccessOpen } from '../notification/store.ts';
 import { reviewNotification } from '../notification/producer-review.ts';
@@ -18,7 +18,7 @@ import type { SavedViewNotifications } from './saved-views.ts';
 import { notificationProducerEventsSql } from './access-log.ts';
 import { observeHorizonLag } from '../horizon/lag.ts';
 
-/** One indexed commit-safe source page, one bounded owner read and at most 256 inbox writes per event. */
+/** One indexed commit-safe source page and at most 256 inbox writes per audience batch. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
   recipientsPerEvent: 256, pollMs: 1_000 } as const;
 const cursorName = 'notification-producer-v1';
@@ -35,6 +35,11 @@ interface RelayEnvelope { id: string; type: string; data: { receipt?: Record<str
 export type FollowNotificationHook = (event: NotificationEvent & {
   display: { kind: 'follow'; actorAgent: string; realm: null; groupKey: string | null } }) => Promise<void>;
 
+function representedPlan(agent: string, actor: string | null, action?: string): RelationshipRecipients {
+  return { targets: [], highlights: false,
+    authorityAudience: { kind: 'represented', agent, actor, action } };
+}
+
 async function represented(pool: Pool | PoolClient, agent: string, actor: string | null,
   action?: string): Promise<string[]> {
   if (!native.test(agent)) return [];
@@ -46,14 +51,6 @@ async function represented(pool: Pool | PoolClient, agent: string, actor: string
     ORDER BY p.id LIMIT $4`, [agent, actor, action ?? null, PRODUCER_COST.recipientsPerEvent + 1])).rows;
   if (rows.length > PRODUCER_COST.recipientsPerEvent) throw new Error('notification recipient bound exceeded');
   return rows.map(row => row.id);
-}
-
-function agentsInImpact(value: unknown): string[] {
-  if (!value || typeof value !== 'object') return [];
-  const result = value as { member?: unknown; impact?: { changes?: { member?: unknown }[] } };
-  if (typeof result.member === 'string') return native.test(result.member) ? [result.member] : [];
-  return Array.isArray(result.impact?.changes) ? [...new Set(result.impact.changes
-    .map(change => change.member).filter((member): member is string => typeof member === 'string' && native.test(member)))] : [];
 }
 
 export class NotificationProducer {
@@ -102,12 +99,11 @@ export class NotificationProducer {
           JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
             AND v.revision = e.vote_revision AND v.value <> 0 WHERE e.id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
-      const recipients = await represented(client, row.author, row.voter_principal);
-      if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `post-vote:${event.event_id}`,
         purpose: 'social', topic: 'post-vote',
         subject: { owner: 'graph', ref: row.target, revision: row.vote_revision },
-        disclosureBasis: 'post-vote-v1', recipients,
+        disclosureBasis: 'post-vote-v1', recipients: [],
+        relationshipPlan: representedPlan(row.author, row.voter_principal),
         display: { kind: 'post_vote', actorAgent: row.voter, realm: null, groupKey: row.target } };
     }
     if (event.kind === 'realm_invitation') {
@@ -116,12 +112,11 @@ export class NotificationProducer {
         FROM access.realm_invitation WHERE id = $1 AND state = 'pending'
           AND expires_at > clock_timestamp()`, [event.event_id])).rows[0];
       if (!row) return null;
-      const recipients = await represented(client, row.member, row.principal_id);
-      if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `realm-invitation:${event.event_id}`,
         purpose: 'governance', topic: 'realm-invitation',
         subject: { owner: 'access', ref: event.event_id, revision: null },
-        disclosureBasis: 'realm-invitation-v1', recipients,
+        disclosureBasis: 'realm-invitation-v1', recipients: [],
+        relationshipPlan: representedPlan(row.member, row.principal_id),
         display: { kind: 'realm_invitation', actorAgent: row.inviter,
           realm: row.realm, groupKey: null } };
     }
@@ -139,12 +134,11 @@ export class NotificationProducer {
       [event.event_id])).rows[0];
       if (!row) return null;
       if (row.submitting_agent === row.reviewer) return null;
-      const recipients = await represented(client, row.submitting_agent, row.actor, 'submission.submit');
-      if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `submission:${event.event_id}`,
         purpose: 'governance', topic: 'submission-decision',
         subject: { owner: 'access', ref: row.id, revision: event.event_id },
-        disclosureBasis: 'submission-decision-v1', recipients,
+        disclosureBasis: 'submission-decision-v1', recipients: [],
+        relationshipPlan: representedPlan(row.submitting_agent, row.actor, 'submission.submit'),
         display: { kind: 'submission_decision', actorAgent: row.reviewer, realm: row.realm, groupKey: row.id } };
     }
     if (event.kind === 'moderation_outcome') {
@@ -168,42 +162,13 @@ export class NotificationProducer {
         )
       ).rows[0];
       if (!row) return null;
-      const reporters = (
-        await client.query<{ id: string }>(
-          `
-        SELECT DISTINCT p.id FROM access.governance_report r
-        JOIN access.principal p ON p.id = r.principal_id AND p.active
-        WHERE r.case_id = $1 AND p.id <> $2 ORDER BY p.id LIMIT $3`,
-          [row.case_id, row.principal_id, PRODUCER_COST.recipientsPerEvent + 1],
-        )
-      ).rows;
-      if (reporters.length > PRODUCER_COST.recipientsPerEvent)
-        throw new Error('moderation reporter bound exceeded');
-      const recipients = new Set(reporters.map((reporter) => reporter.id));
-      const parties = (
-        await client.query<{ id: string }>(
-          `
-        SELECT n.principal_id AS id FROM access.safety_party_notice n
-        JOIN access.principal p ON p.id = n.principal_id AND p.active
-        WHERE n.decision_id = $1 ORDER BY n.principal_id LIMIT $2`,
-          [event.event_id, PRODUCER_COST.recipientsPerEvent + 1],
-        )
-      ).rows;
-      if (parties.length > PRODUCER_COST.recipientsPerEvent)
-        throw new Error('moderation party bound exceeded');
-      for (const party of parties) recipients.add(party.id);
-      // Older governance decisions have no private notice plan. Safety decisions
-      // use their recorded owner plan, including targets withdrawn by enforcement.
-      for (const author of row.statement_of_reasons
-        ? []
-        : await this.contributionAuthors(row.target_resource)) {
-        if (author === row.acting_subject) continue;
-        for (const id of await represented(client, author, row.principal_id))
-          recipients.add(id);
-      }
-      if (recipients.size > PRODUCER_COST.recipientsPerEvent)
-        throw new Error('moderation recipient bound exceeded');
-      if (!recipients.size) return null;
+      // Safety decisions use their recorded private parties, including targets
+      // withdrawn by enforcement. Legacy decisions discover authors serially.
+      const relationshipPlan: RelationshipRecipients = { targets: [], highlights: false,
+        authorityAudience: { kind: 'moderation', decision: event.event_id,
+          caseId: row.case_id, actor: row.principal_id,
+          nextAuthor: row.statement_of_reasons ? undefined
+            : after => this.nextContributionAuthor(row.target_resource, after, row.acting_subject) } };
       return {
         sourceOwner: 'access',
         sourceEvent: `moderation:${event.event_id}`,
@@ -211,7 +176,7 @@ export class NotificationProducer {
         topic: 'moderation-outcome',
         subject: { owner: 'access', ref: event.event_id, revision: null },
         disclosureBasis: 'moderation-outcome-v1',
-        recipients: [...recipients],
+        recipients: [], relationshipPlan,
         display: {
           kind: 'moderation_outcome',
           actorAgent: row.acting_subject,
@@ -221,29 +186,35 @@ export class NotificationProducer {
       };
     }
     const row = (await client.query<{ realm: string; principal_id: string;
-      acting_subject: string; result: unknown }>(`SELECT realm, principal_id, acting_subject, result
+      acting_subject: string }>(`SELECT realm, principal_id, acting_subject
       FROM access.realm_admin_receipt WHERE id = $1`, [event.event_id])).rows[0];
     if (!row) return null;
-    const effects = event.kind === 'realm_role_change'
-      ? (await client.query<{ member: string }>(`SELECT member FROM access.notification_realm_effect
-        WHERE receipt_id = $1 ORDER BY member LIMIT $2`,
-      [event.event_id, PRODUCER_COST.recipientsPerEvent + 1])).rows.map(effect => effect.member) : [];
-    if (effects.length > PRODUCER_COST.recipientsPerEvent) throw new Error('Realm effect bound exceeded');
-    const members = [...new Set([...effects, ...agentsInImpact(row.result)])]
-      .filter(member => member !== row.acting_subject);
-    const recipients = new Set<string>();
-    for (const member of members) for (const id of await represented(client, member, row.principal_id)) {
-      recipients.add(id);
-    }
-    if (recipients.size > PRODUCER_COST.recipientsPerEvent) throw new Error('Realm recipient bound exceeded');
-    if (!recipients.size) return null;
+    const relationshipPlan: RelationshipRecipients = { targets: [], highlights: false,
+      authorityAudience: { kind: 'realm', receipt: event.event_id,
+        actor: row.principal_id, actingSubject: row.acting_subject } };
     return { sourceOwner: 'access', sourceEvent: `realm:${event.event_id}`,
       purpose: 'governance', topic: event.kind === 'realm_role_change'
         ? 'realm-role-change' : 'realm-membership-change',
       subject: { owner: 'access', ref: event.event_id, revision: null },
-      disclosureBasis: 'realm-role-change-v1', recipients: [...recipients],
+      disclosureBasis: 'realm-role-change-v1', recipients: [], relationshipPlan,
       display: { kind: 'realm_role_change', actorAgent: row.acting_subject,
         realm: row.realm, groupKey: row.realm } };
+  }
+
+  private async nextContributionAuthor(resource: string, after: string | null,
+    actor: string): Promise<string | null> {
+    if (!native.test(resource)) return null;
+    const rows = (await this.graph.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ;
+        rv:author ?author ; rv:publicationHead ?decision .
+        { ?contribution rv:work ${iri(resource)} } UNION
+        { FILTER(?contribution = ${iri(resource)}) } }
+      GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:disclosure rv:Public . }
+      FILTER(REGEX(STR(?author), "^https://rezics[.]com/id/[0-9a-f-]{36}$"))
+      FILTER(?author != ${iri(actor)})
+      ${after ? `FILTER(STR(?author) > ${lit(after)})` : ''}
+    } ORDER BY STR(?author) LIMIT 1`, 16_384)).results?.bindings ?? [];
+    return rows[0]?.author?.value ?? null;
   }
 
   private async contributionAuthors(resource: string, revision?: string): Promise<string[]> {
@@ -255,8 +226,7 @@ export class NotificationProducer {
         { FILTER(?contribution = ${iri(resource)}) } }
       GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:disclosure rv:Public .
         ${revision ? `?decision rv:selectedDraft ${iri(revision)} .` : ''} }
-    } LIMIT ${PRODUCER_COST.recipientsPerEvent + 1}`, 16_384)).results?.bindings ?? [];
-    if (rows.length > PRODUCER_COST.recipientsPerEvent) throw new Error('notification author bound exceeded');
+    } LIMIT 2`, 16_384)).results?.bindings ?? [];
     return rows.map(row => row.author?.value ?? '').filter(author => native.test(author));
   }
 

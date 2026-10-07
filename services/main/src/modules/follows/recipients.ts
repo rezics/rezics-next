@@ -10,10 +10,44 @@ export interface RelationshipRecipients {
   except?: readonly string[];
   languages?: readonly string[];
   editorial?: { proposals: readonly string[]; actor: string; skipAuthors: boolean };
+  authorityAudience?: AuthorityAudience;
 }
+export type AuthorityAudience =
+  | { kind: 'represented'; agent: string; actor: string | null; action?: string }
+  | {
+      kind: 'moderation';
+      decision: string;
+      caseId: string;
+      actor: string;
+      nextAuthor?: (after: string | null) => Promise<string | null>;
+    }
+  | { kind: 'realm'; receipt: string; actor: string; actingSubject: string };
+export type AuthorityRecipientFrontier =
+  | { source: 'authority'; phase: 'represented'; afterPrincipal: string | null }
+  | {
+      source: 'authority';
+      phase: 'reporters';
+      afterPrincipal: null;
+      reportAfter: { receivedAt: string; id: string } | null;
+    }
+  | { source: 'authority'; phase: 'parties'; afterPrincipal: string | null }
+  | {
+      source: 'authority';
+      phase: 'authors';
+      afterPrincipal: string | null;
+      afterAuthor: string | null;
+      author: string | null;
+    }
+  | {
+      source: 'authority';
+      phase: 'members';
+      afterPrincipal: string | null;
+      afterMember: string | null;
+      member: string | null;
+    };
 /** Alias identities are visited serially, rather than accumulating an
  * audience-sized cursor. Only the current alias's principal seek is retained. */
-export type RecipientFrontier =
+type RelationshipRecipientFrontier =
   | {
       source: 'base';
       afterPrincipal: string | null;
@@ -26,6 +60,7 @@ export type RecipientFrontier =
       afterPrincipal: string | null;
       legacyAfter: string | null;
     };
+export type RecipientFrontier = RelationshipRecipientFrontier | AuthorityRecipientFrontier;
 export const RELATIONSHIP_RECIPIENT_COST = {
   candidatesPerSource: 257,
   examinedPerBatch: 256,
@@ -117,7 +152,7 @@ function notifyingSql(realm: string, principal: string) {
 async function nextAlias(
   pool: Pick<PoolClient, 'query'>,
   input: RelationshipRecipients,
-  frontier: RecipientFrontier,
+  frontier: RelationshipRecipientFrontier,
 ) {
   const rows = (
     await pool.query<{ target: string; alias: string }>(
@@ -164,7 +199,219 @@ export async function relationshipRecipientPage(
   after: RecipientFrontier | string | null = null,
 ) {
   validateRecipients(input);
-  return indexedRecipientRead(pool, (client) => selectRecipientPage(client, input, after));
+  return indexedRecipientRead<{
+    items: string[];
+    nextCursor: RecipientFrontier | null;
+    reasons: Record<string, ProposalSubscriptionReason>;
+  }>(pool, (client) =>
+    input.authorityAudience
+      ? authorityRecipientPage(client, input.authorityAudience, after)
+      : selectRecipientPage(client, input, after),
+  );
+}
+
+interface AuthorityCandidate {
+  id: string;
+  eligible: boolean;
+}
+function authorityPage(items: string[], nextCursor: AuthorityRecipientFrontier | null) {
+  return {
+    items: [...new Set(items)],
+    nextCursor,
+    reasons: {} as Record<string, ProposalSubscriptionReason>,
+  };
+}
+
+/** Mandatory owner audiences share the broadcast ACK, without applying optional
+ * Follow policy. Each source retains only its current indexed seek. */
+async function authorityRecipientPage(
+  pool: Pick<PoolClient, 'query'>,
+  input: AuthorityAudience,
+  after: RecipientFrontier | string | null,
+) {
+  const frontier = typeof after === 'object' && after?.source === 'authority' ? after : null;
+  const limit = RELATIONSHIP_RECIPIENT_COST.examinedPerBatch;
+  if (input.kind === 'represented') {
+    const position: AuthorityRecipientFrontier =
+      frontier?.phase === 'represented'
+        ? frontier
+        : {
+            source: 'authority',
+            phase: 'represented',
+            afterPrincipal: typeof after === 'string' ? after : null,
+          };
+    const rows = await representedCandidates(
+      pool,
+      input.agent,
+      input.actor,
+      input.action,
+      position.afterPrincipal,
+    );
+    const examined = rows.slice(0, limit);
+    return authorityPage(
+      examined.filter((row) => row.eligible).map((row) => row.id),
+      rows.length > limit ? { ...position, afterPrincipal: examined.at(-1)!.id } : null,
+    );
+  }
+  if (input.kind === 'moderation') {
+    const position: AuthorityRecipientFrontier = frontier ?? {
+      source: 'authority',
+      phase: 'reporters',
+      afterPrincipal: null,
+      reportAfter: null,
+    };
+    if (position.phase === 'reporters') {
+      const rows = (
+        await pool.query<AuthorityCandidate & { report_id: string; received_at: string }>(
+          `
+        WITH page AS MATERIALIZED (
+          SELECT id,received_at,principal_id FROM access.governance_report
+          WHERE case_id=$1 AND ($2::timestamptz IS NULL OR (received_at,id)>($2::timestamptz,$3::uuid))
+          ORDER BY received_at,id LIMIT $4
+        ) SELECT r.id::text AS report_id,r.received_at::text,r.principal_id::text AS id,
+          COALESCE(p.active,false) AND r.principal_id<>$5::uuid AS eligible
+          FROM page r LEFT JOIN LATERAL (SELECT active FROM access.principal WHERE id=r.principal_id LIMIT 1) p ON true
+          ORDER BY r.received_at,r.id`,
+          [
+            input.caseId,
+            position.reportAfter?.receivedAt ?? null,
+            position.reportAfter?.id ?? null,
+            limit + 1,
+            input.actor,
+          ],
+        )
+      ).rows;
+      const examined = rows.slice(0, limit);
+      const last = examined.at(-1);
+      return authorityPage(
+        examined.filter((row) => row.eligible).map((row) => row.id),
+        rows.length > limit
+          ? { ...position, reportAfter: { receivedAt: last!.received_at, id: last!.report_id } }
+          : { source: 'authority', phase: 'parties', afterPrincipal: null },
+      );
+    }
+    if (position.phase === 'parties') {
+      const rows = (
+        await pool.query<AuthorityCandidate>(
+          `
+        WITH page AS MATERIALIZED (
+          SELECT principal_id FROM access.safety_party_notice
+          WHERE decision_id=$1 AND ($2::uuid IS NULL OR principal_id>$2)
+          ORDER BY principal_id LIMIT $3
+        ) SELECT n.principal_id::text AS id,COALESCE(p.active,false) AS eligible FROM page n
+          LEFT JOIN LATERAL (SELECT active FROM access.principal WHERE id=n.principal_id LIMIT 1) p ON true
+          ORDER BY n.principal_id`,
+          [input.decision, position.afterPrincipal, limit + 1],
+        )
+      ).rows;
+      const examined = rows.slice(0, limit);
+      return authorityPage(
+        examined.filter((row) => row.eligible).map((row) => row.id),
+        rows.length > limit
+          ? { ...position, afterPrincipal: examined.at(-1)!.id }
+          : input.nextAuthor
+            ? {
+                source: 'authority',
+                phase: 'authors',
+                afterPrincipal: null,
+                afterAuthor: null,
+                author: null,
+              }
+            : null,
+      );
+    }
+    if (position.phase !== 'authors' || !input.nextAuthor)
+      throw new Error('Invalid moderation audience frontier');
+    const author = position.author ?? (await input.nextAuthor(position.afterAuthor));
+    if (!author) return authorityPage([], null);
+    const rows = await representedCandidates(
+      pool,
+      author,
+      input.actor,
+      undefined,
+      position.afterPrincipal,
+    );
+    const examined = rows.slice(0, limit);
+    return authorityPage(
+      examined.filter((row) => row.eligible).map((row) => row.id),
+      rows.length > limit
+        ? { ...position, author, afterPrincipal: examined.at(-1)!.id }
+        : { ...position, afterAuthor: author, author: null, afterPrincipal: null },
+    );
+  }
+  const position: AuthorityRecipientFrontier =
+    frontier?.phase === 'members'
+      ? frontier
+      : {
+          source: 'authority',
+          phase: 'members',
+          afterPrincipal: null,
+          afterMember: null,
+          member: null,
+        };
+  let member = position.member;
+  if (!member) {
+    member =
+      (
+        await pool.query<{ member: string }>(
+          `
+      WITH effect AS MATERIALIZED (
+        SELECT member FROM access.notification_realm_effect
+        WHERE receipt_id=$1 AND ($2::text IS NULL OR member>$2) ORDER BY member LIMIT 1
+      ), impact AS MATERIALIZED (
+        SELECT change->>'member' AS member FROM access.realm_admin_receipt r
+          CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN jsonb_typeof(r.result->'member')='string'
+              THEN jsonb_build_array(jsonb_build_object('member',r.result->'member'))
+            WHEN jsonb_typeof(r.result#>'{impact,changes}')='array' THEN r.result#>'{impact,changes}'
+            ELSE '[]'::jsonb END) change
+        WHERE r.id=$1 AND jsonb_typeof(change->'member')='string'
+          AND change->>'member' ~ '^https://rezics[.]com/id/[0-9a-f-]{36}$'
+          AND ($2::text IS NULL OR change->>'member'>$2)
+        ORDER BY member LIMIT 1
+      ) SELECT member FROM (SELECT member FROM effect UNION ALL SELECT member FROM impact) candidates
+        ORDER BY member LIMIT 1`,
+          [input.receipt, position.afterMember],
+        )
+      ).rows[0]?.member ?? null;
+  }
+  if (!member) return authorityPage([], null);
+  const rows =
+    member === input.actingSubject
+      ? []
+      : await representedCandidates(pool, member, input.actor, undefined, position.afterPrincipal);
+  const examined = rows.slice(0, limit);
+  return authorityPage(
+    examined.filter((row) => row.eligible).map((row) => row.id),
+    rows.length > limit
+      ? { ...position, member, afterPrincipal: examined.at(-1)!.id }
+      : { ...position, afterMember: member, member: null, afterPrincipal: null },
+  );
+}
+
+async function representedCandidates(
+  pool: Pick<PoolClient, 'query'>,
+  agent: string,
+  actor: string | null,
+  action: string | undefined,
+  after: string | null,
+): Promise<AuthorityCandidate[]> {
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(agent)) return [];
+  return (
+    await pool.query<AuthorityCandidate>(
+      `
+    WITH page AS MATERIALIZED (
+      SELECT DISTINCT r.principal_id FROM access.representation r
+      WHERE r.subject_id=$1 AND r.active AND r.valid_until>clock_timestamp()
+        AND ($2::uuid IS NULL OR r.principal_id<>$2) AND ($3::text IS NULL OR r.action=$3)
+        AND ($4::uuid IS NULL OR r.principal_id>$4) ORDER BY r.principal_id LIMIT $5
+    ) SELECT r.principal_id::text AS id,COALESCE(p.active,false) AND COALESCE(s.active,false)
+      AND s.kind='agent' AS eligible FROM page r
+      LEFT JOIN LATERAL (SELECT active FROM access.principal WHERE id=r.principal_id LIMIT 1) p ON true
+      LEFT JOIN access.authority_subject s ON s.id=$1 ORDER BY r.principal_id`,
+      [agent, actor, action ?? null, after, RELATIONSHIP_RECIPIENT_COST.candidatesPerSource],
+    )
+  ).rows;
 }
 
 async function selectRecipientPage(
@@ -172,9 +419,11 @@ async function selectRecipientPage(
   input: RelationshipRecipients,
   after: RecipientFrontier | string | null = null,
 ) {
+  if (typeof after === 'object' && after?.source === 'authority')
+    throw new Error('Invalid relationship audience frontier');
   // A legacy UUID already covered every alias below that principal. New base
   // seeks do not impose that floor on aliases that have yet to be visited.
-  const position: RecipientFrontier =
+  const position: RelationshipRecipientFrontier =
     typeof after === 'string'
       ? { source: 'base', afterPrincipal: after, legacyAfter: after }
       : (after ?? { source: 'base', afterPrincipal: null, legacyAfter: null });

@@ -58,7 +58,8 @@ test('a followed chapter plans Work and author interests while excluding the aut
 
 test('a current nonzero vote notifies the post author; a superseded vote emits nothing', async () => {
   expect(await produced('feed_post_vote')).toMatchObject([{ purpose: 'social',
-    topic: 'post-vote', recipients: [id(10)], subject: { ref: native(2), revision: id(8) } }]);
+    topic: 'post-vote', recipients: [], subject: { ref: native(2), revision: id(8) },
+    relationshipPlan: { authorityAudience: { kind: 'represented', agent: native(4), actor: id(7) } } }]);
   expect(await produced('feed_post_vote', true)).toEqual([]);
 });
 

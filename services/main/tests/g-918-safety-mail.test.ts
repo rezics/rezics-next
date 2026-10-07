@@ -87,8 +87,11 @@ test('SAFETY07 G918: recorded Content notice owners receive moderation notificat
   producer.setSafetyCorrespondence({ enqueueDecision: async () => {} });
   expect(await producer.runAccessOnce()).toBe(2);
   expect(events).toMatchObject([
-    { sourceEvent: `moderation:${decision}`, purpose: 'governance', recipients: [recipient] },
+    { sourceEvent: `moderation:${decision}`, purpose: 'governance', recipients: [],
+      relationshipPlan: { authorityAudience: { kind: 'moderation', decision,
+        caseId: decision, actor: recipient } } },
   ]);
+  expect(events[0]?.relationshipPlan?.authorityAudience).not.toHaveProperty('nextAuthor', expect.any(Function));
   expect(advanced).toBe(true);
 });
 

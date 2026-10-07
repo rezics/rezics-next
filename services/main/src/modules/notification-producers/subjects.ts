@@ -50,17 +50,46 @@ async function represents(access: Pool, principalId: string, agent: string, acti
   return !!row.rowCount;
 }
 
-async function currentContributionAuthors(env: WorkActivationEnvironment, resource: string): Promise<string[]> {
-  if (!native.test(resource)) return [];
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ;
-      rv:author ?author ; rv:publicationHead ?decision .
-      { ?contribution rv:work ${iri(resource)} } UNION
-      { FILTER(?contribution = ${iri(resource)}) } }
-    GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:disclosure rv:Public . }
-  } LIMIT 257`, 16_384)).results?.bindings ?? [];
-  if (rows.length > 256) throw new Error('notification author bound exceeded');
-  return rows.map(row => row.author?.value ?? '').filter(author => native.test(author));
+async function ownsCurrentContribution(access: Pool, env: WorkActivationEnvironment,
+  principalId: string, resource: string): Promise<boolean> {
+  if (!native.test(resource)) return false;
+  let after: string | null = null;
+  // Seek the recipient's own holdings, never sample the target's author audience.
+  // Only public Agent identities enter the graph query, not Access principals.
+  for (;;) {
+    const rows: { author: string }[] = (await access.query<{ author: string }>(`
+      SELECT DISTINCT r.subject_id AS author FROM access.representation r
+      JOIN access.principal p ON p.id=r.principal_id AND p.active
+      JOIN access.authority_subject s ON s.id=r.subject_id AND s.active AND s.kind='agent'
+      WHERE r.principal_id=$1 AND r.active AND r.valid_until>clock_timestamp()
+        AND ($2::text IS NULL OR r.subject_id>$2) ORDER BY r.subject_id LIMIT 257`,
+    [principalId, after])).rows;
+    const examined = rows.slice(0, 256);
+    let authors = examined.map(row => row.author).filter(author => native.test(author));
+    while (authors.length) {
+      if (!(await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        VALUES ?author { ${authors.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ;
+          rv:author ?author ; rv:publicationHead ?decision .
+          { ?contribution rv:work ${iri(resource)} } UNION
+          { FILTER(?contribution = ${iri(resource)}) } }
+        GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:disclosure rv:Public . }
+      }`, 16_384)).boolean) break;
+      // Authority may have changed during the graph read. A retry only removes
+      // candidates, so concurrent revocations cannot create an unbounded loop.
+      const current = (await access.query<{ author: string }>(`
+        SELECT DISTINCT r.subject_id AS author FROM access.representation r
+        JOIN access.principal p ON p.id=r.principal_id AND p.active
+        JOIN access.authority_subject s ON s.id=r.subject_id AND s.active AND s.kind='agent'
+        WHERE r.principal_id=$1 AND r.subject_id=ANY($2::text[])
+          AND r.active AND r.valid_until>clock_timestamp() ORDER BY r.subject_id`,
+      [principalId, authors])).rows.map(row => row.author);
+      if (current.length === authors.length) return true;
+      authors = current;
+    }
+    if (rows.length <= 256) return false;
+    after = examined.at(-1)!.author;
+  }
 }
 
 /** Each resolution rechecks current recipient authority and exact owner state. */
@@ -174,17 +203,8 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
         ).rows[0];
         if (!row || (input.realm ?? null) !== (native.test(row.context) ? row.context : null))
           return hidden;
-        const authors =
-          !row.reporter && !row.affected && !row.safety
-            ? await currentContributionAuthors(env, row.target_resource)
-            : [];
-        let ownsTarget = false;
-        for (const author of authors) {
-          if (await represents(access, input.principalId, author)) {
-            ownsTarget = true;
-            break;
-          }
-        }
+        const ownsTarget = !row.reporter && !row.affected && !row.safety
+          && await ownsCurrentContribution(access, env, input.principalId, row.target_resource);
         if (!row.reporter && !row.affected && !ownsTarget) return hidden;
         return present(
           {
@@ -209,24 +229,36 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       if (!row || row.realm !== input.realm) return hidden;
       const result = row.result as { member?: unknown; impact?: { changes?: { member?: unknown }[] };
         notificationRole?: unknown; auditDetail?: { kind?: unknown; member?: unknown; assigned?: unknown } };
-      const members = typeof result.member === 'string' ? [result.member]
-        : Array.isArray(result.impact?.changes) ? result.impact.changes.map(change => change.member) : [];
-      const effects = (await access.query<{ member: string }>(`
-        SELECT member FROM access.notification_realm_effect WHERE receipt_id = $1
-        ORDER BY member LIMIT 257`, [input.ref])).rows;
-      if (effects.length > 256) return { status: 'unavailable' };
-      for (const member of [...members, ...effects.map(effect => effect.member)]) {
-        if (typeof member === 'string' && await represents(access, input.principalId, member)) {
-          const roleName = await notificationRoleName(access, row.realm, member, result.notificationRole);
-          return present({ status: 'available', subject: { private: true,
-            fields: { linkTarget: row.realm, realm: row.realm,
-              ...(roleName ? { roleName } : {}),
-              ...(result.auditDetail?.kind === 'assignment' && result.auditDetail.member === member
-                && typeof result.auditDetail.assigned === 'boolean'
-                ? { roleChange: result.auditDetail.assigned ? 'given' : 'taken' } : {}) } } }, row.realm);
-        }
-      }
-      return hidden;
+      const member = (await access.query<{ member: string }>(`
+        SELECT DISTINCT r.subject_id AS member,impact.ordinal FROM access.representation r
+        JOIN access.principal p ON p.id=r.principal_id AND p.active
+        JOIN access.authority_subject s ON s.id=r.subject_id AND s.active AND s.kind='agent'
+        JOIN access.realm_admin_receipt receipt ON receipt.id=$2
+        LEFT JOIN LATERAL (
+          SELECT ordinal FROM jsonb_array_elements(CASE
+            WHEN jsonb_typeof(receipt.result->'member')='string'
+              THEN jsonb_build_array(jsonb_build_object('member',receipt.result->'member'))
+            WHEN jsonb_typeof(receipt.result#>'{impact,changes}')='array'
+              THEN receipt.result#>'{impact,changes}' ELSE '[]'::jsonb END)
+            WITH ORDINALITY AS change(value,ordinal)
+          WHERE jsonb_typeof(value->'member')='string' AND value->>'member'=r.subject_id
+          ORDER BY ordinal LIMIT 1
+        ) impact ON true
+        WHERE r.principal_id=$1 AND r.active AND r.valid_until>clock_timestamp()
+          AND r.subject_id ~ '^https://rezics[.]com/id/[0-9a-f-]{36}$'
+          AND (impact.ordinal IS NOT NULL OR EXISTS (
+            SELECT 1 FROM access.notification_realm_effect effect
+            WHERE effect.receipt_id=receipt.id AND effect.member=r.subject_id))
+        ORDER BY impact.ordinal NULLS LAST,r.subject_id LIMIT 1`,
+      [input.principalId, input.ref])).rows[0]?.member;
+      if (!member) return hidden;
+      const roleName = await notificationRoleName(access, row.realm, member, result.notificationRole);
+      return present({ status: 'available', subject: { private: true,
+        fields: { linkTarget: row.realm, realm: row.realm,
+          ...(roleName ? { roleName } : {}),
+          ...(result.auditDetail?.kind === 'assignment' && result.auditDetail.member === member
+            && typeof result.auditDetail.assigned === 'boolean'
+            ? { roleChange: result.auditDetail.assigned ? 'given' : 'taken' } : {}) } } }, row.realm);
     }
     return hidden;
   } };

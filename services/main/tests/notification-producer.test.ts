@@ -65,5 +65,7 @@ test('notification producer emits a submission decision to its represented recip
   const producer = new NotificationProducer(access, null, {} as Pool, {} as never,
     { enqueue: async (event: NotificationEvent) => { emitted.push(event); return []; } } as never, null);
   expect(await producer.runAccessOnce()).toBe(1);
-  expect(emitted).toMatchObject([{ topic: 'submission-decision', recipients: [recipient] }]);
+  expect(emitted).toMatchObject([{ topic: 'submission-decision', recipients: [],
+    relationshipPlan: { authorityAudience: { kind: 'represented', agent, actor: recipient,
+      action: 'submission.submit' } } }]);
 });
