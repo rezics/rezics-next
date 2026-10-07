@@ -17,8 +17,8 @@ import { activeBackend,
   AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
-  refreshHeavyLockHeld, refreshIsCurrent, refreshProcessAlive, refreshStorageDefinitionChanged, rehearseRefreshMigrations,
-  waitRefreshReady} from '../refresh-stack.ts';
+  refreshHeavyLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
+  refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
 import { refreshSharedStack } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
@@ -561,6 +561,77 @@ describe('shared stack refresh planning', () => {
     expect(changedEnvironment({ A: '1', PASSWORD: 'old-secret' }, { PASSWORD: 'new-secret', B: '2' }))
       .toEqual(['A', 'B', 'PASSWORD']);
     expect(changedEnvironment({ A: '1', B: '2' }, { B: '2', A: '1' })).toEqual([]);
+  });
+
+  test('main mode declares fixed non-ephemeral listen ports for Main, Account and the relay', () => {
+    const source = readFileSync(join(root, 'apphost/apphost.mts'), 'utf8');
+    const declared = source.match(
+      /export const mainModeListenPorts = \{ account: (\d+), main: (\d+), 'main-relay': (null|\d+) \} as const;/,
+    );
+    expect(declared).not.toBeNull();
+    const account = Number(declared![1]);
+    const main = Number(declared![2]);
+    const relay = declared![3] === 'null' ? null : Number(declared![3]);
+    for (const port of [account, main, relay]) {
+      if (port === null) continue;
+      expect(port).toBeGreaterThan(0);
+      expect(port).toBeLessThan(32_768);
+    }
+    expect(account).not.toBe(3002);
+    expect(main).not.toBe(3001);
+    expect(new Set([account, main, relay]).size).toBe(3);
+    // The proxy stays on the public ports. The relay declares no socket.
+    expect(relay).toBeNull();
+    expect(source).toContain('const targetPort = mainModeListenPorts[');
+    expect(source).toContain('return { port, targetPort, env: variable, isProxied: true as const }');
+    expect(source).toContain("withHttpEndpoint(serviceEndpoint(3002, 'ACCOUNT_PORT'))");
+    expect(source).toContain("withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))");
+    expect(source).toContain(".withHttpHealthCheck({ path: '/health/ready' })");
+    const relaySource = source.slice(source.indexOf("addExecutable('main-relay'"));
+    expect(relaySource.slice(0, relaySource.indexOf('accountUrl ='))).not.toContain('withHttpEndpoint');
+  });
+
+  test('writers that have never started plan without an environment blocker', () => {
+    const expected = { ACCOUNT_BASE_URL: 'http://127.0.0.1:3004' };
+    const changes = refreshLoadedEnvironmentChanges({
+      account: { state: 'NotStarted' },
+      main: { state: 'NotStarted' },
+      'main-relay': { state: 'NotStarted' },
+    }, expected);
+    expect(changes).toEqual([]);
+    const plan = refreshPlan({ ...current, environmentChanges: changes,
+      unhealthyResources: ['account', 'main', 'main-relay'] });
+    expect(plan.blockers).toEqual([]);
+    expect(plan.steps).toContain('restart-resources');
+    expect(plan.steps).toContain('wait-ready');
+  });
+
+  test('a running writer with a stale loaded value still blocks refresh', () => {
+    const expected = { ACCOUNT_BASE_URL: 'http://127.0.0.1:3004', ACCOUNT_SECRET: 'loaded-secret' };
+    const running = {
+      account: { state: 'Running', environment: {
+        ACCOUNT_BASE_URL: 'http://127.0.0.1:9', ACCOUNT_PORT: '3012', OTEL_SERVICE_NAME: 'stale',
+        ACCOUNT_SECRET: null,
+      } },
+      main: { state: 'Running', environment: {} },
+      'main-relay': { state: 'Running', environment: {} },
+    };
+    const changes = refreshLoadedEnvironmentChanges(running, expected);
+    expect(changes).toEqual(['account.ACCOUNT_BASE_URL']);
+    const plan = refreshPlan({ ...current, environmentChanges: changes });
+    expect(plan.blockers.join('\n')).toContain('Generated stack environment would change');
+    expect(plan.blockers.join('\n')).toContain('account.ACCOUNT_BASE_URL');
+    expect(refreshLoadedEnvironmentChanges({
+      account: { state: 'Running', environment: {
+        ACCOUNT_BASE_URL: expected.ACCOUNT_BASE_URL, ACCOUNT_SECRET: null,
+      } },
+      main: { state: 'Running', environment: {} },
+      'main-relay': { state: 'Running', environment: {} },
+    }, expected)).toEqual([]);
+    // A writer that already started and then stopped still has an environment to compare.
+    expect(refreshLoadedEnvironmentChanges({
+      account: { state: 'Exited' }, main: { state: 'Finished' }, 'main-relay': { state: 'Stopped' },
+    }, { ACCOUNT_BASE_URL: expected.ACCOUNT_BASE_URL })).toEqual(['account.ACCOUNT_BASE_URL']);
   });
 
   test('lost AppHost resources block refresh before writers are stopped', async () => {

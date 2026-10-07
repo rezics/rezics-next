@@ -2,7 +2,7 @@
 //
 // - main:     the main checkout; shared Account, Main, Main relay, Accounts app, web and
 //             Storybook on the fixed ports 3002, 3001, 3004, 3000 and 6006
-//             through Aspire's proxy.
+//             through Aspire's proxy. Main listens on 3011 and Account on 3012.
 // - frontend: a worktree; the Accounts app, web and Storybook on random ports
 //             against the shared backend, which appears here as external services.
 // - backend:  a worktree with --backend; its own isolated stack and services. Its
@@ -29,6 +29,11 @@ const web = resolve(root, 'apps/web');
 const accountsApp = resolve(root, 'apps/accounts');
 const mode = process.env.REZICS_DEV_MODE ?? 'main';
 if (!['main', 'frontend', 'backend'].includes(mode)) throw new Error(`Unknown REZICS_DEV_MODE: ${mode}`);
+
+/** Process listen ports in main mode. The Aspire proxy stays on 3001 and 3002.
+ * These ports are below the Linux ephemeral range (32768–60999). The relay
+ * does not listen, so it has no socket for Docker or a QA stack to take. */
+export const mainModeListenPorts = { account: 3012, main: 3011, 'main-relay': null } as const;
 const envFile = process.env.REZICS_DEV_ENV;
 if (!envFile) throw new Error('REZICS_DEV_ENV is unset; start the AppHost with `task dev`');
 const env = Object.fromEntries(readFileSync(envFile, 'utf8').split('\n').filter(Boolean)
@@ -75,9 +80,12 @@ if (mode === 'frontend') {
   mainUrl = main;
   backend = main;
 } else {
-  // The main checkout keeps fixed ports on Aspire's proxy and gives each process
-  // its own listening port. A worktree stack already assigned these ports, and
-  // its issuer URL is built from them, so they bind directly.
+  // Main mode keeps the proxy on 3001 and 3002. localhost resolves to ::1
+  // first and these processes bind 127.0.0.1, so the proxy is what makes
+  // health checks and the web and Accounts origins succeed. Listen ports are
+  // fixed below the Linux ephemeral range: a stopped writer otherwise releases
+  // a dynamic port that Docker or a QA stack can publish. A worktree already
+  // assigned its ports, and its issuer is built from them, so it binds directly.
   const fixed = mode === 'main';
   const stack = resolve(envFile, '..');
   // The dev CLI/refresh prepares this pointer. AppHost only consumes stack
@@ -118,9 +126,16 @@ if (mode === 'frontend') {
     './services/main/src/relay-telemetry.ts',
     'services/main/src/relay.ts',
   );
-  const serviceEndpoint = (port: number, variable: string) => fixed
-    ? { port, env: variable }
-    : { port: Number(env[variable]), isProxied: false };
+  const serviceEndpoint = (port: number, variable: 'ACCOUNT_PORT' | 'MAIN_PORT') => {
+    if (!fixed) return { port: Number(env[variable]), isProxied: false as const };
+    const targetPort = mainModeListenPorts[variable === 'ACCOUNT_PORT' ? 'account' : 'main'];
+    // The proxy port and the process port are different sockets. A listen port
+    // inside the ephemeral range can be published by Docker while the writer is stopped.
+    if (!Number.isInteger(targetPort) || targetPort < 1 || targetPort >= 32_768) {
+      throw new Error(`Main-mode listen port ${targetPort} is inside the Linux ephemeral range`);
+    }
+    return { port, targetPort, env: variable, isProxied: true as const };
+  };
   const account = configure(start(builder.addExecutable('account', accountCommand.executable, root,
     accountCommand.args)), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
@@ -132,6 +147,7 @@ if (mode === 'frontend') {
     .withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' })
     .waitFor(account);
+  // The relay polls storage. It has no listen port (mainModeListenPorts['main-relay']).
   await configure(start(builder.addExecutable('main-relay', relayCommand.executable, root,
     relayCommand.args)), relaySpec)
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf }).waitFor(main);

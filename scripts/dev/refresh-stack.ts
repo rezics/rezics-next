@@ -118,6 +118,28 @@ function compose(root: string, args: string[], timeout = 180_000, stackRoot = ro
 
 function sha256(bytes: string | Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
 
+/** Compare non-secret loaded values with the generated stack. Listen ports are
+ * fixed but are not the public proxy ports, and OTEL endpoints belong to the
+ * dashboard. A resource that has never started in this AppHost reports no
+ * environment; it cannot be stale, because it starts from the current
+ * configuration. A stopped resource that did start still compares. */
+export function refreshLoadedEnvironmentChanges(
+  resources: Partial<Record<RefreshResource, { state?: string; environment?: Record<string, string | null | undefined> }>>,
+  expected: Record<string, string | undefined>,
+): string[] {
+  const specs = { account: accountSpec, main: mainSpec, 'main-relay': relaySpec };
+  const changes: string[] = [];
+  for (const name of refreshResources) {
+    if (resources[name]?.state === 'NotStarted') continue;
+    for (const key of Object.keys(specs[name])) {
+      if (expected[key] === undefined || ['ACCOUNT_PORT', 'MAIN_PORT'].includes(key) || key.startsWith('OTEL_')) continue;
+      const actual = resources[name]?.environment?.[key];
+      if (actual === undefined || (actual !== null && actual !== expected[key])) changes.push(`${name}.${key}`);
+    }
+  }
+  return changes;
+}
+
 /** Same generated environment overlays as dev:prepare, without generating a
  * secret, writing a file, running migrations or registering a client. */
 export function expectedRefreshEnvironment(root: string): Record<string, string> {
@@ -263,16 +285,7 @@ export async function inspectRefresh(root: string, stackRoot = root) {
       else throw error;
     }
   }
-  const specs = { account: accountSpec, main: mainSpec, 'main-relay': relaySpec };
-  // Compare non-secret values with the environment Aspire actually loaded. Its
-  // dynamically assigned listening ports differ from the public proxy ports.
-  for (const name of refreshResources) {
-    for (const key of Object.keys(specs[name])) {
-      if (expected[key] === undefined || ['ACCOUNT_PORT', 'MAIN_PORT'].includes(key) || key.startsWith('OTEL_')) continue;
-      const actual = resources[name].environment?.[key];
-      if (actual === undefined || (actual !== null && actual !== expected[key])) environmentChanges.push(`${name}.${key}`);
-    }
-  }
+  environmentChanges.push(...refreshLoadedEnvironmentChanges(resources, expected));
   const dashboard = described.resources?.find(resource => resource.dashboardUrl)?.dashboardUrl;
   if (!dashboard) throw new Error(`Shared AppHost session is unavailable. ${appHostRestartInstruction}`);
   const appHostSession = new URL(dashboard).origin;

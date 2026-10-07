@@ -56,8 +56,12 @@ backend revisions.
 The `storage-backend` pointer retains the last attempted Compose paths, so a
 code-only checkout does not cause artificial container drift. An AppHost restart
 after interrupted maintenance declares backend writers with explicit start;
-`task dev` reports the stopped state promptly, and `task dev:refresh -- --wait`
-finishes maintenance before restarting them. There is no `--recover` command.
+`task dev` reports that NotStarted state promptly. A writer that has never
+started in this AppHost has no loaded environment, and refresh does not treat
+that absence as drift: the process starts from the current AppHost
+configuration. `task dev:refresh -- --wait` finishes maintenance and then starts
+the writers. A running writer whose loaded value differs from the generated
+stack still needs a new AppHost. There is no `--recover` command.
 
 Refresh compares installed official Zone source digests with active approvals
 and submits changed packages through the demo seed's revision, independent
@@ -68,13 +72,19 @@ without `--wait`, it refuses a held heavy QA lock. Dry-run lists affected
 resources and each Zone's approved and source digests; when Main is unavailable,
 approval inspection waits for readiness.
 
-An existing shared AppHost needs one switch-over after adopting pinned mode:
-run `task dev:stop`, then `task dev`, then `task dev:refresh -- --wait` in main.
-Startup serves the last refreshed backend revision unless unfinished maintenance
-holds the target revision with its writers stopped. The same
-AppHost restart is required when refresh reports changed environment variables,
-changed topology, or missing/dead executables. Resource restart cannot reload
-AppHost configuration or recover a lost DCP executable after Docker restarts.
+An existing shared AppHost needs one switch-over after adopting pinned mode,
+and again when Main and Account leave dynamic listen ports: run `task dev:stop`,
+then `task dev`, then `task dev:refresh -- --wait` in main. The proxy stays on
+3001 (Main) and 3002 (Account). Those remain the public URLs, the JWKS and
+introspection addresses, and the `/health/ready` checks. The issuer stays the
+Accounts app on 3004. Main listens on 3011 and Account on 3012, below the
+Linux ephemeral range (32768–60999), so a stopped writer keeps its port while
+Docker and QA stacks publish into that range. The relay does not listen. Startup serves the last
+refreshed backend revision unless unfinished maintenance holds the target
+revision with its writers stopped. The same AppHost restart is required when
+refresh reports changed environment variables, changed topology, or
+missing/dead executables. Resource restart cannot reload AppHost configuration
+or recover a lost DCP executable after Docker restarts.
 If a stop, restart or wait loses a resource during refresh, refresh shuts down
 that AppHost and records no new checkpoint. It keeps any unfinished maintenance
 marker and forward-only storage changes. Resolve a reported shutdown failure,
