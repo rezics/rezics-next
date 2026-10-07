@@ -81,6 +81,18 @@ export type CommandResult =
   | { status: 'committed'; position: CommandPosition; templateIndex?: TemplateIndexDelta }
   | { status: 'guard-unmatched' | 'conflict' | 'unknown-profile' | 'deadline' }
   | { status: 'invalid'; report?: unknown };
+export interface MembershipPreparationInput {
+  dataEpoch: string;
+  routingEpoch: string;
+  /** Exact request identity survives a lost acknowledgment. */
+  requestId: string;
+  /** Absolute wall deadline, shared by every preparation turn and retry. */
+  deadline: number;
+}
+export type MembershipPreparationResult =
+  | { status: 'committed'; complete: boolean; placements: number; receipts: string[];
+      examined: number; phase: number; after: string; restarted: boolean }
+  | Exclude<CommandResult, { status: 'committed' }>;
 export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
   privateSearchWriteEpoch?: string; privateSearchWriteActive?: boolean;
@@ -101,7 +113,9 @@ export class CommandOutcomeUnknown extends Error {}
 export class CommandForbidden extends Error {}
 export class FusekiQueryResponseTooLarge extends Error {}
 
-async function boundedJson<T>(response: Response, maxResponseBytes?: number): Promise<T> {
+async function boundedJson<T>(response: Response, maxResponseBytes?: number, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) await response.body?.cancel(signal.reason);
+  signal?.throwIfAborted();
   if (maxResponseBytes === undefined && !fusekiReadBudget.getStore()) return response.json() as Promise<T>;
   const limit = maxResponseBytes ?? 1_048_576;
   const length = response.headers.get('content-length');
@@ -111,11 +125,14 @@ async function boundedJson<T>(response: Response, maxResponseBytes?: number): Pr
   }
   if (!response.body) throw new Error('Fuseki response body is missing');
   const reader = response.body.getReader();
+  const abort = () => { void reader.cancel(signal?.reason).catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   try {
     while (true) {
       const next = await reader.read();
+      signal?.throwIfAborted();
       if (next.done) break;
       bytes += next.value.byteLength;
       takeReadBytes(next.value.byteLength);
@@ -125,6 +142,8 @@ async function boundedJson<T>(response: Response, maxResponseBytes?: number): Pr
   } catch (error) {
     await reader.cancel();
     throw error;
+  } finally {
+    signal?.removeEventListener('abort', abort);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
 }
@@ -223,6 +242,78 @@ export class FusekiClient {
     });
     if (!response.ok) throw new Error(`Template index returned ${response.status}`);
     return boundedJson<TemplateIndexDelta>(response,1024*1024);
+  }
+
+  async membershipPreparationStatus(): Promise<{ needsPreparation: boolean }> {
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Membership preparation capability is required');
+    takeReadCall();
+    const response = await fetch(new URL('command', this.baseUrl), {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
+      body: JSON.stringify({ templateIndex: { operation: 'membership-status' } }), signal: readSignal(),
+    });
+    if (response.status === 403) throw new CommandForbidden('Membership preparation capability rejected');
+    if (!response.ok) throw new Error(`Membership preparation status returned ${response.status}`);
+    const result = await boundedJson<{ needsPreparation: boolean }>(response, 4096);
+    if (typeof result?.needsPreparation !== 'boolean') throw new Error('Malformed membership preparation status');
+    return result;
+  }
+
+  async membershipPrepare(input: MembershipPreparationInput, signal?: AbortSignal): Promise<MembershipPreparationResult> {
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Membership preparation capability is required');
+    if (!input.dataEpoch || !input.routingEpoch || !input.requestId
+      || !Number.isSafeInteger(input.deadline) || input.deadline < 1) throw new Error('Invalid membership preparation input');
+    const remaining = Math.max(0, input.deadline - Date.now());
+    const deadlineSignal = AbortSignal.timeout(remaining);
+    const requestSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
+    const body = JSON.stringify({ templateIndex: { operation: 'membership-prepare', ...input } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      requestSignal.throwIfAborted();
+      try {
+        takeReadCall();
+        let response: Response;
+        try {
+          response = await fetch(new URL('command', this.baseUrl), {
+            method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
+            body, signal: requestSignal,
+          });
+        } catch (error) {
+          requestSignal.throwIfAborted();
+          throw new CommandOutcomeUnknown('Membership preparation transport outcome unknown', { cause: error });
+        }
+        if (response.status === 403) throw new CommandForbidden('Membership preparation capability rejected');
+        if (response.status >= 500) {
+          await response.body?.cancel();
+          throw new CommandOutcomeUnknown(`Membership preparation returned ${response.status}`);
+        }
+        if (!response.ok && response.status !== 409 && response.status !== 422) {
+          await response.body?.cancel();
+          throw new Error(`Membership preparation returned ${response.status}`);
+        }
+        let result: MembershipPreparationResult;
+        try { result = await boundedJson<MembershipPreparationResult>(response, 65_536, requestSignal); }
+        catch (error) {
+          requestSignal.throwIfAborted();
+          if (error instanceof FusekiQueryResponseTooLarge || error instanceof FusekiReadBudgetExceeded) throw error;
+          throw new CommandOutcomeUnknown('Membership preparation response incomplete', { cause: error });
+        }
+        if (!result || !['committed', 'guard-unmatched', 'conflict', 'invalid', 'unknown-profile', 'deadline'].includes(result.status)) {
+          throw new Error('Malformed membership preparation result');
+        }
+        if (result.status === 'committed' && (typeof result.complete !== 'boolean'
+          || !Number.isInteger(result.placements) || result.placements < 0 || result.placements > 24
+          || !Number.isInteger(result.examined) || result.examined < 0 || result.examined > 256
+          || !Array.isArray(result.receipts) || result.receipts.length !== (result.placements > 0 ? 1 : 0)
+          || result.receipts.some(receipt => typeof receipt !== 'string')
+          || !Number.isInteger(result.phase) || result.phase < 0 || result.phase > 4
+          || result.complete !== (result.phase === 4) || result.examined < result.placements
+          || typeof result.after !== 'string' || !/^(?:[0-9a-f]{64})?$/.test(result.after)
+          || typeof result.restarted !== 'boolean')) throw new Error('Malformed membership preparation bounds');
+        return result;
+      } catch (error) {
+        if (!(error instanceof CommandOutcomeUnknown) || attempt !== 0) throw error;
+      }
+    }
+    throw new CommandOutcomeUnknown('Membership preparation outcome unknown');
   }
 
   /** Legacy write surface; remaining domain and recovery adapters must migrate before P0.2 exit. */

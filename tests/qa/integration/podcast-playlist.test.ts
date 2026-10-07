@@ -9,7 +9,7 @@ import {
 import {
   CommandRejected,
   FusekiClient,
-  type CommandEnvelope,
+  type MembershipPreparationInput,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { hasUnnormalizedMembership, normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
@@ -179,38 +179,40 @@ test('a podcast playlist survives automatic owner upgrade, interruption, reads a
         ?placement rv:generation ?generation ; schema:item ?item ; schema:position ?position .
         ?list rv:generation ?generation ; a schema:ItemList ; ?p ?o . } }`);
     expect(await membership()).toHaveLength(0);
-    // Removing position produces malformed ListItems; SHACL rejects the complete
-    // transaction, including its receipt and all membership conversions.
-    const malformed = new Proxy(f.env.fuseki, {
-      get(target, property) {
-        if (property === 'commandWithReceipt')
-          return (envelope: CommandEnvelope) =>
-            target.commandWithReceipt({
-              ...envelope,
-              update: envelope.update.replace(/ ; schema:position "[^"]+"/g, ''),
-            });
-        const value = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-    await expect(normalizeStoredMembership({ ...f.env, fuseki: malformed })).rejects.toBeInstanceOf(
+    // A malformed stored role must reject the whole native conversion turn,
+    // including its receipt. PartRole is not admitted by CollectionMembership.
+    const replaceRoles = async (from: string, to: string) => f.nativeFuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ?placement rv:occurrenceRole rv:${from} } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ?placement rv:occurrenceRole rv:${to} } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { VALUES ?structure { ${iri(created.structure)} ${iri(extra.structure)} }
+        ?structure rv:selectedGeneration ?generation .
+        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrenceRole rv:${from} . } }`);
+    await replaceRoles('MemberRole', 'PartRole');
+    await expect(normalizeStoredMembership(f.env)).rejects.toBeInstanceOf(
       CommandRejected,
     );
     expect(await membership()).toHaveLength(0);
     expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(true);
+    await replaceRoles('PartRole', 'MemberRole');
     const apps = Bun.env as Record<string, string>;
     // Run the real preparation hook used by dev:refresh and installRelease.
     // Lose preparation after a committed 24-placement batch, before batch two.
-    const command = FusekiClient.prototype.commandWithReceipt;
+    const prepare = FusekiClient.prototype.membershipPrepare;
     let batches = 0;
     let receipt = '';
-    const interrupted = spyOn(FusekiClient.prototype, 'commandWithReceipt').mockImplementation(
-      async function(this: FusekiClient, envelope: CommandEnvelope) {
-        if (envelope.receipt.startsWith('urn:rezics:receipt:bootstrap:ordered-membership:')) {
-          if (++batches === 2) throw new Error('interrupted owner preparation');
-          receipt = envelope.receipt;
+    const interrupted = spyOn(FusekiClient.prototype, 'membershipPrepare').mockImplementation(
+      async function(this: FusekiClient, input: MembershipPreparationInput, signal?: AbortSignal) {
+        if (batches === 1) {
+          batches = 2;
+          throw new Error('interrupted owner preparation');
         }
-        return command.call(this, envelope);
+        const result = await prepare.call(this, input, signal);
+        // A populated store can need dry seek turns before these legacy rows.
+        if (result.status === 'committed' && result.placements > 0) {
+          batches = 1;
+          receipt = result.receipts[0]!;
+        }
+        return result;
       });
     try {
       await expect(migrateOwnerData(apps)).rejects.toThrow('interrupted owner preparation');
