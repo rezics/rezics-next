@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
-import { renderProfile } from '../../../model/compiler/ir.ts';
+import { profileSource } from '../../../model/compiler/shacl.ts';
 import { authoredProfiles, commandProfiles } from '../../../model/compiler/generate.ts';
 import { spaceZoneProfile } from '../../../model/definitions/space-zone-v1.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
@@ -24,7 +24,7 @@ const source = { name: 'Independent site', language: 'ar', actingSubject: actor,
 // A shared wave regenerates once at integration. Install only this reviewed
 // profile in this test process; never write or replace the shared generated files.
 const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
-const currentDigest = createHash('sha256').update(renderProfile(spaceZoneProfile)).digest('hex');
+const currentDigest = createHash('sha256').update(profileSource(spaceZoneProfile)).digest('hex');
 const generated = registry['space-zone-v1'];
 beforeAll(() => { registry['space-zone-v1'] = { sha256: currentDigest,
   shapes: spaceZoneProfile.shapes.map(shape => shape.iri) }; });
@@ -70,7 +70,7 @@ function fixture() {
 }
 
 test('G-963: Zone creation binds capability, normalized handle, visibility and listing to one intent', () => {
-  expect(createHash('sha256').update(renderProfile(spaceZoneProfile)).digest('hex')).toBe(currentDigest);
+  expect(createHash('sha256').update(profileSource(spaceZoneProfile)).digest('hex')).toBe(currentDigest);
   const input = { ...source, handle: 'Reading-Site' };
   const digest = zoneSpaceCreationDigest(input);
   expect(digest).toBe(zoneSpaceCreationDigest({ ...input, handle: 'reading-site', listing: 'listed' }));

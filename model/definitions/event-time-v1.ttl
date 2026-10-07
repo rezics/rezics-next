@@ -1,0 +1,72 @@
+# One identified Event occurrence with separate actual and planned time slots.
+# Each revision keeps precision, calendar, reference, qualifier and source lexical;
+# normalized interval keys are derived outside the graph under a conversion profile.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix time: <http://www.w3.org/2006/time#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/event-time-v1/event-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Event ] ;
+    sh:property [ sh:path rv:eventTime ; sh:maxCount 2 ; sh:class rv:EventTime ] .
+
+<https://rezics.com/definition/event-time-v1/slot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:EventTime ] ;
+    sh:property [ sh:path rv:event ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:class rv:Event ] ;
+    sh:property [ sh:path rv:timeStatus ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( rv:ActualTime rv:PlannedTime ) ] ;
+    sh:property [ sh:path rv:eventTimeHead ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:class rv:EventTimeRevision ] .
+
+<https://rezics.com/definition/event-time-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:EventTimeRevision ] ;
+    sh:property [ sh:path rv:eventTime ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:class rv:EventTime ] ;
+    sh:property [ sh:path rv:timeAvailability ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( rv:Available rv:Withdrawn ) ] ;
+    sh:property [ sh:path rv:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ;
+        sh:class rv:EventTimeRevision ] ;
+    sh:property [ sh:path rv:timeEvidence ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:timeAvailability ; sh:hasValue rv:Withdrawn ] ;
+          sh:property [ sh:path rv:temporalKind ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:eventStart ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:eventEnd ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:timeAvailability ; sh:hasValue rv:Available ] ;
+          sh:property [ sh:path rv:temporalKind ; sh:hasValue rv:InstantTime ] ;
+          sh:property [ sh:path rv:eventStart ; sh:minCount 1 ; sh:maxCount 1 ;
+            sh:class rv:EventTimePoint ] ;
+          sh:property [ sh:path rv:eventEnd ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:timeAvailability ; sh:hasValue rv:Available ] ;
+          sh:property [ sh:path rv:temporalKind ; sh:hasValue rv:IntervalTime ] ;
+          sh:property [ sh:path rv:eventStart ; sh:minCount 1 ; sh:maxCount 1 ;
+            sh:class rv:EventTimePoint ] ;
+          sh:property [ sh:path rv:eventEnd ; sh:minCount 1 ; sh:maxCount 1 ;
+            sh:class rv:EventTimePoint ] ]
+    ) .
+
+<https://rezics.com/definition/event-time-v1/point-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:EventTimePoint ] ;
+    sh:property [ sh:path rv:pointState ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( rv:KnownPoint rv:UnknownPoint rv:OpenPoint ) ] ;
+    sh:property [ sh:path rv:temporalValue ; sh:maxCount 1 ; sh:class time:GeneralDateTimeDescription ] ;
+    sh:property [ sh:path rv:unknownLexical ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:pointState ; sh:hasValue rv:KnownPoint ] ;
+          sh:property [ sh:path rv:temporalValue ; sh:minCount 1 ; sh:maxCount 1 ; sh:class time:GeneralDateTimeDescription ] ;
+          sh:property [ sh:path rv:unknownLexical ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:pointState ; sh:hasValue rv:UnknownPoint ] ;
+          sh:property [ sh:path rv:temporalValue ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:unknownLexical ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ]
+        [ sh:property [ sh:path rv:pointState ; sh:hasValue rv:OpenPoint ] ;
+          sh:property [ sh:path rv:temporalValue ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:unknownLexical ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ]
+    ) .

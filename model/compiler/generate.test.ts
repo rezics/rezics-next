@@ -415,7 +415,7 @@ function replaceIn(root: string, relative: string, from: string, to: string): vo
 test('an in-place profile relaxation regenerates its bytes and digest and detects hand-edited output', async () => {
   const id = 'relation-occurrence-v1';
   const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
-    `model/definitions/${id}.ts`, 'maxLength: 200', 'maxLength: 201'));
+    `model/definitions/${id}.ttl`, 'sh:maxLength 200', 'sh:maxLength 201'));
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
   const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
@@ -443,6 +443,7 @@ test('an authored profile can be removed without a digest lock', async () => {
   const { root, generate: copied } = await copiedProject(copy => {
     generate(copy, false);
     rmSync(join(copy, `model/definitions/${id}.ts`));
+    rmSync(join(copy, `model/definitions/${id}.ttl`));
   });
   expect(() => copied(root, true)).toThrow(`Unexpected generated artifact: generated/model/shapes/${id}.ttl`);
   expect(() => copied(root, false)).not.toThrow();
