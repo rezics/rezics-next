@@ -193,6 +193,12 @@ qualification needs further implementation/drill waves and the already listed
 external operator facts/registrations; no defensible final date can be stated
 until those inputs are supplied. No production action is authorized.
 
+The reviewed curator batch component landed at270ad81bf7f8 after selected unit
+and repository guards. It reuses only existing semantic authority in the same
+fenced client; Work-read paths remain independent. Launch's original import
+regression still needs to run on its producer candidate. Kernel's sole C4/C2
+refresh is active; backend activation is pending its terminal checkpoint.
+
 G-1394 owns the proven signed-in release-browse budget failure: two summary
 passes duplicate anonymous disclosure, producing13graph calls versus12. The
 fix must reuse only valid request/snapshot decisions with exact target, revision,
