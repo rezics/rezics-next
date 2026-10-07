@@ -1,144 +1,136 @@
 # State
 
-Checkpoint: 2026-10-07 13:15 UTC. Sol manager `goal-kernel-codex`, tmux `goal-kernel`.
-Live truth `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
-Goal unfinished. No reliable completion projection: remaining physical locality,
-current-model convergence and Claim/restore qualification still need slices.
+Checkpoint: 2026-10-07 13:49 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Live truth: `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
+Goal remains active. Completion cannot be projected reliably until the physical
+locality and exact restore/Claim qualifications pass.
 
 ## Shared stack
 
-Trust refresh checkpoint12:22: pinned a2f79dc8c085, native0.5.39-c04c234006fa,
-model ab6d394, Access1767 applied; helpers f11ce2248 and reply reporting d9ad2ba574cb
-live. Program ports checkpoint12:26 now runs pinned0247249ed on fixed Main/Account
-ports3011/3012 (behind3001/3002), all six resources healthy. Refreshes are open. No kernel lifecycle waiter. After pending
-native/model/migration waves, coalesce one required `task dev:refresh -- --wait`
-and hold Main code gates from queue through checkpoint; preserve retained volumes.
-Merges alone do not change serving backend. Cold maintenance-read repair returned 23337c98c with 39 focused cases;
-G1282 combined gate is running with exact current native pins: one finite shared preparation deadline, interactive budgets intact.
-Public-name online backfill completed3458 identities, complete:true; evidence
-`.temp/kernel/public-name-backfill-shared-1153.log`. Realm name prefilter locality
-remains open. Warm retry does not qualify cold startup or populated restore.
+The storage upgrade and singleton redesign are landed and serving. Content1521
+uses immutable source streams and a saved PostgreSQL snapshot; no site-wide
+singleton correctness head. C4 repair67883e853690, redesign8c6793a04dbb and
+classification restore1dbd4a099fe2 are applied.
 
-## Accepted contracts
+Latest completed refresh: b7c8d34c0b59f7091eddd6be2c59057cb05562e7,
+native0.5.39-d57155aafd87, modelab6d394, no pending SQL. All six application
+resources were healthy. Main/Account use fixed3011/3012 behind3001/3002.
+It includes ordered membership88ce032c80a2, exact Zone delivery107f23261259,
+Trust public catalogue6ee3f226f, Realm policy receiptsf6383bc94 and notification
+paging84a06c164. Membership preparation completed before the final checkpoint.
+The old native operation inspection failure is fixed by d04038cac: prepare changed
+storage before inspecting membership through the candidate native module; retain
+interactive budgets. Program owns queued refresh re-execution from staged code.
 
-C0 current reviewed basis e75dda7b4; C2 Post first slice and131 exact authored
-Turtle profiles; C3 local Work/Context/relay first path. C4 catalogue Statement
-operation, storage upgrade repair67883e853690, singleton redesign
-8c6793a04dbb Content1521 (immutable source streams/savedPGsnapshot,17integrations),
-authenticated classification restore1dbd4a099fe2 all applied. C5 four native
-bounded templates35c3fe3c5, fair local seek reconciliation Access1761–1764 applied.
-C6 owner command/state/object custody before slim6-quad proof and relay/gap
-recovery after retirement3348b4ad6, Access1765/1766 and Content1522 applied.
-Native manager union45cases across query, conversion, slim, retirement, relay,
-erasure campaign passes. Trust erasure campaign192d5e825979 also shared-applied.
+**Current required refresh is active**, acquired13:45:52, targetingfe7fb82d4922
+and native0.5.39-eeaa550c0acc. Log `.temp/kernel/refresh-realm-owner-pool.log`.
+Main code gates are held from queue through checkpoint. It covers new canonical
+Realm ownera299f1f16255 and admission phase repair112b05137e45. Do not start a
+second lifecycle request or declare these changes activated before checkpoint.
+Preserve all retained volumes. Cold populated600sec startup/restore remains
+unqualified; a successful shared small-stack prepare is insufficient.
 
-Legacy exact model custody G1296 d9bb1413 VERIFIED/CLOSED: original15 committed
-builds extracted SHA-exact,1976 artifacts/31turns/9010ms; independent exact reader
-15generations1961shapes/2536ms. No new generation or guessed root. Evidence
-`.temp/kernel/model-custody-shared-result.json`, `retained-model-reader-result.json`,
-`exact-model-source-evidence.json`. Full populated600sec startup/restore remains
-unqualified. Retired/superseded command object roots need historical closure
-qualification beyond current graph root coverage; trust-ops notified.
+## Accepted contracts and evidence
 
-Zone Content aca04b962cab: homepage owned by same Zone identity, private editor
-bridge, live public/exact disclosure, pin/guard/site-receipt settlement. Launch
-has full signatures; arbitrary page ownership requires server-owned page→Zone
-mapping. Recipe qualifier replacement bf0608673c43 preserves IDs/order/history,
-omitted qualifiers, bounded reference checks and mixed update-away+remove in
-either order. API generated219dcd528; launch owns minimal existing timing fields.
-Complete-name/witness slice permits all64Main languages, overflow refuses65,
-Realm exact slot and local withdrawal; native490 refresh precedes manager
-`task search:names:backfill` acceptance. Latest semantic six bd4494fa50f2 preserve
-pins; Context/classification eight f32f9abe9/eec6c05c9 likewise unchanged generation.
+C0 current basis e75dda7b4; C2 Post slice and131/133 authored Turtle profiles;
+C3 local Work/Context/relay first path; C4 catalogue Statement operation and
+storage redesign; C5 four reviewed native templates35c3fe3c5 and fair local seek
+Access1761–1764; C6 owner custody before slim6-quad proof3348b4ad6 with
+Access1765/1766 and Content1522. These are slices, not full contract closure.
+Trust erasure campaign192d5e825979 is applied.
 
-## Live work and review
+Legacy model custody G1296 d9bb1413 is verified/closed:15 exact committed builds,
+1976 artifacts,31 turns,9010ms; independent reader15 generations/1961 shapes,
+2536ms. Evidence `.temp/kernel/model-custody-shared-result.json`,
+`retained-model-reader-result.json` and `exact-model-source-evidence.json`.
+Public-name backfill completed3458 identities; evidence
+`.temp/kernel/public-name-backfill-shared-1153.log`.
 
-- G1282 attempt8: physical named-graph scope fix accepted (24native and39
-  preservation cases),3501placements/6902seek tuples and137high-degree metadata
-  reads. Manager committed exact native pins d57155aafd87 and QA isolation entry;
-  focused20tests163assert and isolated startup-parent17tests111assert pass. Same
-  Sol returned the cold maintenance client repair in CLI seek-only and fixture migration;
-  existing request10sec/call/byte budgets win, no renewable per-call deadlines.
-  All159 selected unit/guards passed once; Main overlap triggered one automatic rerun.
-- G1290 attempt7: original same-selection nonmatching-body ambiguity fixed with
-  bounded probe. Review found noncanonical alternate Realm slots still split body/name
-  ownership; worker now enforces their shared canonical owner at admission/readiness,
-  without reverse population traversal. Honest matching-postings and Realm-name
-  prefilter costs remain C5 debt; bounded returned witnesses do not prove those costs.
-- G1289 attempt4: numbering parity and existing GroupRole counted-root fix accepted
-  (22 units, 3 physical-scale and 3 writer/API cases). Landing held until unchanged
-  historical manifests can resolve completed roots. Worker now builds one ContentDB
-  source-bound mapping/checkpoint and <=256-entry CAS preparation turns, pending-root
-  retention, current/exact read/write integration and recovery closure. Content1702
-  reserved. Trust owner operations/restore-lineage loan requested; Main constructor
-  and Task command integration coordinated within kernel. No original bytes rewritten.
-- G1306 attempt5: finite cold2048 non-Event prefix case passed in513.3sec, but review
-  blocked two new site-wide actual/planned heads. More than32 unapplied same-status
-  Events outside a ready window make it partial. Worker removes shared ordinary
-  heads and implements fixed-prefix/scoped relevant-effect proof, retaining delayed
-  relevant-write refusal and cursor safety. No new global frontier or budget increase.
-- G1330 attempt5: original exact custody semantics accepted; worker now fixes the
-  supplied-client historical reader (no nested checkout/lifecycle/native proof) and
-  exact accepted language grammar including canonical scripts/regions. Actual final
-  PG/S3/Jena qualification pending. Trust erasure hooks staged in .temp/ref; native
-  Core integration remains coordinated after G1282 landing. Private original draft
-  roots need journal-bound erased/unavailable outcomes before retirement.
-- G1345 prerequisite86d22ff28345 is live in c04; attempt3 lossless eligible Claim fold
-  preserves historical pins, complete qualification, exact literal and provenance.
-  Statement subject leaf is separate; old judgement and current independent decisions
-  retain their original distinct meaning.
-- G1300 private freshness bd4d1c266709 is live. Subject prehydration leaf returned
- 39owner760assert and actual212assert, one hydration at320proposals (19graph calls).
-  Raw SQL still visits324rows/17batches; do not claim physical locality. Manager fixed
-  only new task-ID-bearing titles; first retry failed unrelated QA process reaping.
-  Program fixed its cancellation/SIGKILL polling race and scan timeout7a71dbccd;
-  leaf LANDEDd52a7d95eacc with all159unit/guards green. Attempt14 read-only <=20min
-  physical eligibility/local readiness extension design returned; independent review
-  considers the narrow potential-publication channel and required atomic local heads.
-  G1345 seek/read/graph remain untouched by this separate worker.
-- G1358 exact Zone delivery107f23261259 VERIFIED/CLOSED. Final owner tuple is
-  rechecked after rights/deliverability awaits, preserving native Post privacy and
-  metadata/exposure. Actual race20261007t125122-f00a73 and all154unit/guards pass.
-- G1341 attempt6: both Trust registry and Launch Realm reply/origin callbacks loaned.
-  Max1PG loan repair provisionally accepted; final visibility-race proof pending.
-  Launch takes independent Realm policy receipt-identity relay repair G1367.
-  Retain committed admission before native
-  effects and live permits/sealing. No extra pool, swallowed failure or longer timeout.
-- G1354 Work kind/type six e562c86b9635, G1348 theme/protection six7380ed12c847 and
-  G1352 publication/descriptive ten1e03a3388cfa landed with unit/19guard gates green,
-  all original artifact pins unchanged. G1348 nine relationship/governance261a93ced and G1326 six rating/releases also
-  landed with selected gates; G1348closed. G1354 metadata/Structure six606e55c3c
-  landed with exact original hashes and all154unit/guards; authored count131/133.
-  Content/text six declarations dd568766c036 also landed byte-identically with154
-  selected unit/guards. Attempt8 Luna moves seven rating declarations into their
-  Turtle companions; registry ordering and all bindings remain exact.
-- G1326 rating/releases six landed; attempt13 Grok builds task jena:check using
-  pinned6.2 CLI for RIOT/query parse and scratch named/default-graph TDB2 stats.
-  Program will wire every regression cycle and affected mapping after landing;
-  gate inclusion only if actual no-build check stays under60sec.
-- G1352 attempt4 repairs Composition100target disclosure by existing batch resolver,
-  preserving current/exact/private/hidden and final rights fences. Launch G1365 owns
-  progress; subsequent seek must use explicit accepted episodeNumber within disclosed
-  main-episodes group, including zero/fraction/special values, never physical ordinal.
-- Trust G1366 has exact release-query capability loan for ordinary public catalogue
-  filters; commerce and positive explicitly selected semantic exposures remain gated.
-  Zone v1->v2 narrow conversion waits for Launch G1284 phase2 claim release.
+Membership88ce passed159 affected unit/guards,24 native and39 preservation
+cases;3501 placements/6902 seek tuples and137 high-degree metadata reads.
+Finite maintenance signal spans seek-only/fixture preparation; ordinary request
+10sec, call and byte budgets stay enforced. Zone107f passed154 gate cases and
+actual final-disclosure race20261007t125122-f00a73; G1358 closed.
 
-## Operation and next debt
+Realm ownera299f passed161 gate cases, actual HTTP20261007t131817-b5b01a,
+manager80 membership/name/delta native cases and independent review. Alternate
+current or immutable selection owners are refused; body/name share canonical
+owner and ordinary deltas probe at most64 touched owners. Matching postings and
+unrelated Realm name scope remain C5 debt. Admission112b passed159 gate cases
+and actual max1PG44 assertions20261007t130706-5e3fc4: durable admission precedes
+held native work, final seal follows permit release, revocation is fenced.
 
-Handle ready gates/merges/resumes then foreground `scripts/goal/next-event.sh kernel`.
-Up to24live host-wide, no dispatch below12GiB available. DefaultcodexSol/high,
-xhigh only first-kind designs; Luna/max mechanical. Never workers --heavy.
-Retry merge when main changes gated files. No vault access for workers. Detect
-maintainer docs edits, preserve peers. Required checks include unit gate and19guards;
-anti-silo and QA08 coverage-title debt fixed; serialization28tests55assert pass
-after trust8a1d5a28b narrow offline maintenance writer registrations. Batch program contract/
-cross-Goal progress30min; actual blocker urgent. TrustG1343 consumer/custody/fixture wave landed. Reclaim an updated brief
-BEFORE resuming to replace ledger paths; resume alone does not replace claims.
-Earlier updated-brief resumes must be reclaimed on exit before their gates.
+## Running work and ready reviews
 
-Remaining: Claim fold, all Turtle/current-family/DSL convergence, external body
-copies, physical population locality and Discover remeasurement, populated exact
-restore/erasure/startup qualification, Jena CLI/stats with program. Optional cold
-RDF Patch diagnostic deferred until measurable consumer; no second history engine.
-Close only accepted completed tasks. Whole Goal stays active.
+- G1282 attempt9 builds fixed ClaimStatementFoldPolicy and native tests. Core
+  claims are released to G1330; stage minimal hooks for manager union. Preserve
+  exact old Claim/revision provenance, sealed qualification/receipt, fresh
+  Statement revision without predecessor/SPO rewriting. Exhaustive seek and
+  completion/release qualification are mandatory.
+- G1345 attempt4 moves the last Claim/Assessment constraints into Turtle while
+  retaining its accepted preparation-only fold candidate4ed1c3183. No successful
+  fold or release claim yet. Native completion must drain admissions after
+  closures, not rely on a pre-fence pending probe. Exact candidate artifacts and
+  original stored pins remain unchanged.
+- G1330 attempt6 integrates three Core hooks, approved Trust native erasure inputs
+  and the loaned restore-lineage dual-stream check. Historical reader93c059092
+  uses the supplied client and original exact custody without nested checkout or
+  native proof.71 owner cases/694 assertions,12 native and actual PG/S3/Jena224
+  assertions passed; final integrated TypeScript cutover/mixed raw+slim replay
+  remains required. Private original draft roots need journal-bound erased or
+  unavailable outcomes before retirement. Trust G1343/G1351 compose consumers.
+- G1289 attempt4 adds Content1702 exact original manifest-to-GroupRole mapping,
+  <=256-entry CAS preparation, pending/completed root custody and actual restore
+  release checks. Numbering/root parity passed22 units,3 physical and3 API cases.
+  Trust loans owner operations/restore-lineage hooks; Main index and Taskfile
+  minimal wiring require manager union after handoff. Preserve original bytes,
+  top-level counts and historical manifests; no empty legacy fallback.
+- G1306 attempt5 replaces rejected global actual/planned Event heads with scoped
+  pending-effect coverage registered before graph writes. Outside-window backlog
+  must not spoil readiness/cursors; relevant uncertain writes still refuse.
+  Cold2048 unrelated prefix passed513.3sec. Program approved explicit/regression
+  fixture12GiB/3GiBheap, unchanged600sec, excluded from per-merge affected/gate.
+- G1300 attempt15 implements narrow potential-publication Statement seek under
+  atomic subject-local coverage, Access1769. Previous subject leafd52a7d95eacc
+  passed159 gate cases and320-proposal one-hydration proof, but rawSQL still
+  visits324 rows/17 batches. New channel only truly absent unframed Global;
+  ordinary empty proposals do not advance publication membership. Stage G1345
+  held hooks, require real integrated EXPLAIN/freshness/recovery proof.
+- G1290 attempt8 is a15minute read-only decision for physically local Realm
+  complete-name scope: remove2100 unrelated matching names causing empty pages;
+  preserve complete64 languages, new-match freshness and cold recovery. No
+  whole-Realm inventory, principal cache or global frontier.
+- G1341 attempt7 repairs classification-vocabulary integration to use real current
+  Statement and acceptance, preserving all vocabulary/replay/disclosure assertions.
+  Launch G1368 owns ordinary readers. Legacy conversion/recovery readers and
+  context-statement retired-route refusal tests remain intentional.
+- G1352 attempt4 repairs Composition100-target pages with existing batch disclosure,
+  preserving exact/current/private/final rights fences.9 owner cases passed;
+  actual100-target API proof pending. Launch G1365 needs explicit accepted
+  schema:episodeNumber seek within disclosed main-episodes group next, not ordinal.
+- G1354 attempt8 returned311acf965: seven rating declarations moved beside Turtle,
+ 26 focused cases/1303 assertions, gen parity/types/guards pass. Independent
+  review accepted; Main gate waits for refresh checkpoint. Next eight established
+  declarations remain, followed by current-family convergence and DSL deletion.
+- G1326 attempt14 repairs Jena CLI concurrency and PID-only cancellation after
+  review found global container/stage deletion and orphan watchdogs. Unique owned
+  resources, honest finite inspect/execution/cleanup, controlled ordinary unit
+  tests and actual concurrent Docker proof required. Program wires regression and
+  affected mapping after accepted landing; no per-merge hook yet.
+
+## Operation and remaining debt
+
+Handle ready merges/rebases/resumes, then run foreground
+`scripts/goal/next-event.sh kernel`. Up to24 workers host-wide, dispatch only with
+at least12GiB available. Sol/high for backend; Luna/max for mechanical work;
+workers never use --heavy. Reclaim changed brief before resume. Retry merges
+when Main changes during gates. No workers access vault; no push or production.
+Maintain clean Main and preserve maintainer/peer edits. Native/model/migration
+landings require `task dev:refresh -- --wait` and checkpoint verification.
+
+Still open: full Claim fold,133-profile/current-family/DSL convergence, external
+search copies and physical population locality, Discover remeasurement, exact
+populated restore/erasure/startup, and Jena tools with Program. Zone v1-to-v2
+conversion waits for Launch G1284 phase2 claim release. Optional RDF Patch cold
+comparison is deferred until a measurable consumer. Close accepted completed
+slices only; whole Goal stays active.
