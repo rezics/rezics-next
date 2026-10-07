@@ -56,7 +56,7 @@ export interface RegressionTurnOptions {
   announce?: (message: string) => void;
 }
 
-/** Leave the heavy queue empty before joining it, so merge gates get the next turn between regression batches. */
+/** Explicit maintenance barrier. Normal browser runs join the shared fair queue without waiting for it to drain. */
 export async function waitForRegressionTurn(lockDir?: string, interrupted: () => boolean = () => false,
   options: RegressionTurnOptions = {}): Promise<void> {
   // goalctl imports this module; loading its status reader only at runtime avoids a static import cycle.
@@ -189,9 +189,11 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
 }
 
 export function classify(evidence: string, code = 1): Classification {
-  if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|mounts denied|is not shared from the host and is not known to Docker|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
-  if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(evidence)) return 'resource';
-  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(evidence)) return 'deadline';
+  // Bun prints nearby source branches even when they did not execute; their error literals are not runtime evidence.
+  const runtime = evidence.replace(/^\s*\d+\s*\|.*$/gm, '');
+  if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|mounts denied|is not shared from the host and is not known to Docker|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(runtime)) return 'infrastructure';
+  if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(runtime)) return 'resource';
+  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(runtime)) return 'deadline';
   return 'deterministic';
 }
 
@@ -459,7 +461,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const execute = async (commit: string, batch: Batch, label: string, probeTree?: string): Promise<Execution> => {
       const tree = probeTree ?? await checkoutAt(commit);
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
-      if (browserTier(batch.tier)) await (options.waitForTurn ?? waitForRegressionTurn)(undefined, () => interrupted);
+      if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       const result = await runner(tree, batch, join(directory, label), manifest.shards);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);

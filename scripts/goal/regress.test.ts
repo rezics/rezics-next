@@ -2,9 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { isHeavyTest } from './goalctl.ts';
+import * as goalctl from './goalctl.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionBatchCommand, regressionRegistry,
   runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
@@ -57,6 +58,17 @@ function repo(extraIntegration = 0) {
 }
 
 describe('pinned main-wide regression', () => {
+  test('browser execution joins the fair heavy queue directly by default', async () => {
+    const r = repo();
+    const status = spyOn(goalctl, 'heavyQaStatus').mockImplementation(() => { throw new Error('Unexpected heavy queue drain'); });
+    try {
+      const result = await r.run({ runId: 'fair-browser', only: ['e2e'], waitForTurn: undefined });
+      expect(status).not.toHaveBeenCalled();
+      expect(r.calls).toHaveLength(1);
+      expect(result.batches.every(batch => batch.tier === 'e2e' && batch.state === 'done')).toBe(true);
+    } finally { status.mockRestore(); r.cleanup(); }
+  });
+
   test('routine selection excludes browser tiers with a resumable reason; explicit full selection runs them', async () => {
     const r = repo();
     try {
@@ -597,6 +609,16 @@ test('classification uses engine evidence without treating application ECONNREFU
   expect(classify('The heavy QA lock stayed held for six hours')).toBe('deadline');
   expect(classify('model failed or exceeded 180s')).toBe('deterministic');
   expect(classify('', 137)).toBe('resource');
+});
+
+test('classification ignores unexecuted branches in numbered Bun source excerpts', () => {
+  const nix = " 99 | if (timedOut) throw new Error('Nix oracle operation timed out');\nerror: Nix oracle pin is unavailable";
+  expect(classify(nix)).toBe('deterministic');
+  for (const literal of ['cannot connect to the docker daemon', 'heap out of memory', 'deadline exceeded']) {
+    expect(classify(` 100 | throw new Error('${literal}');\nerror: Invalid application input`)).toBe('deterministic');
+  }
+  expect(classify(`${nix}\nerror: Nix oracle operation timed out`)).toBe('deadline');
+  expect(classify(nix, 137)).toBe('resource');
 });
 
 test('file evidence parses Vitest stories and rejects zero tests and absent data', () => {
