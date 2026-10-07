@@ -8,19 +8,50 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/fiel
 import { Input } from '@rezics/ui/input';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { materializeData } from 'native-i18n';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import type { LibraryMessages } from '../messages.ts';
 import { useCopiesApi } from './provider.tsx';
 import { dayInstant, formatDue, instantFromLocal, localInput } from './format.ts';
 import { handleText, partyFromInput, sameParty } from './party.ts';
+import { recordContinuation, reduceRecordPage, type RecordList } from './paging.ts';
 import type { CopyRecord, LibraryParty, LoanRecord, RecordFailure, RecordResult, ReleaseChoice } from './types.ts';
+import type { CopiesApi } from './api.ts';
 import { submitRecord, writeNewest } from './write.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 type PartyMode = 'name' | 'person';
 
 const dayLater = 14 * 86_400_000;
+const emptyList = { items: [], nextCursor: null, failed: false };
+
+function MoreRecords({ mode, busy, failedText, moreLabel, retryLabel, onMore }: {
+  mode: 'more' | 'retry' | null; busy: boolean; failedText: string; moreLabel: string; retryLabel: string;
+  onMore: () => void;
+}) {
+  if (!mode) return null;
+  return <div className="flex flex-wrap items-center gap-2">
+    {mode === 'retry' ? <p role="alert" className="text-destructive-foreground text-xs">{failedText}</p> : null}
+    <Button type="button" variant="outline" size="sm" aria-busy={busy || undefined} disabled={busy} onClick={onMore}>
+      {mode === 'retry' ? retryLabel : moreLabel}</Button>
+    </div>;
+}
+
+/** Release pages after the ones already listed, until every loaded copy's edition is named or the list ends. */
+async function fillEditions(api: CopiesApi, work: string, held: RecordList<ReleaseChoice>, needed: ReadonlySet<string>):
+  Promise<RecordList<ReleaseChoice>> {
+  let list = held;
+  const seen = new Set<string>();
+  for (let page = 0; page < 30; page++) {
+    const missing = [...needed].some(id => !list.items.some(item => item.id === id));
+    if (!missing || !list.nextCursor || seen.has(list.nextCursor)) return list;
+    seen.add(list.nextCursor);
+    const read = await api.releases(work, list.nextCursor);
+    list = reduceRecordPage(list, read);
+    if (!read.ok) return list;
+  }
+  return list;
+}
 
 function editionLabel(release: ReleaseChoice): string {
   const detail = [release.editionStatement, release.publicationYear, release.isbn13].filter(part => part != null)
@@ -85,8 +116,7 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
 }) {
   const t = materializeData(messages, { locale });
   const api = useCopiesApi();
-  const [releases, setReleases] = useState<ReleaseChoice[]>([]);
-  const [complete, setComplete] = useState(true);
+  const [editions, setEditions] = useState<RecordList<ReleaseChoice>>(emptyList);
   const [release, setRelease] = useState('');
   const [format, setFormat] = useState('');
   const [mode, setMode] = useState<PartyMode>('name');
@@ -96,23 +126,39 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
   const [ownedSince, setOwnedSince] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [moreBusy, setMoreBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const generation = useRef(0);
+  const releases = editions.items;
 
   useEffect(() => {
     if (!open) return;
-    let cancel = false;
+    const ticket = ++generation.current;
     setLoading(true);
+    setMoreBusy(false);
     setError(null);
+    setEditions(emptyList);
     void api.releases(work).then(read => {
-      if (cancel) return;
+      if (ticket !== generation.current) return;
       setLoading(false);
-      if (!read.ok) { setError(t.loadFailed); setReleases([]); return; }
-      setReleases(read.data.items);
-      setComplete(read.data.complete);
-      setRelease(current => current || (read.data.items.length === 1 ? read.data.items[0]!.id : ''));
+      if (!read.ok) { setError(t.loadFailed); return; }
+      setEditions(reduceRecordPage(emptyList, read));
+      setRelease(current => current || (read.data.complete && read.data.items.length === 1 ? read.data.items[0]!.id : ''));
     });
-    return () => { cancel = true; };
+    return () => { generation.current += 1; };
   }, [open, work, api, t.loadFailed]);
+
+  async function moreEditions() {
+    const cursor = editions.nextCursor;
+    if (!cursor || moreBusy) return;
+    const ticket = generation.current;
+    const held = editions;
+    setMoreBusy(true);
+    const read = await api.releases(work, cursor);
+    if (ticket !== generation.current) return;
+    setEditions(reduceRecordPage(held, read));
+    setMoreBusy(false);
+  }
 
   async function save() {
     setError(null);
@@ -152,7 +198,8 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
                   <span className="text-pretty [overflow-wrap:anywhere]">{editionLabel(item)}</span>
                 </RadioGroupItem>)}
               </RadioGroup>
-              {complete ? null : <p className="text-muted-foreground text-xs">{t.editionsPartial}</p>}
+              <MoreRecords mode={recordContinuation(editions)} busy={moreBusy} failedText={t.moreRecordsFailed}
+                moreLabel={t.showMoreEditions} retryLabel={t.retry} onMore={() => void moreEditions()} />
             </fieldset>
             : error ? null : <p className="text-pretty text-muted-foreground text-sm">{t.noEdition}</p>}
           <Field>
@@ -188,8 +235,8 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
 }) {
   const t = materializeData(messages, { locale });
   const api = useCopiesApi();
-  const [copies, setCopies] = useState<CopyRecord[]>([]);
-  const [releases, setReleases] = useState<ReleaseChoice[]>([]);
+  const [owned, setOwned] = useState<RecordList<CopyRecord>>(emptyList);
+  const [editions, setEditions] = useState<RecordList<ReleaseChoice>>(emptyList);
   const [copy, setCopy] = useState('');
   const [direction, setDirection] = useState<'lent' | 'borrowed'>('lent');
   const [mode, setMode] = useState<PartyMode>('name');
@@ -199,29 +246,58 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
   const [due, setDue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [moreBusy, setMoreBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const generation = useRef(0);
+  const copies = owned.items;
+  const releases = editions.items;
 
   useEffect(() => {
     if (!open) return;
-    let cancel = false;
+    const ticket = ++generation.current;
     setLoading(true);
+    setMoreBusy(false);
     setError(null);
+    setOwned(emptyList);
+    setEditions(emptyList);
     setStarted(localInput(Date.now() - 3_600_000));
     setDue(localInput(Date.now() + dayLater));
-    void Promise.all([api.copies(work), api.releases(work)]).then(([owned, editions]) => {
-      if (cancel) return;
+    void Promise.all([api.copies(work), api.releases(work)]).then(async ([ownedPage, editionPage]) => {
+      if (ticket !== generation.current) return;
+      if (!ownedPage.ok || !editionPage.ok) { setLoading(false); setError(t.loadFailed); return; }
+      const listed = reduceRecordPage(emptyList, ownedPage);
+      const labeled = await fillEditions(api, work, reduceRecordPage(emptyList, editionPage),
+        new Set(listed.items.map(item => item.release)));
+      if (ticket !== generation.current) return;
       setLoading(false);
-      if (!owned.ok || !editions.ok) { setError(t.loadFailed); return; }
-      setCopies(owned.data.items);
-      setReleases(editions.data.items);
-      setCopy(current => current || (owned.data.items.length === 1 ? owned.data.items[0]!.id : ''));
+      setOwned(listed);
+      setEditions(labeled);
+      setCopy(current => current || (ownedPage.data.complete && ownedPage.data.items.length === 1
+        ? ownedPage.data.items[0]!.id : ''));
     });
-    return () => { cancel = true; };
+    return () => { generation.current += 1; };
   }, [open, work, api, t.loadFailed]);
+
+  async function moreCopies() {
+    const cursor = owned.nextCursor;
+    if (!cursor || moreBusy) return;
+    const ticket = generation.current;
+    const held = owned;
+    const heldEditions = editions;
+    setMoreBusy(true);
+    const read = await api.copies(work, cursor);
+    if (ticket !== generation.current) return;
+    const listed = reduceRecordPage(held, read);
+    const labeled = await fillEditions(api, work, heldEditions, new Set(listed.items.map(item => item.release)));
+    if (ticket !== generation.current) return;
+    setOwned(listed);
+    setEditions(labeled);
+    setMoreBusy(false);
+  }
 
   async function save() {
     setError(null);
-    if (!copy && copies.length !== 1) { setError(t.copyRequired); return; }
+    if (!copy && (copies.length !== 1 || owned.nextCursor)) { setError(t.copyRequired); return; }
     const chosenCopy = copy || copies[0]!.id;
     const startedAt = instantFromLocal(started);
     const dueAt = instantFromLocal(due);
@@ -267,6 +343,8 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
                   <span className="text-pretty [overflow-wrap:anywhere]">{label(item)}</span>
                 </RadioGroupItem>)}
               </RadioGroup>
+              <MoreRecords mode={recordContinuation(owned)} busy={moreBusy} failedText={t.moreRecordsFailed}
+                moreLabel={t.showMoreCopies} retryLabel={t.retry} onMore={() => void moreCopies()} />
             </fieldset>
             : <p className="text-pretty text-muted-foreground text-sm">{t.noCopyYet}</p>}
           <fieldset className="grid gap-2">

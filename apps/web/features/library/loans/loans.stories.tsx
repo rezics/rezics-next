@@ -175,3 +175,38 @@ export const OwnAndLend: Story = {
     await waitFor(() => expect(pushed.some(href => href.includes('/library/loans'))).toBe(true));
   },
 };
+
+/** An edition or a copy past the first page can still be chosen. */
+const laterOwned = memoryCopiesApi({
+  work: little.work.id, now: storyNow,
+  releases: Array.from({ length: 21 }, (_, index) => ({ id: release(20 + index), title: `Edition ${index + 1}`,
+    editionStatement: index === 20 ? 'Pocket edition' : null, publicationYear: null, isbn13: null })),
+  copies: Array.from({ length: 21 }, (_, index) => ({ id: release(50 + index), work: little.work.id,
+    release: release(20 + index), format: `Copy ${index + 1}`, acquiredFrom: null, acquiredAt: null, ownedFrom: null,
+    ownedThrough: null, removed: false, version: 1, changedAt: new Date(storyNow).toISOString() })),
+});
+
+export const LaterPage: Story = {
+  args: { state: want, view: { ok: true, data: storyView(want) }, reading: [] },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=want-to-read' } },
+  render: args => <LibraryPage {...args} api={memoryLibraryApi()} readerActions={storyReaderActions()}
+    copiesApi={laterOwned} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: `I own a copy, ${littleTitle}` }));
+    const copyDialog = await body().findByRole('dialog', { name: `A copy of “${littleTitle}”` });
+    await waitFor(() => expect(within(copyDialog).getByRole('radio', { name: 'Edition 1', exact: true })).toBeVisible());
+    await expect(within(copyDialog).queryByRole('radio', { name: /Edition 21/ })).toBeNull();
+    await userEvent.click(within(copyDialog).getByRole('button', { name: 'Show more editions' }));
+    await expect(within(copyDialog).getByRole('radio', { name: /Edition 21/ })).toBeVisible();
+    await userEvent.click(within(copyDialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(body().queryByRole('dialog')).toBeNull());
+    await userEvent.click(canvas.getByRole('button', { name: `Lend, ${littleTitle}` }));
+    const lendDialog = await body().findByRole('dialog', { name: `Lend “${littleTitle}”` });
+    await waitFor(() => expect(within(lendDialog).getByRole('radio', { name: /^Copy 1 —/ })).toBeVisible());
+    await expect(within(lendDialog).queryByRole('radio', { name: /Copy 21/ })).toBeNull();
+    await userEvent.click(within(lendDialog).getByRole('button', { name: 'Show more copies' }));
+    const laterCopy = await within(lendDialog).findByRole('radio', { name: /Copy 21/ });
+    await expect(laterCopy).toHaveAccessibleName(/Pocket edition/);
+  },
+};

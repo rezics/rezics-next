@@ -11,6 +11,8 @@ import type { CopyDraft, CopyRecord, LoanDraft, LoanRecord, PersonCard, RecordFa
 
 const headers = () => ({ headers: { 'idempotency-key': commandKey() } });
 const uuid = (iri: string) => iri.slice(-36);
+/** Active and returned lists are each walked this many pages while recovering one loan. */
+const LOAN_SEARCH_PAGES = 200;
 
 function recordFailure(status: number, body: unknown): RecordFailure {
   const code = body && typeof body === 'object' && 'code' in body ? String((body as { code: unknown }).code) : '';
@@ -42,8 +44,8 @@ export interface CopiesApi {
   openLoan(draft: LoanDraft): Promise<RecordResult<LoanRecord>>;
   extendLoan(id: string, expectedVersion: number, dueAt: string): Promise<RecordResult<LoanRecord>>;
   returnLoan(id: string, expectedVersion: number): Promise<RecordResult<LoanRecord>>;
-  /** The loan on this page, then the first active page, then the first returned page. */
-  findLoan(id: string, cursor?: string | null): Promise<RecordResult<LoanRecord | null>>;
+  /** The loan on any active page, then any returned page. */
+  findLoan(id: string): Promise<RecordResult<LoanRecord | null>>;
   /** A handle the reader asked to use as a person. Names are never passed here. */
   person(handle: string): Promise<RecordResult<PersonCard | null>>;
 }
@@ -105,17 +107,25 @@ export function mainCopiesApi(actingSubject: string, main: () => MainClient = br
       return one(written, asLoan);
     },
 
-    async findLoan(id, cursor) {
-      const pages = cursor ? [{ cursor }, {}] : [{}];
-      for (const query of pages) {
-        const read = await api.loans({ state: 'active', ...query });
-        if (!read.ok) return read;
-        const found = read.data.items.find(loan => loan.id === id);
-        if (found) return { ok: true, data: found };
-      }
-      const returned = await api.loans({ state: 'returned' });
-      if (!returned.ok) return returned;
-      return { ok: true, data: returned.data.items.find(loan => loan.id === id) ?? null };
+    async findLoan(id) {
+      // A 409 recovery has only the loan id. Walk every page; the first page is not the whole list.
+      const search = async (state: 'active' | 'returned'): Promise<RecordResult<LoanRecord | null>> => {
+        let cursor: string | null = null;
+        const seen = new Set<string>();
+        for (let page = 0; page < LOAN_SEARCH_PAGES; page++) {
+          const read = await api.loans({ state, ...(cursor ? { cursor } : {}) });
+          if (!read.ok) return read;
+          const found = read.data.items.find(loan => loan.id === id);
+          if (found) return { ok: true, data: found };
+          if (!read.data.nextCursor || seen.has(read.data.nextCursor)) return { ok: true, data: null };
+          seen.add(read.data.nextCursor);
+          cursor = read.data.nextCursor;
+        }
+        return { ok: true, data: null };
+      };
+      const active = await search('active');
+      if (!active.ok || active.data) return active;
+      return search('returned');
     },
 
     async person(handle) {

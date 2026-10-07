@@ -101,7 +101,7 @@ function LoanCard({ item, overdue, locale, messages, onReturned, onExtended }: {
     <p className="text-pretty [overflow-wrap:anywhere]">{item.loan.direction === 'lent' ? t.lentTo({ name })
       : t.borrowedFrom({ name })}</p>
     {facts.length ? <p className="text-pretty text-muted-foreground text-sm [overflow-wrap:anywhere]">{facts.join(' · ')}</p> : null}
-    <p className="font-medium text-sm tabular-nums">{t.dueOn({ date: formatDue(item.loan.dueAt, locale) })}</p>
+    <p className="font-medium text-sm tabular-nums" suppressHydrationWarning>{t.dueOn({ date: formatDue(item.loan.dueAt, locale) })}</p>
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" onClick={() => setReturning(true)}>{t.returnLoan}</Button>
       <Button size="sm" variant="outline" onClick={() => setExtend(true)}>{t.extendLoan}</Button>

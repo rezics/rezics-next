@@ -17,6 +17,15 @@ export interface MemoryCopies {
 }
 
 const page = <T>(items: T[]): RecordPage<T> => ({ items, nextCursor: null, complete: true });
+const PAGE_LIMIT = 20;
+
+function slicePage<T>(items: readonly T[], cursor?: string | null): RecordPage<T> {
+  const start = cursor && /^\d+$/.test(cursor) ? Number(cursor) : 0;
+  const next = items.slice(start, start + PAGE_LIMIT);
+  const end = start + next.length;
+  const nextCursor = end < items.length ? String(end) : null;
+  return { items: [...next], nextCursor, complete: nextCursor === null };
+}
 
 function loanState(loan: Pick<LoanRecord, 'returnedAt' | 'dueAt'>, now: number): LoanRecord['state'] {
   if (loan.returnedAt) return 'returned';
@@ -35,8 +44,8 @@ export function memoryCopiesApi(seed: Partial<MemoryCopies> = {}): CopiesApi & {
   };
   const api: CopiesApi & { state: MemoryCopies } = {
     state,
-    releases: async () => ({ ok: true, data: page(state.releases) }),
-    copies: async work => ({ ok: true, data: page(state.copies.filter(copy => copy.work === work && !copy.removed)) }),
+    releases: async (_work, cursor) => ({ ok: true, data: slicePage(state.releases, cursor) }),
+    copies: async (work, cursor) => ({ ok: true, data: slicePage(state.copies.filter(copy => copy.work === work && !copy.removed), cursor) }),
     async createCopy(draft: CopyDraft) {
       const failed = take('create');
       if (failed) return failed;

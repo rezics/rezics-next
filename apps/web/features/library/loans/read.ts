@@ -1,29 +1,23 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
-import { workTitle } from '../../catalogue/work-tile.tsx';
 import type { MainClient } from '../../discover/types.ts';
 import { type Loaded, settle } from '../../feed/types.ts';
-import { libraryReader, statusShelfItems } from '../read.ts';
-import { statusShelves } from '../state.ts';
+import { libraryReader } from '../read.ts';
+import { workHref } from '../../work-page/route.ts';
+import { collectCopies, loanLabels, type CopyLabel } from './identity.ts';
 import { asCopy, asLoan, asRelease } from './shape.ts';
-import type { CopyRecord, LoanListItem, LoanRecord, ReleaseChoice } from './types.ts';
+import type { CopyRecord, LoanListItem, LoanRecord } from './types.ts';
 
-// The loan list names a copy, not the Work. Titles come from the reader's
-// shelves: each shelf page's Works are asked for their copies until every
-// loan on this page is named or the lookup budget is spent. A loan whose
-// copy is not among those Works still shows its counterparty and due date.
-
-const SHELF_PAGES = 2;
-const COPY_LOOKUPS = 24;
-const uuid = (iri: string) => iri.slice(-36);
+// The loan list names a copy. That copy's own record names the Work and the
+// release, so the label does not depend on which shelf the Work sits on.
+// The private library export is the read that returns those copy records.
+// One loan page asks only for its own copies, and stops once they are named.
 
 export interface LoansPageData {
   items: LoanListItem[];
   nextCursor: string | null;
   complete: boolean;
 }
-
-interface CopyLabel { work: { id: string; href: string; title: string }; edition: string | null; format: string | null }
 
 async function pooled<T>(items: readonly T[], task: (item: T) => Promise<void>, limit: number): Promise<void> {
   let next = 0;
@@ -35,7 +29,7 @@ async function pooled<T>(items: readonly T[], task: (item: T) => Promise<void>, 
   }));
 }
 
-/** Active loans for the reader, oldest due date first, with the Work each copy belongs to when it can be found. */
+/** Active loans for the reader, oldest due date first, with the Work each copy belongs to when it can be read. */
 export const readLoans = cache(async (cursor: string | null, locale: UiLocale): Promise<Loaded<LoansPageData>> => {
   const reader = await libraryReader();
   if (!reader) return { ok: false, failure: 'sign-in' };
@@ -56,51 +50,54 @@ export const readLoans = cache(async (cursor: string | null, locale: UiLocale): 
   nextCursor: read.data.nextCursor, complete: read.data.complete } };
 });
 
-async function labelCopies(main: MainClient, actingSubject: string, loans: readonly LoanRecord[],
-  locale: UiLocale): Promise<Map<string, CopyLabel>> {
-  const wanted = new Set(loans.map(loan => loan.copy));
-  const labels = new Map<string, CopyLabel>();
-  let lookups = 0;
-  const seenWorks = new Set<string>();
-  for (const status of statusShelves) {
-    if (labels.size === wanted.size || lookups >= COPY_LOOKUPS) break;
-    let cursor: string | undefined;
-    for (let page = 0; page < SHELF_PAGES && labels.size < wanted.size && lookups < COPY_LOOKUPS; page++) {
-      const shelf = await settle(() => main.v1.me.shelves.status({ status }).works.get({ query: {
-        actingSubject, sort: 'added', order: 'desc', limit: 20, ...(cursor ? { cursor } : {}) } }));
-      if (!shelf.ok) break;
-      const works = statusShelfItems(shelf.data.items).filter(item => !seenWorks.has(item.work.id));
-      for (const item of works) seenWorks.add(item.work.id);
-      await pooled(works, async item => {
-        if (labels.size === wanted.size || lookups >= COPY_LOOKUPS) return;
-        lookups += 1;
-        const copies = await settle(() => main.v1.works({ id: uuid(item.work.id) }).copies.get({ query: {
-          actingSubject, limit: 20 } }));
-        if (!copies.ok) return;
-        for (const raw of copies.data.items) {
-          const copy = asCopy(raw);
-          if (!copy || !wanted.has(copy.id) || labels.has(copy.id)) continue;
-          const edition = await editionLine(main, actingSubject, copy);
-          labels.set(copy.id, { work: { id: item.work.id, href: item.work.href, title: workTitle(item.work, locale) },
-            edition, format: copy.format });
-        }
-      }, 6);
-      if (!shelf.data.nextCursor) break;
-      cursor = shelf.data.nextCursor;
-    }
+const uuid = (iri: string) => iri.slice(-36);
+
+async function copyPages(main: MainClient, actingSubject: string, wanted: ReadonlySet<string>):
+  Promise<Map<string, CopyRecord>> {
+  let last = new Map<string, CopyRecord>();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let snapshot: string | undefined;
+    let moved = false;
+    const found = await collectCopies(wanted, async cursor => {
+      const answer = await main.v1.me['library-export'].get({ query: { actingSubject, limit: 20,
+        ...(snapshot ? { snapshot } : {}), ...(cursor ? { cursor } : {}) } }).catch(() => null);
+      if (!answer?.data) {
+        moved = answer?.status === 409;
+        return null;
+      }
+      snapshot = answer.data.snapshot;
+      const copies: CopyRecord[] = [];
+      let copiesEnded = false;
+      for (const row of answer.data.rows) {
+        if (row.sourceId.startsWith('loan:')) copiesEnded = true;
+        const copy = asCopy(row.raw.libraryCopy);
+        if (copy) copies.push(copy);
+      }
+      return { copies, nextCursor: copiesEnded ? null : answer.data.nextCursor };
+    });
+    last = found;
+    if (!moved || found.size === wanted.size) return found;
   }
-  return labels;
+  return last;
 }
 
-async function editionLine(main: MainClient, actingSubject: string, copy: CopyRecord): Promise<string | null> {
-  const read = await settle(() => main.v1.works({ id: uuid(copy.work) }).releases({ release: uuid(copy.release) }).get({
-    query: { actingSubject } }));
-  if (!read.ok) return null;
-  const release: ReleaseChoice | null = asRelease(read.data);
-  if (!release) return null;
-  const detail = [release.editionStatement, release.publicationYear, release.isbn13].filter(part => part != null)
-    .join(' · ');
-  return detail ? `${release.title} — ${detail}` : release.title;
+async function labelCopies(main: MainClient, actingSubject: string, loans: readonly LoanRecord[], locale: UiLocale):
+  Promise<Map<string, CopyLabel>> {
+  if (!loans.length) return new Map();
+  const copies = await copyPages(main, actingSubject, new Set(loans.map(loan => loan.copy)));
+  return loanLabels(loans, {
+    copy: async id => copies.get(id) ?? null,
+    async work(id) {
+      const read = await settle(() => main.v1.works({ id: uuid(id) }).get({ query: { actingSubject, language: locale } }));
+      const title = read.ok ? read.data.title?.value : null;
+      return title ? { id, href: workHref(id), title } : null;
+    },
+    async release(work, release) {
+      const read = await settle(() => main.v1.works({ id: uuid(work) }).releases({ release: uuid(release) }).get({
+        query: { actingSubject } }));
+      return read.ok ? asRelease(read.data) : null;
+    },
+  });
 }
 
 async function personNames(main: MainClient, actingSubject: string, loans: readonly LoanRecord[]):

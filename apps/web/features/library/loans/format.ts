@@ -1,16 +1,22 @@
 import type { UiLocale } from '../../../i18n/define.ts';
 
 /**
- * Due times print in UTC so the server render and the browser agree, the same
- * reason Library prints moments in UTC. The zone is written after the time:
- * `dateStyle` cannot be combined with `timeZoneName`.
+ * A due instant in the viewer's language and time zone. Midnight in that zone
+ * is a calendar day: the clock carries nothing, so only the date is shown.
+ * `timeZone` is the viewer's when omitted.
  */
-export function formatDue(value: string, locale: UiLocale): string {
+export function formatDue(value: string, locale: UiLocale, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return `${new Intl.DateTimeFormat(locale, {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC',
-  }).format(date)} UTC`;
+  const zone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const clock = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => clock.find(item => item.type === type)?.value ?? '';
+  const timeless = part('hour') === '00' && part('minute') === '00' && part('second') === '00';
+  return new Intl.DateTimeFormat(locale, timeless
+    ? { dateStyle: 'medium', timeZone: zone }
+    : { dateStyle: 'medium', timeStyle: 'short', timeZone: zone }).format(date);
 }
 
 /** A `datetime-local` value for an instant, in the browser's zone. Dialogs open on the client. */
