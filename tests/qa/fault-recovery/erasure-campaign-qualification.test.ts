@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import { readManifest } from '../../../scripts/fixture/build.ts';
@@ -390,13 +390,29 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
         writeFileSync(join(evidenceDirectory, `native-${index}.log`), buildOutput);
         expect(buildOutput.match(/campaignTargets=/g)).toHaveLength(1);
         expect(buildOutput).toContain(`campaignTargets=${pairs.length}`);
-        const measurements = run(`cat ${MEASURE}/sizes.tsv`);
-        const nativePhases = run(`cat ${MEASURE}/phases.tsv`);
-        const summary = summarizeMeasurements(measurements, nativePhases);
+        // Compose merges command bytes and its own stderr progress messages.
+        // Frame the file bytes rather than treating transport diagnostics as rows.
+        const measurementsCapture = run(campaignFileRead('sizes.tsv'));
+        const phasesCapture = run(campaignFileRead('phases.tsv'));
+        const samplingCapture = run(campaignFileRead('sampling-errors.log'));
+        writeFileSync(join(evidenceDirectory, `sizes-${index}-transport.log`), measurementsCapture);
+        writeFileSync(join(evidenceDirectory, `phases-${index}-transport.log`), phasesCapture);
+        writeFileSync(join(evidenceDirectory, `sampling-${index}-transport.log`), samplingCapture);
+        const measurements = campaignFileBytes(measurementsCapture, 'sizes.tsv');
+        const nativePhases = campaignFileBytes(phasesCapture, 'phases.tsv');
+        // Retain malformed evidence too, so a refusal is directly diagnosable.
         writeFileSync(join(evidenceDirectory, `sizes-${index}.tsv`), measurements);
         writeFileSync(join(evidenceDirectory, `phases-${index}.tsv`), nativePhases);
+        writeFileSync(
+          join(evidenceDirectory, `sampling-errors-${index}.log`),
+          campaignFileBytes(samplingCapture, 'sampling-errors.log'),
+        );
+        const summary = summarizeMeasurements(measurements, nativePhases);
         (evidence.copies as Record<string, unknown>[])[index]!.measurements = summary;
-        const ready = run(`cat ${CANDIDATE}/erasure-purge.ready`);
+        const readyCapture = run(campaignFileRead('ready', `${CANDIDATE}/erasure-purge.ready`));
+        writeFileSync(join(evidenceDirectory, `ready-${index}-transport.log`), readyCapture);
+        const ready = campaignFileBytes(readyCapture, 'ready');
+        writeFileSync(join(evidenceDirectory, `ready-${index}.txt`), ready);
         expect(ready).toContain(`campaign-sha256=${digest(readFileSync(campaignFile, 'utf8'))}\n`);
         (evidence.copies as Record<string, unknown>[])[index]!.ready = ready;
         // The copied candidate is served only in an isolated loopback container for
@@ -523,9 +539,18 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
             const retired = activation('destroy', 'qualification-retire');
             const hash = /evidence-sha256=([0-9a-f]{64})/.exec(retired)?.[1];
             if (!hash) throw new Error('No exact retirement evidence');
-            const receipt = run(
-              'cat /fuseki/databases/rezics/erasure-purge.retired-qualification-retire',
+            const receiptCapture = run(
+              campaignFileRead(
+                'retirement',
+                '/fuseki/databases/rezics/erasure-purge.retired-qualification-retire',
+              ),
             );
+            writeFileSync(
+              join(evidenceDirectory, `retirement-${index}-transport.log`),
+              receiptCapture,
+            );
+            const receipt = campaignFileBytes(receiptCapture, 'retirement');
+            writeFileSync(join(evidenceDirectory, `retirement-${index}.txt`), receipt);
             expect(digest(receipt)).toBe(hash);
             expect(receipt).toContain('source-sha256=');
             (evidence.copies as Record<string, unknown>[])[index]!.retirement = {
@@ -600,9 +625,21 @@ exit "$result"
 SH
 chmod 700 ${MEASURE}/bin/java
 export PATH=${MEASURE}/bin:$PATH
+# A directory can disappear while du walks a compacting generation. Preserve
+# the diagnostic and emit an invalid cell; an existent failed read is never zero.
+: > ${MEASURE}/sampling-errors.log
 sample() {
-  alloc() { if [ -d "$1" ]; then du -sk "$1" 2>/dev/null | cut -f1; else echo 0; fi; }
-  apparent() { if [ -d "$1" ]; then du -sb "$1" 2>/dev/null | cut -f1; else echo 0; fi; }
+  size() {
+    if [ ! -d "$2" ]; then echo 0; return; fi
+    if value=$(du "$1" "$2" 2>> ${MEASURE}/sampling-errors.log); then
+      printf '%s\\n' "$value" | cut -f1
+    else
+      printf 'du-error %s %s %s\\n' "$(date +%s%3N)" "$1" "$2" >> ${MEASURE}/sampling-errors.log
+      printf '%s\\n' du-error
+    fi
+  }
+  alloc() { size -sk "$1"; }
+  apparent() { size -sb "$1"; }
   printf '%s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s\\n' \
     "$(date +%s%3N)" "$(alloc /fuseki/databases)" "$(apparent /fuseki/databases)" \
     "$(alloc /fuseki/databases/rezics)" "$(apparent /fuseki/databases/rezics)" \
@@ -622,18 +659,46 @@ trap - EXIT
 sample`;
 }
 
+type CampaignFile = 'sizes.tsv' | 'phases.tsv' | 'sampling-errors.log' | 'ready' | 'retirement';
+
+function campaignFileRead(file: CampaignFile, path = `${MEASURE}/${file}`): string {
+  return `printf '%s\\n' 'REZICS_CAMPAIGN_EVIDENCE_BEGIN:${file}'
+cat ${path}
+printf '%s\\n' 'REZICS_CAMPAIGN_EVIDENCE_END:${file}'`;
+}
+
+function campaignFileBytes(capture: string, file: CampaignFile): string {
+  const begin = `REZICS_CAMPAIGN_EVIDENCE_BEGIN:${file}\n`;
+  const end = `REZICS_CAMPAIGN_EVIDENCE_END:${file}\n`;
+  if (capture.split(begin).length !== 2 || capture.split(end).length !== 2)
+    throw new Error(`Invalid ${file} measurement transport framing`);
+  const start = capture.indexOf(begin) + begin.length;
+  const finish = capture.indexOf(end);
+  if (finish < start || (finish > start && capture[finish - 1] !== '\n'))
+    throw new Error(`Invalid ${file} measurement transport framing`);
+  return capture.slice(start, finish);
+}
+
 function summarizeMeasurements(sizes: string, phases: string) {
-  const rows = sizes
-    .trim()
+  const rows = (sizes.endsWith('\n') ? sizes.slice(0, -1) : sizes)
     .split('\n')
-    .map((row) => row.trim().split(/\s+/).map(Number));
-  if (
-    rows.length < 2 ||
-    rows.some(
-      (row) => row.length !== 16 || row.some((value) => !Number.isSafeInteger(value) || value < 0),
-    )
-  )
-    throw new Error('Invalid sampled disk evidence');
+    .map((line, index) => {
+      const columns = line.trim().split(/\s+/);
+      const values = columns.map(Number);
+      if (
+        columns.length !== 16 ||
+        columns.some((value) => !/^\d+$/.test(value)) ||
+        values.some((value) => !Number.isSafeInteger(value) || value < 0)
+      )
+        throw new Error(
+          `Invalid sampled disk evidence at row ${index + 1}: expected 16 nonnegative integer columns, received ${JSON.stringify(line)}`,
+        );
+      return values;
+    });
+  if (rows.length < 2)
+    throw new Error('Invalid sampled disk evidence: at least two samples required');
+  if (rows.some((row, index) => index > 0 && row[0]! < rows[index - 1]![0]!))
+    throw new Error('Invalid sampled disk evidence: sample timestamps move backwards');
   const durations: Record<string, number> = {};
   for (const name of ['copy', 'compact', 'index']) {
     const starts = phases
@@ -675,6 +740,116 @@ function summarizeMeasurements(sizes: string, phases: string) {
     minimumFilesystemFreeBytes: Math.min(...rows.map((row) => row[15]! * 1024)),
   };
 }
+
+const measuredPhaseExample = [
+  'copy start 1000',
+  'copy end 1200 0',
+  'compact start 1200',
+  'compact end 1500 0',
+  'index start 1500',
+  'index end 1600 0',
+].join('\n');
+const measuredRowsExample =
+  [
+    '1000 80 81920 60 61440 40 40960 20 20480 0 0 0 0 0 0 200',
+    '1250 180 184320 60 61440 40 40960 20 20480 100 102400 80 81920 20 20480 100',
+    '1500 150 153600 60 61440 40 40960 20 20480 70 71680 50 51200 20 20480 130',
+  ].join('\n') + '\n';
+
+test('OPS10: campaign measurement keeps exact rows apart from Compose transport progress', () => {
+  const capture = `REZICS_CAMPAIGN_EVIDENCE_BEGIN:sizes.tsv\n${measuredRowsExample}REZICS_CAMPAIGN_EVIDENCE_END:sizes.tsv\n Container qualification-fuseki-run Creating\n Container qualification-fuseki-run Created\n`;
+  const rows = campaignFileBytes(capture, 'sizes.tsv');
+  expect(rows).toBe(measuredRowsExample);
+  for (const file of ['ready', 'retirement'] as const) {
+    const payload = `campaign-sha256=${'a'.repeat(64)}\nsource-sha256=${'b'.repeat(64)}\n`;
+    const transport = `REZICS_CAMPAIGN_EVIDENCE_BEGIN:${file}\n${payload}REZICS_CAMPAIGN_EVIDENCE_END:${file}\n Container transport Created\n`;
+    expect(campaignFileBytes(transport, file)).toBe(payload);
+    expect(digest(campaignFileBytes(transport, file))).toBe(digest(payload));
+  }
+  const summary = summarizeMeasurements(rows, measuredPhaseExample);
+  expect(summary.samples).toBe(3);
+  expect(summary.phasesMs).toEqual({ copy: 200, compact: 300, index: 100 });
+  expect(summary.sourceAllocatedBytes).toBe(60 * 1024);
+  expect(summary.candidateAllocatedBytes).toBe(70 * 1024);
+  expect(summary.candidateGraphAllocatedBytes).toBe(50 * 1024);
+  expect(summary.candidateIndexAllocatedBytes).toBe(20 * 1024);
+  expect(summary.peakVolumeAllocatedBytes).toBe(180 * 1024);
+  expect(summary.peakVolumeApparentBytes).toBe(184320);
+  expect(summary.minimumFilesystemFreeBytes).toBe(100 * 1024);
+  expect(summary.maximumObservedSampleGapMs).toBe(250);
+});
+
+test('OPS10: campaign measurement refuses malformed actual rows and framing without dropping evidence', () => {
+  for (const row of [
+    '',
+    '1250 1 2',
+    '1250 -1 2 3 4 5 6 7 8 9 10 11 12 13 14 15',
+    '1250 1.5 2 3 4 5 6 7 8 9 10 11 12 13 14 15',
+    '1250 du-error 2 3 4 5 6 7 8 9 10 11 12 13 14 15',
+    ' Container unexpected-in-file Created',
+  ]) {
+    const rows = measuredRowsExample.replace(measuredRowsExample.split('\n')[1]!, row);
+    const capture = `REZICS_CAMPAIGN_EVIDENCE_BEGIN:sizes.tsv\n${rows}REZICS_CAMPAIGN_EVIDENCE_END:sizes.tsv\n Container transport Created\n`;
+    expect(campaignFileBytes(capture, 'sizes.tsv')).toBe(rows);
+    expect(() =>
+      summarizeMeasurements(campaignFileBytes(capture, 'sizes.tsv'), measuredPhaseExample),
+    ).toThrow('at row 2');
+  }
+  for (const capture of [
+    measuredRowsExample,
+    `REZICS_CAMPAIGN_EVIDENCE_END:sizes.tsv\nREZICS_CAMPAIGN_EVIDENCE_BEGIN:sizes.tsv\n${measuredRowsExample}`,
+    `REZICS_CAMPAIGN_EVIDENCE_BEGIN:sizes.tsv\n${measuredRowsExample}REZICS_CAMPAIGN_EVIDENCE_END:sizes.tsv\nREZICS_CAMPAIGN_EVIDENCE_END:sizes.tsv\n`,
+  ])
+    expect(() => campaignFileBytes(capture, 'sizes.tsv')).toThrow('transport framing');
+  expect(() =>
+    summarizeMeasurements(measuredRowsExample.replace('1250 ', '500 '), measuredPhaseExample),
+  ).toThrow('timestamps move backwards');
+});
+
+test('OPS10: campaign measurement uses real du bytes and rejects an existent failed du read', () => {
+  const directory = mkdtempSync(join(root, '.temp', 'erasure-campaign-measurement-'));
+  try {
+    for (const path of ['rezics/tdb2', 'rezics/lucene', 'campaign-measure'])
+      mkdirSync(join(directory, path), { recursive: true });
+    writeFileSync(join(directory, 'rezics/tdb2', 'sample'), Buffer.alloc(4096, 7));
+    const build = measuredBuild().replaceAll('/fuseki/databases', directory);
+    const sampler = build.slice(build.indexOf(': > '), build.indexOf('\nsample\n('));
+    const run = (failed: boolean) =>
+      spawnSync(
+        'sh',
+        [
+          '-ec',
+          `${sampler}
+${failed ? "du() { printf '%s\\n' 'du: sample failure' >&2; return 1; }" : ''}
+sample
+sample
+${campaignFileRead('sizes.tsv').replaceAll('/fuseki/databases', directory)}`,
+        ],
+        { encoding: 'utf8', timeout: 10_000 },
+      );
+    const measured = run(false);
+    expect(measured.status).toBe(0);
+    const summary = summarizeMeasurements(
+      campaignFileBytes(measured.stdout, 'sizes.tsv'),
+      measuredPhaseExample,
+    );
+    expect(summary.samples).toBe(2);
+    expect(summary.sourceGraphApparentBytes).toBeGreaterThanOrEqual(4096);
+    expect(summary.candidateAllocatedBytes).toBe(0);
+    expect(readFileSync(join(directory, 'campaign-measure/sampling-errors.log'), 'utf8')).toBe('');
+    rmSync(join(directory, 'campaign-measure/sizes.tsv'));
+    const failed = run(true);
+    expect(failed.status).toBe(0);
+    expect(() =>
+      summarizeMeasurements(campaignFileBytes(failed.stdout, 'sizes.tsv'), measuredPhaseExample),
+    ).toThrow('at row 1');
+    const errors = readFileSync(join(directory, 'campaign-measure/sampling-errors.log'), 'utf8');
+    expect(errors).toContain('du: sample failure');
+    expect(errors).toContain('du-error');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 async function retainedCustody(
   client: FusekiClient,
