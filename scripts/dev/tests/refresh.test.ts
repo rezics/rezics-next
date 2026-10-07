@@ -16,7 +16,7 @@ import { activeBackend,
   storageBackend,
   AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
-import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
+import { inspectRefresh, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
   refreshHeavyLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
 import { refreshSharedStack } from '../refresh-stack.ts';
@@ -521,6 +521,30 @@ describe('shared stack refresh planning', () => {
       ]);
     });
   }
+
+  test('candidate membership inspection defers old-module operations until stopped-writer preparation', async () => {
+    let calls = 0;
+    const oldModule = { membershipPreparationStatus: async () => {
+      calls++; throw new Error('Membership preparation status returned 400');
+    } };
+    const membershipCurrent = await refreshMembershipCurrent(true, true, oldModule);
+    expect(calls).toBe(0);
+    expect(membershipCurrent).toBe(false);
+    const events: string[] = [];
+    await executeRefresh(refreshPlan({ ...current, storageChanged: true, membershipCurrent }), actions(events));
+    expect(events.indexOf('stopWriters')).toBeLessThan(events.indexOf('prepareStorage'));
+    expect(events.indexOf('prepareStorage')).toBeLessThan(events.indexOf('restartResources'));
+    expect(await refreshMembershipCurrent(false, true, {
+      membershipPreparationStatus: async () => ({ needsPreparation: false }),
+    })).toBe(true);
+    await expect(refreshMembershipCurrent(false, true, oldModule)).rejects.toThrow('returned 400');
+    expect(calls).toBe(1);
+    expect(await refreshMembershipCurrent(false, false, oldModule)).toBe(false);
+    expect(calls).toBe(1);
+    expect(await refreshMembershipCurrent(false, true, {
+      membershipPreparationStatus: async () => ({ needsPreparation: true }),
+    })).toBe(false);
+  });
 
   test('legacy ordered membership requires stopped-writer owner preparation even at the recorded revision', async () => {
     const plan = refreshPlan({ ...current, membershipCurrent: false });

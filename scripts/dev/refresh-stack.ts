@@ -261,6 +261,14 @@ export function refreshStorageDefinitionChanged(target: string, installed: strin
     !existsSync(join(installed, path)) || !readFileSync(join(target, path)).equals(readFileSync(join(installed, path))));
 }
 
+/** Candidate-only operations cannot inspect an older serving native module.
+ * Changed storage remains unproven until stopped-writer preparation installs
+ * the candidate; a matching live module must supply its actual completion. */
+export async function refreshMembershipCurrent(storageChanged: boolean, fusekiReady: boolean,
+  fuseki: Pick<FusekiClient, 'membershipPreparationStatus'>): Promise<boolean> {
+  return !storageChanged && fusekiReady && !await hasUnnormalizedMembership(fuseki);
+}
+
 export async function inspectRefresh(root: string, stackRoot = root) {
   const dir = stackDirectory(stackRoot, { profile: 'dev' });
   const env = readEnv(join(dir, 'dev.env'));
@@ -355,7 +363,7 @@ export async function inspectRefresh(root: string, stackRoot = root) {
   const input : RefreshInputs = { revision, previousRevision: pinnedRevision ?? checkpoint?.revision,
     checkpointMissing: !checkpoint, imagePresent, storageChanged, pendingMigrations,
     modelCurrent: active.generation === targetGeneration, statementCurrent,
-    membershipCurrent: serviceReady('fuseki') && !await hasUnnormalizedMembership(
+    membershipCurrent: await refreshMembershipCurrent(storageChanged, serviceReady('fuseki'),
       new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN)),
     unhealthyResources: refreshResources.filter(name => resources[name].state !== 'Running'
       || resources[name].healthStatus !== 'Healthy'),
