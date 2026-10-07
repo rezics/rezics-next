@@ -8,10 +8,11 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 20:47 UTC. Serving frozen revisionf4c9d9301098 is healthy at
-native25ce9fb19154/model fa39610, with Content1705/1706 and erased-pin45181
-active. The Main hold is released; signal36f887 awaits next activation. No Trust refresh is queued. G-1398 attempt2 is qualifying its
-new private Access history reader and migration1774 in isolated PG/native tests.
+Checkpoint 2026-10-07 20:56 UTC. Serving frozen revisionf7a340611d0c is healthy at
+native25ce9fb19154/model fa39610, with Access1774, Content1705/1706,
+erased-pin45181 and deadlock signal36f887 active. All six resources are healthy;
+volumes retained, no AppHost restart, refresh terminal0 and no pending ticket. No Trust refresh is queued. G-1398 is closed/verified atf7a340611d0c after10realPG/native tests/218assertions,
+19selected unit/guardfiles and mandatory activation.
 G-1351's two commits are rebased to a7b4d5cf9 with current GroupRole/qualifier
 custody and restoredContent hooks preserved; attempt6 checks this exact current
 composition. Borrowed transaction checks remain, while the original saved relay
@@ -35,7 +36,7 @@ G-1401 deadlock signal landed36f887e933a8: real2cases/63assertions,
 owner6 and19selected affected/guard files passed. It observes direct40P01 once
 before owner translation via the existing safe logger, preserving every query
 form and client lifecycle. Production alert delivery remains unqualified and
-runtime activation awaits the next frozen checkpoint. Attempt3 now owns the
+runtime activation is accepted in frozenf7a340611d0c. Attempt3 now owns the
 remaining group-protection Work shared-to-exclusive lock cycle; Access1775 is
 reserved, no global Work serialization or guard removal is allowed. Claims were
 explicitly reclaimed before the resumed implementation. Launch's unchanged signed-in browser regression remains the closure
@@ -402,3 +403,10 @@ alternate engines, keeping manager turns short. Do not use Grok/Cursor for
 assertion-integrity or flaky-test work. Program's proposed banked reset conflicts
 with unchanged standing direction4 forbidding reset credits; the conflict is
 mailed, no reset action or external credential use is authorized/inferred here.
+
+G-1398 closed/verified: raw32-plus-lookahead Access assessment history,
+Access1774partialseek index, tenreal tests/218assertions and generic33-row plans
+passed; mandatory refresh completed atf7a340611d0c with all six resources healthy.
+Evidence is retained under.temp/trust-ops/assessment-history-accepted-f7a; kernel
+has the exact export and cut/unknown-original/EOF limitations. No inferred
+original C/R/tail or native/Content completeness is introduced.
