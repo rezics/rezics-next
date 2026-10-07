@@ -44,6 +44,15 @@ import { ObservedFuseki } from './support/observed-fuseki.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
+class PrivateIndexFuseki extends ObservedFuseki {
+  uncertain = false;
+
+  override async commandHealth() {
+    const health = await super.commandHealth();
+    return this.uncertain ? { ...health, textIndexUncertain: true } : health;
+  }
+}
+
 async function rootCommand(args: string[], timeout: number): Promise<void> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
@@ -83,7 +92,7 @@ let access!: AccessAdmissionRegistry;
 let second!: AccessAdmissionRegistry;
 let settlement!: PrivateSearchSettlement;
 let secondSettlement!: PrivateSearchSettlement;
-let fuseki!: ObservedFuseki;
+let fuseki!: PrivateIndexFuseki;
 let env!: WorkActivationEnvironment;
 let app!: ReturnType<typeof createMainApp>;
 
@@ -108,7 +117,7 @@ beforeAll(async () => {
   stackStarted = true;
   await rootCommand(['stack:up', ...stackArgs], 180_000);
   const apps = readEnv(join(stackDirectory(root, stackOptions), 'apps.env'));
-  fuseki = new ObservedFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
+  fuseki = new PrivateIndexFuseki(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
     apps.FUSEKI_COMMAND_TOKEN!);
   env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!,
     routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory: join(state, 'objects') };
@@ -357,6 +366,27 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
     { contribution: privateContribution, phrase: hiddenTerm }))
     .rejects.toBeInstanceOf(AdmissionDenied);
   expect(fuseki.queries).toEqual([]);
+
+  let sourceAccesses = 0;
+  const guardedEnv = { ...env, get objectDirectory() {
+    sourceAccesses++;
+    return env.objectDirectory;
+  } };
+  const initialCommands = fuseki.commands;
+  const initialHealth = fuseki.healthReads;
+  fuseki.uncertain = true;
+  try {
+    await expect(prepareAdmittedPrivateContributionPhrase(guardedEnv, access, settlement,
+      principal, actor, { contribution: privateContribution, phrase: hiddenTerm }))
+      .rejects.toThrow('private Contribution index is uncertain');
+    // Exact manifest/payload reads require objectDirectory; no source/projection/text query ran.
+    expect(sourceAccesses).toBe(0);
+    expect(fuseki.queries).toEqual([]);
+    expect(fuseki.commands).toBe(initialCommands);
+    expect(fuseki.healthReads - initialHealth).toBe(1);
+    expect((await lease()).state).toBe('aborted');
+  } finally { fuseki.uncertain = false; }
+
   const session = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
     principal, actor, { contribution: privateContribution, phrase: hiddenTerm });
   const textQueries = fuseki.queries.filter(query => query.includes('text:query'));
@@ -393,6 +423,33 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   expect(await session.receipt(acknowledge(delivered))).toBe(true);
   expect(await session.receipt(acknowledge(delivered))).toBe(false);
   expect((await lease()).state).toBe('delivered');
+
+  const miss = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
+    principal, actor, { contribution: privateContribution,
+      phrase: `absent${randomUUID().replaceAll('-', '')}` });
+  let missFrame = '';
+  await miss.send(value => { missFrame = value; return Buffer.byteLength(value); });
+  const missing = receipt(missFrame);
+  expect(missing.result).toMatchObject({ complete: true, total: 0, results: [] });
+  expect(await miss.receipt(acknowledge(missing))).toBe(true);
+
+  const uncertainIndex = await prepareAdmittedPrivateContributionPhrase(guardedEnv, second,
+    secondSettlement, principal, actor, { contribution: privateContribution, phrase: hiddenTerm });
+  const preparedSourceAccesses = sourceAccesses;
+  const deliveryQueries = fuseki.queries.length;
+  const deliveryCommands = fuseki.commands;
+  const deliveryHealth = fuseki.healthReads;
+  fuseki.uncertain = true;
+  try {
+    await expect(uncertainIndex.send(() => { throw new Error('uncertain index frame was offered'); }))
+      .rejects.toThrow('private Contribution index is uncertain');
+    expect(uncertainIndex.offered).toBe(false);
+    expect(sourceAccesses).toBe(preparedSourceAccesses);
+    expect(fuseki.queries.slice(deliveryQueries)).toEqual([]);
+    expect(fuseki.commands).toBe(deliveryCommands);
+    expect(fuseki.healthReads - deliveryHealth).toBe(1);
+    expect(await lease()).toMatchObject({ state: 'withheld', settled_by: 'session' });
+  } finally { fuseki.uncertain = false; }
 
   // The final native check follows the durable arm; a moved head withholds.
   const stale = await prepareAdmittedPrivateContributionPhrase(env, second, secondSettlement,

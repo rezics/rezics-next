@@ -50,6 +50,9 @@ function samePosition(left: PrivatePosition, right: PrivatePosition): boolean {
 
 async function position(env: WorkActivationEnvironment, contribution: string): Promise<PrivatePosition> {
   const health = await env.fuseki.commandHealth();
+  if ((health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
+    throw new PrivateSearchUnavailable('private Contribution index is uncertain');
+  }
   if (health.moduleVersion !== COMMAND_MODULE_VERSION || !health.privateSearchWriteEpoch
     || !/^(0|[1-9][0-9]*)$/.test(health.privateSearchWriteEpoch)
     || health.privateSearchWriteActive !== false
