@@ -136,6 +136,7 @@ const original = {
         { count: 6, hash: '7f0006926467534d4151650cc16161d4730b46a9396a4c6df91ff47f2343f851' },
         { count: 6, hash: '17357861ab7c25725799448d7cda1d96ef93831338cd55ece4d9d925b0050fcb' },
       ],
+      canonical: { types: ['rv:TranslationLink'] },
     }],
   },
 } as const;

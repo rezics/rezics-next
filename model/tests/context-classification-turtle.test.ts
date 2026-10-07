@@ -166,9 +166,13 @@ const original = {
   'classification-context-v1': {
     source: '41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20',
     shapes: [
-      { role: 'global', count: 6, hash: '717e5b6ede705b9fcec3dddae5d93f61668165d36dbffa25acbad699120edceb', alternatives: [] },
+      { role: 'global', count: 6, hash: '717e5b6ede705b9fcec3dddae5d93f61668165d36dbffa25acbad699120edceb', alternatives: [],
+        canonical: { types: ['rv:ClassificationContext'], when: [
+          { path: 'rv:contextRole', value: 'rv:GlobalClassification' },
+        ] } },
       { role: 'realm', count: 3, hash: '5e825e9206278421245ad1013972ac3ff3a905923f8c77eced5d087309c9fb71', alternatives: [] },
-      { role: 'context', count: 6, hash: 'd0dcc6bdf9377c8740591b15702fbbfe0db211fc766e97640829812656ce509c', alternatives: [] },
+      { role: 'context', count: 6, hash: 'd0dcc6bdf9377c8740591b15702fbbfe0db211fc766e97640829812656ce509c', alternatives: [],
+        canonical: { types: ['rv:ClassificationContext'] } },
     ],
   },
   'classification-global-context-v1': {
@@ -180,11 +184,16 @@ const original = {
   'classification-proposition-v1': {
     source: '8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0',
     shapes: [
-      { role: 'scheme', count: 2, hash: '72e42ba2654eec041b301f099dfaafd211de501d9a6a8d0f667740a47a6c43b2', alternatives: [] },
-      { role: 'concept', count: 4, hash: '9b3bbfd1f302942a23a4e454fe4f84dfe7b6b91934da9f4efa6d40f1999ffb76', alternatives: [] },
-      { role: 'path', count: 5, hash: '9d4ea35cccc80600a067e6f714b86e80eaee66a364de70711a53e7bfbefd038b', alternatives: [] },
-      { role: 'expression', count: 5, hash: '28ccce1e96ce9356f6db4dc8f91846c258f6e5c0dd02bd16c0b8b1cfb20b66eb', alternatives: [] },
-      { role: 'sense', count: 5, hash: '802477e96d883a576e6a2a28dba5d0770e3f6ce629bfdcfdd9d7d4503304e6e2', alternatives: [] },
+      { role: 'scheme', count: 2, hash: '72e42ba2654eec041b301f099dfaafd211de501d9a6a8d0f667740a47a6c43b2', alternatives: [],
+        canonical: { types: ['skos:ConceptScheme'] } },
+      { role: 'concept', count: 4, hash: '9b3bbfd1f302942a23a4e454fe4f84dfe7b6b91934da9f4efa6d40f1999ffb76', alternatives: [],
+        canonical: { types: ['skos:Concept'] } },
+      { role: 'path', count: 5, hash: '9d4ea35cccc80600a067e6f714b86e80eaee66a364de70711a53e7bfbefd038b', alternatives: [],
+        canonical: { types: ['rv:ConceptPath'] } },
+      { role: 'expression', count: 5, hash: '28ccce1e96ce9356f6db4dc8f91846c258f6e5c0dd02bd16c0b8b1cfb20b66eb', alternatives: [],
+        canonical: { types: ['rv:ClassificationExpression'] } },
+      { role: 'sense', count: 5, hash: '802477e96d883a576e6a2a28dba5d0770e3f6ce629bfdcfdd9d7d4503304e6e2', alternatives: [],
+        canonical: { types: ['rv:ClassificationSense'] } },
     ],
   },
   'classification-direct-decision-v1': {
@@ -194,9 +203,36 @@ const original = {
       { role: 'main', count: 2, hash: '38c14aa447f6cc8bed594eeea701832a977c994aeb735cfe28393cd7bbd74bda', alternatives: [] },
       { role: 'sense', count: 4, hash: '7d85cc4033f10c63d35f9b9b1d7f6344f11429268672f0a24bfa5133c0cedd45', alternatives: [] },
       { role: 'context', count: 3, hash: 'd5b5e4f7c070109d900e3a8e7450fd066754b50e36eac34d2aa5701f1c1bc63f', alternatives: [] },
-      { role: 'application', count: 8, hash: '00dad4af07691bcf13e96681c02eb6e90e624c7df7fbd801f3e03d9b6c5a457e', alternatives: [] },
-      { role: 'decision', count: 8, hash: 'd7e9a209609acb82acc212b59dbc8200ec515383167eb270db4c7f27bcbc9067', alternatives: [] },
+      { role: 'application', count: 8, hash: '00dad4af07691bcf13e96681c02eb6e90e624c7df7fbd801f3e03d9b6c5a457e', alternatives: [],
+        canonical: { types: ['rv:ClassificationApplication'] } },
+      { role: 'decision', count: 8, hash: 'd7e9a209609acb82acc212b59dbc8200ec515383167eb270db4c7f27bcbc9067', alternatives: [],
+        canonical: { types: ['rv:ClassificationDecision'] } },
     ],
+  },
+} as const;
+
+const expectedBindings = {
+  'classification-context-v1': {
+    required: ['realm', 'context'],
+    roles: ['global', 'realm', 'context'],
+    demandedBy: ['rv:ClassificationContext'],
+  },
+  'classification-proposition-v1': {
+    required: ['scheme', 'concept', 'path', 'expression', 'sense'],
+    roles: ['scheme', 'concept', 'path', 'expression', 'sense'],
+    demandedBy: [
+      'rv:ClassificationSense', 'rv:ConceptPath', 'rv:ClassificationExpression',
+      'skos:Concept', 'skos:ConceptScheme',
+    ],
+  },
+  'classification-direct-decision-v1': {
+    required: [
+      'work', 'main', 'sense', 'sense-revision', 'context', 'context-kind', 'application', 'decision',
+      'slot', 'proposer', 'decider', 'outcome',
+    ],
+    optional: ['realm', 'context-revision', 'predecessor'],
+    roles: ['work', 'main', 'sense', 'context', 'application', 'decision'],
+    demandedBy: ['rv:ClassificationApplication', 'rv:ClassificationDecision'],
   },
 } as const;
 
@@ -498,7 +534,7 @@ test('Turtle profiles preserve all source pins, property graphs, roles and comma
   };
   for (const profile of profiles) {
     const baseline = original[profile.id as keyof typeof original];
-    expect(profile.binding).toBeUndefined();
+    expect(profile.binding).toEqual(expectedBindings[profile.id as keyof typeof expectedBindings]);
     expect(profile.shapes).toHaveLength(baseline.shapes.length);
     for (const [index, shape] of profile.shapes.entries()) {
       const expected = baseline.shapes[index]!;
