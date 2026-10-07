@@ -51,9 +51,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       .structureObjects = work.structureObjects;
   }
   const visibleOccurrence = async (request: Request, structure: string, occurrence: string,
-    actingSubject: string, selectedRevision: string | null) => {
+    actingSubject: string, selectedRevision: string | null, write = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    const principal = await work.account.verify(request, ['work:read']);
+    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
     const header = await readCompositionHeader(work.environment, structure);
     if (!header || !structureProfileFor(header.profile).componentPredicate) {
       throw new CompositionUnavailable('composition is unavailable');
@@ -119,7 +119,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const structure = `https://rezics.com/id/${params.id}`;
         const occurrence = `https://rezics.com/id/${params.occurrence}`;
         const visible = await visibleOccurrence(request, structure, occurrence,
-          body.actingSubject, body.selectedRevision ?? null);
+          body.actingSubject, body.selectedRevision ?? null, true);
         const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
           library: { agent: body.actingSubject, work: visible.work },
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,

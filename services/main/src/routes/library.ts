@@ -162,8 +162,8 @@ function readWorks(value: string) {
 }
 
 export function libraryRoutes(work: MainWorkDependencies) {
-  const reader = async (request: Request, agent: string) => {
-    const principal = await work.account.verify(request, ['work:read']);
+  const reader = async (request: Request, agent: string, write = false) => {
+    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
     if (!work.access.canReadAsBaselineMember
       || !await work.access.canReadAsBaselineMember(principal, agent)) return null;
     return principal;
@@ -213,7 +213,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       try {
-        if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
+        if (!await reader(request, body.actingSubject, true)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
         const basis = await workRead(work, request, { actingSubject: body.actingSubject },
           async session => {
@@ -298,7 +298,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       try {
-        if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        if (!await reader(request, body.actingSubject, true)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
         const canonical = await workRead(work, request, { actingSubject: body.actingSubject },async session => {
           const target = await resolveLibraryWork(session, workId);
@@ -345,7 +345,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       try {
-        if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
+        if (!await reader(request, body.actingSubject, true)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
         return Response.json(await work.libraryStatus.setGoal({ agent: body.actingSubject, year: body.year,
           target: body.target, expectedVersion: body.expectedVersion, idempotencyKey }),
           { headers: privateHeaders });

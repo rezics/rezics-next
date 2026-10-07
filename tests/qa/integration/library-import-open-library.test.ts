@@ -13,7 +13,8 @@ import { AccessPolicyOwner } from '../../../services/main/src/modules/access/pol
 test('G428: two readers add one Open Library identity and receive one native Work', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
   const directory = join(resolve(import.meta.dir, '../../..'), '.temp', `library-import-${randomUUID()}`);
-  const h = await authorCreditFixture(Bun.env as Record<string, string>, directory);
+  const h = await authorCreditFixture(Bun.env as Record<string, string>, directory,
+    'openid work:create work:edit work:read work:protect library:write source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
   try {
     const libraryImport = new ReaderLibraryImportStore(h.pool);
     const libraryFiles = new LibraryFileStore(h.pool);

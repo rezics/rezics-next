@@ -30,21 +30,21 @@ export const openApiOperations = {
 } as const;
 export const capabilities = {
   '/v1/me/library-imports/{id}': { delete: { disposition: 'supported', mcp: { tool: 'library_import_delete', title: 'Delete an uploaded library file',
-    scopes: ['work:read'], description: 'Delete your uploaded source rows and import plans. Applied Library records remain. Uploads otherwise expire seven days after creation.' } } },
+    scopes: ['work:read','library:write'], description: 'Delete your uploaded source rows and import plans. Applied Library records remain. Uploads otherwise expire seven days after creation.' } } },
   '/v1/me/library-imports': { post: { disposition: 'supported', mcp: { tool: 'library_import_create', title: 'Import a library file',
-    scopes: ['work:read'],
+    scopes: ['work:read','library:write'],
     description: 'Upload your own library export or mapped CSV. Uploads expire after seven days; save an export to retain source fields. Catalogue matches are reviewed before applying. A CSV without mapping returns headers without storing the file.' } } },
   '/v1/me/library-imports/{id}/rows': { get: { disposition: 'supported', mcp: { tool: 'library_import_rows', title: 'Review library import rows',
     scopes: ['work:read'],
     description: 'Page through every source row and its catalogue or Open Library candidates, retaining unsupported source fields.' } } },
   '/v1/me/library-imports/{id}/rows/{row}': { put: { disposition: 'supported', mcp: { tool: 'library_import_resolve', title: 'Resolve a library import row',
-    scopes: ['work:read'],
+    scopes: ['work:read','library:write'],
     description: 'Choose a native Work and optional exact target, or keep the row private. expectedVersion protects concurrent review.' } } },
   '/v1/me/library-imports/{id}/apply': { post: { disposition: 'supported', mcp: { tool: 'library_import_apply', title: 'Apply a reviewed library import',
-    scopes: ['work:read','collection:edit','rating:read','rating:submit'],
+    scopes: ['work:read','library:write','collection:edit','rating:read','rating:submit'],
     description: 'Apply a bounded group of reviewed rows through ordinary library commands. Repeat until pending is false; retries resume one effect.' } } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { disposition: 'supported', mcp: { tool: 'library_import_adopt', title: 'Adopt an Open Library candidate',
-    scopes: ['work:read','work:create'],
+    scopes: ['work:read','library:write','work:create'],
     description: 'Explicitly adopt a reviewed Open Library candidate using ordinary catalogue authority. Resolve the source row separately to the returned Work before applying.' } } },
 } as const satisfies CapabilityDeclarations;
 const match = t.Object({ kind: t.Union([t.Literal('matched'),t.Literal('ambiguous'),t.Literal('not-found')]),
@@ -65,21 +65,21 @@ function failure(error: unknown): Response {
   return workReadError(error);
 }
 export function libraryImportsRoutes(deps: MainWorkDependencies) {
-  async function own(request: Request, agent: string) {
+  async function own(request: Request, agent: string, write = false) {
     const key = request.headers.get('idempotency-key') ?? '';
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new ReaderImportInvalid('A valid Idempotency-Key is required');
-    const principal = await deps.account.verify(request,['work:read']);
+    const principal = await deps.account.verify(request,write ? ['work:read','library:write'] : ['work:read']);
     if (!await deps.access.canReadAsBaselineMember?.(principal,agent)) return problem(403,'library_import_denied','Import files are private to your own Person');
     if (!deps.libraryFiles || !deps.libraryImport) throw new ReaderImportUnavailable('Library import is unavailable');
-    return key;
+    return { key, principal };
   }
   return new Elysia()
     .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
       query: t.Object({ actingSubject: readId },closed),response: { 200: t.Object({ deleted: t.Literal(true) }),...errors },
     },async ({ request,params,query }) => {
       try {
-        const key = await own(request,query.actingSubject); if (key instanceof Response) return key;
-        await deps.libraryFiles!.delete(query.actingSubject,params.id,key);
+        const admission = await own(request,query.actingSubject,true); if (admission instanceof Response) return admission;
+        await deps.libraryFiles!.delete(query.actingSubject,params.id,admission.key);
         return Response.json({ deleted: true },{ headers });
       } catch (error) { return failure(error); }
     })
@@ -90,11 +90,11 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
         200: t.Object({ headers: t.Array(t.String(),{ maxItems: 64 }),distinctValues: t.Record(t.String(),t.Array(t.String(),{ maxItems: 50 })) }),...errors },
     }, async ({ request,body }) => {
       try {
-        const key = await own(request,body.actingSubject); if (key instanceof Response) return key;
+        const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
         if (new TextEncoder().encode(body.file).length > FILE_IMPORT_COST.bytes) throw new FileImportInvalid('File exceeds 2 MiB');
         if (body.format === 'generic-csv' && !body.mapping) return Response.json(inspectGenericCsv(body.file),{ headers });
         const rows = parseLibraryFile(body.format,body.file,body.mapping);
-        const value = await deps.libraryFiles!.create(body.actingSubject,key,importDigest([body.format,body.file,body.mapping ?? null]),body.format,rows);
+        const value = await deps.libraryFiles!.create(body.actingSubject,admission.key,importDigest([body.format,body.file,body.mapping ?? null]),body.format,rows);
         return Response.json(value,{ status: 201,headers });
       } catch (error) { return failure(error); }
     })
@@ -103,7 +103,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       response: { 200: t.Object({ rows: t.Array(rowView,{ maxItems: FILE_IMPORT_COST.page }),nextCursor: t.Nullable(t.Integer()) }),...errors },
     }, async ({ request,params,query }) => {
       try {
-        const key = await own(request,query.actingSubject); if (key instanceof Response) return key;
+        const admission = await own(request,query.actingSubject); if (admission instanceof Response) return admission;
         const page = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
         for (const row of page.rows) if (!row.match) {
           const matched = row.resolution?.choice === 'private'
@@ -112,11 +112,20 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
             : row.resolution?.work ? { kind: 'matched' as const,work: row.resolution.work,target: row.resolution.target ?? null,
               candidates: [],truncated: false,openLibrary: [],openLibraryAvailability: 'not-requested' as const }
               : await matchLibraryRow(deps.libraryImport!,request,query.actingSubject,row.source, search => searchLibrarySource(deps,request,search));
-          await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
+          // Read consent permits candidate discovery, but only write consent may
+          // retain a match and advance the uploaded row's version.
+          if (admission.principal.accountScopes?.includes('library:write')) {
+            const current = await own(request,query.actingSubject,true);
+            if (current instanceof Response) return current;
+            await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
+          }
+          row.match = matched;
         }
         const saved = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
         const stillOwn = await own(request,query.actingSubject); if (stillOwn instanceof Response) return stillOwn;
-        return Response.json({ rows: saved.rows,nextCursor: saved.more ? saved.rows.at(-1)!.index : null },{ headers });
+        const matches = new Map(page.rows.map(row => [row.index,row.match]));
+        return Response.json({ rows: saved.rows.map(row => ({ ...row,match: row.match ?? matches.get(row.index) ?? null })),
+          nextCursor: saved.more ? saved.rows.at(-1)!.index : null },{ headers });
       } catch (error) { return failure(error); }
     })
     .put(`${base}/:id/rows/:row`, { params: t.Object({ id: readUuid,row: t.Integer({ minimum: 0,maximum: 4999 }) }),
@@ -124,7 +133,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       response: { 200: t.Object({ resolved: t.Literal(true) }),...errors },
     }, async ({ request,params,body }) => {
       try {
-        const key = await own(request,body.actingSubject); if (key instanceof Response) return key;
+        const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
         const { actingSubject,expectedVersion,...choice } = body;
         if (choice.choice === 'apply' && !choice.work) throw new ReaderImportInvalid('Choose a Work before applying this row');
         if (choice.work) {
@@ -135,7 +144,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
             if (targets[0]?.work !== choice.work) throw new ReaderImportInvalid('Chosen target belongs to another Work');
           }
         }
-        await deps.libraryFiles!.resolve(actingSubject,params.id,params.row,expectedVersion,choice,key);
+        await deps.libraryFiles!.resolve(actingSubject,params.id,params.row,expectedVersion,choice,admission.key);
         return Response.json({ resolved: true },{ headers });
       } catch (error) { return failure(error); }
     })
@@ -145,7 +154,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
         202: t.Object({ total: t.Integer(),completed: t.Integer(),issues: t.Integer(),pending: t.Boolean() }),...errors },
     }, async ({ request,params,body }) => {
       try {
-        const key = await own(request,body.actingSubject); if (key instanceof Response) return key;
+        const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
         const value = await applyLibraryFile(deps.libraryFiles!,deps.libraryImport!,request,body.actingSubject,params.id,
           { context: body.context,language: body.language });
         return Response.json(value,{ status: value.pending ? 202 : 200,headers });
@@ -157,7 +166,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     }, async ({ request,params,body }: { request: Request; params: { id: string; row: number };
       body: { actingSubject: string; workId: string; titleLanguage?: string } }) => {
       try {
-        const key = await own(request,body.actingSubject); if (key instanceof Response) return key;
+        const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
         const page = await deps.libraryFiles!.page(body.actingSubject,params.id,params.row-1,1);
         if (page.rows[0]?.index !== params.row || !page.rows[0].match?.openLibrary.some(c => c.workId === body.workId)) {
           throw new ReaderImportInvalid('Choose an Open Library candidate from this row');

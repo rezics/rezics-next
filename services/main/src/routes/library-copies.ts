@@ -48,8 +48,8 @@ function failure(error: unknown): Response {
 }
 
 export function libraryCopiesRoutes(deps: MainWorkDependencies) {
-  const own = async (request: Request, agent: string) => {
-    const principal = await deps.account.verify(request, ['work:read']);
+  const own = async (request: Request, agent: string, write = false) => {
+    const principal = await deps.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
     if (!await deps.access.canReadAsBaselineMember?.(principal, agent)) {
       throw new LibraryRecordDenied('Copies and loans are private to your own Person');
     }
@@ -76,12 +76,12 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const { actingSubject, expectedVersion, release, ...changes } = body;
         const result = await deps.libraryCopies.write({ agent: actingSubject, expectedVersion, release, changes,
           idempotencyKey: request.headers.get('idempotency-key') ?? '' },
         () => workRead(deps, request, { actingSubject }, session => resolveCopyRelease(session, release)),
-        () => own(request, actingSubject), checkParty(request, actingSubject));
+        () => own(request, actingSubject, true), checkParty(request, actingSubject));
         return Response.json(result, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -90,11 +90,11 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const { actingSubject, expectedVersion, ...changes } = body;
         const result = await deps.libraryCopies.write({ agent: actingSubject, expectedVersion, changes,
           id: `https://rezics.com/id/${params.id}`, idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, actingSubject), checkParty(request, actingSubject));
+        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, actingSubject, true), checkParty(request, actingSubject));
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -103,10 +103,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const result = await deps.libraryCopies.write({ agent: body.actingSubject, expectedVersion: body.expectedVersion,
           id: `https://rezics.com/id/${params.id}`, changes: {}, remove: true, idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, body.actingSubject));
+        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, body.actingSubject, true));
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -128,10 +128,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const { actingSubject, ...input } = body;
         const result = await deps.libraryLoans.write({ ...input, operation: 'open', agent: actingSubject,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, actingSubject), checkParty(request, actingSubject));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, actingSubject, true), checkParty(request, actingSubject));
         return Response.json(result, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -140,10 +140,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const result = await deps.libraryLoans.write({ operation: 'extend', agent: body.actingSubject,
           expectedVersion: body.expectedVersion, dueAt: body.dueAt, id: `https://rezics.com/id/${params.id}`,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject, true));
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -152,10 +152,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject);
+        await own(request, body.actingSubject, true);
         const result = await deps.libraryLoans.write({ operation: 'return', agent: body.actingSubject,
           expectedVersion: body.expectedVersion, id: `https://rezics.com/id/${params.id}`,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject, true));
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     });

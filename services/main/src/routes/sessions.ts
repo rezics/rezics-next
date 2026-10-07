@@ -39,8 +39,8 @@ function failure(error: unknown): Response {
 }
 
 export function sessionsRoutes(work: MainWorkDependencies) {
-  const own = async (request: Request, agent: string) => {
-    const principal = await work.account.verify(request, ['work:read']);
+  const own = async (request: Request, agent: string, write = false) => {
+    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
     // Access's own-person baseline excludes delegated Agents, even when they
     // hold work.read, agent.control or another public command's permission.
     if (!await work.access.canReadAsBaselineMember?.(principal, agent)) {
@@ -68,7 +68,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
     }, async ({ request, body }) => {
       if (!work.sessions) return problem(503, 'session_unavailable', 'Sessions are unavailable');
       try {
-        const principal = await own(request, body.actingSubject);
+        const principal = await own(request, body.actingSubject, true);
         const { actingSubject, target, expectedVersion, ...changes } = body;
         const additions = changes.addSelections ?? [];
         const inputs: SelectionInput[] = [{ target, ...additions.find(item => item.target === target) },
@@ -84,7 +84,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!work.sessions) return problem(503, 'session_unavailable', 'Sessions are unavailable');
       try {
-        const principal = await own(request, body.actingSubject);
+        const principal = await own(request, body.actingSubject, true);
         const { actingSubject, expectedVersion, ...changes } = body;
         const value = await work.sessions.write({ principal, agent: actingSubject,
           id: `https://rezics.com/id/${params.id}`, changes, expectedVersion,

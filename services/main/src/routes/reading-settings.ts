@@ -33,8 +33,8 @@ function failure(error: unknown): Response {
 
 /** One principal settings row; one baseline person-Agent check per request. */
 export function readingSettingsRoutes(work: MainWorkDependencies) {
-  const reader = async (request: Request, actingSubject: string) => {
-    const principal = await work.account.verify(request, ['work:read']);
+  const reader = async (request: Request, actingSubject: string, write = false) => {
+    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
     if (!work.access.canReadAsBaselineMember
       || !await work.access.canReadAsBaselineMember(principal, actingSubject)) {
       return null;
@@ -62,7 +62,7 @@ export function readingSettingsRoutes(work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       try {
-        const principal = await reader(request, body.actingSubject);
+        const principal = await reader(request, body.actingSubject, true);
         if (!principal) return problem(403, 'reader_settings_denied', 'Reader settings are unavailable');
         const { actingSubject: _actingSubject, expectedVersion, ...value } = body;
         return Response.json(await work.readingSettings.write(principal, value, expectedVersion, key),

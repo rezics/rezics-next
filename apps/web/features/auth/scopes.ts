@@ -36,6 +36,8 @@ export const MAIN_SITE_SCOPES = [
   'type:admit',
   // Shared Contexts and the reader's private selections.
   'context:read', 'context:write', 'context:select',
+  // Personal library, reading records and reader settings.
+  'library:write',
   // Source records can be read; Library imports use Main's constrained Work route.
   'source:read',
   // Packages a person installs, revokes or recommends for a Work.
