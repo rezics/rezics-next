@@ -172,7 +172,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('getV1CompositionsByIdProgress');
   expect(matrix.find(entry => entry.path === '/v1/compositions/{id}/progress' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
-  expect(publicOperations).toHaveLength(520);
+  // Trust approved the credits facade with optional bearer reads.
+  expect(publicOperations).toContain('getV1WorksByIdCredits');
+  expect(matrix.find(entry => entry.path === '/v1/works/{id}/credits' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: false });
+  expect(publicOperations).toHaveLength(521);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
