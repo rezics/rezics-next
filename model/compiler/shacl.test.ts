@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Value } from 'typebox/value';
+import { DataFactory, Parser, Store } from 'n3';
 import type { TSchema } from 'typebox';
 import { buildModelOutputs } from './outputs.ts';
 import { parseTurtleProfile, profileSource } from './shacl.ts';
@@ -177,10 +178,12 @@ test('Turtle lowers IRIOrLiteral as a mixed value and keeps incompatible facets 
     buildModelOutputs([profile]).get('generated/model/contexts/probe-v1.jsonld')!,
   ) as { '@context': Record<string, { '@type'?: string }> };
   expect(context['@context']['rv:value']?.['@type']).toBeUndefined();
-  expect(() => parseTurtleProfile(
-    'probe-v1',
-    turtle('sh:path rv:value ; sh:nodeKind sh:IRIOrLiteral ; sh:datatype xsd:string'),
-  )).toThrow('Cannot lower sh:nodeKind with sh:datatype');
+  expect(() =>
+    parseTurtleProfile(
+      'probe-v1',
+      turtle('sh:path rv:value ; sh:nodeKind sh:IRIOrLiteral ; sh:datatype xsd:string'),
+    ),
+  ).toThrow('Cannot lower sh:nodeKind with sh:datatype');
 });
 
 test('Unsupported SHACL and RDF term kinds fail by name rather than losing constraints', () => {
@@ -288,8 +291,73 @@ test('Turtle fixed values preserve escaped lexical strings and distinguish IRIs'
     'sh:datatype xsd:string ; sh:in (rv:main)',
     'sh:in ("main") ; sh:pattern "main"',
     'sh:hasValue "main" ; sh:maxLength 4',
-    'sh:in ("main") ; sh:hasValue "main"',
+    'sh:in ("main") ; sh:hasValue "other"',
     'sh:hasValue "main" ; sh:maxCount 0',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+});
+
+test('Turtle enum and required-value conjunctions preserve graph membership and TypeBox outcomes', async () => {
+  for (const [members, required, allowed] of [
+    [
+      'rv:main rv:qualifier',
+      'rv:main',
+      ['https://rezics.com/vocab/main', 'https://rezics.com/vocab/qualifier'],
+    ],
+    ['"main" "qualifier"', '"main"', ['main', 'qualifier']],
+  ] as const) {
+    for (const maximum of [1, 4]) {
+      const source = turtle(
+        `sh:path rv:value ; sh:in (${members}) ; sh:hasValue ${required} ; sh:maxCount ${maximum}`,
+      );
+      const profile = parseTurtleProfile('probe-v1', source);
+      const property = profile.shapes[0]!.properties[0]!;
+      expect(property.in).toHaveLength(2);
+      expect(property.hasValue).toBe(required);
+      expect(profileSource(profile)).toBe(source);
+      const graph = new Store(new Parser().parse(source));
+      const sh = 'http://www.w3.org/ns/shacl#';
+      const rdf = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+      const shape = graph.getQuads(null, sh + 'hasValue', null, null)[0]!.subject;
+      const fixed = graph.getObjects(shape, sh + 'hasValue', null)[0]!;
+      let head = graph.getObjects(shape, sh + 'in', null)[0]!;
+      const terms: ReturnType<typeof graph.getObjects> = [];
+      while (head.value !== rdf + 'nil') {
+        terms.push(graph.getObjects(head, rdf + 'first', null)[0]!);
+        head = graph.getObjects(head, rdf + 'rest', null)[0]!;
+      }
+      const typed = (await schemas(profile))[profile.shapes[0]!.iri]!;
+      for (const values of [[], [allowed[0]], [allowed[1]], [...allowed], [allowed[0], 'other']]) {
+        const graphValues = new Store(
+          values.map((value) =>
+            DataFactory.quad(
+              DataFactory.namedNode('urn:probe:node'),
+              DataFactory.namedNode('https://rezics.com/vocab/value'),
+              required.startsWith('"') ? DataFactory.literal(value) : DataFactory.namedNode(value),
+            ),
+          ),
+        ).getObjects('urn:probe:node', 'https://rezics.com/vocab/value', null);
+        const conforms =
+          graphValues.length <= maximum &&
+          graphValues.some((value) => value.equals(fixed)) &&
+          graphValues.every((value) => terms.some((term) => term.equals(value)));
+        const expected =
+          values.includes(allowed[0]) &&
+          values.every((value) => (allowed as readonly string[]).includes(value)) &&
+          values.length <= maximum;
+        expect(conforms).toBe(expected);
+        expect(Value.Check(typed, node({ 'rv:value': values }))).toBe(expected);
+      }
+      expect(Value.Check(typed, node({}))).toBe(false);
+    }
+  }
+  for (const clauses of [
+    'sh:in (rv:main) ; sh:hasValue rv:other ; sh:maxCount 1',
+    'sh:in (rv:main) ; sh:hasValue rv:main ; sh:nodeKind sh:IRIOrLiteral',
+    'sh:in ("main") ; sh:hasValue 1',
+    'sh:in (rv:main) ; sh:hasValue "main"',
+    'sh:in (rv:main) ; sh:hasValue rv:main ; sh:pattern "main"',
+    'sh:in (rv:main) ; sh:hasValue rv:main ; sh:maxCount 0',
   ])
     expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
 });

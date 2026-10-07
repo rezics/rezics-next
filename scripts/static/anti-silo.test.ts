@@ -20,11 +20,13 @@ import {
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseTurtleProfile } from '../../model/compiler/shacl.ts';
+import { profileWorkTypes } from '../../model/compiler/type.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const BASELINE = 'scripts/static/anti-silo-baseline.json';
 const ZONE_WORK = 'packages/zone-sdk/src/index.ts';
-const TYPE_LIST = 'model/definitions/work-kind-v2.ts';
+const TYPE_LIST = 'model/definitions/work-kind-v2.ttl';
 const DOMAIN_TOKENS = new Set([
   'game',
   'games',
@@ -150,22 +152,11 @@ function excludedLiteral(path: string): boolean {
 }
 
 function admittedWorkTypes(repo: string): WorkType[] {
-  const source = readFileSync(join(repo, TYPE_LIST), 'utf8');
-  const prefixes = new Map<string, string>();
-  for (const match of source.matchAll(/\[['"]([A-Za-z0-9]+)['"]\s*,\s*['"]([^'"]+)['"]\]/g)) {
-    prefixes.set(match[1]!, match[2]!);
-  }
-  const list = source.match(/\bin:\s*\[([\s\S]*?)\]/);
-  if (!list) throw new Error(`${TYPE_LIST} has no admitted Work type list`);
-  const names = [...list[1]!.matchAll(/['"]([^'"]+)['"]/g)].map((match) => match[1]!);
-  if (names.length === 0) throw new Error(`${TYPE_LIST} admits no Work types`);
-  return names.map((prefixed) => {
-    const colon = prefixed.indexOf(':');
-    const prefix = colon < 0 ? '' : prefixed.slice(0, colon);
-    const local = colon < 0 ? prefixed : prefixed.slice(colon + 1);
-    const base = prefixes.get(prefix);
-    if (!base) throw new Error(`${TYPE_LIST} type ${prefixed} has no prefix`);
-    return { full: `${base}${local}`, prefixed };
+  const profile = parseTurtleProfile('work-kind-v2', readFileSync(join(repo, TYPE_LIST), 'utf8'));
+  return profileWorkTypes(profile).map((full) => {
+    const namespace = profile.prefixes.find(([, base]) => full.startsWith(base));
+    if (!namespace) throw new Error(`${TYPE_LIST} type ${full} has no prefix`);
+    return { full, prefixed: `${namespace[0]}:${full.slice(namespace[1].length)}` };
   });
 }
 
