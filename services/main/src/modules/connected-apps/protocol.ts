@@ -1,6 +1,6 @@
 import { lookup as resolveHost } from 'node:dns/promises';
-import { isIP, type LookupFunction } from 'node:net';
-import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
+import type { IncomingMessage } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { randomUUID } from 'node:crypto';
 import { canonicalJson, isObject, sha256, validateInputSchema } from './json.ts';
@@ -51,11 +51,22 @@ export interface McpTransport {
  * Redirects are never followed, avoiding credential forwarding to a new origin.
  */
 export class SafeMcpTransport implements McpTransport {
+  private readonly resolve: (host: string) => Promise<Array<{ address: string; family: number }>>;
+  private readonly request: typeof httpsRequest;
+
+  constructor(network: {
+    resolve?: (host: string) => Promise<Array<{ address: string; family: number }>>;
+    request?: typeof httpsRequest;
+  } = {}) {
+    this.resolve = network.resolve ?? (host => resolveHost(host, { all: true, verbatim: true }));
+    this.request = network.request ?? httpsRequest;
+  }
+
   async send(endpoint: string, request: McpTransportRequest): Promise<McpHttpResponse> {
     const url = parseEndpoint(endpoint);
     if (url.protocol !== 'https:') throw new McpProtocolError('MCP endpoints must use HTTPS');
     const host = unbracket(url.hostname);
-    const addresses = await resolveAddresses(host, request.signal);
+    const addresses = await resolveAddresses(host, this.resolve, request.signal);
     if (addresses.length === 0 || addresses.some(address => !isPublicAddress(address.address))) {
       throw new McpProtocolError('MCP endpoint resolves to a non-public address');
     }
@@ -71,9 +82,8 @@ export class SafeMcpTransport implements McpTransport {
     if (body.byteLength > HTTP_MAX_REQUEST_BYTES) throw new McpProtocolError('MCP request exceeds the byte limit');
     const headers = { accept: 'application/json, text/event-stream', ...request.headers,
       'content-length': String(body.byteLength) };
-    const sender = url.protocol === 'https:' ? httpsRequest : httpRequest;
     return new Promise((resolve, reject) => {
-      const outgoing = sender(url, { method: request.method, headers, signal, lookup: pinnedLookup,
+      const outgoing = this.request(url, { method: request.method, headers, signal, lookup: pinnedLookup,
         agent: false, maxHeaderSize: 16_384 }, (incoming: IncomingMessage) => {
         const responseHeaders = new Headers();
         for (const [key, value] of Object.entries(incoming.headers)) {
@@ -335,7 +345,9 @@ export function validateEndpoint(value: string): URL {
   return parseEndpoint(value);
 }
 
-async function resolveAddresses(host: string, signal?: AbortSignal): Promise<Array<{ address: string; family: number }>> {
+async function resolveAddresses(host: string,
+  resolver: (host: string) => Promise<Array<{ address: string; family: number }>>,
+  signal?: AbortSignal): Promise<Array<{ address: string; family: number }>> {
   if (signal?.aborted) throw new McpCancelled(false);
   const family = isIP(host);
   if (family) return [{ address: host, family }];
@@ -349,47 +361,51 @@ async function resolveAddresses(host: string, signal?: AbortSignal): Promise<Arr
       else resolve(addresses ?? []);
     };
     signal?.addEventListener('abort', abort, { once: true });
-    resolveHost(host, { all: true, verbatim: true }).then(
+    resolver(host).then(
       addresses => finish(undefined, addresses), error => finish(error instanceof Error ? error : new Error(String(error))));
   });
 }
 
 function unbracket(host: string): string { return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host; }
 
+const nonPublic = new BlockList();
+// Match SafeSnapshotTransport's conservative policy, including whole special
+// blocks with public exceptions. Numeric checks cover every address spelling.
+// https://www.iana.org/assignments/iana-ipv4-special-registry (2025-10-09)
+// Reverified with the IPv6 registry on 2026-10-07.
+for (const [address, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.88.99.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+] as const) nonPublic.addSubnet(address, prefix, 'ipv4');
+
+const globalV6 = new BlockList();
+globalV6.addSubnet('2000::', 3, 'ipv6');
+// Refuse protocol/transition and documentation assignments inside global
+// unicast; mapped, translated, private and scoped addresses stay outside it.
+// https://www.iana.org/assignments/iana-ipv6-special-registry (2025-10-09)
+for (const [address, prefix] of [
+  ['2001::', 23],
+  ['2001:db8::', 32],
+  ['2002::', 16],
+  ['3fff::', 20],
+] as const) nonPublic.addSubnet(address, prefix, 'ipv6');
+
 function isPublicAddress(value: string): boolean {
   const family = isIP(value);
-  if (family === 4) {
-    const [a, b, c] = value.split('.').map(Number) as [number, number, number, number];
-    return !(a === 0 || a === 10 || a === 127 || a >= 224
-      || (a === 100 && b! >= 64 && b! <= 127)
-      || (a === 169 && b === 254) || (a === 172 && b! >= 16 && b! <= 31)
-      || (a === 192 && (b === 0 || b === 168) && (b !== 0 || c === 0 || c === 2))
-      || (a === 192 && b === 88 && c === 99)
-      || (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100)))
-      || (a === 203 && b === 0 && c === 113) || a >= 240);
-  }
-  if (family !== 6 || value.includes('%')) return false;
-  const lower = value.toLowerCase();
-  if (lower.startsWith('::ffff:')) {
-    const mapped = lower.slice(7);
-    if (isIP(mapped) === 4) return isPublicAddress(mapped);
-    return false;
-  }
-  const expanded = expandIpv6(lower);
-  if (!expanded) return false;
-  const first = Number.parseInt(expanded[0]!, 16);
-  // Only global unicast 2000::/3 is admitted; documentation space is excluded.
-  return (first & 0xe000) === 0x2000 && !lower.startsWith('2001:db8:');
-}
-
-function expandIpv6(value: string): string[] | null {
-  const parts = value.split('::');
-  if (parts.length > 2) return null;
-  const left = parts[0] ? parts[0]!.split(':') : [];
-  const right = parts[1] ? parts[1]!.split(':') : [];
-  const zeros = parts.length === 2 ? 8 - left.length - right.length : 0;
-  if ((parts.length === 1 && left.length !== 8) || zeros < 0) return null;
-  const groups = [...left, ...Array(zeros).fill('0'), ...right];
-  return groups.length === 8 && groups.every(group => /^[0-9a-f]{1,4}$/.test(group))
-    ? groups.map(group => group.padStart(4, '0')) : null;
+  if (family === 4) return !nonPublic.check(value, 'ipv4');
+  return family === 6 && !value.includes('%')
+    && globalV6.check(value, 'ipv6') && !nonPublic.check(value, 'ipv6');
 }
