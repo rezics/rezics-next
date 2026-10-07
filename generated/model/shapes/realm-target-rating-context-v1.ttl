@@ -22,3 +22,5 @@
     sh:property [ sh:path rv:ratingCadence ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-standing-v1> ] ;
     sh:property [ sh:path rv:ratingPopulationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-account-principal-population-v1> ] ;
     sh:property [ sh:path rv:ratingAggregationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ] .
+
+# Authored SHACL constraints for derived rating evidence.

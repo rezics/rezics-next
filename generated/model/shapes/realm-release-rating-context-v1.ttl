@@ -26,3 +26,5 @@
     sh:property [ sh:path rv:ratingTimeZone ; sh:maxCount 0 ] ;
     sh:property [ sh:path rv:ratingCalendar ; sh:maxCount 0 ] ;
     sh:property [ sh:path rv:ratingPolicyHead ; sh:maxCount 0 ] .
+
+# Authored SHACL constraints for derived rating evidence.
