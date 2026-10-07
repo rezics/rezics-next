@@ -169,7 +169,7 @@ export const messages = {
   detailsLanguage: 'Language', addLanguage: 'Add a language', removeLanguage: 'Remove',
   saveDetails: 'Save details', savingDetails: 'Saving…', detailsSaved: 'Details saved.',
   detailsDenied: 'This identity can’t edit this work’s details.',
-  detailsDeniedHelp: 'Only the identity that created a work, while it still maintains it, can change its details.',
+  detailsDeniedHelp: 'Only an identity that currently maintains this work can change its details.',
   detailsStale: 'Someone changed these details meanwhile. Your edits are kept; review them and save again.',
   detailsInvalid: 'Check the details: each language needs a language and a title, tagline or description.',
   detailsFailed: 'Couldn’t save the details. Try again.',

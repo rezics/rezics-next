@@ -4,12 +4,21 @@ import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { FALLBACK_POLICY } from '../media/summary.ts';
 
 export const STUDIO_WORK_COST = { pageSize: 20, candidateAdmissions: 200, textsPerPage: 200,
-  submissionsPerPage: 200, graphCalls: 5, accessCalls: 4 } as const;
+  submissionsPerPage: 200, graphCalls: 14, accessCalls: 4 } as const;
 export const STUDIO_WORK_DETAIL_COST = { graphCalls: 4, accessCalls: 4,
   texts: 200, submissions: 200 } as const;
 const types = ['https://schema.org/Book', 'https://schema.org/DigitalDocument',
   'https://schema.org/Recipe'] as const;
 type WorkType = typeof types[number];
+// Credits classify the original authoring intent. Current maintainer/controller
+// proofs alone confer Studio authority; a recipient never needs creator credits.
+const writerCreditPattern = (work: string, writer: string) => `
+  GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${work} ;
+    rv:agent ${writer} ; schema:roleName "author" ; rv:creditRevision ?creditHead . }
+  GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ;
+    rv:component ?credit ; rv:work ${work} ; rv:agent ${writer} .
+    FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }`;
+
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
   view?: 'authored' | 'curated' }
 
@@ -33,12 +42,8 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
   if (heads.length !== 1 || !heads[0]?.main || !heads[0]?.head || !heads[0]?.mainHead
     || !heads[0]?.title) throw new WorkReadMissing('Studio Work is unavailable');
   const head = heads[0];
-  const credits = await session.query(`SELECT ?credit WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${iri(work)} ;
-      rv:agent ${iri(agent)} ; schema:roleName "author" ; rv:creditRevision ?creditHead . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ;
-      rv:component ?credit ; rv:work ${iri(work)} ; rv:agent ${iri(agent)} .
-      FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
+  const credits = first.row.action === 'work.edit' ? [] : await session.query(`SELECT ?credit WHERE {
+    ${writerCreditPattern(iri(work), iri(first.row.writer))}
   } LIMIT 2`, 2);
   const typeRows = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(work)} a ?type . FILTER(?type IN (${types.map(type => `<${type}>`).join(', ')}))
@@ -94,17 +99,18 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
   const limit = session.options.limit ?? 20;
   const view = filters.view ?? 'authored';
   const first = await access.studioWorks(principal, agent,
-    '00000000-0000-0000-0000-000000000000', 1, view);
-  const binding = ['studio-works-v1', agent, view, filters.state ?? null, filters.type ?? null, first.stamp];
+    '', 1);
+  const binding = ['studio-works-v2', agent, view, filters.state ?? null, filters.type ?? null, first.stamp];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const after = cursor?.after ?? '00000000-0000-0000-0000-000000000000';
-  const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1, view);
+  const after = cursor?.after ?? '';
+  const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1);
   if (page.stamp !== first.stamp) throw new WorkReadMoved('Studio controller changed');
   const admissions = page.rows.slice(0, STUDIO_WORK_COST.candidateAdmissions);
   const byAdmission = new Map(admissions.map(row => [row.id, row]));
-  const workRows = admissions.length ? await session.query(`SELECT ?admission ?work ?main ?head ?mainHead ?title
+  const proven = admissions.filter(row => row.generation !== null);
+  const workRows = proven.length ? await session.query(`SELECT ?admission ?work ?main ?head ?mainHead ?title
     ?disclosure WHERE {
-      VALUES ?admission { ${admissions.map(row => lit(row.id)).join(' ')} }
+      VALUES (?admission ?writer) { ${proven.map(row => `(${lit(row.id)} ${iri(row.writer)})`).join(' ')} }
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:admissionId ?admission ;
         rv:outcome rv:Succeeded ; rv:work ?work ; rv:mainVersion ?main .
       }
@@ -113,35 +119,26 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
         ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ?work .
         OPTIONAL { ?work rv:disclosure ?disclosure }
         FILTER NOT EXISTS { ?work rv:protectionHead ?protection }
-        ${view === 'authored' ? `?authorCredit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ${iri(agent)} ;
-          schema:roleName "author" ; rv:creditRevision ?creditHead .
-        ` : ''}
       }
-      ${view === 'authored' ? `GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ;
-        rv:component ?authorCredit ; rv:work ?work ; rv:agent ${iri(agent)} .
-        FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }` : ''}
-      ${view === 'curated' ? `FILTER NOT EXISTS {
-        GRAPH ${iri(GRAPHS.current)} { ?curatedCredit a rv:NativeAgentCredit ;
-          rv:work ?work ; rv:agent ${iri(agent)} ; schema:roleName "author" ;
-          rv:creditRevision ?curatedHead . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?curatedHead a rv:NativeAgentCreditRevision ;
-          rv:component ?curatedCredit . FILTER NOT EXISTS { ?curatedHead a rv:ErasedRevision } }
-      }` : ''}
+      FILTER ${view === 'authored' ? 'EXISTS' : 'NOT EXISTS'} {
+        ${writerCreditPattern('?work', '?writer')}
+      }
     } LIMIT ${STUDIO_WORK_COST.candidateAdmissions + 1}`,
   STUDIO_WORK_COST.candidateAdmissions + 1) : [];
   const order = new Map(admissions.map((row, index) => [row.id, index]));
   workRows.sort((left, right) => (order.get(left.admission?.value ?? '') ?? limit)
     - (order.get(right.admission?.value ?? '') ?? limit));
-  if (new Set(workRows.map(row => row.admission?.value)).size !== workRows.length) {
+  if (new Set(workRows.map(row => row.admission?.value)).size !== workRows.length
+    || workRows.some(row => {
+      const candidate = byAdmission.get(row.admission?.value ?? '');
+      return !candidate || candidate.generation === null || candidate.work !== row.work?.value;
+    })) {
     throw new WorkReadUnavailable('Studio Work receipt is ambiguous');
   }
   if (workRows.length > STUDIO_WORK_COST.candidateAdmissions) {
     throw new WorkReadLimit('Studio inventory exceeds candidate budget');
   }
   const selectedRows = workRows.slice(0, limit);
-  if (!selectedRows.length && page.rows.length > STUDIO_WORK_COST.candidateAdmissions) {
-    throw new WorkReadLimit('Studio inventory has more candidates than its bounded scan');
-  }
   const workIds = selectedRows.map(row => row.work?.value).filter((value): value is string => !!value);
   const typeRows = workIds.length ? await session.query(`SELECT ?work ?type WHERE {
     VALUES ?work { ${workIds.map(iri).join(' ')} }
@@ -211,13 +208,13 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
       createdAt, updatedAt }];
   });
   const again = await access.studioWorks(principal, agent, after,
-    STUDIO_WORK_COST.candidateAdmissions + 1, view);
+    STUDIO_WORK_COST.candidateAdmissions + 1);
   if (again.stamp !== page.stamp || JSON.stringify(again.rows) !== JSON.stringify(page.rows)) {
     throw new WorkReadMoved('Studio Work inventory changed');
   }
   const more = workRows.length > limit || page.rows.length > STUDIO_WORK_COST.candidateAdmissions;
-  const tail = workRows.length > limit ? selectedRows.at(-1)?.admission?.value
-    : admissions.at(-1)?.id;
+  const tail = workRows.length > limit ? byAdmission.get(selectedRows.at(-1)?.admission?.value ?? '')?.work
+    : admissions.at(-1)?.work;
   return pageResult(session, items, more && tail
     ? encodeReadCursor(binding, session.position, tail) : null);
 }

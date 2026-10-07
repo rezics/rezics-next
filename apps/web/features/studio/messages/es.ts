@@ -156,7 +156,7 @@ export default {
   detailsLanguage: 'Idioma', addLanguage: 'Añadir un idioma', removeLanguage: 'Quitar',
   saveDetails: 'Guardar detalles', savingDetails: 'Guardando…', detailsSaved: 'Detalles guardados.',
   detailsDenied: 'Esta identidad no puede editar los detalles de esta obra.',
-  detailsDeniedHelp: 'Solo la identidad que creó una obra puede cambiar sus detalles, y solo mientras siga manteniéndola.',
+  detailsDeniedHelp: 'Solo una identidad que actualmente mantenga esta obra puede cambiar sus detalles.',
   detailsStale: 'Alguien cambió estos detalles mientras tanto. Tus cambios se conservan; revísalos y vuelve a guardar.',
   detailsInvalid: 'Revisa los detalles: cada entrada necesita un idioma y un título, una frase gancho o una descripción.',
   detailsFailed: 'No se pudieron guardar los detalles. Inténtalo de nuevo.',

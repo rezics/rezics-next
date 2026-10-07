@@ -156,7 +156,7 @@ export default {
   detailsLanguage: 'Sprache', addLanguage: 'Sprache hinzufügen', removeLanguage: 'Entfernen',
   saveDetails: 'Details speichern', savingDetails: 'Wird gespeichert…', detailsSaved: 'Details gespeichert.',
   detailsDenied: 'Diese Identität kann die Details dieses Werks nicht bearbeiten.',
-  detailsDeniedHelp: 'Nur die Identität, die ein Werk erstellt hat, kann seine Details ändern, solange sie es noch betreut.',
+  detailsDeniedHelp: 'Nur eine Identität, die dieses Werk derzeit betreut, kann seine Details ändern.',
   detailsStale: 'Jemand hat diese Details inzwischen geändert. Deine Änderungen bleiben erhalten; prüfe sie und speichere erneut.',
   detailsInvalid: 'Prüfe die Details: Jeder Eintrag braucht eine Sprache und einen Titel, einen Einzeiler oder eine Beschreibung.',
   detailsFailed: 'Die Details konnten nicht gespeichert werden. Versuch es noch einmal.',

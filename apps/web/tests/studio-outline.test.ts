@@ -101,17 +101,20 @@ describe('Studio outline commands', () => {
     expect(main.calls).toEqual(['publish-chapter', 'eligibility']);
   });
 
-  test('facts name the writer and keep what only the writer sees; only a writer’s own draft is publishable', () => {
+  test('facts name provenance separately from the authoring subject that can publish', () => {
     const agents = [{ iri: agent, label: 'Lin Mei', handle: null, kind: 'person' as const, path: 'represented-agent' as const },
       { iri: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002', label: 'Pen', handle: null,
         kind: 'pen-name' as const, path: 'represented-agent' as const }];
     const page = { items: [{ ...item('x', 'book'), target: 't' }, { ...item('y', 'book'), target: null }] } as never;
     const facts = chapterFacts(agents[0]!, agents, page, [
-      { occurrence: 'x', writer: agent, otherIdentity: false, state: 'draft', target: 't', label: null, language: 'zh-Hans',
+      { occurrence: 'x', writer: agent, authoringSubject: agent,
+        otherIdentity: false, state: 'draft', target: 't', label: null, language: 'zh-Hans',
         length: { unit: 'characters', value: 120 } },
-      { occurrence: 'y', writer: agents[1]!.iri, otherIdentity: true, state: 'empty', target: 'u',
+      { occurrence: 'y', writer: agents[1]!.iri, authoringSubject: agents[1]!.iri,
+        otherIdentity: true, state: 'empty', target: 'u',
         label: { value: '私', language: 'zh-Hans' }, language: 'zh-Hans', length: null }]);
-    expect(facts.x).toEqual({ writer: { kind: 'self' }, state: 'draft', length: { unit: 'characters', value: 120 } });
+    expect(facts.x).toEqual({ writer: { kind: 'self' }, author: { kind: 'self' },
+      state: 'draft', length: { unit: 'characters', value: 120 } });
     expect(facts.y).toMatchObject({ writer: { kind: 'agent' }, target: 'u', label: { value: '私' } });
     expect(publishable(facts.x)).toBe(true);
     expect(publishable(facts.y)).toBe(false);

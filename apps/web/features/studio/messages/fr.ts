@@ -156,7 +156,7 @@ export default {
   detailsLanguage: 'Langue', addLanguage: 'Ajouter une langue', removeLanguage: 'Retirer',
   saveDetails: 'Enregistrer les détails', savingDetails: 'Enregistrement…', detailsSaved: 'Détails enregistrés.',
   detailsDenied: 'Cette identité ne peut pas modifier les détails de cette œuvre.',
-  detailsDeniedHelp: 'Seule l’identité qui a créé une œuvre peut modifier ses détails, tant qu’elle en assure le suivi.',
+  detailsDeniedHelp: 'Seule une identité qui assure actuellement le suivi de cette œuvre peut modifier ses détails.',
   detailsStale: 'Quelqu’un a modifié ces détails entre-temps. Vos modifications sont conservées ; vérifiez-les et enregistrez à nouveau.',
   detailsInvalid: 'Vérifiez les détails : chaque entrée doit avoir une langue et un titre, une accroche ou une description.',
   detailsFailed: 'Impossible d’enregistrer les détails. Réessayez.',

@@ -464,6 +464,10 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     const chapter = row.target ?? fact?.target ?? null;
     const label = row.label ?? fact?.label ?? null;
     const writer = fact?.writer.kind === 'agent' ? fact.writer.agent : null;
+    const author = fact?.author.kind === 'agent' ? fact.author.agent : null;
+    const writerName = writer ? studioAgentName(writer, t)
+      : fact?.writer.kind === 'external' ? studioAgentName({ iri: fact.writer.iri, label: null }, t)
+        : fact?.writer.kind === 'self' && fact.author.kind !== 'self' ? studioAgentName(agent, t) : null;
     const remembered = chapter ? memory[chapter] : undefined;
     const language = label?.language ?? book.language;
     const length = fact?.length ?? (typeof remembered?.length === 'number'
@@ -495,16 +499,16 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
           {chapter ? null : <LockIcon aria-hidden="true" className="size-4" />}{name}</p>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
           {chapter ? <Status state={stateOf(row, fact, remembered)} t={t} /> : null}
-          {writer ? <span>{t.writtenAs({ agent: studioAgentName(writer, t) })}</span> : null}
+          {writerName ? <span>{t.writtenAs({ agent: writerName })}</span> : null}
           {stats.map(part => <span key={part}>{part}</span>)}
         </p>
       </div>
       <div className="col-span-full flex flex-wrap items-center gap-1 ps-20 sm:col-span-1 sm:justify-end sm:ps-0">
-        {writer && chapter ? <Link href={chapterHref(writer, book.id, chapter, undefined, book.language)}
-          aria-label={t.switchToWrite({ title: name, agent: studioAgentName(writer, t) })}
+        {author && chapter ? <Link href={chapterHref(author, book.id, chapter, undefined, book.language)}
+          aria-label={t.switchToWrite({ title: name, agent: studioAgentName(author, t) })}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           <ArrowLeftRightIcon aria-hidden="true" />{t.switchChapter}</Link>
-          : row.target ? <Link href={chapterHref(agent, book.id, row.target, memory[row.target]?.head ?? undefined,
+          : chapter && fact?.author.kind === 'self' ? <Link href={chapterHref(agent, book.id, chapter, memory[chapter]?.head ?? undefined,
             book.language)} aria-label={t.writeNamed({ title: name })}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             <PenLineIcon aria-hidden="true" />{t.writeChapter}</Link> : null}

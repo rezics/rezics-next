@@ -98,6 +98,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     if (!target || !owner?.controlled || !controlled.has(target)) {
       const disclosed = !!target && liveTargets.has(target) && publicTargets.has(target) && !!item.target;
       return { occurrence: item.occurrence, writer: disclosed ? owner?.writer ?? null : null,
+        authoringSubject: null,
         otherIdentity: false, state: disclosed ? 'published' as const : null,
         target: disclosed ? item.target : null, label: disclosed ? item.label : null,
         language: disclosed ? item.label?.language ?? null : null };
@@ -109,7 +110,9 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
     const state = !variants.length ? 'empty' : selected && selectedVariant?.draftHead
       ? selectedVariant.draftHead === selected ? 'published' : 'changed'
       : variants.some(variant => publicVariants.has(variant.id)) ? 'published' : 'draft';
-    return { occurrence: item.occurrence, writer: owner!.writer, otherIdentity: owner!.writer !== agent,
+    return { occurrence: item.occurrence, writer: owner!.writer,
+      authoringSubject: owner!.authoringSubject,
+      otherIdentity: owner!.authoringSubject !== null && owner!.authoringSubject !== agent,
       state, target, label: item.label ?? placement.label ?? null,
       language: selectedVariant?.languageTag ?? placement.label?.language ?? null,
       text: selectedVariant?.draftHead ?? null };

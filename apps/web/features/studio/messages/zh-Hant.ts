@@ -153,7 +153,7 @@ export default {
   detailsLanguage: '語言', addLanguage: '新增語言', removeLanguage: '移除',
   saveDetails: '儲存資訊', savingDetails: '正在儲存…', detailsSaved: '資訊已儲存。',
   detailsDenied: '此身分無法編輯這部作品的資訊。',
-  detailsDeniedHelp: '只有建立作品且仍在維護它的身分，才能修改作品資訊。',
+  detailsDeniedHelp: '只有目前維護這部作品的身分，才能修改作品資訊。',
   detailsStale: '這些資訊剛被其他人修改。你的修改已保留，請檢查後再次儲存。',
   detailsInvalid: '請檢查資訊：每一列都需要選擇語言，並填寫標題、一句話簡介或簡介。',
   detailsFailed: '無法儲存資訊，請再試一次。',

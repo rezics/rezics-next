@@ -152,7 +152,7 @@ export default {
   detailsLanguage: '语言', addLanguage: '添加语言', removeLanguage: '移除',
   saveDetails: '保存信息', savingDetails: '正在保存…', detailsSaved: '信息已保存。',
   detailsDenied: '此身份不能编辑这部作品的信息。',
-  detailsDeniedHelp: '只有创建作品并仍在维护它的身份才能修改作品信息。',
+  detailsDeniedHelp: '只有当前维护这部作品的身份才能修改作品信息。',
   detailsStale: '这些信息刚被其他人修改。你的修改已保留，请检查后再次保存。',
   detailsInvalid: '请检查信息：每一行需要选择语言，并填写标题、一句话简介或简介。',
   detailsFailed: '无法保存信息，请重试。',

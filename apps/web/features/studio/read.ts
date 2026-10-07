@@ -454,28 +454,25 @@ export async function readChapters(
     );
   let reader = readAs ?? actingSubject;
   let loaded = await chapterPage(reader);
-  // The same person may open a writer's Book through another of their identities.
-  // Main's Studio chapter read is fenced to the Book's maintainer, so resolve one credited
-  // author among the identities this person controls when the current identity is refused.
+  // Credits record provenance. Only Main's Studio read can establish which of
+  // this person's identities currently maintains the Book.
   if (
     !loaded.ok &&
     (loaded.failure === 'missing' || loaded.failure === 'denied') &&
     agents.length > 1
   ) {
-    const credits = await settle(() =>
-      main.v1.works({ id: idOf(header.id) })['agent-credits'].get({ query: { actingSubject } }),
-    );
-    const writer =
-      credits.ok &&
-      credits.data.items.find(
-        (credit) =>
-          credit.role === 'author' &&
-          credit.agent !== actingSubject &&
-          agents.some((agent) => agent.iri === credit.agent),
-      );
-    if (writer) {
-      reader = writer.agent;
-      loaded = await chapterPage(reader);
+    for (const candidate of agents) {
+      if (candidate.iri === reader) continue;
+      const answer = await chapterPage(candidate.iri);
+      if (answer.ok) {
+        reader = candidate.iri;
+        loaded = answer;
+        break;
+      }
+      if (answer.failure !== 'missing' && answer.failure !== 'denied') {
+        loaded = answer;
+        break;
+      }
     }
   }
   const page = loaded.ok
@@ -676,11 +673,12 @@ export interface StudioChapter {
 export async function readStudioChapter(
   actingSubject: string,
   chapter: string,
-  revision: string | null,
+  _revision: string | null,
   locale: UiLocale,
   requested: string | null = null,
+  client?: MainClient,
 ): Promise<Loaded<StudioChapter>> {
-  const main = await mainApi();
+  const main = client ?? await mainApi();
   const [header, listed] = await Promise.all([
     settle(() => main.v1.posts({ id: chapter }).get({ query: { actingSubject, language: locale } })),
     settle(() =>
@@ -688,10 +686,10 @@ export async function readStudioChapter(
     ),
   ]);
   if (!header.ok) return header;
+  if (!listed.ok) return listed;
+  if (listed.data.authoringSubject !== actingSubject) return { ok: false, failure: 'denied' };
   const titled = header.data.title.language;
-  const written = listed.ok
-    ? listed.data.items.map((item) => item.language.tag).filter((tag): tag is string => !!tag)
-    : [];
+  const written = listed.data.items.map((item) => item.language.tag).filter((tag): tag is string => !!tag);
   const language = canonicalLanguage(
     requested ??
       written.find((tag) => tag.toLowerCase() === titled.toLowerCase()) ??
@@ -699,12 +697,10 @@ export async function readStudioChapter(
       titled,
   );
   const variant = await chapterVariant(header.data.id, language);
-  // Main lists a chapter's variant heads to the Agent that writes it or holds a grant to; to others it answers 404.
-  const known = listed.ok
-    ? (listed.data.items.find((item) => item.variantId === variant) ??
-      listed.data.items.find((item) => item.language.tag?.toLowerCase() === language.toLowerCase()))
-    : undefined;
-  const head = known?.draftHead ?? (listed.ok ? null : revision);
+  // A saved revision address cannot stand in for current authoring authority.
+  const known = listed.data.items.find((item) => item.variantId === variant) ??
+    listed.data.items.find((item) => item.language.tag?.toLowerCase() === language.toLowerCase());
+  const head = known?.draftHead ?? null;
   const base = {
     chapter: {
       id: header.data.id,
@@ -721,11 +717,11 @@ export async function readStudioChapter(
       ok: true,
       data: {
         ...base,
-        basis: listed.ok ? 'main' : 'none',
+        basis: 'main',
         head: null,
         body: '',
         digest: null,
-        epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null,
+        epoch: listed.data.sourcePosition.dataEpoch,
       },
     };
   }
@@ -748,7 +744,7 @@ export async function readStudioChapter(
       notes: chapterNoteEditors(exact.data.body.notes),
       embeds: exact.data.body.embeds,
       digest: exact.data.reference.byteDigest,
-      epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null,
+      epoch: listed.data.sourcePosition.dataEpoch,
     },
   };
 }

@@ -153,7 +153,7 @@ export default {
   detailsLanguage: '언어', addLanguage: '언어 추가', removeLanguage: '삭제',
   saveDetails: '세부 정보 저장', savingDetails: '저장 중…', detailsSaved: '세부 정보를 저장했습니다.',
   detailsDenied: '이 프로필로는 이 작품의 세부 정보를 수정할 수 없습니다.',
-  detailsDeniedHelp: '작품을 만들었고 지금도 관리하고 있는 프로필만 세부 정보를 바꿀 수 있습니다.',
+  detailsDeniedHelp: '현재 이 작품을 관리하는 프로필만 세부 정보를 바꿀 수 있습니다.',
   detailsStale: '그사이 다른 사람이 세부 정보를 바꿨습니다. 수정한 내용은 그대로 있으니 확인한 뒤 다시 저장하세요.',
   detailsInvalid: '세부 정보를 확인하세요. 각 항목에는 언어와 함께 제목, 한 줄 소개, 설명 중 하나가 있어야 합니다.',
   detailsFailed: '세부 정보를 저장하지 못했습니다. 다시 시도해 주세요.',

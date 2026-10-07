@@ -38,6 +38,8 @@ const page = t.Object({ items: t.Array(item, { maxItems: 20 }), ...pageFields })
 const workType = t.Union([t.Literal('https://schema.org/Book'),
   t.Literal('https://schema.org/DigitalDocument'), t.Literal('https://schema.org/Recipe')]);
 const chapterFacts = t.Object({ occurrence: readId, writer: t.Nullable(readId),
+  /** Current authoring identity; a private read grant alone leaves it null. */
+  authoringSubject: t.Nullable(readId),
   otherIdentity: t.Boolean(), state: t.Nullable(t.Union([t.Literal('empty'), t.Literal('draft'),
     t.Literal('published'), t.Literal('changed')])), target: t.Nullable(readId),
   label: t.Nullable(t.Object({ value: t.String(), language: t.String() })),
@@ -118,6 +120,7 @@ export function studioRoutes(work: MainWorkDependencies) {
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 300 })) },
     { additionalProperties: false }),
     response: { 200: t.Object({ work: readId,
+      authoringSubject: t.Nullable(readId),
       items: t.Array(t.Object({ variantId: t.String(),
         language: t.Object({ kind: t.String(), tag: t.Nullable(t.String()),
           originalTag: t.Nullable(t.String()) }), direction: t.String(),
@@ -134,7 +137,8 @@ export function studioRoutes(work: MainWorkDependencies) {
           throw new WorkReadUnavailable('Content owner is unavailable');
         }
         if (!work.studioAccess) throw new WorkReadUnavailable('Content authority is unavailable');
-        if (!await work.studioAccess.canReadContentVariants(session.principal, query.actingSubject, resource)) {
+        const authority = await work.studioAccess.contentVariantAuthority(session.principal, query.actingSubject, resource);
+        if (!authority) {
           throw new WorkReadMissing('Content variants are unavailable');
         }
         const current = await session.query(`SELECT ?work WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -152,14 +156,16 @@ export function studioRoutes(work: MainWorkDependencies) {
           throw new WorkReadUnavailable('Content variant heads are ambiguous');
         }
         const byVariant = new Map(heads.map(row => [row.variant!.value, row]));
-        if (!await work.studioAccess.canReadContentVariants(session.principal, query.actingSubject, resource)) {
+        const finalAuthority = await work.studioAccess.contentVariantAuthority(session.principal, query.actingSubject, resource);
+        if (!finalAuthority || finalAuthority.authoringSubject !== authority.authoringSubject) {
           throw new WorkReadMoved('Content variant authority changed');
         }
         await fenceStudioVariantHeads(content, resource, query.cursor ?? '', query.limit ?? 20, listed);
         // Clients use the Content epoch to prepare publication; this sequencer
         // watermark is metadata, not the consistency fence for these variants.
         const sourcePosition = await content.ownerPosition();
-        return { work: resource, items: listed.items.map(item => ({ variantId: item.id,
+        return { work: resource, authoringSubject: authority.authoringSubject,
+          items: listed.items.map(item => ({ variantId: item.id,
           language: { kind: item.languageKind, tag: item.languageTag,
             originalTag: item.originalLanguageTag }, direction: item.direction,
           draftHead: item.draftHead, publicationHead: byVariant.get(item.id)?.publication?.value ?? null,

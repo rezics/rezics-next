@@ -153,7 +153,7 @@ export default {
   detailsLanguage: '言語', addLanguage: '言語を追加', removeLanguage: '削除',
   saveDetails: '詳細を保存', savingDetails: '保存中…', detailsSaved: '詳細を保存しました。',
   detailsDenied: 'このエージェントでは、この作品の詳細を編集できません。',
-  detailsDeniedHelp: '作品の詳細を変更できるのは、その作品を作成し、現在も管理しているエージェントだけです。',
+  detailsDeniedHelp: '作品の詳細を変更できるのは、現在この作品を管理しているエージェントだけです。',
   detailsStale: 'その間に誰かがこの詳細を変更しました。あなたの編集は残っています。内容を確認して、もう一度保存してください。',
   detailsInvalid: '詳細を確認してください。各行には、言語と、タイトル・キャッチコピー・説明のいずれかが必要です。',
   detailsFailed: '詳細を保存できませんでした。もう一度お試しください。',

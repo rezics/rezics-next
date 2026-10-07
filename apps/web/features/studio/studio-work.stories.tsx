@@ -29,10 +29,14 @@ function chaptersOf(main: ReturnType<typeof storyMain>): ContentsPage {
 
 function chapters(options: Parameters<typeof storyMain>[0] = {}) {
   const main = storyMain(options);
-  main.seedBook(ids.serial, [{ target: ids.chapters[0]!, title: '第一章 雨夜' },
-    { target: ids.chapters[1]!, title: '第二章 未寄出的信' }, { target: ids.chapters[2]!, title: '第三章 最后一班车' }]);
+  main.seedOutline(ids.serial, [{ target: ids.chapters[0]!, title: '第一章 雨夜', state: 'published' },
+    { target: ids.chapters[1]!, title: '第二章 未寄出的信', state: 'published' },
+    { target: ids.chapters[2]!, title: '第三章 最后一班车', state: 'empty' }]);
+  const facts = main.main.v1.me.agents({ agent: agents[0]!.iri.slice(-36) }).works({ id: ids.serial.slice(-36) })
+    .chapters.get({ query: { language: 'zh-Hans' } })
+    .then(read => factsOf(agents[0]!, agents, read.data!.page, read.data!.facts));
   return { main, content: { tab: 'chapters', chapters: { page: { ok: true, data: chaptersOf(main) },
-    main: main.main } } as WorkTabContent };
+    main: main.main, facts } } as WorkTabContent };
 }
 
 const chapterIds = [...ids.chapters, 'https://rezics.com/id/00000000-0000-4000-8000-000000000114',
@@ -150,12 +154,37 @@ export const Chapters: Story = {
 };
 
 const chapterFacts: ChapterFacts = {
-  [contents.items[0]!.occurrence]: { writer: { kind: 'self' }, state: 'changed' },
-  [contents.items[1]!.occurrence]: { writer: { kind: 'self' }, state: 'published' },
-  [contents.items[2]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! }, state: 'draft' },
-  [contents.items[3]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! }, state: 'empty',
+  [contents.items[0]!.occurrence]: { writer: { kind: 'self' }, author: { kind: 'self' }, state: 'changed' },
+  [contents.items[1]!.occurrence]: { writer: { kind: 'self' }, author: { kind: 'self' }, state: 'published' },
+  [contents.items[2]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! },
+    author: { kind: 'agent', agent: agents[1]! }, state: 'draft' },
+  [contents.items[3]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! },
+    author: { kind: 'agent', agent: agents[1]! }, state: 'empty',
     target: 'https://rezics.com/id/00000000-0000-4000-8000-000000000114', label: { value: '第四章 站台', language: 'zh-Hans' } },
-  'https://rezics.com/id/00000000-0000-4000-8000-000000001105': { writer: { kind: 'unknown' }, state: null },
+  'https://rezics.com/id/00000000-0000-4000-8000-000000001105': {
+    writer: { kind: 'unknown' }, author: { kind: 'unknown' }, state: null },
+};
+
+/** Stewardship changed while the original writer remains credited. Read access alone offers no author actions. */
+export const TransferredChapters: Story = {
+  args: { content: { tab: 'chapters', chapters: { facts: Promise.resolve({
+    [contents.items[0]!.occurrence]: { writer: { kind: 'agent', agent: agents[1]! },
+      author: { kind: 'self' }, state: 'changed' },
+    [contents.items[1]!.occurrence]: { writer: { kind: 'self' }, author: { kind: 'unknown' }, state: 'published' },
+    [contents.items[2]!.occurrence]: { writer: { kind: 'self' },
+      author: { kind: 'agent', agent: agents[1]! }, state: 'draft' },
+  } satisfies ChapterFacts), page: { ok: true, data: { ...contents, items: contents.items.slice(0, 3) } } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const rows = within(canvas.getByRole('list')).getAllByRole('listitem');
+    await waitFor(() => expect(rows[0]).toHaveTextContent('Written as 月下书生 · Moonlit Scribe'));
+    await expect(within(rows[0]!).getByRole('link', { name: 'Write “第一章 雨夜”' }))
+      .toHaveAttribute('href', expect.stringContaining('/studio/@111111114bZ6BZRUqUqZep/'));
+    await expect(within(rows[0]!).queryByRole('link', { name: /^Switch/ })).toBeNull();
+    await expect(within(rows[1]!).queryByRole('link', { name: /^Write|^Switch/ })).toBeNull();
+    await expect(within(rows[2]!).getByRole('link', { name: /^Switch to/ }))
+      .toHaveAttribute('href', expect.stringContaining('/studio/@111111114bZ6BZRUqUqZeq/'));
+  },
 };
 
 /**
@@ -446,6 +475,19 @@ export const DetailsStale: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Save details' }));
     await expect(await canvas.findByText(/Someone changed these details meanwhile/)).toBeInTheDocument();
     await expect(canvas.getByText('另一位维护者写的简介')).toBeInTheDocument();
+  },
+};
+
+/** A former maintainer keeps their input and sees which current identity can edit. */
+export const DetailsDenied: Story = {
+  args: { content: { tab: 'details', details: { ...details, status: 'denied' },
+    cover: { cover: null }, tags: { ok: true, data: tags } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Only an identity that currently maintains this work can change its details.'))
+      .toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: 'Tagline' }))
+      .toHaveValue('一封没有地址的信，把雨夜书店带向二十年前的秘密。');
   },
 };
 

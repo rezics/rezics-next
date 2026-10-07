@@ -9,12 +9,16 @@ import { idOf } from './types.ts';
 
 export type ChapterState = 'empty' | 'draft' | 'published' | 'changed';
 /** Who writes a chapter, of the identities this person acts as. */
-export type ChapterWriter = { kind: 'self' } | { kind: 'agent'; agent: AgentOption } | { kind: 'unknown' };
+export type ChapterWriter = { kind: 'self' } | { kind: 'agent'; agent: AgentOption }
+  | { kind: 'external'; iri: string } | { kind: 'unknown' };
+export type ChapterAuthor = { kind: 'self' } | { kind: 'agent'; agent: AgentOption } | { kind: 'unknown' };
 /** How long a chapter is, in the unit its language's writers count. */
 export interface ChapterLength { unit: 'characters' | 'words'; value: number }
 
 export interface ChapterFact {
   writer: ChapterWriter;
+  /** Main's current authoring subject, independent of the original writer and private read grants. */
+  author: ChapterAuthor;
   /** Where the chapter stands for its writer, from its Content variants; null when Main didn't say. */
   state: ChapterState | null;
   /** The chapter and its title as its writer sees them, when the Studio Agent can't see them. */
@@ -36,21 +40,23 @@ export type RawFact = StudioChapterRead['facts'][number];
 export function chapterFacts(agent: AgentOption, agents: readonly AgentOption[], page: ContentsPage | null,
   facts: readonly RawFact[]): ChapterFacts {
   return Object.fromEntries(facts.map(fact => {
-    // A page may have been read as another controlled writer; Main's otherIdentity
-    // flag is relative to that reader, not the Studio page's Agent.
     const other = agents.find(option => option.iri === fact.writer && option.iri !== agent.iri);
     const writer: ChapterWriter = fact.writer === agent.iri ? { kind: 'self' }
-      : other ? { kind: 'agent', agent: other } : { kind: 'unknown' };
+      : other ? { kind: 'agent', agent: other }
+        : fact.writer ? { kind: 'external', iri: fact.writer } : { kind: 'unknown' };
+    const subject = agents.find(option => option.iri === fact.authoringSubject);
+    const author: ChapterAuthor = fact.authoringSubject === agent.iri ? { kind: 'self' }
+      : subject ? { kind: 'agent', agent: subject } : { kind: 'unknown' };
     const hidden = page !== null && !page.items.find(item => item.occurrence === fact.occurrence)?.target;
-    return [fact.occurrence, { writer, state: fact.state,
+    return [fact.occurrence, { writer, author, state: fact.state,
       ...(hidden && fact.target ? { target: fact.target } : {}),
       ...(hidden && fact.label ? { label: fact.label } : {}),
       ...(fact.length ? { length: fact.length } : {}) }];
   }));
 }
 
-/** A chapter can be published from the list when its writer is this Agent and it has a draft to publish. */
-export const publishable = (fact: ChapterFact | undefined) => fact?.writer.kind === 'self'
+/** Publish only as Main's current authoring subject, never from provenance or a private read grant. */
+export const publishable = (fact: ChapterFact | undefined) => fact?.author.kind === 'self'
   && (fact.state === 'draft' || fact.state === 'changed');
 
 /** The groups a chapter can move into, in reading order. */

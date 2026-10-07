@@ -306,10 +306,11 @@ export function storyMain(options: StoryMainOptions = {}) {
       if (!found) return fail(404, 'work_unavailable');
       return ok(levelPage(found, request?.query?.parent));
     } },
-    'content-variants': { get: async () => {
+    'content-variants': { get: async (request: { query: { actingSubject: string } }) => {
       await wait();
       const resource = `https://rezics.com/id/${params.id}`;
-      return ok({ work: resource, items: [...variants.entries()].filter(([, value]) => value.resource === resource)
+      return ok({ work: resource, authoringSubject: request.query.actingSubject,
+        items: [...variants.entries()].filter(([, value]) => value.resource === resource)
         .map(([variantId, value]) => ({ variantId, language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' },
           direction: 'ltr', draftHead: value.head, publicationHead: value.publication,
           eligibilityHead: value.eligibility })), nextCursor: null,
@@ -332,7 +333,8 @@ export function storyMain(options: StoryMainOptions = {}) {
     return ok({ profile: 'studio-chapters-v1', page, facts: page.items.filter(item => item.role === 'chapter')
       .map(item => {
         const node = found.nodes.find(entry => entry.occurrence === item.occurrence)!;
-        return { occurrence: item.occurrence, writer, otherIdentity: false, state: node.state ?? 'empty',
+        return { occurrence: item.occurrence, writer, authoringSubject: writer,
+          otherIdentity: false, state: node.state ?? 'empty',
           target: item.target, label: item.label, language: item.label?.language ?? null,
           length: node.length ?? null };
       }) });
