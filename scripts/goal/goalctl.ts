@@ -1576,11 +1576,11 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 
 /** Parallel `task test` shards under one wall-clock budget. An unfinished shard makes the side inconclusive:
  * failures from shards that did finish are not a verdict, because the set was not fully run. */
-export async function runUnitGate(cwd: string, files: readonly string[]): Promise<{
+export async function runUnitGate(cwd: string, files: readonly string[], shards?: number): Promise<{
   done: boolean; failing: string[]; unfinished: string[]; output: string;
 }> {
   if (!files.length) return { done: true, failing: [], unfinished: [], output: '' };
-  const groups = balanceUnitShards(files, unitGateShards());
+  const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
   console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
   const deadline = Date.now() + budget;
@@ -1627,9 +1627,21 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     return;
   }
   console.log(`Unit gate: ${branch.failing.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
-  const introduced = branch.failing.filter(file =>
+  // A file can fail beside its shard-mates and pass when those failures run together. One call, same budget:
+  // an unfinished confirmation is inconclusive, and only a failure that recurs can be introduced.
+  const confirmed = await runUnitGate(worktree, branch.failing, 1);
+  if (!confirmed.done) {
+    reportUnfinished('affected', confirmed.unfinished);
+    return;
+  }
+  const orderDependent = branch.failing.filter(file => !confirmed.failing.includes(file));
+  if (orderDependent.length) {
+    console.log(`Unit gate: ${orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${orderDependent.join('\n  ')}`);
+  }
+  if (!confirmed.failing.length) return;
+  const introduced = confirmed.failing.filter(file =>
     spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0);
-  const existing = branch.failing.filter(file => !introduced.includes(file));
+  const existing = confirmed.failing.filter(file => !introduced.includes(file));
   let directory: string | undefined;
   try {
     if (existing.length) {

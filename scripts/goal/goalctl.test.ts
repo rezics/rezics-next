@@ -821,9 +821,11 @@ process.exit(await child.exited);
         if (outcome === 'skipped') expect(existsSync(log)).toBe(false);
         else {
           const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-          expect(runs).toHaveLength(outcome === 'new-file' ? 1 : 2);
+          // The failing file is run with its shard, then again alone, then at main when the file already exists.
+          expect(runs).toHaveLength(outcome === 'new-file' ? 2 : 3);
           expect(runs[0].cwd).toBe(task.worktree);
-          if (outcome !== 'new-file') expect(runs[1].cwd).not.toBe(task.worktree);
+          expect(runs[1].cwd).toBe(task.worktree);
+          if (outcome !== 'new-file') expect(runs[2].cwd).not.toBe(task.worktree);
           expect(runs.every(run => run.args.includes(`./${file}`))).toBe(true);
           expect(runs.every(run => !run.args.some((arg: string) => arg.includes('never.test')))).toBe(true);
           expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
@@ -865,12 +867,61 @@ process.exit(await child.exited);
       expect(reported).toContain(files[7]!);
       for (const file of files) if (!failing.has(file)) expect(reported).not.toContain(file);
       const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
-      expect(runs).toHaveLength(4);
-      expect(runs.every(run => run.cwd === task.worktree)).toBe(true);
-      const groups = runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).sort());
+      const filesOf = (run: { args: string[] }) => run.args.filter(arg => arg.endsWith('.test.ts')).sort();
+      const confirmed = runs.filter(run => filesOf(run).join() === [`./${files[0]}`, `./${files[7]}`].sort().join());
+      expect(confirmed).toHaveLength(1);
+      expect(confirmed[0]!.cwd).toBe(task.worktree);
+      const shards = runs.filter(run => run !== confirmed[0]);
+      expect(shards).toHaveLength(4);
+      expect(shards.every(run => run.cwd === task.worktree)).toBe(true);
+      const groups = shards.map(filesOf);
       expect(groups.every(group => group.length === 2)).toBe(true);
       expect(groups.flat().sort()).toEqual(files.map(file => `./${file}`).sort());
       expect(new Set(groups.flat()).size).toBe(files.length);
+    } finally { r.cleanup(); }
+  }, 45_000);
+
+  test('a failure that disappears when the failing files run together is order-dependent and not blocking', async () => {
+    const r = repo();
+    try {
+      const mate = 'aa-mate.test.ts';
+      const stable = 'bb-stable.test.ts';
+      const dependent = 'cc-dependent.test.ts';
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(mate, stable, dependent); r.save(ledger);
+      writeFileSync(join(task.worktree, mate), `import { test } from 'bun:test';\n`
+        + `test('leaves a mark for a later file in this process', () => { (globalThis as { shardMate?: boolean }).shardMate = true; });\n`);
+      writeFileSync(join(task.worktree, stable), `import { expect, test } from 'bun:test';\n`
+        + `test('stays invalid', () => expect(true).toBe(false));\n`);
+      writeFileSync(join(task.worktree, dependent), `import { expect, test } from 'bun:test';\n`
+        + `test('passes unless an earlier file in this process left a mark', () => expect((globalThis as { shardMate?: boolean }).shardMate).toBe(undefined));\n`);
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', mate, stable, dependent]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add order-dependent units']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  unit: ${mate}\n  unit: ${stable}\n  unit: ${dependent}\n`);
+      const log = join(r.dir, '.temp/unit-log');
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2' });
+      expect(result.status).toBe(1);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      const reported = result.stderr.split('introduced unit failures')[1] ?? '';
+      expect(reported).toContain(stable);
+      expect(reported).not.toContain(dependent);
+      expect(reported).not.toContain(mate);
+      const noted: string[] = [];
+      for (const line of (result.stdout.split('order-dependent, reported, not blocking\n')[1] ?? '').split('\n')) {
+        if (!line.startsWith('  ')) break;
+        noted.push(line.trim());
+      }
+      expect(noted).toEqual([dependent]);
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
+      const filesOf = (run: { args: string[] }) => run.args.filter(arg => arg.endsWith('.test.ts')).sort();
+      const confirmation = runs.filter(run => filesOf(run).join() === [`./${dependent}`, `./${stable}`].sort().join());
+      expect(confirmation).toHaveLength(1);
+      expect(confirmation[0]!.cwd).toBe(task.worktree);
+      expect(runs.filter(run => filesOf(run).includes(`./${mate}`))).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 45_000);
 
