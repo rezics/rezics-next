@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
-import { savedFilterCreate, savedFilterDelete, savedFilterOrder, savedFilterReceipt, savedFiltersPage,
-  savedFiltersQuery, savedFilterUpdate } from '../modules/saved-filter/contract.ts';
+import { SAVED_FILTER_COST, savedFilterCreate, savedFilterDelete, savedFilterOrder, savedFilterReceipt,
+  savedFiltersPage, savedFiltersQuery, savedFilterUpdate } from '../modules/saved-filter/contract.ts';
 import { SavedFilterInvalid } from '../modules/saved-filter/admit.ts';
 import { homeAvailable } from '../modules/saved-filter/feed.ts';
 import { SavedFilterFollowed, SavedFilterMissing, type SavedFilterRow, SavedFilterTabsFull }
@@ -51,9 +51,12 @@ export function savedFilterRoutes(work: MainWorkDependencies) {
       async ({ request, query }) => {
         try {
           const principal = await work.account.verify(request, ['follow:read']);
-          const listed = await store().list(principal, query.actingSubject);
+          const listed = await store().list(principal, query.actingSubject, query.cursor);
           const concepts = [...new Set(listed.rows.flatMap(row => row.concept ? [row.concept] : []))];
-          // Followed Concepts read as their own labels, in the reader's language.
+          // The page is the summary batch: one read names this page's Concepts and never a second page.
+          if (concepts.length > SAVED_FILTER_COST.page) {
+            throw new WorkReadUnavailable('Saved Filter names exceed one summary page');
+          }
           const names = concepts.length ? await workRead(work, new Request(request.url), { language: query.language },
             session => session.summaries(concepts)) : [];
           const label = (concept: string) => {
@@ -66,7 +69,8 @@ export function savedFilterRoutes(work: MainWorkDependencies) {
             home: homeAvailable(row.document as FilterDocument) ? 'available' as const : 'unsupported' as const,
             revision: row.revision });
           return Response.json({ profile: 'saved-filters-v1', revision: listed.revision,
-            items: listed.rows.map(item), complete: listed.complete }, { headers: homeHeaders });
+            items: listed.rows.map(item), cursor: listed.cursor, complete: listed.cursor === null },
+          { headers: homeHeaders });
         } catch (error) { return savedFilterError(error); }
       })
     .post('/v1/me/saved-filters', { body: savedFilterCreate, response: receipt }, async ({ request, body }) => {

@@ -4,15 +4,25 @@ import type { ResourceQuery } from '../../../../../model/definitions/filter-docu
 import { readId, readName, readUuid } from '../work/read-contract.ts';
 
 /**
- * A reader's Saved Filters (docs/contracts/queries.md): at most 50 they name,
- * plus one per followed Concept, which the follow inventory bounds. At most
- * eight are pinned as Home tabs. A list reads one inventory row and at most
- * 100 filters on one index, with one summary batch naming followed Concepts.
+ * A reader's Saved Filters (docs/contracts/queries.md). A followed Concept adds
+ * one filter, which the follow inventory bounds. Filters the reader names are
+ * bounded by the principal write rate limit, not a stored count. At most eight
+ * are pinned as Home tabs. A list reads one inventory row and at most one page
+ * on the listing index: pinned positions, then newer unpinned rows. The page
+ * is one summary batch, so naming that page's Concepts is one summary read.
  * Every command locks one inventory row and touches at most the eight pinned
  * rows. A stored document holds at most 32 nodes (the Filter admission's
  * bound) in 8 KiB; executing it never enlarges the executing template's budget.
  */
-export const SAVED_FILTER_COST = { named: 50, pinned: 8, listed: 100, documentBytes: 8192 } as const;
+export const SAVED_FILTER_COST = {
+  pinned: 8,
+  /** One list page, equal to the resource-summary batch (`SUMMARY_PAGE_COST.batch`). */
+  page: 64,
+  /** One inventory share, plus at most two listing-index ranges (pinned or same-timestamp, then older unpinned). */
+  listReads: 3,
+  cursor: 256,
+  documentBytes: 8192,
+} as const;
 
 const closed = { additionalProperties: false } as const;
 /** Saved Filters persist as filter-document-v2 Filters; the Filter group itself is unchanged from v1. */
@@ -35,14 +45,18 @@ export const savedFilterItem = t.Object({ id: readUuid,
   home: t.Union([t.Literal('available'), t.Literal('unsupported')]),
   revision: readUuid });
 export type SavedFilterItem = Static<typeof savedFilterItem>;
+const savedFilterCursor = t.String({ minLength: 1, maxLength: SAVED_FILTER_COST.cursor });
 export const savedFiltersPage = t.Object({ profile: t.Literal('saved-filters-v1'),
   /** The inventory revision a reorder names; null before the reader has any filter. */
   revision: t.Nullable(readUuid),
-  items: t.Array(savedFilterItem, { maxItems: SAVED_FILTER_COST.listed }),
-  /** False when more filters exist than one list reads; pinned filters always come first. */
+  items: t.Array(savedFilterItem, { maxItems: SAVED_FILTER_COST.page }),
+  /** Pass as `cursor` to read the next page. Null on the last page. Pinned filters come first. */
+  cursor: t.Nullable(savedFilterCursor),
+  /** False when `cursor` continues the inventory. */
   complete: t.Boolean() });
 export const savedFiltersQuery = t.Object({ actingSubject: readId,
-  language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })) }, closed);
+  language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })),
+  cursor: t.Optional(savedFilterCursor) }, closed);
 
 export const savedFilterCreate = t.Object({ profile: t.Literal('saved-filter-create-v1'), actingSubject: readId,
   name: savedFilterName, filter: t.Unknown(), context: t.Literal('global'), pinned: t.Boolean() }, closed);

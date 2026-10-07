@@ -66,7 +66,7 @@ describe('the closed outcome', () => {
 
 describe('Saved Filter client', () => {
   const answer = (error: { status: number; value: unknown } | null) => async () => ({
-    data: error ? null : { profile: 'saved-filters-v1', revision: null, items: [], complete: true },
+    data: error ? null : { profile: 'saved-filters-v1', revision: null, items: [], cursor: null, complete: true },
     error,
   });
   function client(calls: string[], error: { status: number; value: unknown } | null) {

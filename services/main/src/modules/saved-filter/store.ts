@@ -24,8 +24,64 @@ export interface SavedFilterRow {
   concept: string | null; pin_position: number | null; revision: string;
 }
 const columns = 'id, name, profile, document, facets, context, concept, pin_position, revision';
+/** Microseconds in UTC, so a cursor compares equal to the stored `timestamptz`. */
+export const SAVED_FILTER_CURSOR_STAMP =
+  `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+const listedColumns = `${columns}, ${SAVED_FILTER_CURSOR_STAMP} AS created_at_text`;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const stamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+interface ListedSavedFilter extends SavedFilterRow { created_at_text: string }
+interface SavedFilterSeek { pin: number | null; at: string; id: string }
+
+/**
+ * Listing index `(principal_id, pin_position ASC NULLS LAST, created_at DESC, id)`.
+ * A null pin sorts after every tab. Positions are unique, so the next tab is
+ * the next position. Each statement is one index range: a null cursor is its
+ * own statement, not an OR. `IS NULL` is not an ordering equivalence, so the
+ * unpinned ORDER BY still names pin_position; every such row is null, and the
+ * rest is newer `created_at`, then id.
+ * https://www.postgresql.org/docs/current/indexes-ordering.html (2026-10-07)
+ */
+export const SAVED_FILTER_PINNED_PAGE = `SELECT ${listedColumns} FROM access.saved_filter
+  WHERE principal_id = $1 AND pin_position >= 0
+  ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $2`;
+export const SAVED_FILTER_PINNED_AFTER = `SELECT ${listedColumns} FROM access.saved_filter
+  WHERE principal_id = $1 AND pin_position > $2
+  ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $3`;
+export const SAVED_FILTER_UNPINNED_PAGE = `SELECT ${listedColumns} FROM access.saved_filter
+  WHERE principal_id = $1 AND pin_position IS NULL
+  ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $2`;
+export const SAVED_FILTER_UNPINNED_TIE_PAGE = `SELECT ${listedColumns} FROM access.saved_filter
+  WHERE principal_id = $1 AND pin_position IS NULL AND created_at = $2::timestamptz AND id > $3::uuid
+  ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $4`;
+export const SAVED_FILTER_UNPINNED_OLDER_PAGE = `SELECT ${listedColumns} FROM access.saved_filter
+  WHERE principal_id = $1 AND pin_position IS NULL AND created_at < $2::timestamptz
+  ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $3`;
+
+export function encodeSavedFilterCursor(row: { pin_position: number | null; created_at_text: string; id: string }): string {
+  const pin = row.pin_position === null ? null : Number(row.pin_position);
+  return Buffer.from(JSON.stringify({ pin, at: row.created_at_text, id: row.id })).toString('base64url');
+}
+
+export function decodeSavedFilterCursor(cursor: string): SavedFilterSeek {
+  if (cursor.length > SAVED_FILTER_COST.cursor || !/^[A-Za-z0-9_-]+$/.test(cursor)) {
+    throw new ControlInvalid('Invalid Saved Filter cursor');
+  }
+  let parsed: unknown;
+  try { parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')); }
+  catch { throw new ControlInvalid('Invalid Saved Filter cursor'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new ControlInvalid('Invalid Saved Filter cursor');
+  const record = parsed as Record<string, unknown>;
+  const { pin, at, id } = record;
+  const pinOk = pin === null || (typeof pin === 'number' && Number.isInteger(pin) && pin >= 0 && pin < SAVED_FILTER_COST.pinned);
+  if (!pinOk || typeof at !== 'string' || !stamp.test(at) || typeof id !== 'string' || !uuid.test(id)
+    || Object.keys(record).length !== 3) {
+    throw new ControlInvalid('Invalid Saved Filter cursor');
+  }
+  return { pin: pin as number | null, at, id };
+}
 
 function checkName(name: string) {
   if (name !== name.trim() || !name.length || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
@@ -47,18 +103,30 @@ type Command = { kind: 'create'; input: SavedFilterCreate } | { kind: 'update'; 
 export class SavedFilterStore {
   constructor(private readonly pool: Pool) {}
 
-  /** Pinned filters in tab order, then the newest others: one inventory row and at most 101 filter rows. */
-  async list(principal: VerifiedPrincipal, agent: string) {
+  /** Pinned tabs, then newer unpinned filters. One inventory row and at most two index ranges. */
+  async list(principal: VerifiedPrincipal, agent: string, cursor?: string | null) {
     if (!agentPattern.test(agent)) throw new ControlInvalid('Invalid person Agent');
+    const seek = cursor ? decodeSavedFilterCursor(cursor) : null;
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const inventory = (await client.query<{ revision: string }>(
         'SELECT revision FROM access.saved_filter_inventory WHERE principal_id = $1 FOR SHARE', [owner])).rows[0];
-      const rows = (await client.query<SavedFilterRow>(`SELECT ${columns} FROM access.saved_filter
-        WHERE principal_id = $1 ORDER BY pin_position NULLS LAST, created_at DESC, id LIMIT $2`,
-      [owner, SAVED_FILTER_COST.listed + 1])).rows;
-      return { revision: inventory?.revision ?? null, rows: rows.slice(0, SAVED_FILTER_COST.listed),
-        complete: rows.length <= SAVED_FILTER_COST.listed };
+      const limit = SAVED_FILTER_COST.page + 1;
+      const rows: ListedSavedFilter[] = [];
+      const take = async (sql: string, params: unknown[]) => {
+        if (rows.length >= limit) return;
+        rows.push(...(await client.query<ListedSavedFilter>(sql, [...params, limit - rows.length])).rows);
+      };
+      // A null pin is already past every tab. A pin cursor resumes at the next position.
+      if (!seek) await take(SAVED_FILTER_PINNED_PAGE, [owner]);
+      else if (seek.pin !== null) await take(SAVED_FILTER_PINNED_AFTER, [owner, seek.pin]);
+      if (seek?.pin === null) {
+        await take(SAVED_FILTER_UNPINNED_TIE_PAGE, [owner, seek.at, seek.id]);
+        await take(SAVED_FILTER_UNPINNED_OLDER_PAGE, [owner, seek.at]);
+      } else await take(SAVED_FILTER_UNPINNED_PAGE, [owner]);
+      const page = rows.slice(0, SAVED_FILTER_COST.page);
+      return { revision: inventory?.revision ?? null, rows: page,
+        cursor: rows.length > SAVED_FILTER_COST.page ? encodeSavedFilterCursor(page.at(-1)!) : null };
     });
   }
 
@@ -79,16 +147,11 @@ export class SavedFilterStore {
     const admitted = admitSavedFilter(input.filter);
     if (input.pinned) pinnable(admitted.document);
     return this.command(principal, input.actingSubject, key, { kind: 'create', input }, async (client, owner) => {
-      const inventory = (await client.query<{ named_count: number }>(
-        'SELECT named_count FROM access.saved_filter_inventory WHERE principal_id = $1', [owner])).rows[0]!;
-      if (inventory.named_count >= SAVED_FILTER_COST.named) throw new ControlInvalid('Saved Filter limit reached');
       const position = input.pinned ? await this.freeTab(client, owner) : null;
       const id = randomUUID(), revision = randomUUID();
       await client.query(`INSERT INTO access.saved_filter (id, principal_id, name, profile, document, facets,
         context, concept, pin_position, revision) VALUES ($1,$2,$3,$8,$4,$5,'global',NULL,$6,$7)`,
       [id, owner, input.name, admitted.document, admitted.facets, position, revision, SAVED_FILTER_PROFILE]);
-      await client.query(`UPDATE access.saved_filter_inventory SET named_count = named_count + 1
-        WHERE principal_id = $1`, [owner]);
       return { action: 'created' as const, id, filterRevision: revision };
     });
   }
@@ -139,8 +202,6 @@ export class SavedFilterStore {
       if (row.concept) throw new SavedFilterFollowed('Unfollow the Concept to remove its filter');
       if (row.pin_position !== null) await this.unpin(client, owner, id, row.pin_position);
       await client.query('DELETE FROM access.saved_filter WHERE principal_id = $1 AND id = $2', [owner, id]);
-      await client.query(`UPDATE access.saved_filter_inventory SET named_count = named_count - 1
-        WHERE principal_id = $1`, [owner]);
       return { action: 'deleted' as const, id, filterRevision: null };
     });
   }

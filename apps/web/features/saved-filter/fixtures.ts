@@ -68,7 +68,7 @@ export function memorySavedFilters(initial: SavedFilters = readerFilters, option
     async list() {
       calls.push('list');
       return { ok: true, data: { profile: 'saved-filters-v1', revision, items: items.map(item => ({ ...item })),
-        complete: true } };
+        cursor: null, complete: true } };
     },
     async create(input) {
       calls.push(`create:${input.name}`);

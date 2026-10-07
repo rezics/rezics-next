@@ -5,8 +5,12 @@ import type { FilterDocument } from '../../../model/definitions/filter-document-
 import { CONCEPT_FACET, conceptFilter } from '../src/modules/concept-page/contract.ts';
 import { resolveFacet } from '../src/modules/facets/registry.ts';
 import { QueryRejected } from '../src/modules/query/compile.ts';
+import { SUMMARY_PAGE_COST } from '../src/modules/media/summary-pages.ts';
+import { ControlInvalid } from '../src/modules/access/topology-control.ts';
 import { admitSavedFilter, SavedFilterInvalid } from '../src/modules/saved-filter/admit.ts';
+import { SAVED_FILTER_COST } from '../src/modules/saved-filter/contract.ts';
 import { homeAvailable, homeFeedConditions } from '../src/modules/saved-filter/feed.ts';
+import { decodeSavedFilterCursor, encodeSavedFilterCursor } from '../src/modules/saved-filter/store.ts';
 
 const id = (n: number) => `https://rezics.com/id/019d0000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const ref = (name: string) => resolveFacet(name)!.id;
@@ -71,4 +75,26 @@ test('G-431: a filter Home cannot show in full is a typed refusal, never an empt
     expect(refusal(() => homeFeedConditions(document))).toBe(expected);
     expect(homeAvailable(document)).toBe(false);
   }
+});
+
+test('Saved Filters page within one summary batch and are not a stored count', () => {
+  expect(SAVED_FILTER_COST.page).toBe(SUMMARY_PAGE_COST.batch);
+  expect(SAVED_FILTER_COST.page).toBeLessThanOrEqual(SUMMARY_PAGE_COST.batch);
+  expect(SAVED_FILTER_COST.pinned).toBe(8);
+  const migration = readFileSync(join(import.meta.dir, '../migrations/access/1331_saved_filter_inventory.sql'), 'utf8');
+  expect(migration).toContain('DROP COLUMN named_count');
+  expect(migration.includes('BETWEEN 0 AND 50')).toBe(false);
+});
+
+test('a Saved Filter cursor keeps a null pin distinct from a tab position', () => {
+  const id = '00000000-0000-4000-8000-000000000001';
+  const at = '2024-06-01T00:00:00.000000Z';
+  const pinned = encodeSavedFilterCursor({ pin_position: 0, created_at_text: at, id });
+  const open = encodeSavedFilterCursor({ pin_position: null, created_at_text: at, id });
+  expect(decodeSavedFilterCursor(pinned)).toEqual({ pin: 0, at, id });
+  expect(decodeSavedFilterCursor(open)).toEqual({ pin: null, at, id });
+  expect(pinned).not.toBe(open);
+  expect(() => decodeSavedFilterCursor('not-a-cursor')).toThrow(ControlInvalid);
+  const forged = Buffer.from(JSON.stringify({ pin: SAVED_FILTER_COST.pinned, at, id })).toString('base64url');
+  expect(() => decodeSavedFilterCursor(forged)).toThrow(ControlInvalid);
 });

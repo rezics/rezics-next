@@ -137,3 +137,21 @@ test('G-965 relay checkpoint waits for all saved-view matching pages', async () 
   expect(await producer.runRelayOnce()).toBe(0);
   expect(advanced).toBe(true);
 });
+
+test('an unsupported saved view is skipped and the following valid view still delivers', async () => {
+  const refused = uuid(10);
+  const delivered = uuid(11);
+  const continued = harness(2);
+  Object.assign(continued.service, { matching: async (view: { id: string }) => {
+    if (view.id === refused) throw new QueryRejected('unsupported_query_shape', 'no template for this filter');
+    return subject;
+  } });
+  expect(await continued.service.run(envelope)).toEqual({ complete: true, produced: 1 });
+  expect([...continued.emitted.keys()]).toEqual([`work-public:${id(1)}:${delivered}`]);
+
+  const blocked = harness(2);
+  Object.assign(blocked.service, { matching: async () => { throw new Error('owner down'); } });
+  await expect(blocked.service.run(envelope)).rejects.toThrow('owner down');
+  expect(blocked.emitted.size).toBe(0);
+  expect(blocked.progress()).toEqual({ after_principal: null, complete: false });
+});
