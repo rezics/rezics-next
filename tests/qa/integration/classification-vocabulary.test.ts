@@ -4,6 +4,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { VOCABULARY_COST } from '../../../services/main/src/modules/classification/vocabulary.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
+import { readWorkClassifications } from '../../../services/main/src/modules/work/read-classifications.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
 const short = (id: string) => id.slice(-36);
@@ -213,8 +215,20 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
         200,
       ),
     ).toMatchObject({ ...decision, replayed: true });
+    const chipsPath = `/v1/works/${short(work.work)}/classifications?language=zh-Hans`;
+    const chipsResponse = await call(chipsPath);
+    if (chipsResponse.status !== 200) {
+      // Preserve the HTTP assertion and surface the concrete reader failure
+      // when its public problem response intentionally omits owner details.
+      await workRead(
+        home.deps,
+        new Request(`http://main.local${chipsPath}`),
+        { language: 'zh-Hans' },
+        (session) => readWorkClassifications(session, work.work),
+      );
+    }
     const chips = await home.json<{ items: { concept: string; name: { value: string } }[] }>(
-      await call(`/v1/works/${short(work.work)}/classifications?language=zh-Hans`),
+      chipsResponse,
       200,
     );
     expect(chips.items).toMatchObject([{ concept: child.concept, name: { value: '都市' } }]);
