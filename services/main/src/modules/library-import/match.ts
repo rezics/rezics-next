@@ -16,7 +16,7 @@ export function chooseCandidates(row: CanonicalRow, candidates: ImportCandidate[
 }
 export function mainCall(store: ReaderLibraryImportStore, request: Request, method: string,
   path: string, body?: object, key?: string) {
-  return store.call(new Request(`http://main.local${path}`, { method,
+  return store.call(new Request(`http://main.local${path}`, { method,signal: request.signal,
     headers: { authorization: request.headers.get('authorization') ?? '',
       ...(body ? { 'content-type': 'application/json' } : {}), ...(key ? { 'idempotency-key': key } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}) }));

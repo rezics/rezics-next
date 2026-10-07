@@ -32,12 +32,12 @@ const accept: Record<ImportFormat, string> = { goodreads: '.csv,text/csv', story
 
 /** One working import: the rows Main reported so far, and where the reader is in reviewing, applying and finishing. */
 interface Active { entry: PendingImport; rows: ImportRow[]; loaded: boolean; progress: ApplyProgress | null;
-  stopped: boolean; finished: boolean }
+  stopped: boolean; finished: boolean; deferred: boolean }
 
 /**
  * Library import. Main parses the file, matches every row and applies the reviewed result; this component
  * uploads the text, shows each row Main reports (matched, ambiguous with candidates, not found), forwards
- * the reader's choices and repeats apply until Main has none pending. A reload or a second visit comes
+ * the reader's choices, starts apply and reads its progress. A reload or a second visit comes
  * back to the same upload, because Main keeps it for seven days and this browser remembers its id.
  */
 export function LibraryImport({ agent, context, locale, messages, api, shelf = browserImportShelf, initialOpen = false }: {
@@ -50,6 +50,13 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   // Imported reviews are in a language the reader knows, not the page's: their first reading language, else unspecified.
   const reviewLanguage = writingLanguage({ reading: useReadingLanguages(agent) });
   const run = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const session = () => {
+    if (!controller.current || controller.current.signal.aborted) controller.current = new AbortController();
+    return controller.current;
+  };
+  const stop = () => { run.current += 1; controller.current?.abort(); };
+  const start = () => { stop(); return session(); };
   const [open, setOpen] = useState(initialOpen);
   const [pending, setPending] = useState<PendingImport[]>([]);
   const [format, setFormat] = useState<ImportFormat>('goodreads');
@@ -65,21 +72,30 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
 
   useEffect(() => { setPending(shelf.list(agent)); }, [agent, shelf]);
-  useEffect(() => () => { run.current += 1; }, []);
+  useEffect(() => {
+    session();
+    return () => { run.current += 1; controller.current?.abort(); };
+  }, []);
   const refreshPending = () => setPending(shelf.list(agent));
   const patch = (change: Partial<Active>) => setActive(current => current && { ...current, ...change });
   const failureText = (failure: unknown) => failure instanceof ImportError
     ? failure.failure === 'missing' ? t.importExpired : failure.failure === 'invalid' ? t.importInvalid
-      : t.importUnavailable : t.importUnavailable;
+      : failure.failure === 'admission' ? t.importAdmission : failure.failure === 'pending' ? t.importAdoptionPending
+        : failure.failure === 'budget' ? t.importAdoptionBudget : failure.failure === 'unavailable' ? t.importUnavailable
+          : failure.failure === 'denied' ? t.importDenied : t.importRequestFailed : t.importRequestFailed;
+  const terminalText = (progress: ApplyProgress) => progress.reason === 'no-progress' ? t.importStalled
+    : progress.reason === 'lease-expired' ? t.importLeaseExpired : progress.reason === 'owner-refused' ? t.importOwnerRefused
+      : t.importApplyFailed;
 
   async function openImport(entry: PendingImport) {
-    const generation = ++run.current;
-    const live = () => generation === run.current;
-    setOpen(true); setError(null); setMapping(null); setPage(0);
-    setActive({ entry, rows: [], loaded: false, progress: null, stopped: false, finished: false });
+    const { signal } = start();
+    const generation = run.current;
+    const live = () => generation === run.current && !signal.aborted;
+    setOpen(true); setError(null); setMapping(null); setPage(0); setUploading(false); setResolving(false);
+    setActive({ entry, rows: [], loaded: false, progress: null, stopped: false, finished: false, deferred: false });
     let rows: ImportRow[];
     try {
-      rows = await loadAllRows(client, entry.id, entry.total, loaded => live() && patch({ rows: loaded }), live);
+      rows = await loadAllRows(client, entry.id, entry.total, loaded => live() && patch({ rows: loaded }), live, signal);
     } catch (failure) {
       if (!live()) return;
       if (failure instanceof ImportError && failure.failure === 'missing') { shelf.remove(agent, entry.id); refreshPending(); setActive(null); }
@@ -92,86 +108,109 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     setGroup(finished ? 'issues' : countGroups(rows).ambiguous ? 'ambiguous' : 'matched');
     patch({ rows, loaded: true, finished });
     if (finished) { shelf.remove(agent, entry.id); refreshPending(); }
-    else if (applyStarted(rows) || entry.intent) void apply(entry, rows);
+    else if (applyStarted(rows) || entry.intent) void apply(entry, rows, { checkOnly: true });
   }
 
   async function upload(file: File, chosen: CsvMapping | null = null, text?: string) {
     // The mapped CSV was checked when it was first read; only a file chosen now is measured.
     if (text === undefined && file.size > UPLOAD_LIMIT_BYTES) { setError(t.importTooLarge); return; }
+    const { signal } = session();
+    const generation = run.current;
+    const live = () => generation === run.current && !signal.aborted;
     setError(null); setUploading(true);
     try {
       const content = text ?? await file.text();
+      if (!live()) return;
       if (format === 'generic-csv' && !chosen) {
-        setMapping({ file: content, name: file.name, inspection: await client.inspect(content) });
+        const inspection = await client.inspect(content, { signal });
+        if (live()) setMapping({ file: content, name: file.name, inspection });
         return;
       }
-      const created = await client.create({ format, file: content, ...chosen ? { mapping: chosen } : {} });
+      const created = await client.create({ format, file: content, ...chosen ? { mapping: chosen } : {} }, { signal });
+      if (!live()) return;
       const entry: PendingImport = { id: created.id, format, name: file.name, total: created.total,
         createdAt: Date.now(), intent: null };
       shelf.save(agent, entry); refreshPending();
       void openImport(entry);
-    } catch (failure) { setError(failureText(failure)); }
-    finally { setUploading(false); }
+    } catch (failure) { if (live()) setError(failureText(failure)); }
+    finally { if (live()) setUploading(false); }
   }
 
-  async function showRow(id: string, index: number) {
-    const fresh = await reloadRow(client, id, index);
-    if (fresh) setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, fresh) } : current);
+  async function showRow(id: string, index: number, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const fresh = await reloadRow(client, id, index, signal);
+    if (fresh && !signal.aborted) setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, fresh) } : current);
   }
-  async function resolveRow(id: string, row: ImportRow, choice: RowResolution) {
-    try { await client.resolve(id, row, choice); } catch (failure) {
+  async function resolveRow(id: string, row: ImportRow, choice: RowResolution, signal = session().signal) {
+    signal.throwIfAborted();
+    try { await client.resolve(id, row, choice, { signal }); } catch (failure) {
       // The row changed elsewhere: show Main's version, so the next choice is made on it, then say so.
-      if (failure instanceof ImportError && failure.failure === 'conflict') await showRow(id, row.index).catch(() => undefined);
+      if (failure instanceof ImportError && failure.failure === 'conflict') await showRow(id, row.index, signal).catch(() => undefined);
       throw failure;
     }
-    await showRow(id, row.index);
+    await showRow(id, row.index, signal);
   }
   /** Rows the reader asked to overwrite what the Library already has: Main applies `replace` for them alone. */
-  async function useImportedValues(id: string, targets: readonly ImportRow[]) {
+  async function useImportedValues(id: string, targets: readonly ImportRow[], signal: AbortSignal) {
     for (const row of targets) {
+      signal.throwIfAborted();
       const work = row.resolution?.work ?? row.match?.work;
       if (row.source.kind !== 'source' || !work || groupOf(row) !== 'matched') continue;
       const target = row.resolution?.target ?? row.match?.target;
-      await client.resolve(id, row, { choice: 'apply', work, ...target ? { target } : {}, conflictChoice: 'replace' });
+      await client.resolve(id, row, { choice: 'apply', work, ...target ? { target } : {}, conflictChoice: 'replace' }, { signal });
     }
   }
   async function adoptRow(id: string, row: ImportRow, workId: string) {
-    const work = await client.adopt(id, row.index, workId, locale);
-    await resolveRow(id, row, { choice: 'apply', work });
+    const { signal } = session();
+    signal.throwIfAborted();
+    const work = await client.adopt(id, row.index, workId, locale, { signal });
+    await resolveRow(id, row, { choice: 'apply', work }, signal);
   }
   /** Not reloaded one by one: a reviewed choice only becomes sealed when apply starts. */
-  async function keepPrivate(id: string, targets: readonly ImportRow[]) {
+  async function keepPrivate(id: string, targets: readonly ImportRow[], signal: AbortSignal) {
     for (const row of targets) {
-      await client.resolve(id, row, { choice: 'private' });
+      signal.throwIfAborted();
+      await client.resolve(id, row, { choice: 'private' }, { signal });
+      signal.throwIfAborted();
       const kept = { ...row, resolution: { choice: 'private' as const }, version: row.version + 1 };
       setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, kept) } : current);
     }
   }
   async function keepAllPrivate() {
     if (!active) return;
+    const { signal } = session();
     setResolving(true); setError(null);
-    try { await keepPrivate(active.entry.id, active.rows.filter(needsChoice)); } catch { setError(t.importResolveFailed); }
-    setResolving(false);
+    try { await keepPrivate(active.entry.id, active.rows.filter(needsChoice), signal); }
+    catch (failure) { if (!signal.aborted) setError(failureText(failure)); }
+    if (!signal.aborted) setResolving(false);
   }
 
-  async function apply(entry: PendingImport, current: readonly ImportRow[]) {
+  async function apply(entry: PendingImport, current: readonly ImportRow[], options: { checkOnly?: boolean; resume?: boolean } = {}) {
+    const { signal } = session();
     const generation = run.current;
-    const live = () => generation === run.current;
+    const live = () => generation === run.current && !signal.aborted;
     const intent = entry.intent ?? { context, language: reviewLanguage };
     const withIntent = { ...entry, intent };
     setError(null);
-    patch({ stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
+    patch({ stopped: false, deferred: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
     try {
       // Main will not seal while a row has neither a match nor a choice: what was not found stays private.
       // A sealed import has none left in that group, so a resumed apply asks for nothing here.
-      await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'));
-      if (!entry.intent && useImported) await useImportedValues(entry.id, current);
+      if (!options.checkOnly) await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'), signal);
+      if (!options.checkOnly && !entry.intent && useImported) await useImportedValues(entry.id, current, signal);
+      if (!live()) return;
       // From here the intent is fixed: remember it, so a reload resumes this apply.
       shelf.save(agent, withIntent);
       patch({ entry: withIntent });
-      if (!await pollLibraryApply(client, entry.id, intent, { active: live,
-        onProgress: progress => patch({ progress }) })) return;
-      const rows = await loadAllRows(client, entry.id, entry.total, () => {}, live);
+      const result = await pollLibraryApply(client, entry.id, intent, { active: live, signal, ...options,
+        onProgress: progress => patch({ progress }) });
+      if (!result) return;
+      if (result.state === 'review') { patch({ stopped: true }); setError(t.importRequestFailed); return; }
+      if (result.state === 'stalled' || result.state === 'failed') {
+        patch({ stopped: true }); setError(terminalText(result)); return;
+      }
+      if (result.pending) { patch({ deferred: true }); return; }
+      const rows = await loadAllRows(client, entry.id, entry.total, () => {}, live, signal);
       if (!live()) return;
       patch({ rows, finished: true, stopped: false });
       setGroup(rows.some(row => row.outcome?.issues.length) ? 'issues' : 'all'); setPage(0);
@@ -186,11 +225,14 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   }
 
   async function discard(entry: PendingImport) {
-    try { await client.discard(entry.id); } catch (failure) {
+    const { signal } = session();
+    try { await client.discard(entry.id, { signal }); } catch (failure) {
+      if (signal.aborted) return;
       if (!(failure instanceof ImportError && failure.failure === 'missing')) { setError(failureText(failure)); return; }
     }
+    if (signal.aborted) return;
     shelf.remove(agent, entry.id); refreshPending();
-    if (active?.entry.id === entry.id) { run.current += 1; setActive(null); }
+    if (active?.entry.id === entry.id) { stop(); setActive(null); }
   }
 
   const rows = active?.rows ?? [];
@@ -207,10 +249,15 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const visible = shown.slice(page * PAGE, (page + 1) * PAGE);
   const pages = Math.ceil(shown.length / PAGE);
   const others = pending.filter(entry => entry.id !== active?.entry.id);
-  const busy = uploading || (!!active && !active.finished && !active.stopped && (!active.loaded || !!active.progress?.pending));
+  const busy = uploading || (!!active && !active.finished && !active.stopped && !active.deferred && (!active.loaded || !!active.progress?.pending));
 
   return <section aria-labelledby="library-import" className="rounded-2xl border border-border/70 p-4 sm:p-5">
-    <details open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <details open={open} onToggle={event => {
+      const next = event.currentTarget.open;
+      setOpen(next);
+      if (!next) { stop(); setUploading(false); setResolving(false); patch({ deferred: !!active?.entry.intent, stopped: !active?.entry.intent }); }
+      else session();
+    }}>
       <summary className="cursor-pointer rounded-sm font-semibold text-lg outline-none focus-visible:ring-2
         focus-visible:ring-ring"><h2 id="library-import" className="inline">{t.importTitle}</h2>
         {others.length && !open ? <span className="ms-2 font-normal text-muted-foreground text-sm">
@@ -267,11 +314,11 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
         {active ? <div className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-muted-foreground text-sm">{t.importFileSelected({ name: active.entry.name })}</p>
-            {!active.finished ? <Button size="sm" variant="outline" disabled={resolving || !!active.progress?.pending}
+            {!active.finished ? <Button size="sm" variant="outline" disabled={resolving || !!active.progress?.pending && !active.deferred}
               onClick={() => void discard(active.entry)}>{t.importDiscard}</Button>
               : <span className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => void discard(active.entry)}>{t.importDelete}</Button>
-                <Button size="sm" variant="outline" onClick={() => { run.current += 1; setActive(null); }}>{t.importClose}</Button></span>}
+                <Button size="sm" variant="outline" onClick={() => { stop(); setActive(null); }}>{t.importClose}</Button></span>}
           </div>
           {!active.loaded && !active.stopped ? <div className="grid gap-1" role="status">
             <Progress value={Math.round((rows.length / Math.max(1, active.entry.total)) * 100)} aria-label={t.importMatching({
@@ -314,10 +361,15 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
               <div className="flex flex-wrap items-center gap-3">
                 {active.progress?.pending || active.stopped ? null : <Button disabled={busy || resolving || !!choose}
                   onClick={() => void apply(active.entry, rows)}>{t.importApply}</Button>}
-                {active.stopped && active.loaded ? <Button onClick={() => void apply(active.entry, rows)}>{t.importContinue}</Button> : null}
+                {active.stopped && active.loaded ? <Button onClick={() => void apply(active.entry, rows, { resume: true })}>{t.importContinue}</Button> : null}
                 {choose && !sealed ? <p className="text-muted-foreground text-sm">{t.importNeedChoices(choose)}</p> : null}
               </div>
-              {active.progress?.pending ? <div className="grid gap-1" role="status">
+              {active.deferred ? <div className="grid gap-2" role="status">
+                <p className="text-sm">{t.importStillImporting}</p>
+                <div><Button size="sm" variant="outline" onClick={() => void apply(active.entry, rows, { checkOnly: true })}>
+                  {t.importCheckProgress}</Button></div>
+              </div> : null}
+              {active.progress?.pending && !active.deferred ? <div className="grid gap-1" role="status">
                 <Progress value={Math.round((active.progress.completed / Math.max(1, active.progress.total)) * 100)}
                   aria-label={t.importApplying({ done: number(active.progress.completed), total: number(active.progress.total) })} />
                 <p className="text-sm">{t.importApplying({ done: number(active.progress.completed), total: number(active.progress.total) })}</p>

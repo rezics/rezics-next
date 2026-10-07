@@ -164,7 +164,7 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
 }
 
 export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLibraryImportStore,
-  request: Request, agent: string, id: string, intent: ApplyIntent) {
+  request: Request, agent: string, id: string, intent: ApplyIntent,token?: string) {
   await files.seal(agent,id,intent);
   const file = await files.file(agent,id);
   await store.withBatch(agent,'library-file-agent-apply',async () => {
@@ -175,10 +175,10 @@ export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLib
       try {
         const outcome = await applyRow(store,request,agent,file.import_key,item,intent,file.format);
         if (!outcome) break;
-        await files.complete(agent,id,item.index,outcome);
+        await files.complete(agent,id,item.index,outcome,token);
       } catch (error) {
         if (!(error instanceof ImportSessionFailed)) throw error;
-        await files.complete(agent,id,item.index,{ applied: ['private-source'],issues: ['session-failed'] });
+        await files.complete(agent,id,item.index,{ applied: ['private-source'],issues: ['session-failed'] },token);
       }
     }
   });

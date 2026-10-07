@@ -68,8 +68,11 @@ export function ImportRowItem({ row, sealed, locale, messages, onResolve, onAdop
   async function run(work: () => Promise<void>) {
     setBusy(true); setNote(null);
     try { await work(); setChanging(false); } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') { setBusy(false); return; }
       setNote(error instanceof ImportError && error.failure === 'conflict' ? t.importRowChanged
-        : error instanceof ImportError && error.failure === 'budget' ? t.importAdoptionBudget : t.importResolveFailed);
+        : error instanceof ImportError && error.failure === 'budget' ? t.importAdoptionBudget
+          : error instanceof ImportError && error.failure === 'pending' ? t.importAdoptionPending
+            : error instanceof ImportError && error.failure === 'admission' ? t.importAdmission : t.importResolveFailed);
     }
     setBusy(false);
   }

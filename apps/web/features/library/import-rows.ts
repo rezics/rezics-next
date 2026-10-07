@@ -38,8 +38,8 @@ export const PARALLEL_PAGES = 3;
  * its multiples, so the rest are read in parallel; `onRows` gets the rows so far, in order.
  */
 export async function loadAllRows(api: ImportApi, id: string, total: number, onRows: (rows: ImportRow[]) => void = () => {},
-  active: () => boolean = () => true): Promise<ImportRow[]> {
-  const first = await api.rows(id, -1);
+  active: () => boolean = () => true, signal?: AbortSignal): Promise<ImportRow[]> {
+  const first = await api.rows(id, -1, { signal });
   const found = new Map<number, ImportRow>(first.rows.map(row => [row.index, row]));
   const ordered = () => [...found.values()].sort((a, b) => a.index - b.index);
   onRows(ordered());
@@ -48,18 +48,18 @@ export async function loadAllRows(api: ImportApi, id: string, total: number, onR
   if (first.nextCursor !== null && size) for (let at = first.nextCursor; at < total - 1; at += size) cursors.push(at);
   await Promise.all(Array.from({ length: PARALLEL_PAGES }, async () => {
     while (cursors.length && active()) {
-      const page = await api.rows(id, cursors.shift()!);
+      const page = await api.rows(id, cursors.shift()!, { signal });
       for (const row of page.rows) found.set(row.index, row);
       onRows(ordered());
     }
   }));
   const rows = ordered();
-  if (active() && rows.length !== total) throw new ImportError('unavailable', 'Main answered fewer rows than the upload has');
+  if (active() && rows.length !== total) throw new ImportError('invalid', 'Main answered fewer rows than the upload has');
   return rows;
 }
 
 /** The row Main now holds at `index`, after a choice or a conflict. */
-export async function reloadRow(api: ImportApi, id: string, index: number): Promise<ImportRow | undefined> {
-  const page = await api.rows(id, index - 1);
+export async function reloadRow(api: ImportApi, id: string, index: number, signal?: AbortSignal): Promise<ImportRow | undefined> {
+  const page = await api.rows(id, index - 1, { signal });
   return page.rows.find(row => row.index === index);
 }

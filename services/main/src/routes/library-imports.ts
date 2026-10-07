@@ -8,7 +8,7 @@ import { inspectGenericCsv } from '../modules/library-import/formats/generic-csv
 import { importDigest, LibraryFileMissing } from '../modules/library-import/file-store.ts';
 import { mainCall, matchLibraryRow } from '../modules/library-import/match.ts';
 import { adoptLibrarySource, searchLibrarySource } from '../modules/library-import/open-library.ts';
-import { applyLibraryFile } from '../modules/library-import/apply.ts';
+import { getLibraryImportApplyWorker } from '../modules/library-import/apply-worker.ts';
 import { ReaderImportConflict, ReaderImportInvalid, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -91,7 +91,8 @@ export const openApiOperations = {
   '/v1/me/library-imports/{id}': { delete: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows': { get: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows/{row}': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
-  '/v1/me/library-imports/{id}/apply': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}/apply': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true, idempotencyKey: true },
+    post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 export const capabilities = {
@@ -106,9 +107,11 @@ export const capabilities = {
   '/v1/me/library-imports/{id}/rows/{row}': { put: { disposition: 'supported', mcp: { tool: 'library_import_resolve', title: 'Resolve a library import row',
     scopes: ['work:read','library:write'],
     description: 'Choose a native Work and optional exact target, or keep the row private. expectedVersion protects concurrent review.' } } },
-  '/v1/me/library-imports/{id}/apply': { post: { disposition: 'supported', mcp: { tool: 'library_import_apply', title: 'Apply a reviewed library import',
+  '/v1/me/library-imports/{id}/apply': { get: { disposition: 'supported', mcp: { tool: 'library_import_status', title: 'Check a library import',
+    scopes: ['work:read'],description: 'Read progress and the server-owned completion, failure or stall reason for your uploaded library.' } },
+    post: { disposition: 'supported', mcp: { tool: 'library_import_apply', title: 'Apply a reviewed library import',
     scopes: ['work:read','library:write','collection:edit','rating:read','rating:submit'],
-    description: 'Apply a bounded group of reviewed rows through ordinary library commands. Repeat until pending is false; retries resume one effect.' } } },
+    description: 'Start a reviewed library job through ordinary commands. Read its status; explicitly resume a failed or stalled job with fresh authority.' } } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { disposition: 'supported', mcp: { tool: 'library_import_adopt', title: 'Adopt an Open Library candidate',
     scopes: ['work:read','library:write','work:create'],
     description: 'Explicitly adopt a reviewed Open Library candidate using ordinary catalogue authority. Resolve the source row separately to the returned Work before applying.' } } },
@@ -122,6 +125,10 @@ const resolution = t.Object({ choice: t.Union([t.Literal('apply'),t.Literal('pri
   conflictChoice: t.Optional(t.Union([t.Literal('keep'),t.Literal('replace')])) },closed);
 const rowView = t.Object({ index: t.Integer(), source: canonicalRow, match: t.Nullable(match), resolution: t.Nullable(resolution),
   outcome: t.Nullable(t.Object({ applied: t.Array(t.String()),issues: t.Array(t.String()) })),version: t.Integer() });
+const applyProgress = t.Object({ total: t.Integer(),completed: t.Integer(),issues: t.Integer(),pending: t.Boolean(),
+  state: t.Union(['review','pending','completed','stalled','failed'].map(value => t.Literal(value))),
+  reason: t.Nullable(t.Union(['no-progress','lease-expired','owner-refused','apply-failed','worker-stopped'].map(value => t.Literal(value)))),
+  receipt: t.Optional(t.String()) });
 function failure(error: unknown): Response {
   if (error instanceof LibraryImportTooLarge) return problem(413,'library_import_too_large','Import body exceeds 2 MiB plus the 16 KiB request envelope');
   if (error instanceof LibraryImportTimedOut) return problem(408,'library_import_timeout','Import transfer timed out');
@@ -133,6 +140,7 @@ function failure(error: unknown): Response {
   return workReadError(error);
 }
 export function libraryImportsRoutes(deps: MainWorkDependencies) {
+  const worker=deps.libraryFiles && deps.libraryImport ? getLibraryImportApplyWorker(deps.libraryFiles,deps.libraryImport) : null;
   const intakePrincipals = new WeakMap<Request,VerifiedAccountAssertion>();
   async function own(request: Request, agent: string, write = false, verified?: VerifiedAccountAssertion) {
     const key = request.headers.get('idempotency-key') ?? '';
@@ -143,6 +151,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     return { key, principal };
   }
   return new Elysia()
+    .cleanup(async () => { await worker?.stop(); })
     .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
       query: t.Object({ actingSubject: readId },closed),response: { 200: t.Object({ deleted: t.Literal(true) }),...errors },
     },async ({ request,params,query }) => {
@@ -236,16 +245,26 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
         return Response.json({ resolved: true },{ headers });
       } catch (error) { return failure(error); }
     })
+    .get(`${base}/:id/apply`, { params: t.Object({ id: readUuid }),query: t.Object({ actingSubject: readId },closed),
+      response: { 200: applyProgress,...errors },
+    },async ({ request,params,query }) => {
+      try {
+        const admission=await own(request,query.actingSubject);if (admission instanceof Response) return admission;
+        return Response.json(await deps.libraryFiles!.progress(query.actingSubject,params.id),{ headers });
+      } catch (error) { return failure(error); }
+    })
     .post(`${base}/:id/apply`, { params: t.Object({ id: readUuid }),
-      body: t.Object({ actingSubject: readId,context: t.Nullable(readId),language: readLanguage },closed),
-      response: { 200: t.Object({ total: t.Integer(),completed: t.Integer(),issues: t.Integer(),pending: t.Boolean() }),
-        202: t.Object({ total: t.Integer(),completed: t.Integer(),issues: t.Integer(),pending: t.Boolean() }),...errors },
+      body: t.Object({ actingSubject: readId,context: t.Nullable(readId),language: readLanguage,resume: t.Optional(t.Boolean()) },closed),
+      response: { 200: applyProgress,202: applyProgress,...errors },
     }, async ({ request,params,body }) => {
       try {
         const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
-        const value = await applyLibraryFile(deps.libraryFiles!,deps.libraryImport!,request,body.actingSubject,params.id,
-          { context: body.context,language: body.language });
-        return Response.json(value,{ status: value.pending ? 202 : 200,headers });
+        const intent={ context: body.context,language: body.language };
+        await deps.libraryFiles!.seal(body.actingSubject,params.id,intent);
+        await deps.libraryFiles!.jobs.status(body.actingSubject,params.id);
+        const accepted=await deps.libraryFiles!.jobs.accept(body.actingSubject,params.id,admission.key,intent,body.resume ?? false);
+        if (accepted.token) worker!.schedule(request,body.actingSubject,params.id,intent,accepted.token);
+        return Response.json(accepted.result,{ status: accepted.result.pending ? 202 : 200,headers });
       } catch (error) { return failure(error); }
     })
     .post(`${base}/:id/rows/:row/adoptions`, { params: t.Object({ id: readUuid,row: t.Integer({ minimum: 0,maximum: 4999 }) }),

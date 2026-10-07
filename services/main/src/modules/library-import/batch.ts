@@ -78,7 +78,7 @@ export class ImportCommands {
     if (body) headers.set('content-type', 'application/json');
     if (commandKey) headers.set('idempotency-key', commandKey);
     return this.store.call(new Request(`http://main.local${path}`, {
-      method, headers, ...(body ? { body: JSON.stringify(body) } : {}) }));
+      method, headers,signal: this.request.signal, ...(body ? { body: JSON.stringify(body) } : {}) }));
   }
 
   async read<T>(path: string): Promise<T | null> {

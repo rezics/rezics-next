@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { expireLibraryUploads, eraseLibraryImportsForPrincipals } from './privacy.ts';
 import { pruneOrderedReadChanges } from '../safety-queue/retention.ts';
+import { LibraryImportJobStore } from './job-store.ts';
 
 /** A minute poll drains expired uploads in bounded batches. */
 export class LibraryImportRetentionWorker {
@@ -11,6 +12,7 @@ export class LibraryImportRetentionWorker {
   start() { this.task = this.run(); }
   async stop() { this.controller.abort();await this.task; }
   async poll() {
+    await new LibraryImportJobStore(this.content).expire();
     await pruneOrderedReadChanges(this.access,this.content);
     let expired = 0;
     let batch: number;

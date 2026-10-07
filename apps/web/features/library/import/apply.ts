@@ -1,23 +1,45 @@
-import type { ApplyIntent, ApplyProgress, ImportApi } from '../import-api.ts';
+import { ImportError, type ApplyIntent, type ApplyProgress, type ImportApi } from '../import-api.ts';
+import { abortable, pauseForImport } from './lifetime.ts';
 
-const POLL_INTERVAL_MS = 1000;
-const waitForProgress = (milliseconds: number) => new Promise<void>(resolve => setTimeout(resolve, milliseconds));
+export const APPLY_POLL_WINDOW_MS = 30_000;
+export const APPLY_POLL_LIMIT = 16;
 
-/** Accepted work stays pending until Main completes it or refuses it. Leaving the import stops polling. */
-export async function pollLibraryApply(api: Pick<ImportApi, 'apply'>, id: string, intent: ApplyIntent, {
-  onProgress, active, wait = waitForProgress,
+/** Submit once, then read the server-owned job. A local deadline leaves its last truthful progress intact. */
+export async function pollLibraryApply(api: Pick<ImportApi, 'apply' | 'status'>, id: string, intent: ApplyIntent, {
+  onProgress, active, wait = pauseForImport, signal, checkOnly = false, resume = false,
 }: {
   onProgress: (progress: ApplyProgress) => void;
   active: () => boolean;
-  wait?: (milliseconds: number) => Promise<void>;
+  wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+  signal?: AbortSignal;
+  checkOnly?: boolean;
+  resume?: boolean;
 }): Promise<ApplyProgress | null> {
-  while (active()) {
-    const progress = await api.apply(id, intent);
-    if (!active()) return null;
-    onProgress(progress);
-    if (!progress.pending) return progress;
-    // An unchanged count can mean an owner command is still running; it is not a refusal.
-    await wait(POLL_INTERVAL_MS);
+  if (!active() || signal?.aborted) return null;
+  const deadline = AbortSignal.timeout(APPLY_POLL_WINDOW_MS);
+  const bounded = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  let latest: ApplyProgress | null = null, waited = 0;
+  try {
+    for (let poll = 0; poll < APPLY_POLL_LIMIT && active(); poll++) {
+      bounded.throwIfAborted();
+      const progress = await abortable((poll > 0 || checkOnly) && api.status
+        ? api.status(id, { signal: bounded }) : api.apply(id, intent, { signal: bounded, resume }), bounded);
+      if (!active() || signal?.aborted) return null;
+      latest = progress;
+      onProgress(progress);
+      if (!progress.pending || progress.state === 'failed' || progress.state === 'stalled') return progress;
+      const delay = Math.min(1000 * 2 ** poll, 5000);
+      if (waited + delay >= APPLY_POLL_WINDOW_MS || poll + 1 === APPLY_POLL_LIMIT) return latest;
+      await abortable(wait(delay, bounded), bounded);
+      waited += delay;
+    }
+  } catch (failure) {
+    if (!active() || signal?.aborted) return null;
+    if (deadline.aborted || failure instanceof ImportError && (failure.failure === 'admission' || failure.failure === 'pending')) {
+      if (latest) return latest;
+      throw failure;
+    }
+    throw failure;
   }
-  return null;
+  return active() ? latest : null;
 }

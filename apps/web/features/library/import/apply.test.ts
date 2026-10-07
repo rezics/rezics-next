@@ -18,7 +18,7 @@ describe('library apply polling', () => {
     expect(result).toEqual(complete);
     expect(seen).toEqual(replies);
     expect(calls).toEqual(Array.from({ length: 8 }, () => ['file', intent]));
-    expect(waits).toEqual(Array<number>(7).fill(1000));
+    expect(waits).toEqual([1000, 2000, 4000, 5000, 5000, 5000, 5000]);
   });
 
   test('an actual refusal is propagated without manufacturing another pending reply', async () => {
@@ -59,4 +59,57 @@ describe('library apply polling', () => {
       { active: () => false, onProgress: () => {} })).toBeNull();
     expect(calls).toBe(0);
   });
+  test('permanent 202 has bounded backoff and returns truthful pending progress', async () => {
+    let commands = 0, reads = 0;
+    const waits: number[] = [];
+    const result = await pollLibraryApply({ apply: async () => { commands++; return pending; },
+      status: async () => { reads++; return pending; } }, 'file', intent, {
+      active: () => true, onProgress: () => {}, wait: async delay => { waits.push(delay); },
+    });
+    expect(result).toEqual(pending);
+    expect(commands).toBe(1);
+    expect(reads).toBe(7);
+    expect(waits).toEqual([1000, 2000, 4000, 5000, 5000, 5000, 5000]);
+    expect(waits.reduce((a, b) => a + b, 0)).toBeLessThan(30_000);
+  });
+
+  test('checking an existing job reads status and never resubmits its write', async () => {
+    let writes = 0, reads = 0;
+    expect(await pollLibraryApply({ apply: async () => { writes++; return complete; },
+      status: async () => { reads++; return complete; } }, 'file', intent, {
+      active: () => true, onProgress: () => {}, checkOnly: true,
+    })).toEqual(complete);
+    expect(writes).toBe(0); expect(reads).toBe(1);
+  });
+
+  test('terminal stalled state retains the actual reason and stops reads', async () => {
+    const stalled: ApplyProgress = { ...pending, pending: false, state: 'stalled', reason: 'lease-expired' };
+    let reads = 0;
+    expect(await pollLibraryApply({ apply: async () => pending, status: async () => { reads++; return stalled; } },
+      'file', intent, { active: () => true, onProgress: () => {}, wait: async () => {} })).toEqual(stalled);
+    expect(reads).toBe(1);
+  });
+
+  test('admission exhaustion while reading status preserves accepted pending work', async () => {
+    expect(await pollLibraryApply({ apply: async () => pending,
+      status: async () => { throw new ImportError('admission'); } }, 'file', intent,
+    { active: () => true, onProgress: () => {}, wait: async () => {} })).toEqual(pending);
+  });
+
+  test('abort during an in-flight status read returns null and prevents later reads', async () => {
+    const controller = new AbortController();
+    let reads = 0;
+    const result = pollLibraryApply({ apply: async () => pending, status: async (_id, options) => {
+      reads++; controller.abort();
+      expect(options?.signal?.aborted).toBe(true);
+      return new Promise(() => {});
+    } }, 'file', intent, { signal: controller.signal, active: () => true, onProgress: () => {}, wait: async () => {} });
+    expect(await result).toBeNull(); expect(reads).toBe(1);
+  });
+
+  test('exhausted first submission is an admission refusal, not a manufactured accepted job', async () => {
+    await expect(pollLibraryApply({ apply: async () => { throw new ImportError('admission'); } }, 'file', intent,
+      { active: () => true, onProgress: () => {} })).rejects.toEqual(new ImportError('admission'));
+  });
+
 });

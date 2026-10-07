@@ -92,6 +92,7 @@ export type WorkerName =
   | 'main.zone-browse.projection'
   | 'main.realm-policy.recovery'
   | 'main.library-import.retention'
+  | 'main.library-import.apply'
   | 'main.library.backfill'
   | 'main.post.backfill'
   | 'main.media.screen'

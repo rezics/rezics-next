@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import type { ImportApi } from './import-api.ts';
+import { ImportError, mainImportApi, type ImportApi } from './import-api.ts';
+import type { MainClient } from '../discover/types.ts';
 import { agentId, fakeImportApi, type FakeOptions, goodreadsRows, halfApplied } from './import-fixtures.ts';
 import { type ImportShelf, memoryImportShelf, type PendingImport } from './import-store.ts';
 import { LibraryImport } from './library-import.tsx';
@@ -12,17 +13,21 @@ import zhHans from './messages/zh-Hans.ts';
 import { chooseOption } from '../stories/choose-option.ts';
 
 /** Each render gets its own Main and browser storage, so a story can be replayed. */
-function Harness({ make, entries = [], ...props }: Omit<React.ComponentProps<typeof LibraryImport>, 'api' | 'shelf'>
-  & { make: () => ImportApi; entries?: readonly PendingImport[] }) {
+function Harness({ make, entries = [], unmountControl = false, strictMode = false, ...props }: Omit<React.ComponentProps<typeof LibraryImport>, 'api' | 'shelf'>
+  & { make: () => ImportApi; entries?: readonly PendingImport[]; unmountControl?: boolean; strictMode?: boolean }) {
   const [api] = useState(make);
   const [shelf] = useState<ImportShelf>(() => memoryImportShelf(entries));
-  return <LibraryImport {...props} api={api} shelf={shelf} />;
+  const [mounted, setMounted] = useState(true);
+  const importer = mounted ? <LibraryImport {...props} api={api} shelf={shelf} /> : null;
+  return <>{unmountControl ? <button type="button" onClick={() => setMounted(current => !current)}>
+    {mounted ? 'Unmount importer' : 'Mount importer'}</button> : null}
+  {strictMode ? <StrictMode>{importer}</StrictMode> : importer}</>;
 }
 const pending = (over: Partial<PendingImport> = {}): PendingImport => ({ id: 'file-1', format: 'goodreads',
   name: 'goodreads_library_export.csv', total: 9, createdAt: Date.now(), intent: null, ...over });
 const file = (name = 'goodreads_library_export.csv') => new File(['Title,Author\nPride and Prejudice,Jane Austen\n'], name, { type: 'text/csv' });
 let last: ReturnType<typeof fakeImportApi> | undefined;
-const faked = (options: FakeOptions = {}) => () => (last = fakeImportApi(goodreadsRows(), options));
+const faked = (options: FakeOptions = {}): (() => ImportApi) => () => (last = fakeImportApi(goodreadsRows(), options));
 
 const meta = { title: 'Library/Import', component: Harness,
   args: { agent: agentId, context: agentId, locale: 'en', messages, make: faked() },
@@ -194,3 +199,85 @@ export const German: Story = { args: { locale: 'de', messages: { ...messages, ..
 
 export const Japanese: Story = { args: { locale: 'ja', messages: { ...messages, ...ja } },
   async play({ canvasElement }) { await userEvent.click(within(canvasElement).getByText('本をインポート')); } };
+
+
+/** Observation stops after admission exhaustion; an explicit check reads the durable job later. */
+export const StillImporting: Story = { args: { make: () => {
+  let reads=0;
+  return { ...fakeImportApi(halfApplied()),status: async () => {
+    if (reads++===0) return { total: 9,completed: 4,issues: 0,pending: true,state: 'pending' as const,reason: null };
+    throw new ImportError('admission');
+  } };
+}, entries: [pending({ intent: { context: agentId, language: 'und' } })] },
+async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByRole('button', { name: /Continue/ }));
+  await expect(await canvas.findByText('Still importing. You can leave and come back.')).toBeVisible();
+  await expect(canvas.getByRole('button', { name: 'Check progress' })).toBeEnabled();
+  await expect(canvas.queryByText(/unavailable right now/)).toBeNull();
+} };
+
+/** A real server stall names its reason; only the explicit Continue command asks the server to resume. */
+let explicitResume = false;
+export const ServerStalled: Story = { args: { make: () => {
+  explicitResume = false;
+  const fake = fakeImportApi(halfApplied(), { step: 9 });
+  return { ...fake, status: async () => ({
+    total: 9, completed: 4, issues: 0, pending: false, state: 'stalled' as const, reason: 'lease-expired' as const,
+  }), apply: async (id, intent, options) => { explicitResume = options?.resume === true; return fake.apply(id, intent, options); } };
+}, entries: [pending({ intent: { context: agentId, language: 'und' } })] },
+async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByRole('button', { name: /Continue/ }));
+  await expect(await canvas.findByText(/worker did not finish in time/)).toBeVisible();
+  await expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+  await expect(await canvas.findByText(/Finished: 9 of 9 rows/)).toBeVisible();
+  await expect(explicitResume).toBe(true);
+} };
+
+let admissionSignals: AbortSignal[] = [];
+const permanentlyAdmitted = () => {
+  admissionSignals = [];
+  const main = { v1: { me: { 'library-imports': { post: async (_body: unknown,
+    options: { fetch: { signal: AbortSignal } }) => {
+    admissionSignals.push(options.fetch.signal);
+    return { status: 429, data: null, response: new Response(null, {
+      status: 429, headers: { 'retry-after': '1' },
+    }) };
+  } } } } } as unknown as MainClient;
+  return mainImportApi(agentId, () => main);
+};
+
+/** Leaving while admission is waiting aborts the inner loop; remounting creates a usable fresh lifetime. */
+export const CancelOnUnmount: Story = { args: { make: permanentlyAdmitted, unmountControl: true, strictMode: true },
+async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.upload(canvas.getByLabelText('Library file'), file());
+  await waitFor(() => expect(admissionSignals).toHaveLength(1));
+  await userEvent.click(canvas.getByRole('button', { name: 'Unmount importer' }));
+  await expect(admissionSignals[0]!.aborted).toBe(true);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  await expect(admissionSignals).toHaveLength(1);
+  await userEvent.click(canvas.getByRole('button', { name: 'Mount importer' }));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.upload(canvas.getByLabelText('Library file'), file());
+  await waitFor(() => expect(admissionSignals).toHaveLength(2));
+  await expect(admissionSignals[1]!.aborted).toBe(false);
+  await userEvent.click(canvas.getByRole('button', { name: 'Unmount importer' }));
+} };
+
+/** Closing the disclosure interrupts abandoned commands while the server keeps accepted jobs. */
+export const CancelOnClose: Story = { args: { make: permanentlyAdmitted }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.upload(canvas.getByLabelText('Library file'), file());
+  await waitFor(() => expect(admissionSignals).toHaveLength(1));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await waitFor(() => expect(admissionSignals[0]!.aborted).toBe(true));
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  await expect(admissionSignals).toHaveLength(1);
+} };

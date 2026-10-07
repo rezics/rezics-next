@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { type MainClient } from '../../discover/types.ts';
-import { ImportError, mainImportApi } from '../import-api.ts';
+import { IMPORT_REQUEST_ATTEMPTS, ImportError, mainImportApi } from '../import-api.ts';
 
 interface Reply {
   status: number;
@@ -10,10 +10,10 @@ interface Reply {
 }
 
 function client(replies: Reply[]) {
-  const sent: Array<{ body: unknown; headers: { 'idempotency-key': string } }> = [];
+  const sent: Array<{ body: unknown; headers: { 'idempotency-key': string }; signal?: AbortSignal }> = [];
   const waits: number[] = [];
-  const post = async (body: unknown, { headers }: { headers: { 'idempotency-key': string } }) => {
-    sent.push({ body, headers });
+  const post = async (body: unknown, { headers, fetch }: { headers: { 'idempotency-key': string }; fetch?: { signal?: AbortSignal } }) => {
+    sent.push({ body, headers, signal: fetch?.signal });
     const reply = replies[sent.length - 1];
     if (!reply) throw new Error('Unexpected extra import request');
     return reply;
@@ -92,4 +92,70 @@ describe('library import admission and adoption polling', () => {
     const { api } = client([{ status: 200, data: null }]);
     await expect(api.inspect('Title')).rejects.toEqual(new ImportError('invalid'));
   });
+  test('permanent 429 exhausts finite attempts and remains admission, never unavailable', async () => {
+    const { api, sent, waits } = client(Array.from({ length: IMPORT_REQUEST_ATTEMPTS }, () => admission('0')));
+    await expect(api.inspect('Title')).rejects.toEqual(new ImportError('admission'));
+    expect(sent).toHaveLength(IMPORT_REQUEST_ATTEMPTS);
+    expect(waits).toHaveLength(IMPORT_REQUEST_ATTEMPTS - 1);
+    expect(new Set(sent.map(request => request.headers['idempotency-key'])).size).toBe(1);
+  });
+
+  test('Retry-After beyond the observation window stops without an early retry', async () => {
+    const { api, sent, waits } = client([admission('60')]);
+    await expect(api.inspect('Title')).rejects.toEqual(new ImportError('admission'));
+    expect(sent).toHaveLength(1);
+    expect(waits).toEqual([]);
+  });
+
+  test('permanent 202 adoption exhausts as pending, never unavailable', async () => {
+    const { api, sent } = client(Array.from({ length: IMPORT_REQUEST_ATTEMPTS }, pending));
+    await expect(api.adopt('import', 1, 'OL1W', 'en')).rejects.toEqual(new ImportError('pending'));
+    expect(sent).toHaveLength(IMPORT_REQUEST_ATTEMPTS);
+  });
+
+  test('abort interrupts admission waits and prevents the next command', async () => {
+    const controller = new AbortController();
+    const { api, sent } = client([admission()]);
+    const response = api.inspect('Title', { signal: controller.signal });
+    controller.abort();
+    await expect(response).rejects.toMatchObject({ name: 'AbortError' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.signal?.aborted).toBe(true);
+  });
+
+  test('abort reaches an in-flight SDK fetch and releases an adapter that never answers', async () => {
+    const controller = new AbortController();
+    let fetchSignal: AbortSignal | undefined;
+    const main = { v1: { me: { 'library-imports': { post: (_body: unknown,
+      options: { fetch: { signal: AbortSignal } }) => {
+      fetchSignal = options.fetch.signal;
+      return new Promise(() => {});
+    } } } } } as unknown as MainClient;
+    const response = mainImportApi('reader', () => main).inspect('Title', { signal: controller.signal });
+    controller.abort();
+    await expect(response).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchSignal?.aborted).toBe(true);
+  });
+
+  test('already cancelled operations send nothing', async () => {
+    const controller = new AbortController(); controller.abort();
+    const { api, sent } = client([]);
+    await expect(api.inspect('Title', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(sent).toHaveLength(0);
+  });
+
+  test('abort after 429 arrives interrupts its Retry-After wait', async () => {
+    const controller = new AbortController();
+    let calls = 0, entered!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; });
+    const main = { v1: { me: { 'library-imports': { post: async () => { calls++; return admission('2'); } } } } } as unknown as MainClient;
+    const api = mainImportApi('reader', () => main, async (_delay, signal) => {
+      expect(signal?.aborted).toBe(false); entered(); return new Promise(() => {});
+    });
+    const response = api.inspect('Title', { signal: controller.signal });
+    await waiting; controller.abort();
+    await expect(response).rejects.toMatchObject({ name: 'AbortError' });
+    expect(calls).toBe(1);
+  });
+
 });

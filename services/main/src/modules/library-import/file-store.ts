@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { FILE_IMPORT_COST, canonicalRow, type CanonicalRow, type LibraryFileFormat } from './formats/contract.ts';
 import { ReaderImportConflict } from './reader-import.ts';
 import { deleteLibraryUploads } from './privacy.ts';
+import { LibraryImportJobStore, ImportJobLeaseLost } from './job-store.ts';
 
 export class LibraryFileMissing extends Error {}
 export const LIBRARY_UPLOAD_RETENTION_DAYS = 7;
@@ -47,7 +48,8 @@ const sourceView = `CASE WHEN r.source_view IS NULL THEN s.source ELSE r.source_
 /** One bulk insert; pages and apply use the (agent,file,row) keyset. All review
  * mutations lock the file before rows, so apply seals one immutable intent. */
 export class LibraryFileStore {
-  constructor(readonly pool: Pool) {}
+  readonly jobs: LibraryImportJobStore;
+  constructor(readonly pool: Pool) { this.jobs=new LibraryImportJobStore(pool); }
   async create(agent: string, key: string, digest: string, format: LibraryFileFormat, rows: CanonicalRow[]) {
     const id = fileIdentity(agent, key), client = await this.pool.connect();
     try {
@@ -157,16 +159,28 @@ export class LibraryFileStore {
       WHERE r.agent=$1 AND r.file_id=$2 AND r.outcome IS NULL ORDER BY r.row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
     return rows.rows.map(unpack);
   }
-  async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>) {
-    await this.pool.query(`UPDATE reader.library_import_source_row SET outcome=$4,version=version+1
-      WHERE agent=$1 AND file_id=$2 AND row_number=$3 AND outcome IS NULL`, [agent,id,index,JSON.stringify(outcome)]);
+  async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>,token?: string) {
+    const client=await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (token && !(await client.query(`SELECT 1 FROM reader.library_import_job WHERE agent=$1 AND file_id=$2
+        AND state='pending' AND lease_token=$3 FOR UPDATE`,[agent,id,token])).rowCount) throw new ImportJobLeaseLost('Import worker lease expired');
+      await client.query(`UPDATE reader.library_import_source_row SET outcome=$4,version=version+1
+        WHERE agent=$1 AND file_id=$2 AND row_number=$3 AND outcome IS NULL`,[agent,id,index,JSON.stringify(outcome)]);
+      if (token) await this.jobs.progress(agent,id,token,client);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
   }
   async progress(agent: string, id: string) {
+    await this.file(agent,id);
+    const job=await this.jobs.status(agent,id);
     const result = await this.pool.query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,
       count(outcome)::integer AS completed,
       count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
       FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2`, [agent,id]);
-    return { ...result.rows[0]!, pending: result.rows[0]!.completed < result.rows[0]!.total };
+    const counts=result.rows[0]!;
+    const state=job?.state ?? (counts.completed===counts.total ? 'completed' as const : 'review' as const);
+    return { ...counts,state,reason: job?.reason ?? null,pending: state==='pending' };
   }
   async delete(agent: string, id: string, key: string) {
     const client = await this.pool.connect();

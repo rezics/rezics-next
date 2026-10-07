@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { recordImportJobProgress } from './job-context.ts';
 
 const WORK = /^OL[1-9][0-9]{0,11}W$/;
 const AGENT = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -90,9 +91,10 @@ export class ReaderLibraryImportStore {
   }
 
   async completeStep(agent: string, key: string, row: number, step: string): Promise<void> {
-    await this.pool.query(`UPDATE reader.library_import_step SET completed = true
-      WHERE agent = $1 AND import_key = $2 AND row_number = $3 AND step_key = $4`,
+    const changed=await this.pool.query(`UPDATE reader.library_import_step SET completed = true
+      WHERE agent = $1 AND import_key = $2 AND row_number = $3 AND step_key = $4 AND NOT completed`,
     [agent, key, row, step]);
+    if (changed.rowCount) await recordImportJobProgress();
   }
 
   async planPlacement(agent: string, shelf: string, work: string,
@@ -111,8 +113,9 @@ export class ReaderLibraryImportStore {
   }
 
   async completePlacement(agent: string, shelf: string, work: string): Promise<void> {
-    await this.pool.query(`UPDATE reader.library_import_placement SET completed = true
-      WHERE agent = $1 AND shelf = $2 AND work = $3`, [agent, shelf, work]);
+    const changed=await this.pool.query(`UPDATE reader.library_import_placement SET completed = true
+      WHERE agent = $1 AND shelf = $2 AND work = $3 AND NOT completed`, [agent, shelf, work]);
+    if (changed.rowCount) await recordImportJobProgress();
   }
 
   async revisePlacement(agent: string, shelf: string, work: string,
