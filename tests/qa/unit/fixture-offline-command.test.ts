@@ -47,3 +47,16 @@ test('a signaled command and a printed token stay bounded', () => {
   expect(text).toContain('FUSEKI_COMMAND_TOKEN=[redacted]');
   expect(text).not.toContain('supersecretvalue');
 });
+
+test('a medium-sized private seed reaches stdin intact without entering argv', () => {
+  const payload = '<urn:seed> <urn:body> "private-seed" <urn:graph> .\n'.repeat(4096);
+  expect(Buffer.byteLength(payload)).toBeGreaterThan(131_072);
+  const result = spawnSync(process.execPath, ['-e',
+    'const data=await Bun.stdin.bytes(); process.stdout.write(Buffer.from(data));'], {
+    encoding: 'utf8', input: payload,
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe(payload);
+  expect(result.stderr).toBe('');
+});
