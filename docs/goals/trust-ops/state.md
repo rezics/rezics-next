@@ -536,3 +536,19 @@ migration handoff; no worker/schema/runtime changes have started and no competin
 number is chosen. Exact schema/route/locator loan is coordinated, not inferred
 from unavailable-source reads. No selector text or resolvedText may remain after
 erasure; independently-authored annotation erasure stays its author's family.
+
+G-1408 dispatchedCursor1 (pid2714314) after Kernelreleased1708 and granted exact
+comment/migration/locator loans. Reviewed source constraints and inventory are
+staged; no new registry/404-only/split-owner design is accepted. Current5s
+set-based erasure cap, whole rollback, exact terminalrevision+journalid/epoch
+and postmigration/pre-terminal signedcoverage proof remain mandatory.
+
+G-1401 full hooks returned19forced concurrency passes after five real40P01
+reproductions. Two owner failures were reproduced by manager on actualpre-change
+36f887e93, QA230536-4296f7: consent403 and selected-capability5000ms timeout,
+both alone as well. They remain separate gaps, not successes. Currentrebase/type
+passes and105unit/guard gate is live in tmuxg1401-lock-gate, log/exit
+g1401-lock-merge-2312.*. G-1351 actualsmalloperator caller passedQA225912-a430e1
+209s; itsrebasedpositive slice/typepass is in162unit/guard gate, tmux
+g1351-positive-gate/log+exitg1351-positive-merge-2310.*. No mediumlaunchdrill
+or outer-outcome retry is claimed. No owned refresh before terminal gates.
