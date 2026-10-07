@@ -347,6 +347,8 @@ test('Content Showcase save replays exact bytes, rejects stale heads and publish
     expect(unpublishedEditor.draft).toMatchObject({ variantId: page.variantId, revisionId: page.revisionId,
       document, byteDigest: page.byteDigest, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
       sourcePosition: { owner: 'content', dataEpoch: page.contentEpoch } });
+    expect((await f.call('GET', `${f.path}/showcase-editor?actingSubject=${encodeURIComponent(f.actor)}`,
+      undefined, randomUUID(), null)).status).toBe(401);
     const retained = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(
       await f.exact(page.revisionId, true), 200);
     expect(retained.body.document).toEqual(document);
@@ -386,6 +388,7 @@ test('Content Showcase save replays exact bytes, rejects stale heads and publish
     const presentation = async () => f.json<{ presentation: ZonePresentation; home?: Home['page'] }>(
       await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
     const published = await presentation();
+    expect(published).not.toHaveProperty('draft');
     expect(published.presentation.modules).toEqual([documentHero]);
     expect(published.presentation.slides).toEqual(documentSlides);
     expect(published.presentation.tokens.titleEffect).toBe('outline');
