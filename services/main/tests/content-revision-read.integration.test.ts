@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { ContentCore, migrateContent, type VariantIdentity } from '../../content/src/index.ts';
+import { ContentConflict, ContentCore, migrateContent, type VariantIdentity } from '../../content/src/index.ts';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
@@ -29,6 +29,8 @@ class ReadGraph extends FusekiClient {
   currentWorkPresent = true;
   constructor() { super('http://127.0.0.1:1/rezics'); }
   override async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('SELECT DISTINCT ?type')) return { results: { bindings: this.currentWorkPresent
+      ? [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] : [] } };
     return { boolean: sparql.includes('schema:CreativeWork') ? this.currentWorkPresent : true };
   }
 }
@@ -102,7 +104,7 @@ test('WORK09: partial Content exact history requires current Work disclosure and
     await expect(content.saveDraft({ operationId: `save-${randomUUID()}`, variant,
       expectedHead: second.revisionId, model: 'content-shape-v1', sourceRevision: null,
       provenance: { editor: 'test' }, serializedJson: JSON.stringify({ body: 'false projection', document }) }))
-      .rejects.toThrow('invalid document or text projection');
+      .rejects.toBeInstanceOf(ContentConflict);
 
     const unknown = await read(randomUUID());
     expect(unknown.status).toBe(404);

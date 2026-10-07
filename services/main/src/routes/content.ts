@@ -5,7 +5,8 @@ import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { editAdmittedMetadataWork } from '../modules/work/edit-admitted.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
-import { ContentDraftStale, saveAdmittedContentDraft } from '../modules/content-publication/draft.ts';
+import { canReadContentTarget, ContentDraftStale, ContentDraftUnavailable,
+  resolveContentTarget, saveAdmittedContentDraft } from '../modules/content-publication/draft.ts';
 import { createAdmittedContentComment } from '../modules/content-publication/comment.ts';
 import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
 import { publishAdmittedContent } from '../modules/content-publication/publish-admitted.ts';
@@ -23,6 +24,9 @@ import { titleControlBasis } from './shared.ts';
 import { publicDomainRevisionCurrent } from '../modules/content-publication/public-domain-read.ts';
 import { authoredBodySchema } from '../api-document.ts';
 import type { DocumentSnapshot } from '@rezics/document';
+import { isZonePublishedPageRevision } from '../modules/zone/publication.ts';
+import { discloseContent } from '../modules/disclosure/assembly.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 
 const textDraftFields = {
   notes: t.Optional(t.Object({ before: t.Optional(authoredBodySchema({}, 8192)),
@@ -349,26 +353,49 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       params: t.Object({ revision: t.String({
         pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
       }) }),
-      query: t.Object({ actingSubject: t.String({
+      query: t.Object({ actingSubject: t.Optional(t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
-      }) }, { additionalProperties: false }),
+      })) }, { additionalProperties: false }),
       response: { 200: exactContentRevision, ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const principal = await work.account.verify(request, ['work:read']);
         if (!work.content) return problem(503, 'dependency_unavailable', 'Content owner is unavailable');
         const resourceId = await work.content.owningResourceForRevision(params.revision);
-        if (!resourceId || !await work.access.canReadWork(principal, query.actingSubject, resourceId)) {
+        if (!resourceId) {
           return problem(404, 'revision_unavailable', 'Revision is unavailable');
         }
-        const current = await fuseki.query(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
-          ASK { GRAPH <urn:rezics:graph:current> {
-            ${iri(resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);
-        if (current.boolean !== true) return problem(404, 'revision_unavailable', 'Revision is unavailable');
-        const exact = (await work.content.readExactBatch([params.revision],
-          async ids => new Set(ids)))[0];
+        let target;
+        try { target = await resolveContentTarget(work.environment, resourceId); }
+        catch (error) {
+          if (!(error instanceof ContentDraftUnavailable)) throw error;
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
+        const published = target.zone
+          ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision) : false;
+        let principal = null;
+        if (!published) {
+          if (!query.actingSubject) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+          principal = await work.account.verify(request, [target.zone ? 'zone:edit' : 'work:read']);
+          if (!await canReadContentTarget(work.environment, work.access, principal,
+            query.actingSubject, resourceId, target)) {
+            return problem(404, 'revision_unavailable', 'Revision is unavailable');
+          }
+        } else if (request.headers.has('authorization')) {
+          principal = await work.account.verify(request, []);
+        }
+        const viewer = disclosureViewer(principal, query.actingSubject);
+        const read = () => work.content!.readExactBatch([params.revision], async ids => new Set(ids));
+        let results = await (target.zone ? withDisclosureViewer(viewer, read) : read());
+        if (target.zone) results = await discloseContent(work.environment, results,
+          viewer);
+        if (published && target.zone && !await isZonePublishedPageRevision(work.environment,
+          target.zone, resourceId, params.revision)) {
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
+        const exact = results[0];
         if (exact?.status === 'available'
+          && exact.reference.resourceId === resourceId
           && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)) {
           return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
             body: exact.body }, { headers: { 'cache-control': 'no-store' } });

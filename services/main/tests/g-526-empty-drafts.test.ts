@@ -15,6 +15,7 @@ import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts'
 const resource = `https://rezics.com/id/${randomUUID()}`;
 const actor = `https://rezics.com/id/${randomUUID()}`;
 const variant = `urn:rezics:variant:${randomUUID()}`;
+const currentWorkType = { results: { bindings: [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] } };
 
 test('G-526: both Contribution digest contracts distinguish empty text from absent or non-string bodies', () => {
   const create = { work: resource, language: 'en', actingSubject: actor, body: '' };
@@ -51,7 +52,8 @@ test('G-526: empty publication reads one exact revision and creates no admission
       byteDigest: input.expectedDigest }, body: { body: '' } }];
   }, preparePublication: () => { throw new Error('empty body created a pin'); } } as unknown as ContentCore;
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
-    fuseki: { query: async () => ({ boolean: true }) } } as unknown as WorkActivationEnvironment;
+    fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
+      ? currentWorkType : { boolean: true } } } as unknown as WorkActivationEnvironment;
   const access = { canReadWork: async () => true, register: () => { throw new Error('empty body created an admission'); } } as unknown as AccessAdmissionRegistry;
   await expect(publishAdmittedContent(env, content,
     { verify: async () => ({ issuer: 'https://account.test', subject: randomUUID() }) }, access,
@@ -64,6 +66,7 @@ test('G-526: empty publication reads one exact revision and creates no admission
 test('G-526: non-readers cannot load private bodies or create a publication admission', async () => {
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
     fuseki: { query: async (query: string) => {
+      if (query.includes('SELECT DISTINCT ?type')) return currentWorkType;
       if (query.includes('SELECT')) throw new Error('non-reader looked up a Contribution revision');
       return { boolean: true };
     } } } as unknown as WorkActivationEnvironment;
@@ -99,7 +102,8 @@ test('G-526: an empty Content revision must match the exact publication intent',
 
 test('G-526: readable Work authority does not disclose a foreign Content revision', async () => {
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
-    fuseki: { query: async () => ({ boolean: true }) } } as unknown as WorkActivationEnvironment;
+    fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
+      ? currentWorkType : { boolean: true } } } as unknown as WorkActivationEnvironment;
   const access = { canReadWork: async () => true,
     register: () => { throw new Error('foreign revision created an admission'); } } as unknown as AccessAdmissionRegistry;
   const content = { owningResourceForRevision: async () => actor,

@@ -12,7 +12,9 @@ const native = () => `https://rezics.com/id/${randomUUID()}`;
 test('G-957/G-526: Content accepts its character budget in plain and document form before binding exact bytes', async () => {
   const resourceId = native(), author = native();
   const saved: SaveDraftCommand[] = [];
-  const env = { fuseki: { query: async () => ({ boolean: true }) },
+  const env = { fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
+    ? { results: { bindings: [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] } }
+    : { boolean: true } },
     lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() } } as unknown as WorkActivationEnvironment;
   const content = { saveDraft: async (command: SaveDraftCommand) => {
     saved.push(command);

@@ -10,6 +10,8 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } f
 import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
   publicContentEmbedGuards }
   from './embed-closure.ts';
+import { contentTargetGuard, type ContentTarget } from './draft.ts';
+import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
 
 const NONE = 'urn:rezics:none';
 const REVISION_IRI_PREFIX = 'urn:rezics:content:revision:';
@@ -173,15 +175,16 @@ function receiptFields(env: WorkActivationEnvironment, admission: RegisteredAdmi
 
 export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: PublishPinnedContentInput, preparation: PublicationPreparation,
-  embedded: readonly ExactContentReference[] = []): string {
+  embedded: readonly ExactContentReference[] = [], target?: ContentTarget): string {
   const receipt = contentPublicationReceiptIri(admission.id);
   const decision = contentPublicationDecisionIri(admission.id);
   const operation = `urn:rezics:operation:${hash(`${admission.id}\0content-publication`)}`;
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0content`)}`;
   const ref = preparation.reference;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization'
-    : ref.model === POST_CONTENT_MODEL ? 'rv:Post' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
+  const targetIdentity = target ?? (input.targetProfile === 'catalog-description'
+    ? { type: 'https://schema.org/Organization', zone: null }
+    : ref.model === POST_CONTENT_MODEL ? { type: `${RV}Post`, zone: null } : undefined);
   const languageTag = ref.language.kind === 'tag' ? `rv:contentLanguage ${lit(ref.language.tag)} ;` : '';
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
@@ -228,7 +231,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.resourceId)} a ${targetKind} .
+        ${contentTargetGuard(input.resourceId, targetIdentity)}
         ${input.spoiler !== undefined ? `${iri(input.resourceId)} a rv:Post . OPTIONAL { ${iri(input.resourceId)} rv:spoiler ?priorSpoiler }` : ''}
         OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
@@ -245,12 +248,13 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
 
 function rejectedUpdate(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: PublishPinnedContentInput, preparation: PublicationPreparation,
-  reason: 'StaleHead' | 'EmbedDenied', embedded: readonly ExactContentReference[] = []): string {
+  reason: 'StaleHead' | 'EmbedDenied', embedded: readonly ExactContentReference[] = [], target?: ContentTarget): string {
   const receipt = contentPublicationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0rejected-content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0rejected-content`)}`;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization'
-    : preparation.reference.model === POST_CONTENT_MODEL ? 'rv:Post' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
+  const targetIdentity = target ?? (input.targetProfile === 'catalog-description'
+    ? { type: 'https://schema.org/Organization', zone: null }
+    : preparation.reference.model === POST_CONTENT_MODEL ? { type: `${RV}Post`, zone: null } : undefined);
   const guard = reason === 'StaleHead'
     ? `FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expectedHeadTerm(input)})`
     : `FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})
@@ -275,7 +279,7 @@ function rejectedUpdate(env: WorkActivationEnvironment, admission: RegisteredAdm
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.resourceId)} a ${targetKind} .
+        ${contentTargetGuard(input.resourceId, targetIdentity)}
         OPTIONAL { ${iri(input.variantId)} rv:resource ?registeredResource }
         OPTIONAL { ${iri(input.variantId)} rv:contentPublicationHead ?prior }
       }
@@ -444,7 +448,8 @@ async function candidateValidations(env: WorkActivationEnvironment, admissionId:
 
 /** Graph receipt, not an HTTP response, proves the terminal result before Content settlement. */
 export async function publishPinnedContent(env: WorkActivationEnvironment, content: ContentCore,
-  admission: RegisteredAdmission, input: PublishPinnedContentInput): Promise<ContentPublicationResult> {
+  admission: RegisteredAdmission, input: PublishPinnedContentInput,
+  target?: ContentTarget): Promise<ContentPublicationResult> {
   const digest = checkedAdmission(admission, input);
   await assertContentPublicationBody(content, input, env);
   // The existing graph writer rejects unknown current types and unvalidated
@@ -473,7 +478,7 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
     return pending(receipt, preparation.replayed);
   }
   const envelope = { receipt, digest, update: buildPinnedContentPublicationUpdate(env, admission,
-    input, preparation, embeds.dependencies),
+    input, preparation, embeds.dependencies, target),
     validations, deadlineMs: 10_000 };
   let guardUnmatched = false;
   try {
@@ -497,18 +502,41 @@ export async function publishPinnedContent(env: WorkActivationEnvironment, conte
       try {
         await env.fuseki.commandWithReceipt({ receipt, digest,
           update: rejectedUpdate(env, admission, input, preparation, 'EmbedDenied',
-            embeds.dependencies), validations: [], deadlineMs: 10_000 });
+            embeds.dependencies, target), validations: [], deadlineMs: 10_000 });
       } catch { /* the exact rejection receipt resolves an uncertain response */ }
       terminal = await reconcile(env, content, admission, input, preparation);
       if (terminal) return terminal;
     }
     try {
       await env.fuseki.commandWithReceipt({ receipt, digest,
-        update: rejectedUpdate(env, admission, input, preparation, 'StaleHead'),
+        update: rejectedUpdate(env, admission, input, preparation, 'StaleHead', [], target),
         validations: [], deadlineMs: 10_000 });
     } catch { /* a lost stale outcome is resolved from the same receipt */ }
     terminal = await reconcile(env, content, admission, input, preparation);
     if (terminal) return terminal;
   }
   return pending(receipt, preparation.replayed);
+}
+
+/** Launch settles its pending custody pin using the historical site receipt,
+ * never the current draft or the current site head. Republish/retire retain proof. */
+export async function settleZonePageContentPublication(env: WorkActivationEnvironment,
+  content: ContentCore, preparationId: string, siteReceipt: string): Promise<
+  Awaited<ReturnType<ContentCore['settlePublication']>>> {
+  const preparation = await content.readPublicationPreparation(preparationId);
+  if (!preparation) throw new ContentPublicationConflict('Content page pin is absent');
+  const publication = await readZoneSitePublicationReceipt(env, siteReceipt);
+  const ref = preparation.reference;
+  if (!publication || publication.zone !== ref.resourceId
+    || !publication.pages.some(page => page.page === ref.resourceId
+      && page.variantId === ref.variantId && page.revisionId === ref.revisionId)) {
+    throw new ContentPublicationConflict('Site receipt does not select the pinned exact page');
+  }
+  if ((await content.ownerPosition()).dataEpoch !== preparation.position.dataEpoch) {
+    throw new StaleContentOwnerEpoch('Content owner epoch changed before site settlement');
+  }
+  return content.settlePublication(`content-site-settle:${hash(preparationId)}`, preparationId, {
+    outcome: 'active', revisionId: ref.revisionId, receipt: publication.receipt,
+    dataEpoch: publication.dataEpoch, sequence: publication.sequence,
+  }, preparation.position.dataEpoch);
 }

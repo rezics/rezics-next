@@ -46,9 +46,9 @@ test('Note bounds and non-Post draft targets fail without creating an admission 
   const account = { verify: async () => ({ issuer: 'account', subject: 'author' }) };
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
     fuseki: { query: async (query: string) => {
-      expect(query).toContain('a rv:Post');
-      expect(query).not.toContain('VALUES ?kind');
-      return { boolean: false };
+      return query.includes('SELECT DISTINCT ?type')
+        ? { results: { bindings: [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] } }
+        : { boolean: true };
     } } } as unknown as WorkActivationEnvironment;
   await expect(saveAdmittedContentDraft(env, content, account, access, new Request('http://main.local'), input))
     .rejects.toBeInstanceOf(ContentConflict);
