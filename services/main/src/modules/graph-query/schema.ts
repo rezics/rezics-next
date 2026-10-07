@@ -66,13 +66,13 @@ export const GRAPH_QUERY_COST = {
     maxFusekiBytes: WORK_READ_COST.graphBytes,
     projectionPartQueries: 1,
     readingFenceQueries: 2,
-    recordsPerCandidate: 3 + MAX_FRAMES, // Statement, endpoints and applicability coordinates
+    recordsPerCandidate: 5 + MAX_FRAMES, // Statement, endpoints, applicability, qualification scope and edition
     revelationBatches: Math.ceil(
-      (GRAPH_QUERY_LIMITS.candidates * (3 + MAX_FRAMES + 2 * (MAX_FRAMES + 1)) + 1) /
+      (GRAPH_QUERY_LIMITS.candidates * (5 + MAX_FRAMES + 2 * (MAX_FRAMES + 1)) + 1) /
         REVELATION_COST.batch,
     ),
     maxRequestMs: GRAPH_QUERY_READ_LIMITS.requestMs,
-    resourceAccessChecks: GRAPH_QUERY_LIMITS.candidates + 3,
+    resourceAccessChecks: GRAPH_QUERY_LIMITS.candidates * 3 + 3,
     privateContextAccessChecks: GRAPH_QUERY_LIMITS.candidates,
     noPerStatementGraphHydration: true,
   },

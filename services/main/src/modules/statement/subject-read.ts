@@ -20,7 +20,7 @@ import {
   type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { resolveStatementAcceptancesAt } from './read.ts';
+import { resolveStatementAcceptancesAt, statementValueFromManifest } from './read.ts';
 import type { StatementSeekOrder } from './seek.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
@@ -29,6 +29,8 @@ import { readWikiClaimEvidence, projectWikiEvidence } from '../wiki/evidence-rea
 import type { WikiEvidenceRow } from '../wiki/evidence.ts';
 import { framePattern, matchFromScore } from '../projection/frame-read.ts';
 import type { Coordinate } from '../projection/dimension.ts';
+import { ContextCommandUnavailable } from '../context/command.ts';
+import { statementQualificationFromBindings } from './qualification.ts';
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
  * disclosed lookahead. Withheld rows never produce a short continuing page.
@@ -40,7 +42,7 @@ export const SUBJECT_STATEMENT_COST = {
   inventoryQueriesPerBatch: 2,
   candidates: 20,
   componentProperties: 256,
-  referencesPerCandidate: 25,
+  referencesPerCandidate: 27,
   referenceBatch: 64,
   disclosurePasses: 2,
   wikiEvidenceQueriesPerBatch: 1,
@@ -121,7 +123,8 @@ async function acceptanceScope(session: WorkReadSession, context: string) {
     await session.realm(rows[0]!.realm!.value);
   }
   return { inherit: rows[0]!.policy!.value === CLASSIFICATION_INHERIT_POLICY,
-    realm: rows[0]!.realm?.value ?? null };
+    realm: rows[0]!.realm?.value ?? null,
+  };
 }
 
 function statementValue(row: ReadRow): StatementValue {
@@ -182,7 +185,8 @@ export async function readSubjectStatements(
     ...(frames ? [frames] : []),
   ];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  let after: { phase: 'component' | 'statement'; predicate?: string; meaningKey?: string; score?: number } = { phase: frames ? 'statement' : 'component' };
+  let after: { phase: 'component' | 'statement'; predicate?: string; meaningKey?: string; score?: number;
+  } = { phase: frames ? 'statement' : 'component' };
   if (cursor) {
     try {
       after = JSON.parse(cursor.order) as typeof after;
@@ -192,7 +196,8 @@ export async function readSubjectStatements(
     if (
       !['component', 'statement'].includes(after.phase) ||
       (after.phase === 'statement' && (typeof after.predicate !== 'string' || typeof after.meaningKey !== 'string'
-        || frames && (!Number.isInteger(after.score) || after.score! < 0 || after.score! > 136)))
+        ||
+          (frames && (!Number.isInteger(after.score) || after.score! < 0 || after.score! > 136))))
     ) {
       throw new WorkReadInvalid('Statement cursor is invalid');
     }
@@ -225,7 +230,8 @@ export async function readSubjectStatements(
   };
   const items: Item[] = [];
   const publishedEvidence = new Map<string,WikiEvidenceRow[]>();
-  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; meaningKey?: string; score?: number }[] = [];
+  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; meaningKey?: string; score?: number;
+  }[] = [];
   const appendProperties = async () => {
     const component = await readCurrentComponent(session.deps.environment, resource, 'resource');
     const properties =
@@ -249,10 +255,14 @@ export async function readSubjectStatements(
         ),
       );
       const disclosedProperties = await boundary.visible(page.filter(({ property }) =>
-        property.value.kind !== 'resource' || allowed.has(property.value.ref)).map(({ property }) =>
-        propertyRevelationRecord(resource, property.predicate, property.value)));
+        property.value.kind !== 'resource' || allowed.has(property.value.ref),
+          ).map(({ property }) =>
+        propertyRevelationRecord(resource, property.predicate, property.value),
+          ),
+      );
       for (const { property } of page) {
-        if (!disclosedProperties.has(propertyRevelationRecord(resource, property.predicate, property.value))) continue;
+        if (!disclosedProperties.has(propertyRevelationRecord(resource, property.predicate, property.value),
+          )) continue;
         if (property.value.kind === 'resource' && !allowed.has(property.value.ref)) continue;
         items.push({
           kind: 'component-property',
@@ -275,27 +285,32 @@ export async function readSubjectStatements(
     const coverage = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
     let statementAfter: StatementSeekOrder | null =
       cursor && after.phase === 'statement'
-        ? { predicate: after.predicate!, meaningKey: after.meaningKey!, statementId: cursor.after, score: after.score ?? 0 }
+        ? { predicate: after.predicate!, meaningKey: after.meaningKey!, statementId: cursor.after, score: after.score ?? 0,
+          }
         : null;
     while (items.length <= limit) {
       session.checkDeadline();
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
       const sought = await seek.seek(session.position,resource,statementAfter,frames);
-      const rows: ReadRow[] = sought.candidates.map(row => ({
+      const rows: ReadRow[] = sought.candidates.map((row) => ({
         statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
         key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
       }));
       if (scope && rows.length) {
         const acceptance = scope.realm ? {kind: 'realm' as const,realm: scope.realm} : {kind: 'global' as const};
         const exact = await resolveStatementAcceptancesAt(session.deps.environment,
-          rows.map(row => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position);
+          rows.map((row) => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position,
+        );
         const qualified = await resolveStatementAcceptancesAt(session.deps.environment,
-          [...new Set(rows.map(row => row.key!.value))].map(meaningKey => ({kind: 'qualified-fact',meaningKey})),
-          acceptance,session.position);
+          [...new Set(rows.map((row) => row.key!.value))].map((meaningKey) => ({kind: 'qualified-fact',meaningKey,
+          })),
+          acceptance,session.position,
+        );
         for (const row of rows) {
-          const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result];
-          if (results.some(result => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
-          const result = results.find(result => result.state === 'accepted');
+          const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result,
+          ];
+          if (results.some((result) => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
+          const result = results.find((result) => result.state === 'accepted');
           if (result?.state === 'accepted') row.acceptance = {type: 'literal',value: result.decision+'|'+result.source};
         }
       }
@@ -305,10 +320,12 @@ export async function readSubjectStatements(
       }
       if (page.length) {
         const hydrated = await session.query(
-          `SELECT ?statement ?predicate ?object ?relation ?speaker ?key ?head
+          `SELECT ?statement ?predicate ?object ?relation ?speaker ?key ?head ?manifest
         ?pin ?ctx ?disclosure ?speakerRealm ?frameScore
+        ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
         (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
         (GROUP_CONCAT(DISTINCT STR(?applicability); separator="|") AS ?qualifiers)
+        (GROUP_CONCAT(DISTINCT STR(?qualifier); separator="|") AS ?valueQualifiers)
         (GROUP_CONCAT(DISTINCT STR(?evidence); separator="|") AS ?sources) WHERE {
         VALUES ?statement { ${page.map((row) => iri(row.statement!.value)).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
@@ -317,14 +334,23 @@ export async function readSubjectStatements(
           OPTIONAL { ?statement rv:interpretationDefinition ?definition }
           OPTIONAL { ?statement rv:applicability ?applicability }
           OPTIONAL { ?statement rv:semanticContextRevision ?pin }
+          OPTIONAL { ?statement rv:qualificationDefinition ?qualificationDefinition }
+          OPTIONAL { ?statement rv:interpretationContext ?qualificationContext }
+          OPTIONAL { ?statement rv:valuePrecision ?precision }
+          OPTIONAL { ?statement rv:valueQualifier ?qualifier }
+          OPTIONAL { ?statement rv:validFrom ?validFrom }
+          OPTIONAL { ?statement rv:validUntil ?validUntil }
+          OPTIONAL { ?statement rv:editionScope ?edition }
           OPTIONAL { ?speaker a rv:Realm . BIND(?speaker AS ?speakerRealm) } }
         GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision ; rv:component ?statement .
+          OPTIONAL { ?head rv:manifest ?manifest }
           OPTIONAL { ?head rv:evidence ?evidence } }
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?statement rv:semanticContextRevision ?pin }
           GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?ctx }
           GRAPH ${iri(GRAPHS.current)} { ?ctx rv:disclosure ?disclosure } }
         ${coverage ? `${coverage.filter}\nBIND(${coverage.score} AS ?frameScore)` : ''}
-      } GROUP BY ?statement ?predicate ?object ?relation ?speaker ?key ?head ?pin ?ctx ?disclosure ?speakerRealm ?frameScore
+      } GROUP BY ?statement ?predicate ?object ?relation ?speaker ?key ?head ?manifest ?pin ?ctx ?disclosure ?speakerRealm ?frameScore
+        ?qualificationDefinition ?qualificationContext ?precision ?validFrom ?validUntil ?edition
       LIMIT ${page.length + 1}`,
           page.length,
         );
@@ -335,15 +361,36 @@ export async function readSubjectStatements(
           throw new WorkReadUnavailable('Statement hydration is incomplete or ambiguous');
         }
         const byId = new Map(hydrated.map((row) => [row.statement!.value, row]));
-        const wikiClaims = await readWikiClaimEvidence(session,page.map(row => row.statement!.value),'statement');
+        const qualifications = new Map(
+          hydrated.map((row) => {
+            try {
+              return [row.statement!.value, statementQualificationFromBindings([row])] as const;
+            } catch (error) {
+              if (error instanceof ContextCommandUnavailable)
+                throw new WorkReadUnavailable('Statement qualification is unavailable');
+              throw error;
+            }
+          }),
+        );
+        const wikiClaims = await readWikiClaimEvidence(session,page.map((row) => row.statement!.value),'statement',
+        );
         const allowed = await checkReferences(
           hydrated.flatMap((row) => {
             const value = statementValue(row);
+            const qualification = qualifications.get(row.statement!.value);
             return [
               ...(value.kind === 'resource' ? [value.iri] : []),
               ...list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
-              ...list(row.sources?.value, STATEMENT_LIMITS.evidence).filter(source =>
-                !wikiClaims.get(row.statement!.value)?.some(evidence => evidence.id === source)),
+              ...list(row.sources?.value, STATEMENT_LIMITS.evidence).filter(
+                (source) =>
+                !wikiClaims.get(row.statement!.value)?.some((evidence) => evidence.id === source),
+              ),
+              ...(qualification
+                ? [
+                    qualification.interpretationContext,
+                    ...(qualification.editionScope === null ? [] : [qualification.editionScope]),
+                  ]
+                : []),
             ];
           }),
         );
@@ -357,7 +404,8 @@ export async function readSubjectStatements(
             !row.speaker ||
             !row.key ||
             row.predicate?.value !== candidate.predicate!.value || row.key?.value !== candidate.key!.value
-            || coverage && Number(row.frameScore?.value) !== Number(candidate.specificity?.value)
+            ||
+            (coverage && Number(row.frameScore?.value) !== Number(candidate.specificity?.value))
           ) {
             throw new WorkReadUnavailable('Statement hydration differs from its candidate');
           }
@@ -380,6 +428,13 @@ export async function readSubjectStatements(
             }
           }
           const value = statementValue(row);
+          const qualification = qualifications.get(row.statement!.value);
+          const qualificationReferences = qualification
+            ? [
+                qualification.interpretationContext,
+                ...(qualification.editionScope === null ? [] : [qualification.editionScope]),
+              ]
+            : [];
           if (
             value.kind === 'resource' &&
             nativeReference.test(value.iri) &&
@@ -392,14 +447,17 @@ export async function readSubjectStatements(
               row.definitions?.value,
               STATEMENT_LIMITS.interpretationDefinitions,
             ),
+            ...(qualification ? { qualification } : {}),
           };
           const sources = list(row.sources?.value, STATEMENT_LIMITS.evidence);
-          const evidence = (wikiClaims.get(row.statement!.value) ?? []).filter(row => sources.includes(row.id));
+          const evidence = (wikiClaims.get(row.statement!.value) ?? []).filter((row) => sources.includes(row.id),
+          );
           if (!candidate.acceptance?.value && !evidence.length) continue;
           if (
             [...qualifiers.applicability, ...sources].some(
-              (ref) => nativeReference.test(ref) && !allowed.has(ref) && !evidence.some(row => row.id === ref),
-            )
+              (ref) => nativeReference.test(ref) && !allowed.has(ref) && !evidence.some((row) => row.id === ref),
+            ) ||
+            qualificationReferences.some((ref) => nativeReference.test(ref) && !allowed.has(ref))
           )
             continue;
           const [decision, source] = candidate.acceptance?.value.split('|') ?? [];
@@ -420,7 +478,9 @@ export async function readSubjectStatements(
             sources,
             ...(frames ? { frameMatch: matchFromScore(Number(candidate.specificity?.value)) } : {}),
             ...(evidence.length ? {
-              publication: { kind: 'wiki-bundle' as const,works: [...new Set(evidence.map(row => row.sourceWork))] } } : {}),
+              publication: { kind: 'wiki-bundle' as const,works: [...new Set(evidence.map((row) => row.sourceWork))],
+                  },
+                } : {}),
             acceptance: decision ? {
               context,
               decision,
@@ -435,9 +495,26 @@ export async function readSubjectStatements(
             ...(frames ? { score: Number(candidate.specificity?.value) } : {}),
           });
         }
-        const disclosedStatements = await boundary.visible(batchPositions.map(position => position.key));
+        const disclosedStatements = await boundary.visible(batchPositions.map((position) => position.key),
+        );
         for (const [index, item] of batchItems.entries()) {
           if (!disclosedStatements.has(batchPositions[index]!.key)) continue;
+          if (item.kind === 'statement') {
+            try {
+              item.value = await statementValueFromManifest(
+                session.deps.environment,
+                item.statement,
+                byId.get(item.statement)?.manifest?.value,
+                item.meaningKey,
+                item.value,
+                item.qualifiers.qualification,
+              );
+            } catch (error) {
+              if (error instanceof ContextCommandUnavailable)
+                throw new WorkReadUnavailable('Statement literal is unavailable');
+              throw error;
+            }
+          }
           items.push(item);
           positions.push(batchPositions[index]!);
         }
@@ -445,7 +522,8 @@ export async function readSubjectStatements(
       if (rows.length < batchSize) break;
       const last = rows.at(-1)!;
       statementAfter = { predicate: last.predicate!.value, meaningKey: last.key!.value, statementId: last.statement!.value,
-        score: Number(last.specificity?.value ?? 0) };
+        score: Number(last.specificity?.value ?? 0),
+      };
     }
   }
   if (frames && items.length <= limit) await appendProperties();
@@ -466,16 +544,19 @@ export async function readSubjectStatements(
     items.splice(limit);
   }
   const published = items.filter((item): item is Extract<Item,{ kind: 'statement' }> =>
-    item.kind === 'statement' && publishedEvidence.has(item.statement));
+    item.kind === 'statement' && publishedEvidence.has(item.statement),
+  );
   if (published.length) {
-    const fenced = await readWikiClaimEvidence(session,published.map(item => item.statement),'statement');
-    const evidence = published.flatMap(item => publishedEvidence.get(item.statement)!);
-    if (evidence.some(row => !fenced.get(row.claim!)?.some(current => current.id === row.id))) {
+    const fenced = await readWikiClaimEvidence(session,published.map((item) => item.statement),'statement',
+    );
+    const evidence = published.flatMap((item) => publishedEvidence.get(item.statement)!);
+    if (evidence.some((row) => !fenced.get(row.claim!)?.some((current) => current.id === row.id))) {
       throw new WorkReadMissing('Wiki claim is unavailable');
     }
     const projected = await projectWikiEvidence(session,evidence);
-    for (const item of published) item.evidence = projected.filter(row =>
-      publishedEvidence.get(item.statement)!.some(source => source.id === row.id));
+    for (const item of published) item.evidence = projected.filter((row) =>
+      publishedEvidence.get(item.statement)!.some((source) => source.id === row.id),
+      );
   }
   const fencedReferences = await visibleResourceReferences(session, [...visibleReferences]);
   if ([...visibleReferences].some((ref) => !fencedReferences.has(ref)))

@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
-  GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+  GLOBAL_CLASSIFICATION_CONTEXT,
+} from '../classification/context.ts';
+import { statementQualificationKeyTuple, type StatementQualification } from './qualification.ts';
 
 // Owner schema for Statements and their acceptance decisions
-// (docs/contracts/classification.md, model/definitions/statement-v1.ts and
+// (docs/contracts/classification.md, model/definitions/statement-v1.ttl and
 // statement-decision-v1.ts). Graph-owned; commands reuse the existing receipt,
 // outbox batch, RevisionAnchor, manifest and epoch/sequence fences.
 //
@@ -64,6 +66,7 @@ export interface StatementMeaning {
   interpretationDefinitions: string[];
   value: StatementValue;
   applicability: string[];
+  qualification?: StatementQualification;
 }
 
 export interface StatementRecord extends StatementMeaning {
@@ -157,12 +160,20 @@ export function statementMeaningKey(meaning: StatementMeaning): string {
     || !reference.test(meaning.relationDefinition)) {
     throw new InvalidStatementSchemaInput('invalid Statement meaning');
   }
-  return `urn:rezics:meaning:${sha256(JSON.stringify(['statement-meaning-v1', meaning.subject,
+  const key: unknown[] = ['statement-meaning-v1', meaning.subject,
     meaning.predicate, meaning.relationDefinition,
     checkReferences(meaning.interpretationDefinitions, 'interpretation definitions',
-      STATEMENT_LIMITS.interpretationDefinitions),
+      STATEMENT_LIMITS.interpretationDefinitions,
+    ),
     canonicalValue(meaning.value),
-    checkReferences(meaning.applicability, 'Statement applicability', STATEMENT_LIMITS.applicability)]))}`;
+    checkReferences(meaning.applicability, 'Statement applicability', STATEMENT_LIMITS.applicability,
+    ),
+  ];
+  if (meaning.qualification !== undefined) {
+    key[0] = 'statement-meaning-v2';
+    key.push(statementQualificationKeyTuple(meaning.qualification));
+  }
+  return `urn:rezics:meaning:${sha256(JSON.stringify(key))}`;
 }
 
 /** One decision head per exact target and acceptance scope. */

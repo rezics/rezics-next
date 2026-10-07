@@ -132,15 +132,18 @@ export function buildModelOutputs(profiles: readonly ProfileDefinition[]): Map<s
     const context: Record<string, unknown> = {};
     for (const [prefix, iri] of prefixes) context[prefix] = { '@id': iri, '@prefix': true };
     for (const path of paths) {
-      const properties = profile.shapes.flatMap(shape => [
-        ...shape.properties, ...(shape.or ?? []).flat(),
-      ]).filter(property => property.path === path);
-      const kinds = new Set(properties.map(property => valueKind(property, prefixes)));
+      const properties = profile.shapes.flatMap((shape) => [
+        ...shape.properties, ...(shape.or ?? []).flat()]).filter((property) => property.path === path);
+      // A forbidden branch has no value to coerce; it must not erase the type
+      // declared by the branches that admit the property.
+      const kinds = new Set(properties.map((property) => valueKind(property, prefixes))
+          .filter((kind) => kind !== 'absent'),
+      );
       const mapping: Record<string, string> = { '@id': expand(path, prefixes) };
-      if ([...kinds].every(kind => kind === 'iri')) mapping['@type'] = '@id';
-      if ([...kinds].every(kind => kind === 'integer')) mapping['@type'] = 'xsd:integer';
-      if ([...kinds].every(kind => kind === 'boolean')) mapping['@type'] = `${reservedNamespaces.xsd}boolean`;
-      if ([...kinds].every(kind => kind === 'dateTime')) mapping['@type'] = 'xsd:dateTime';
+      if (kinds.size === 1 && kinds.has('iri')) mapping['@type'] = '@id';
+      if (kinds.size === 1 && kinds.has('integer')) mapping['@type'] = 'xsd:integer';
+      if (kinds.size === 1 && kinds.has('boolean')) mapping['@type'] = `${reservedNamespaces.xsd}boolean`;
+      if (kinds.size === 1 && kinds.has('dateTime')) mapping['@type'] = 'xsd:dateTime';
       context[path] = mapping;
       iriEntries.set(path, expand(path, prefixes));
       for (const property of properties) {

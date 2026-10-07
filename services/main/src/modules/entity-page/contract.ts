@@ -7,6 +7,7 @@ import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { wikiClaimEvidence } from '../wiki/evidence-contract.ts';
 import { frameMatch } from '../projection/frame-read.ts';
 import { relationRenderingSchema } from '../../routes/lexicon.ts';
+import { statementQualificationSchema } from '../statement/contract.ts';
 
 const closed = { additionalProperties: false } as const;
 export const entityPageContext = t.Union([t.Literal(GLOBAL_CLASSIFICATION_CONTEXT), readId]);
@@ -99,7 +100,9 @@ const statement = t.Object(
     speaker: t.String(),
     meaningKey: t.String(),
     qualifiers: t.Object(
-      { applicability: t.Array(t.String()), interpretationDefinitions: t.Array(t.String()) },
+      { applicability: t.Array(t.String()), interpretationDefinitions: t.Array(t.String()),
+        qualification: t.Optional(statementQualificationSchema),
+      },
       closed,
     ),
     sources: t.Array(t.String()),

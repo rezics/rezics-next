@@ -11,9 +11,20 @@ import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { normalizeStatementSubject, type StatementTargetReader } from './projection.ts';
-import { DECISION_OUTCOME_TERMS, STATEMENT_AUTHORITY, STATEMENT_DECISION_PROFILE, STATEMENT_LIMITS,
+import {
+  normalizeStatementQualification,
+  statementQualificationKeyTuple,
+  statementQualificationTriples,
+  validateStatementDefinitions,
+  validateStatementInterpretationDefinition,
+  type StatementQualification,
+} from './qualification.ts';
+import { readStatement, readStatementRevisionSnapshot } from './read.ts';
+import {
+  DECISION_OUTCOME_TERMS, STATEMENT_AUTHORITY, STATEMENT_DECISION_PROFILE, STATEMENT_LIMITS,
   STATEMENT_PROFILE, decisionSlotIri, statementMeaningKey, type DecisionOutcome, type DecisionTarget,
-  type StatementMeaning, type StatementValue } from './schema.ts';
+  type StatementMeaning, type StatementValue,
+} from './schema.ts';
 
 export { STATEMENT_FAMILIES } from './receipt-family.ts';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -29,7 +40,8 @@ function decisionOutcomeTerm(outcome: DecisionOutcome): string {
 export type StatementSpeaker = { kind: 'personal' } | { kind: 'realm'; realm: string };
 export type StatementInterpretationRequest =
   | { kind: 'selected' }
-  | { kind: 'explicit'; context: string; semanticRevision: string };
+  | { kind: 'explicit'; context: string; semanticRevision: string }
+  | { kind: 'definition'; definition: string };
 
 export interface RecordStatementInput {
   speaker: StatementSpeaker;
@@ -43,6 +55,7 @@ export interface RecordStatementInput {
   expectedInterpretation?: { semanticRevision: string | null; definition: string | null };
   evidence: string[];
   actingSubject: string;
+  qualification?: StatementQualification;
   /** Internal publisher binding, absent from the public Statement write contract.
    * The existing source slot indexes candidates; evidence still authorizes reads. */
   wikiPublicationWork?: string;
@@ -60,20 +73,40 @@ export function recordStatementRequest(input: RecordStatementInput) {
   if (!nativeId.test(input.actingSubject) || !nativeId.test(input.subject)
     || (input.speaker.kind === 'realm' && !nativeId.test(input.speaker.realm))
     || (input.interpretation.kind === 'explicit' && !nativeId.test(input.interpretation.semanticRevision))
-    || input.evidence.length > STATEMENT_LIMITS.evidence || new Set(input.evidence).size !== input.evidence.length
-    || input.wikiPublicationWork !== undefined && (!nativeId.test(input.wikiPublicationWork) || !input.evidence.length)) {
+    ||
+    (input.interpretation.kind === 'definition' &&
+      !nativeId.test(input.interpretation.definition)) ||
+    input.evidence.length > STATEMENT_LIMITS.evidence || new Set(input.evidence).size !== input.evidence.length
+    ||
+    (input.wikiPublicationWork !== undefined && (!nativeId.test(input.wikiPublicationWork) || !input.evidence.length))) {
     throw new InvalidContextCommand('invalid Statement request');
   }
   for (const value of input.evidence) term(value);
   term(input.predicate);
+  if (
+    (input.qualification !== undefined || input.interpretation.kind === 'definition') &&
+    input.value.kind === 'literal' &&
+    (input.value.language !== null) !==
+      (input.value.datatype === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString')
+  ) {
+    throw new InvalidContextCommand('literal language and datatype disagree');
+  }
   statementMeaningKey({ subject: input.subject, predicate: input.predicate,
     relationDefinition: input.relationDefinition, interpretationDefinitions: [], value: input.value,
-    applicability: input.applicability });
+    applicability: input.applicability,
+    ...(input.qualification !== undefined ? { qualification: input.qualification } : {}),
+  });
   return { ...STATEMENT_AUTHORITY.speak(speakerIri(input)), digest: hash(JSON.stringify([
     STATEMENT_FAMILIES.record, input.speaker, input.subject, input.predicate, input.relationDefinition,
     input.value, [...input.applicability].sort(), input.interpretation, input.expectedInterpretation ?? null,
     [...input.evidence].sort(), input.actingSubject,
-    ...(input.wikiPublicationWork ? [input.wikiPublicationWork] : [])])) };
+    ...(input.wikiPublicationWork ? [input.wikiPublicationWork] : []),
+        ...(input.qualification !== undefined
+          ? [statementQualificationKeyTuple(input.qualification)]
+          : []),
+      ]),
+    ),
+  };
 }
 
 export function objectTerm(value: StatementValue): string {
@@ -86,11 +119,30 @@ export function objectTerm(value: StatementValue): string {
 
 /** Resolve the Statement's interpretation slot; a write never proceeds on an incomplete result. */
 export async function statementInterpretation(env: WorkActivationEnvironment, input: RecordStatementInput,
-  speaker: InterpretationSpeaker): Promise<Interpretation> {
+  speaker: InterpretationSpeaker,
+  canReadDefinition?: (definition: string) => Promise<boolean>,
+): Promise<Interpretation> {
+  if (input.interpretation.kind === 'definition') {
+    await validateStatementInterpretationDefinition(
+      env,
+      input.interpretation.definition,
+      canReadDefinition,
+    );
+    return {
+      state: 'resolved',
+      basis: 'explicit',
+      context: null,
+      semanticRevision: null,
+      definition: input.interpretation.definition,
+      entryRevision: null,
+      selectionRevision: null,
+    };
+  }
   if (input.value.kind !== 'resource') {
     if (input.interpretation.kind === 'explicit') throw new InvalidContextCommand('only a resource value is interpreted');
     return { state: 'resolved', basis: 'none', context: null, semanticRevision: null, definition: null,
-      entryRevision: null, selectionRevision: null };
+      entryRevision: null, selectionRevision: null,
+    };
   }
   return resolveInterpretation(env, { object: input.value.iri, relation: input.predicate,
     explicit: input.interpretation.kind === 'explicit'
@@ -107,13 +159,16 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   input: RecordStatementInput, speaker: InterpretationSpeaker,
   beforeCommit?: (component: string, receipt: string) => Promise<void>,
   canReadProjection?: (projection: string) => Promise<boolean>,
-  readTargets?: StatementTargetReader): Promise<ContextCommandReceipt> {
+  readTargets?: StatementTargetReader,
+  canReadDefinition?: (definition: string) => Promise<boolean>,
+): Promise<ContextCommandReceipt> {
   const request = recordStatementRequest(input);
   const family = STATEMENT_FAMILIES.record;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
   const normalized = await normalizeStatementSubject(env, input, canReadProjection, readTargets);
-  const interpretation = await statementInterpretation(env, input, speaker);
+  const definitions = await validateStatementDefinitions(env, input, canReadDefinition);
+  const interpretation = await statementInterpretation(env, input, speaker, canReadDefinition);
   if (interpretation.state === 'unavailable') throw new ContextCommandUnavailable('interpretation is unavailable');
   // The route previews first; a slot that became unresolved meanwhile seals as unavailable.
   if (interpretation.state !== 'resolved') throw new ContextCommandUnavailable(`interpretation is ${interpretation.state}`);
@@ -133,7 +188,11 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   const meaning: StatementMeaning = { subject: normalized.subject, predicate: input.predicate,
     relationDefinition: input.relationDefinition,
     interpretationDefinitions: interpretation.definition ? [interpretation.definition] : [],
-    value: input.value, applicability: normalized.applicability };
+    value: input.value, applicability: normalized.applicability,
+    ...(input.qualification !== undefined
+      ? { qualification: normalizeStatementQualification(input.qualification) }
+      : {}),
+  };
   const meaningKey = statementMeaningKey(meaning);
   const statement = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
@@ -154,7 +213,18 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   const pinGuard = interpretation.semanticRevision
     ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(interpretation.semanticRevision)} a rv:ContextSemanticRevision . }` : '';
   const definitionGuard = activeDirectDefinitionsGuard([input.relationDefinition,
-    ...(interpretation.definition ? [interpretation.definition] : [])]);
+    ...(interpretation.definition ? [interpretation.definition] : []),
+  ]);
+  const directInterpretationGuard =
+    input.interpretation.kind === 'definition'
+      ? (
+          await validateStatementInterpretationDefinition(
+            env,
+            input.interpretation.definition,
+            canReadDefinition,
+          )
+        ).guard
+      : '';
   const realmGuard = input.speaker.kind === 'realm'
     ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.speaker.realm)} a rv:Realm ; rv:realmState rv:Active . }` : '';
   await beforeCommit?.(statement,commandReceiptIri(admission.id,family));
@@ -165,7 +235,8 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rdf:object ${objectTerm(input.value)} ; rv:relationDefinition ${term(input.relationDefinition)} ;
         ${meaning.interpretationDefinitions.map(value => `rv:interpretationDefinition ${term(value)} ;`).join(' ')}
         ${interpretation.semanticRevision ? `rv:semanticContextRevision ${iri(interpretation.semanticRevision)} ;` : ''}
-        ${meaning.applicability.map(value => `rv:applicability ${term(value)} ;`).join(' ')}
+        ${meaning.applicability.map((value) => `rv:applicability ${term(value)} ;`).join(' ')}
+        ${meaning.qualification ? statementQualificationTriples(meaning.qualification) : ''}
         ${input.wikiPublicationWork ? `rv:source ${iri(input.wikiPublicationWork)} ;` : ''}
         rv:speaker ${iri(speakerId)} ; rv:meaningKey ${iri(meaningKey)} ; rv:statementState rv:Active ;
         rv:head ${iri(revision)} . }
@@ -178,8 +249,9 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(meaning.subject)} a ?subjectType .
       ${meaning.subject !== input.subject ? `${iri(input.subject)} a rv:Projection ; rv:projectionOf ${iri(meaning.subject)} .` : ''} }
-      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard}
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }` });
+      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard} ${definitions.guard} ${directInterpretationGuard}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }`,
+  });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
   if (selectionGuard) {
     const sealed = await sealCommandTerminal(env, admission, family, 'stale-head',
@@ -233,9 +305,33 @@ export async function withdrawStatement(env: WorkActivationEnvironment, admissio
   }
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
+  const snapshot = await readStatementRevisionSnapshot(env, input.statement, input.expectedHead);
+  const retained = await readStatement(env, input.statement, async () => true);
+  const meaning: StatementMeaning = snapshot.meaning ?? {
+    subject: retained.subject,
+    predicate: retained.predicate,
+    relationDefinition: retained.relationDefinition,
+    interpretationDefinitions:
+      retained.meaningBasis.state === 'defined' || retained.meaningBasis.state === 'readable'
+        ? retained.meaningBasis.interpretationDefinitions
+        : [],
+    value: retained.value,
+    applicability: retained.applicability,
+    ...(retained.qualification ? { qualification: retained.qualification } : {}),
+  };
   const manifest = prepareComponent(env.objectDirectory, input.statement, {
     revision, predecessor: input.expectedHead, state: 'withdrawn', evidence: [],
-    recordedBy: input.actingSubject }, STATEMENT_PROFILE);
+    recordedBy: input.actingSubject,
+      meaning,
+      meaningKey: retained.meaningKey,
+      speaker: retained.speaker,
+      semanticContextRevision:
+        snapshot.semanticContextRevision ??
+        (retained.meaningBasis.state === 'readable'
+          ? retained.meaningBasis.semanticRevision
+          : null),
+    }, STATEMENT_PROFILE,
+  );
   const validations = await profileValidations(env.fuseki, 'statement-v1', [
     { shape: `${STATEMENT_PROFILE}/statement-shape`, focus: [input.statement],
       graphs: [GRAPHS.current, GRAPHS.revisions] },

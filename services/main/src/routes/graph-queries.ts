@@ -13,7 +13,10 @@ import {
   queryRelationGraph,
 } from '../modules/graph-query/query.ts';
 import { queryStatementGraph } from '../modules/graph-query/statements.ts';
-import { checkedRelationGraphQuery, checkedStatementGraphQuery, InvalidGraphQuery } from '../modules/graph-query/schema.ts';
+import { statementQualificationSchema } from '../modules/statement/contract.ts';
+import {
+  checkedRelationGraphQuery, checkedStatementGraphQuery, InvalidGraphQuery,
+} from '../modules/graph-query/schema.ts';
 import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts';
 import type { PrivateContextSelections } from '../modules/context/private-selection.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -144,6 +147,9 @@ const response = t.Object(
 );
 const meaningBasis = t.Union([
   t.Object({ state: t.Literal('none') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('defined'), interpretationDefinitions: t.Array(t.String()) },
+    { additionalProperties: false },
+  ),
   t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
   t.Object(
     {
@@ -181,6 +187,7 @@ const claim = t.Object(
     meaningKey: t.String(),
     applicability: t.Array(t.String()),
     meaningBasis,
+    qualification: t.Optional(statementQualificationSchema),
     evidence: t.Array(t.String()),
     decisions: t.Array(decision),
   },
@@ -296,6 +303,10 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
         }
         const selections = (work as MainWorkDependencies & GraphRouteDependencies)
           .contextSelections;
+        const readStatementReferences = work.access.canReadReferences?.bind(work.access);
+        if (!readStatementReferences) {
+          return problem(503, 'graph_query_unavailable', 'Graph read authority is unavailable');
+        }
         let contextPrincipal:
           | Promise<Awaited<ReturnType<typeof work.account.verify>> | null>
           | undefined;
@@ -316,6 +327,8 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
               work.environment,
               {
                 canReadResource: canRead,
+                canReadResources: (resources) =>
+                  readStatementReferences(principal, selected.actingSubject, resources),
                 readingBinding: await boundary.binding(),
                 visibleRecords: (records) => revealedGraphRecords(boundary, records),
                 canReadPrivateContext: async (context) => {
