@@ -22,21 +22,22 @@ crash retry waits for Kernel's corrected frozen released-proof reader.
 G-1344 accounting-only ba6e8d5e6 passed six focused cases/94 assertions. Each
 ordinary restore gates independently at600ACTIVE; aggregate626.229seconds
 active and947.344seconds external span remain reported without an aggregate
-ceiling. The manager queued the actual100k campaign behind Launch's heavy gate
-from the unchanged compatible539/fa worktree and literal medium backup/copies.
-The first tool-owned wait exited before QA; its log is retained separately.
-The live retry is tmux goal-trust-ops:medium-campaign, Task961636/goalctl961682.
-Log: .temp/worktrees/g-1344/.temp/goal/campaign-medium-manager-tmux-2030.log;
-terminal result: .temp/goal/campaign-medium-manager-result.json in that worktree.
-Launch/Program have the specific G-1400 worker heavy-scope review request.
+ceiling. Actual100k campaign QA20261007t203250-42388e failed26.8seconds:
+first copy's original restore evidence and exact native pins passed, then a
+COUNT/sample request timed out before any campaign phase completed. Original
+539/fa backup is retained; this failure is neither a campaign pass nor current
+25ce release proof. Manager job is terminal and heavy lock released. G-1344
+attempt11 diagnoses the exact failing call/liveness and bounded fixture repair;
+no budget increase, dropped cardinality or rewritten source evidence is allowed.
+The failed artifact is .temp/worktrees/g-1344/.artifacts/qa/20261007t203250-42388e.
+
 G-1401 is dispatched for the inherited privacy-safe PostgreSQL deadlock signal
 through the existing shared pool and logger; production alert delivery remains
-unqualified.
-Qualification remains pending and will not be relabeled as current25ce release
-proof. Launch's unchanged signed-in browser regression remains the closure check
-for activated G-1394. Kernel has the narrow original-descriptor fixture loan in
-unclaimed scripts/ops/tests/g-916-object-coverage.test.ts; no lifecycle or custody
-semantics are loaned.
+unqualified. Launch's unchanged signed-in browser regression remains the closure
+check for activated G-1394. Kernel has the narrow original-descriptor fixture loan
+in unclaimed scripts/ops/tests/g-916-object-coverage.test.ts, and the additive
+private candidate title issuer loan in title-admission.ts. Both retain existing
+custody/lifecycle semantics; admission.ts stays exclusively with G-1343.
 G-1343 borrowed reconciliation and retained-native-event component landed at
 `f83b0b599b06`. Forty-seven owner cases, fifty-five actual integration cases and
 a167.7second single-cut restore with152assertions passed. The source reader
@@ -143,7 +144,7 @@ above for the inherited verification gaps.
 | G-1333 | Closed/verified `3b12289689e1` after launch accepted its listener ownership fix. Plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. |
 | G-1342 | Closed/verified `98e679a8edc0`: two lent projection faults use the existing safe logger. |
 | G-1343 | Component landed `f83b0b599b06`: borrowed clients, exact historical roots and retained native-event proof. 47owner/55integration/152restore assertions pass; merge gate green after explicit maintenance-writer registration. Keep task open for any helper change needed by actual partial-release retry and the separate private-custody erasure contract. |
-| G-1344 | Held caller and measurement repair landed `dda9c5361193`; all160 affected unit/guard files pass. Actual native HTTP proof passed53.6s/136assertions; measurement3cases/40assertions pass. Accounting ba6e8d5e6 passed6/94; manager actual100k campaign is queued on frozen539/fa sources. Real campaign/time/peak qualification remains open. |
+| G-1344 | Held caller and measurement repair landed `dda9c5361193`; all160 affected unit/guard files pass. Actual native HTTP proof passed53.6s/136assertions; measurement3cases/40assertions pass. Accounting ba6e8d5e6 passed6/94; actual100k campaign QA203250 failed early TimeoutError, attempt11 investigates bounded validation. Real campaign/time/peak qualification remains open. |
 | G-1351 | Safe seam/lock order landed. Actual composition `152d95e17` has78 focused passes; old metadata default-alias defect blocked native proof and is fixed upstream. Attempt6 qualifies rebased a7b4d5cf9 on current Main; prior actual operator proof passed564 assertions, with successful retry/recapture still excluded. |
 | G-1353 | Closed/verified. Queue `85a01f3c`, exact reply `d9ad2ba574cb` and fixture `fe7fb82d4922` landed. Actual report/notice and governance integration passed; affected units and guards green. |
 | G-1359 | Closed/verified `46dd3930714e`: exact Content GET declares optional bearer and generated anonymous-or-bearer security; other private/closed readers remain mandatory. Luna/max accepted first handoff,5files33insert/10delete;103 affected unit/guards all green after current rebase. |
