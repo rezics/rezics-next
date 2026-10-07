@@ -22,6 +22,7 @@ import { activeBackend,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, inspectRefreshAppHost, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
   refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
+  buildRefreshImage, imageBuildBudgetMs,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
 import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
@@ -1426,4 +1427,52 @@ test('a refresh is current only when the serving revision and live state match t
   expect(refreshIsCurrent({ ...current, storageChanged: true })).toBe(false);
   expect(refreshIsCurrent({ ...current, unhealthyResources: ['main'] })).toBe(false);
   expect(refreshIsCurrent({ ...current, environmentChanges: ['WEB_OAUTH_CLIENT_ID'] })).toBe(false);
+});
+
+describe('refresh image build', () => {
+  function stack(script: string) {
+    const dir = mkdtempSync(join(root, '.temp/image-build-'));
+    const state = join(dir, '.temp/stack/rezics-dev');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, 'compose.env'), 'SECRET_VALUE=do-not-log\n');
+    const docker = join(dir, 'docker');
+    writeFileSync(docker, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    return { dir, docker, log: join(state, 'image-build.log') };
+  }
+
+  test('budget covers the measured native build', () => {
+    expect(imageBuildBudgetMs).toBe(30 * 60_000);
+  });
+
+  test('a build that outlives the budget reports a timeout', async () => {
+    const { dir, docker, log } = stack('echo started; exec sleep 30');
+    try {
+      const started = Date.now();
+      await expect(buildRefreshImage(dir, dir, { budgetMs: 300, executable: docker }))
+        .rejects.toThrow('image build exceeded 0.3 s');
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(readFileSync(log, 'utf8')).toContain('started');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('a failing build names its private log, which holds the output', async () => {
+    const { dir, docker, log } = stack('echo "step 3/9 mvn package"; echo "BUILD FAILURE" >&2; exit 255');
+    try {
+      const error = await buildRefreshImage(dir, dir, { executable: docker }).catch(failure => failure as Error);
+      expect(error.message).toContain('exit 255');
+      expect(error.message).toContain(log);
+      expect(readFileSync(log, 'utf8')).toContain('step 3/9 mvn package');
+      expect(readFileSync(log, 'utf8')).toContain('BUILD FAILURE');
+      expect(statSync(log).mode & 0o777).toBe(0o600);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('output beyond the 8 MiB buffer does not fail the step', async () => {
+    const { dir, docker, log } = stack('head -c 20971520 /dev/zero | tr "\\0" x; echo; echo done >&2');
+    try {
+      await buildRefreshImage(dir, dir, { executable: docker });
+      expect(statSync(log).size).toBeGreaterThan(20 * 1024 * 1024);
+      expect(readFileSync(log, 'utf8').endsWith('done\n')).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });

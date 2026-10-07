@@ -1,6 +1,6 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, readlinkSync,
+import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync,
   realpathSync,
   renameSync,
   rmSync, statSync, writeFileSync ,
@@ -116,6 +116,44 @@ function compose(root: string, args: string[], timeout = 180_000, stackRoot = ro
   const file = join(stackDirectory(stackRoot, { profile: 'dev' }), 'compose.env');
   return command(root, 'docker', ['compose', '--env-file', file, '-f', join(root, 'infra/dev/compose.yaml'),
     '--project-name', 'rezics-dev', ...args], composeProcessEnvironment(process.env, readEnv(file)), timeout);
+}
+
+/** `infra/jena/Dockerfile` runs `mvn package` with the native unit tests; one
+ * qualified run took 656 s. Thirty minutes is about three times that. Host
+ * admission already bounds memory and the build runs before any writer stops,
+ * so a long budget costs nothing but waiting. */
+export const imageBuildBudgetMs = 30 * 60_000;
+const imageBuildLog = 'image-build.log';
+
+/** Build the Jena image with its output streamed to a private log beside the
+ * refresh state. Dockerfile steps and Maven logs carry no environment values,
+ * unlike other Compose and describe output, and a file has no buffer limit. */
+export async function buildRefreshImage(root: string, stackRoot = root,
+  options: { budgetMs?: number; executable?: string } = {}): Promise<void> {
+  const budgetMs = options.budgetMs ?? imageBuildBudgetMs;
+  const dir = stackDirectory(stackRoot, { profile: 'dev' });
+  const file = join(dir, 'compose.env');
+  const log = join(dir, imageBuildLog);
+  const fd = openSync(log, 'w', 0o600);
+  try {
+    fchmodSync(fd, 0o600);
+    const child = spawn(options.executable ?? 'docker', ['compose', '--env-file', file,
+      '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'build', 'fuseki'],
+    { cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)), stdio: ['ignore', fd, fd] });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+      setTimeout(() => child.kill('SIGKILL'), 10_000).unref();
+    }, budgetMs);
+    const outcome = await new Promise<{ code: number | null; error?: Error }>(done => {
+      child.once('error', error => done({ code: null, error }));
+      child.once('close', code => done({ code }));
+    }).finally(() => clearTimeout(timer));
+    if (timedOut) throw new Error(`image build exceeded ${budgetMs >= 60_000 ? `${budgetMs / 60_000} min` : `${budgetMs / 1000} s`}; output in ${log}`);
+    if (outcome.error || outcome.code !== 0)
+      throw new Error(`image build failed (exit ${outcome.code ?? 'signal/error'}); output in ${log}`);
+  } finally { closeSync(fd); }
 }
 
 function sha256(bytes: string | Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -691,7 +729,7 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
       buildImage: async () => {
         await runHostAdmission(4, ['docker', 'compose', 'build', 'fuseki'], {
           root: candidate, run: async () => {
-            compose(candidate, ['build', 'fuseki'], 300_000, root);
+            await buildRefreshImage(candidate, root);
             return 0;
           },
         });
