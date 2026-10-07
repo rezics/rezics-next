@@ -52,6 +52,12 @@ async function fixture() {
       '/v1/agents', { profile: 'agent-provision-v1', kind: 'person', displayName }), 201)).agent;
     const actor = await person('Site author');
     const otherActor = await person('Other site identity');
+    // Withdrawing the reader's mandate must leave the Agent's controller floor intact.
+    const backup = await stack.member('remaining-controller');
+    await stack.accessPool.query(`INSERT INTO access.representation
+      (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`,
+    [randomUUID(), backup.principalId, actor]);
     const call = (method: string, path: string, body?: unknown, authenticated = true) =>
       app.handle(new Request(`http://main.local${path}`, { method,
         headers: { ...(authenticated ? { authorization: `Bearer ${member.token}` } : {}),
@@ -86,7 +92,8 @@ async function fixture() {
       })]);
       return { pending, reached, release: barrier.release };
     };
-    return { ...stack, ...created, actor, otherActor, firstDocument, first, later, publish, read, pauseRead };
+    return { ...stack, ...created, actor, otherActor, editorPrincipalId: member.principalId,
+      firstDocument, first, later, publish, read, pauseRead };
   } catch (error) { await stack.stop(); throw error; }
 }
 
@@ -125,7 +132,8 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
           await privateRead.reached;
           if (withdrawal === 'controller') {
             const revoked = await f.accessPool.query<{ id: string }>(`UPDATE access.representation SET active = false
-              WHERE subject_id = $1 AND action = 'agent.control' AND active RETURNING id`, [f.actor]);
+              WHERE subject_id = $1 AND principal_id = $2 AND action = 'agent.control' AND active RETURNING id`,
+            [f.actor, f.editorPrincipalId]);
             revokedIds = revoked.rows.map(row => row.id);
             expect(revokedIds.length).toBeGreaterThan(0);
           } else {
