@@ -16,10 +16,12 @@ export const READING_POSITION_COST = { occurrences: 10_000, workDepth: 16, workB
 
 export const readingPositionPage = t.Object({
   profile: t.Literal('reading-positions-v1'), work: readId, resolved: t.String(),
+  scope: t.Optional(t.Union([t.Literal('resume'), t.Literal('positions')])),
   items: t.Array(t.Object({ occurrence: readId, work: readId, structure: readId, revision: readId,
     parent: readId, segmentKey: t.String(), orderKey: t.String(),
     role: t.Union([t.Literal('part'), t.Literal('chapter'), t.Literal('group')]),
-    target: t.Nullable(t.String()), ordinal: t.Optional(t.Integer({ minimum: 1 })),
+    target: t.Nullable(t.String()), ordinal: t.Optional(t.Integer({ minimum: 1,
+      deprecated: true, description: 'Omitted: physical ordinals can count undisclosed items.' })),
     labels: t.Optional(t.Array(t.Object({ value: t.String(), language: t.String() }), { maxItems: READING_POSITION_COST.labels })),
     displayLabel: t.Optional(t.String()) }), { maxItems: READING_POSITION_COST.chooserPage }),
   nextCursor: t.Nullable(t.String()), complete: t.Boolean(),

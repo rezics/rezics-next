@@ -1,21 +1,26 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { StructureProgressStore, InvalidStructureProgress } from '../src/modules/progress/store.ts';
+import { StructureProgressStore, InvalidStructureProgress, ProgressOrderUnavailable, STRUCTURE_PROGRESS_COST, type StructureProgress } from '../src/modules/progress/store.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { chooserPosition } from '../src/modules/reading-position/chooser-position.ts';
 import { ReadingPositionTraversal } from '../src/modules/reading-position/traversal.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
-import { COMPOSITION_PROFILE, orderTreeKey } from '../src/modules/structure/graph.ts';
+import { COMPOSITION_PROFILE, orderTreeKey, type CompositionHeader } from '../src/modules/structure/graph.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord } from '../src/modules/structure/format.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
+
+import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeDisclosureBound } from '../src/modules/reading-position/errors.ts';
+import { disclosedCompletedProgress } from '../src/modules/progress/disclosure.ts';
+import { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
+import { ProgressOrderProjection } from '../src/modules/progress/order-projection.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ value,
   type: value.startsWith('https://') || value.startsWith('urn:') ? 'uri' : 'literal' });
 
-async function fixture(grouped = false, reverseNumbers = false) {
+async function fixture(grouped = false, _reverseNumbers = false, singletons = false, book = false, mutate?: (records: OccurrenceRecord[]) => void) {
   const work = id(), structure = id(), revision = id(), generation = id(), specials = id(), main = id();
   const stored = new Map<string, Uint8Array>();
   let objectsRead = 0, rowsRead = 0, calls = 0;
@@ -31,11 +36,12 @@ async function fixture(grouped = false, reverseNumbers = false) {
       return body;
     },
   };
+  const parents = Array.from({ length: 1000 }, id);
   const episodes: OccurrenceRecord[] = Array.from({ length: 1000 }, (_, index) => ({
-    occurrence: id(), state: 'active', parent: grouped ? main : structure, segmentKey: 'a',
-    orderKey: (index + 1).toString(36).padStart(4, '0'), role: 'part', target: id(),
-    selection: { mode: 'follow-context' }, introducedBy: revision,
-    labels: [], qualifier: { type: 'work-part', displayLabel: `Episode ${index + 1}`, inclusion: 'required' },
+    occurrence: id(), state: 'active', parent: singletons ? parents[index]! : grouped ? main : structure, segmentKey: 'a',
+    orderKey: (index + 1).toString(36).padStart(4, '0'), role: book ? 'chapter' : 'part', target: id(),
+    ...(book ? { selection: { mode: 'follow-context' as const } } : {}), introducedBy: revision,
+    labels: [], ...(book ? {} : { qualifier: { type: 'work-part' as const, displayLabel: `Episode ${index + 1}`, inclusion: 'required' as const } }),
   }));
   const group: OccurrenceRecord = { occurrence: specials, state: 'active', parent: structure,
     segmentKey: 'b', orderKey: 'a', role: 'group', introducedBy: revision,
@@ -43,13 +49,15 @@ async function fixture(grouped = false, reverseNumbers = false) {
   const special: OccurrenceRecord = { ...episodes[0]!, occurrence: id(), parent: specials, target: id(),
     segmentKey: 'a', orderKey: 'a', qualifier: { type: 'work-part', displayLabel: 'Special', inclusion: 'extra' } };
   const mainGroup: OccurrenceRecord = { ...group, occurrence: main, segmentKey: 'a', labels: [{ value: 'Main', language: 'en' }] };
-  const records = [...episodes, ...(grouped ? [mainGroup] : []), group, special];
-  const numbers = new Map(episodes.map((record, index) => [record.target!, String(reverseNumbers ? 1000 - index : index + 1)]));
+  if (book) delete special.qualifier;
+  const singletonGroups: OccurrenceRecord[] = singletons ? parents.map((parent, index) => ({ ...mainGroup, occurrence: parent, orderKey: (index + 1).toString(36).padStart(4, '0') })) : [];
+  const records = [...episodes, ...(grouped ? [mainGroup] : []), ...singletonGroups, group, special];
+  mutate?.(records);
   const cost = newCost();
   const entries = records.map(record => ({ parent: record.parent, segmentKey: record.segmentKey!,
     orderKey: record.orderKey!, occurrence: record.occurrence }));
   const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure, structureOf: id(),
-    profile: 'work-composition' as const, generation, pageFormat: STRUCTURE_PAGE_FORMAT,
+    profile: book ? 'book-composition' as const : 'work-composition' as const, generation, pageFormat: STRUCTURE_PAGE_FORMAT,
     records: await recordTree(objects).apply(await recordTree(objects).empty(cost),
       new Map(records.map(record => [record.occurrence, record])), cost),
     order: await orderTree(objects).apply(await orderTree(objects).empty(cost),
@@ -57,17 +65,27 @@ async function fixture(grouped = false, reverseNumbers = false) {
     placementCount: records.length, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
   const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
   objectsRead = 0;
-  const completed: string[] = [], hidden = new Set<string>();
-  let finished = false, ambiguous = false, historyPages = 0;
+  const completed: string[] = [], hidden = new Set<string>(), published = new Set<string>();
+  const header: CompositionHeader = { structure, profile: manifest.profile, owner: work, component: manifest.structureOf,
+    mainVersion: manifest.structureOf, work, head: revision, generation, placementCount: records.length, manifest: `urn:rezics:sha256:${digest}` };
+  const env = { structureObjects: objects, fuseki: { query: async (q: string) => ({ results: { bindings: q.includes('SELECT ?component') ? [{ component: binding(header.component), profile: binding(`https://rezics.com/vocab/${book ? 'BookComposition' : 'WorkComposition'}`), head: binding(revision), generation: binding(generation), count: binding(String(records.length)), manifest: binding(header.manifest) }] : [{ owner: binding(work) }] } }) } };
+  let ambiguous = false, historyPages = 0, indexRows = 0, indexReads = 0;
+  const key = (record: OccurrenceRecord) => (record.parent === structure ? '' : `${record.parent === specials ? 'b' : 'a'}\u0002${singletons ? parents.indexOf(record.parent).toString(36).padStart(4, '0') : 'a'}\u0001`) + `${record.segmentKey}\u0002${record.orderKey}`;
   const principal = { issuer: 'https://reader.test', subject: 'viewer', emailVerified: true };
   const session = {
-    deps: { structureObjects: objects, readingPositions: {
-      completedPage: async (_principal: unknown, selected: string[], after?: string) => {
-        expect(selected).toEqual([structure]); historyPages++;
-        const offset = after ? Number(after) : 0;
-        return { items: completed.slice(offset, offset + 50), next: completed.length > offset + 50 ? String(offset + 50) : null };
+    deps: { environment: env, structureObjects: objects, progress: {
+      resumeCandidates: async () => {
+        indexReads++;
+        const selected = records.filter(record => completed.includes(record.occurrence) && record !== special)
+          .sort((a, b) => key(a) < key(b) ? 1 : -1).slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates + 1);
+        indexRows += selected.length;
+        return { items: selected.slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates).map(record => ({ structure,
+          occurrence: record.occurrence, selectedRevision: null, completed: true, position: null, version: 1 })),
+          more: selected.length > STRUCTURE_PROGRESS_COST.resumeCandidates };
       },
-      finishedWorks: async () => new Set(finished ? [work] : []),
+    }, readingPositions: {
+      completedPage: async () => { historyPages++; throw new Error('Resume must never page history'); },
+      finishedWorks: async () => { throw new Error('Resume must never scan Library history'); },
     } },
     principal, options: { actingSubject: id() }, checkDeadline: () => {},
     query: async (query: string) => {
@@ -90,17 +108,10 @@ async function fixture(grouped = false, reverseNumbers = false) {
       } else if (query.includes('# reading-position:works')) {
         expect(query).toContain('rv:composedWork');
         rows = [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
-      } else if (query.includes('# reading-position:accepted-number')) {
-        const parent = query.match(/rv:parent <([^>]+)>/)! [1]!;
-        const number = query.match(/VALUES \?number \{ \"([^\"]+)\"/)! [1]!;
-        const after = query.match(/FILTER\(\?segmentKey > \"([^\"]+)\" \|\| \(\?segmentKey = \"[^\"]+\"\s+&& \?orderKey > \"([^\"]+)\"/);
-        const limit = Number(query.match(/LIMIT (\d+)$/)! [1]!);
-        rows = records.filter(record => record.parent === parent && (record.role === 'group' || numbers.get(record.target!) === number)
-          && (!after || record.segmentKey! > after[1]! || record.segmentKey === after[1] && record.orderKey! > after[2]!))
-          .sort((a, b) => `${a.segmentKey!}\0${a.orderKey!}`.localeCompare(`${b.segmentKey!}\0${b.orderKey!}`)).slice(0, limit).map(record => ({
-            occurrence: binding(record.occurrence), parent: binding(parent), segmentKey: binding(record.segmentKey!),
-            orderKey: binding(record.orderKey!), matches: binding(String(record.role !== 'group' && numbers.get(record.target!) === number)),
-          }));
+      } else if (query.includes('# reading-position:nested-composition')) rows = [];
+      else if (query.includes('# progress:published-selections')) {
+        rows = [...published].filter(value => value.split('\0').every(part => query.includes(part)))
+          .map(value => { const [target, pin] = value.split('\0'); return { target: binding(target!), revision: binding(pin!) }; });
       } else if (query.includes('# reading-position:manifest')) rows = [{ manifest: binding(`urn:rezics:sha256:${digest}`) }];
       else {
         expect(query).toMatch(/# reading-position:(records|hydrate)/);
@@ -117,71 +128,11 @@ async function fixture(grouped = false, reverseNumbers = false) {
     },
   } as unknown as WorkReadSession;
   const traversal = () => new ReadingPositionTraversal(session, work, async resources => new Set(resources.filter(resource => !hidden.has(resource))));
-  return { work, main, episodes, special, session, completed, hidden, traversal,
-    finish: () => { finished = true; }, ambiguous: () => { ambiguous = true; },
-    measure: () => ({ objectsRead, rowsRead, calls, historyPages }) };
+  return { work, main, structure, revision, header, objects, records, episodes, special, session, completed, hidden, published, traversal,
+    disclose: (reader: WorkReadSession, selected: CompositionHeader, rows: readonly StructureProgress[]) => disclosedCompletedProgress(reader, selected, rows, async (_session, _profile, targets) => new Set(targets.filter(target => !hidden.has(target)))),
+    ambiguous: () => { ambiguous = true; },
+    measure: () => ({ objectsRead, rowsRead, calls, historyPages, indexRows, indexReads }) };
 }
-
-test('a numeric seek to accepted Episode 1000 reads counted paths and the exact terminal occurrence', async () => {
-  const f = await fixture();
-  const page = await f.traversal().page({ limit: 1, q: '１０００' });
-  expect(page.items).toMatchObject([{ occurrence: f.episodes[999]!.occurrence, ordinal: 1000, role: 'part' }]);
-  expect(page.complete).toBe(true); expect(page.next).toBeNull();
-  expect(f.measure().objectsRead).toBeLessThanOrEqual(16);
-  expect(f.measure().rowsRead).toBeLessThanOrEqual(12);
-  expect(f.measure().calls).toBeLessThanOrEqual(12);
-  expect((await f.traversal().page({ limit: 1, q: '1000', after: f.episodes[999]!.occurrence })).items).toEqual([]);
-});
-
-test('Episode parts page and finish without a Work main version, and specials keep their own sibling ordinal', async () => {
-  const f = await fixture();
-  const first = await f.traversal().page({ limit: 1 });
-  expect(first.items[0]!.occurrence).toBe(f.episodes[0]!.occurrence);
-  expect(first.next).toBe(f.episodes[0]!.occurrence);
-  const special = await f.traversal().page({ limit: 1, after: f.episodes[999]!.occurrence });
-  expect(special.items).toMatchObject([{ occurrence: f.special.occurrence, parent: f.special.parent, ordinal: 1 }]);
-  const last = await f.traversal().last(f.work);
-  expect(last?.item.occurrence).toBe(f.special.occurrence);
-});
-
-test('missing accepted numbers do not walk terminal Episode navigation entries', async () => {
-  const f = await fixture();
-  for (const q of ['0', '1001', '1002', '1000000000000']) {
-    const before = f.measure();
-    const page = await f.traversal().page({ limit: 1, q });
-    expect(page).toMatchObject({ items: [], complete: true, next: null });
-    expect(f.measure().calls - before.calls).toBeLessThanOrEqual(12);
-    expect(f.measure().rowsRead - before.rowsRead).toBeLessThanOrEqual(12);
-    expect(f.measure().objectsRead - before.objectsRead).toBeLessThanOrEqual(16);
-  }
-});
-
-test('Mine chooses furthest current completion after out-of-order ticks and another device sees the same occurrence', async () => {
-  const f = await fixture();
-  f.completed.push(f.episodes[999]!.occurrence, ...f.episodes.slice(0, 999).reverse().map(record => record.occurrence), id());
-  for (let device = 0; device < 2; device++) {
-    expect(await chooserPosition(f.session, f.traversal(), 'mine', true)).toBe(f.episodes[999]!.occurrence);
-  }
-  expect(f.measure().historyPages).toBe(42);
-  expect(f.measure().rowsRead).toBeLessThan(2010);
-  expect(f.measure().calls).toBeLessThanOrEqual(48);
-  expect(f.measure().objectsRead).toBe(0);
-  f.completed.splice(0);
-  expect(await chooserPosition(f.session, f.traversal(), 'mine', true)).toBe('start');
-  f.finish();
-  expect(await chooserPosition(f.session, f.traversal(), 'mine', true)).toBe(f.special.occurrence);
-});
-
-test('hidden completed targets and ambiguous terminal metadata fail closed', async () => {
-  const f = await fixture();
-  f.completed.push(f.episodes[999]!.occurrence);
-  f.hidden.add(f.episodes[999]!.target!);
-  expect((await f.traversal().page({ limit: 1, q: '1000' })).items).toEqual([]);
-  await expect(chooserPosition(f.session, f.traversal(), 'mine', true)).rejects.toBeInstanceOf(WorkReadMissing);
-  expect(await chooserPosition(f.session, f.traversal(), 'mine', false)).toBe('start');
-  f.hidden.clear(); f.ambiguous();
-  await expect(f.traversal().metadataFor(f.episodes[999]!.target!)).rejects.toBeInstanceOf(WorkReadUnavailable);
-});
 
 test('completed progress pages keep sparse continuation and selection-qualified primary-key order', async () => {
   const structure = id(), occurrence = id(), later = id();
@@ -225,21 +176,152 @@ test('completed progress rejects invalid page keys and limits without touching o
   expect(calls).toBe(1);
 });
 
-test('numeric seeks descend a thousand terminal Episode parts in a group using accepted values, not position', async () => {
-  const f = await fixture(true, true);
-  for (const [number, index, ordinal] of [['1', 999, 1000], ['1000', 0, 1]] as const) {
+
+test('1000 singleton groups cannot emulate an accepted-number seek without the kernel index', async () => {
+  const f = await fixture(false, false, true);
+  for (const q of ['1', '1000']) {
     const before = f.measure();
-    const page = await f.traversal().page({ limit: 1, q: number });
-    expect(page.items).toMatchObject([{ occurrence: f.episodes[index]!.occurrence,
-      parent: f.main, ordinal, target: f.episodes[index]!.target }]);
-    expect(page.items).toHaveLength(1);
-    expect(page.complete).toBe(true);
-    expect(f.measure().calls - before.calls).toBeLessThan(15);
-    expect(f.measure().rowsRead - before.rowsRead).toBeLessThan(15);
-    expect(f.measure().objectsRead - before.objectsRead).toBeLessThan(20);
-    expect((await f.traversal().page({ limit: 1, q: number, after: f.episodes[index]!.occurrence })).items).toEqual([]);
+    await expect(f.traversal().page({ limit: 1, q })).rejects.toBeInstanceOf(ReadingSeekUnavailable);
+    expect(f.measure().calls - before.calls).toBe(2);
+    expect(f.measure().rowsRead - before.rowsRead).toBe(2);
+    expect(f.measure().objectsRead - before.objectsRead).toBe(1);
   }
-  expect(await f.traversal().page({ limit: 1, q: '1002' })).toMatchObject({ items: [], complete: true });
+});
+
+test('Mine over 1000 completions uses one fixed owner index window and never pages history', async () => {
+  const f = await fixture(true);
+  f.completed.push(f.episodes[999]!.occurrence, ...f.episodes.slice(0, 999).reverse().map(row => row.occurrence));
+  expect(await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose)).toBe(f.episodes[999]!.occurrence);
+  expect(f.measure().historyPages).toBe(0);
+  expect(f.measure().indexReads).toBe(1);
+  expect(f.measure().indexRows).toBe(17);
+  expect(f.measure().calls).toBeLessThan(8);
+});
+
+test('hidden furthest completion falls back within 16 candidates; exhaustion is explicit', async () => {
+  const f = await fixture(true);
+  f.completed.push(f.episodes[0]!.occurrence, f.episodes[999]!.occurrence);
+  f.hidden.add(f.episodes[999]!.target!);
+  expect(await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose)).toBe(f.episodes[0]!.occurrence);
+  f.completed.push(...f.episodes.slice(983, 999).map(row => row.occurrence));
+  for (const row of f.episodes.slice(983)) f.hidden.add(row.target!);
+  await expect(chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose))
+    .rejects.toBeInstanceOf(ReadingResumeDisclosureBound);
+  expect(await chooserPosition(f.session, f.traversal(), 'mine', false, f.disclose)).toBe('start');
+});
+
+test('a visible last sibling never returns a physical ordinal over 999 hidden items', async () => {
+  const f = await fixture();
+  for (const row of f.episodes.slice(0, 999)) f.hidden.add(row.target!);
+  const page = await f.traversal().page({ limit: 1 });
+  expect(page.items[0]!.occurrence).toBe(f.episodes[999]!.occurrence);
+  expect(page.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+});
+
+test('completed collection filters hidden IDs, pins, positions and missing keys before counting', async () => {
+  const f = await fixture();
+  const rows: StructureProgress[] = f.episodes.slice(0, 50).map(record => ({ structure: f.structure,
+    occurrence: record.occurrence, selectedRevision: null, completed: true, position: 'private saved position', version: 1 }));
+  expect(await f.disclose(f.session, f.header, rows)).toHaveLength(50);
   f.hidden.add(f.episodes[0]!.target!);
-  expect(await f.traversal().page({ limit: 1, q: '1000' })).toMatchObject({ items: [], complete: true });
+  const hidden = rows[0]!;
+  const selected = { ...hidden, selectedRevision: `urn:rezics:content:revision:${randomUUID()}` };
+  const missing = { ...hidden, occurrence: id() };
+  expect(await f.disclose(f.session, f.header, [hidden, selected, missing, rows[1]!])).toEqual([rows[1]!]);
+});
+
+test('same-target fixed pins require their own policy and current public revision; withdrawal hides the row', async () => {
+  const first = `urn:rezics:content:revision:${randomUUID()}`, second = `urn:rezics:content:revision:${randomUUID()}`;
+  const f = await fixture(false, false, false, true, records => {
+    records[0]!.selection = { mode: 'fixed-revision', revision: first };
+    records[1]!.target = records[0]!.target;
+    records[1]!.selection = { mode: 'fixed-revision', revision: second };
+    records[2]!.target = records[0]!.target;
+  });
+  const rows = f.episodes.slice(0, 3).map(record => ({ structure: f.structure, occurrence: record.occurrence,
+    selectedRevision: first, completed: true, position: 'private pinned position', version: 1 }));
+  f.published.add(`${f.episodes[0]!.target}\0${first}`);
+  expect(await f.disclose(f.session, f.header, rows)).toEqual([rows[0]!, rows[2]!]);
+  f.published.clear();
+  expect(await f.disclose(f.session, f.header, rows)).toEqual([]);
+});
+
+test('owner resume seek is a partial-index top range and readiness refuses stale or legacy keys', async () => {
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' }, structure = id(), revision = id();
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  let stale = false;
+  const pool = { query: async (sql: string, params: unknown[]) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM structure.progress_scope')) return { rows: [{ ready: true, order_revision: stale ? id() : revision }] };
+    return { rows: Array.from({ length: sql.includes('LIMIT 1') ? 1 : 17 }, () => ({ occurrence: id(), selection_key: '', completed: true, position: null, version: '1' })) };
+  } } as unknown as Pool;
+  const store = new StructureProgressStore(pool);
+  const page = await store.resumeCandidates(principal, structure, revision);
+  expect(page.items).toHaveLength(16); expect(page.more).toBe(true);
+  expect(calls[1]!.sql).toContain('ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT $5');
+  expect(calls[1]!.sql).toContain('completed AND resume_eligible AND order_key IS NOT NULL');
+  expect(calls[1]!.params).toEqual([principal.issuer, principal.subject, structure, revision, 17]);
+  stale = true;
+  await expect(store.resumeCandidates(principal, structure, revision)).rejects.toBeInstanceOf(ProgressOrderUnavailable);
+  expect(calls.at(-1)!.sql).toContain('LIMIT 1');
+});
+
+test('reader fence is one version row, never a hash or aggregate of progress/session/library history', async () => {
+  let calls = 0;
+  const pool = { query: async (sql: string) => {
+    calls++; expect(sql).toContain('structure.progress_reader');
+    expect(sql).not.toMatch(/string_agg|md5|consumption_session|library_status/);
+    return { rows: [{ version: '12345678901234567890' }] };
+  } } as unknown as Pool;
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' };
+  expect(await new ReadingPositionStore(pool).privateSnapshot(principal, id())).toBe('12345678901234567890');
+  expect(await new StructureProgressStore(pool).readerVersion(principal)).toBe('12345678901234567890');
+  expect(calls).toBe(2);
+});
+
+test('missing progress owner reports resume unavailable without consulting history sources', async () => {
+  const f = await fixture();
+  f.session.deps.progress = undefined;
+  await expect(chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose)).rejects.toBeInstanceOf(ReadingResumeUnavailable);
+  expect(f.measure().historyPages).toBe(0);
+});
+
+test('order maintenance skips occurrence inventories by owner prefix and repairs only two rows per step', async () => {
+  const f = await fixture();
+  const native = f.session.deps.environment.fuseki.query.bind(f.session.deps.environment.fuseki);
+  f.session.deps.environment.fuseki.query = async (q, options) => q.includes('ASK') ? { boolean: true } : native(q, options);
+  Object.assign(f.session.deps.environment, { lineage: { dataEpoch: 'test', routingEpoch: 'test' } });
+  const rows = f.episodes.slice(0, 3).map(row => ({ occurrence: row.occurrence, selection_key: '' }))
+    .sort((a, b) => a.occurrence.localeCompare(b.occurrence));
+  const writes: string[] = [];
+  let state = { ready: false, order_revision: f.revision, invalidations: '0',
+    reindex_cursor: null as { occurrence?: string; selection?: string } | null, reindex_invalidations: null as string | null };
+  const client = { release: () => {}, query: async (sql: string, params: unknown[] = []) => {
+    if (sql.startsWith('SELECT order_revision')) return { rows: [state] };
+    if (sql.startsWith('SELECT occurrence,selection_key')) {
+      expect(sql).toContain('LIMIT 3');
+      return { rows: rows.filter(row => !params[3] || row.occurrence > String(params[3])).slice(0, 3) };
+    }
+    if (sql.includes("reindex_cursor='{}'")) state = { ...state, reindex_cursor: {}, reindex_invalidations: state.invalidations };
+    if (sql.startsWith('UPDATE structure.progress SET')) writes.push(String(params[3]));
+    if (sql.includes('ready=(NOT $4)')) state = { ...state, ready: !params[3],
+      reindex_cursor: params[3] ? JSON.parse(String(params[4])) : null };
+    return { rows: [] };
+  } };
+  const pool = { connect: async () => client, query: async (sql: string) => {
+    expect(sql).toContain('ORDER BY principal_issuer,principal_subject,structure,occurrence,selection_key LIMIT 1');
+    expect(sql).not.toMatch(/DISTINCT|GROUP BY/);
+    return { rows: [{ principal_issuer: 'https://reader.test', principal_subject: 'viewer', structure: f.structure }] };
+  } } as unknown as Pool;
+  const projection = new ProgressOrderProjection(pool, f.session.deps.environment);
+  await projection.step();
+  expect(writes).toHaveLength(2); expect(state.ready).toBe(false);
+  await projection.step();
+  expect(writes).toHaveLength(3); expect(state.ready).toBe(true);
+});
+
+test('ambiguous terminal metadata fails closed and cannot masquerade as an admitted Work', async () => {
+  const f = await fixture();
+  f.ambiguous();
+  await expect(f.traversal().metadataFor(f.episodes[0]!.target!)).rejects.toBeInstanceOf(WorkReadUnavailable);
 });

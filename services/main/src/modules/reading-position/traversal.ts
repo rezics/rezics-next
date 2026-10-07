@@ -8,6 +8,7 @@ import { normalizePositionQuery } from './store.ts';
 import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
 import { searchOccurrenceLabels } from './label-index.ts';
 import { readingWorkScope } from './work-scope.ts';
+import { ReadingSeekUnavailable } from './errors.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
  * Each seek returns <=101 placements, with <=16 labels each. Configured stores
@@ -74,6 +75,17 @@ export class ReadingPositionTraversal {
     if (!this.metadata.has(work)) this.metadata.set(work, this.readMetadata(work));
     return this.metadata.get(work)!;
   }
+  async hasNestedComposition(meta: ReadingWork): Promise<boolean> {
+    const rows = await this.session.query(`# reading-position:nested-composition
+      SELECT ?work WHERE { GRAPH ${current} {
+        ?placement rv:generation ${iri(meta.generation!)} ; rv:composedWork ?work .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+        ?work rv:mainVersion ?main .
+        ?structure rv:structureOf ?main ; rv:structureProfile ?profile .
+        FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
+      } } LIMIT 1`, 1);
+    return rows.length > 0;
+  }
   private async readMetadata(work: string): Promise<ReadingWork> {
     // A PartRole can target any admitted resource. Only targets with a
     // selected supported composition descend; Episodes remain terminal.
@@ -119,71 +131,11 @@ export class ReadingPositionTraversal {
     }
   }
 
-  /** Numeric selection descends counted immutable subtrees. Projection-only
-   * adapters retain their legacy offset; continuation always uses order keys. */
+  /** Numeric chapter selection requires the counted immutable index. */
   private async numbered(meta: ReadingWork, parent: string, q: string): Promise<string | null> {
     if (!/^[1-9]\d*$/.test(q) || !Number.isSafeInteger(Number(q)) || Number(q) > STRUCTURE_LIMITS.maxPlacements) return null;
-    if (this.order) return readingOrderRead(() => this.order!.numbered(meta, parent, Number(q)));
-    const rows = await this.session.query(`# reading-position:number
-      SELECT ?occurrence WHERE { GRAPH ${current} { ${placementPattern(iri(meta.generation!), parent)} } }
-      ORDER BY ?segmentKey ?orderKey ?occurrence LIMIT 1 OFFSET ${Number(q) - 1}`, 1);
-    return rows[0]?.occurrence?.value ?? null;
-  }
-
-  /** Accepted scalar numbers address parts; physical sibling rank addresses
-   * navigation only. Each branch seeks a fixed predicate/object or owner key,
-   * never the unfiltered PartRole inventory. Groups must remain traversable. */
-  private async acceptedNumberRange(meta: ReadingWork, parent: string,
-    after: ReadingOccurrence | undefined, q: string, probe: number): Promise<Candidate[]> {
-    const placement = `?placement rv:generation ${iri(meta.generation!)} ; rv:occurrence ?occurrence ;
-      rv:orderSegment ?segment ; rv:orderKey ?orderKey .
-      ?segment rv:parent ${iri(parent)} ; rv:segmentKey ?segmentKey .
-      FILTER NOT EXISTS { ?placement rv:removedBy ?removed }`;
-    // Keep each seek's owner constraints in its BGP, so the engine need not
-    // materialize all generation placements to join a small matching branch.
-    // https://jena.apache.org/documentation/tdb/optimizer.html
-    const rows = await this.session.query(`# reading-position:accepted-number
-      SELECT DISTINCT ?occurrence ?parent ?segmentKey ?orderKey ?matches WHERE {
-        GRAPH ${current} {
-          { VALUES ?number { ${lit(BigInt(q).toString())}^^<http://www.w3.org/2001/XMLSchema#integer> ${lit(q)} }
-            ?target schema:episodeNumber ?number .
-            ?placement schema:item ?target ; rv:occurrenceRole rv:PartRole .
-            ${placement}
-          } UNION {
-            ?placement rv:occurrenceRole rv:GroupRole .
-            ${placement}
-          } UNION {
-            ?placement rv:composedWork ?childWork .
-            ?childWork rv:mainVersion ?main .
-            ?childStructure rv:structureOf ?main ; rv:structureProfile ?profile ; rv:selectedGeneration ?childGeneration .
-            FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
-            ?childGeneration rv:generationState rv:Active .
-            ${placement}
-          }
-          BIND(EXISTS { ?placement schema:item ?numberedTarget .
-            VALUES ?acceptedNumber { ${lit(BigInt(q).toString())}^^<http://www.w3.org/2001/XMLSchema#integer> ${lit(q)} }
-            ?numberedTarget schema:episodeNumber ?acceptedNumber . } AS ?matches)
-        }
-        BIND(${iri(parent)} AS ?parent)
-        ${after ? `FILTER(?segmentKey > ${lit(after.segmentKey)} || (?segmentKey = ${lit(after.segmentKey)}
-          && ?orderKey > ${lit(after.orderKey)}))` : ''}
-      } ORDER BY ?segmentKey ?orderKey ?occurrence LIMIT ${probe}`, probe);
-    const entries = new Map<string, { parent: string; occurrence: string; segmentKey: string; orderKey: string; matches: boolean }>();
-    for (const row of rows) {
-      const occurrence = row.occurrence?.value, segmentKey = row.segmentKey?.value, orderKey = row.orderKey?.value;
-      if (!occurrence || !NATIVE_ID.test(occurrence) || row.parent?.value !== parent
-        || !segmentKey || !orderKey || !['true', 'false'].includes(row.matches?.value ?? '')) {
-        throw new WorkReadUnavailable('Numbered placement is unavailable');
-      }
-      const previous = entries.get(occurrence);
-      if (previous && (previous.segmentKey !== segmentKey || previous.orderKey !== orderKey)) {
-        throw new WorkReadUnavailable('Numbered placement is ambiguous');
-      }
-      entries.set(occurrence, { parent, occurrence, segmentKey, orderKey,
-        matches: previous?.matches || row.matches!.value === 'true' });
-    }
-    const items = await readingOrderRead(() => this.order!.hydrate(meta, [...entries.values()], true));
-    return items.map(item => ({ item, matches: entries.get(item.occurrence)!.matches }));
+    if (!this.order) throw new ReadingSeekUnavailable('An indexed reading-position seek is unavailable');
+    return readingOrderRead(() => this.order!.numbered(meta, parent, Number(q)));
   }
 
   private async range(meta: ReadingWork, parent: string, after: ReadingOccurrence | undefined,
@@ -193,9 +145,9 @@ export class ReadingPositionTraversal {
       const items = await readingOrderRead(() => this.order!.range(meta, parent, after, reverse, probe));
       return items.map(item => ({ item, matches: true }));
     }
-    if (/^\d+$/.test(q) && this.order
+    if (/^[+-]?\d+(?:[./]\d+)?$/.test(q) && this.order
       && (await readingOrderRead(() => this.order!.manifest(meta))).profile === 'work-composition') {
-      return this.acceptedNumberRange(meta, parent, after, q, probe);
+      throw new ReadingSeekUnavailable('Episode-number seek is unavailable until its indexed Structure read is ready');
     }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
     if (q && this.order) {
@@ -412,7 +364,8 @@ export class ReadingPositionTraversal {
     }
     const complete = items.length <= input.limit;
     items.splice(input.limit);
-    return { items, next: complete ? null : items.at(-1)!.occurrence, complete: complete && !this.labelsIndexing,
+    const delivered: ReadingOccurrence[] = items.map(({ ordinal: _ordinal, ...item }) => item);
+    return { items: delivered, next: complete ? null : items.at(-1)!.occurrence, complete: complete && !this.labelsIndexing,
       ...(q ? { search: { status: this.labelsIndexing ? 'indexing' as const : 'current' as const } } : {}) };
   }
 

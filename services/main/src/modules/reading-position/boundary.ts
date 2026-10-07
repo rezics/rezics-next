@@ -227,8 +227,8 @@ export class ReadingBoundary {
     return this.reader;
   }
   private async privateSnapshot() {
-    if (this.selection !== 'mine' || !this.session.deps.readingPositions || !await this.ownReader()) return null;
-    return this.session.deps.readingPositions.privateSnapshot(this.session.principal!, this.session.options.actingSubject!);
+    if (this.selection !== 'mine' || !await this.ownReader()) return null;
+    return this.session.deps.progress?.readerVersion(this.session.principal!) ?? 'unconfigured';
   }
   async visible(records: readonly string[]): Promise<Set<string>> {
     const store = this.session.deps.readingPositions;
@@ -278,11 +278,24 @@ export class ReadingBoundary {
   }
   async chooser(work: string, limit: number, after?: string, q?: string) {
     const traversal = this.traversalFor(work);
+    if (this.selection === 'mine' && !q?.trim()) {
+      if (after) throw new WorkReadInvalid('Resume reads have no chooser continuation; use position=start to browse');
+      const resolved = await chooserPosition(this.session, traversal, this.selection, await this.ownReader());
+      const location = resolved === 'start' ? null : await traversal.location(resolved);
+      const items: ReadingOccurrence[] = [];
+      if (location) {
+        const { ordinal: _ordinal, ...item } = location.item;
+        items.push(item);
+      }
+      await this.fence();
+      return { work, resolved, items, next: null, complete: true, search: undefined,
+        scope: 'resume' as const };
+    }
     const page = await traversal.page({ limit, after, q });
     const resolved = await chooserPosition(this.session, traversal, this.selection,
       this.selection === 'mine' && await this.ownReader());
     await this.fence();
-    return { work, resolved, ...page };
+    return { work, resolved, ...page, scope: 'positions' as const };
   }
 }
 

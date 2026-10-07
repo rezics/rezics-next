@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { ProgressOrderProjection } from './order-projection.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const REVISION = /^urn:rezics:content:revision:[0-9a-f-]{36}$/;
@@ -10,8 +12,10 @@ const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
 export class InvalidStructureProgress extends Error {}
 export class StaleStructureProgress extends Error {}
 export class StructureProgressConflict extends Error {}
+export class ProgressOrderUnavailable extends Error {}
 export const STRUCTURE_PROGRESS_COST = { latestRows: 1,
   pageRows: 51,
+  resumeCandidates: 16,
   libraryProjection: 'indexed top-one seek, independent of occurrence inventory' } as const;
 
 export interface ProgressPageKey { occurrence: string; selectedRevision: string | null }
@@ -41,6 +45,8 @@ export interface ProgressWrite {
   idempotencyKey: string;
   /** Authorized parent Work resolved by the route, updated in this transaction. */
   library?: { agent: string; work: string };
+  /** Exact immutable ancestor keys, supplied by the authorized occurrence read. */
+  order?: { revision: string; key: string; eligible?: boolean };
 }
 
 function validIdentity(structure: string, occurrence: string, selectedRevision: string | null) {
@@ -59,7 +65,52 @@ function state(input: { structure: string; occurrence: string; selectedRevision:
 
 /** Private Content-DB owner; no target bytes or publication state are copied here. */
 export class StructureProgressStore {
-  constructor(private readonly pool: Pool) {}
+  private projection: ProgressOrderProjection | undefined;
+  constructor(private readonly pool: Pool, private readonly options: { automaticOrderProjection?: boolean } = {}) {}
+  configureOrderProjection(env: WorkActivationEnvironment) {
+    if (this.projection || this.options.automaticOrderProjection === false) return;
+    this.projection = new ProgressOrderProjection(this.pool, env);
+    this.projection.start();
+  }
+  stopOrderProjection() { this.projection?.stop(); }
+
+  async readerVersion(principal: VerifiedPrincipal): Promise<string> {
+    const value = await this.pool.query<{ version: string }>(`SELECT version::text AS version
+      FROM structure.progress_reader WHERE principal_issuer = $1 AND principal_subject = $2`,
+    [principal.issuer, principal.subject]);
+    return value.rows[0]?.version ?? '0';
+  }
+
+  /** A partial index stops after 16 candidates and one lookahead. Readiness
+   * is a keyed owner row, never a hash/count of the history. */
+  async resumeCandidates(principal: VerifiedPrincipal, structure: string, revision: string) {
+    validIdentity(structure, structure, null);
+    if (!ID.test(revision)) throw new InvalidStructureProgress('progress order revision is invalid');
+    const scope = await this.pool.query<{ order_revision: string | null; ready: boolean }>(
+      `SELECT order_revision, ready FROM structure.progress_scope
+       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3`,
+    [principal.issuer, principal.subject, structure]);
+    if (!scope.rows[0]?.ready || scope.rows[0]?.order_revision !== revision) {
+      const legacy = await this.pool.query(`SELECT occurrence FROM structure.progress
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1`,
+      [principal.issuer, principal.subject, structure]);
+      if (legacy.rows.length) {
+        this.projection?.request(principal, structure);
+        throw new ProgressOrderUnavailable('Completed progress needs a current order index');
+      }
+      return { items: [] as StructureProgress[], more: false };
+    }
+    const result = await this.pool.query<{ occurrence: string; selection_key: string; completed: boolean;
+      position: string | null; version: string }>(`SELECT occurrence, selection_key, completed, position,
+        version::text AS version FROM structure.progress
+      WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
+        AND order_revision = $4 AND completed AND resume_eligible AND order_key IS NOT NULL
+      ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT $5`,
+    [principal.issuer, principal.subject, structure, revision, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
+    return { items: result.rows.slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates).map(row => state({
+      structure, occurrence: row.occurrence, selectedRevision: row.selection_key || null }, row)),
+    more: result.rows.length > STRUCTURE_PROGRESS_COST.resumeCandidates };
+  }
 
   /** Live reader-owned state, in primary-key order. Limit the indexed range
    * before filtering completion: a sparse history must not scan the series.
@@ -114,6 +165,12 @@ export class StructureProgressStore {
   async write(input: ProgressWrite): Promise<StructureProgress> {
     const selectedRevision = input.selectedRevision ?? null;
     validIdentity(input.structure, input.occurrence, selectedRevision);
+    if (input.order && (!ID.test(input.order.revision)
+      || input.order.eligible !== undefined && typeof input.order.eligible !== 'boolean'
+      || input.order.key.split('\u0001').length > 16
+      || !input.order.key.split('\u0001').every(part => /^[0-9a-z]{1,32}\u0002[0-9a-z]{1,32}$/.test(part)))) {
+      throw new InvalidStructureProgress('progress order key is invalid');
+    }
     if (!KEY.test(input.idempotencyKey) || !Number.isSafeInteger(input.expectedVersion)
       || input.expectedVersion < 0 || typeof input.completed !== 'boolean'
       || input.position !== null && (typeof input.position !== 'string'
@@ -133,6 +190,15 @@ export class StructureProgressStore {
     let operation: string | null = null;
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      await client.query(`INSERT INTO structure.progress_reader VALUES ($1,$2,1)
+        ON CONFLICT (principal_issuer,principal_subject) DO UPDATE
+          SET version=structure.progress_reader.version`, [input.principal.issuer, input.principal.subject]);
+      await client.query(`INSERT INTO structure.progress_scope
+        (principal_issuer, principal_subject, structure, order_revision, ready, version)
+        SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
+          WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
+        ON CONFLICT DO NOTHING`, [input.principal.issuer, input.principal.subject, input.structure,
+        input.order?.revision ?? null, !!input.order]);
       if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -182,15 +248,15 @@ export class StructureProgressStore {
       if (version === 0) {
         await client.query(`INSERT INTO structure.progress
           (principal_issuer, principal_subject, structure, occurrence, selection_key,
-            completed, position, version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            completed, position, version, order_revision, order_key, resume_eligible) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
-          selectionKey, input.completed, input.position, next]);
+          selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
       } else {
         await client.query(`UPDATE structure.progress SET completed = $6, position = $7,
-          version = $8, updated_at = clock_timestamp() WHERE principal_issuer = $1
+          version = $8, order_revision = $9, order_key = $10, resume_eligible = $11, updated_at = clock_timestamp() WHERE principal_issuer = $1
           AND principal_subject = $2 AND structure = $3 AND occurrence = $4 AND selection_key = $5`,
         [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
-          selectionKey, input.completed, input.position, next]);
+          selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
       }
       await client.query(`INSERT INTO structure.progress_command
         (principal_issuer, principal_subject, idempotency_key, request_digest,

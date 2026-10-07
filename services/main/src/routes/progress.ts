@@ -7,7 +7,7 @@ import { InvalidStructureProgress, StaleStructureProgress, StructureProgressConf
   type ProgressPageKey }
   from '../modules/progress/store.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader,
-  readPublishedVariants } from '../modules/structure/graph.ts';
+} from '../modules/structure/graph.ts';
 import { readCompositionPage } from '../modules/structure/read.ts';
 import { canReadCompositionWork, compositionTargetReader } from '../modules/composition/disclosure-read.ts';
 import { structureProfileFor } from '../modules/structure/profiles.ts';
@@ -20,6 +20,8 @@ import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { pageFields } from '../modules/work/read-contract.ts';
+import { disclosedCompletedProgress, publishedProgressSelections } from '../modules/progress/disclosure.ts';
+import { readProgressOrder } from '../modules/progress/order.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevision = t.String({ pattern: '^urn:rezics:content:revision:[0-9a-f-]{36}$' });
@@ -56,37 +58,40 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     (work.environment as typeof work.environment & { structureObjects?: typeof work.structureObjects })
       .structureObjects = work.structureObjects;
   }
+  work.progress?.configureOrderProjection?.(work.environment);
   const visibleOccurrence = async (request: Request, structure: string, occurrence: string,
     actingSubject: string, selectedRevision: string | null, write = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
-    const header = await readCompositionHeader(work.environment, structure);
-    if (!header || !structureProfileFor(header.profile).componentPredicate) {
-      throw new CompositionUnavailable('composition is unavailable');
-    }
-    const profile = structureProfileFor(header.profile);
-    const page = await workRead(work, request, { actingSubject }, async session => {
+    const visible = await workRead(work, request, { actingSubject }, async session => {
+      const header = await readCompositionHeader(work.environment, structure);
+      if (!header || !structureProfileFor(header.profile).componentPredicate) {
+        throw new CompositionUnavailable('composition is unavailable');
+      }
+      const profile = structureProfileFor(header.profile);
       if (!await canReadCompositionWork(session, header.work)) {
         throw new CompositionUnavailable('composition is unavailable');
       }
-      return readCompositionPage(work.environment, { structure, occurrence, limit: 1,
+      const page = await readCompositionPage(work.environment, { structure, occurrence, limit: 1, header,
         canReadTarget: compositionTargetReader(session, profile) });
+      const record = page.occurrences[0];
+      if (!record || !profile.targetRoles.includes(record.role) || !record.target) {
+        throw new CompositionUnavailable('target occurrence is unavailable');
+      }
+      if (selectedRevision) {
+        const selected = record.selection?.mode === 'fixed-revision'
+          ? record.selection.revision === selectedRevision
+          : record.selection?.mode === 'follow-context';
+        if (!selected || !(await publishedProgressSelections(session,
+          [{ target: record.target, revision: selectedRevision }])).has(`${record.target}\0${selectedRevision}`)) {
+          throw new CompositionUnavailable('selected Content revision is unavailable');
+        }
+      }
+      const canonical = (await resolveTargets(session, [header.work], 'discussion'))[0]!.resource;
+      const order = write ? await readProgressOrder(work.environment, header, occurrence) : undefined;
+      return { work: canonical, order };
     });
-    const record = page.occurrences[0];
-    if (!record || !profile.targetRoles.includes(record.role) || !record.target) {
-      throw new CompositionUnavailable('target occurrence is unavailable');
-    }
-    if (selectedRevision) {
-      const selected = record.selection?.mode === 'fixed-revision'
-        ? record.selection.revision === selectedRevision
-        : record.selection?.mode === 'follow-context'
-          && (await readPublishedVariants(work.environment, [record.target]))
-            .some(variant => variant.revision === selectedRevision);
-      if (!selected) throw new CompositionUnavailable('selected Content revision is unavailable');
-    }
-    const canonical = await workRead(work, request, { actingSubject }, async session =>
-      (await resolveTargets(session, [header.work], 'discussion'))[0]!.resource);
-    return { principal, work: canonical };
+    return { principal, ...visible };
   };
   return new Elysia()
     .get('/v1/compositions/:id/progress', {
@@ -98,7 +103,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       response: { 200: t.Object({ structure: ref,
         items: t.Array(t.Object({ ...result.properties, completed: t.Literal(true) }), {
           maxItems: STRUCTURE_PROGRESS_COST.pageRows - 1,
-          description: 'This principal\'s completed selection-qualified occurrence states, including tombstones. Any completed selection marks its occurrence complete.' }), ...pageFields,
+          description: 'This principal\'s completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.' }), ...pageFields,
         consistency: t.Literal('live'), complete: t.Boolean(),
         cost: t.Object({ progressRows: t.Integer({ maximum: STRUCTURE_PROGRESS_COST.pageRows }) }) }),
       ...workReadProblems },
@@ -126,12 +131,11 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
               throw new InvalidStructureProgress('progress cursor is invalid');
             }
           }
-          // These are the reader's saved occurrence keys, including tombstones;
-          // no target, label or Content bytes are disclosed by this collection.
           const saved = await work.progress!.completedPage(session.principal!, structure, query.limit ?? 50, after);
+          const items = await disclosedCompletedProgress(session, header, saved.items);
           const nextCursor = saved.next ? encodeReadCursor(binding, session.position, JSON.stringify(saved.next)) : null;
-          return { structure, items: saved.items, nextCursor, sourcePosition: session.position,
-            count: { value: saved.items.length, kind: 'exact-page' as const, total: null },
+          return { structure, items, nextCursor, sourcePosition: session.position,
+            count: { value: items.length, kind: 'exact-page' as const, total: null },
             consistency: 'live' as const, complete: nextCursor === null,
             cost: { progressRows: (query.limit ?? 50) + 1 } };
         });
@@ -182,6 +186,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           body.actingSubject, body.selectedRevision ?? null, true);
         const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
           library: { agent: body.actingSubject, work: visible.work },
+          order: visible.order,
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,
           position: body.position, expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });

@@ -41,18 +41,12 @@ export class ReadingPositionStore {
     if (result.rows.length !== 1) throw new WorkReadUnavailable('Revelation generation is unavailable');
     return result.rows[0]!.version;
   }
-  /** One read of this reader's existing owner state; no counter table or writes.
-   * Call only after Access proves this principal owns the Person, never for an
-   * arbitrary acting Agent. Cost is linear in that reader's indexed history. */
-  async privateSnapshot(principal: VerifiedPrincipal, agent: string): Promise<string> {
-    const result = await this.pool.query<{ snapshot: string }>(`SELECT md5(concat_ws('|',
-      (SELECT string_agg(concat_ws(':', structure, occurrence, selection_key, version, completed), '|' ORDER BY structure, occurrence, selection_key)
-        FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2),
-      (SELECT string_agg(concat_ws(':', id, version), '|' ORDER BY id)
-        FROM reader.consumption_session WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3),
-      (SELECT string_agg(concat_ws(':', work, version, status), '|' ORDER BY work)
-        FROM reader.library_status WHERE agent = $3))) AS snapshot`, [principal.issuer, principal.subject, agent]);
-    return result.rows[0]!.snapshot;
+  /** Constant-size owner clock; no history aggregation or paging. */
+  async privateSnapshot(principal: VerifiedPrincipal, _agent: string): Promise<string> {
+    const result = await this.pool.query<{ version: string }>(`SELECT version::text AS version
+      FROM structure.progress_reader WHERE principal_issuer=$1 AND principal_subject=$2`,
+    [principal.issuer, principal.subject]);
+    return result.rows[0]?.version ?? '0';
   }
   async lookup(records: readonly string[]): Promise<Map<string, Revelation[]>> {
     if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
@@ -134,29 +128,5 @@ export class ReadingPositionStore {
   /** The graph refused the write: drop only this receipt's registration. */
   async abandon(receipt: string): Promise<void> {
     await this.pool.query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1`, [receipt]);
-  }
-  async completed(principal: VerifiedPrincipal, structures: readonly string[]): Promise<Set<string>> {
-    if (!structures.length) return new Set();
-    const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence
-      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
-        AND structure = ANY($3::text[]) AND completed`, [principal.issuer, principal.subject, structures]);
-    return new Set(result.rows.map(row => row.occurrence));
-  }
-  /** Indexed reader-owned progress pages; no inventory-sized response. */
-  async completedPage(principal: VerifiedPrincipal, structures: readonly string[], after?: string) {
-    if (structures.length > REVELATION_COST.batch) throw new WorkReadInvalid('Progress structure batch exceeds its cost');
-    if (!structures.length) return { items: [], next: null };
-    const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence
-      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
-        AND structure = ANY($3::text[]) AND completed AND ($4::text IS NULL OR occurrence > $4)
-      ORDER BY occurrence LIMIT $5`, [principal.issuer, principal.subject, structures, after ?? null, REVELATION_COST.batch + 1]);
-    const items = result.rows.slice(0, REVELATION_COST.batch).map(row => row.occurrence);
-    return { items, next: result.rows.length > REVELATION_COST.batch ? items.at(-1)! : null };
-  }
-  async finishedWorks(agent: string, works: readonly string[]): Promise<Set<string>> {
-    if (works.length > REVELATION_COST.batch) throw new WorkReadInvalid('Finished Work batch exceeds 50 records');
-    const result = await this.pool.query<{ work: string }>(`SELECT work FROM reader.library_status
-      WHERE agent = $1 AND work = ANY($2::text[]) AND status = 'read'`, [agent, works]);
-    return new Set(result.rows.map(row => row.work));
   }
 }
