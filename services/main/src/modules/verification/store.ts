@@ -8,6 +8,9 @@ import { verificationLimits } from './schema.ts';
 import {
   ASSESSMENT_PRODUCER_COST,
   type AssessmentProducerPermit,
+  type AssessmentProducerAuditFrontier,
+  type AssessmentProducerAuditEntry,
+  type AssessmentProducerAuditPage,
   type AssessmentProducerRecord,
   type AssessmentProducerStage,
   type AssessmentProducerTerminal,
@@ -15,6 +18,9 @@ import {
 } from './assessment-producer.ts';
 export type {
   AssessmentProducerPermit,
+  AssessmentProducerAuditFrontier,
+  AssessmentProducerAuditEntry,
+  AssessmentProducerAuditPage,
   AssessmentProducerRecord,
   AssessmentProducerStage,
   AssessmentProducerTerminal,
@@ -744,6 +750,59 @@ export class VerificationStore {
         );
       }
       return rows;
+    });
+  }
+
+  /** Audit every original producer, including terminal history. This bounded
+   * table read is not Access coverage, native inventory or a closure seal. */
+  async auditAssessmentProducers(
+    permit: AssessmentProducerPermit,
+    frontier: AssessmentProducerAuditFrontier | null = null,
+    limit: number = ASSESSMENT_PRODUCER_COST.page,
+  ): Promise<AssessmentProducerAuditPage> {
+    const { mode, job, generation, restoreEpoch } = permit;
+    if (mode !== 'maintenance' || typeof job !== 'string' || !producerJob(job)
+      || typeof generation !== 'string' || !nonnegative(generation)
+      || typeof restoreEpoch !== 'string' || !nonnegative(restoreEpoch)
+      || !Number.isInteger(limit) || limit < 1 || limit > ASSESSMENT_PRODUCER_COST.page
+      || (frontier !== null && (!UUID.test(frontier.after) || frontier.job !== job
+        || frontier.generation !== generation || frontier.restoreEpoch !== restoreEpoch))) {
+      throw new VerificationInvalid('invalid assessment producer audit frontier or permit');
+    }
+    const expected: AssessmentProducerPermit = { mode, job, generation, restoreEpoch };
+    const after = frontier?.after ?? null;
+    return this.tx(async client => {
+      // Prefer the existing ordered PK seek over a population sort even for a
+      // tiny corpus. The setting lasts only for this operator transaction.
+      await client.query('SET LOCAL enable_sort = off');
+      await this.assessmentProducerPermit(client, expected);
+      // Bound raw rows before parsing. A malformed original consumes its place
+      // in the window; a locked row waits/refuses rather than silently vanishing.
+      const rows = (await client.query<AssessmentProducerRow>(`SELECT ${producerColumns}
+        FROM verification.assessment_producer
+        WHERE admission_id ${after === null ? '>=' : '>'} $1::uuid
+        ORDER BY admission_id LIMIT $2 FOR SHARE`,
+      [after ?? MIN_UUID, limit + 1])).rows;
+      const consumed = rows.slice(0, limit);
+      const entries: AssessmentProducerAuditEntry[] = consumed.map(row => {
+        try {
+          const producer = producerRecord(row);
+          if (typeof producer.stageGeneration !== 'string' || !nonnegative(producer.stageGeneration)
+            || typeof producer.restoreEpoch !== 'string' || !nonnegative(producer.restoreEpoch)) {
+            throw new VerificationUnavailable('stored assessment producer generation is invalid');
+          }
+          if (producer.terminal === null) return { status: 'unresolved', reason: 'pending', producer };
+          checkProducerTerminal(producer.admission, producer.terminal);
+          return { status: 'terminal', producer: { ...producer, terminal: producer.terminal } };
+        } catch {
+          return { status: 'unresolved', reason: 'invalid-original', admission: row.admission_id };
+        }
+      });
+      await this.assessmentProducerPermit(client, expected);
+      const eof = rows.length <= limit;
+      return { scope: 'content-assessment-producer', entries, eof,
+        frontier: eof ? null : { after: consumed[consumed.length - 1]!.admission_id, job,
+          generation, restoreEpoch } };
     });
   }
 

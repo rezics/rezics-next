@@ -7,6 +7,8 @@ import {
   nativeId,
   uuidOf,
   type ActivationInput,
+  type AssessmentProducerAuditFrontier,
+  type AssessmentProducerPermit,
   type AssessmentProducerStage,
   type AssessmentProducerTerminal,
   type StagedAssessmentProducer,
@@ -30,10 +32,9 @@ afterEach(async () => {
     restore_epoch = (SELECT version FROM reading_position.generation WHERE singleton) WHERE singleton`);
 });
 
-function fixture() {
+function fixture(admission: string = randomUUID()) {
   const principal = randomUUID();
   const challenger = randomUUID();
-  const admission = randomUUID();
   const claim = nativeId(randomUUID());
   const claimRevision = nativeId(randomUUID());
   const assessment = nativeId(randomUUID());
@@ -154,6 +155,7 @@ function heldQueries(match: (sql: string) => boolean) {
   const connected = deferred();
   const resume = deferred();
   const queries: string[] = [];
+  const calls: { sql: string; values?: unknown[] }[] = [];
   const backendPids: number[] = [];
   let held = false;
   const database = {
@@ -164,6 +166,7 @@ function heldQueries(match: (sql: string) => boolean) {
       return {
         query: async (sql: string, values?: unknown[]) => {
           queries.push(sql);
+          calls.push({ sql, values });
           const result = await client.query(sql, values);
           if (!held && match(sql)) {
             held = true;
@@ -182,8 +185,62 @@ function heldQueries(match: (sql: string) => boolean) {
     connected,
     resume,
     queries,
+    calls,
     backendPids,
   };
+}
+
+function settlement<T>(promise: Promise<T>) {
+  return promise.then(
+    (value) => ({ status: 'fulfilled' as const, value }),
+    (error) => ({ status: 'rejected' as const, error }),
+  );
+}
+
+function auditFrontier(
+  permit: AssessmentProducerPermit,
+  after: string,
+): AssessmentProducerAuditFrontier {
+  if (permit.mode !== 'maintenance' || !permit.job)
+    throw new Error('Audit fixture requires a closed producer');
+  return {
+    after,
+    job: permit.job,
+    generation: permit.generation,
+    restoreEpoch: permit.restoreEpoch,
+  };
+}
+
+async function seedProducerRows(
+  f: ReturnType<typeof fixture>,
+  admissions: readonly string[],
+  scope = f.stage.scope,
+) {
+  const stage = originalIntent(f);
+  await pool.query(
+    `INSERT INTO verification.assessment_producer
+    (admission_id, request_digest, principal_id, acting_subject, scope, authority_epoch, idempotency_key,
+      claim, claim_revision, intent_json, stage_generation, restore_epoch, terminal, terminal_at)
+    SELECT admission, $2, $3, $4, $5, $6, admission::text, $7, $8, $9, gate.generation, gate.restore_epoch,
+      terminal, clock_timestamp()
+    FROM unnest($1::uuid[], $10::jsonb[]) AS inputs(admission, terminal)
+    CROSS JOIN verification.assessment_producer_gate gate WHERE gate.singleton`,
+    [
+      admissions,
+      stage.requestDigest,
+      stage.principal,
+      stage.actingSubject,
+      scope,
+      stage.authorityEpoch,
+      stage.claim,
+      stage.claimRevision,
+      JSON.stringify(stage.intent),
+      admissions.map((admission) => ({
+        ...f.terminal,
+        receipt: `urn:rezics:receipt:${createHash('sha256').update(`${admission}\0claim-assess`).digest('hex')}`,
+      })),
+    ],
+  );
 }
 
 function expectPlainGateReads(queries: readonly string[]) {
@@ -214,6 +271,24 @@ async function waitingForProducerLock(pid: number, mode: 'RowExclusiveLock' | 'S
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`Producer did not wait for its ${mode} table lock`);
+}
+
+async function waitingForAuditRow(pid: number) {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    if (
+      (
+        await pool.query(
+          `SELECT 1 FROM pg_stat_activity WHERE pid = $1
+      AND wait_event_type = 'Lock' AND query LIKE '%FOR SHARE%'`,
+          [pid],
+        )
+      ).rowCount
+    )
+      return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Audit did not wait behind the producer effect row lock');
 }
 
 async function reached(promise: Promise<void>) {
@@ -886,6 +961,342 @@ test('the indexed pending seek cannot skip a locked earliest producer', async ()
       permit,
       async () => f.terminal,
     );
+}, 15_000);
+
+test('closed producer audit includes sparse terminal and pending rows and consumes malformed originals', async () => {
+  const minimum = '00000000-0000-0000-0000-000000000000';
+  const terminal = fixture(minimum);
+  const pending = fixture('00000000-0000-0000-0000-000000000010');
+  const invalid = fixture('00000000-0000-0000-0000-000000000030');
+  const later = fixture('00000000-0000-0000-0000-000000001000');
+  const original = await terminal.store.stageAssessmentProducer(originalIntent(terminal));
+  await terminal.store.withAssessmentProducerEffects(
+    terminal.admission,
+    original.row.requestDigest,
+    original.permit,
+    async () => terminal.terminal,
+  );
+  const unresolved = await pending.store.stageAssessmentProducer(originalIntent(pending));
+  await seedProducerRows(invalid, [invalid.admission], 'unreviewed:assessment');
+  const laterOriginal = await later.store.stageAssessmentProducer(originalIntent(later));
+  await later.store.withAssessmentProducerEffects(
+    later.admission,
+    laterOriginal.row.requestDigest,
+    laterOriginal.permit,
+    async () => later.terminal,
+  );
+  const permit = await terminal.store.closeAssessmentProducerGate(
+    randomUUID(),
+    original.permit.generation,
+  );
+  const first = await terminal.store.auditAssessmentProducers(permit, null, 2);
+  expect(first.scope).toBe('content-assessment-producer');
+  expect(first.entries).toEqual([
+    { status: 'terminal', producer: { ...original.row, terminal: terminal.terminal } },
+    { status: 'unresolved', reason: 'pending', producer: unresolved.row },
+  ]);
+  expect(first.eof).toBe(false);
+  expect(first.frontier).toEqual(auditFrontier(permit, pending.admission));
+  const second = await terminal.store.auditAssessmentProducers(permit, first.frontier, 2);
+  expect(second.entries).toEqual([
+    { status: 'unresolved', reason: 'invalid-original', admission: invalid.admission },
+    { status: 'terminal', producer: { ...laterOriginal.row, terminal: later.terminal } },
+  ]);
+  expect(second.frontier).toEqual(auditFrontier(permit, later.admission));
+  expect(second.eof).toBe(false);
+  let page = second;
+  for (let pages = 0; !page.eof && pages < 8; pages++) {
+    page = await terminal.store.auditAssessmentProducers(permit, page.frontier);
+    expect(page.scope).toBe('content-assessment-producer');
+  }
+  expect(page.eof).toBe(true);
+  expect(page.frontier).toBeNull();
+  const empty = auditFrontier(permit, 'ffffffff-ffff-ffff-ffff-ffffffffffff');
+  expect(await terminal.store.auditAssessmentProducers(permit, empty, 1)).toEqual({
+    scope: 'content-assessment-producer',
+    entries: [],
+    frontier: null,
+    eof: true,
+  });
+  const wrongPermit = { ...permit, generation: String(BigInt(permit.generation) + 1n) };
+  await expect(
+    terminal.store.auditAssessmentProducers(
+      wrongPermit,
+      auditFrontier(wrongPermit, empty.after),
+      1,
+    ),
+  ).rejects.toThrow('gate changed');
+  await expect(terminal.store.auditAssessmentProducers(original.permit, null, 1)).rejects.toThrow();
+  await expect(
+    terminal.store.auditAssessmentProducers(
+      permit,
+      { ...empty, generation: String(BigInt(permit.generation) + 1n) },
+      1,
+    ),
+  ).rejects.toThrow();
+  await expect(
+    terminal.store.auditAssessmentProducers(permit, { ...empty, job: randomUUID() }, 1),
+  ).rejects.toThrow();
+  await expect(
+    terminal.store.auditAssessmentProducers(
+      permit,
+      { ...empty, restoreEpoch: String(BigInt(permit.restoreEpoch) + 1n) },
+      1,
+    ),
+  ).rejects.toThrow();
+  for (const limit of [0, 33])
+    await expect(terminal.store.auditAssessmentProducers(permit, empty, limit)).rejects.toThrow();
+  await pending.store.withAssessmentProducerEffects(
+    pending.admission,
+    unresolved.row.requestDigest,
+    permit,
+    async () => pending.terminal,
+  );
+});
+
+test('closed audit waits for its earliest retained row and remains compatible with unrelated maintenance effects', async () => {
+  const f = fixture();
+  const stage = await f.store.stageAssessmentProducer(originalIntent(f));
+  const sameWindow = fixture('30000000-0000-0000-0000-000000000001');
+  const sameWindowStage = await sameWindow.store.stageAssessmentProducer(
+    originalIntent(sameWindow),
+  );
+  const permit = await f.store.closeAssessmentProducerGate(randomUUID(), stage.permit.generation);
+  const lock = await pool.connect();
+  let blocked: Awaited<ReturnType<typeof settlement>> | undefined;
+  try {
+    await lock.query('BEGIN');
+    await lock.query(
+      'SELECT admission_id FROM verification.assessment_producer WHERE admission_id = $1 FOR UPDATE',
+      ['00000000-0000-0000-0000-000000000000'],
+    );
+    blocked = await settlement(f.store.auditAssessmentProducers(permit, null, 1));
+  } finally {
+    await lock.query('ROLLBACK');
+    lock.release();
+  }
+  expect(blocked!.status).toBe('rejected');
+  if (blocked!.status === 'rejected') expect(blocked!.error.message).toContain('lock timeout');
+  const held = heldQueries(
+    (sql) =>
+      /FROM verification\.assessment_producer/.test(sql) &&
+      /ORDER BY admission_id/.test(sql) &&
+      /FOR SHARE/.test(sql),
+  );
+  const auditing = settlement(held.store.auditAssessmentProducers(permit, null, 1));
+  let sealed: Awaited<ReturnType<VerificationStore['withAssessmentProducerEffects']>> | undefined;
+  try {
+    await reached(held.locked.promise);
+    sealed = await f.store.withAssessmentProducerEffects(
+      f.admission,
+      stage.row.requestDigest,
+      permit,
+      async () => f.terminal,
+    );
+  } finally {
+    held.resume.resolve();
+  }
+  expect(sealed?.terminal).toEqual(f.terminal);
+  const outcome = await auditing;
+  expect(outcome.status).toBe('fulfilled');
+  if (outcome.status === 'fulfilled') expect(outcome.value.entries).toHaveLength(1);
+  const sql = held.queries.find(
+    (query) => /ORDER BY admission_id/.test(query) && /FOR SHARE/.test(query),
+  );
+  expect(sql).not.toMatch(/terminal IS NULL|SKIP LOCKED|OFFSET|count\s*\(/i);
+  expectPlainGateReads(held.queries);
+  const effectHeld = heldQueries((query) =>
+    /FROM verification\.assessment_producer WHERE admission_id = \$1 FOR UPDATE/.test(query),
+  );
+  const committing = settlement(
+    effectHeld.store.withAssessmentProducerEffects(
+      sameWindow.admission,
+      sameWindowStage.row.requestDigest,
+      permit,
+      async () => sameWindow.terminal,
+    ),
+  );
+  const reader = heldQueries(() => false);
+  let resumedAudit:
+    | ReturnType<
+        typeof settlement<Awaited<ReturnType<VerificationStore['auditAssessmentProducers']>>>
+      >
+    | undefined;
+  try {
+    await reached(effectHeld.locked.promise);
+    resumedAudit = settlement(
+      reader.store.auditAssessmentProducers(
+        permit,
+        auditFrontier(permit, '30000000-0000-0000-0000-000000000000'),
+        1,
+      ),
+    );
+    await reached(reader.connected.promise);
+    await waitingForAuditRow(reader.backendPids[0]!);
+  } finally {
+    effectHeld.resume.resolve();
+  }
+  const committed = await committing;
+  const resumed = await resumedAudit!;
+  expect(committed.status).toBe('fulfilled');
+  expect(resumed.status).toBe('fulfilled');
+  if (resumed.status === 'fulfilled')
+    expect(resumed.value.entries).toEqual([
+      { status: 'terminal', producer: { ...sameWindowStage.row, terminal: sameWindow.terminal } },
+    ]);
+}, 15_000);
+
+test('closed audit seeks one fixed primary-key page at 64 and 10000 producers', async () => {
+  const f = fixture();
+  const lowerBound = '60000000-0000-0000-0000-000000000000';
+  const admission = (ordinal: number) =>
+    `60000000-0000-0000-0000-${ordinal.toString(16).padStart(12, '0')}`;
+  await seedProducerRows(
+    f,
+    Array.from({ length: 64 }, (_, index) => admission(index + 1)),
+  );
+  await pool.query('ANALYZE verification.assessment_producer');
+  const generation = (
+    await pool.query(
+      'SELECT generation::text FROM verification.assessment_producer_gate WHERE singleton',
+    )
+  ).rows[0].generation;
+  const firstPermit = await f.store.closeAssessmentProducerGate(randomUUID(), generation);
+  async function measure(permit: AssessmentProducerPermit, population: number) {
+    const observed = heldQueries(() => false);
+    const page = await observed.store.auditAssessmentProducers(
+      permit,
+      auditFrontier(permit, lowerBound),
+      32,
+    );
+    expect(page.entries).toHaveLength(32);
+    expect(page.entries.every((entry) => entry.status === 'terminal')).toBe(true);
+    expect(page.eof).toBe(false);
+    expect(page.frontier).toEqual(auditFrontier(permit, admission(32)));
+    const query = observed.calls.find(
+      (call) =>
+        /FROM verification\.assessment_producer/.test(call.sql) &&
+        /ORDER BY admission_id/.test(call.sql) &&
+        /FOR SHARE/.test(call.sql),
+    );
+    if (!query) throw new Error('Missing actual audit page query');
+    expect(query.sql).not.toMatch(/terminal IS NULL|OFFSET|SKIP LOCKED|count\s*\(/i);
+    expect(query.values).toEqual([lowerBound, 33]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const planner = observed.calls.filter((call) =>
+        /^SET LOCAL enable_sort = off$/.test(call.sql),
+      );
+      expect(planner).toHaveLength(1);
+      for (const setting of planner) await client.query(setting.sql, setting.values);
+      const plan = (
+        await client.query(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${query.sql}`,
+          query.values,
+        )
+      ).rows[0]['QUERY PLAN'][0].Plan;
+      type PlanNode = {
+        'Node Type': string;
+        'Index Name'?: string;
+        'Actual Rows': number;
+        'Actual Loops': number;
+        Plans?: PlanNode[];
+      };
+      const nodes: PlanNode[] = [];
+      function visit(node: PlanNode) {
+        nodes.push(node);
+        for (const child of node.Plans ?? []) visit(child);
+      }
+      visit(plan);
+      const buffers = (plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0);
+      console.log(
+        JSON.stringify({
+          case: 'assessment-producer-audit-page',
+          population,
+          rows: plan['Actual Rows'],
+          loops: plan['Actual Loops'],
+          buffers,
+          nodes: nodes.map((node) => ({
+            type: node['Node Type'],
+            index: node['Index Name'],
+            rows: node['Actual Rows'],
+          })),
+        }),
+      );
+      expect(nodes.some((node) => /Sort|Seq Scan/.test(node['Node Type']))).toBe(false);
+      const index = nodes.find((node) => node['Index Name'] === 'assessment_producer_pkey');
+      expect(index).toBeDefined();
+      expect(index?.['Actual Rows']).toBe(33);
+      expect(index?.['Actual Loops']).toBe(1);
+      expect(plan['Actual Rows']).toBe(33);
+      expect(plan['Actual Loops']).toBe(1);
+      expect(buffers).toBeLessThanOrEqual(256);
+      await client.query('ROLLBACK');
+      return { buffers, sql: query.sql, rows: index?.['Actual Rows'] };
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  }
+  const small = await measure(firstPermit, 64);
+  // Only the isolated fixture reopens its gate to prepare a larger corpus;
+  // each measured page uses a newly acquired exact maintenance permit.
+  await pool.query(
+    "UPDATE verification.assessment_producer_gate SET mode = 'ordinary', job = NULL WHERE singleton",
+  );
+  await seedProducerRows(
+    f,
+    Array.from({ length: 9936 }, (_, index) => admission(index + 65)),
+  );
+  await pool.query('ANALYZE verification.assessment_producer');
+  const largePermit = await f.store.closeAssessmentProducerGate(
+    randomUUID(),
+    firstPermit.generation,
+  );
+  const large = await measure(largePermit, 10000);
+  expect(large.sql).toBe(small.sql);
+  expect(large.rows).toBe(small.rows);
+  expect(large.buffers).toBeLessThanOrEqual(small.buffers + 16);
+}, 30_000);
+
+test('closed audit rechecks restore epoch after reading its page', async () => {
+  const f = fixture();
+  const stage = await f.store.stageAssessmentProducer(originalIntent(f));
+  const permit = await f.store.closeAssessmentProducerGate(randomUUID(), stage.permit.generation);
+  const epoch = (
+    await pool.query('SELECT version::text FROM reading_position.generation WHERE singleton')
+  ).rows[0].version;
+  const held = heldQueries(
+    (sql) =>
+      /FROM verification\.assessment_producer/.test(sql) &&
+      /ORDER BY admission_id/.test(sql) &&
+      /FOR SHARE/.test(sql),
+  );
+  const auditing = settlement(held.store.auditAssessmentProducers(permit, null, 1));
+  try {
+    await reached(held.locked.promise);
+    await pool.query(
+      'UPDATE reading_position.generation SET version = version + 1 WHERE singleton',
+    );
+  } finally {
+    held.resume.resolve();
+  }
+  const outcome = await auditing;
+  try {
+    expect(outcome.status).toBe('rejected');
+    if (outcome.status === 'rejected') expect(outcome.error.message).toContain('restore epoch');
+  } finally {
+    await pool.query('UPDATE reading_position.generation SET version = $1 WHERE singleton', [
+      epoch,
+    ]);
+  }
+  await f.store.withAssessmentProducerEffects(
+    f.admission,
+    stage.row.requestDigest,
+    permit,
+    async () => f.terminal,
+  );
 }, 15_000);
 
 test('a changed restore epoch refuses the saved cut and leaves the original intent unresolved', async () => {

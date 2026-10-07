@@ -66,15 +66,18 @@ import {
   type VerificationDependencies,
 } from '../src/modules/verification/operations.ts';
 import {
+  VerificationInvalid,
   VerificationMissing,
+  VerificationStale,
+  VerificationStore,
   type AnalysisSnapshot,
   type ActivationInput,
+  type AssessmentProducerAuditFrontier,
   type AssessmentProducerPermit,
   type AssessmentProducerRecord,
   type AssessmentProducerStage,
   type AssessmentProducerTerminal,
   type SummaryState,
-  type VerificationStore,
 } from '../src/modules/verification/store.ts';
 import {
   GRAPHS,
@@ -2030,4 +2033,173 @@ test('a claimed historical admission with a committed graph assessment cannot re
   expect(f.resolutions).toEqual([]);
   expect(f.activations).toEqual([]);
   expect(await readReceipt(f.env, f.admissionId, 'claim-assess', ['assessment'])).toEqual(graphTerminal);
+});
+
+const auditAdmission = (ordinal: number) => id(3000 + ordinal).slice('https://rezics.com/id/'.length);
+const auditPermit = (): AssessmentProducerPermit => ({
+  mode: 'maintenance', job: 'assessment-producer-audit', generation: '8', restoreEpoch: '3',
+});
+
+function assessmentAuditRow(ordinal: number, status: AssessmentProducerTerminal['status'] | null) {
+  const admission = auditAdmission(ordinal);
+  const intent: AssessClaimInput = {
+    limitations: 'Preserve the original source pins and order during a bounded audit.',
+    claimRevision: id(540), evidenceSetRevision: id(541), sourceAssessments: [id(543), id(542)],
+    method: 'human-review', judgment: 'supported', evaluationContext: 'urn:assessment:audit:context',
+    adoptedRevision: null, scorePerMillion: null, calibration: null, evaluationReference: null,
+    expectedSummary: null, resolvesChallenges: [auditAdmission(543), auditAdmission(542)],
+    actingSubject: id(544),
+  };
+  const terminal: AssessmentProducerTerminal | null = status === null ? null : {
+    status, receipt: receiptIri(admission, 'claim-assess'), assessment: status === 'cancelled' ? null : id(545),
+    activation: status === 'activated'
+      ? { status: 'activated', generation: id(546), number: '2', dispute: 'resolved' }
+      : status === 'refused' ? { status: 'stale-summary', active: null }
+        : status === 'no-activation' ? { status: 'not-reproduced' } : { status: 'cancelled' },
+  };
+  const producer: AssessmentProducerRecord = {
+    admission, requestDigest: assessmentDigest(id(539), intent), principal: auditAdmission(544),
+    actingSubject: intent.actingSubject, scope: ADMISSIONS['claim-assess'].scope, authorityEpoch: '1',
+    idempotencyKey: `audit:${ordinal}`, claim: id(539), claimRevision: intent.claimRevision, intent,
+    stageGeneration: '7', restoreEpoch: '3', terminal,
+  };
+  return { producer, row: {
+    admission_id: producer.admission, request_digest: producer.requestDigest, principal_id: producer.principal,
+    acting_subject: producer.actingSubject, scope: producer.scope, authority_epoch: producer.authorityEpoch,
+    idempotency_key: producer.idempotencyKey, claim: producer.claim, claim_revision: producer.claimRevision,
+    intent_json: JSON.stringify(intent), stage_generation: producer.stageGeneration,
+    restore_epoch: producer.restoreEpoch, terminal,
+  } };
+}
+
+/** A fixed SQL owner seam: it supplies a raw window and known control reads.
+ * It does not evaluate WHERE/ORDER BY/LIMIT, joins, locks, or any SQL mutation. */
+function assessmentAuditSqlWindow(rows: Record<string, unknown>[]) {
+  const permit = auditPermit();
+  const queries: { sql: string; values: unknown[] }[] = [];
+  const state = { connections: 0, gateReads: 0, driftAfterWindow: false };
+  const query = async (sql: string, values: unknown[] = []) => {
+    queries.push({ sql, values });
+    if (/\bFROM reading_position\.generation\b/.test(sql)) return { rows: [{ epoch: permit.restoreEpoch }], rowCount: 1 };
+    if (/\bFROM verification\.assessment_producer_gate\b/.test(sql)) {
+      state.gateReads++;
+      return { rows: [{ mode: permit.mode, job: permit.job,
+        generation: state.driftAfterWindow && state.gateReads > 1 ? '9' : permit.generation,
+        restore_epoch: permit.restoreEpoch }], rowCount: 1 };
+    }
+    if (/\bFROM verification\.assessment_producer\b/.test(sql)) return { rows, rowCount: rows.length };
+    if (/^(?:BEGIN|SET LOCAL|COMMIT|ROLLBACK)\b/.test(sql)) return { rows: [], rowCount: 0 };
+    throw new Error(`Audit attempted unexpected SQL: ${sql}`);
+  };
+  const pool = { query, connect: async () => {
+    state.connections++;
+    return { query, release: () => {} };
+  } } as unknown as Pool;
+  return { store: new VerificationStore(pool), permit, queries, state };
+}
+
+test('assessment audit refuses malformed or mismatched cursors and permits before contacting Content', async () => {
+  const f = assessmentAuditSqlWindow([]);
+  const frontier: AssessmentProducerAuditFrontier = {
+    after: auditAdmission(1), job: f.permit.job!, generation: f.permit.generation, restoreEpoch: f.permit.restoreEpoch,
+  };
+  const cases: { permit?: AssessmentProducerPermit; frontier?: AssessmentProducerAuditFrontier; limit?: number }[] = [
+    { permit: { ...f.permit, mode: 'ordinary', job: null } },
+    { permit: { ...f.permit, job: null } },
+    { permit: { ...f.permit, job: 'invalid audit job' } },
+    { permit: { ...f.permit, generation: '-1' } },
+    { permit: { ...f.permit, generation: '08' } },
+    { permit: { ...f.permit, generation: 8 as unknown as string } },
+    { permit: { ...f.permit, restoreEpoch: 'not-an-epoch' } },
+    { permit: { ...f.permit, restoreEpoch: 3 as unknown as string } },
+    { frontier: { ...frontier, after: id(1) } },
+    { frontier: { ...frontier, job: 'another-maintenance-job' } },
+    { frontier: { ...frontier, generation: '7' } },
+    { frontier: { ...frontier, restoreEpoch: '2' } },
+    { limit: 0 }, { limit: 33 }, { limit: 1.5 },
+  ];
+  for (const invalid of cases) {
+    await expect(f.store.auditAssessmentProducers(invalid.permit ?? f.permit,
+      invalid.frontier ?? null, invalid.limit ?? 32)).rejects.toBeInstanceOf(VerificationInvalid);
+    expect(f.state.connections).toBe(0);
+    expect(f.queries).toEqual([]);
+  }
+});
+
+test('assessment audit consumes malformed originals within the raw 32-row window and preserves every terminal and source order', async () => {
+  const statuses = ['activated', 'refused', 'no-activation', 'cancelled'] as const;
+  const original = Array.from({ length: 33 }, (_, index) => assessmentAuditRow(index + 1,
+    index >= 1 && index <= statuses.length ? statuses[index - 1]! : null));
+  const rows: Record<string, unknown>[] = original.map(item => ({ ...item.row }));
+  // This is valid JSON with bounded fixed keys, but its original native source
+  // pin is invalid. The real Store parser must report it rather than skip it.
+  rows[0]!.intent_json = JSON.stringify({ ...original[0]!.producer.intent,
+    sourceAssessments: ['urn:not-an-exact-native-assessment'] });
+  const before = structuredClone(rows);
+  const f = assessmentAuditSqlWindow(rows);
+  const page = await f.store.auditAssessmentProducers(f.permit);
+  expect(page.scope).toBe('content-assessment-producer');
+  expect(page.entries).toHaveLength(32);
+  expect(page.entries[0]).toEqual({ status: 'unresolved', reason: 'invalid-original', admission: auditAdmission(1) });
+  for (let index = 1; index <= statuses.length; index++) {
+    const producer = original[index]!.producer;
+    if (producer.terminal === null) throw new Error('Expected an original typed terminal');
+    expect(page.entries[index]).toEqual({ status: 'terminal', producer: { ...producer, terminal: producer.terminal } });
+  }
+  expect(page.entries[5]).toEqual({ status: 'unresolved', reason: 'pending', producer: original[5]!.producer });
+  for (const entry of page.entries) {
+    if (!('producer' in entry)) continue;
+    expect(entry.producer.intent.sourceAssessments).toEqual([id(543), id(542)]);
+    expect(entry.producer.intent.resolvesChallenges).toEqual([auditAdmission(543), auditAdmission(542)]);
+    expect(JSON.stringify(entry.producer.intent)).toBe(original.find(item =>
+      item.producer.admission === entry.producer.admission)!.row.intent_json);
+  }
+  expect(page.eof).toBe(false);
+  expect(page.frontier).toEqual({ after: auditAdmission(32), job: f.permit.job!,
+    generation: f.permit.generation, restoreEpoch: f.permit.restoreEpoch });
+  expect(page.entries.some(entry => ('producer' in entry ? entry.producer.admission : entry.admission) === auditAdmission(33))).toBe(false);
+  const windows = f.queries.filter(query => /\bFROM verification\.assessment_producer\b/.test(query.sql));
+  expect(windows).toHaveLength(1);
+  expect(windows[0]!.values).toEqual(['00000000-0000-0000-0000-000000000000', 33]);
+  expect(windows[0]!.sql).toMatch(/ORDER BY admission_id LIMIT \$2/);
+  expect(windows[0]!.sql).not.toMatch(/terminal IS NULL|SKIP LOCKED|COUNT\s*\(/i);
+  expect(rows).toEqual(before);
+});
+
+test('assessment audit EOF retains unknown entries and resumes strictly after the consumed frontier', async () => {
+  const pending = assessmentAuditRow(33, null);
+  const malformed = assessmentAuditRow(34, 'cancelled');
+  const falseTerminal = assessmentAuditRow(35, null);
+  const rows: Record<string, unknown>[] = [{ ...pending.row }, { ...malformed.row,
+    terminal: { ...malformed.row.terminal!, receipt: 'urn:forged:terminal-receipt' } },
+    { ...falseTerminal.row, terminal: false }];
+  const f = assessmentAuditSqlWindow(rows);
+  const frontier: AssessmentProducerAuditFrontier = {
+    after: auditAdmission(32), job: f.permit.job!, generation: f.permit.generation, restoreEpoch: f.permit.restoreEpoch,
+  };
+  const page = await f.store.auditAssessmentProducers(f.permit, frontier);
+  expect(page.eof).toBe(true);
+  expect(page.frontier).toBeNull();
+  expect(page.entries).toEqual([
+    { status: 'unresolved', reason: 'pending', producer: pending.producer },
+    { status: 'unresolved', reason: 'invalid-original', admission: malformed.producer.admission },
+    { status: 'unresolved', reason: 'invalid-original', admission: falseTerminal.producer.admission },
+  ]);
+  expect(page).not.toHaveProperty('complete');
+  const window = f.queries.find(query => /\bFROM verification\.assessment_producer\b/.test(query.sql))!;
+  expect(window.values).toEqual([frontier.after, 33]);
+  expect(window.sql).toMatch(/admission_id > \$1::uuid/);
+});
+
+test('assessment audit refuses a live permit change before reading or returning a raw window', async () => {
+  const invalidAtStart = assessmentAuditSqlWindow([]);
+  await expect(invalidAtStart.store.auditAssessmentProducers({ ...invalidAtStart.permit, generation: '7' }))
+    .rejects.toBeInstanceOf(VerificationStale);
+  expect(invalidAtStart.queries.some(query => /\bFROM verification\.assessment_producer\b/.test(query.sql))).toBe(false);
+  const changedAfterRead = assessmentAuditSqlWindow([assessmentAuditRow(1, null).row]);
+  changedAfterRead.state.driftAfterWindow = true;
+  await expect(changedAfterRead.store.auditAssessmentProducers(changedAfterRead.permit))
+    .rejects.toBeInstanceOf(VerificationStale);
+  expect(changedAfterRead.queries.some(query => query.sql === 'ROLLBACK')).toBe(true);
+  expect(changedAfterRead.queries.some(query => query.sql === 'COMMIT')).toBe(false);
 });

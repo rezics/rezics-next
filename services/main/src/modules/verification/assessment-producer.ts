@@ -45,3 +45,26 @@ export interface StagedAssessmentProducer {
   row: AssessmentProducerRecord;
   permit: AssessmentProducerPermit;
 }
+
+/** An exact UUID frontier for this maintenance cut, not a signed closure witness. */
+export interface AssessmentProducerAuditFrontier {
+  after: string;
+  job: string;
+  generation: string;
+  restoreEpoch: string;
+}
+export type AssessmentProducerAuditEntry =
+  | {
+      status: 'terminal';
+      producer: AssessmentProducerRecord & { terminal: AssessmentProducerTerminal };
+    }
+  | { status: 'unresolved'; reason: 'pending'; producer: AssessmentProducerRecord }
+  | { status: 'unresolved'; reason: 'invalid-original'; admission: string };
+export interface AssessmentProducerAuditPage {
+  scope: 'content-assessment-producer';
+  entries: AssessmentProducerAuditEntry[];
+  frontier: AssessmentProducerAuditFrontier | null;
+  /** No further rows after this window. Earlier pages and unresolved entries remain the caller's responsibility.
+   * Under operator quiescence this concerns only this Content table, never historical Access, native inventory or fold completion. */
+  eof: boolean;
+}
