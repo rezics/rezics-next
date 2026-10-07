@@ -45,3 +45,5 @@
     sh:property [ sh:path rv:rightsStatus ; sh:maxCount 1 ; sh:hasValue rv:Undetermined ] ;
     sh:property [ sh:path rv:agent ; sh:maxCount 0 ] ;
     sh:property [ sh:path schema:author ; sh:maxCount 0 ] .
+
+# Authored SHACL constraints for Work addresses and author credits.

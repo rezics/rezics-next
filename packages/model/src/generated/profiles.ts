@@ -1421,7 +1421,7 @@ export const profileRegistry = {
     ]
   },
   "work-address-claim-v1": {
-    "sha256": "0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df",
+    "sha256": "17326364438e3f150c7ff8e02e37e51596bed52049282f7b40a120c520503617",
     "file": "shapes/work-address-claim-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-address-claim-v1/binding-shape",
@@ -1433,7 +1433,7 @@ export const profileRegistry = {
     ]
   },
   "work-address-disposition-v1": {
-    "sha256": "30c4d9f8e3926e197186dbd3e0a9b6392db661fcd590251d3cee660880ab071c",
+    "sha256": "9c4f852c5ff565984ef8a1c228d2c580b58c98c8e397cfdfb5305800fdc676de",
     "file": "shapes/work-address-disposition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-address-disposition-v1/merged-route-shape",
@@ -1449,7 +1449,7 @@ export const profileRegistry = {
     ]
   },
   "work-address-lifecycle-v1": {
-    "sha256": "54a6ba17ab7e5e9a70f7e1a4c6cc8e854692b1946f5a24247db3f47ef070634f",
+    "sha256": "4057be5cb9790c3aa94c846707224cbe7c211f1eb3b3f17f03ecb3b039715134",
     "file": "shapes/work-address-lifecycle-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-address-lifecycle-v1/redirect-shape",
@@ -1461,7 +1461,7 @@ export const profileRegistry = {
     ]
   },
   "work-author-credit-v1": {
-    "sha256": "369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281",
+    "sha256": "40f7566879e80c782d418972aec38b5c1699ee0727c8eb56c128b719c606eb4a",
     "file": "shapes/work-author-credit-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-author-credit-v1/credit-shape",

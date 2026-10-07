@@ -51,3 +51,5 @@
     sh:property [ sh:path rv:routeState ; sh:maxCount 1 ; sh:hasValue rv:Retired ] ;
     sh:property [ sh:path rv:routeDisposition ; sh:maxCount 1 ; sh:hasValue rv:Retired ] ;
     sh:property [ sh:path rv:redirectWork ; sh:maxCount 0 ] .
+
+# Authored SHACL constraints for Work addresses and author credits.

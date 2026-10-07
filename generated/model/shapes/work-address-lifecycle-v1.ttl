@@ -26,3 +26,5 @@
     sh:property [ sh:path rv:routeChangeKind ; sh:maxCount 1 ; sh:hasValue rv:Renamed ] ;
     sh:property [ sh:path rv:modelRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:shapeRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+# Authored SHACL constraints for Work addresses and author credits.

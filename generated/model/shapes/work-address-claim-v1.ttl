@@ -21,3 +21,5 @@
     sh:property [ sh:path rv:normalizedSlug ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:minLength 1 ; sh:maxLength 64 ] ;
     sh:property [ sh:path rv:modelRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:shapeRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+# Authored SHACL constraints for Work addresses and author credits.
