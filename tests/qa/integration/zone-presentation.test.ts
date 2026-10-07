@@ -14,7 +14,8 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 let started: Promise<MediaStack> | undefined;
-const stack = () => started ??= startMediaStack('zone-presentation');
+// Administrator Content admissions require the fixture's live Account recheck.
+const stack = () => started ??= startMediaStack('zone-presentation', { library: true });
 afterAll(async () => { if (started) await (await started).stop(); });
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
 async function json<T>(response: Response, expected = 200): Promise<T> {
