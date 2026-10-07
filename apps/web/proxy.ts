@@ -32,6 +32,7 @@ import { mainReadHeaders } from './features/api/main-read.ts';
 import { serverRead } from './features/api/server-read.ts';
 import { SERVER_DEADLINE_HEADER, SERVER_READ_LIMITS } from './features/api/server-fetch.ts';
 import { mainPosition, parsePosition } from './features/wiki/position.ts';
+import { WORK_MISSING_HEADER } from './features/work-page/admission.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -42,6 +43,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const deadlineAt =
     Date.now() + (transfer ? SERVER_READ_LIMITS.transfer : SERVER_READ_LIMITS.page);
   const incoming = new Headers(request.headers);
+  incoming.delete(WORK_MISSING_HEADER);
   incoming.set(SERVER_DEADLINE_HEADER, String(deadlineAt));
   const pathname = request.nextUrl.pathname;
   const locale =
@@ -131,6 +133,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pageRequest = request.method === 'GET' || request.method === 'HEAD';
   let spaceAddress: ResolvedAddress | undefined;
   let resourceAddress: ResolvedAddress | undefined;
+  let workAddress: ResolvedAddress | undefined;
   let addressed = pageRequest
     ? await decideAddress(new URL(request.url), locale, async (lookup) => {
         const read = await readAddress(
@@ -142,6 +145,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
         if (lookup.scope === 'resource' && read.kind === 'resolved') resourceAddress = read.data;
+        if (lookup.scope === 'work' && read.kind === 'resolved') workAddress = read.data;
         return read;
       })
     : { kind: 'pass' as const };
@@ -203,10 +207,44 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       addressed = { kind: 'error', status: 503 };
     }
   }
-  // Work pages own their localized not-found boundary and recheck the live
-  // owner read. A missing/restricted address must reach it instead of returning
-  // an empty middleware 404; unavailable and retired addresses keep their status.
-  if (path?.lookup.scope === 'work' && addressed.kind === 'error' && addressed.status === 404)
+  if (path?.lookup.scope === 'work' && addressed.kind !== 'error') {
+    // Editors skip canonical redirects, but their pages also need a visible Work.
+    if (!workAddress) {
+      const read = await readAddress(path.lookup,
+        displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','), undefined, incoming, resourceViewer);
+      if (read.kind === 'resolved') workAddress = read.data;
+      else addressed = { kind: 'error', status: read.kind === 'missing' ? 404 : read.kind === 'retired' ? 410 : read.status ?? 503,
+        ...(read.kind === 'unavailable' && read.retryAfter ? { retryAfter: read.retryAfter } : {}) };
+    }
+    if (workAddress && addressed.kind !== 'error') {
+      // A cached public address cannot admit a Work that has since become private.
+      const query = new URLSearchParams(resourceViewer ? { actingSubject: resourceViewer.actingSubject } : {});
+      // Former chapter addresses resolve to a Post's reader place, not a Work header.
+      const owner = workAddress.canonical.prefix.startsWith('/w/') && workAddress.canonical.prefix !== '/w/' ? 'posts' : 'works';
+      const url = `${serviceOrigin('MAIN_ORIGIN')}/v1/${owner}/${workAddress.holder.slice(-36)}?${query}`;
+      try {
+        const read = async () => serverRead(url, {
+          headers: await mainReadHeaders({ 'accept-language': locale,
+            ...(resourceViewer ? { authorization: `Bearer ${resourceViewer.token}` } : {}) }, incoming),
+          cache: 'no-store',
+        }, { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata });
+        let response = await read();
+        if (response.status === 409) {
+          await response.body?.cancel();
+          response = await read();
+        }
+        if (response.status === 404 || response.status === 403 || response.status === 410)
+          addressed = { kind: 'error', status: 404 };
+        else if (!response.ok) addressed = { kind: 'error', status: 503 };
+        await response.body?.cancel();
+      } catch {
+        addressed = { kind: 'error', status: 503 };
+      }
+    }
+  }
+  // Decide status before loading can stream, then render the localized Work boundary.
+  const missingWork = path?.lookup.scope === 'work' && addressed.kind === 'error' && addressed.status === 404;
+  if (missingWork)
     addressed = { kind: 'pass' };
   let discoveryHeaders: Record<string, string> = {};
   // Resolve denied Space reads through Main's limited landing page. A missing
@@ -285,6 +323,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return finish(NextResponse.redirect(destination));
   }
   const headers = incoming;
+  if (missingWork) headers.set(WORK_MISSING_HEADER, '1');
   headers.delete(ADDRESS_HEADER);
   // HTTP header values are bytes; native-script names need an ASCII envelope.
   if ('data' in addressed && addressed.data)
@@ -306,7 +345,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     headers.set('content-security-policy', policy);
     headers.set(ZONE_NONCE_HEADER, nonce);
   }
-  const response = NextResponse.next({ request: { headers } });
+  const response = NextResponse.next({ request: { headers }, ...(missingWork ? { status: 404 } : {}) });
+  if (missingWork) {
+    response.headers.set('cache-control', 'no-store');
+    response.headers.set('x-robots-tag', 'noindex');
+  }
   for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
   if (policy) response.headers.set('content-security-policy', policy);
   // A case's private page keeps its credential in the address; no request it makes may carry that address on.

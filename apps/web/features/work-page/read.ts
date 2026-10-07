@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
 import { resolveAddress } from '../address/server.ts';
@@ -7,6 +7,7 @@ import { addressKey } from '../address/path.ts';
 import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
+import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
@@ -168,6 +169,8 @@ export type WorkResolution =
  * to their reader place in the address edge before any page renders.
  */
 export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<WorkResolution> => {
+  // Reuse the charged address miss or live owner refusal for metadata and every view.
+  if ((await headers()).get(WORK_MISSING_HEADER) === '1') return { kind: 'missing' };
   const parsed = parseWorkRef(ref);
   if (!parsed) return { kind: 'missing' };
   const resolved = await resolveWorkRef(parsed);

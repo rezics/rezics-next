@@ -15,8 +15,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     : work.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle };
 }
 
-// Admit the Work before the view's loading boundary can stream a 200 response.
-// Private and missing Works must both render the parent not-found boundary with HTTP 404.
+// Reuse the proxy's admission before rendering the Work frame or its loading view.
 export default async function WorkLayout({ params, children }: Params & { children: ReactNode }) {
   const { ref } = await params;
   const locale = await requestLocale();
