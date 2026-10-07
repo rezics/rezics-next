@@ -23,3 +23,14 @@ CREATE INDEX realm_reply_sibling_new ON access.realm_thread_reference
 -- Unrelated admission-population rebuilds cannot become a readiness scan.
 CREATE INDEX realm_reply_projection_pending ON access.realm_thread_dirty(data_epoch,kind,resource)
   WHERE kind <> 'population';
+
+-- A focus below a withdrawn ancestor has a different placement scope from the
+-- opening discussion. Those bounded candidates still need ordered index seeks.
+CREATE INDEX realm_reply_branch_best ON access.realm_thread_reference
+  (data_epoch,realm,parent,access.realm_reply_best(score,occurred_at),
+    (-access.realm_reply_time(occurred_at)),placement COLLATE "C") INCLUDE(reply);
+CREATE INDEX realm_reply_branch_top ON access.realm_thread_reference
+  (data_epoch,realm,parent,(-score::double precision),
+    (-access.realm_reply_time(occurred_at)),placement COLLATE "C") INCLUDE(reply);
+CREATE INDEX realm_reply_branch_new ON access.realm_thread_reference
+  (data_epoch,realm,parent,(-access.realm_reply_time(occurred_at)),placement COLLATE "C") INCLUDE(reply);

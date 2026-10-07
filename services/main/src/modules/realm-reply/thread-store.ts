@@ -88,7 +88,7 @@ export class RealmReplyThreadStore {
 
   /** One parent index range, at most limit+1 candidates and one exact child probe per candidate. */
   async siblingPage(epoch: string, realm: string, parent: string, sort: 'best' | 'new' | 'top',
-    limit: number, after?: ThreadSiblingKey): Promise<ThreadSibling[]> {
+    limit: number, after?: ThreadSiblingKey, includeInactive = false): Promise<ThreadSibling[]> {
     if (!native.test(realm) || !native.test(parent) || !Number.isInteger(limit)
       || limit < 1 || limit > REALM_THREAD_COST.replies
       || after && (!Number.isFinite(after.rank) || !/^-?\d+$/.test(after.time) || !native.test(after.placement))) {
@@ -105,9 +105,10 @@ export class RealmReplyThreadStore {
       (SELECT $4::double precision AS rank,$5::bigint AS time,$6::text AS placement)
       SELECT r.reply,r.placement,${rank} AS rank,(${time})::text AS time,
       COALESCE((SELECT true FROM access.realm_thread_reference c WHERE c.data_epoch=$1 AND c.realm=$2
-        AND c.parent=r.reply AND c.active
+        AND c.parent=r.reply ${includeInactive ? '' : 'AND c.active'}
         ORDER BY -access.realm_reply_time(c.occurred_at),c.placement COLLATE "C" LIMIT 1),false) AS has_children
-      FROM access.realm_thread_reference r WHERE r.data_epoch=$1 AND r.realm=$2 AND r.parent=$3 AND r.active
+      FROM access.realm_thread_reference r WHERE r.data_epoch=$1 AND r.realm=$2 AND r.parent=$3
+      ${includeInactive ? '' : 'AND r.active'}
       ${after ? `AND (${key}) > (${seek})` : ''}
       ORDER BY ${key} LIMIT $7`, [epoch, realm, parent, after?.rank ?? null,
         after?.time ?? null, after?.placement ?? '', limit + 1]);
@@ -127,10 +128,10 @@ export class RealmReplyThreadStore {
     return rows.rows.map(node);
   }
   /** The projector resolves the opening discussion beyond the request's ancestor bound. */
-  async threadRoot(epoch: string, realm: string, focus: string): Promise<string | null> {
+  async focusBasis(epoch: string, realm: string, focus: string): Promise<{ thread: string; active: boolean } | null> {
     if (!native.test(realm) || !native.test(focus)) throw new RealmReplyInvalid('Invalid thread focus');
-    return (await this.access.query<{ thread: string }>(`SELECT thread FROM access.realm_thread_reference
-      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, focus])).rows[0]?.thread ?? null;
+    return (await this.access.query<{ thread: string; active: boolean }>(`SELECT thread,active FROM access.realm_thread_reference
+      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, focus])).rows[0] ?? null;
   }
   rankedPage(
     session: WorkReadSession,

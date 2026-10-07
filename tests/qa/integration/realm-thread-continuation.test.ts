@@ -90,9 +90,9 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     [epoch, realm, work, JSON.stringify(references)]);
   };
   const page = async (name: string, parent: string, sort: Sort, limit: number,
-    after?: ThreadSiblingKey, explain = true): Promise<ThreadSibling[]> => {
+    after?: ThreadSiblingKey, explain = true, includeInactive = false): Promise<ThreadSibling[]> => {
     statements = [];
-    const rows = await store.siblingPage(epoch, realm, parent, sort, limit, after);
+    const rows = await store.siblingPage(epoch, realm, parent, sort, limit, after, includeInactive);
     expect(rows.length, name).toBeLessThanOrEqual(limit + 1);
     if (explain) {
       expect(statements.length, name).toBeGreaterThan(0);
@@ -188,6 +188,11 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
       expectKeys(next, expected.slice(REALM_THREAD_COST.replies));
       expect(new Set([...shown, ...next].map((row) => row.reply)).size).toBe(192);
       expect(await page(`inactive-${sort}`, inactive, sort, 20)).toEqual([]);
+      const focusedBranch = ordered(references(inactive, 40000, 1000), sort);
+      expect((await page(`focused-inactive-${sort}`, inactive, sort, 20, undefined, true, true)).map(key))
+        .toEqual(focusedBranch.slice(0, 21));
+      expect((await page(`focused-inactive-${sort}-continued`, inactive, sort, 20,
+        focusedBranch[499], true, true)).map(key)).toEqual(focusedBranch.slice(500, 521));
 
       const all = ordered(large, sort);
       expectKeys(await page(`10000-${sort}-first`, wide, sort, 20), all.slice(0, 21));
@@ -249,7 +254,14 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     await access.query(`UPDATE access.realm_thread_reference SET thread=$3
       WHERE data_epoch=$1 AND realm=$2 AND reply=ANY($4::text[])`, [epoch, realm, branchRoot,
       Array.from({ length: 33 }, (_, depth) => native(70001 + depth))]);
-    expect(await store.threadRoot(epoch, realm, native(70033))).toBe(branchRoot);
+    expect(await store.focusBasis(epoch, realm, native(70033)))
+      .toEqual({ thread: branchRoot, active: true });
+    await access.query(`UPDATE access.realm_thread_reference SET active=false
+      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, native(70033)]);
+    expect(await store.focusBasis(epoch, realm, native(70033)))
+      .toEqual({ thread: branchRoot, active: false });
+    await access.query(`UPDATE access.realm_thread_reference SET active=true
+      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, native(70033)]);
     let branchFocus = branchRoot;
     const reached = [branchFocus];
     for (let depth = 1; depth <= REALM_THREAD_COST.depth; depth++) {

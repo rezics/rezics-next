@@ -119,10 +119,16 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
       realmReplyThreads: {
         assertThreadProjection: async () => {},
         identities: async (ids: readonly string[]) => placed.filter(item => ids.includes(reply(item.id))).map(node),
-        threadRoot: async (_epoch: string, _realm: string, focus: string) => {
+        focusBasis: async (_epoch: string, _realm: string, focus: string) => {
           let current = placed.find(item => reply(item.id) === focus);
+          let active = current?.approved !== false;
           while (current?.parent) current = byId.get(current.parent);
-          return current ? reply(current.id) : null;
+          let above = placed.find(item => reply(item.id) === focus);
+          while (above?.parent) {
+            above = byId.get(above.parent);
+            if (above?.approved === false) active = false;
+          }
+          return current ? { thread: reply(current.id), active } : null;
         },
         siblingPage: async (_epoch: string, _realm: string, parent: string, sort: 'best' | 'new' | 'top',
           limit: number, after?: { rank: number; time: string; placement: string }) => {

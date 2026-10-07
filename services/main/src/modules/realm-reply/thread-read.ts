@@ -330,6 +330,12 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     } catch { throw new WorkReadInvalid('Thread sibling cursor is invalid'); }
   }
   await threads.assertThreadProjection(session);
+  const focusBasis = await threads.focusBasis(session.position.dataEpoch, realm, focus);
+  if (!focusBasis) throw new WorkReadMissing('Reply is unavailable');
+  // A bookmark beneath a withdrawn ancestor still reads its own placed branch.
+  // Whole-thread eligibility cannot hide descendants of that new focus; raw
+  // candidates remain bounded and pass the same live placement admission below.
+  const includeInactive = !focusBasis.active;
   // Breadth-first selection budgets candidates, not only visible replies. Each
   // parent uses a matching index seek; children outside this window keep a route
   // to their own bounded focus read instead of disappearing behind the budget.
@@ -345,7 +351,8 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       continuations.push({ kind: 'depth', reply: parent.reply });
       continue;
     }
-    const page = await threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining, parent.after);
+    const page = await threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining,
+      parent.after, includeInactive);
     const children = page.slice(0, remaining);
     selected.push(...children.map(child => child.reply));
     for (const child of children) {
@@ -357,8 +364,8 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       continuations.push(siblingContinuation(parent.reply, last));
     }
   }
-  const [identities, parents, thread] = await Promise.all([threads.identities(selected), threads.ancestors(focus),
-    threads.threadRoot(session.position.dataEpoch, realm, focus)]);
+  const [identities, parents] = await Promise.all([threads.identities(selected), threads.ancestors(focus)]);
+  const thread = focusBasis.thread;
   const identityMap = new Map(identities.map(node => [node.reply, node]));
   const subtree = selected.flatMap(reply => identityMap.has(reply) ? [identityMap.get(reply)!] : []);
   if (!thread || !subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');

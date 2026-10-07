@@ -72,6 +72,22 @@ test('the reply budget preserves an entry point for every deferred branch', asyn
   expect(continued.items.map(item => item.reply)).toEqual([reply(2), reply(1000)]);
 });
 
+test('a placed bookmark below a withdrawn ancestor keeps its own traversable branch', async () => {
+  const placed = [{ id: 1, author: 1, approved: false }, { id: 2, parent: 1, author: 1 },
+    ...Array.from({ length: 192 }, (_, index) => ({ id: index + 3, parent: 2, author: 1 }))];
+  const { session } = world(placed);
+  const readPage = session.deps.realmReplyThreads!.siblingPage.bind(session.deps.realmReplyThreads!);
+  Object.assign(session.deps.realmReplyThreads!, { siblingPage: async (...args: Parameters<typeof readPage>) =>
+    args[6] ? readPage(...args) : [] });
+  const first = await readRealmThread(session, realm, reply(2), 'new');
+  expect(first.ancestors).toEqual([]);
+  expect(first.items).toHaveLength(192);
+  const next = siblingCursor(first);
+  const rest = await readRealmThread(session, realm, reply(2), 'new', next.cursor);
+  expect(rest.items).toHaveLength(2);
+  expect(new Set([...first.items.slice(1), ...rest.items.slice(1)].map(item => item.reply)).size).toBe(192);
+});
+
 test('a new reply invalidates the old walk explicitly and is reachable after restart without silent skips', async () => {
   const placed = siblings(192), { session } = world(placed);
   const first = await readRealmThread(session, realm, reply(1), 'new');
