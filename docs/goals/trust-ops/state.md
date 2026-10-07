@@ -157,7 +157,7 @@ case-specific public facts and accurate automation indication; no new reason-cod
 contract was requested. Program's local-QA-only recovery memory wrappers are
 accepted if production behavior is strictly unchanged.
 
-G-1366 closed/verified at `6ee3f226f15c`: filtered public catalogues retain their public read behavior; commerce remains gated. G-1382 now repairs the three Trust regression-run-3 fixture failures without changing production or weakening guards.
+G-1366 closed/verified at `6ee3f226f15c`: filtered public catalogues retain their public read behavior; commerce remains gated. G-1382 closed/verified at `449acab8f675`: three regression fixtures repaired, three actual counter-notice cases/221assertions passed, all19 selected unit/guards green; production and guard behavior unchanged.
 
 Next local checkpoint follows the next handoff/inbox event. Deployment
 qualification needs further implementation/drill waves and the already listed
