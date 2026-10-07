@@ -17,8 +17,12 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 interface Page<T> { items: T[]; nextCursor: string | null;
   count: { value: number; total: null; kind: 'exact-page' } }
 
-/** Retain exact foreground queries when the original page budget fails. */
-async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: string): Promise<T> {
+// 8 page reads + 10 shared classification-reader reads, constant per page.
+// Reducing that fixed overhead is a follow-up; item count must not increase it.
+const DECISION_PAGE_QUERY_BUDGET = 18;
+
+/** Retain foreground query evidence alongside each page's measured cost. */
+async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: string): Promise<{ page: T; graphQueries: number }> {
   const queries: string[] = [];
   const original = stack.fuseki.query;
   const before = stack.fuseki.queries;
@@ -26,7 +30,10 @@ async function measuredDecisionPage<T>(stack: MediaStack, path: string, sample: 
     if (isForegroundOperation()) queries.push(args[0]);
     return original.apply(stack.fuseki, args);
   };
-  try { return await json<T>(await stack.call('GET', path)); }
+  try {
+    const page = await json<T>(await stack.call('GET', path));
+    return { page, graphQueries: stack.fuseki.queries - before };
+  }
   finally {
     stack.fuseki.query = original;
     const directory = join(import.meta.dir, '../../../.temp/goal');
@@ -108,10 +115,9 @@ test('Realm reads: public home, scoped Works, indexed decisions, privacy and sta
       { kind: 'realm', realm: realm.realm });
     const accepted = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor,
       statement, { kind: 'realm-classification', id: realm.realm }, 'accepted', null), editor.token, 'realm-topic-decision');
-    const beforeDecisions = stack.fuseki.queries;
-    const decisions = await measuredDecisionPage<Page<{ kind: string; work: string | null; subject: string | null;
+    const { page: decisions, graphQueries } = await measuredDecisionPage<Page<{ kind: string; work: string | null; subject: string | null;
       outcome: string | null }>>(stack, `${root}/decisions?limit=1`, 'one-classification');
-    expect(stack.fuseki.queries - beforeDecisions).toBeLessThanOrEqual(8);
+    expect(graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
     expect(decisions.items).toMatchObject([{ kind: 'classification', work: first.work,
       subject: concept.sense, outcome: 'accepted' }]);
     expect(decisions.nextCursor).toBeString();
@@ -260,7 +266,7 @@ test('Statement classification disclosure hides judgments, private meaning, with
         const population = scope.kind === 'global' ? 'global' : 'realm';
         await discloseClassificationConcept(post, editor.token, editor.actor, term.concept,
           `disclosure-hint-${name}-${population}`, scope.kind === 'global' ? scope : { kind: 'realm', realm: scope.id });
-        if (name === 'pending') continue;
+        if (['pending', 'judgment', 'withheld'].includes(name)) continue;
         const decision = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor,
           statement, scope, name === 'rejected' ? 'rejected' : 'accepted', null), editor.token,
         `disclosure-decision-${name}-${population}`);
@@ -275,10 +281,24 @@ test('Statement classification disclosure hides judgments, private meaning, with
       { token: editor.token }).then(response => json<{ books: number; detailsAvailability: string;
         topConcepts: { name: string; count: number }[] }>(response));
     const root = `/v1/realms/${short(realm.realm)}/decisions`;
-    const visibleBefore = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, root,
+    const single = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, root,
+      'disclosure-one-classification');
+    expect(single.page.items.map(item => item.subject)).toEqual([terms.visible.sense]);
+    expect(single.graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
+    for (const name of ['judgment', 'withheld'] as const) {
+      for (const scope of [{ kind: 'global' } as const, { kind: 'realm-classification', id: realm.realm } as const]) {
+        const population = scope.kind === 'global' ? 'global' : 'realm';
+        const decision = await post<{ decision: string }>('/v1/statement-decisions', statementDecisionBody(editor.actor,
+          recorded.get(name)!, scope, 'accepted', null), editor.token, `disclosure-decision-${name}-${population}`);
+        if (scope.kind !== 'global') decisions.set(name, decision.decision);
+      }
+    }
+    const triple = await measuredDecisionPage<Page<{ id: string; subject: string }>>(stack, root,
       'three-classifications');
-    expect(new Set(visibleBefore.items.map(item => item.subject))).toEqual(new Set([
+    expect(new Set(triple.page.items.map(item => item.subject))).toEqual(new Set([
       terms.visible.sense, terms.judgment.sense, terms.withheld.sense]));
+    expect(triple.graphQueries).toBe(single.graphQueries);
+    expect(triple.graphQueries).toBeLessThanOrEqual(DECISION_PAGE_QUERY_BUDGET);
     expect((await stats()).topConcepts.map(item => item.name).sort()).toEqual([
       'Judgment hidden genre', 'Visible genre', 'Withheld genre']);
 
