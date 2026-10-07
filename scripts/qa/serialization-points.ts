@@ -225,6 +225,8 @@ export const serializationAllowlist: SerializationAllowance[] = [
       main + 'modules/access/platform-administrator.ts',
       main + 'modules/work/restore-lineage.ts',
       main + 'modules/erasure/reconcile.ts',
+      // Operator closes an already-held graph before bounded Claim folding.
+      main + 'modules/verification/claim-fold.ts',
     ],
   },
   {
