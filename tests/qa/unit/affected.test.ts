@@ -28,9 +28,9 @@ test('a changed module selects every test that reaches it and routes each to its
   const result = plan(['services/main/src/access.ts']);
   expect(result.tests).toEqual({ unit: [], owner: [], model: [],
     integration: ['tests/qa/integration/access-api.test.ts'],
-    'fault/recovery': ['services/main/tests/recovery.integration.test.ts',
-      'tests/qa/fault-recovery/access-restore.test.ts'] });
+    'fault/recovery': ['tests/qa/fault-recovery/access-restore.test.ts'] });
   expect(result.deferred).toEqual([
+    { file: 'services/main/tests/recovery.integration.test.ts', reason: 'legacy host-Jena test outside the QA registry' },
     { file: 'tests/qa/load/practical.test.ts', reason: 'capacity tier; run explicitly with task test -- <file>' },
   ]);
   expect(result.widened).toEqual([]);
@@ -153,40 +153,34 @@ test('affected commands run unit files directly and stack tiers through the QA h
   expect(affectedCommands(result).map(item => item.command)).toEqual([
     ['bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', 'services/main/tests/rating.test.ts']],
     ['bun', ['scripts/qa/cli.ts', '--tier', 'integration', '--file', 'tests/qa/integration/access-api.test.ts']],
-    ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery',
-      '--file', 'services/main/tests/recovery.integration.test.ts',
-      '--file', 'tests/qa/fault-recovery/access-restore.test.ts']],
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery', '--file', 'tests/qa/fault-recovery/access-restore.test.ts']],
   ]);
   expect(affectedCommands(plan(['services/main/migrations/access/020_roles.sql'])).map(item => item.command))
     .toEqual([['bun', ['scripts/qa/cli.ts', '--tier', 'integration']],
       ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery']]]);
 });
 
-test('migrated Main runtime fixtures select their QA tiers for direct and imported changes', () => {
+test('migrated Main runtime fixtures select their QA tier; contract-blocked ones stay deferred', () => {
   const source = 'services/main/src/modules/semantic/command.ts';
-  const integration = ['activate', 'edit', 'outbox'].map(name => `services/main/tests/${name}.integration.test.ts`);
-  const recovery = 'services/main/tests/recovery.integration.test.ts';
-  const legacy = 'services/main/tests/full-work.integration.test.ts';
-  const runtimeGraph = [source, ...integration, recovery, legacy].map(file => ({
+  const integration = ['edit', 'outbox'].map(name => `services/main/tests/${name}.integration.test.ts`);
+  const blocked = ['activate', 'full-work', 'recovery'].map(name => `services/main/tests/${name}.integration.test.ts`);
+  const runtimeGraph = [source, ...integration, ...blocked].map(file => ({
     source: file, dependencies: file === source ? [] : [edge(source)],
   }));
   const imported = plan([source], { graph: runtimeGraph, exists: () => true });
   expect(imported.tests.integration).toEqual(integration);
-  expect(imported.tests['fault/recovery']).toEqual([recovery]);
+  expect(imported.tests['fault/recovery']).toEqual([]);
   expect(imported.tests.owner).toEqual([]);
   expect(imported.tests.unit).toEqual([]);
-  expect(imported.deferred).toEqual([
-    { file: legacy, reason: 'legacy host-Jena test outside the QA registry' },
-  ]);
-  for (const [tier, selected] of [['integration', integration], ['fault/recovery', [recovery]]] as const) {
-    for (const file of selected) {
-      expect(routeTest(file)).toEqual({ tier });
-      const direct = plan([file], { graph: runtimeGraph, exists: () => true });
-      expect(affectedCommands(direct).map(item => item.command)).toEqual([
-        ['bun', ['scripts/qa/cli.ts', '--tier', tier, '--file', file]],
-      ]);
-      expect(direct.deferred).toEqual([]);
-    }
+  expect(imported.deferred).toEqual(blocked.map(file => (
+    { file, reason: 'legacy host-Jena test outside the QA registry' })));
+  for (const file of integration) {
+    expect(routeTest(file)).toEqual({ tier: 'integration' });
+    const direct = plan([file], { graph: runtimeGraph, exists: () => true });
+    expect(affectedCommands(direct).map(item => item.command)).toEqual([
+      ['bun', ['scripts/qa/cli.ts', '--tier', 'integration', '--file', file]],
+    ]);
+    expect(direct.deferred).toEqual([]);
   }
 });
 

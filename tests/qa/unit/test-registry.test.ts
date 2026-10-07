@@ -3,27 +3,25 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { legacyHostJenaGateFiles, ownerGateFiles, testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
-import { expandTestPaths, isolatedIntegrationFiles, planStackProjects, selfManagedFaultAdmission,
-  selfManagedFaultFiles, splitTestArgs } from '../../../scripts/qa/core.ts';
+import { expandTestPaths, isolatedIntegrationFiles, planStackProjects, selfManagedFaultFiles, splitTestArgs } from '../../../scripts/qa/core.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-test('migrated Main runtime fixtures stay registered in stack tiers and receive independent projects', () => {
-  const integration = ['activate', 'edit', 'outbox'].map(name => `services/main/tests/${name}.integration.test.ts`);
-  const recovery = 'services/main/tests/recovery.integration.test.ts';
-  const fixtures = [...integration, recovery];
+test('migrated Main runtime fixtures stay registered in the integration tier and receive independent projects', () => {
+  const integration = ['edit', 'outbox'].map(name => `services/main/tests/${name}.integration.test.ts`);
+  const blocked = ['activate', 'recovery'].map(name => `services/main/tests/${name}.integration.test.ts`);
   const owners = ownerGateFiles(root);
   const units = unitOwnerFiles(root);
-  for (const file of fixtures) {
+  for (const file of [...integration, ...blocked]) {
     expect(owners).not.toContain(file);
     expect(units).not.toContain(file);
-    expect(legacyHostJenaGateFiles as readonly string[]).not.toContain(file);
-    expect(testExclusions.some(item => item.file === file)).toBe(false);
     for (const tier of ['unit', 'owner', 'model'] as const) {
       expect(() => testArgs(tier, undefined, { files: [file] })).toThrow('not registered');
     }
   }
   for (const file of integration) {
+    expect(legacyHostJenaGateFiles as readonly string[]).not.toContain(file);
+    expect(testExclusions.some(item => item.file === file)).toBe(false);
     expect(testArgs('integration')).toContain(file);
     expect(testArgs('integration', undefined, { files: [file] })).toEqual([file]);
     expect(() => testArgs('fault/recovery', undefined, { files: [file] })).toThrow('not registered');
@@ -33,17 +31,20 @@ test('migrated Main runtime fixtures stay registered in stack tiers and receive 
   const integrationProjects = planStackProjects(new Map([
     [shared, 1], ...integration.map(file => [file, 10] as const),
   ]), 2, 'integration');
-  expect(integrationProjects).toHaveLength(4);
+  expect(integrationProjects).toHaveLength(3);
   for (const file of [shared, ...integration]) expect(integrationProjects).toContainEqual([file]);
 
-  expect(testArgs('fault/recovery')).toContain(recovery);
-  expect(testArgs('fault/recovery', undefined, { files: [recovery] })).toEqual([recovery]);
-  expect(() => testArgs('integration', undefined, { files: [recovery] })).toThrow('not registered');
-  expect(selfManagedFaultFiles.has(recovery)).toBe(true);
-  expect(selfManagedFaultAdmission.get(recovery)).toBe('startup');
-  const harnessFault = 'tests/qa/fault-recovery/lost-response.test.ts';
-  expect(planStackProjects(new Map([[recovery, 10], [harnessFault, 1]]), 1, 'fault/recovery'))
-    .toEqual([[harnessFault], [recovery]]);
+  // Activation and recovery assert contracts the product contradicts: they run in no tier.
+  for (const file of blocked) {
+    expect(legacyHostJenaGateFiles as readonly string[]).toContain(file);
+    expect(testExclusions.some(item => item.file === file)).toBe(true);
+    expect(isolatedIntegrationFiles.has(file)).toBe(false);
+    expect(selfManagedFaultFiles.has(file)).toBe(false);
+    for (const tier of ['integration', 'fault/recovery'] as const) {
+      expect(testArgs(tier)).not.toContain(file);
+      expect(() => testArgs(tier, undefined, { files: [file] })).toThrow('not registered');
+    }
+  }
 });
 
 test('every tracked Bun test belongs to a full QA tier or a reasoned exclusion', () => {

@@ -3,8 +3,7 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
-  // Activation and edit bind exact graph sequences and fresh Access authority; outbox replays from zero and changes lineage.
-  'services/main/tests/activate.integration.test.ts',
+  // Edit binds exact graph sequences and fresh Access authority; outbox replays from zero and changes lineage.
   'services/main/tests/edit.integration.test.ts',
   'services/main/tests/outbox.integration.test.ts',
   // Question presentations qualify first-administrator authority and independent revision heads on an empty graph.

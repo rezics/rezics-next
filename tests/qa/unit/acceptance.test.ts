@@ -119,8 +119,7 @@ test('QA06: failure rerun selects failed names without borrowing prior passes', 
       'services/account/tests/account-pitr.integration.test.ts',
       'services/account/tests/account-access-recovery.integration.test.ts',
       'services/main/tests/access-pitr.integration.test.ts',
-      'services/main/tests/content-recovery.integration.test.ts',
-      'services/main/tests/recovery.integration.test.ts']);
+      'services/main/tests/content-recovery.integration.test.ts']);
     expect(parseArgs(['--only-failed', 'run-one']).onlyFailed).toBe('run-one');
     expect(() => parseArgs(['--only-failed', '../bad'])).toThrow();
     const current = join(artifacts, 'current');
@@ -197,7 +196,7 @@ test('QA06: failed fault/recovery test is read from the flat artifact and resele
   } finally { rmSync(artifacts, { recursive: true, force: true }); }
 });
 
-test('QA06: migrated host-Jena failures rerun in their current QA tiers', () => {
+test('QA06: migrated host-Jena failures rerun in QA while contract-blocked files stay retired', () => {
   const artifacts = mkdtempSync(join(scratch, 'rezics-qa-migrated-prior-'));
   const prior = join(artifacts, 'migrated-one');
   mkdirSync(prior);
@@ -213,21 +212,19 @@ test('QA06: migrated host-Jena failures rerun in their current QA tiers', () => 
       <testcase name="activate: prior pass" file="services/main/tests/activate.integration.test.ts" />
     </testsuite>`);
     const selection = failedSelection(artifacts, 'migrated-one');
-    expect(selection.tiers).toEqual(['integration', 'fault/recovery']);
-    expect(selection.retiredTests).toEqual([]);
+    expect(selection.tiers).toEqual(['integration']);
     expect(selection.tests.map(item => [item.file, item.tier])).toEqual([
-      ['services/main/tests/activate.integration.test.ts', 'integration'],
       ['services/main/tests/edit.integration.test.ts', 'integration'],
       ['services/main/tests/outbox.integration.test.ts', 'integration'],
-      ['services/main/tests/recovery.integration.test.ts', 'fault/recovery'],
+    ]);
+    // Activation and recovery assert contracts the product contradicts, so they stay retired.
+    expect(selection.retiredTests?.map(item => item.file)).toEqual([
+      'services/main/tests/activate.integration.test.ts',
+      'services/main/tests/recovery.integration.test.ts',
     ]);
     expect(testArgs('integration', selection)).toEqual([
-      'services/main/tests/activate.integration.test.ts', 'services/main/tests/edit.integration.test.ts',
-      'services/main/tests/outbox.integration.test.ts', '-t',
-      '^.*(?:activate: failed command|edit: failed command|outbox: failed replay)$',
-    ]);
-    expect(testArgs('fault/recovery', selection)).toEqual([
-      'services/main/tests/recovery.integration.test.ts', '-t', '^.*(?:recovery: failed restore)$',
+      'services/main/tests/edit.integration.test.ts', 'services/main/tests/outbox.integration.test.ts', '-t',
+      '^.*(?:edit: failed command|outbox: failed replay)$',
     ]);
   } finally { rmSync(artifacts, { recursive: true, force: true }); }
 });
