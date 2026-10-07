@@ -37,7 +37,7 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--tier' && implementedTiers.includes(args[i + 1] as Tier)) tier = args[++i] as Tier;
     else if (args[i] === '--only-failed' && /^[a-z0-9][a-z0-9-]{0,30}$/.test(args[i + 1] ?? '')) onlyFailed = args[++i];
-    else if (args[i] === '--file' && /\.(?:test|e2e)\.ts$/.test(args[i + 1] ?? '')) files.push(args[++i]!);
+    else if (args[i] === '--file' && /\.(?:test|e2e)\.tsx?$/.test(args[i + 1] ?? '')) files.push(args[++i]!);
     else if (args[i] === '--id' && /^[A-Z][A-Z0-9]*\d{2,}$/.test(args[i + 1] ?? '')) id = args[++i];
     else if (args[i] === '--keep') keep = true;
     else if (args[i] === '--record') record = true;

@@ -10,6 +10,7 @@ import {
   isQaOwnerPath,
   legacyHostJenaGateFiles,
   testArgs,
+  testExclusions,
   unitHarnessFiles,
 } from './acceptance.ts';
 
@@ -159,6 +160,8 @@ export function classify(path: string): Rule | undefined {
 }
 
 export function routeTest(path: string): { tier: AffectedTier } | { deferred: string } | { workspace: FrontendWorkspace } | undefined {
+  const excluded = testExclusions.find(item => item.file === path && path.startsWith('apps/web/'));
+  if (excluded) return { deferred: excluded.reason };
   const workspace = frontendWorkspace(path);
   if (workspace) return workspace === 'apps/about' || isQaE2ePath(path) ? undefined : { workspace };
   if (isQaE2ePath(path) || path.startsWith('apps/') || path.startsWith('packages/ui/'))

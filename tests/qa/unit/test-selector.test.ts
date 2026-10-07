@@ -91,3 +91,9 @@ test('Bun script owner files select their bounded tier without a service stack',
   ]);
   expect(parseArgs(['--tier', 'owner']).tier).toBe('owner');
 });
+
+
+test('owner file selection accepts Bun TSX tests', () => {
+  expect(parseArgs(['--tier', 'owner', '--file', 'packages/document/tests/checker.test.tsx']).files)
+    .toEqual(['packages/document/tests/checker.test.tsx']);
+});

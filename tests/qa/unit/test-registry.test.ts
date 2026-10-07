@@ -36,7 +36,7 @@ test('owner discovery registers nested Bun TSX tests without admitting an unregi
     const owner = 'services/main/tests/nested/behavior.test.tsx';
     const script = 'scripts/static/contract.test.ts';
     const packageFile = 'packages/document/tests/checker.test.ts';
-    for (const file of [owner, 'services/main/tests/unregistered.integration.test.ts',
+    for (const file of [owner, 'services/main/tests/unregistered.integration.test.ts', 'services/main/tests/unregistered.integration.test.tsx',
       'model/tests/daily-rating.test.ts', 'apps/web/node_modules/dependency.test.ts', script, packageFile]) {
       mkdirSync(dirname(join(fixture, file)), { recursive: true });
       writeFileSync(join(fixture, file), '');

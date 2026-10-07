@@ -165,7 +165,7 @@ function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
       const path = `${directory}/${entry.name}`;
       if (entry.isDirectory() && !['node_modules', '.temp', '.artifacts', 'dist', '.git'].includes(entry.name)) walk(path);
       else if (entry.isFile() && /\.test\.tsx?$/.test(entry.name)
-        && !entry.name.endsWith('.integration.test.ts') && !reserved.has(path)) found.push(path);
+        && !/\.integration\.test\.tsx?$/.test(entry.name) && !reserved.has(path)) found.push(path);
     }
   };
   for (const directory of unitOwnerDirectories) walk(directory);
@@ -174,7 +174,7 @@ function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
 
 const retainedUnitOwners = new Set(['scripts/dev/config.test.ts', 'scripts/operations/search-state.test.ts']);
 export function isQaOwnerPath(path: string): boolean {
-  return !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
+  return /\.test\.tsx?$/.test(path) && !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
     && (path.startsWith('scripts/') || path.startsWith('packages/')
     || path === 'services/main/tests/g-903-api-inputs.test.ts');
 }

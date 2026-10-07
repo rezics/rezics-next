@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { classify, formatPlan, needsGraph, planAffected, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { classify, formatPlan, needsGraph, planAffected, routeTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -202,4 +202,11 @@ test('frontend workspace metadata does not schedule stacks through broad directo
   expect(Object.values(result.tests).flat()).toEqual([]);
   expect(result.widened).toEqual([]);
   expect(affectedCommands(result).map(item => item.command)).toEqual([['task', ['ui:typecheck']]]);
+});
+
+
+test('affected selection defers the explicitly excluded live browser fixture', () => {
+  expect(routeTest('apps/web/tests/g-944-shared-browser.test.ts')).toEqual({
+    deferred: 'Live shared-stack Playwright fixture requires running web, Accounts and Main services; run it explicitly through goalctl rather than the isolated Bun unit tier.',
+  });
 });
