@@ -6,7 +6,9 @@ import { AccessExposure } from '../../../services/main/src/modules/access/exposu
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
+import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
 import { HomePersonalStore } from '../../../services/main/src/modules/feed/personal.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { FeedViewerStateReader } from '../../../services/main/src/modules/feed/viewer-state.ts';
@@ -152,6 +154,8 @@ export async function startHomeStack(label: string, options: {
   const consumer = `feed-${randomUUID()}`;
   const feed = new FeedStore(stack.accessPool);
   const deps = { environment: stack.env, access: stack.access,
+    judgments: new AccessJudgments(stack.accessPool),
+    contextSelections: new PrivateContextSelections(stack.accessPool),
     platformAccess: new AccessExposure(stack.accessPool), account, feed,
     follows: new FollowsStore(stack.accessPool), feedViewerState: new FeedViewerStateReader(),
     realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env),
