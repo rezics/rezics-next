@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
+import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { land, type LandScope } from './land.ts';
 import { GoalMailStore } from './mail.ts';
@@ -3148,6 +3149,18 @@ function currentQaGoal(): string | undefined {
   try { return readLedger().tasks[taskId]?.goal; } catch { return undefined; }
 }
 
+/** The harness admits its own lifetime lease after memory and the startup turn. */
+function harnessOwnsSlot(command: readonly string[]): boolean {
+  if (basename(command[0] ?? '') !== 'bun') return false;
+  const script = resolve(command[1] ?? '');
+  if (script === resolve(import.meta.dir, '../qa/cli.ts')) return true;
+  if (script !== resolve(import.meta.dir, '../qa/test.ts')) return false;
+  const args = command.slice(2);
+  if (parseAffectedArgs(args)) return false;
+  const [program, selected] = selectTestCommand(args);
+  return program === 'bun' && selected[0] === 'scripts/qa/cli.ts';
+}
+
 export async function withSlot(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
@@ -3157,9 +3170,10 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   let code: number | undefined;
   const artifactRoot = join(process.cwd(), '.artifacts', 'qa');
   const prior = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
+  const deferred = !heavy && harnessOwnsSlot(command);
   const slots = heavy ? undefined : options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
   if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
-  const dir = options.slotDirectory ?? join(stateDir, 'qa-slots');
+  const dir = options.slotDirectory ?? (deferred ? process.env.GOAL_QA_SLOT_DIRECTORY : undefined) ?? join(stateDir, 'qa-slots');
   const heavyLockDirectory = options.heavyLockDirectory ?? (options.slotDirectory ? join(dir, 'heavy') : heavyLock);
   const waiterDirectory = join(dir, 'waiters');
   const goal = currentQaGoal();
@@ -3169,7 +3183,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   let waitPath: string | undefined;
   try {
     releaseHeavy = heavy ? await acquireHeavy(command, { lockDir: heavyLockDirectory, goal, announce }) : undefined;
-    if (!heavy) {
+    if (!heavy && !deferred) {
       const deadline = now() + (options.timeoutMs ?? 3_600_000);
       let announced = false;
       while (!heldSlot) {
@@ -3192,7 +3206,8 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       if (waitPath) rmSync(waitPath, { force: true });
     }
     (options.reap ?? reapStaleQaStacks)();
-    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_IN_SLOT: '1',
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_IN_SLOT: deferred ? '0' : '1',
+      ...(deferred ? { GOAL_QA_SLOT_DIRECTORY: dir, GOAL_QA_SLOTS: String(slots) } : {}),
       GOAL_QA_WAIT_DIR: waiterDirectory, GOAL_QA_COMMAND: command.join(' ') };
     if (heavy || process.env.GOAL_QA_HEAVY_RUN === '1') env.GOAL_QA_HEAVY_RUN = '1';
     if (goal) env.GOAL_ID = goal;

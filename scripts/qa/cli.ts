@@ -218,6 +218,22 @@ async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4])
   runSlots ??= await acquireRunSlots(1, slotOptions);
 }
 
+/** Host-only tiers also own a lease, but retries never hold one through admission. */
+async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+  for (;;) {
+    try {
+      return await admit('other', async () => {
+        await reserveRunSlot({ deadline: Date.now(), runDeadline });
+        return work();
+      }, env);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith('No QA slot became free before the deadline')) throw error;
+      if (Date.now() >= runDeadline) throw error;
+      await Bun.sleep(Math.min(3_000, runDeadline - Date.now()));
+    }
+  }
+}
+
 async function startRunStack(args: string[], budget: number, env: NodeJS.ProcessEnv = process.env,
   reserve = reserveRunSlot) {
   return withStartupSlot(env,
@@ -237,8 +253,7 @@ async function resetChildStacks(registry: string): Promise<string[]> {
 
 async function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  const result = await admit('other',
-    async () => command(root, program, args, budget, env), env);
+  const result = await admitRun(async () => command(root, program, args, budget, env), env);
   const ok = result.ok && result.elapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
   if (name === 'static') writeFileSync(join(directory, `${name}.xml`),
@@ -257,7 +272,7 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
 async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
-  const result = await admit('other',
+  const result = await admitRun(
     () => commandAsync(root, program, args, budget, process.env, noteMemory, { runDeadline }));
   const ok = result.ok && result.activeElapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });

@@ -2571,6 +2571,60 @@ describe('heavy QA lock', () => {
     }
   }, 35_000);
 
+  for (const args of [
+    ['scripts/qa/cli.ts', '--tier', 'model', '--file', 'model/tests/native-equivalence.test.ts'],
+    ['scripts/qa/test.ts', '--tier', 'model', '--file', 'model/tests/native-equivalence.test.ts'],
+    ['scripts/qa/test.ts', 'tests/qa/integration/access-download-api.test.ts'],
+    ['scripts/qa/test.ts', 'scripts/goal/goalctl.test.ts'],
+    ['scripts/qa/test.ts', '--tier', 'unit', '--file', 'tests/qa/unit/qa-harness.test.ts'],
+  ]) {
+    test(`light harness dispatch defers its ordinary slot: ${args.join(' ')}`, async () => {
+      const root = mkdtempSync(join(process.cwd(), '.temp', 'deferred-harness-slot-'));
+      const slots = join(root, 'slots');
+      mkdirSync(slots);
+      mkdirSync(join(slots, '0'));
+      writeFileSync(join(slots, '0', 'pid'), String(process.pid));
+      try {
+        expect(await withSlot(['bun', ...args], false, undefined, {
+          slotDirectory: slots, slots: 1, timeoutMs: 0,
+          reap: () => {}, sleep: async () => { throw new Error('Dispatcher waited for a slot'); },
+          runCommand: async (_command, env, onStart) => {
+            expect(env.GOAL_IN_SLOT).toBe('0');
+            expect(env.GOAL_QA_SLOT_DIRECTORY).toBe(slots);
+            expect(env.GOAL_QA_SLOTS).toBe('1');
+            expect(readFileSync(join(slots, '0', 'pid'), 'utf8')).toBe(String(process.pid));
+            onStart();
+            return 0;
+          },
+        })).toBe(0);
+        expect(existsSync(join(slots, '0'))).toBe(true);
+      } finally { rmSync(root, { recursive: true, force: true }); }
+    });
+  }
+
+  for (const args of [
+    ['scripts/qa/test.ts', 'tests/qa/unit/qa-harness.test.ts'],
+    ['scripts/qa/test.ts', 'apps/web/features/manage/members.stories.tsx'],
+    ['scripts/qa/test.ts', '--affected', '--list'],
+  ]) {
+    test(`light non-harness dispatch retains its ordinary slot: ${args.join(' ')}`, async () => {
+      const root = mkdtempSync(join(process.cwd(), '.temp', 'non-harness-slot-'));
+      const slots = join(root, 'slots');
+      try {
+        expect(await withSlot(['bun', ...args], false, undefined, {
+          slotDirectory: slots, slots: 1, reap: () => {},
+          runCommand: async (_command, env, onStart) => {
+            expect(env.GOAL_IN_SLOT).toBe('1');
+            expect(readFileSync(join(slots, '0', 'pid'), 'utf8')).toBe(String(process.pid));
+            onStart();
+            return 0;
+          },
+        })).toBe(0);
+        expect(existsSync(join(slots, '0'))).toBe(false);
+      } finally { rmSync(root, { recursive: true, force: true }); }
+    });
+  }
+
   test('a slot waiter reports its reason and appears in status until a slot opens', async () => {
     const root = mkdtempSync(join(tmpdir(), 'slot-wait-status-'));
     const slots = join(root, 'qa-slots');
