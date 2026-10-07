@@ -7,7 +7,7 @@ import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.t
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
-import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE, STRUCTURE_PROFILES,
+import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type StructureManifest } from '../src/modules/structure/format.ts';
 import { derivedId, orderTreeKey } from '../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
@@ -33,6 +33,15 @@ function fixture(input: Target[], signedIn = false) {
   let graphBytes = 0;
   graph.query = async query => {
     queries.push(query);
+    if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
+      const resources = [...new Set([...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!)))];
+      const result = { results: { bindings: resources.map(resource => ({ work: uri(resource), head: uri(revision),
+        owningWork: uri(indexed.get(resource)?.base && indexed.get(resource)?.base !== 'work'
+          ? derivedId('composition-target-parent') : resource), owningHead: uri(revision) })) } };
+      graphBytes += Buffer.byteLength(JSON.stringify(result));
+      return result;
+    }
     const resources = [...query.matchAll(/VALUES \?r \{([^}]+)\}/g)].flatMap(match =>
       [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!));
     const bindings: NonNullable<SparqlResult['results']>['bindings'] = [];
@@ -113,8 +122,7 @@ test('Composition profile batching preserves catalog targets and leaves other pr
   const catalog = ['https://schema.org/Book', 'https://schema.org/DigitalDocument'];
   expect(new Set(await read([...catalog, f.input[0]!.resource]))).toEqual(new Set([...catalog, f.input[0]!.resource]));
   expect(f.hydration).toEqual([[f.input[0]!.resource]]);
-  for (const profile of STRUCTURE_PROFILES.filter(profile =>
-    !['work-composition', 'collection-membership'].includes(profile))) {
+  for (const profile of ['book-composition', 'recipe-composition', 'zone-navigation']) {
     expect(compositionTargetBatchReader(f.session(), structureProfileFor(profile))).toBeUndefined();
   }
 });
@@ -226,7 +234,8 @@ test('Work parts disclose 100 distinct Episode targets without scalar target pro
   expect(result.next).toBeNull();
   expect(scalarProbes).toBe(1);
   expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
-  expect(f.queries).toHaveLength(10);
+  expect(f.queries).toHaveLength(11);
+  expect(f.queries.filter(query => query.includes('SELECT ?work ?head ?owningWork ?owningHead'))).toHaveLength(1);
   missingMain = true;
   await expect(readWorkParts(f.session(), owner, { limit: 100 })).rejects.toBeInstanceOf(WorkReadUnavailable);
 });
@@ -262,5 +271,6 @@ test('Work wholes skip a sparse range and hydrate repeated whole identities once
   expect(ranges).toBe(2);
   expect(scalarProbes).toBe(1);
   expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
-  expect(f.queries).toHaveLength(8);
+  expect(f.queries).toHaveLength(9);
+  expect(f.queries.filter(query => query.includes('SELECT ?work ?head ?owningWork ?owningHead'))).toHaveLength(1);
 });

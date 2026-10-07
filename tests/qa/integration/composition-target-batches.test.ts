@@ -60,6 +60,7 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST', '/v1/contributions', {
       profile: 'text-contribution-v1', work: work.work, body: `${title} original text`, language: 'en', actingSubject: f.actor }), 201);
+    await f.grant(`contribution:read:${draft.contribution}`, 'contribution.read');
     await f.grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
     const publication = await f.json<{ publicationDecision: string }>(await f.call('POST', '/v1/contribution-publications', {
       profile: 'text-publication-v1', contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
