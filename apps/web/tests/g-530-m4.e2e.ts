@@ -189,7 +189,15 @@ for (const [name, viewport, index] of [
     try {
       // Shelved as Read on its page, with dates recorded in Library.
       await expect(page.getByRole('heading', { level: 1, name: book.title })).toBeVisible();
-      await choose(page, /More shelves/, 'Read');
+      // The label changes optimistically; confirm the single write before a document navigation can interrupt it.
+      const [shelved] = await Promise.all([
+        page.waitForResponse(response => response.request().method() === 'PUT'
+          && new URL(response.url()).pathname === `/api/main/v1/works/${uuid(book.work)}/reader-status`,
+        { timeout: SESSION_TIMEOUT }),
+        choose(page, /More shelves/, 'Read'),
+      ]);
+      expect(shelved.status()).toBe(200);
+      expect(await shelved.json()).toMatchObject({ status: 'read' });
       await expect(page.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
       await page.goto('/en/library?shelf=read');
       const row = page.getByRole('heading', { level: 3, name: book.title });
