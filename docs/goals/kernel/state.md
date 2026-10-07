@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 13:50 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 14:49 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal remains active. Completion cannot be projected reliably until the physical
 locality and exact restore/Claim qualifications pass.
@@ -12,21 +12,19 @@ uses immutable source streams and a saved PostgreSQL snapshot; no site-wide
 singleton correctness head. C4 repair67883e853690, redesign8c6793a04dbb and
 classification restore1dbd4a099fe2 are applied.
 
-Latest completed refresh: b7c8d34c0b59f7091eddd6be2c59057cb05562e7,
-native0.5.39-d57155aafd87, modelab6d394, no pending SQL. All six application
-resources were healthy. Main/Account use fixed3011/3012 behind3001/3002.
-It includes ordered membership88ce032c80a2, exact Zone delivery107f23261259,
-Trust public catalogue6ee3f226f, Realm policy receiptsf6383bc94 and notification
-paging84a06c164. Membership preparation completed before the final checkpoint.
-The old native operation inspection failure is fixed by d04038cac: prepare changed
-storage before inspecting membership through the candidate native module; retain
-interactive budgets. Program owns queued refresh re-execution from staged code.
-
-Latest Realm refresh completed13:49: fe7fb82d49222eab3ec88148a0541fa32ef835ec,
-native0.5.39-eeaa550c0acc, no pending SQL, unchanged modelab6d394. Log
-`.temp/kernel/refresh-realm-owner-pool.log` ends Shared stack refresh complete.
-Canonical Realm ownera299f1f16255 and admission112b05137e45 are now activated.
-Main code hold released; no kernel lifecycle waiter. Preserve retained volumes.
+Latest completed refresh:84db46281330715ba9d2a0cd6fca9b51094d50ef,
+native0.5.39-eeaa550c0acc, modelab6d394 unchanged, no pending SQL. Log
+`.temp/kernel/refresh-composition-metadata-wave.log` completed exit0;
+`task urls` confirms all six applications Running Healthy. Main/Account use
+fixed3011/3012 behind3001/3002. Includes membership88ce032c80a2,
+Zone107f23261259, Realm ownera299f1f16255/admission112b05137e45,
+Trust catalogue6ee3f226f, Launch policyf6383bc94/notification84a06c164,
+Composition381fb06516f1 and final8Turtle declarations84db46281330.
+Account/Main/relay restarted with retained volumes. Main code hold released;
+no kernel lifecycle waiter. Unmerged Claim/Event/publication/Structure/native
+union candidates remain isolated. Refresh inspection repaird04038cac prepares
+changed storage before checking membership through the candidate native module;
+Program owns queued staged-code re-execution G1346.
 Cold populated600sec startup/restore remains unqualified; a successful shared
 small-stack prepare is insufficient.
 
@@ -62,66 +60,75 @@ held native work, final seal follows permit release, revocation is fenced.
 
 ## Running work and ready reviews
 
-- G1282 attempt9 builds fixed ClaimStatementFoldPolicy and native tests. Core
-  claims are released to G1330; stage minimal hooks for manager union. Preserve
-  exact old Claim/revision provenance, sealed qualification/receipt, fresh
-  Statement revision without predecessor/SPO rewriting. Exhaustive seek and
-  completion/release qualification are mandatory.
-- G1345 attempt4 moves the last Claim/Assessment constraints into Turtle while
-  retaining its accepted preparation-only fold candidate4ed1c3183. No successful
-  fold or release claim yet. Native completion must drain admissions after
-  closures, not rely on a pre-fence pending probe. Exact candidate artifacts and
-  original stored pins remain unchanged.
-- G1330 attempt6 integrates three Core hooks, approved Trust native erasure inputs
-  and the loaned restore-lineage dual-stream check. Historical reader93c059092
-  uses the supplied client and original exact custody without nested checkout or
-  native proof.71 owner cases/694 assertions,12 native and actual PG/S3/Jena224
-  assertions passed; final integrated TypeScript cutover/mixed raw+slim replay
-  remains required. Private original draft roots need journal-bound erased or
-  unavailable outcomes before retirement. Trust G1343/G1351 compose consumers.
-- G1289 attempt4 adds Content1702 exact original manifest-to-GroupRole mapping,
-  <=256-entry CAS preparation, pending/completed root custody and actual restore
-  release checks. Numbering/root parity passed22 units,3 physical and3 API cases.
-  Trust loans owner operations/restore-lineage hooks; Main index and Taskfile
-  minimal wiring require manager union after handoff. Preserve original bytes,
-  top-level counts and historical manifests; no empty legacy fallback.
-- G1306 attempt5 replaces rejected global actual/planned Event heads with scoped
-  pending-effect coverage registered before graph writes. Outside-window backlog
-  must not spoil readiness/cursors; relevant uncertain writes still refuse.
-  Cold2048 unrelated prefix passed513.3sec. Program approved explicit/regression
-  fixture12GiB/3GiBheap, unchanged600sec, excluded from per-merge affected/gate.
-- G1300 attempt15 implements narrow potential-publication Statement seek under
-  atomic subject-local coverage, Access1769. Previous subject leafd52a7d95eacc
-  passed159 gate cases and320-proposal one-hydration proof, but rawSQL still
-  visits324 rows/17 batches. New channel only truly absent unframed Global;
-  ordinary empty proposals do not advance publication membership. Stage G1345
-  held hooks, require real integrated EXPLAIN/freshness/recovery proof.
-- G1290 attempt8 returned a scoped-copy design but identified a false-empty
-  insertion gap: Work name writes can publish before async adoption fanout reaches
-  a Realm. Next source-promotion decision brief is committed/reclaimed45146c8f0;
-  resume file .temp/kernel/resume-g1290-source-promotion.md. Resume was refused
-  at10.57GiB available below12GiB floor; retry when memory recovers. Candidate
-  head promotion needs exact Work-local adoption basis and finite copy turns.
-  No query-time population inventory, principal cache or global frontier.
-- G1341 attempt7 repairs classification-vocabulary integration to use real current
-  Statement and acceptance, preserving all vocabulary/replay/disclosure assertions.
-  Launch G1368 owns ordinary readers. Legacy conversion/recovery readers and
-  context-statement retired-route refusal tests remain intentional.
-- G1352 attempt4 repairs Composition100-target pages with existing batch disclosure,
-  preserving exact/current/private/final rights fences.9 owner cases passed;
-  actual100-target API proof pending. Launch G1365 needs explicit accepted
-  schema:episodeNumber seek within disclosed main-episodes group next, not ordinal.
-- G1354 seven rating declarations landed3fe6866cf24e,154 gate files green and
-  exact source/generated bytes preserved. Attempt9 Luna now moves the final
-  eight declarations beside Turtle. Independent C2 audit recommends first
-  removing TS author rendering/fallback, separately from16 current families.
-  Claim/Assessment author conversion is accepted against its unlanded candidate,
-  so Main still131 authors; candidate133. DSL/current-family work remains open.
-- G1326 attempt14 repairs Jena CLI concurrency and PID-only cancellation after
-  review found global container/stage deletion and orphan watchdogs. Unique owned
-  resources, honest finite inspect/execution/cleanup, controlled ordinary unit
-  tests and actual concurrent Docker proof required. Program wires regression and
-  affected mapping after accepted landing; no per-merge hook yet.
+- G1282 attempt10: fixed native policy2d1bb19ca accepted component;12 actual
+  TDB2 cases,13GPOS/171GSPO rows unchanged at4097 Assessments plus4097 unrelated
+  Claim revisions; adversarial interleaving refuses128/47 without mutation.
+  Complete/release refused. Core hooks staged forG1330. Read-only finite current
+  Claim inventory decision now; capture before conversion removes original type.
+- G1345 attempt6: accepted preparation4ed1c3183 and final2Turtle authors995284ed0
+  unmerged,272 artifacts unchanged. Main131 authors/candidate133. Implement actual
+  acquire/convert seam with claimFoldJob and six exact sealed raw D/Q/B fields,
+  postclosure admission recheck; isolated CommandService proof pending. Borrowed
+  frozen native union is temporary, restored before handoff. Complete:false and
+  release refusal remain mandatory; exhaustive inventory/drained Content producer
+  closures are later prerequisites.
+- G1330 attempt6: historical readHistorical93c059092 uses supplied client, original
+  exact custody, no nested checkout.71 owner/694 assertions,12 native and actual
+  PG/S3/Jena224 assertions passed. Compose slim/Core/Trust native policies and
+  loaned restore dual-stream checks; real TS cutover/mixed raw+slim tail proof
+  pending. Trust G1343/G1351 borrowed snapshots remain WIP. Original private draft
+  roots require journal-bound erased/unavailable outcomes before retirement.
+- G1289 attempt5: durable Content1702 GroupRole roots,<=256-entry CAS preparation,
+  source/count/cursor validation and complete-only original-SHA mapping accepted
+  component.33 units,5PG/S3 and scale/navigation pass. Trust13:14 operations and
+  restore-lineage loans plus manager Mainconstructor loan now explicit; worker
+  integrates exact minimal staged wiring and proves GC/restore before landing.
+  Preserve peer callbacks, original bytes,200GROUPS versus201directChapters.
+- G1306 attempt6: scoped Event effects9a5d3f978 independently accepted, global
+  heads removed. Actual2048-prefix/2051slots, replay64/buckets34, outside-window
+  33effects32applied/1pending cursor valid; relevant effect refuses. Cold proof
+  561.4sec/600sec with approved12GiB/3GiB explicit fixture. EventTime alias binding
+  remains blocker; qualify exact event-time-v1/denotesEvent binding via temporary
+  held qualification.ts overlay, stage tested patch. No generic static bypass or
+  constant total cold-preparation claim.
+- G1300 attempt16: Access1769 helper2e5b5b982 accepted component but NOT deployed.
+  0/320/4096 proposals each visit2SQLrows via partial index; actual route remains
+  324rawrows/17seeks/369buffers until union. Worker owns subject reader and new
+  native membership helper/tests; temporary seek/Core hooks require actual source,
+  restore/raw rebuild/Global absence/final disclosure and cold physical proof,
+  restored before commit. No Access-only landing or outer WorkRead independence
+  claim.128-step/160calls/4MiB/10sec retained.
+- G1290 attempt10: approved narrow native Work source/adoption primitives only;
+  local adoption basis,source generation,<=64links,EOF/sourceCAS proof plus real
+  physical mutation/rollback/restart tests. No queryswitch/scoped name copies or
+  full promotion framework. Earlier staged promotion decision uses bounded
+  existing pending commands and reciprocal adoption barrier; omission gap is not
+  solved by async fanout. Canonical ownera299f/admission112b already live.
+- G1341 attempt7: actual vocabulary integration uses Statement+acceptance and
+  exact replay identity/revision/meaning/source position; preserve bilingual
+  hierarchy/disclosure and stale/denial cases. Launch G1368 owns ordinary readers;
+  historical recovery/conversion and intentional retired-route404 cases remain.
+- G1352 Composition batching LANDED381fb06516f1 and activated,155unit/guardfiles
+  green. Real100Episode current/exact27graphcalls/264957bytes/22SQL/295–332ms;
+  rights race64calls/533266bytes/60SQL/927ms. Legacy fixture14tests326assert pass,
+  original sparse/private/hidden/final authority preserved. Attempt6 now read-only
+  explicit schema:episodeNumber seek decision for disclosed main-episodes/season;
+  zero,fractions,specials,duplicates are data, never physical ordinal.
+- G1354 final8 declarations LANDED84db46281330,155gatefiles green, runtime and
+  original source/generated bytes unchanged. Fresh three parity files11tests/
+  517assertions exit0; earlier canceled check is not counted. Attempt11 moved from
+  Luna to codex-1 Sol/high for approved TS author-renderer retirement; parallel
+  preparation only until G1345 final2authors land. No family/generic API deletion
+  in first slice; preserve exact custody, clones without source refuse.
+- G1373 codex-1/high:<=15min read-only external Jena text document delivery design,
+  existing journal/head/epoch/recovery/erasure semantics and TDB2/Lucene non-atomic
+  commit proof. Distinguish transport copies from authoritative/query-used facts.
+  No held native source edit or second framework/service.
+
+G1326 Jena CLI3d3aa4ec2722 verified/closed:160unit/guardfiles green, actual
+pinned Docker parser/statistics, overlapping runs, PID/group cancellation and
+owned cleanup pass; exact present image with --pull=never. Program G1371 wires
+regression/affected mapping afterG1370; no per-merge hook until actual<60sec.
 
 ## Operation and remaining debt
 
