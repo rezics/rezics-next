@@ -283,7 +283,7 @@ function stopAsyncCommands(): void {
 }
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
-  env: NodeJS.ProcessEnv = process.env): Promise<{ ok: boolean; output: string; elapsedMs: number;
+  env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void): Promise<{ ok: boolean; output: string; elapsedMs: number;
   timedOut: boolean }> {
   const start = Date.now();
   const child = spawn(name, args, { cwd: root, detached: true,
@@ -291,8 +291,19 @@ export async function commandAsync(root: string, name: string, args: string[], t
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) commandProcessGroups.add(child.pid);
   let stdout = '', stderr = '', timedOut = false;
-  child.stdout.on('data', chunk => { stdout += String(chunk); });
-  child.stderr.on('data', chunk => { stderr += String(chunk); });
+  const observe = () => {
+    let pending = '';
+    return (chunk: string) => {
+      if (!onOutputLine) return;
+      pending += chunk;
+      const lines = pending.split('\n');
+      pending = lines.pop()!;
+      for (const line of lines) onOutputLine(line);
+    };
+  };
+  const observeStdout = observe(), observeStderr = observe();
+  child.stdout.on('data', chunk => { const value = String(chunk); stdout += value; observeStdout(value); });
+  child.stderr.on('data', chunk => { const value = String(chunk); stderr += value; observeStderr(value); });
   const terminate = (signal: NodeJS.Signals) => {
     if (!child.pid) return;
     try { process.kill(-child.pid, signal); }

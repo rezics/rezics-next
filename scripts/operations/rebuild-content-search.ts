@@ -15,6 +15,7 @@ import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvir
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
 import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins,
   type FusekiStateRunner } from './search-state.ts';
+import { withQaStackStartup } from '../qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -77,7 +78,13 @@ const runner: FusekiStateRunner = {
   exec: script => compose(['exec', '-T', 'fuseki', 'sh', '-ec', script], docker),
   offline: script => compose(['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], docker),
   stop: () => { compose(['stop', 'fuseki'], docker); },
-  start: () => { compose(['up', '-d', '--wait', 'fuseki'], docker); },
+  start: async () => {
+    const start = () => { compose(['up', '-d', '--wait', 'fuseki'], docker); };
+    if (options.profile === 'qa') await withQaStackStartup(root,
+      composeProcessEnvironment(docker, readEnv(join(stack, 'compose.env'))), Date.now() + 300_000,
+      start, { services: ['fuseki'] });
+    else start();
+  },
   container: () => compose(['ps', '-q', 'fuseki'], docker).trim(),
 };
 await assertWritersStopped(apps.MAIN_ORIGIN!);

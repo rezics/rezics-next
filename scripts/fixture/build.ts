@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Pool } from 'pg';
+import { withQaStackStartup } from '../qa/memory-admission.ts';
 import { CommandRejected, FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, composeProcessEnvironment, createSecrets, readEnv, savePrivate } from '../dev/config.ts';
@@ -157,7 +158,8 @@ async function buildLocked(
           remaining(),
         ),
     };
-    await phase('start', async () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); });
+    await phase('start', () => withQaStackStartup(root, env, deadline,
+      () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); }));
     await phase('migrate', async () => { await migrateFixtureOwners(apps); });
     // The command module bootstraps only an empty dataset, so the real bootstrap
     // commits first and the offline owners then load into the stopped TDB2.
@@ -173,7 +175,8 @@ async function buildLocked(
     for (const owner of owners.filter(item => item.phase === 'offline-graph')) {
       loads[owner.name] = await phase(`load:${owner.name}`, () => owner.load(corpus, target));
     }
-    await phase('restart-graph', async () => { compose(['up', '-d', '--wait', 'fuseki']); });
+    await phase('restart-graph', () => withQaStackStartup(root, env, deadline,
+      () => { compose(['up', '-d', '--wait', 'fuseki']); }, { services: ['fuseki'] }));
     await phase('load:online', async () => {
       const online = owners.filter(item => item.phase === 'online');
       const results = await Promise.all(online.map(owner => owner.load(corpus, target)));

@@ -3,6 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
 import { parseArgs } from './core.ts';
+import { qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
@@ -112,6 +113,24 @@ async function run([program, args]: [string, string[]]): Promise<number> {
   return child.exited;
 }
 
+export interface TestDispatchOptions {
+  runner?: typeof run;
+  admission?: typeof waitForMemory;
+  deadline?: number;
+  env?: NodeJS.ProcessEnv;
+}
+
+/** Explicit stories bypass the stack harness, but their browser workers still need host memory. */
+export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
+  const command = selectTestCommand(args);
+  if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)) {
+    await (options.admission ?? waitForMemory)(qaMemoryNeed(root, 'browser', undefined, options.env ?? process.env), {
+      deadline: options.deadline ?? Date.now() + 6 * 3_600_000,
+    });
+  }
+  return (options.runner ?? run)(command);
+}
+
 export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ failed: boolean; results: string[] }> {
   const results: string[] = [];
   let failed = false;
@@ -127,7 +146,7 @@ export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ f
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const affected = parseAffectedArgs(args);
-  if (!affected) process.exit(await run(selectTestCommand(args)));
+  if (!affected) process.exit(await dispatchTest(args));
   const plan = affectedPlan(root, affected.ref);
   console.log(formatPlan(plan));
   if (affected.list) process.exit(0);

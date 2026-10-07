@@ -19,6 +19,7 @@ import {
 import { appEnvironment, replacePrivate, savePrivate, stackDirectory } from '../dev/config.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { currentEngines, freshPorts, root } from '../fixture/stack.ts';
+import { withQaStackStartup, type StartupMemoryOptions } from '../qa/memory-admission.ts';
 import {
   assertPinnedState,
   inspectFusekiState,
@@ -90,6 +91,15 @@ export interface RestoreEvidence {
   elapsedMs: number;
   budgetMs: number;
   failure?: string;
+}
+
+/** A target is admitted after restore preparation, immediately before its containers start. */
+export function startRestoredServices(context: Pick<ReturnType<typeof stackContext>, 'environment' | 'compose'>,
+  deadline: number, environment: NodeJS.ProcessEnv = process.env,
+  admission: Partial<StartupMemoryOptions> = {}): Promise<void> {
+  return withQaStackStartup(root, { ...environment, ...context.environment }, deadline, () => {
+    context.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
+  }, admission);
 }
 
 /** Always new volumes, never the original. O(encrypted bytes + restored owner rows
@@ -275,9 +285,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
         budget,
       );
     });
-    await budget.phase('start-held', () => {
-      context!.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
-    });
+    await budget.phase('start-held', () => startRestoredServices(context!, budget.started + 600_000, environment));
     pools = Object.fromEntries(
       ['account', 'access', 'content', 'relay'].map((database) => [
         database,

@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { Database } from 'bun:sqlite';
 import { qaResourceClasses, type QaResourceClass } from './resource-classes.ts';
 
 export const GiB = 1024 ** 3;
+export type QaMemoryService = 'postgres' | 'fuseki' | 'rustfs' | 'toxiproxy' | 'mailpit';
 export interface MemoryReading { vmTotal: number; vmUsed: number; hostAvailable: number }
 export interface MemoryNeed { vm: number; host: number; hostReserve: number; vmReserve: number }
 
@@ -29,7 +31,8 @@ function threshold(env: NodeJS.ProcessEnv, name: string, fallback: number): numb
 
 /** Read the authored caps so changes to Compose cannot silently underbudget QA. */
 export function qaMemoryNeed(root: string, kind: 'other' | 'browser', resourceClass?: QaResourceClass,
-  env: NodeJS.ProcessEnv = process.env): MemoryNeed {
+  env: NodeJS.ProcessEnv = process.env,
+  services: readonly QaMemoryService[] = ['postgres', 'fuseki', 'rustfs', 'toxiproxy', 'mailpit']): MemoryNeed {
   let vm = 0;
   if (resourceClass) {
     const capBytes = (value: string) => {
@@ -39,12 +42,13 @@ export function qaMemoryNeed(root: string, kind: 'other' | 'browser', resourceCl
     };
     const compose = readFileSync(join(root, 'infra/dev/compose.qa.yaml'), 'utf8');
     for (const service of ['POSTGRES', 'RUSTFS', 'TOXIPROXY', 'MAILPIT']) {
+      if (!services.includes(service.toLowerCase() as QaMemoryService)) continue;
       const key = `REZICS_${service}_MEMORY_LIMIT`;
       const cap = new RegExp(`\\$\\{${key}:-([^}]+)\\}`).exec(compose)?.[1];
       if (!cap) throw new Error(`Missing QA memory cap: ${key}`);
       vm += capBytes(env[key] ?? cap);
     }
-    vm += capBytes(env.REZICS_FUSEKI_MEMORY_LIMIT ?? env.REZICS_QA_FUSEKI_MEMORY_LIMIT
+    if (services.includes('fuseki')) vm += capBytes(env.REZICS_FUSEKI_MEMORY_LIMIT ?? env.REZICS_QA_FUSEKI_MEMORY_LIMIT
       ?? qaResourceClasses[resourceClass].memory);
   }
   return {
@@ -68,12 +72,18 @@ export function parseMemoryReading(total: string, stats: string, meminfo: string
   return { vmTotal, vmUsed, hostAvailable: Number(available[1]) * 1024 };
 }
 
+function readHostMemory(): MemoryReading {
+  const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(readFileSync('/proc/meminfo', 'utf8'));
+  if (!available) throw new Error('Cannot read host MemAvailable');
+  return { vmTotal: 0, vmUsed: 0, hostAvailable: Number(available[1]) * 1024 };
+}
+
 const execute = promisify(execFile);
-export async function readMemory(remainingMs: number): Promise<MemoryReading> {
+export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = process.env): Promise<MemoryReading> {
   const timeout = Math.max(1, Math.min(10_000, remainingMs));
   const [info, stats] = await Promise.all([
-    execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout }),
-    execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'], { timeout, maxBuffer: 4 * 1024 ** 2 }),
+    execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env }),
+    execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'], { timeout, env, maxBuffer: 4 * 1024 ** 2 }),
   ]);
   return parseMemoryReading(info.stdout, stats.stdout, readFileSync('/proc/meminfo', 'utf8'));
 }
@@ -87,10 +97,73 @@ export interface MemoryWaitOptions {
   pollMs?: number;
 }
 
+export interface StartupMemoryOptions extends MemoryWaitOptions {
+  /** Tests isolate their mutex; production processes all use the same host file. */
+  lockFile?: string;
+}
+
+/** All QA processes share one SQLite writer lock, released automatically on death.
+ * Keep it through Compose readiness, so the next process measures the containers
+ * created by this startup instead of sharing its pre-start memory snapshot. */
+export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMemoryOptions,
+  start: () => T | Promise<T>): Promise<T> {
+  const lockFile = options.lockFile ?? '/tmp/rezics-qa-memory-startup.sqlite';
+  mkdirSync(dirname(lockFile), { recursive: true });
+  const mutex = new Database(lockFile, { create: true });
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
+  const announce = options.announce ?? console.log;
+  const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
+  if (pollMs <= 0) { mutex.close(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
+  let held = false, announced = false;
+  try {
+    mutex.exec('PRAGMA busy_timeout=0');
+    for (;;) {
+      if (now() >= options.deadline)
+        throw new Error(`Memory admission deadline reached waiting for another QA startup; ${admissionMessage(need)}; no work started`);
+      try {
+        mutex.exec('BEGIN IMMEDIATE');
+        held = true;
+        break;
+      } catch (error) {
+        if (!['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '')) throw error;
+      }
+      if (!announced) {
+        announce(`Waiting for another QA startup; ${admissionMessage(need)}`);
+        announced = true;
+      }
+      await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
+    }
+    await waitForMemory(need, options);
+    return await start();
+  } finally {
+    try { if (held) mutex.exec('ROLLBACK'); }
+    finally { mutex.close(true); }
+  }
+}
+
+/** Child startups inherit their runner's deadline; standalone startup stays bounded. */
+export function qaMemoryDeadline(env: NodeJS.ProcessEnv, deadline: number): number {
+  const inherited = env.REZICS_QA_MEMORY_DEADLINE;
+  if (inherited === undefined) return deadline;
+  const value = Number(inherited);
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid REZICS_QA_MEMORY_DEADLINE');
+  return Math.min(value, deadline);
+}
+
+export function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv, deadline: number,
+  start: () => T | Promise<T>, options: Partial<StartupMemoryOptions> & { services?: readonly QaMemoryService[] } = {}): Promise<T> {
+  return withMemoryStartup(qaMemoryNeed(root, env.REZICS_QA_MEMORY_KIND === 'browser' ? 'browser' : 'other',
+    'catalogue-disk', env, options.services), {
+    ...options, deadline: qaMemoryDeadline(env, deadline),
+    read: options.read ?? (remaining => readMemory(remaining, env)),
+  }, start);
+}
+
 function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
   const gib = (bytes: number) => `${(bytes / GiB).toFixed(2)} GiB`;
   return `QA memory: Docker VM needs ${gib(need.vm)} + ${gib(need.vmReserve)} reserve, `
-    + `free ${reading ? gib(Math.max(0, reading.vmTotal - reading.vmUsed)) : 'unknown'}; `
+    + `free ${reading ? reading.vmTotal === 0 ? 'not needed' : gib(Math.max(0, reading.vmTotal - reading.vmUsed)) : 'unknown'}; `
     + `host needs ${gib(need.host)} + ${gib(need.hostReserve)} reserve, `
     + `available ${reading ? gib(reading.hostAvailable) : 'unknown'}`;
 }
@@ -100,7 +173,8 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
-  const read = options.read ?? readMemory;
+  const needsVm = need.vm + need.vmReserve > 0;
+  const read = options.read ?? (needsVm ? readMemory : async () => readHostMemory());
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive');
   let message = admissionMessage(need);
@@ -109,7 +183,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
     let reading: MemoryReading;
     try {
       reading = await read(options.deadline - now());
-      if (Object.values(reading).some(value => !Number.isFinite(value) || value < 0) || reading.vmTotal === 0)
+      if (Object.values(reading).some(value => !Number.isFinite(value) || value < 0) || needsVm && reading.vmTotal === 0)
         throw new Error('Invalid memory reading');
       message = admissionMessage(need, reading);
       if (now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve

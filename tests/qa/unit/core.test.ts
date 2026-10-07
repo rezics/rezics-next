@@ -32,6 +32,27 @@ test('QA work starts only after memory admission and stays unstarted at the dead
   expect(result).toBe('started');
 });
 
+test('startup wait lines stream before the child exits, including fragmented stdout and stderr', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-memory-output-'));
+  const proceed = join(dir, 'proceed');
+  const lines: string[] = [];
+  try {
+    const result = await commandAsync(dir, 'bun', ['-e', `
+      process.stdout.write('Waiting; QA mem');
+      await Bun.sleep(10);
+      process.stdout.write('ory: needs 5 GiB\\n');
+      while (!require('node:fs').existsSync(${JSON.stringify(proceed)})) await Bun.sleep(5);
+      process.stderr.write('Admitted; QA memory: available 6 GiB\\n');
+    `], 2_000, process.env, line => {
+      lines.push(line);
+      if (line.startsWith('Waiting;')) writeFileSync(proceed, 'continue');
+    });
+    expect(result.ok).toBe(true);
+    expect(lines).toEqual(['Waiting; QA memory: needs 5 GiB', 'Admitted; QA memory: available 6 GiB']);
+    expect(result.output).toContain('Waiting; QA memory: needs 5 GiB');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('storybook selection remains e2e-only alongside the owner tier', () => {
   expect(parseArgs(['--tier', 'e2e', '--storybook']).storybook).toBe(true);
   expect(parseArgs(['--tier', 'owner', '--file', 'services/main/tests/preferences-settings.test.ts']))

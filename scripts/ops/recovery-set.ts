@@ -352,6 +352,7 @@ export function stackContext(options: StackOptions, budget: RecoveryBudget) {
   const environment = composeProcessEnvironment(dockerEnvironment(), saved);
   return {
     directory,
+    deadline: budget.started + RECOVERY_BUDGET_MS,
     saved,
     apps,
     project,

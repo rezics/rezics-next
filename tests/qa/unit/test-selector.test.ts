@@ -1,7 +1,52 @@
+import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { selectTestCommand } from '../../../scripts/qa/test.ts';
+import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs } from '../../../scripts/qa/core.ts';
+import { GiB } from '../../../scripts/qa/memory-admission.ts';
+
+test('explicit web, Accounts and shared UI stories wait for host admission before launching', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  for (const workspace of ['apps/web', 'apps/accounts', 'packages/ui']) {
+    const file = [...new Bun.Glob(`${workspace}/**/*.stories.tsx`).scanSync({ cwd: root })][0]!;
+    expect(file).toBeDefined();
+    const args = [file, '--reporter=junit', '--outputFile=.temp/selected-stories.xml'];
+    const expected = selectTestCommand(args);
+    let release!: () => void;
+    const waiting = new Promise<void>(done => { release = done; });
+    let requested = false;
+    const launches: [string, string[]][] = [];
+    const result = dispatchTest(args, { deadline: 1234, env: {}, admission: async (need, options) => {
+      expect(need).toEqual({ vm: 0, host: 4 * GiB, hostReserve: 8 * GiB, vmReserve: 0 });
+      expect(options.deadline).toBe(1234);
+      requested = true;
+      await waiting;
+    }, runner: async command => { launches.push(command); return 7; } });
+    expect(requested).toBe(true);
+    expect(launches).toEqual([]);
+    release();
+    expect(await result).toBe(7);
+    expect(launches).toEqual([expected]);
+  }
+});
+
+test('a Storybook admission failure prevents launch', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const file = [...new Bun.Glob('apps/web/**/*.stories.tsx').scanSync({ cwd: root })][0]!;
+  let launched = false;
+  await expect(dispatchTest([file], { env: {}, admission: async () => { throw new Error('Memory admission deadline reached'); },
+    runner: async () => { launched = true; return 0; } })).rejects.toThrow('Memory admission deadline reached');
+  expect(launched).toBe(false);
+});
+
+test('ordinary explicit tests keep their existing dispatch without Storybook admission', async () => {
+  const args = ['services/main/tests/command.test.ts', '-t', 'profile'];
+  const launches: [string, string[]][] = [];
+  const code = await dispatchTest(args, { admission: async () => { throw new Error('Unexpected Storybook admission'); },
+    runner: async command => { launches.push(command); return 0; } });
+  expect(code).toBe(0);
+  expect(launches).toEqual([selectTestCommand(args)]);
+});
 
 test('QA09: explicit unit paths still run without a service stack', () => {
   expect(selectTestCommand(['services/main/tests/command.test.ts', '-t', 'profile'])).toEqual([

@@ -19,6 +19,7 @@ import { refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
+import { withQaStackStartup } from '../qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -279,7 +280,11 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
   for (let attempt = 0; ; attempt++) {
     const config = await stackConfig(options);
     try {
-      compose(options, ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env);
+      const start = () => compose(options,
+        ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, 180_000);
+      if (options.profile === 'qa') await withQaStackStartup(root,
+        composeProcessEnvironment(env, config.composeEnv), Date.now() + 180_000, start);
+      else start();
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
     } catch (error) {

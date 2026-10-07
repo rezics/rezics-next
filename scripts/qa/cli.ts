@@ -55,7 +55,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
-import { qaMemoryNeed } from './memory-admission.ts';
+import { qaMemoryDeadline, qaMemoryNeed } from './memory-admission.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
@@ -88,17 +88,18 @@ const caseCoverage = declaredCaseCoverage(cases, options.backend ? 'backend' : '
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
 const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.backend ? backendTiers : implementedTiers);
 const chosen = options.files || options.id ? options : undefined;
-const runDeadline = Date.now() + 6 * 3_600_000;
-// Resample after each startup so parallel shards do not all use the same free-memory snapshot.
-const startAdmittedStack = concurrencyGate(1);
-async function admit<T>(kind: 'other' | 'browser', resourceClass: Parameters<typeof qaMemoryNeed>[2],
-  deadline: number, work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
-  return withQaMemory(qaMemoryNeed(root, kind, resourceClass, env), {
+const runDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
+process.env.REZICS_QA_MEMORY_DEADLINE = String(runDeadline);
+function noteMemory(message: string): void {
+  if (!message.includes('QA memory:')) return;
+  console.log(message);
+  appendFileSync(join(logs, 'memory-admission.log'), `${message}\n`);
+}
+// Host work is admitted here; every Compose startup owns the shared VM guard.
+async function admit<T>(kind: 'other' | 'browser', deadline: number, work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+  return withQaMemory(qaMemoryNeed(root, kind, undefined, env), {
     deadline: Math.min(runDeadline, deadline),
-    announce: message => {
-      console.log(message);
-      appendFileSync(join(logs, 'memory-admission.log'), `${message}\n`);
-    },
+    announce: noteMemory,
   }, work);
 }
 let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
@@ -115,7 +116,7 @@ async function resetChildStacks(registry: string): Promise<string[]> {
 
 async function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  const result = await admit('other', undefined, Date.now() + budget,
+  const result = await admit('other', Date.now() + budget,
     async () => command(root, program, args, budget, env), env);
   const ok = result.ok && result.elapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
@@ -135,7 +136,7 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
 async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
-  const result = await admit('other', undefined, Date.now() + budget,
+  const result = await admit('other', Date.now() + budget,
     () => commandAsync(root, program, args, budget));
   const ok = result.ok && result.elapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
@@ -204,12 +205,12 @@ async function runShard(
   let compose: Record<string, string> = {};
   if (needsStack) {
     started.push(projectRunId);
-    const upCommand = () => startAdmittedStack(() => admit('other', resourceClass ?? 'ordinary',
+    const upCommand = () => admit('other',
       preparationStartedAt + LOAD_PREPARATION_BUDGET_MS + budget, () =>
       commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000, {
         ...environment,
         [QA_STACK_TIER]: tier,
-      }), environment));
+      }, noteMemory), environment);
     const up = await (startStack ? startStack(upCommand) : upCommand()).catch(error => ({
       ok: false, timedOut: true, elapsedMs: Date.now() - preparationStartedAt,
       output: error instanceof Error ? error.message : String(error),
@@ -264,7 +265,7 @@ async function runShard(
   }
   if (!needsStack) {
     try {
-      await admit('other', 'ordinary', preparationStartedAt + LOAD_PREPARATION_BUDGET_MS + budget,
+      await admit('other', preparationStartedAt + LOAD_PREPARATION_BUDGET_MS + budget,
         async () => {}, environment);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -282,6 +283,7 @@ async function runShard(
     ...environment,
     ...apps,
     REZICS_QA_RUN_ID: projectRunId,
+    REZICS_QA_MEMORY_DEADLINE: String(Math.min(runDeadline, testStart + budget)),
     REZICS_QA_PREPARATION_STARTED_AT: String(preparationStartedAt),
     [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
@@ -334,6 +336,7 @@ async function runShard(
       ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
       Math.max(1, budget - (Date.now() - testStart)),
       testEnvironment(),
+      noteMemory,
     );
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
@@ -423,14 +426,14 @@ async function runStackTier(tier: StackTier): Promise<void> {
   ) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
-    const prepared = await startAdmittedStack(() => admit('other', 'ordinary',
+    const prepared = await admit('other',
       Date.now() + LOAD_PREPARATION_BUDGET_MS, () => commandAsync(
       root,
       'bun',
       ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
       LOAD_PREPARATION_BUDGET_MS,
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
-    ), qaStackEnvironment(process.env)));
+      noteMemory), qaStackEnvironment(process.env));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
     if (!prepared.ok) {
       errors.push(
@@ -600,8 +603,8 @@ try {
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);
-      const up = await admit('other', 'catalogue-disk', runDeadline, async () =>
-        command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000));
+      const up = await admit('other', runDeadline, () =>
+        commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000, process.env, noteMemory));
       if (!up.ok) {
         errors.push('model stack startup failed');
         writeFileSync(join(logs, 'model-stack.log'), up.output);
@@ -635,9 +638,9 @@ try {
       try {
         const projectRunId = `${runId}-e`;
         startedProjects.push(projectRunId);
-        const up = await admit('browser', 'catalogue-disk', runDeadline, async () =>
-          command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
-          '--accounts-app'], 180_000));
+        const up = await admit('browser', runDeadline, () =>
+          commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
+          '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' }, noteMemory));
         if (!up.ok) {
           errors.push('e2e stack startup failed');
           writeFileSync(join(logs, 'e2e-stack.log'), up.output);
@@ -716,9 +719,9 @@ try {
         splitTestArgs(testArgs(tier, selection, chosen)).paths);
       const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
       startedProjects.push(projectRunId);
-      const up = await admit('other', 'catalogue-disk', preparationStarted + LOAD_PREPARATION_BUDGET_MS, async () =>
-        command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
-        Math.min(180_000, remainingPreparation())));
+      const up = await admit('other', preparationStarted + LOAD_PREPARATION_BUDGET_MS, () =>
+        commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
+        Math.min(180_000, remainingPreparation()), process.env, noteMemory));
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const apps = readEnv(join(stackDir, 'apps.env'));
@@ -732,9 +735,9 @@ try {
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const fixtureResults = await Promise.all(fixturePlan.map(async item => {
         startedFixtureProjects.push(item.runId);
-        const result = await startAdmittedStack(() => admit('other', 'catalogue-disk',
+        const result = await admit('other',
           preparationStarted + LOAD_PREPARATION_BUDGET_MS, () => commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
-          '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation()))).catch(error => ({
+          '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation(), process.env, noteMemory)).catch(error => ({
             ok: false, timedOut: true, elapsedMs: Date.now() - preparationStarted,
             output: error instanceof Error ? error.message : String(error),
           }));
