@@ -7,13 +7,23 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.query.ReadWrite;
+import org.apache.jena.graph.Graph;
+import org.apache.jena.graph.Triple;
 import org.apache.jena.sparql.core.DatasetGraph;
+import org.apache.jena.sparql.core.DatasetGraphWrapper;
+import org.apache.jena.sparql.core.Quad;
+import org.apache.jena.sparql.graph.GraphWrapper;
+import org.apache.jena.util.iterator.ExtendedIterator;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.jena.vocabulary.RDFS;
 import org.junit.Test;
@@ -207,12 +217,61 @@ public class ModelMutationPolicyTest {
             Set.of(), Set.of(), false, false, true);
     }
 
-    @Test public void zoneConfigurationEditWithUnchangedTypeNeverScansMountsOrRevisions() {
+    /** Physical oracle: records every dataset and graph-view read the policy and SHACL issue. */
+    private static final class ReadLog extends DatasetGraphWrapper {
+        final List<String> reads = new ArrayList<>();
+        ReadLog(DatasetGraph delegate) { super(delegate); }
+        private static String text(Node node) { return node == null || node == Node.ANY ? "*" : node.toString(); }
+        void record(String kind, Node g, Node s, Node p, Node o) {
+            reads.add(kind + " " + text(g) + " " + text(s) + " " + text(p) + " " + text(o));
+        }
+        @Override public Iterator<Quad> find() { record("find", null, null, null, null); return super.find(); }
+        @Override public Iterator<Quad> find(Quad quad) {
+            record("find", quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+            return super.find(quad);
+        }
+        @Override public Iterator<Quad> find(Node g, Node s, Node p, Node o) {
+            record("find", g, s, p, o); return super.find(g, s, p, o);
+        }
+        @Override public boolean contains(Node g, Node s, Node p, Node o) {
+            record("contains", g, s, p, o); return super.contains(g, s, p, o);
+        }
+        @Override public boolean contains(Quad quad) {
+            record("contains", quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+            return super.contains(quad);
+        }
+        @Override public Graph getGraph(Node graph) {
+            return new GraphWrapper(super.getGraph(graph)) {
+                @Override public ExtendedIterator<Triple> find(Triple m) {
+                    record("graph-find", graph, m.getMatchSubject(), m.getMatchPredicate(), m.getMatchObject());
+                    return super.find(m);
+                }
+                @Override public ExtendedIterator<Triple> find(Node s, Node p, Node o) {
+                    record("graph-find", graph, s, p, o); return super.find(s, p, o);
+                }
+                @Override public boolean contains(Triple t) {
+                    record("graph-contains", graph, t.getSubject(), t.getPredicate(), t.getObject());
+                    return super.contains(t);
+                }
+                @Override public boolean contains(Node s, Node p, Node o) {
+                    record("graph-contains", graph, s, p, o); return super.contains(s, p, o);
+                }
+                @Override public Stream<Triple> stream(Node s, Node p, Node o) {
+                    record("graph-stream", graph, s, p, o); return super.stream(s, p, o);
+                }
+            };
+        }
+    }
+
+    /** Edits one Zone's head, presentation and disclosure over a corpus of {@code mounts}
+     * mounts and as many historical revisions; returns the sorted reads the policy check issued
+     * (SHACL visits properties in hash order). */
+    private static List<String> zoneEditReads(int mounts) {
         ProfileRegistry profiles = zoneProfiles();
         DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
         data.begin(ReadWrite.WRITE);
         try {
-            Node current = uri(CommandPolicy.CURRENT), zone = zoneWithHistory(data, 1_100);
+            Node current = uri(CommandPolicy.CURRENT), zone = zoneWithHistory(data, mounts);
             CommandPolicy.Plan plan = zonePlan(ZONE);
             ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
             Node old = zoneRevision(data, "head", zone, null), next = zoneRevision(data, "next", zone, old);
@@ -221,8 +280,25 @@ public class ModelMutationPolicyTest {
             data.add(current, zone, uri(RV + "presentation"), uri("https://rezics.com/definition/zone-presentation-v2"));
             data.delete(current, zone, uri(RV + "disclosure"), uri(RV + "Public"));
             data.add(current, zone, uri(RV + "disclosure"), uri(RV + "Private"));
-            assertNull(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+            ReadLog log = new ReadLog(data);
+            assertNull(ModelMutationPolicy.check(profiles, log, plan, "urn:rezics:receipt:zone:probe", before));
+            return log.reads.stream().sorted().toList();
         } finally { data.abort(); data.end(); }
+    }
+
+    @Test public void zoneConfigurationEditWithUnchangedTypeNeverScansMountsOrRevisions() {
+        List<String> small = zoneEditReads(3), large = zoneEditReads(1_100);
+        // Point work only: no read leaves the subject unbound while its object is the Zone
+        // (the inbound mount, Space and revision scan), and the work does not grow with the corpus.
+        for (List<String> reads : List.of(small, large)) {
+            assertFalse(reads.isEmpty());
+            for (String read : reads) {
+                String[] part = read.split(" ");
+                assertFalse(read, part[2].equals("*") && part[4].equals(ZONE));
+            }
+        }
+        assertEquals(small, large);
+        assertEquals(34, large.size());
     }
 
     @Test public void zoneEditStillRefusesInvalidDirectFieldsAndTypeRemoval() {

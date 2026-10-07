@@ -356,7 +356,8 @@ final class ModelMutationPolicy {
     /** Every authored inbound rv:Zone constraint (Space rv:zoneCapability, mount rv:zone,
      * revision rv:component) is sh:class rv:Zone, so it reads only the type set. A Zone edit
      * that leaves that set unchanged cannot invalidate any mount, Space or historical revision,
-     * however many exist. Retirement or retyping still scans. */
+     * however many exist; a state-only change such as rv:zoneState Retired keeps the set and
+     * skips too. Only a type-set change scans. */
     private static boolean stableZoneIdentity(DatasetGraph data, String name, Subject before) {
         if (before.selection() == null || typeChanged(data, name, before)) return false;
         return before.selection().type().equals(RV + "Zone");
