@@ -367,11 +367,11 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
         await validate('account-deletion-journal', accessClient);
         await relayClient!.query('SELECT 1 /* retained deletion journal */');
       }),
-    ...(options.actualCapturedRelay ? [] : [spyOn(relayCoverage, 'relayCoverage').mockImplementation(async (pool, consumer, client) => {
-      expect(pool).toBe(capturedRelay.pool);
+    ...(options.actualCapturedRelay ? [] : [spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementation(async (client, consumer) => {
+      expect(client).toBe(capturedRelay.client);
       expect(consumer).toBe(coverage.relay.consumer);
-      expect(client).toBeUndefined();
-      await validate('captured-relay');
+      expect(capturedRelay.transactionOpen).toBe(true);
+      await validate('captured-relay', client);
       return coverage.relay;
     })]),
     spyOn(coverageHead, 'assertCurrentRecoveryCoverageHead').mockImplementation(async (client, retained) => {

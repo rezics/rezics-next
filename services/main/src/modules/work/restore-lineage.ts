@@ -538,8 +538,20 @@ export async function releaseRestoredGraphHold(
     throw new RestoreLineageConflict('separate restored relay handoff is unavailable');
   }
   let capturedRelay: RelayCoverage;
-  try { capturedRelay = await relayCoverage(evidence.restoredRelayPool, coverage.relay.consumer); }
-  catch (error) { throw new RestoreLineageConflict('captured relay handoff is unavailable', { cause: error }); }
+  let capturedClient: PoolClient | undefined;
+  try {
+    // This snapshot belongs to the captured copy. The pure scan never begins
+    // or commits either caller-owned retained-journal or Access transaction.
+    capturedClient = await evidence.restoredRelayPool.connect();
+    await capturedClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    capturedRelay = await relayCoverageOnClient(capturedClient, coverage.relay.consumer);
+    await capturedClient.query('COMMIT');
+  } catch (error) {
+    if (capturedClient) {
+      try { await capturedClient.query('ROLLBACK'); } catch { /* retain original error */ }
+    }
+    throw new RestoreLineageConflict('captured relay handoff is unavailable', { cause: error });
+  } finally { capturedClient?.release(); }
   assertRetainedRecoveryRelayCut(coverage, capturedRelay);
   let accessClient: PoolClient | undefined;
   let relayHeadClient: PoolClient | undefined;

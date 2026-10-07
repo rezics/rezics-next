@@ -69,8 +69,10 @@ export interface RestoreResources {
     authority: RetainedAuthorityCoverage;
     signingKey: string;
     maintenance: Pick<FusekiClient, 'command'>;
-    originalGraph?: Pick<RestoredGraphCustody, 'fuseki' | 'lineage'>;
-  };
+  } & (
+    | { originalSource: 'original-graph'; originalGraph: Pick<RestoredGraphCustody, 'fuseki' | 'lineage'> }
+    | { originalSource: 'retained-native-event'; originalGraph?: never }
+  );
 }
 export interface RelocationView {
   id: string; owner: RelocationStageInput['owner']; datasetId: string;
@@ -174,7 +176,8 @@ export class OwnerOperations {
           structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) },
       ...(restoredRelayPool ? { restoredRelayPool } : {}),
       ...(configuredRetained ? { erasures: { authority: { sealedCoverage, hmacKey },
-        signingKey, maintenance: heldErasureMaintenanceClient(graphUrl, maintenanceKey) } } : {}) },
+        signingKey, maintenance: heldErasureMaintenanceClient(graphUrl, maintenanceKey),
+        originalSource: 'retained-native-event' as const } } : {}) },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
   }
 
@@ -254,9 +257,15 @@ export class OwnerOperations {
               restoredRelayPool: resources.restoredRelayPool,
               ...(resources.erasures ? { releaseErasures: async (clients, releaseGraph) => {
                 const erasures = resources.erasures!;
-                if (!erasures.originalGraph) {
-                  throw new RestoreLineageConflict('independently retained original graph proof is unavailable');
+                if (erasures.originalSource === 'retained-native-event' && 'originalGraph' in erasures) {
+                  throw new RestoreLineageConflict('retained original proof source is ambiguous');
                 }
+                const originalSource = erasures.originalSource === 'retained-native-event'
+                  ? { originalSource: 'retained-native-event' as const }
+                  : erasures.originalSource === 'original-graph' && erasures.originalGraph
+                    ? { originalSource: 'original-graph' as const, originalGraph: erasures.originalGraph }
+                    : undefined;
+                if (!originalSource) throw new RestoreLineageConflict('independently retained original proof source is unavailable');
                 let current: RecoveryCoverage;
                 try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
                   erasures.authority.hmacKey, 'graph-recovery-coverage'); }
@@ -267,15 +276,18 @@ export class OwnerOperations {
                 try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
                   current.relay.consumer, erasures.authority, clients.accessClient); }
                 catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
+                const restoredObjects = resources.objectStore.structureObjects
+                  ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
+                    resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
                 const restored: RestoredOwners = { account: resources.accountPool,
-                  access: resources.accessPool, content: resources.contentPool, objects: resources.objectStore,
+                  access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
                   graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
                     ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
                     heldErasure: { cut: { ...this.environment.lineage,
                       restoreCutover: `urn:rezics:restore:${this.environment.lineage.dataEpoch}`,
                       priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence },
                     accessHoldGeneration: clients.fenceGeneration, signingKey: erasures.signingKey,
-                    maintenance: erasures.maintenance, originalGraph: erasures.originalGraph } } };
+                    maintenance: erasures.maintenance, ...originalSource } } };
                 const result = await reconcileRestoredErasures(this.relay, restored,
                   { operationId: `${operationId}:erasures`, consumer: current.relay.consumer,
                     replay: true, authority: erasures.authority }, clients);

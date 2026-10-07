@@ -15,6 +15,7 @@ test('operator recovery adapter requires independently supplied current owner ev
     },
   } as unknown as Pool;
   const erasures: RetainedRecoveryChecks['erasures'] = {
+    originalSource: 'retained-native-event',
     authority: { sealedCoverage: 'externally-retained-authority', hmacKey: 'ab'.repeat(32) },
     signingKey: 'cd'.repeat(32),
     maintenance: {
@@ -36,6 +37,11 @@ test('operator recovery adapter requires independently supplied current owner ev
     { relayPool, erasures: { ...erasures, authority: { ...erasures.authority, hmacKey: '' } } },
     { relayPool, erasures: { ...erasures, signingKey: '' } },
     { relayPool, erasures: { ...erasures, maintenance: undefined } },
+    { relayPool, erasures: { ...erasures, originalSource: undefined } },
+    { relayPool, erasures: { ...erasures, originalSource: 'unknown' } },
+    { relayPool, erasures: { ...erasures, originalSource: 'original-graph', originalGraph: {} } },
+    { relayPool, erasures: { ...erasures, originalGraph: undefined } },
+    { relayPool, erasures: { ...erasures, originalGraph: {} } },
   ]) {
     expect(() =>
       recoveryChecks(probes, 'ef'.repeat(32), input as unknown as RetainedRecoveryChecks),

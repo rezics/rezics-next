@@ -18,6 +18,7 @@ import {
   ReceiptCustody,
 } from '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
+import { StructureGroupRootStore } from '../../../services/main/src/modules/structure/group-root.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -29,7 +30,13 @@ export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuse
 export interface RetainedRecoveryChecks {
   /** Caller-owned current ledger, available while the original project is stopped. */
   relayPool: Pool;
-  erasures: NonNullable<RestoreResources['erasures']>;
+  /** The stopped source is qualified only through its retained native handoff. */
+  erasures: Extract<
+    NonNullable<RestoreResources['erasures']>,
+    {
+      originalSource: 'retained-native-event';
+    }
+  >;
 }
 
 /** Ephemeral QA custody uses distinct secret/public keyrings, just like the
@@ -166,7 +173,9 @@ export function recoveryChecks(
     !retained.erasures?.authority?.sealedCoverage ||
     !retained.erasures.authority.hmacKey ||
     !retained.erasures.signingKey ||
-    typeof retained.erasures.maintenance?.command !== 'function'
+    typeof retained.erasures.maintenance?.command !== 'function' ||
+    retained.erasures.originalSource !== 'retained-native-event' ||
+    'originalGraph' in retained.erasures
   ) {
     throw new Error(
       'Recovery checks require independently retained current erasure and authority evidence',
@@ -226,7 +235,13 @@ export function recoveryChecks(
     },
     reconcile: async (context, body, idempotencyKey) => {
       expect(verifiedBeforeRelease).toBe(true);
-      const objects = objectStore(context.apps, context.budget);
+      const objects: RestoreResources['objectStore'] = objectStore(context.apps, context.budget);
+      if (objects.structureObjects) {
+        objects.structureGroupRoots = new StructureGroupRootStore(
+          context.pools.content,
+          objects.structureObjects,
+        );
+      }
       const env = {
         fuseki: context.fuseki,
         lineage: {

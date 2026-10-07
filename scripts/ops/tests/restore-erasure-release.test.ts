@@ -4,10 +4,10 @@ import type { FusekiClient } from '../../../services/main/src/infrastructure/fus
 import {
   finishOperatorRestore,
   restoreRecoverySet,
-  type RestoredContext,
+  type OperatorRestoreReleaseContext,
   type RestoreChecks,
 } from '../restore.ts';
-import { RecoveryBudget, type RecoveryManifest } from '../recovery-set.ts';
+import { RecoveryBudget } from '../recovery-set.ts';
 
 const dataEpoch = '00000000-0000-4000-8000-000000000051';
 const routingEpoch = '00000000-0000-4000-8000-000000000052';
@@ -20,16 +20,14 @@ function restored(
   } = {},
 ) {
   const events: string[] = [];
-  const context: RestoredContext = {
+  const context: OperatorRestoreReleaseContext = {
     budget: new RecoveryBudget(),
     manifest: {
-      id: 'retained-cut',
       fenceGeneration: '9007199254740993',
       sealedCoverage: 'signed-owner-cut',
       sealedDeletionSets: ['signed-deletion-cut'],
-    } as RecoveryManifest,
+    },
     apps: { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch },
-    appsFile: '',
     fuseki: {
       query: async (query: string) => {
         events.push('graph-release-observation');
@@ -64,10 +62,9 @@ function restored(
           return { rows: [] };
         },
       } as unknown as Pool,
-      relay: {} as Pool,
     },
   };
-  const checks: RestoreChecks = {
+  const checks: RestoreChecks<OperatorRestoreReleaseContext> = {
     verify: async () => {},
     reconcile: async (received, body, key) => {
       expect(received).toBe(context);

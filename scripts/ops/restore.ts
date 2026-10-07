@@ -59,17 +59,23 @@ export interface RestoredContext {
   pools: Record<keyof RecoveryManifest['owners'], Pool>;
   fuseki: FusekiClient;
 }
-export interface RestoreChecks {
+/** The release observer consumes these captured facts; unrelated encrypted-set
+ * inventory belongs to the full restore and need not be invented by a caller. */
+export type OperatorRestoreReleaseContext = Pick<RestoredContext, 'budget' | 'apps' | 'fuseki'> & {
+  manifest: Pick<RecoveryManifest, 'sealedCoverage' | 'sealedDeletionSets' | 'fenceGeneration'>;
+  pools: Pick<RestoredContext['pools'], 'account' | 'access' | 'content'>;
+};
+export interface RestoreChecks<Context extends OperatorRestoreReleaseContext = RestoredContext> {
   /** Exact samples, authorized/denied reads, deleted subjects, revoked grants,
    * representative search and Account/library takeout; any failure keeps held. */
-  verify(context: RestoredContext): Promise<void>;
+  verify(context: Context): Promise<void>;
   /** Adapter to POST /v1/owners/reconciliations on this isolated Main instance.
    * Account owns authentication; a local recovery command must not forge it.
    * A matched operation owns retained-erasure reconciliation and both graph
    * and Access release using independently retained current owner evidence;
    * this command only observes the released generation. */
   reconcile(
-    context: RestoredContext,
+    context: Context,
     body: {
       profile: 'owner-reconciliation-v1';
       kind: 'restore';
@@ -109,9 +115,9 @@ function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
 /** The authenticated owner operation releases admission only after its current
  * retained journal check. Observe both releases before enabling owner logins;
  * a matched response alone cannot reopen a still-held or different generation. */
-export async function finishOperatorRestore(
-  context: RestoredContext,
-  checks: RestoreChecks,
+export async function finishOperatorRestore<Context extends OperatorRestoreReleaseContext>(
+  context: Context,
+  checks: Pick<RestoreChecks<Context>, 'reconcile'>,
   idempotencyKey: string,
   beforeReconcile: () => void,
 ): Promise<void> {

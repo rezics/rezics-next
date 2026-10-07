@@ -1,4 +1,6 @@
 import { expect } from 'bun:test';
+import { Elysia } from 'elysia';
+import { decodeJwt } from 'jose';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,7 +8,7 @@ import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
-import { createMainApp } from '../../../services/main/src/app.ts';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import {
   ObjectIntegrityError,
@@ -17,6 +19,8 @@ import {
   AccessAdmissionRegistry,
   engageAccessRecoveryFence,
 } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
+import { ContentSearchReadAccess } from '../../../services/main/src/modules/search-disclosure/content-read-lease.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
 import {
   heldErasureMaintenanceClient,
@@ -68,7 +72,14 @@ import {
   type RecoveryCoverage,
 } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import { authorCreditFixture, nativeId } from '../../../tests/qa/fixtures/author-credit.ts';
+import type { RestoreChecks } from '../../../scripts/ops/restore.ts';
+import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
+import { healthRoutes } from '../../../services/main/src/routes/health.ts';
+import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
+import { ratingAccount } from '../../../tests/qa/support/rating-account.ts';
+import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { cloneQaOwnerDatabases } from '../../../tests/qa/support/fake-delivery.ts';
 import { copyRecoveryTree } from '../../../tests/qa/support/recovery-copy.ts';
 import { seedContent } from '../../../tests/qa/load/corpus.ts';
@@ -183,7 +194,7 @@ export async function ownerRestoreErasureFixture() {
     }
   };
   const objects = new DirectoryObjects(join(directory, 'objects-live'));
-  let authenticated: Awaited<ReturnType<typeof authorCreditFixture>> | undefined;
+  let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   const close = async () => {
     await authenticated?.close();
     for (const container of containers) container.remove();
@@ -202,6 +213,11 @@ export async function ownerRestoreErasureFixture() {
     rmSync(directory, { recursive: true, force: true });
   };
   try {
+    await migrateContent(source.content);
+    expect(
+      (await source.content.query("SELECT to_regclass('content.receipt') IS NOT NULL AS present"))
+        .rows,
+    ).toEqual([{ present: true }]);
     const liveVolume = volume('live'),
       cutVolume = volume('cut');
     const live = await standaloneFuseki(qa.dockerEnv, {
@@ -218,18 +234,62 @@ export async function ownerRestoreErasureFixture() {
     );
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
     await initializeFreshGraph(native, lineage);
-    authenticated = await authorCreditFixture(
-      {
-        ...apps,
-        FUSEKI_URL: live.url,
-        MAIN_OBJECT_DIRECTORY: objects.directory,
-        ACCOUNT_DATABASE_URL: databases.urls.account,
-        ACCESS_DATABASE_URL: databases.urls.access,
-        CONTENT_DATABASE_URL: databases.urls.content,
-      },
-      objects.directory,
+    authenticated = await ratingAccount(
+      { ...apps, ACCOUNT_DATABASE_URL: databases.urls.account },
       'openid work:create work:edit work:read owner:operate',
     );
+    const refreshTime = (token: string) => {
+      const { exp } = decodeJwt(token);
+      if (!Number.isSafeInteger(exp)) throw new Error('actual OAuth token expiry is unavailable');
+      return exp! * 1_000 - 30_000;
+    };
+    let ownerToken = authenticated.tokenA;
+    let ownerTokenRefreshAt = refreshTime(ownerToken);
+    const currentOwnerToken = async () => {
+      // Decoded expiry schedules refresh only. The actual Account verifier
+      // authenticates and introspects every request in the Owner route.
+      if (Date.now() >= ownerTokenRefreshAt) {
+        ownerToken = await authenticated!.tokenFor(authenticated!.a);
+        ownerTokenRefreshAt = refreshTime(ownerToken);
+      }
+      return ownerToken;
+    };
+    const actor = `https://rezics.com/id/${randomUUID()}`,
+      principalId = randomUUID();
+    const principal = await authenticated.verifier.verify(
+      new Request('http://main.local', {
+        headers: { authorization: `Bearer ${authenticated.tokenA}` },
+      }),
+      ['work:edit'],
+    );
+    await source.access.query(
+      'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES($1,$2,$3)',
+      [principalId, principal.issuer, principal.subject],
+    );
+    await source.access.query("INSERT INTO access.authority_subject(id,kind) VALUES($1,'agent')", [
+      actor,
+    ]);
+    const registry = new AccessAdmissionRegistry(
+      source.access,
+      qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
+    );
+    const grant = async (scope: string, action: string) => {
+      await source.access.query(
+        'INSERT INTO access.scope_gate(id) VALUES($1) ON CONFLICT DO NOTHING',
+        [scope],
+      );
+      await source.access.query(
+        `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+        VALUES($1,$2,$3,$4,now()+interval '1 hour')`,
+        [randomUUID(), principalId, actor, action],
+      );
+      await source.access.query(
+        `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES($1,$2,$2,$3,$4,now()+interval '1 hour')`,
+        [randomUUID(), actor, scope, action],
+      );
+    };
+    await grant('work:create:root', 'work.create');
     const custody = new ReceiptCustody(
       new PostgresReceiptCustodyStore(source.access),
       objects,
@@ -238,53 +298,45 @@ export async function ownerRestoreErasureFixture() {
       proofRetirementSender(live.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!),
     );
     const env: WorkActivationEnvironment = {
-      ...authenticated.env,
       fuseki: native,
+      lineage,
+      objectDirectory: objects.directory,
       workObjects: objects,
       receiptCustody: custody,
+      titleAdmissionKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
     };
     await ensureModelGeneration(env);
-    const key = randomUUID();
-    const created = await authenticated.json<{ work: string }>(
-      await authenticated.call(
-        'POST',
-        '/v1/works',
-        await authenticated.catalogueBody(
-          {
-            profile: 'metadata-only-v1',
-            title: 'Owner restore erasure fixture',
-            language: 'en',
-            actingSubject: authenticated.actor,
-          },
-          key,
-        ),
-        key,
-      ),
-      201,
-    );
-    await authenticated.grant(`work:edit:${created.work}`, 'work.edit');
-    const principal = await authenticated.account.verifier.verify(
-      new Request('http://main.local', {
-        headers: { authorization: `Bearer ${authenticated.account.tokenA}` },
+    const created = await createAdmittedMetadataWork(
+      env,
+      authenticated.verifier,
+      registry,
+      new Request('http://main.local/v1/works', {
+        headers: { authorization: `Bearer ${authenticated.tokenA}` },
       }),
-      ['work:edit'],
+      {
+        title: 'Owner restore erasure fixture',
+        language: 'en',
+        actingSubject: actor,
+        idempotencyKey: randomUUID(),
+      },
     );
+    await grant(`work:edit:${created.work}`, 'work.edit');
     const metadata = async (intent: MetadataIntent) => {
-      const registered = await authenticated!.access.register({
+      const registered = await registry.register({
         principal,
-        actingSubject: authenticated!.actor,
+        actingSubject: actor,
         scope: `work:edit:${created.work}`,
         action: 'work.edit',
         idempotencyKey: randomUUID(),
         requestDigest: metadataDigest(intent),
       });
-      const claimed = await authenticated!.access.claim(
-        registered.id,
-        registered.requestDigest,
-        principal,
-      );
+      const claimed = await registry.claim(registered.id, registered.requestDigest, principal);
       expect(await commitMetadata(env, claimed, intent)).toBe(true);
-      return (await readMetadataReceipt(env, claimed.id))!;
+      const terminal = await readMetadataReceipt(env, claimed.id);
+      if (!terminal || terminal.outcome !== 'succeeded')
+        throw new Error('Native metadata did not produce its successful terminal');
+      await registry.recordGraphOutcome(claimed.id, terminal);
+      return terminal;
     };
     await metadata({
       work: created.work,
@@ -295,64 +347,6 @@ export async function ownerRestoreErasureFixture() {
         localized: [],
       }),
     });
-    // Reuse C6's stopped disposable source cut: subsequent positions are
-    // allocated by real native commands, with diagnostic and Main cuts unequal.
-    live.runner.stop();
-    live.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
-flock -n 9
-cat > /tmp/owner-erasure-source.ru <<'OWNER_ERASURE_SOURCE'
-PREFIX rv: <https://rezics.com/vocab/>
-CLEAR GRAPH <urn:rezics:graph:outbox> ;
-DELETE { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence ?old . <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } }
-INSERT { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence 896 .
-  <${MAIN_RELAY_STREAM_SCOPE}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
-WHERE { GRAPH <urn:rezics:graph:control> {
-  <urn:rezics:dataset:product> rv:sequence ?old . OPTIONAL { <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } } }
-OWNER_ERASURE_SOURCE
-java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-source.ru`);
-    await live.runner.start();
-    const command = await metadata({
-      work: created.work,
-      expectedHead: null,
-      state: checkedMetadataState({
-        kind: 'edition',
-        id: nativeId(),
-        status: 'active',
-        title: { value: 'Retained native edition', language: 'en' },
-        contentLanguage: 'en',
-        editionStatement: null,
-        publisher: null,
-        publicationYear: null,
-        isbn13: null,
-      }),
-    });
-    await custody.retire(command.receipt);
-    const retired = (
-      await source.access.query<{
-        payload_sha256: string;
-        payload: Buffer;
-        retired: boolean;
-        data_epoch: string;
-        stream_sequence: string;
-      }>(
-        'SELECT payload_sha256,payload,retired_at IS NOT NULL AS retired,data_epoch,stream_sequence::text FROM access.command_custody WHERE receipt=$1',
-        [command.receipt],
-      )
-    ).rows[0]!;
-    const prepared = JSON.parse(retired.payload.toString('utf8')) as PreparedCommand;
-    const historicalManifest = prepared.manifest.slice(-64);
-    const manifest = JSON.parse(
-      readFileSync(join(objects.directory, historicalManifest), 'utf8'),
-    ) as { payload: string };
-    expect(retired.retired).toBe(true);
-    expect(
-      (
-        await native.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
-      GRAPH <urn:rezics:graph:receipts> { <${command.receipt}> a rv:CommitProof } }`)
-      ).boolean,
-    ).toBe(false);
     const core = new ContentCore(source.content);
     const save = async (body: string) => {
       const saved = await core.saveDraft({
@@ -381,6 +375,20 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       'erased native HTTP fixture payload',
     );
     const revisionId = published.revisionId;
+    const cursor = new ContentProjectionCursor(source.content);
+    const projectionConsumer = `owner-erasure-${suffix}`;
+    await cursor.initialize(projectionConsumer);
+    const high = await core.ownerPosition();
+    for (
+      let event = 0;
+      event < 32 && (await cursor.read(projectionConsumer)).sequence !== high.sequence;
+      event++
+    ) {
+      if (!(await relayContentProjectionOnce(env, core, cursor, projectionConsumer))) {
+        throw new Error('actual Content projection ended before its owner cut');
+      }
+    }
+    expect((await cursor.read(projectionConsumer)).sequence).toBe(high.sequence);
     expect(
       (
         await native.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
@@ -390,6 +398,78 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       ).boolean,
     ).toBe(true);
     const laterRevisionId = await save('later retained journal fixture payload');
+    // Reuse C6's stopped disposable source cut: subsequent positions are
+    // allocated by real native commands, with diagnostic and Main cuts unequal.
+    live.runner.stop();
+    live.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
+flock -n 9
+cat > /tmp/owner-erasure-source.ru <<'OWNER_ERASURE_SOURCE'
+PREFIX rv: <https://rezics.com/vocab/>
+CLEAR GRAPH <urn:rezics:graph:outbox> ;
+DELETE { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence ?old . <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } }
+INSERT { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence 896 .
+  <${MAIN_RELAY_STREAM_SCOPE}> rv:dataEpoch "${lineage.dataEpoch}" ; rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
+WHERE { GRAPH <urn:rezics:graph:control> {
+  <urn:rezics:dataset:product> rv:sequence ?old . OPTIONAL { <${MAIN_RELAY_STREAM_SCOPE}> ?p ?o } } }
+OWNER_ERASURE_SOURCE
+java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-source.ru`);
+    await live.runner.start();
+    const component = `https://rezics.com/id/${randomUUID()}`;
+    const edition = (title: string) =>
+      checkedMetadataState({
+        kind: 'edition',
+        id: component,
+        status: 'active',
+        title: { value: title, language: 'en' },
+        contentLanguage: 'en',
+        editionStatement: null,
+        publisher: null,
+        publicationYear: null,
+        isbn13: null,
+      });
+    const command = await metadata({
+      work: created.work,
+      expectedHead: null,
+      state: edition('Retained native edition 1'),
+    });
+    const second = await metadata({
+      work: created.work,
+      expectedHead: command.revision!,
+      state: edition('Retained native edition 2'),
+    });
+    const third = await metadata({
+      work: created.work,
+      expectedHead: second.revision!,
+      state: edition('Retained native edition 3'),
+    });
+    for (const receipt of [command.receipt, second.receipt, third.receipt])
+      await custody.retire(receipt);
+    const retired = (
+      await source.access.query<{
+        payload_sha256: string;
+        payload: Buffer;
+        retired: boolean;
+        data_epoch: string;
+        stream_sequence: string;
+      }>(
+        'SELECT payload_sha256,payload,retired_at IS NOT NULL AS retired,data_epoch,stream_sequence::text FROM access.command_custody WHERE receipt=$1',
+        [command.receipt],
+      )
+    ).rows[0]!;
+    const prepared = JSON.parse(retired.payload.toString('utf8')) as PreparedCommand;
+    const historicalManifest = prepared.manifest.slice(-64);
+    const manifest = JSON.parse(
+      readFileSync(join(objects.directory, historicalManifest), 'utf8'),
+    ) as { payload: string };
+    expect(retired.retired).toBe(true);
+    expect(
+      (
+        await native.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH <urn:rezics:graph:receipts> { <${command.receipt}> a rv:CommitProof } }`)
+      ).boolean,
+    ).toBe(false);
     const consumer = `owner-erasure-restore:${suffix}`;
     await initializeRelayCheckpoint(source.relay, consumer, lineage.dataEpoch);
     const drain = async (relay: Pool, relayConsumer = consumer) => {
@@ -400,6 +480,41 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       throw new Error('fixture relay handoff exceeded its bound');
     };
     await drain(source.relay);
+    await grant(`work:read:${created.work}`, 'work.read');
+    const leaseTemplates = {
+      download: (
+        await new AccessDownloadLeases(source.access).admit(
+          principal,
+          actor,
+          created.work,
+          randomUUID(),
+        )
+      ).id,
+      search: (
+        await new ContentSearchReadAccess(source.access).admit(
+          principal,
+          actor,
+          created.work,
+          published.variantId,
+        )
+      ).id,
+    };
+    const availableBeforeErasure = (
+      await new ContentCore(source.content).readExactBatch(
+        [revisionId],
+        async (ids) => new Set(ids),
+      )
+    )[0]!;
+    expect(availableBeforeErasure.status).toBe('available');
+    if (availableBeforeErasure.status !== 'available')
+      throw new Error('source publication bytes are unavailable before erasure');
+    expect(hash(availableBeforeErasure.serializedJson)).toBe(
+      availableBeforeErasure.reference.byteDigest,
+    );
+    expect(Buffer.byteLength(availableBeforeErasure.serializedJson, 'utf8')).toBe(
+      availableBeforeErasure.reference.byteLength,
+    );
+    expect(availableBeforeErasure.serializedJson).toContain('erased native HTTP fixture payload');
     const generation = await engageAccessRecoveryFence(source.access);
     let coverage: RecoveryCoverage | undefined;
     for (let attempt = 0; attempt < 8 && !coverage; attempt++) {
@@ -432,6 +547,36 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     };
     await retainRecoveryCoverageHead(source.relay, authority.sealedCoverage, restoreKey);
     await retainErasureCoverage(source.relay, consumer);
+    // Retaining the first signed capture advances the real cluster WAL while
+    // the quiesced owner rows and graph cut remain unchanged. Capture the
+    // second frontier before erasure makes historical Content unavailable.
+    const newerCoverage = await captureGraphRecoveryCoverage(
+      native,
+      source.account,
+      source.access,
+      source.relay,
+      consumer,
+      source.content,
+      { directory: objects.directory, workObjects: objects },
+    );
+    const { accountPg: capturedPg, ...capturedOwners } = coverage;
+    const { accountPg: newerPg, ...newerOwners } = newerCoverage;
+    expect(newerOwners).toEqual(capturedOwners);
+    expect(newerPg.systemIdentifier).toBe(capturedPg.systemIdentifier);
+    expect(
+      (
+        await source.account.query('SELECT $2::pg_lsn > $1::pg_lsn AS advanced', [
+          capturedPg.flushedLsn,
+          newerPg.flushedLsn,
+        ])
+      ).rows,
+    ).toEqual([{ advanced: true }]);
+    const newerAuthority = {
+      sealedCoverage: JSON.stringify(
+        sealRecoveryPayload(newerCoverage, restoreKey, 'graph-recovery-coverage'),
+      ),
+      hmacKey: restoreKey,
+    };
     cpSync(objects.directory, backupObjects, { recursive: true });
     live.runner.stop();
     copyGraph(liveVolume, cutVolume);
@@ -471,7 +616,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       operationId: randomUUID(),
       requestDigest: hash(revisionId),
       kind: 'revision',
-      principalId: authenticated.principalId,
+      principalId: principalId,
       admissionId: randomUUID(),
       authorityEpoch: generation,
       targets: [{ kind: 'content_revision', ref: revisionId }],
@@ -486,7 +631,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       erased.erasureEpoch,
       [revisionId],
     );
-    expect(BigInt(original.sequence)).toBeGreaterThan(0n);
+    expect(original.sequence).toBe('900');
     await applyContentErasure(source.content, {
       erasureId: erased.erasureId,
       erasureEpoch: erased.erasureEpoch,
@@ -498,8 +643,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     await markErasureSuppressed(source.relay, erased.erasureId);
     await drain(source.relay);
     const retainedProof = (
-      await source.relay.query<{ graph_position: object;
-        relay_position: { streamScope: string; dataEpoch: string; sequence: string } }>(
+      await source.relay.query<{
+        graph_position: object;
+        relay_position: { streamScope: string; dataEpoch: string; sequence: string };
+      }>(
         `SELECT envelope->'data'->'sourcePosition' AS graph_position,
          envelope->'data'->'relayPosition' AS relay_position FROM relay.delivered_event
        WHERE envelope->>'type'='com.rezics.erasure.graph-suppressed.v1'
@@ -514,6 +661,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       sequence: original.sequence,
     });
     expect(retainedProof[0]!.relay_position.streamScope).toBe(MAIN_RELAY_STREAM_SCOPE);
+    expect(retainedProof[0]!.relay_position.sequence).toBe('4');
     expect(retainedProof[0]!.relay_position.dataEpoch).toBe(original.dataEpoch);
     expect(original.sequence).not.toBe(retainedProof[0]!.relay_position.sequence);
     expect(original.sequence).not.toBe(erased.erasureEpoch);
@@ -530,25 +678,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       liveRetentionReason: 'Original physical cut remains retained after logical suppression',
     });
     const retainedRelayTemplate = await databases.snapshot('relay', () => closePool(source.relay));
-    const captureCurrentAuthority = async (retainedRelay: Pool) => {
-      const current = await captureGraphRecoveryCoverage(
-        native,
-        source.account,
-        source.access,
-        retainedRelay,
-        consumer,
-        source.content,
-        { directory: objects.directory, workObjects: objects },
-      );
-      return {
-        sealedCoverage: JSON.stringify(
-          sealRecoveryPayload(current, restoreKey, 'graph-recovery-coverage'),
-        ),
-        hmacKey: restoreKey,
-      };
-    };
     let index = 0;
-    const copy = async (options: { originalProof?: 'missing' | 'corrupt' } = {}) => {
+    const copy = async () => {
       const copyStarted = Date.now(),
         ordinal = ++index;
       const retainedDatabase = `qa_owner_erasure_${suffix}_${ordinal}`;
@@ -600,11 +731,19 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       };
       let recovering = true;
       for (let attempt = 0; attempt < 100 && recovering; attempt++) {
-        recovering = (await owners.account.query<{ recovering: boolean }>(
-          'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering ?? true;
+        recovering =
+          (
+            await owners.account.query<{ recovering: boolean }>(
+              'SELECT pg_is_in_recovery() AS recovering',
+            )
+          ).rows[0]?.recovering ?? true;
         if (recovering) await Bun.sleep(100);
       }
       expect(recovering).toBe(false);
+      // Recovery connects as postgres while ordinary owner roles stay offline.
+      await owners.account.query(
+        'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',
+      );
       const restoredVolume = volume(`copy-${ordinal}`);
       copyGraph(cutVolume, restoredVolume);
       const graph = await standaloneFuseki(qa.dockerEnv, {
@@ -621,7 +760,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       );
       const restoredLineage = {
         dataEpoch: randomUUID(),
-        routingEpoch: (BigInt(lineage.routingEpoch) + 1n).toString(),
+        routingEpoch: /^[0-9]+$/.test(lineage.routingEpoch)
+          ? (BigInt(lineage.routingEpoch) + 1n).toString()
+          : randomUUID(),
       };
       await cutoverRestoredGraphLineage(fuseki, {
         prior: { ...lineage, sequence: coverage!.priorSequence },
@@ -644,30 +785,6 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         workObjects: restoredObjects,
         receiptCustody: restoredCustody,
       };
-      let originalGraph = options.originalProof === 'missing' ? undefined : { fuseki: native, lineage };
-      let proofGraph: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
-      if (options.originalProof === 'corrupt') {
-        const proofVolume = volume(`proof-${ordinal}`);
-        live.runner.stop(); copyGraph(liveVolume, proofVolume); await live.runner.start();
-        proofGraph = await standaloneFuseki(qa.dockerEnv, {
-          name: `rezics-owner-erasure-${suffix}-proof-${ordinal}`, image: image,
-          volume: proofVolume, secrets: fusekiSecrets(qa.composeEnv),
-        });
-        containers.push(proofGraph);
-        proofGraph.runner.stop();
-        proofGraph.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
-flock -n 9
-cat > /tmp/owner-erasure-corrupt-proof.ru <<'OWNER_ERASURE_CORRUPT_PROOF'
-PREFIX rv: <https://rezics.com/vocab/>
-DELETE { GRAPH <urn:rezics:graph:receipts> { <${original.receipt}> rv:sequence ?n } }
-INSERT { GRAPH <urn:rezics:graph:receipts> { <${original.receipt}> rv:sequence 0 } }
-WHERE { GRAPH <urn:rezics:graph:receipts> { <${original.receipt}> rv:sequence ?n } }
-OWNER_ERASURE_CORRUPT_PROOF
-java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/owner-erasure-corrupt-proof.ru`);
-        await proofGraph.runner.start();
-        originalGraph = { fuseki: new FusekiClient(proofGraph.url,
-          qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN, qa.composeEnv.FUSEKI_COMMAND_TOKEN), lineage };
-      }
       const resources: RestoreResources = {
         accountPool: owners.account,
         accessPool: owners.access,
@@ -677,7 +794,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         objectStore: { directory: restoredDirectory, workObjects: restoredObjects },
         erasures: {
           authority,
-          ...(originalGraph ? { originalGraph } : {}),
+          originalSource: 'retained-native-event',
           signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
           maintenance: heldErasureMaintenanceClient(
             graph.url,
@@ -686,41 +803,75 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         },
       };
       const operations = new OwnerOperations(retainedRelay, restoredEnv, resources);
-      const app = createMainApp(fuseki, {
+      const work: MainWorkDependencies = {
         environment: restoredEnv,
-        account: authenticated!.account.verifier,
+        account: authenticated!.verifier,
         access: new AccessAdmissionRegistry(owners.access),
         content: new ContentCore(owners.content),
         ownerOperations: operations,
-      });
-      const request = (key = randomUUID(), token = authenticated!.account.tokenA) =>
-        app.handle(
+      };
+      const app = new Elysia().use(ownerRoutes(work)).use(healthRoutes(fuseki, work));
+      const request = async (
+        key: string = randomUUID(),
+        token?: string,
+        body: Parameters<RestoreChecks['reconcile']>[1] = {
+          profile: 'owner-reconciliation-v1',
+          kind: 'restore',
+          sealedCoverage: authority.sealedCoverage,
+          sealedDeletionSets: [],
+        },
+      ) => {
+        const bearer = token ?? (await currentOwnerToken());
+        return app.handle(
           new Request('http://main.local/v1/owners/reconciliations', {
             method: 'POST',
             headers: {
-              authorization: `Bearer ${token}`,
+              authorization: `Bearer ${bearer}`,
               'content-type': 'application/json',
               'idempotency-key': key,
             },
-            body: JSON.stringify({
-              profile: 'owner-reconciliation-v1',
-              kind: 'restore',
-              sealedCoverage: authority.sealedCoverage,
-              sealedDeletionSets: [],
-            }),
+            body: JSON.stringify(body),
           }),
         );
+      };
       const ready = () => app.handle(new Request('http://main.local/health/ready'));
+      const faultRetained = async (
+        sql: string | readonly { sql: string; values?: unknown[] }[],
+        values: unknown[] = [],
+      ) => {
+        const url = new URL(relayUrl);
+        url.username = 'postgres';
+        url.password = qa.composeEnv.POSTGRES_PASSWORD!;
+        const client = new Client({ connectionString: url.toString() });
+        await client.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query('SET LOCAL session_replication_role = replica');
+          const statements = typeof sql === 'string' ? [{ sql, values }] : sql;
+          if (!statements.length) throw new Error('retained test fault has no SQL statements');
+          const first = await client.query(statements[0]!.sql, statements[0]!.values ?? []);
+          for (const statement of statements.slice(1))
+            await client.query(statement.sql, statement.values ?? []);
+          await client.query('COMMIT');
+          return first;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          await client.end();
+        }
+      };
       const dispose = async () => {
         graph.remove();
-        proofGraph?.remove();
         for (const owner of [...Object.values(owners), retainedRelay]) await closePool(owner);
         execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
           timeout: 15_000,
         });
         pgCopies.splice(pgCopies.indexOf(data), 1);
       };
-      expect(Date.now() - copyStarted).toBeLessThan(600_000);
+      const copyElapsedMs = Date.now() - copyStarted;
+      console.info('owner restore erasure copy ready', { ordinal, elapsedMs: copyElapsedMs });
+      expect(copyElapsedMs).toBeLessThan(600_000);
       return {
         app,
         owners,
@@ -732,20 +883,25 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         custody: restoredCustody,
         request,
         ready,
+        faultRetained,
         dispose,
       };
     };
-    expect(Date.now() - preparationStarted).toBeLessThan(600_000);
+    const preparationElapsedMs = Date.now() - preparationStarted;
+    console.info('owner restore erasure cut ready', { elapsedMs: preparationElapsedMs });
+    expect(preparationElapsedMs).toBeLessThan(600_000);
     return {
       source,
       native,
       custody,
       coverage,
       authority,
+      newerAuthority,
       generation,
       original,
       erased,
       revisionId,
+      availableBeforeErasure,
       laterRevisionId,
       work: created.work,
       retired,
@@ -755,11 +911,12 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       historicalPayload: manifest.payload.slice(7),
       modelShape: prepared.envelope.validations[0]!.sha256,
       principal,
-      actor: authenticated.actor,
+      actor: actor,
       published,
-      principalId: authenticated.principalId,
+      principalId: principalId,
+      leaseTemplates,
+      stopOriginal: () => live.runner.stop(),
       copy,
-      captureCurrentAuthority,
       close,
     };
   } catch (error) {
