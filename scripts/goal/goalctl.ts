@@ -1978,18 +1978,38 @@ export function unitFailureDetails(output: string, candidates: readonly string[]
   return found;
 }
 
+function normalizedFindingLines(detail: string | undefined): string[] {
+  if (!detail) return [];
+  return detail.split('\n').flatMap(line => {
+    const added = /^\s*\+\s?(.*)$/.exec(line);
+    if (!added) return [];
+    const finding = added[1]!.trim();
+    if (!finding || /^(?:Received|Expected)(?:\s|$)/i.test(finding)) return [];
+    return [finding.replace(/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json)):\d+(?::\d+)?/g, '$1:<line>')];
+  });
+}
+
 export function introducedUnitFailureFiles(branchFiles: readonly string[], branch: readonly UnitFailureDetail[],
   main: readonly UnitFailureDetail[]): string[] {
   const introduced: string[] = [];
   for (const file of branchFiles) {
     const branchFailures = branch.filter(failure => failure.file === file);
-    if (!branchFailures.length || branchFailures.some(failure => failure.detail === undefined)) {
+    if (!branchFailures.length) {
       introduced.push(file);
       continue;
     }
-    const mainSignatures = new Set(main.filter(failure => failure.file === file && failure.detail !== undefined)
-      .map(failure => JSON.stringify([failure.test, failure.detail])));
-    if (branchFailures.some(failure => !mainSignatures.has(JSON.stringify([failure.test, failure.detail])))) introduced.push(file);
+    for (const branchFailure of branchFailures) {
+      const mainFailures = main.filter(failure => failure.file === file && failure.test === branchFailure.test);
+      if (!mainFailures.length) {
+        introduced.push(file);
+        break;
+      }
+      const mainFindings = new Set(mainFailures.flatMap(failure => normalizedFindingLines(failure.detail)));
+      if (normalizedFindingLines(branchFailure.detail).some(finding => !mainFindings.has(finding))) {
+        introduced.push(file);
+        break;
+      }
+    }
   }
   return [...new Set(introduced)].sort();
 }

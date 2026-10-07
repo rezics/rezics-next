@@ -249,13 +249,23 @@ describe('goalctl runtime policy', () => {
     }]);
   });
 
-  test('a branch-only guard finding is introduced while an identical finding is inherited', () => {
+  test('G-1332 gate comparison blocks added findings but ignores removals and shifted line numbers', () => {
     const file = 'tests/qa/unit/serialization-points.test.ts';
-    const report = (detail: string): UnitFailureDetail[] => [{ file, test: 'serialization guard > checks findings', detail }];
-    const main = report('Expected []\nReceived ["existing finding"]');
-    expect(introducedUnitFailureFiles([file], report('Expected []\nReceived ["existing finding", "branch-only finding"]'), main))
-      .toEqual([file]);
-    expect(introducedUnitFailureFiles([file], report('Expected []\nReceived ["existing finding"]'), main)).toEqual([]);
+    const report = (...findings: string[]): UnitFailureDetail[] => [{ file,
+      test: 'service migrations and write paths introduce no unapproved serialization or gate upgrades',
+      detail: ['error: expect(received).toEqual(expected)', `- Expected  - ${findings.length}`, `+ Received  + ${findings.length}`,
+        ...findings.map(finding => `+ ${JSON.stringify(finding)}`)].join('\n') }];
+    const baseline = 'restore-lineage.ts:394: singleton-write: access.recovery_fence: singleton write guard';
+    const removed = 'restore-lineage.ts:410: constant-advisory-key: rezics-relay-erasure-epoch: restore boundary key';
+    const added = 'restore-lineage.ts:414: constant-advisory-key: rezics-relay-erasure-epoch: second restore boundary';
+    const shifted = 'restore-lineage.ts:398: singleton-write: access.recovery_fence: singleton write guard';
+    const main = report(baseline, removed);
+
+    expect(introducedUnitFailureFiles([file], report(baseline, removed), main)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], report(baseline, removed, added), main)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], report(baseline), main)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], report(shifted), report(baseline))).toEqual([]);
+    expect(introducedUnitFailureFiles([file], report(baseline), [])).toEqual([file]);
   });
 
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {
