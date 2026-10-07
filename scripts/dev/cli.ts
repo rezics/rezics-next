@@ -613,6 +613,7 @@ async function main(): Promise<void> {
       if (args.length !== 2)
         throw new Error('dev:prepare --seek-only requires one environment file');
       const env = readEnv(resolve(root, args[1]!));
+      const preparationSignal = AbortSignal.timeout(540_000);
       const pool = new Pool({
         connectionString: env.ACCESS_DATABASE_URL,
         max: 2,
@@ -625,6 +626,7 @@ async function main(): Promise<void> {
               env.FUSEKI_URL!,
               env.FUSEKI_MAINTENANCE_TOKEN,
               env.FUSEKI_COMMAND_TOKEN,
+              preparationSignal,
             ),
             lineage: {
               dataEpoch: env.MAIN_DATA_EPOCH!,

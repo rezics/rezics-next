@@ -20,10 +20,14 @@ function takeReadBytes(bytes: number): void {
   budget.bytesLeft -= bytes;
 }
 
-function readSignal(): AbortSignal {
+function readSignal(preparationSignal?: AbortSignal): AbortSignal {
   const request = fusekiReadBudget.getStore()?.signal;
+  // Offline preparation shares one caller-owned finite deadline across all reads.
+  // A configured client inside HTTP still obeys the tighter interactive budget.
+  if (!request && preparationSignal) return preparationSignal;
   const upstream = AbortSignal.timeout(10_000);
-  return request ? AbortSignal.any([request, upstream]) : upstream;
+  return AbortSignal.any([upstream, ...(request ? [request] : []),
+    ...(preparationSignal ? [preparationSignal] : [])]);
 }
 
 export interface SparqlResult {
@@ -116,8 +120,8 @@ export class FusekiQueryResponseTooLarge extends Error {}
 async function boundedJson<T>(response: Response, maxResponseBytes?: number, signal?: AbortSignal): Promise<T> {
   if (signal?.aborted) await response.body?.cancel(signal.reason);
   signal?.throwIfAborted();
-  if (maxResponseBytes === undefined && !fusekiReadBudget.getStore()) return response.json() as Promise<T>;
-  const limit = maxResponseBytes ?? 1_048_576;
+  if (!signal && maxResponseBytes === undefined && !fusekiReadBudget.getStore()) return response.json() as Promise<T>;
+  const limit = maxResponseBytes ?? (fusekiReadBudget.getStore() ? 1_048_576 : Infinity);
   const length = response.headers.get('content-length');
   if (length && Number(length) > limit) {
     await response.body?.cancel();
@@ -179,7 +183,8 @@ export class FusekiClient {
   private readonly maintenanceCapability: string | undefined;
 
   constructor(baseUrl: string, maintenanceCapability = process.env.FUSEKI_MAINTENANCE_TOKEN,
-    private readonly commandCapability = process.env.FUSEKI_COMMAND_TOKEN) {
+    private readonly commandCapability = process.env.FUSEKI_COMMAND_TOKEN,
+    private readonly preparationSignal?: AbortSignal) {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       throw new Error('Fuseki URL must be HTTP(S)');
@@ -194,6 +199,8 @@ export class FusekiClient {
       && (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1)) {
       throw new Error('invalid Fuseki query response budget');
     }
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('query', this.baseUrl), {
       method: 'POST',
@@ -202,10 +209,10 @@ export class FusekiClient {
         accept: 'application/sparql-results+json',
       },
       body: sparql,
-      signal: readSignal(),
+      signal,
     });
     if (!response.ok) throw new Error(`Fuseki query returned ${response.status}`);
-    return boundedJson<SparqlResult>(response, maxResponseBytes);
+    return boundedJson<SparqlResult>(response, maxResponseBytes, signal);
   }
 
   async templateQuery(envelope: TemplateQueryEnvelope, maxResponseBytes = 512 * 1024): Promise<SparqlResult> {
@@ -221,39 +228,45 @@ export class FusekiClient {
     }
     const body = JSON.stringify({ templateQuery: envelope });
     if (Buffer.byteLength(body) > 512 * 1024) throw new Error('template query exceeds request byte budget');
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command', this.baseUrl), {
       method: 'POST', headers: { 'content-type': 'application/json',
         accept: 'application/sparql-results+json', authorization: `Bearer ${this.commandCapability}` },
-      body, signal: readSignal(),
+      body, signal,
     });
     if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
     if (!response.ok) throw new Error(`Fuseki template query returned ${response.status}`);
-    return boundedJson<SparqlResult>(response, maxResponseBytes);
+    return boundedJson<SparqlResult>(response, maxResponseBytes, signal);
   }
 
   async templateIndex(input: { operation: 'basis'; keys: TemplateIndexKey[] }
     | { operation: 'backfill'; phase: number; after: string }): Promise<TemplateIndexDelta> {
     if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Template index capability is required');
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command',this.baseUrl), {
       method: 'POST', headers: { 'content-type':'application/json', authorization:`Bearer ${this.commandCapability}` },
-      body: JSON.stringify({ templateIndex: input }), signal: readSignal(),
+      body: JSON.stringify({ templateIndex: input }), signal,
     });
     if (!response.ok) throw new Error(`Template index returned ${response.status}`);
-    return boundedJson<TemplateIndexDelta>(response,1024*1024);
+    return boundedJson<TemplateIndexDelta>(response,1024*1024, signal);
   }
 
   async membershipPreparationStatus(): Promise<{ needsPreparation: boolean }> {
     if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Membership preparation capability is required');
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command', this.baseUrl), {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
-      body: JSON.stringify({ templateIndex: { operation: 'membership-status' } }), signal: readSignal(),
+      body: JSON.stringify({ templateIndex: { operation: 'membership-status' } }), signal,
     });
     if (response.status === 403) throw new CommandForbidden('Membership preparation capability rejected');
     if (!response.ok) throw new Error(`Membership preparation status returned ${response.status}`);
-    const result = await boundedJson<{ needsPreparation: boolean }>(response, 4096);
+    const result = await boundedJson<{ needsPreparation: boolean }>(response, 4096, signal);
     if (typeof result?.needsPreparation !== 'boolean') throw new Error('Malformed membership preparation status');
     return result;
   }
@@ -264,7 +277,8 @@ export class FusekiClient {
       || !Number.isSafeInteger(input.deadline) || input.deadline < 1) throw new Error('Invalid membership preparation input');
     const remaining = Math.max(0, input.deadline - Date.now());
     const deadlineSignal = AbortSignal.timeout(remaining);
-    const requestSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
+    const requestSignal = AbortSignal.any([deadlineSignal, ...(signal ? [signal] : []),
+      ...(this.preparationSignal || fusekiReadBudget.getStore() ? [readSignal(this.preparationSignal)] : [])]);
     const body = JSON.stringify({ templateIndex: { operation: 'membership-prepare', ...input } });
     for (let attempt = 0; attempt < 2; attempt++) {
       requestSignal.throwIfAborted();
@@ -326,12 +340,14 @@ export class FusekiClient {
   }
 
   async commandHealth(): Promise<CommandHealth> {
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command', this.baseUrl), {
-      headers: { accept: 'application/json' }, signal: readSignal(),
+      headers: { accept: 'application/json' }, signal,
     });
     if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
-    const value = await boundedJson<CommandHealth>(response, 65_536);
+    const value = await boundedJson<CommandHealth>(response, 65_536, signal);
     if (!value || typeof value.moduleVersion !== 'string'
       || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.instanceId)
       || !/^(0|[1-9][0-9]*)$/.test(value.publicSearchWriteEpoch)
@@ -346,14 +362,16 @@ export class FusekiClient {
 
   async searchDeltaSince(ordinal: string): Promise<SearchDeltaProof> {
     if (!/^-1$|^(0|[1-9][0-9]*)$/.test(ordinal)) throw new Error('invalid search delta ordinal');
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted();
     takeReadCall();
     const url = new URL('command', this.baseUrl);
     url.searchParams.set('deltaSince', ordinal);
     const response = await fetch(url, {
-      headers: { accept: 'application/json' }, signal: readSignal(),
+      headers: { accept: 'application/json' }, signal,
     });
     if (!response.ok) throw new Error(`Fuseki search delta returned ${response.status}`);
-    const proof = await boundedJson<SearchDeltaProof>(response, 65_536);
+    const proof = await boundedJson<SearchDeltaProof>(response, 65_536, signal);
     if (!proof || typeof proof.available !== 'boolean') throw new Error('malformed search delta proof');
     return proof;
   }

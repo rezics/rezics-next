@@ -32,6 +32,7 @@ export interface OwnerMigrationEvidence {
 export async function migrateOwnerData(
   apps: Record<string, string>,
 ): Promise<OwnerMigrationEvidence[]> {
+  const preparationSignal = AbortSignal.timeout(540_000);
   const pool = new Pool({
     connectionString: apps.ACCESS_DATABASE_URL,
     max: 2,
@@ -54,6 +55,7 @@ export async function migrateOwnerData(
         apps.FUSEKI_URL!,
         apps.FUSEKI_MAINTENANCE_TOKEN,
         apps.FUSEKI_COMMAND_TOKEN,
+        preparationSignal,
       ),
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       addresses: new AliasRegistry(pool),
