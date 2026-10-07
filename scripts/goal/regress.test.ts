@@ -1,16 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
+import * as filesystem from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionBatchCommand, regressionRegistry,
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
+  regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
   runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 function repo(extraIntegration = 0) {
-  const dir = mkdtempSync(join(tmpdir(), 'goal-regression-'));
+  const fixtureRoot = regressionCheckoutRoot(import.meta.dir, join(homedir(), '.cache/rezics-r/tests'));
+  const dir = mkdtempSync(join(fixtureRoot, 'repo-'));
   const git = (...args: string[]) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr);
@@ -43,7 +47,7 @@ function repo(extraIntegration = 0) {
     return { code: Object.values(outcomes).every(result => result === 'passed') ? 0 : 1, outcomes,
       queueMs: 2, testMs: 3, totalMs: 5, artifactPaths: [directory] };
   };
-  const options: RegressionOptions = { repo: dir, stateDir, registry: async () => files.map(file => ({ ...file })),
+  const options: RegressionOptions = { repo: dir, stateDir, checkoutRoot: join(dir, '.temp/r'), registry: async () => files.map(file => ({ ...file })),
     prepare: async () => ({ ok: true, artifactPaths: [] }), runner, slots: 1, waitForTurn: async () => {} };
   const event = (before: string, after: string, goal = 'owner') => {
     mkdirSync(stateDir, { recursive: true });
@@ -661,10 +665,188 @@ test('only browser and Storybook commands acquire the heavy lock', () => {
 });
 
 test('detached worktree names leave room for owner PostgreSQL Unix sockets', () => {
-  const repo = '/home/edge/projects/rezics/rezics-next/.temp/worktrees/sample';
-  const length = checkoutNameLength(repo);
-  expect(Buffer.byteLength(join(repo, '.temp/regress', 'a'.repeat(length), '.temp/pg-sock/.s.PGSQL.65535'))).toBeLessThanOrEqual(107);
-  expect(() => checkoutNameLength(`/tmp/${'a'.repeat(100)}`)).toThrow('too deep');
+  const root = '/home/edge/.cache/rezics-r/example';
+  const length = checkoutNameLength(root);
+  expect(Buffer.byteLength(join(root, 'a'.repeat(length), '.temp/pg-sock/.s.PGSQL.65535'))).toBeLessThanOrEqual(107);
+  expect(() => checkoutNameLength(`/disk/${'a'.repeat(100)}`)).toThrow('GOAL_REGRESS_CHECKOUT_ROOT');
+});
+
+test('default checkout cache is independent of a source repository filesystem and canonicalizes aliases', () => {
+  const r = repo();
+  let cache = '';
+  const previous = process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+  delete process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+  const expected = join(realpathSync(join(homedir(), '.cache/rezics-r')), createHash('sha256').update(realpathSync(r.dir)).digest('hex').slice(0, 12));
+  try {
+    const probes: string[] = [];
+    cache = regressionCheckoutRoot(r.dir, undefined, path => {
+      probes.push(path);
+      return path.startsWith(r.dir) ? 0x01021994 : statfsSync(path).type;
+    });
+    expect(cache).toBe(expected);
+    expect(cache.startsWith(r.dir)).toBe(false);
+    expect(probes.some(path => path.startsWith(r.dir))).toBe(false);
+    const alias = join(r.dir, '.temp/repo-alias');
+    mkdirSync(join(r.dir, '.temp'), { recursive: true }); symlinkSync(r.dir, alias);
+    expect(regressionCheckoutRoot(alias)).toBe(cache);
+    expect(isRamBackedFileSystem(statfsSync(cache).type)).toBe(false);
+  } finally {
+    if (cache === expected) rmSync(cache, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+    else process.env.GOAL_REGRESS_CHECKOUT_ROOT = previous;
+    r.cleanup();
+  }
+});
+
+test('explicit disk cache configuration is canonicalized and still refuses RAM', () => {
+  const r = repo();
+  const previous = process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+  try {
+    const target = join(r.dir, '.temp/cache');
+    process.env.GOAL_REGRESS_CHECKOUT_ROOT = target;
+    expect(regressionCheckoutRoot(r.dir)).toBe(realpathSync(target));
+    expect(() => regressionCheckoutRoot(r.dir, undefined, () => 0x01021994)).toThrow('RAM-backed');
+  } finally {
+    if (previous === undefined) delete process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+    else process.env.GOAL_REGRESS_CHECKOUT_ROOT = previous;
+    r.cleanup();
+  }
+});
+
+test('RAM-backed checkout roots are refused before allocation, including signed magic values and symlinks', () => {
+  const r = repo();
+  try {
+    for (const magic of [0x01021994, 0x858458f6, 0x958458f6, BigInt(0x858458f6), 0x858458f6 | 0]) {
+      const target = join(r.dir, '.temp/rejected');
+      expect(() => regressionCheckoutRoot(r.dir, target, () => magic)).toThrow('RAM-backed');
+      expect(existsSync(target)).toBe(false);
+    }
+    const target = join(r.dir, '.temp/physical');
+    mkdirSync(target, { recursive: true });
+    const alias = join(r.dir, '.temp/alias'); symlinkSync(target, alias);
+    expect(() => regressionCheckoutRoot(r.dir, alias, path => path === realpathSync(target) ? 0x01021994 : 0xef53))
+      .toThrow('RAM-backed');
+  } finally { r.cleanup(); }
+});
+
+test('socket length counts the physical checkout root behind a short symlink', () => {
+  const r = repo();
+  try {
+    const target = join(r.dir, '.temp', 'deep'.repeat(30));
+    mkdirSync(target, { recursive: true });
+    const alias = join(r.dir, '.temp/short'); symlinkSync(target, alias);
+    expect(() => checkoutNameLength(alias)).toThrow('shorter disk path');
+  } finally { r.cleanup(); }
+});
+
+test('safe legacy disk checkouts resume without repeating passes or changing their paths', async () => {
+  const r = repo();
+  try {
+    const legacy = join(r.dir, '.temp/regress');
+    const first = await r.run({ runId: 'legacy-disk', checkoutRoot: legacy });
+    r.calls.length = 0;
+    const resumed = await r.run({ resume: 'legacy-disk' });
+    expect(resumed.checkout).toBe(first.checkout);
+    expect(resumed.status).toBe('passed');
+    expect(r.calls).toHaveLength(0);
+  } finally { r.cleanup(); }
+});
+
+test('RAM-backed legacy checkouts relocate to disk without deleting old trees or repeating passes', async () => {
+  const r = repo();
+  let probe: ReturnType<typeof spyOn> | undefined;
+  try {
+    const legacy = join(r.dir, '.temp/regress');
+    const first = await r.run({ runId: 'legacy-ram', checkoutRoot: legacy });
+    const original = filesystem.statfsSync;
+    probe = spyOn(filesystem, 'statfsSync').mockImplementation(((path: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
+      const stat = original(path, options);
+      if (String(path).startsWith(legacy)) stat.type = typeof stat.type === 'bigint' ? BigInt(0x01021994) : 0x01021994;
+      return stat;
+    }) as typeof original);
+    r.calls.length = 0;
+    const resumed = await r.run({ resume: 'legacy-ram' });
+    expect(resumed.checkout.startsWith(realpathSync(r.options.checkoutRoot!) + '/')).toBe(true);
+    expect(resumed.checkout).not.toBe(first.checkout);
+    expect(existsSync(first.checkout)).toBe(true);
+    expect(resumed.status).toBe('passed');
+    expect(r.calls).toHaveLength(0);
+  } finally { probe?.mockRestore(); r.cleanup(); }
+});
+
+test('deep legacy checkout maps relocate to a short cache while preserving prior passes', async () => {
+  const r = repo();
+  try {
+    await r.run({ runId: 'legacy-deep' });
+    const legacy = join(r.dir, '.temp/regress', 'old'.repeat(35));
+    r.git('worktree', 'add', '--detach', legacy, r.base);
+    const directory = join(r.options.stateDir, 'regress/legacy-deep');
+    const mapPath = join(directory, 'checkouts.json');
+    const map = JSON.parse(readFileSync(mapPath, 'utf8')) as Record<string, string>;
+    map[`${r.base}:pinned`] = legacy; writeFileSync(mapPath, JSON.stringify(map));
+    const recorded = r.manifest('legacy-deep'); recorded.checkout = legacy;
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify(recorded));
+    r.calls.length = 0;
+    const resumed = await r.run({ resume: 'legacy-deep' });
+    expect(resumed.checkout).not.toBe(legacy);
+    expect(existsSync(legacy)).toBe(true);
+    expect(resumed.status).toBe('passed');
+    expect(r.calls).toHaveLength(0);
+  } finally { r.cleanup(); }
+});
+
+test('RAM-backed report directories fail before checkout allocation or runner admission', async () => {
+  const r = repo();
+  const original = filesystem.statfsSync;
+  const probe = spyOn(filesystem, 'statfsSync').mockImplementation(((path: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
+    const stat = original(path, options); stat.type = typeof stat.type === 'bigint' ? BigInt(0x01021994) : 0x01021994; return stat;
+  }) as typeof original);
+  try {
+    await expect(r.run({ runId: 'ram-reports' })).rejects.toThrow('report directory is on a RAM-backed');
+    expect(r.calls).toHaveLength(0);
+    expect(existsSync(r.options.checkoutRoot!)).toBe(false);
+    expect(existsSync(join(r.options.stateDir, 'regress/ram-reports'))).toBe(false);
+  } finally { probe.mockRestore(); r.cleanup(); }
+});
+
+test('missing registered disk worktrees recover without pruning unrelated Git registry entries', async () => {
+  const r = repo();
+  try {
+    const first = await r.run({ runId: 'removed-tree' });
+    rmSync(first.checkout, { recursive: true, force: true });
+    r.calls.length = 0;
+    const resumed = await r.run({ resume: 'removed-tree' });
+    expect(resumed.checkout).toBe(first.checkout);
+    expect(resumed.status).toBe('passed');
+    expect(r.calls).toHaveLength(0);
+  } finally { r.cleanup(); }
+});
+
+test('resume rejects a checkout map whose child symlink escapes the verified cache', async () => {
+  const r = repo();
+  const external = repo();
+  try {
+    await r.run({ runId: 'map-escape' });
+    const mapPath = join(r.options.stateDir, 'regress/map-escape/checkouts.json');
+    const map = JSON.parse(readFileSync(mapPath, 'utf8')) as Record<string, string>;
+    const escaped = join(r.options.checkoutRoot!, 'escape'); symlinkSync(external.dir, escaped);
+    map[`${r.base}:pinned`] = escaped; writeFileSync(mapPath, JSON.stringify(map));
+    await expect(r.run({ resume: 'map-escape' })).rejects.toThrow('outside its cache');
+  } finally { r.cleanup(); external.cleanup(); }
+});
+
+test('pinned Task preparation uses a verified private disk TMPDIR', async () => {
+  const r = repo();
+  try {
+    r.write('Taskfile.yml', "version: '3'\ntasks:\n  install:\n    cmds: ['echo $TMPDIR']\n  gen:check:\n    cmds: ['echo $TMPDIR']\n");
+    r.commit();
+    const result = await r.run({ runId: 'disk-tmp', prepare: undefined });
+    expect(result.status).toBe('passed');
+    for (const path of result.preflight.artifactPaths) {
+      expect(readFileSync(path, 'utf8')).toContain(join(result.checkout, '.temp/tmp'));
+    }
+    expect(isRamBackedFileSystem(statfsSync(join(result.checkout, '.temp/tmp')).type)).toBe(false);
+  } finally { r.cleanup(); }
 });
 
 test('shared UI stories can be selected alone through the web Storybook command', () => {

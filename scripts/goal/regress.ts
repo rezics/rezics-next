@@ -1,7 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync,
-  renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+  realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import * as filesystem from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
@@ -41,7 +43,7 @@ export interface Manifest {
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
-  shards?: number; slots?: number; runId?: string;
+  shards?: number; slots?: number; runId?: string; checkoutRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
   runner?: (checkout: string, batch: Batch, directory: string, shards: number) => Promise<Execution>;
@@ -105,9 +107,44 @@ const validId = (id: string): boolean => /^[a-z0-9][a-z0-9-]{0,60}$/.test(id);
 // Owner gates start local PostgreSQL under the checkout. Linux sun_path is 108 bytes including NUL.
 // https://man7.org/linux/man-pages/man7/unix.7.html
 const postgresSocketSuffix = '/.temp/pg-sock/.s.PGSQL.65535';
-export function checkoutNameLength(repo: string): number {
-  const length = Math.min(16, 107 - Buffer.byteLength(join(repo, '.temp/regress')) - Buffer.byteLength(postgresSocketSuffix) - 1);
-  if (length < 2) throw new Error('Regression checkout root is too deep for PostgreSQL sockets; use a shorter repository path');
+// Linux superblock magic values: /usr/include/linux/magic.h.
+export function isRamBackedFileSystem(type: number | bigint): boolean {
+  return [0x01021994, 0x858458f6, 0x958458f6].includes(Number(type) >>> 0);
+}
+type FileSystemType = (path: string) => number | bigint;
+const fileSystemType: FileSystemType = path => filesystem.statfsSync(path).type;
+function physicalPath(path: string): string {
+  let parent = resolve(path);
+  while (!existsSync(parent)) parent = dirname(parent);
+  return resolve(realpathSync(parent), relative(parent, resolve(path)));
+}
+function within(root: string, path: string): boolean {
+  const child = relative(root, path);
+  return child !== '..' && !child.startsWith('../') && !isAbsolute(child);
+}
+function diskDirectory(path: string, purpose: string, probe: FileSystemType = fileSystemType): string {
+  let parent = resolve(path);
+  while (!existsSync(parent)) parent = dirname(parent);
+  if (isRamBackedFileSystem(probe(realpathSync(parent)))) {
+    throw new Error(`Regression ${purpose} is on a RAM-backed filesystem: ${path}; choose a disk path`);
+  }
+  mkdirSync(path, { recursive: true });
+  const physical = realpathSync(path);
+  if (isRamBackedFileSystem(probe(physical))) throw new Error(`Regression ${purpose} is on a RAM-backed filesystem: ${physical}; choose a disk path`);
+  return physical;
+}
+
+export function regressionCheckoutRoot(repo: string, override?: string, probe: FileSystemType = fileSystemType): string {
+  const key = createHash('sha256').update(realpathSync(repo)).digest('hex').slice(0, 12);
+  const root = override ?? process.env.GOAL_REGRESS_CHECKOUT_ROOT ?? join(homedir(), '.cache', 'rezics-r', key);
+  const physical = diskDirectory(root, 'checkout root', probe);
+  checkoutNameLength(physical);
+  return physical;
+}
+
+export function checkoutNameLength(checkoutRoot: string): number {
+  const length = Math.min(16, 107 - Buffer.byteLength(physicalPath(checkoutRoot)) - Buffer.byteLength(postgresSocketSuffix) - 1);
+  if (length < 2) throw new Error('Regression checkout root is too deep for PostgreSQL sockets; set GOAL_REGRESS_CHECKOUT_ROOT to a shorter disk path');
   return length;
 }
 
@@ -199,10 +236,13 @@ export function classify(evidence: string, code = 1): Classification {
 
 async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000,
   env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  const temporary = diskDirectory(join(checkout, '.temp/tmp'), 'subprocess TMPDIR');
+  diskDirectory(dirname(logPath), 'log directory');
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, 'w', 0o600);
   try {
-    const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log], env });
+    const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log],
+      env: { ...env, TMPDIR: temporary } });
     const forward = (signal: NodeJS.Signals) => {
       try { if (child.pid) process.kill(-child.pid, signal); } catch { child.kill(signal); }
     };
@@ -349,8 +389,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
   const prepare = options.prepare ?? prepareCheckout;
   const runId = options.resume ?? options.runId ?? newRunId();
   if (!validId(runId)) throw new Error('Invalid regression run ID');
-  const directory = join(stateDir, 'regress', runId);
-  mkdirSync(directory, { recursive: true });
+  const directory = diskDirectory(join(stateDir, 'regress', runId), 'report directory');
   const lock = join(directory, 'lock');
   if (existsSync(lock)) {
     const pid = existsSync(join(lock, 'pid')) ? Number(readFileSync(join(lock, 'pid'), 'utf8')) : 0;
@@ -369,29 +408,51 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const path = join(directory, 'manifest.json');
     const pinned = options.resume ? json<Manifest>(path).atCommit : git(repo, ['rev-parse', '--verify', `${options.at ?? 'main'}^{commit}`]);
     if (options.resume && options.at && git(repo, ['rev-parse', `${options.at}^{commit}`]) !== pinned) throw new Error('Resume revision differs from the pinned commit');
-    const worktrees = join(repo, '.temp/regress');
+    const worktrees = regressionCheckoutRoot(repo, options.checkoutRoot);
+    const legacyRoot = resolve(repo, '.temp/regress');
+    const physicalLegacyRoot = physicalPath(legacyRoot);
     const treeMapPath = join(directory, 'checkouts.json');
     const treeMap = existsSync(treeMapPath) ? json<Record<string, string>>(treeMapPath) : {};
-    const nameLength = checkoutNameLength(repo);
+    const nameLength = checkoutNameLength(worktrees);
     const prepared = new Map<string, Manifest['preflight']>();
     const preparedCheckouts = new Map<string, Manifest['preflight']>();
     const checkoutAt = async (commit: string, probe?: string, install = true) => {
       const key = `${commit}:${probe ?? 'pinned'}`;
-      let checkout = treeMap[key];
+      let checkout: string | undefined = treeMap[key];
+      if (checkout) {
+        const candidate = resolve(checkout);
+        const physical = physicalPath(candidate);
+        if ((!within(worktrees, candidate) && !within(legacyRoot, candidate) && !within(physicalLegacyRoot, candidate))
+          || (!within(worktrees, physical) && !within(physicalLegacyRoot, physical))) {
+          throw new Error('Regression checkout map points outside its cache or legacy repository directory');
+        }
+        let existing = candidate;
+        while (!existsSync(existing)) existing = dirname(existing);
+        if (isRamBackedFileSystem(fileSystemType(realpathSync(existing)))
+          || Buffer.byteLength(physical + postgresSocketSuffix) > 107) {
+          checkout = undefined;
+        } else {
+          checkout = physical; treeMap[key] = checkout;
+        }
+      }
       if (!checkout) {
         const space = 16n ** BigInt(nameLength);
         const seed = BigInt(`0x${createHash('sha256').update(`${runId}:${key}`).digest('hex')}`);
         for (let offset = 0n; offset < space; offset++) {
           const candidate = join(worktrees, ((seed + offset) % space).toString(16).padStart(nameLength, '0'));
           if (existsSync(candidate)) continue;
-          git(repo, ['worktree', 'add', '--detach', candidate, commit]);
+          diskDirectory(worktrees, 'checkout root');
+          git(repo, ['worktree', 'add', '--force', '--detach', candidate, commit]);
           checkout = candidate; treeMap[key] = checkout; atomic(treeMapPath, treeMap);
           break;
         }
         if (!checkout) throw new Error('No short regression worktree path is free; remove completed regression checkouts');
       }
-      if (relative(worktrees, checkout).startsWith('..')) throw new Error('Regression checkout map points outside its repository');
-      if (!existsSync(checkout)) git(repo, ['worktree', 'add', '--detach', checkout, commit]);
+      if (!existsSync(checkout)) {
+        diskDirectory(dirname(checkout), 'checkout root');
+        git(repo, ['worktree', 'add', '--force', '--detach', checkout, commit]);
+      }
+      diskDirectory(checkout, 'pinned checkout');
       if (git(checkout, ['rev-parse', 'HEAD']) !== commit || git(checkout, ['status', '--porcelain'])) {
         throw new Error(`Pinned checkout changed: ${checkout}`);
       }
