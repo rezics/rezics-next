@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
-import { Pool } from 'pg';
+import { Pool, type PoolConfig } from 'pg';
 import { accountAuthOptions, createAccountAuth, type AccountConfig } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
@@ -23,7 +23,8 @@ export async function freePort(): Promise<number> {
   });
 }
 
-export async function accountFixture(overrides: Partial<AccountConfig> = {}, hostname = '127.0.0.1') {
+export async function accountFixture(overrides: Partial<AccountConfig> = {}, hostname = '127.0.0.1',
+  poolOptions: Pick<PoolConfig, 'max' | 'connectionTimeoutMillis'> = {}) {
   const state = join(resolve(import.meta.dir, '../../..'), '.temp', `account-g205-${Bun.randomUUIDv7()}`);
   const data = join(state, 'pg');
   mkdirSync(state, { recursive: true });
@@ -31,7 +32,7 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
   const port = await freePort();
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k /tmp`, '-w', 'start'], { stdio: 'ignore' });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' });
+  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', ...poolOptions });
   const accountPort = await freePort();
   const baseURL = `http://${hostname}:${accountPort}`;
   const secret = 'account-g205-integration-secret-at-least-32';

@@ -75,4 +75,6 @@ export const integrationGateFiles = [
   'services/main/tests/showcase-author-batch.integration.test.ts',
   'services/main/tests/realm-policy-revision.integration.test.ts',
   'services/account/tests/bulk-session-revocation.integration.test.ts',
+  'services/account/tests/bulk-session-revocation-pool.integration.test.ts',
+  'services/account/tests/bulk-session-revocation-fairness.integration.test.ts',
 ] as const;

@@ -91,6 +91,11 @@ export async function beforeSessionDelete(pool: Pool, session: { id: string; use
 export type SessionCleanupPage = { userId?: string; sessions: number; accessTokens: number;
   refreshTokens: number; pendingConsents: number; pending: boolean };
 
+// Scheduling only; durable authority and retry state remain in the owner row.
+// Advance on claim, including failed pages, so one backlog or poison page cannot
+// monopolize the existing timer. A restart safely begins a new bounded round.
+const cleanupAfter = new WeakMap<Pool, string>();
+
 /** One existing-owner maintenance continuation. At most 100 session candidates,
  * 100 writes per token/consent table, and one security row; no all-user session
  * scan or request drain. Lateral token probes cap retained history per candidate
@@ -103,11 +108,16 @@ export async function cleanupRevokedSessionPage(pool: Pool): Promise<SessionClea
     await db.query('BEGIN');
     await db.query("SET LOCAL lock_timeout = '2s'");
     await db.query("SET LOCAL statement_timeout = '5s'");
+    const after = cleanupAfter.get(pool);
     const claimed = await db.query<{ userId: string; generation: string }>(`SELECT user_id AS "userId",
       session_generation::text AS generation FROM rezics_account_security WHERE session_cleanup_pending
-      ORDER BY user_id LIMIT 1 FOR UPDATE SKIP LOCKED`);
-    const owner = claimed.rows[0];
+        AND ($1::text IS NULL OR user_id > $1)
+      ORDER BY user_id LIMIT 1 FOR UPDATE SKIP LOCKED`, [after ?? null]);
+    const owner = claimed.rows[0] ?? (after ? (await db.query<{ userId: string; generation: string }>(`SELECT
+      user_id AS "userId", session_generation::text AS generation FROM rezics_account_security
+      WHERE session_cleanup_pending AND user_id <= $1 ORDER BY user_id LIMIT 1 FOR UPDATE SKIP LOCKED`, [after])).rows[0] : undefined);
     if (!owner) { await db.query('COMMIT'); return page; }
+    cleanupAfter.set(pool, owner.userId);
     page.userId = owner.userId;
     const terminal = await db.query<{ id: string }>(`SELECT id FROM "session"
       WHERE "userId" = $1 AND rezics_generation IS NULL ORDER BY id LIMIT $2 FOR UPDATE`,

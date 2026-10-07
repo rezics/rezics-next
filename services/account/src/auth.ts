@@ -1,4 +1,8 @@
 import { betterAuth } from 'better-auth';
+import { getAdapter } from 'better-auth/db/adapter';
+import { registerSchemaCheck, schemaCheckFor } from '@better-auth/core/db/internal';
+import { Kysely, PostgresDialect, sql } from 'kysely';
+import { getCurrentAdapter, getCurrentDBAdapterAsyncLocalStorage, queueAfterTransactionHook } from '@better-auth/core/context';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
@@ -38,7 +42,7 @@ function withoutBackchannelMetadata<T extends object>(metadata: T) {
  * so legacy client rows cannot build outbound targets. Our logical deletion
  * veto leaves token retirement to bounded maintenance; endpoint signing and
  * token storage keep normal mode. Retain normal initializer validation. */
-function accountOAuthProvider(pool: Pool, options: Parameters<typeof oauthProvider>[0]) {
+function accountOAuthProvider(db: Kysely<unknown>, owners: SessionOwners, options: Parameters<typeof oauthProvider>[0]) {
   const provider = oauthProvider(options);
   const revocations = oauthProvider({ ...options, disableJwtPlugin: true, storeClientSecret: 'encrypted' });
   return { ...provider,
@@ -46,7 +50,7 @@ function accountOAuthProvider(pool: Pool, options: Parameters<typeof oauthProvid
       const initialized = await provider.init(ctx);
       const revocationHooks = await revocations.init(ctx);
       initialized.options.databaseHooks.session.delete = revocationHooks.options.databaseHooks.session.delete;
-      return { ...initialized, context: { adapter: fencedSessionAdapter(pool, ctx.adapter) } };
+      return { ...initialized, context: { adapter: fencedSessionAdapter(ctx.adapter, db, ctx.options, owners) } };
     },
     onRequest: async (request: Request, ctx: Parameters<typeof provider.onRequest>[1]) => {
       const result = await provider.onRequest(request, ctx);
@@ -60,41 +64,28 @@ function accountOAuthProvider(pool: Pool, options: Parameters<typeof oauthProvid
 }
 
 type AccountAdapter = Parameters<ReturnType<typeof oauthProvider>['init']>[0]['adapter'];
-type SessionReadAdapter = Pick<AccountAdapter, 'create' | 'findOne' | 'findMany'> & Partial<Pick<AccountAdapter, 'transaction'>>;
 type SessionFenceRow = { id: string; userId: string; rezicsGeneration?: number | string | null };
 type SessionTokenRow = { sessionId?: string | null; clientId?: string; scopes?: string[] };
 
-type TransactionAdmissions = { sessions: Set<string>; users: Set<string> };
+type SessionOwners = WeakMap<object, Kysely<unknown>>;
 
-/** Check both committed stamps in one bounded batch: a fetched session can
- * become terminal without changing its owner's epoch. Only sessions created
- * by this transaction may use an uncommitted returned admission stamp. */
-function fencedSessionAdapter<T extends SessionReadAdapter>(pool: Pool, adapter: T,
-  admissions?: TransactionAdmissions): T {
+/** Re-read the actual session terminal stamp and owner epoch in one bounded
+ * statement. A provider-held transaction sees its own signup/admission rows
+ * without borrowing another client or mixing epochs across statements. */
+function fencedSessionAdapter<T extends AccountAdapter>(adapter: T, db: Kysely<unknown>,
+  options: Parameters<typeof getAdapter>[0], owners: SessionOwners): T {
   async function activeSessionIds(sessions: SessionFenceRow[]): Promise<Set<string>> {
     if (!sessions.length) return new Set();
-    const bases = await pool.query<{ id: string; userId: string; committed: boolean;
-      stamp: string | null; generation: string | null }>(`SELECT wanted.id,
-      wanted.user_id AS "userId", s.id IS NOT NULL AS committed,
-      s.rezics_generation::text AS stamp, p.session_generation::text AS generation
-      FROM unnest($1::text[], $2::text[]) wanted(id, user_id)
-      LEFT JOIN "session" s ON s.id = wanted.id AND s."userId" = wanted.user_id
-      LEFT JOIN rezics_account_security p ON p.user_id = wanted.user_id`,
-    [sessions.map(session => session.id), sessions.map(session => session.userId)]);
-    const fetched = new Map(sessions.map(session => [session.id, session]));
-    return new Set(bases.rows.filter(basis => {
-      if (basis.committed) {
-        return basis.stamp !== null && basis.generation !== null && basis.stamp === basis.generation;
-      }
-      if (!admissions?.sessions.has(basis.id)) return false;
-      const session = fetched.get(basis.id);
-      // The user INSERT initializes security in the same transaction. Permit
-      // its zero epoch only when this exact transaction created that user;
-      // an existing account with missing security always fails closed.
-      const generation = basis.generation ?? (admissions.users.has(basis.userId) ? '0' : null);
-      return generation !== null && session?.rezicsGeneration !== null
-        && session?.rezicsGeneration !== undefined && String(session.rezicsGeneration) === generation;
-    }).map(basis => basis.id));
+    // This statement follows the caller's lookup: an individual session can
+    // become terminal without advancing its owner's session epoch.
+    const fresh = await sql<{ id: string }>`SELECT s.id
+      FROM unnest(${sessions.map(session => session.id)}::text[],
+        ${sessions.map(session => session.userId)}::text[]) wanted(id, user_id)
+      JOIN "session" s ON s.id = wanted.id AND s."userId" = wanted.user_id
+      JOIN rezics_account_security p ON p.user_id = wanted.user_id
+      WHERE s.rezics_generation IS NOT NULL
+        AND s.rezics_generation = p.session_generation`.execute(db);
+    return new Set(fresh.rows.map(session => session.id));
   }
 
   async function visibleRows<R>(model: string, rows: R[]): Promise<R[]> {
@@ -118,8 +109,8 @@ function fencedSessionAdapter<T extends SessionReadAdapter>(pool: Pool, adapter:
     const staleClients = [...new Set(linked.flatMap(row => row.sessionId && !active.has(row.sessionId)
       && row.clientId ? [row.clientId] : []))];
     if (!staleClients.length) return rows;
-    const firstParty = await pool.query<{ client_id: string }>(`SELECT client_id
-      FROM rezics_oauth_first_party_client WHERE client_id = ANY($1::text[])`, [staleClients]);
+    const firstParty = await sql<{ client_id: string }>`SELECT client_id
+      FROM rezics_oauth_first_party_client WHERE client_id = ANY(${staleClients}::text[])`.execute(db);
     const productClients = new Set(firstParty.rows.map(row => row.client_id));
     return rows.flatMap(row => {
       const token = row as SessionTokenRow;
@@ -144,17 +135,7 @@ function fencedSessionAdapter<T extends SessionReadAdapter>(pool: Pool, adapter:
     return Object.fromEntries(Object.entries(row as Record<string, unknown>)
       .filter(([field]) => selected.includes(field))) as R;
   }
-  return { ...adapter,
-    create: async (data: Parameters<AccountAdapter['create']>[0]) => {
-      const row = await adapter.create(data);
-      // Keep the database's returned trigger-authored stamp. Tracking is local
-      // to the transaction adapter and disappears after commit or rollback.
-      if (admissions && typeof row?.id === 'string') {
-        if (data.model === 'session') admissions.sessions.add(row.id);
-        else if (data.model === 'user') admissions.users.add(row.id);
-      }
-      return row;
-    },
+  const fenced: T = { ...adapter,
     findOne: async <R>(data: Parameters<AccountAdapter['findOne']>[0]): Promise<R | null> => {
       const row = await adapter.findOne<R>({ ...data, select: readFields(data.model, data.select) });
       if (!row) return null;
@@ -165,10 +146,20 @@ function fencedSessionAdapter<T extends SessionReadAdapter>(pool: Pool, adapter:
       const rows = await adapter.findMany<R>({ ...data, select: readFields(data.model, data.select) });
       return (await visibleRows(data.model, rows)).map(row => originalFields(row, data.select));
     },
-    ...(adapter.transaction ? { transaction: async <R>(callback: Parameters<AccountAdapter['transaction']>[0]) =>
-      adapter.transaction!(transaction => callback(fencedSessionAdapter(pool, transaction,
-        { sessions: new Set(), users: new Set() }))) as Promise<R> } : {}),
+    transaction: async <R>(callback: Parameters<AccountAdapter['transaction']>[0]) =>
+      db.isTransaction ? callback(fenced) as Promise<R> : db.transaction().execute(async trx => callback(
+        // The transaction already owns its client. Keep the pinned provider
+        // adapter on that owner without attempting an inner transaction.
+        fencedSessionAdapter(await getAdapter({ ...options,
+          database: { db: trx, type: 'postgres', transaction: false } }),
+          trx, options, owners))) as Promise<R>,
   } as T;
+  owners.set(fenced, db);
+  // Adapter checks live in the provider's WeakMap, so object spread alone
+  // would silently drop validation before runWithTransaction.
+  const check = schemaCheckFor(adapter);
+  if (check) registerSchemaCheck(fenced, check);
+  return fenced;
 }
 
 export interface AccountConfig {
@@ -213,6 +204,10 @@ export function agentRegistrationScopes(): string[] {
 }
 
 export function accountAuthOptions(config: AccountConfig) {
+  // Use the provider's existing Kysely/Postgres owner over the configured pool.
+  // The same owner also remains available to getMigrations and bootstrap.
+  const db = new Kysely<unknown>({ dialect: new PostgresDialect({ pool: config.pool }) });
+  const sessionOwners: SessionOwners = new WeakMap();
   const agentScopes = agentRegistrationScopes();
   const operatorHooks = operatorAuthHooks(config.pool, config.operatorUserIds);
   const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
@@ -225,7 +220,7 @@ export function accountAuthOptions(config: AccountConfig) {
     policyVersions: config.policyVersions,
     baseURL: config.baseURL,
     secret: config.secret,
-    database: config.pool,
+    database: { db, type: 'postgres' as const, transaction: true },
     advanced: { ipAddress: { ipAddressHeaders: ['x-rezics-client-ip'] } },
     // The HTTP boundary checks our session-bound reauthentication proof. The
     // provider's age-only check cannot recognize that proof after step-up.
@@ -338,10 +333,21 @@ export function accountAuthOptions(config: AccountConfig) {
       }, after: async (user: { id: string }, context: { request?: Request } | null) => {
         const locale = takeSignupRequestLocale(user.id, context?.request);
         await config.pool.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, locale]);
-    } } }, session: { create: { before: async (session: { userId: string }) => {
-      const blocked = await config.pool.query(`SELECT 1 FROM rezics_account_security WHERE user_id = $1
-        AND (deletion_started_at IS NOT NULL OR password_reset_required OR (suspended_at IS NOT NULL AND (suspended_until IS NULL OR suspended_until > now())))`, [session.userId]);
-      if (blocked.rowCount) {
+    } } }, session: { create: { before: async (session: { userId: string },
+      context: { context: { adapter: AccountAdapter } } | null) => {
+      // Sign-up owns an open provider transaction here. Read its trigger-created
+      // owner row through that adapter; the admission trigger remains final.
+      const adapter = context ? await getCurrentAdapter(context.context.adapter)
+        : (await getCurrentDBAdapterAsyncLocalStorage()).getStore()?.adapter;
+      const ownerDb = adapter ? sessionOwners.get(adapter) : db;
+      if (!ownerDb) throw new APIError('SERVICE_UNAVAILABLE', { code: 'ACCOUNT_UNAVAILABLE',
+        message: 'Account session owner is unavailable' });
+      const policy = await sql<{ blocked: boolean }>`SELECT deletion_started_at IS NOT NULL
+        OR password_reset_required OR (suspended_at IS NOT NULL
+          AND (suspended_until IS NULL OR suspended_until > now())) AS blocked
+        FROM rezics_account_security WHERE user_id = ${session.userId}`.execute(ownerDb);
+      const blocked = !policy.rows[0] || policy.rows[0].blocked;
+      if (blocked) {
         throw new APIError('FORBIDDEN', { code: 'ACCOUNT_UNAVAILABLE', message: 'Sign-in is unavailable for this account' });
       }
       return { data: session };
@@ -363,12 +369,17 @@ export function accountAuthOptions(config: AccountConfig) {
       sendVerificationEmail: async ({ user, url }: { user: EmailUser; url: string }, request?: Request) => {
         if (!config.email && !requireEmailVerification) return;
         if (!config.email) throw new Error('Account email delivery is not configured');
-        const bound = new URL(url);
-        bound.searchParams.set('token', await createEmailVerificationToken(config.secret, user.email,
-          undefined, 1800, { [RECOVERY_GENERATION_CLAIM]: await currentRecoveryGeneration(config.pool, user.id) }));
-        await config.email.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(bound.toString(), 'verified'),
-          purpose: 'verify', locale: await languageForSignupEmail(config.pool, user, request) })
-          .catch(() => console.error('Account email intent unavailable'));
+        // Sign-up holds the provider transaction until this callback returns.
+        // Prepare/enqueue the durable email only after that transaction commits,
+        // just as the provider already queues user.create.after hooks.
+        await queueAfterTransactionHook(async () => {
+          const bound = new URL(url);
+          bound.searchParams.set('token', await createEmailVerificationToken(config.secret, user.email,
+            undefined, 1800, { [RECOVERY_GENERATION_CLAIM]: await currentRecoveryGeneration(config.pool, user.id) }));
+          await config.email!.enqueue({ userId: user.id, to: user.email, url: markEmailChangeStep(bound.toString(), 'verified'),
+            purpose: 'verify', locale: await languageForSignupEmail(config.pool, user, request) })
+            .catch(() => console.error('Account email intent unavailable'));
+        });
       },
     },
     // emailChangeApi owns the durable two-mailbox flow. Provider change tokens
@@ -447,7 +458,7 @@ export function accountAuthOptions(config: AccountConfig) {
         } },
       }),
       jwt(signingKeyOptions(config.pool)),
-      accountOAuthProvider(config.pool, {
+      accountOAuthProvider(db, sessionOwners, {
         loginPage: '/sign-in',
         consentPage: '/consent',
         // The signed authorization request lets /sign-in name the App before
