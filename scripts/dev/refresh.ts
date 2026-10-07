@@ -91,6 +91,23 @@ export const backendCommand: BackendCommand = (root, executable, args) => {
   return result.stdout.trim();
 };
 
+/** Model alignment's small intent/audit checkpoints survive executable revisions.
+ * This is metadata, not a copy of owner data, and lets a newer code fix resume
+ * the same generation's lost-response finalization. */
+export function linkBackendModelJournal(checkout: string, stack: string): void {
+  const shared = join(stack, 'model-bootstrap');
+  const local = join(checkout, '.temp/datasets/model-bootstrap');
+  mkdirSync(shared, { recursive: true, mode: 0o700 });
+  mkdirSync(dirname(local), { recursive: true, mode: 0o700 });
+  if (existsSync(local)) {
+    try { if (readlinkSync(local) === shared) return; }
+    catch { /* An older checkout used a private metadata directory. */ }
+    cpSync(local, shared, { recursive: true });
+    rmSync(local, { recursive: true, force: true });
+  }
+  symlinkSync(shared, local, 'dir');
+}
+
 /** Reuse a lockfile-identical dependency tree by reflink/copy, preserving the
  * relative workspace links. A symlink to the live checkout's dependencies would
  * let the next install change the serving revision. */
@@ -104,7 +121,7 @@ export function stageBackend(
     throw new Error('Backend revision must be a full Git commit ID');
   const checkout = join(stack, 'backend-revisions', revision);
   const ready = join(checkout, '.temp/backend-ready');
-  if (existsSync(ready)) return checkout;
+  if (existsSync(ready)) { linkBackendModelJournal(checkout, stack); return checkout; }
   if (existsSync(checkout) && activeBackend(stack) === checkout)
     throw new Error(
       'Active backend artifacts are incomplete; refuse to replace a serving checkout',
@@ -146,53 +163,61 @@ export function stageBackend(
   mkdirSync(join(checkout, '.temp/stack'), { recursive: true });
   symlinkSync(stack, join(checkout, '.temp/stack/rezics-dev'), 'dir');
   syncBackendInputs(root, checkout);
+  linkBackendModelJournal(checkout, stack);
   // Mark only complete preparations; a failed install/gen is rebuilt on retry.
   writeFileSync(ready, revision);
   return checkout;
 }
 
-/** Startup uses the last successful refresh, including after the AppHost stops.
- * A fresh stack has no checkpoint yet and starts at its initial committed HEAD. */
+export interface PendingRefresh {
+  revision: string;
+  backend: string;
+  storage: string;
+  pid: number;
+  refreshId: string;
+  mutatingStep?: 'prepare-storage' | 'align-model' | 'approve-zones';
+}
+
+export function readPendingRefresh(stack: string): PendingRefresh | undefined {
+  const path = join(stack, 'refresh-pending');
+  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as PendingRefresh) : undefined;
+}
+
+/** A failed forward-only maintenance turn keeps its target selected. AppHost
+ * declares its writers with explicit start until refresh completes the retry. */
 export function ensureBackend(
   root: string,
   stack: string,
   command: BackendCommand = backendCommand,
 ): string {
-  if (existsSync(join(stack, 'refresh-recovery')))
-    throw new Error(
-      `Retained storage recovery snapshot at ${join(stack, 'refresh-recovery')}; recover it before starting the backend`,
-    );
-  const pending = join(stack, 'refresh-pending');
-  let interruptedBackend: string | undefined;
-  if (existsSync(pending)) {
-    const { pid, backend, phase } = JSON.parse(readFileSync(pending, 'utf8')) as {
-      pid: number;
-      backend?: string;
-      phase?: string;
-    };
-    interruptedBackend = backend;
-    if (phase !== 'committed' && phase !== 'restored') {
-      try {
-        process.kill(pid, 0);
-        throw new Error('A backend refresh is running; startup cannot change its revision');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-      }
+  const pending = readPendingRefresh(stack);
+  const checkpointPath = join(stack, 'refresh.json');
+  const checkpoint = existsSync(checkpointPath)
+    ? (JSON.parse(readFileSync(checkpointPath, 'utf8')) as {
+        revision: string;
+        refreshId?: string;
+      })
+    : undefined;
+  const committed = pending && checkpoint?.refreshId === pending.refreshId;
+  if (pending && !committed) {
+    try {
+      process.kill(pending.pid, 0);
+      throw new Error('A backend refresh is running; startup cannot change its revision');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
     }
   }
-  const checkpoint = join(stack, 'refresh.json');
-  const revision = existsSync(checkpoint)
-    ? (JSON.parse(readFileSync(checkpoint, 'utf8')) as { revision: string }).revision
-    : interruptedBackend || activeBackend(stack)
-      ? command(interruptedBackend ?? activeBackend(stack)!, 'git', ['rev-parse', 'HEAD'])
-      : command(root, 'git', ['rev-parse', 'HEAD']);
+  const revision =
+    pending?.mutatingStep && !committed
+      ? pending.revision
+      : (checkpoint?.revision ??
+        command(pending?.backend ?? activeBackend(stack) ?? root, 'git', ['rev-parse', 'HEAD']));
   const checkout = stageBackend(root, stack, revision, command);
   syncBackendInputs(root, checkout);
   activateBackend(stack, checkout);
   if (!existsSync(join(stack, 'storage-backend')))
     activateBackend(stack, checkout, 'storage-backend');
-  cpSync(join(root, 'scripts/dev/refresh.ts'), join(stack, 'backend-gate.ts'));
-  rmSync(join(stack, 'refresh-pending'), { force: true });
+  if (!pending?.mutatingStep || committed) rmSync(join(stack, 'refresh-pending'), { force: true });
   return backendPointer(stack);
 }
 
@@ -214,8 +239,6 @@ export function backendExecutable(
           'backend',
           backendPointer(stack),
           '--preload',
-          join(stack, 'backend-gate.ts'),
-          '--preload',
           preload,
           entry,
         ],
@@ -226,90 +249,9 @@ export function backendExecutable(
       };
 }
 
-interface GateServeOptions {
-  fetch?: (request: Request, server: unknown) => Response | Promise<Response>;
-  [key: string]: unknown;
-}
-
-/** Public traffic stays fenced until the refresh checkpoint commits. Readiness
- * and the refresh's private seed client can run, without accepting user writes
- * that a failed refresh would erase when restoring its owner snapshots. */
-export function installBackendGate(): void {
-  const stack = process.env.REZICS_BACKEND_STACK;
-  const runtime = (
-    globalThis as unknown as { Bun?: { serve: (options: GateServeOptions) => unknown } }
-  ).Bun;
-  if (stack && runtime) {
-    const serve = runtime.serve;
-    runtime.serve = (options) => {
-      let fetch = options.fetch;
-      const fenced = (next: GateServeOptions) => {
-        fetch = next.fetch ?? fetch;
-        if (!fetch) throw new Error('Pinned backend requires a Bun fetch handler');
-        const handler = fetch;
-        // Elysia promotes routes with server.reload after startup. Its ordinary
-        // fetch handler covers those routes; keep every request behind the fence.
-        return {
-          ...next,
-          routes: {},
-          fetch: (request: Request, server: unknown) => {
-            const pending = join(stack, 'refresh-pending');
-            if (existsSync(pending)) {
-              const { token, phase } = JSON.parse(readFileSync(pending, 'utf8')) as {
-                token: string;
-                phase?: string;
-              };
-              const path = new URL(request.url).pathname;
-              if (
-                phase !== 'committed' &&
-                phase !== 'restored' &&
-                !['/health/ready', '/health/live'].includes(path) &&
-                request.headers.get('x-rezics-refresh') !== token
-              )
-                return new Response('Backend refresh in progress', {
-                  status: 503,
-                  headers: { 'Retry-After': '1' },
-                });
-            }
-            return handler.call(next, request, server);
-          },
-        };
-      };
-      const server = serve.call(runtime, fenced(options)) as {
-        reload: (options: GateServeOptions) => unknown;
-      };
-      const reload = server.reload;
-      server.reload = (next) => reload.call(server, fenced(next));
-      return server;
-    };
-  }
-  const token = process.env.REZICS_REFRESH_GATE_TOKEN;
-  if (token || stack) {
-    const fetch = globalThis.fetch;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      if (['127.0.0.1', 'localhost', '[::1]'].includes(new URL(request.url).hostname)) {
-        // Main still needs Account introspection/JWKS while both public
-        // listeners are fenced. The same private token accompanies that hop.
-        const pending = stack && join(stack, 'refresh-pending');
-        const current =
-          token ??
-          (pending && existsSync(pending)
-            ? (JSON.parse(readFileSync(pending, 'utf8')) as { token: string }).token
-            : undefined);
-        if (current) request.headers.set('x-rezics-refresh', current);
-      }
-      return fetch(request);
-    }) as typeof globalThis.fetch;
-  }
-}
-
-installBackendGate();
-
 export const refreshResources = ['account', 'main', 'main-relay'] as const;
 export type RefreshResource = typeof refreshResources[number];
-export type RefreshStep = 'build-image' | 'rehearse-migrations' | 'snapshot-storage'
-  | 'switch-backend'
+export type RefreshStep = 'build-image' | 'rehearse-migrations' | 'switch-backend'
   | 'stop-writers' | 'prepare-storage' | 'align-model'
   | 'restart-resources' | 'wait-ready' | 'approve-zones' | 'record-success';
 
@@ -327,6 +269,7 @@ export interface RefreshInputs {
   revision: string;
   previousRevision?: string;
   checkpointMissing?: boolean;
+  resumeStep?: PendingRefresh['mutatingStep'];
   imagePresent: boolean;
   storageChanged: boolean;
   pendingMigrations: readonly string[];
@@ -355,16 +298,17 @@ export function refreshPlan(input: RefreshInputs): { steps: RefreshStep[]; block
   );
   const advance = input.previousRevision !== input.revision ;
   const prepare =
+    input.resumeStep === 'prepare-storage' ||
     !input.imagePresent
     || input.storageChanged || input.pendingMigrations.length > 0 || !input.statementCurrent || !input.membershipCurrent;
-  const restart = advance || prepare || !input.modelCurrent || input.unhealthyResources.length > 0;
+  const restart = Boolean(input.resumeStep) ||
+    advance || prepare || !input.modelCurrent || input.unhealthyResources.length > 0;
   const steps: RefreshStep[] = [];
   if (!input.imagePresent) steps.push('build-image');
   if (input.pendingMigrations.length) steps.push('rehearse-migrations');
   if (restart) steps.push('stop-writers');
-  if (prepare|| !input.modelCurrent) steps.push('snapshot-storage');
   if (prepare) steps.push('prepare-storage');
-  if (prepare || !input.modelCurrent) steps.push('align-model');
+  if (prepare || !input.modelCurrent|| input.resumeStep === 'align-model') steps.push('align-model');
   if (restart) steps.push('switch-backend', 'restart-resources', 'wait-ready');
   if (!restart && input.zoneApprovals.length) steps.push('wait-ready');
   if (restart || input.zoneApprovals.length) steps.push('approve-zones');
@@ -387,67 +331,101 @@ export interface RefreshActions {
   buildImage(): Promise<void>;
   rehearseMigrations(): Promise<void>;
   stopWriters(): Promise<void>;
-  snapshotStorage(): Promise<void>;
+  beforeMutation(step: NonNullable<PendingRefresh['mutatingStep']>): Promise<void>;
   switchBackend(): Promise<void>;
-  rollbackPrevious(): Promise<void>;
+  restartPrevious(): Promise<void>;
   prepareStorage(): Promise<void>;
   alignModel(): Promise<void>;
   restartResources(): Promise<void>;
   waitReady(): Promise<void>;
-  approveZones(): Promise<void>;
+  approveZones(beforeMutation: () => Promise<void>): Promise<void>;
   stopAppHost(): Promise<void>;
   recordSuccess(): Promise<void>;
 }
 
-/** Ordinary failures restore the previous revision and its stopped-storage snapshot. A lost orchestration
- * resource instead shuts down this AppHost, avoiding partially stopped writers. */
+/** Storage/model maintenance is forward-only. Once a mutating operation is
+ * entered, an error requires stopped writers and an idempotent retry. */
 export async function executeRefresh(
   plan: ReturnType<typeof refreshPlan>,
   actions: RefreshActions,
+  mutationAlreadyStarted = false,
 ): Promise<void> {
   if (plan.blockers.length) throw new Error(plan.blockers.join('\n'));
+  let mutated = mutationAlreadyStarted;
+  let stopped = false;
+  let failedStep: RefreshStep | undefined;
+  const beforeMutation = async (step: NonNullable<PendingRefresh['mutatingStep']>) => {
+    await actions.beforeMutation(step);
+    mutated = true;
+  };
   const operations: Record<RefreshStep, () => Promise<void>> = {
     'build-image': () => actions.buildImage(),
     'rehearse-migrations': () => actions.rehearseMigrations(),
     'stop-writers': () => actions.stopWriters(),
-    'snapshot-storage': () => actions.snapshotStorage(),
     'switch-backend': () => actions.switchBackend(),
     'prepare-storage': () => actions.prepareStorage(),
     'align-model': () => actions.alignModel(),
     'restart-resources': () => actions.restartResources(),
     'wait-ready': () => actions.waitReady(),
-    'approve-zones': () => actions.approveZones(),
+    'approve-zones': () => actions.approveZones(() => beforeMutation('approve-zones')),
     'record-success': () => actions.recordSuccess(),
   };
-  let stopped = false;
   try {
     for (const step of plan.steps) {
+      failedStep = step;
       if (step === 'stop-writers') stopped = true;
+      if (step === 'prepare-storage' || step === 'align-model') await beforeMutation(step);
       await operations[step]();
     }
   } catch (error) {
+    const message = `Refresh failed at ${failedStep}: ${error instanceof Error ? error.message : String(error)}`;
+    const retry = 'Retry: task dev:refresh -- --wait';
     if (error instanceof AppHostResourceLost) {
       try {
         await actions.stopAppHost();
       } catch {
         throw new Error(
-          `${error.message}. Automatic AppHost shutdown failed; task dev:stop must succeed before restarting`,
+          `${message}. Automatic AppHost shutdown failed; task dev:stop must succeed before restarting. ${retry}`,
           { cause: error },
         );
       }
-      throw new Error(`${error.message}. This AppHost was stopped; data volumes were retained`, {
-        cause: error,
-      });
+      throw new Error(
+        `${message}. This AppHost was stopped; data volumes were retained${mutated ? '; storage/model may have changed; writers remain stopped' : ''}. ${retry}`,
+        {
+          cause: error,
+        },
+      );
+    }
+    if (mutated) {
+      try {
+        await actions.stopWriters();
+      } catch (stopError) {
+        try {
+          await actions.stopAppHost();
+        } catch {
+          throw new Error(
+            `${message}. Writers could not be stopped: ${String(stopError)}; task dev:stop must succeed. ${retry}`,
+            { cause: error },
+          );
+        }
+      }
+      throw new Error(
+        `${message}. Storage/model may have changed; writers remain stopped. ${retry}`,
+        { cause: error },
+      );
     }
     if (stopped) {
       try {
-        await actions.rollbackPrevious();
+        await actions.restartPrevious();
       } catch (recovery) {
-        throw new Error(`Refresh failed; previous backend recovery failed: ${String(recovery)}`, {
-          cause: error,
-        });
+        throw new Error(
+          `${message}. Previous backend restart failed: ${String(recovery)}. ${retry}`,
+          {
+            cause: error,
+          },
+        );
       }
     }
-    throw error;
+    throw new Error(`${message}. Previous revision retained. ${retry}`, { cause: error });
   }
 }

@@ -16,7 +16,7 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
-import { ensureBackend, backendCommand, activeBackend, storageBackend } from './refresh.ts';
+import { ensureBackend, backendCommand, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
 import { expectedRefreshEnvironment, refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
@@ -517,7 +517,8 @@ async function devStart(args: string[]): Promise<void> {
         run('docker', ['compose', '--env-file', join(stackDirectory(root, options!), 'compose.env'),
           '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '-d', '--wait'],
           composeProcessEnvironment(process.env, readEnv(join(stackDirectory(root, options!), 'compose.env'))), 180_000);
-        replacePrivate(envFile, expectedRefreshEnvironment(root));
+        if (!readPendingRefresh(stackDirectory(root, options!))?.mutatingStep)
+          replacePrivate(envFile, expectedRefreshEnvironment(root));
       } else backendCommand(backend, 'task', ['dev:prepare']);
     } else replacePrivate(envFile, await prepareDev(options!));
   }
@@ -525,6 +526,11 @@ async function devStart(args: string[]): Promise<void> {
     { ...process.env, REZICS_DEV_ENV: envFile, REZICS_DEV_MODE: mode });
   console.log(`${mode === 'main' ? 'Shared backend and frontend' : mode === 'frontend'
     ? 'Frontend against the shared backend' : 'Isolated backend and frontend'}:`);
+  if (mode === 'main' && readPendingRefresh(stackDirectory(root, options!))?.mutatingStep) {
+    devUrls();
+    console.log('Backend writers remain stopped after incomplete maintenance. Retry: task dev:refresh -- --wait');
+    return;
+  }
   for (const resource of ['account', 'main', 'main-relay', 'accounts', 'web', 'storybook']) {
     try { aspireCli(['wait', resource, '--timeout', '180'], process.env, true); }
     catch { /* frontend mode has no account/main executables; a failure shows in the table */ }

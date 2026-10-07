@@ -11,12 +11,14 @@ import { activeBackend,
   backendExecutable,
   ensureBackend,
   stageBackend,
+  readPendingRefresh,
+  linkBackendModelJournal,
   storageBackend,
   AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
-  refreshHeavyLockHeld, refreshIsCurrent, refreshProcessAlive, refreshStorageDefinitionChanged, RefreshStorageBackup, rehearseRefreshMigrations,
-  refreshSharedStack, refreshRecoveryCommitted } from '../refresh-stack.ts';
+  refreshHeavyLockHeld, refreshIsCurrent, refreshProcessAlive, refreshStorageDefinitionChanged, rehearseRefreshMigrations,
+  waitRefreshReady} from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -35,10 +37,6 @@ describe('pinned shared backend', () => {
     mkdirSync(join(dir, 'services/main/src'), { recursive: true });
     mkdirSync(join(dir, 'scripts/dev'), { recursive: true });
     cpSync(join(root, 'scripts/dev/refresh.ts'), join(dir, 'scripts/dev/refresh.ts'));
-    cpSync(
-      join(root, 'scripts/dev/refresh.ts'),
-      join(dir, '.temp/stack/rezics-dev/backend-gate.ts'),
-    );
     writeFileSync(join(dir, '.gitignore'), '.temp/\nnode_modules/\ngenerated/\n');
     writeFileSync(join(dir, 'package.json'), '{"name":"backend-probe","private":true}');
     writeFileSync(join(dir, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
@@ -142,37 +140,20 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
       operations.alignModel = async () => {
         throw new Error('Code-only refresh must skip model alignment');
       };
-      operations.snapshotStorage = async () => {
-        throw new Error('Code-only refresh must skip snapshots');
-      };
       operations.switchBackend = async () => {
-        writeFileSync(
-          join(stack, 'refresh-pending'),
-          JSON.stringify({ token: 'private-refresh-token', pid: process.pid }),
-        );
         activateBackend(stack, candidate);
       };
       operations.restartResources = async () => {
         backend = await start(dir, stack);
       };
       operations.waitReady = async () => {
-        expect((await fetch(backend!.url, { method: 'POST' })).status).toBe(503);
         expect(await (await fetch(new URL('/health/ready', backend!.url))).json()).toEqual({
           revision: target,
           generated: target,
         });
-        expect(
-          (
-            await fetch(backend!.url, {
-              method: 'POST',
-              headers: { 'x-rezics-refresh': 'private-refresh-token' },
-            })
-          ).status,
-        ).toBe(200);
-      };
+        };
       operations.recordSuccess = async () => {
         writeFileSync(join(stack, 'refresh.json'), JSON.stringify({ revision: target }));
-        rmSync(join(stack, 'refresh-pending'));
       };
       const plan = refreshPlan({ ...current, revision: target, previousRevision: revision });
       expect(plan.steps).toEqual([
@@ -208,50 +189,36 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
     }
   }, 30_000);
 
-  test('failed postcommit model alignment restores the old graph and restarts the previous executable', async () => {
+  test('failed postcommit model alignment retains forward progress and leaves writers stopped', async () => {
     const { dir, stack, revision } = repository();
     let backend: Awaited<ReturnType<typeof start>> | undefined;
     try {
       const previous = stageBackend(dir, stack, revision);
       activateBackend(stack, previous);
       backend = await start(dir, stack);
-      backendCommand(dir, 'git', ['commit', '--allow-empty', '-m', 'New model']);
-      const target = backendCommand(dir, 'git', ['rev-parse', 'HEAD']);
-      stageBackend(dir, stack, target);
       let model = revision;
-      let snapshot = '';
-      const events: string[] = [];
-      const operations = actions(events);
+      const operations = actions([]);
       operations.stopWriters = async () => {
-        await backend!.stop();
+        await backend?.stop();
         backend = undefined;
       };
-      operations.snapshotStorage = async () => {
-        snapshot = model;
-      };
       operations.alignModel = async () => {
-        model = target;
+        model = 'new-model';
         throw new Error('Audit failed after model head committed');
       };
-      operations.rollbackPrevious = async () => {
-        model = snapshot;
-        activateBackend(stack, previous);
-        backend = await start(dir, stack);
+      operations.restartPrevious = async () => {
+        throw new Error('Must not restart incompatible previous code');
       };
       await expect(
         executeRefresh(
           refreshPlan({
             ...current,
-            revision: target,
-            previousRevision: revision,
-            modelCurrent: false,
-          }),
-          operations,
-        ),
-      ).rejects.toThrow('Audit failed after model head committed');
-      expect(model).toBe(revision);
-      expect((await (await fetch(backend!.url)).json()).revision).toBe(revision);
-      expect(events).not.toContain('recordSuccess');
+            modelCurrent: false}),
+          operations),
+      ).rejects.toThrow('Refresh failed at align-model: Audit failed after model head committed. Storage/model may have changed; writers remain stopped. Retry: task dev:refresh -- --wait',
+      );
+      expect(model).toBe('new-model');
+      expect(backend).toBeUndefined();
     } finally {
       await backend?.stop();
       rmSync(dir, { recursive: true, force: true });
@@ -336,8 +303,20 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
       activateBackend(stack, candidate);
       ensureBackend(dir, stack);
       expect(activeBackend(stack)).toBe(previous);
-      mkdirSync(join(stack, 'refresh-recovery'));
-      expect(() => ensureBackend(dir, stack)).toThrow('Retained storage recovery snapshot');
+      const target = backendCommand(candidate, 'git', ['rev-parse', 'HEAD']);
+      writeFileSync(join(stack, 'refresh-pending'),
+        JSON.stringify({
+          revision: target,
+          backend: previous,
+          storage: previous,
+          pid: 2147483647,
+          refreshId: 'failed',
+          mutatingStep: 'align-model',
+        }),
+      );
+      ensureBackend(dir, stack);
+      expect(activeBackend(stack)).toBe(candidate);
+      expect(readPendingRefresh(stack)?.mutatingStep).toBe('align-model');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -360,111 +339,38 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
     expect(checkpoint).toBe(target);
   });
 
-  for (const phase of ['committed', 'restored'] as const) {
-    test(`${phase} cleanup recovery preserves writes accepted after publication, even at the same revision`, async () => {
-      const { dir, stack, revision } = repository();
-      try {
-        const backend = stageBackend(dir, stack, revision);
-        activateBackend(stack, backend);
-        const before = {
-          revision,
-          appHostHash: 'hash',
-          appHostSession: 'session',
-          refreshId: 'before',
-        };
-        const checkpoint = { ...before, refreshId: phase === 'committed' ? 'after' : 'before' };
-        writeFileSync(join(stack, 'refresh.json'), JSON.stringify(checkpoint));
-        const recovery = join(stack, 'refresh-recovery');
-        mkdirSync(recovery);
-        writeFileSync(
-          join(recovery, 'snapshot.json'),
-          JSON.stringify({ previous: backend, checkpoint: before }),
-        );
-        writeFileSync(join(recovery, 'postgres.tar'), 'obsolete owner snapshot');
-        writeFileSync(join(stack, 'owner-state'), 'newly accepted write');
-        if (phase === 'restored')
-          writeFileSync(
-            join(stack, 'refresh-pending'),
-            JSON.stringify({
-              backend,
-              storage: backend,
-              checkpoint: before,
-              refreshId: 'failed-attempt',
-              phase,
-              restartRequired: false,
-            }),
-          );
-        // The stub has no dev:stop task: trying to rewind would fail this test
-        // before any Docker command can run.
-        await refreshSharedStack(dir, ['--recover']);
-        expect(readFileSync(join(stack, 'owner-state'), 'utf8')).toBe('newly accepted write');
-        expect(JSON.parse(readFileSync(join(stack, 'refresh.json'), 'utf8'))).toEqual(checkpoint);
-        expect(existsSync(recovery)).toBe(false);
-        expect(existsSync(join(stack, 'refresh-pending'))).toBe(false);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    }, 30_000);
-  }
-
-  test('the checkpoint commit boundary distinguishes a same-revision maintenance refresh', () => {
-    expect(refreshRecoveryCommitted({ refreshId: 'new' }, { refreshId: 'old' })).toBe(true);
-    expect(refreshRecoveryCommitted({ refreshId: 'old' }, { refreshId: 'old' })).toBe(false);
-    expect(refreshRecoveryCommitted(null, null)).toBe(false);
-  });
-
-  test('an interrupted code-only refresh restores its previous executable and keeps current owner data', async () => {
+  test('a newer maintenance code fix retains the previous generation intent and audit checkpoint', () => {
     const { dir, stack, revision } = repository();
     try {
       const previous = stageBackend(dir, stack, revision);
       activateBackend(stack, previous);
-      const before = {
-        revision,
-        appHostHash: 'hash',
-        appHostSession: 'session',
-        refreshId: 'before',
-      };
-      writeFileSync(join(stack, 'refresh.json'), JSON.stringify(before));
-      const facade = join(dir, 'Taskfile.yml');
-      writeFileSync(
-        facade,
-        `${readFileSync(facade, 'utf8')}
-  dev:stop:
-    cmds:
-      - touch .temp/stopped
-  dev:
-    cmds:
-      - touch .temp/started
-`,
-      );
-      backendCommand(dir, 'git', ['add', 'Taskfile.yml']);
-      backendCommand(dir, 'git', ['commit', '-m', 'Stub lifecycle commands']);
-      const candidate = stageBackend(dir, stack, backendCommand(dir, 'git', ['rev-parse', 'HEAD']));
-      activateBackend(stack, candidate);
-      writeFileSync(
-        join(stack, 'refresh-pending'),
-        JSON.stringify({
-          phase: 'preparing',
-          backend: previous,
-          storage: previous,
-          checkpoint: before,
-          refreshId: 'interrupted',
-        }),
-      );
-      writeFileSync(join(stack, 'owner-state'), 'current owner data');
-      await refreshSharedStack(dir, ['--recover']);
-      expect(activeBackend(stack)).toBe(previous);
-      expect(readFileSync(join(stack, 'owner-state'), 'utf8')).toBe('current owner data');
-      expect(existsSync(join(dir, '.temp/stopped'))).toBe(true);
-      expect(existsSync(join(dir, '.temp/started'))).toBe(true);
-      expect(existsSync(join(stack, 'refresh-pending'))).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+      const intent = join(previous, '.temp/datasets/model-bootstrap/intent.json');
+      writeFileSync(intent, '{"generation":"already-committed","audit":"unfinished"}');
+      backendCommand(dir, 'git', ['commit', '--allow-empty', '-m', 'Maintenance code fix']);
+      const next = stageBackend(dir, stack, backendCommand(dir, 'git', ['rev-parse', 'HEAD']));
+      expect(readFileSync(join(next, '.temp/datasets/model-bootstrap/intent.json'), 'utf8')).toBe(readFileSync(intent, 'utf8'));
+      writeFileSync(join(next, '.temp/datasets/model-bootstrap/completed.json'), 'audit finished');
+      expect(readFileSync(join(previous, '.temp/datasets/model-bootstrap/completed.json'), 'utf8')).toBe('audit finished');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 30_000);
-});
 
-describe('refresh storage recovery', () => {
+  test('an existing private model intent is adopted without copying owner data', () => {
+    const dir = mkdtempSync(join(root, '.temp/model-intent-'));
+    const checkout = join(dir, 'checkout');
+    const stack = join(dir, 'stack');
+    mkdirSync(join(checkout, '.temp/datasets/model-bootstrap'), { recursive: true });
+    writeFileSync(join(checkout, '.temp/datasets/model-bootstrap/intent.json'), 'unfinished intent');
+    try {
+      linkBackendModelJournal(checkout, stack);
+      expect(readFileSync(join(stack, 'model-bootstrap/intent.json'), 'utf8')).toBe('unfinished intent');
+      linkBackendModelJournal(checkout, stack);
+      expect(readFileSync(join(checkout, '.temp/datasets/model-bootstrap/intent.json'), 'utf8')).toBe('unfinished intent');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  });
+
+describe('refresh storage planning', () => {
   test('code-only revisions retain installed Compose hashes despite different absolute checkout paths', () => {
     const dir = mkdtempSync(join(root, '.temp/refresh-compose-'));
     const previous = join(dir, 'previous');
@@ -519,100 +425,6 @@ describe('refresh storage recovery', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
-
-  test('postcommit alignment failure restores both stopped owner volumes and private environment', () => {
-    const dir = mkdtempSync(join(root, '.temp/refresh-snapshot-'));
-    const stack = join(dir, '.temp/stack/rezics-dev');
-    mkdirSync(stack, { recursive: true });
-    writeFileSync(join(stack, 'dev.env'), 'MODEL=previous\n');
-    const previous = join(stack, 'backend-revisions', 'a'.repeat(40));
-    const backend = join(stack, 'backend-revisions', 'b'.repeat(40));
-    mkdirSync(previous, { recursive: true });
-    mkdirSync(backend, { recursive: true });
-    activateBackend(stack, backend);
-    const volumes: Record<string, string> = { postgres: 'previous-sql', fuseki: 'previous-model' };
-    const snapshots: Record<string, string> = {};
-    const events: string[] = [];
-    const backup = new RefreshStorageBackup(
-      previous,
-      dir,
-      (_cwd, _executable, args) => {
-        if (args[0] === 'inspect') {
-          const service = args[1]!;
-          return JSON.stringify([
-            {
-              Image: 'pinned-postgres',
-              Mounts: [
-                {
-                  Type: 'volume',
-                  Name: service,
-                  Destination: service === 'postgres' ? '/var/lib/postgresql' : '/fuseki/databases',
-                },
-              ],
-            },
-          ]);
-        }
-        const service = args
-          .find((arg) => arg.startsWith('type=volume,source='))!
-          .split(',')[1]!
-          .slice('source='.length);
-        if (args.at(-1)!.includes('-cpf')) {
-          snapshots[service] = volumes[service]!;
-          events.push(`snapshot:${service}`);
-        } else {
-          volumes[service] = snapshots[service]!;
-          events.push(`restore:${service}`);
-        }
-        return '';
-      },
-      (_cwd, args) => {
-        if (args[0] === 'ps') return args[2]!;
-        events.push(args.join(' '));
-        return '';
-      },
-    );
-    try {
-      backup.capture();
-      const reloaded = new RefreshStorageBackup(previous, dir);
-      expect(reloaded.load().backend).toBe(backend);
-      volumes.postgres = 'partially-migrated-sql';
-      volumes.fuseki = 'committed-new-model';
-      writeFileSync(join(stack, 'dev.env'), 'MODEL=new\n');
-      backup.restore();
-      expect(volumes).toEqual({ postgres: 'previous-sql', fuseki: 'previous-model' });
-      expect(readFileSync(join(stack, 'dev.env'), 'utf8')).toBe('MODEL=previous\n');
-      expect(events).toEqual([
-        'stop postgres fuseki',
-        'snapshot:postgres',
-        'snapshot:fuseki',
-        'up -d --wait postgres fuseki',
-        'stop postgres fuseki',
-        'restore:postgres',
-        'restore:fuseki',
-        'up -d --wait',
-      ]);
-      backup.discard();
-      expect(existsSync(join(stack, 'refresh-recovery'))).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  test('capture refuses a retained recovery set and cannot discard it during rollback', () => {
-    const dir = mkdtempSync(join(root, '.temp/refresh-retained-'));
-    const recovery = join(dir, '.temp/stack/rezics-dev/refresh-recovery');
-    mkdirSync(recovery, { recursive: true });
-    writeFileSync(join(recovery, 'snapshot.json'), 'retained');
-    try {
-      const backup = new RefreshStorageBackup(dir, dir);
-      expect(() => backup.capture()).toThrow('retained');
-      backup.restore();
-      backup.discard();
-      expect(readFileSync(join(recovery, 'snapshot.json'), 'utf8')).toBe('retained');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
 });
 
 describe('shared stack refresh planning', () => {
@@ -659,8 +471,7 @@ describe('shared stack refresh planning', () => {
   test('a missing pinned image is built before stopped-writer storage and model maintenance', () => {
     expect(refreshPlan({ ...current, imagePresent: false, storageChanged: true,
       pendingMigrations: ['access/new.sql'], modelCurrent: false }).steps).toEqual([
-      'build-image', 'rehearse-migrations', 'stop-writers', 'snapshot-storage',
-      'prepare-storage', 'align-model',
+      'build-image', 'rehearse-migrations', 'stop-writers', 'prepare-storage', 'align-model',
       'switch-backend',
       'restart-resources', 'wait-ready', 'approve-zones', 'record-success',
     ]);
@@ -674,8 +485,7 @@ describe('shared stack refresh planning', () => {
     test(`${reason} prepares storage and aligns the model before restarting`, () => {
       expect(refreshPlan({ ...current, ...changes }).steps).toEqual([
         ...('pendingMigrations' in changes ? ['rehearse-migrations'] as const : []),
-        'stop-writers', 'snapshot-storage',
-        'prepare-storage', 'align-model',
+        'stop-writers', 'prepare-storage', 'align-model',
         'switch-backend', 'restart-resources', 'wait-ready', 'approve-zones', 'record-success',
       ]);
     });
@@ -683,23 +493,21 @@ describe('shared stack refresh planning', () => {
 
   test('legacy ordered membership requires stopped-writer owner preparation even at the recorded revision', async () => {
     const plan = refreshPlan({ ...current, membershipCurrent: false });
-    expect(plan.steps).toEqual(['stop-writers', 'snapshot-storage',
+    expect(plan.steps).toEqual(['stop-writers',
       'prepare-storage', 'align-model',
       'switch-backend',
       'restart-resources', 'wait-ready', 'approve-zones', 'record-success']);
     const events: string[] = [];
     await expect(executeRefresh(plan, actions(events, 'prepareStorage'))).rejects.toThrow('failed prepareStorage');
-    expect(events).toEqual(['stopWriters', 'snapshotStorage',
-      'prepareStorage',
-      'rollbackPrevious',
-    ]);
+    expect(events).toEqual(['stopWriters', 'prepareStorage',
+      'stopWriters']);
     await executeRefresh(plan, actions([]));
     expect(refreshPlan(current).steps).toEqual([]);
   });
 
   test('a stale model generation is aligned without unnecessary storage work', () => {
     expect(refreshPlan({ ...current, modelCurrent: false }).steps).toEqual([
-      'stop-writers', 'snapshot-storage',
+      'stop-writers',
       'align-model',
       'switch-backend', 'restart-resources', 'wait-ready', 'approve-zones', 'record-success',
     ]);
@@ -745,23 +553,104 @@ function actions(events: string[], fail?: keyof RefreshActions): RefreshActions 
     if (name === fail) throw new Error(`failed ${name}`);
   };
   return { buildImage: step('buildImage'), rehearseMigrations: step('rehearseMigrations'),
-    stopWriters: step('stopWriters'), snapshotStorage: step('snapshotStorage'),
+    stopWriters: step('stopWriters'), beforeMutation: async ()=> {},
     switchBackend: step('switchBackend'),
-    rollbackPrevious: step('rollbackPrevious'),
+    restartPrevious: step('restartPrevious'),
     prepareStorage: step('prepareStorage'),
     alignModel: step('alignModel'), restartResources: step('restartResources'), waitReady: step('waitReady'),
     approveZones: step('approveZones'), stopAppHost: step('stopAppHost'), recordSuccess: step('recordSuccess') };
 }
 
 describe('shared stack refresh execution and guards', () => {
+  test('readiness re-describes restarted resources when stopped Account had no preflight URL', async () => {
+    const before = {
+      account: { name: 'account', state: 'Finished' },
+      main: { name: 'main', state: 'Finished' },
+      'main-relay': { name: 'main-relay', state: 'Finished' },
+    };
+    let resources: ReturnType<Parameters<typeof waitRefreshReady>[0]> =
+      before;
+    const requested: string[] = [];
+    const operations = actions([]);
+    operations.restartResources = async () => {
+      resources = {
+        account: {
+          name: 'account',
+          state: 'Running',
+          properties: { 'executable.pid': 11 },
+          urls: [{ url: 'http://127.0.0.1:41001' }],
+        },
+        main: {
+          name: 'main',
+          state: 'Running',
+          properties: { 'executable.pid': 12 },
+          urls: [{ url: 'http://127.0.0.1:41002' }],
+        },
+        'main-relay': {
+          name: 'main-relay',
+          state: 'Running',
+          properties: { 'executable.pid': 13 },
+        },
+      };
+    };
+    operations.waitReady = () =>
+      waitRefreshReady(
+        () => resources,
+        (async (input) => {
+          requested.push(String(input));
+          return new Response(null, { status: 200 });
+        }) as typeof fetch,
+        () => true,
+      );
+    await executeRefresh(
+      refreshPlan({ ...current, unhealthyResources: ['account', 'main', 'main-relay'] }),
+      operations,
+    );
+    expect(before.account).not.toHaveProperty('urls');
+    expect(requested).toEqual([
+      'http://127.0.0.1:41001/health/ready',
+      'http://127.0.0.1:41002/health/ready',
+    ]);
+  });
+
+  for (const failure of [
+    'stopWriters',
+    'switchBackend',
+    'restartResources',
+    'waitReady',
+  ] as const) {
+    test(`${failure} failure before maintenance restarts the previous revision`, async () => {
+      const events: string[] = [];
+      await expect(
+        executeRefresh(refreshPlan({ ...current, revision: 'new-code' }), actions(events, failure)),
+      ).rejects.toThrow('Previous revision retained. Retry: task dev:refresh -- --wait');
+      expect(events.at(-1)).toBe('restartPrevious');
+    });
+  }
+
+  test('resume replays alignment even when the model head already advanced before an audit failure', () => {
+    const plan = refreshPlan({ ...current, resumeStep: 'align-model' });
+    expect(plan.steps).toContain('align-model');
+    expect(plan.steps).not.toContain('prepare-storage');
+  });
+
+  test('a resumed maintenance failure during image build cannot restart the old revision', async () => {
+    const events: string[] = [];
+    await expect(
+      executeRefresh(
+        refreshPlan({ ...current, imagePresent: false }),
+        actions(events, 'buildImage'),
+        true,
+      ),
+    ).rejects.toThrow('writers remain stopped. Retry: task dev:refresh -- --wait');
+    expect(events).toEqual(['buildImage', 'stopWriters']);
+  });
   test('an incomplete Statement upgrade prepares stopped storage and cannot restart on conversion failure', async () => {
     const events: string[] = [];
     await expect(executeRefresh(refreshPlan({...current,statementCurrent: false}),actions(events,'prepareStorage')))
       .rejects.toThrow('failed prepareStorage');
-    expect(events).toEqual(['stopWriters','snapshotStorage',
-      'prepareStorage',
-      'rollbackPrevious',
-    ]);
+    expect(events).toEqual(['stopWriters','prepareStorage',
+      'stopWriters']);
   });
   test('worktrees, other branches and tracked edits are refused', () => {
     expect(() => assertRefreshCheckout(true, 'main', false)).toThrow('never in a worktree');
@@ -780,8 +669,7 @@ describe('shared stack refresh execution and guards', () => {
   test('success is recorded only after ordered maintenance and readiness', async () => {
     const events: string[] = [];
     await executeRefresh(refreshPlan({ ...current, imagePresent: false }), actions(events));
-    expect(events).toEqual(['buildImage', 'stopWriters', 'snapshotStorage',
-      'prepareStorage', 'alignModel',
+    expect(events).toEqual(['buildImage', 'stopWriters', 'prepareStorage', 'alignModel',
       'switchBackend',
       'restartResources', 'waitReady', 'approveZones', 'recordSuccess']);
     events.length = 0;
@@ -797,7 +685,7 @@ describe('shared stack refresh execution and guards', () => {
     expect(events).toEqual(['rehearseMigrations']);
     const retry: string[] = [];
     await executeRefresh(plan, actions(retry));
-    expect(retry).toEqual(['rehearseMigrations', 'stopWriters', 'snapshotStorage',
+    expect(retry).toEqual(['rehearseMigrations', 'stopWriters',
       'prepareStorage', 'alignModel',
       'switchBackend',
       'restartResources', 'waitReady', 'approveZones', 'recordSuccess']);

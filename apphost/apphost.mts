@@ -18,7 +18,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { mainSpec, relaySpec } from '../services/main/src/config.ts';
-import { appHostSourceHash, backendExecutable, ensureBackend } from '../scripts/dev/refresh.ts';
+import { appHostSourceHash, backendExecutable, ensureBackend, readPendingRefresh } from '../scripts/dev/refresh.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
 import { accountsSpec } from '../apps/accounts/features/config/env.ts';
@@ -82,6 +82,8 @@ if (mode === 'frontend') {
   const stack = resolve(envFile, '..');
   if (fixed) ensureBackend(root, stack);
   if (fixed) writeFileSync(join(stack, 'apphost-hash'), appHostSourceHash(root));
+  const holdWriters = fixed && Boolean(readPendingRefresh(stack)?.mutatingStep);
+  const start = <T extends { withExplicitStart(): T }>(resource: T): T => holdWriters ? resource.withExplicitStart() : resource;
   const executable = (preload: string, entry: string) =>
     backendExecutable(mode, stack, preload, entry);
   const accountCommand = executable(
@@ -96,19 +98,19 @@ if (mode === 'frontend') {
   const serviceEndpoint = (port: number, variable: string) => fixed
     ? { port, env: variable }
     : { port: Number(env[variable]), isProxied: false };
-  const account = configure(builder.addExecutable('account', accountCommand.executable, root,
-    accountCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
+  const account = configure(start(builder.addExecutable('account', accountCommand.executable, root,
+    accountCommand.args)), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3002, 'ACCOUNT_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' });
-  const main = configure(builder.addExecutable('main', mainCommand.executable, root,
-    mainCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), mainSpec, fixed ? ['MAIN_PORT'] : [])
+  const main = configure(start(builder.addExecutable('main', mainCommand.executable, root,
+    mainCommand.args)), mainSpec, fixed ? ['MAIN_PORT'] : [])
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' })
     .waitFor(account);
-  await configure(builder.addExecutable('main-relay', relayCommand.executable, root,
-    relayCommand.args).withEnvironment('REZICS_BACKEND_STACK', fixed ? stack : ''), relaySpec)
+  await configure(start(builder.addExecutable('main-relay', relayCommand.executable, root,
+    relayCommand.args)), relaySpec)
     .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf }).waitFor(main);
   accountUrl = account.getEndpoint('http');
   mainUrl = main.getEndpoint('http');
