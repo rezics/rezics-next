@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 12:35 UTC. Sol manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 13:15 UTC. Sol manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal unfinished. No reliable completion projection: remaining physical locality,
 current-model convergence and Claim/restore qualification still need slices.
@@ -13,15 +13,15 @@ live. Program ports checkpoint12:26 now runs pinned0247249ed on fixed Main/Accou
 ports3011/3012 (behind3001/3002), all six resources healthy. Refreshes are open. No kernel lifecycle waiter. After pending
 native/model/migration waves, coalesce one required `task dev:refresh -- --wait`
 and hold Main code gates from queue through checkpoint; preserve retained volumes.
-Merges alone do not change serving backend. Cold maintenance-read repair belongs
-to G1282 attempt8: one finite shared preparation deadline, interactive budgets intact.
+Merges alone do not change serving backend. Cold maintenance-read repair returned 23337c98c with 39 focused cases;
+G1282 combined gate is running with exact current native pins: one finite shared preparation deadline, interactive budgets intact.
 Public-name online backfill completed3458 identities, complete:true; evidence
 `.temp/kernel/public-name-backfill-shared-1153.log`. Realm name prefilter locality
 remains open. Warm retry does not qualify cold startup or populated restore.
 
 ## Accepted contracts
 
-C0 current reviewed basis e75dda7b4; C2 Post first slice and125 exact authored
+C0 current reviewed basis e75dda7b4; C2 Post first slice and131 exact authored
 Turtle profiles; C3 local Work/Context/relay first path. C4 catalogue Statement
 operation, storage upgrade repair67883e853690, singleton redesign
 8c6793a04dbb Content1521 (immutable source streams/savedPGsnapshot,17integrations),
@@ -57,25 +57,32 @@ pins; Context/classification eight f32f9abe9/eec6c05c9 likewise unchanged genera
   preservation cases),3501placements/6902seek tuples and137high-degree metadata
   reads. Manager committed exact native pins d57155aafd87 and QA isolation entry;
   focused20tests163assert and isolated startup-parent17tests111assert pass. Same
-  Sol now repairs cold maintenance client reads in CLI seek-only and fixture migration;
+  Sol returned the cold maintenance client repair in CLI seek-only and fixture migration;
   existing request10sec/call/byte budgets win, no renewable per-call deadlines.
+  All159 selected unit/guards passed once; Main overlap triggered one automatic rerun.
 - G1290 attempt7: original same-selection nonmatching-body ambiguity fixed with
   bounded probe. Review found noncanonical alternate Realm slots still split body/name
   ownership; worker now enforces their shared canonical owner at admission/readiness,
   without reverse population traversal. Honest matching-postings and Realm-name
   prefilter costs remain C5 debt; bounded returned witnesses do not prove those costs.
-- G1289 attempt3: counted chapter neighbourhood accepted in principle, but review
-  returned regression replacing the original200GROUP limit with200ALL placements.
-  Worker adds a retained GroupRole root with the existing counted tree; preserves
-  numbering for201+ ungrouped chapters and sparse groups, current/exact/restore.
-- G1306 attempt4: Event cold coverage must ready relevant retained prefixes independent
-  of huge unrelated pre-first-tick Main history; same-window disjoint updates and
-  delayed relevant reader refusal remain acceptance. No global catch-up readiness.
-- G1330 attempt4: held slim metadata restoration from original exact custody.
-  Trust G1343 needs committed HistoricalReceiptRead API/all original digests;
-  G1344 native held-erasure inputs are staged in worker .temp/ref/trust-held-erasure.
-  Core hooks remain held by G1282. Protect all historical roots; legacy private draft
-  objects require journal-bound erased/unavailable exact outcomes before retirement.
+- G1289 attempt4: numbering parity and existing GroupRole counted-root fix accepted
+  (22 units, 3 physical-scale and 3 writer/API cases). Landing held until unchanged
+  historical manifests can resolve completed roots. Worker now builds one ContentDB
+  source-bound mapping/checkpoint and <=256-entry CAS preparation turns, pending-root
+  retention, current/exact read/write integration and recovery closure. Content1702
+  reserved. Trust owner operations/restore-lineage loan requested; Main constructor
+  and Task command integration coordinated within kernel. No original bytes rewritten.
+- G1306 attempt5: finite cold2048 non-Event prefix case passed in513.3sec, but review
+  blocked two new site-wide actual/planned heads. More than32 unapplied same-status
+  Events outside a ready window make it partial. Worker removes shared ordinary
+  heads and implements fixed-prefix/scoped relevant-effect proof, retaining delayed
+  relevant-write refusal and cursor safety. No new global frontier or budget increase.
+- G1330 attempt5: original exact custody semantics accepted; worker now fixes the
+  supplied-client historical reader (no nested checkout/lifecycle/native proof) and
+  exact accepted language grammar including canonical scripts/regions. Actual final
+  PG/S3/Jena qualification pending. Trust erasure hooks staged in .temp/ref; native
+  Core integration remains coordinated after G1282 landing. Private original draft
+  roots need journal-bound erased/unavailable outcomes before retirement.
 - G1345 prerequisite86d22ff28345 is live in c04; attempt3 lossless eligible Claim fold
   preserves historical pins, complete qualification, exact literal and provenance.
   Statement subject leaf is separate; old judgement and current independent decisions
@@ -86,23 +93,29 @@ pins; Context/classification eight f32f9abe9/eec6c05c9 likewise unchanged genera
   only new task-ID-bearing titles; first retry failed unrelated QA process reaping.
   Program fixed its cancellation/SIGKILL polling race and scan timeout7a71dbccd;
   leaf LANDEDd52a7d95eacc with all159unit/guards green. Attempt14 read-only <=20min
-  physical eligibility/local readiness extension design; G1345 seek/read/graph untouched.
-- G1358 native Post resolver2cea01b674cd is live; attempt2 exact Zone delivery race
-  fixes final published-owner recheck after awaited rights fences. Formal updated-brief
-  reclaim must run on exit before gate because ledger still holds old Post scope.
+  physical eligibility/local readiness extension design returned; independent review
+  considers the narrow potential-publication channel and required atomic local heads.
+  G1345 seek/read/graph remain untouched by this separate worker.
+- G1358 exact Zone delivery107f23261259 VERIFIED/CLOSED. Final owner tuple is
+  rechecked after rights/deliverability awaits, preserving native Post privacy and
+  metadata/exposure. Actual race20261007t125122-f00a73 and all154unit/guards pass.
 - G1341 attempt6: both Trust registry and Launch Realm reply/origin callbacks loaned.
-  Repair max1PG nested admission checkout, retaining committed admission before native
+  Max1PG loan repair provisionally accepted; final visibility-race proof pending.
+  Launch takes independent Realm policy receipt-identity relay repair G1367.
+  Retain committed admission before native
   effects and live permits/sealing. No extra pool, swallowed failure or longer timeout.
 - G1354 Work kind/type six e562c86b9635, G1348 theme/protection six7380ed12c847 and
   G1352 publication/descriptive ten1e03a3388cfa landed with unit/19guard gates green,
   all original artifact pins unchanged. G1348 nine relationship/governance261a93ced and G1326 six rating/releases also
-  landed with selected gates; G1348closed. G1354 six Workmetadata/Structure exact
-  sources accepted, gate returned G830 caller hashing rendered comments rather than
-  original source. Attempt6 Luna fixes this caller using profileSource and audits peers;
-  no compiler semantic change or generated artifact drift.
-- G1326 catalogue callers6c3318df5634 landed: current shared Context -> Statement ->
-  qualified-fact decision, distinct command costs; actual G1031/G1035 pass and all
-  gates green. Returned rating/release batch as above; now review before reuse/close.
+  landed with selected gates; G1348closed. G1354 metadata/Structure six606e55c3c
+  landed with exact original hashes and all154unit/guards; authored count131/133.
+  Content/text six declarations dd568766c036 also landed byte-identically with154
+  selected unit/guards. Attempt8 Luna moves seven rating declarations into their
+  Turtle companions; registry ordering and all bindings remain exact.
+- G1326 rating/releases six landed; attempt13 Grok builds task jena:check using
+  pinned6.2 CLI for RIOT/query parse and scratch named/default-graph TDB2 stats.
+  Program will wire every regression cycle and affected mapping after landing;
+  gate inclusion only if actual no-build check stays under60sec.
 - G1352 attempt4 repairs Composition100target disclosure by existing batch resolver,
   preserving current/exact/private/hidden and final rights fences. Launch G1365 owns
   progress; subsequent seek must use explicit accepted episodeNumber within disclosed
