@@ -395,15 +395,15 @@ export class VerificationStore {
     } finally { client.release(); }
   }
 
-  /** Compatible locks drain only this producer and its restore epoch. Ordinary
-   * writers never increment the gate generation or a global correctness head. */
+  /** The singleton is maintenance configuration, read without tuple locks.
+   * Producer table locks, not shared tuple ownership, establish the writer cut. */
   private async assessmentProducerPermit(
     client: PoolClient,
     expected?: AssessmentProducerPermit,
   ): Promise<AssessmentProducerPermit> {
     const epoch = (
       await client.query<{ epoch: string }>(`SELECT version::text AS epoch
-      FROM reading_position.generation WHERE singleton FOR SHARE`)
+      FROM reading_position.generation WHERE singleton`)
     ).rows[0]?.epoch;
     const gate = (
       await client.query<{
@@ -412,7 +412,7 @@ export class VerificationStore {
         generation: string;
         restore_epoch: string;
       }>(`SELECT mode, job, generation::text, restore_epoch::text
-      FROM verification.assessment_producer_gate WHERE singleton FOR SHARE`)
+      FROM verification.assessment_producer_gate WHERE singleton`)
     ).rows[0];
     if (!gate || epoch === undefined || gate.restore_epoch !== epoch) {
       throw new VerificationStale('assessment producer restore epoch is unavailable or changed');
@@ -493,6 +493,9 @@ export class VerificationStore {
           'assessment producer belongs to another gate generation or restore epoch',
         );
       }
+      // INSERT owns ROW EXCLUSIVE until commit. If it waited behind maintenance,
+      // this READ COMMITTED statement sees the new mode and rolls the insert back.
+      await this.assessmentProducerPermit(client, permit);
       return { row, permit };
     });
   }
@@ -532,6 +535,9 @@ export class VerificationStore {
       throw new VerificationInvalid('invalid assessment producer identity');
     }
     return this.tx(async (client) => {
+      // Before the first SELECT fixes the REPEATABLE READ snapshot, join the
+      // compatible writer barrier. Terminal replay participates without effects.
+      await client.query('LOCK TABLE verification.assessment_producer IN ROW EXCLUSIVE MODE');
       await this.assessmentProducerPermit(client, permit);
       const stored = (
         await client.query<AssessmentProducerRow>(
@@ -555,7 +561,10 @@ export class VerificationStore {
           'assessment producer belongs to another gate generation or restore epoch',
         );
       }
-      if (row.terminal) return row;
+      if (row.terminal) {
+        await this.assessmentProducerPermit(client, permit);
+        return row;
+      }
       const terminal = await work(client, row);
       checkProducerTerminal(admission, terminal);
       if (terminal.activation.status === 'activated' || terminal.activation.status === 'replayed') {
@@ -646,12 +655,13 @@ export class VerificationStore {
         terminal_at = clock_timestamp() WHERE admission_id = $1`,
         [admission, terminal],
       );
+      await this.assessmentProducerPermit(client, permit);
       return { ...row, terminal };
     }, true);
   }
 
-  /** UPDATE waits for all prior compatible effect locks. A timeout rolls back
-   * without a closure permit, and future ordinary tails must refuse. */
+  /** Only maintenance writes the singleton. SHARE drains prior stage/effect
+   * writers and blocks new writers until the mode update commits. */
   async closeAssessmentProducerGate(
     job: string,
     expectedGeneration: string,
@@ -661,8 +671,16 @@ export class VerificationStore {
     return this.tx(async (client) => {
       const epoch = (
         await client.query<{ epoch: string }>(`SELECT version::text AS epoch
-        FROM reading_position.generation WHERE singleton FOR SHARE`)
+        FROM reading_position.generation WHERE singleton`)
       ).rows[0]?.epoch;
+      // The conditional UPDATE serializes operators without ordinary readers
+      // acquiring a shared tuple lock (or allocating singleton MultiXacts).
+      await client.query(
+        `UPDATE verification.assessment_producer_gate
+        SET mode = 'maintenance', job = $1, generation = generation + 1
+        WHERE singleton AND mode = 'ordinary' AND generation = $2 AND restore_epoch = $3`,
+        [job, expectedGeneration, epoch],
+      );
       const gate = (
         await client.query<{
           mode: AssessmentProducerPermit['mode'];
@@ -670,28 +688,21 @@ export class VerificationStore {
           generation: string;
           restore_epoch: string;
         }>(`SELECT mode, job, generation::text, restore_epoch::text
-        FROM verification.assessment_producer_gate WHERE singleton FOR UPDATE`)
+        FROM verification.assessment_producer_gate WHERE singleton`)
       ).rows[0];
       if (!gate || epoch === undefined || gate.restore_epoch !== epoch) {
         throw new VerificationStale('assessment producer restore epoch changed');
       }
-      if (
-        gate.mode === 'maintenance' &&
-        gate.job === job &&
-        BigInt(gate.generation) === BigInt(expectedGeneration) + 1n
-      ) {
-        return { mode: gate.mode, job: gate.job, generation: gate.generation, restoreEpoch: epoch };
-      }
-      if (gate.mode !== 'ordinary' || gate.generation !== expectedGeneration) {
+      if (gate.mode !== 'maintenance' || gate.job !== job
+        || BigInt(gate.generation) !== BigInt(expectedGeneration) + 1n) {
         throw new VerificationStale('assessment producer closure generation changed');
       }
-      const generation = String(BigInt(gate.generation) + 1n);
-      await client.query(
-        `UPDATE verification.assessment_producer_gate
-        SET mode = 'maintenance', job = $1, generation = $2 WHERE singleton`,
-        [job, generation],
-      );
-      return { mode: 'maintenance', job, generation, restoreEpoch: epoch };
+      const permit: AssessmentProducerPermit = {
+        mode: gate.mode, job: gate.job, generation: gate.generation, restoreEpoch: epoch,
+      };
+      await client.query('LOCK TABLE verification.assessment_producer IN SHARE MODE');
+      await this.assessmentProducerPermit(client, permit);
+      return permit;
     });
   }
 

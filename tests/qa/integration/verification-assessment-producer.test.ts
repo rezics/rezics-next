@@ -151,12 +151,16 @@ function deferred() {
 /** Pause after the real SQL lock, keeping its transaction and client alive. */
 function heldQueries(match: (sql: string) => boolean) {
   const locked = deferred();
+  const connected = deferred();
   const resume = deferred();
   const queries: string[] = [];
+  const backendPids: number[] = [];
   let held = false;
   const database = {
     connect: async () => {
       const client = await pool.connect();
+      backendPids.push((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+      connected.resolve();
       return {
         query: async (sql: string, values?: unknown[]) => {
           queries.push(sql);
@@ -172,7 +176,44 @@ function heldQueries(match: (sql: string) => boolean) {
       };
     },
   } as unknown as Pool;
-  return { store: new VerificationStore(database), locked, resume, queries };
+  return {
+    store: new VerificationStore(database),
+    locked,
+    connected,
+    resume,
+    queries,
+    backendPids,
+  };
+}
+
+function expectPlainGateReads(queries: readonly string[]) {
+  const reads = queries.filter(
+    (sql) =>
+      /\bSELECT\b/.test(sql) &&
+      /(?:assessment_producer_gate|reading_position\.generation)/.test(sql),
+  );
+  expect(reads.length).toBeGreaterThan(0);
+  for (const sql of reads)
+    expect(sql).not.toMatch(/FOR\s+(?:SHARE|UPDATE|KEY SHARE|NO KEY UPDATE)/i);
+}
+
+async function waitingForProducerLock(pid: number, mode: 'RowExclusiveLock' | 'ShareLock') {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    if (
+      (
+        await pool.query(
+          `SELECT 1 FROM pg_locks WHERE pid = $1
+      AND relation = 'verification.assessment_producer'::regclass
+      AND mode = $2 AND NOT granted`,
+          [pid, mode],
+        )
+      ).rowCount
+    )
+      return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Producer did not wait for its ${mode} table lock`);
 }
 
 async function reached(promise: Promise<void>) {
@@ -511,7 +552,15 @@ test('ordinary effect locks are compatible, closure waits for them, and later or
   const f = fixture();
   const stage = originalIntent(f);
   const staged = await f.store.stageAssessmentProducer(stage);
-  const held = heldQueries((sql) => /assessment_producer_gate/.test(sql) && /FOR SHARE/.test(sql));
+  const readRows = () =>
+    pool.query(`SELECT 'gate' AS owner, xmax::text FROM verification.assessment_producer_gate
+    WHERE singleton UNION ALL SELECT 'epoch' AS owner, xmax::text FROM reading_position.generation WHERE singleton`);
+  const beforeReaders = (await readRows()).rows;
+  const gateRead = (sql: string) =>
+    /FROM verification\.assessment_producer_gate WHERE singleton/.test(sql);
+  const held = heldQueries(gateRead);
+  const secondHeld = heldQueries(gateRead);
+  let secondTail: ReturnType<VerificationStore['withAssessmentProducerEffects']> | undefined;
   const tail = held.store.withAssessmentProducerEffects(
     f.admission,
     stage.requestDigest,
@@ -526,12 +575,54 @@ test('ordinary effect locks are compatible, closure waits for them, and later or
     const otherStage = originalIntent(other);
     const compatible = await other.store.stageAssessmentProducer(otherStage);
     expect(compatible.permit.generation).toBe(staged.permit.generation);
-    await other.store.withAssessmentProducerEffects(
+    secondTail = secondHeld.store.withAssessmentProducerEffects(
       other.admission,
       otherStage.requestDigest,
       compatible.permit,
       async () => other.terminal,
     );
+    await reached(secondHeld.locked.promise);
+    const pids = [held.backendPids[0]!, secondHeld.backendPids[0]!];
+    const locks = (
+      await pool.query(
+        `SELECT pid, locktype, relation::regclass::text AS relation, mode, granted
+      FROM pg_locks WHERE pid = ANY($1::int[]) AND relation = ANY($2::regclass[])`,
+        [
+          pids,
+          [
+            'verification.assessment_producer',
+            'verification.assessment_producer_gate',
+            'reading_position.generation',
+          ],
+        ],
+      )
+    ).rows;
+    for (const pid of pids) {
+      expect(
+        locks.filter(
+          (lock) =>
+            lock.pid === pid &&
+            lock.relation === 'verification.assessment_producer' &&
+            lock.mode === 'RowExclusiveLock' &&
+            lock.granted,
+        ),
+      ).toHaveLength(1);
+      const sharedRows = locks.filter(
+        (lock) =>
+          lock.pid === pid &&
+          ['verification.assessment_producer_gate', 'reading_position.generation'].includes(
+            lock.relation,
+          ),
+      );
+      expect(sharedRows).toHaveLength(2);
+      for (const lock of sharedRows)
+        expect(lock).toMatchObject({
+          locktype: 'relation',
+          mode: 'AccessShareLock',
+          granted: true,
+        });
+    }
+    expect((await readRows()).rows).toEqual(beforeReaders);
     await expect(
       f.store.closeAssessmentProducerGate(randomUUID(), staged.permit.generation),
     ).rejects.toThrow('lock timeout');
@@ -543,9 +634,37 @@ test('ordinary effect locks are compatible, closure waits for them, and later or
       ).rows[0],
     ).toEqual({ mode: 'ordinary', generation: staged.permit.generation });
   } finally {
+    secondHeld.resume.resolve();
     held.resume.resolve();
+    if (secondTail) await secondTail;
     await tail;
   }
+  expectPlainGateReads(held.queries);
+  expectPlainGateReads(secondHeld.queries);
+  const replayHeld = heldQueries((sql) =>
+    /LOCK TABLE verification\.assessment_producer IN ROW EXCLUSIVE MODE/i.test(sql),
+  );
+  let replayEffects = 0;
+  const replay = replayHeld.store.withAssessmentProducerEffects(
+    f.admission,
+    stage.requestDigest,
+    staged.permit,
+    async () => {
+      replayEffects++;
+      return f.terminal;
+    },
+  );
+  try {
+    await reached(replayHeld.locked.promise);
+    await expect(
+      f.store.closeAssessmentProducerGate(randomUUID(), staged.permit.generation),
+    ).rejects.toThrow('lock timeout');
+  } finally {
+    replayHeld.resume.resolve();
+  }
+  expect((await replay).terminal).toEqual(f.terminal);
+  expect(replayEffects).toBe(0);
+  expectPlainGateReads(replayHeld.queries);
   const pending = fixture();
   const pendingStage = originalIntent(pending);
   const beforeClose = await pending.store.stageAssessmentProducer(pendingStage);
@@ -577,6 +696,133 @@ test('ordinary effect locks are compatible, closure waits for them, and later or
     async () => pending.terminal,
   );
   expect(reconciled.terminal).toEqual(pending.terminal);
+}, 15_000);
+
+test('an in-flight producer INSERT blocks closure and a timed-out closer leaves no permit', async () => {
+  const f = fixture();
+  const stage = originalIntent(f);
+  const generation = (
+    await pool.query(
+      'SELECT generation::text FROM verification.assessment_producer_gate WHERE singleton',
+    )
+  ).rows[0].generation;
+  const inserted = heldQueries((sql) =>
+    /INSERT INTO verification\.assessment_producer \(/.test(sql),
+  );
+  const staging = inserted.store.stageAssessmentProducer(stage);
+  let closed: Awaited<ReturnType<VerificationStore['closeAssessmentProducerGate']>> | undefined;
+  try {
+    await reached(inserted.locked.promise);
+    expect(await f.store.readAssessmentProducer(f.admission)).toBeNull();
+    await expect(
+      f.store.closeAssessmentProducerGate(randomUUID(), generation).then((permit) => {
+        closed = permit;
+        return permit;
+      }),
+    ).rejects.toThrow('lock timeout');
+    expect(closed).toBeUndefined();
+    expect(
+      (
+        await pool.query(
+          'SELECT mode, generation::text FROM verification.assessment_producer_gate WHERE singleton',
+        )
+      ).rows[0],
+    ).toEqual({ mode: 'ordinary', generation });
+    const closer = heldQueries(() => false);
+    const closure = closer.store.closeAssessmentProducerGate(randomUUID(), generation);
+    try {
+      await reached(closer.connected.promise);
+      await waitingForProducerLock(closer.backendPids[0]!, 'ShareLock');
+      inserted.resume.resolve();
+      const staged = await staging;
+      const permit = await closure;
+      expect(permit.mode).toBe('maintenance');
+      expect((await f.store.readAssessmentProducer(f.admission))?.intent).toEqual(stage.intent);
+      expect(staged.permit.generation).toBe(generation);
+      await f.store.withAssessmentProducerEffects(
+        f.admission,
+        stage.requestDigest,
+        permit,
+        async () => f.terminal,
+      );
+    } finally {
+      inserted.resume.resolve();
+      await closure;
+    }
+  } finally {
+    inserted.resume.resolve();
+    await staging;
+  }
+  expectPlainGateReads(inserted.queries);
+}, 15_000);
+
+test('a stale INSERT and a delayed repeatable-read effect both refuse after the maintenance table barrier', async () => {
+  const f = fixture();
+  const stage = originalIntent(f);
+  const pending = fixture();
+  const pendingStage = originalIntent(pending);
+  const staged = await pending.store.stageAssessmentProducer(pendingStage);
+  const staleReader = heldQueries((sql) =>
+    /FROM verification\.assessment_producer_gate WHERE singleton/.test(sql),
+  );
+  const staging = staleReader.store.stageAssessmentProducer(stage);
+  // Collect settlement without invoking Bun's rejection matcher while the SQL
+  // barrier is held; that matcher can wait before cleanup releases the writer.
+  const stageSettled = staging.catch(() => undefined);
+  const closer = heldQueries((sql) =>
+    /LOCK TABLE verification\.assessment_producer IN SHARE MODE/i.test(sql),
+  );
+  let closure: ReturnType<VerificationStore['closeAssessmentProducerGate']> | undefined;
+  const delayed = heldQueries(() => false);
+  let effects = 0;
+  let effect: ReturnType<VerificationStore['withAssessmentProducerEffects']> | undefined;
+  let effectSettled: Promise<unknown> | undefined;
+  try {
+    await reached(staleReader.locked.promise);
+    closure = closer.store.closeAssessmentProducerGate(randomUUID(), staged.permit.generation);
+    await reached(closer.locked.promise);
+    staleReader.resume.resolve();
+    effect = delayed.store.withAssessmentProducerEffects(
+      pending.admission,
+      pendingStage.requestDigest,
+      staged.permit,
+      async () => {
+        effects++;
+        return pending.terminal;
+      },
+    );
+    effectSettled = effect.catch(() => undefined);
+    await waitingForProducerLock(staleReader.backendPids[0]!, 'RowExclusiveLock');
+    await reached(delayed.connected.promise);
+    await waitingForProducerLock(delayed.backendPids[0]!, 'RowExclusiveLock');
+    const lock = delayed.queries.findIndex((sql) =>
+      /LOCK TABLE verification\.assessment_producer IN ROW EXCLUSIVE MODE/i.test(sql),
+    );
+    const firstSelect = delayed.queries.findIndex((sql) => /\bSELECT\b/i.test(sql));
+    expect(lock).toBeGreaterThanOrEqual(0);
+    expect(firstSelect).toBe(-1);
+  } finally {
+    staleReader.resume.resolve();
+    closer.resume.resolve();
+    if (closure) await closure;
+    await stageSettled;
+    if (effectSettled) await effectSettled;
+  }
+  await expect(staging).rejects.toThrow('gate changed');
+  if (effect === undefined) throw new Error('Delayed effect did not reach the table barrier');
+  await expect(effect).rejects.toThrow('gate changed');
+  expect(effects).toBe(0);
+  expect(await f.store.readAssessmentProducer(f.admission)).toBeNull();
+  expect((await pending.store.readAssessmentProducer(pending.admission))?.terminal).toBeNull();
+  expectPlainGateReads(staleReader.queries);
+  expectPlainGateReads(delayed.queries);
+  const permit = await closure!;
+  await pending.store.withAssessmentProducerEffects(
+    pending.admission,
+    pendingStage.requestDigest,
+    permit,
+    async () => pending.terminal,
+  );
 }, 15_000);
 
 test('the indexed pending seek cannot skip a locked earliest producer', async () => {
