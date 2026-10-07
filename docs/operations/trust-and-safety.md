@@ -149,7 +149,17 @@ carries evidence and effects; these are operating responsibilities:
   the designated agent, restrict expeditiously, handle counter-notices and a
   repeat-infringer policy, and enforce decisions across graph reads, history,
   search, caches, exports and every Zone. Public report intake accepts notices
-  without an account and provides private case correspondence. EU notice-and-action
+  without an account and provides private case correspondence. Under
+  [17 U.S.C. §512(g)(2)(B)–(C)](https://www.copyright.gov/title17/92chap5.html#512),
+  promptly forward a valid counter-notice to the claimant and restore between
+  10 and 14 business days after REZICS receives it, unless a qualifying court-filing
+  notice stays restoration. Intake records the immutable receipt-based window;
+  claimant sending has a separate idempotent receipt and confirmation timestamp.
+  If sending remains unconfirmed at the ten-day floor, hold restoration and
+  surface the case in the staff due queue and alerts. Delivery retries do not
+  reset either deadline. An overlapping active restriction also blocks release;
+  staff must resolve overdue delivery and restoration failures, not extend the
+  statutory clock. EU notice-and-action
   under the DSA applies from the first EU user, and DSM Article 17's
   new-service regime still requires authorization efforts and notice-based
   removal. Credits naming real people (staff, voice actors) need a privacy

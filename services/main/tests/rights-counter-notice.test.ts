@@ -1,4 +1,9 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import {
+  listConventionViolations,
+  type ListOpenApi,
+} from '../../../scripts/static/list-convention.ts';
 import type { PoolClient } from 'pg';
 import { addBusinessDays } from '../src/modules/public-report/contract.ts';
 import {
@@ -10,14 +15,21 @@ import {
 import { GovernanceInvalid, GovernanceStale } from '../src/modules/governance/store.ts';
 import { safetyDecisionMessage } from '../../account/src/email-safety.ts';
 
-test('Counter-notice windows preserve UTC delivery time and skip weekends', () => {
-  for (const delivered of [
-    '2026-10-02T14:37:12Z',
-    '2026-10-03T14:37:12Z',
-    '2026-10-04T14:37:12Z',
-  ]) {
-    expect(addBusinessDays(new Date(delivered), 10).toISOString()).toBe('2026-10-16T14:37:12.000Z');
-    expect(addBusinessDays(new Date(delivered), 14).toISOString()).toBe('2026-10-22T14:37:12.000Z');
+test('Private case correspondence serves the complete cursor/limit/items list convention', () => {
+  const api = JSON.parse(
+    readFileSync(new URL('../../../generated/openapi/main/public.json', import.meta.url), 'utf8'),
+  ) as ListOpenApi;
+  expect(
+    listConventionViolations(api).filter((item) =>
+      item.operation.startsWith('GET /v1/public-reports/{caseId}'),
+    ),
+  ).toEqual([]);
+});
+
+test('Counter-notice windows preserve UTC intake receipt time and skip weekends', () => {
+  for (const received of ['2026-10-02T14:37:12Z', '2026-10-03T14:37:12Z', '2026-10-04T14:37:12Z']) {
+    expect(addBusinessDays(new Date(received), 10).toISOString()).toBe('2026-10-16T14:37:12.000Z');
+    expect(addBusinessDays(new Date(received), 14).toISOString()).toBe('2026-10-22T14:37:12.000Z');
   }
 });
 
@@ -107,12 +119,15 @@ test('Mandatory claimant mail includes the full signed counter-notice and the fi
       counterNotice: {
         statement: 'Misidentified material',
         declaration: '{"signature":"Subscriber"}',
+        receivedAt: '2026-10-02T14:37:12.000Z',
       },
     });
     expect(message).toContain('Misidentified material');
     expect(message).toContain('Subscriber');
     expect(message).toContain('claimant-secret');
     expect(message).toContain('10');
+    expect(message).toContain('2026-10-02T14:37:12.000Z');
+    expect(message).not.toContain('{receivedAt}');
     expect(message).toContain('POST /v1/public-reports/case/correspondence');
     expect(message).not.toContain('undefined');
   }

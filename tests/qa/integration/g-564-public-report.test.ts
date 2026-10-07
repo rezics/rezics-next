@@ -26,7 +26,7 @@ import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 interface Receipt { reportId: string; caseId: string; credential: string; receivedAt: string; replayed: boolean }
 interface Step { id: string; kind: string; dueAt: string | null; occurredAt: string; contentLanguage: string | null;
   statement: string | null }
-interface Status { receivedAt: string; contentLanguage: string; steps: Step[]; nextCursor: string | null }
+interface Status { receivedAt: string; contentLanguage: string; items: Step[]; complete: boolean; nextCursor: string | null }
 
 test('G-564: public API intake, private correspondence, legal deadlines, urgent evidence and preservation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run with the QA integration tier');
@@ -114,7 +114,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     const correspond = (receipt: Receipt, body: unknown, secret = receipt.credential, key = randomUUID()) =>
       call('POST', `/v1/public-reports/${receipt.caseId}/correspondence`, body, { secret, key });
     await json(await correspond(first, message), 200);
-    expect((await status(first)).steps.some(step => step.statement === message.statement && step.contentLanguage === 'sw-KE')).toBe(true);
+    expect((await status(first)).items.some(step => step.statement === message.statement && step.contentLanguage === 'sw-KE')).toBe(true);
     const signed = await json<Receipt>(await call('POST', '/v1/public-reports', base, { token: f.account.tokenA }), 201);
     const own = await json<{ reports: Array<{ reportId: string }> }>(await call('GET', '/v1/public-reports/mine',
       undefined, { token: f.account.tokenA }), 200);
@@ -125,12 +125,12 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
       contactEmail: 'safe@example.test', ncii: { signature: 'Depicted person', depictedPersonOrAuthorized: true,
         goodFaithWithoutConsent: true, supportingInformation: 'Publication was without consent' } }), 201);
     const before = await status(ncii);
-    const deadline = before.steps.find(step => step.kind === 'removal_deadline')!;
+    const deadline = before.items.find(step => step.kind === 'removal_deadline')!;
     expect(Date.parse(deadline.dueAt!) - Date.parse(ncii.receivedAt)).toBe(48 * 3600_000);
     await json(await correspond(ncii, message), 200);
     const after = await status(ncii);
     expect(after.receivedAt).toBe(before.receivedAt);
-    expect(after.steps.find(step => step.kind === 'removal_deadline')).toEqual(deadline);
+    expect(after.items.find(step => step.kind === 'removal_deadline')).toEqual(deadline);
     await expect(f.accessPool.query('UPDATE access.governance_report SET received_at = now() WHERE id = $1',
       [ncii.reportId])).rejects.toThrow();
     await expect(f.accessPool.query('UPDATE access.governance_process_step SET due_at = now() WHERE id = $1',
@@ -157,7 +157,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     // A credential alone cannot counter a notice before any material was removed.
     // The delivered waiting/restoration flow is exercised by rights-counter-notice.test.ts.
     expect((await correspond(copyright, counter, affected)).status).toBe(409);
-    expect((await status(copyright, affected)).steps.some(step => step.kind === 'restoration_not_before')).toBe(false);
+    expect((await status(copyright, affected)).items.some(step => step.kind === 'restoration_not_before')).toBe(false);
     await json(await correspond(copyright, { kind: 'appeal', statement: 'Please review', contentLanguage: 'x-private' }, affected), 200);
 
     // Urgent anchors are never returned to general deciders or Realm moderators.
@@ -207,11 +207,11 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     for (let index = 0; index < 51; index++) await json(await correspond(first,
       { ...message, statement: `Private clarification ${index}` }), 200);
     const bounded = await status(first);
-    expect(bounded.steps).toHaveLength(50);
+    expect(bounded.items).toHaveLength(50);
     expect(bounded.nextCursor).not.toBeNull();
     const continuation = await json<Status>(await call('GET',
       `/v1/public-reports/${first.caseId}?cursor=${bounded.nextCursor}`, undefined, { secret: first.credential }), 200);
-    expect(continuation.steps).toHaveLength(3);
+    expect(continuation.items).toHaveLength(3);
     expect(continuation.nextCursor).toBeNull();
 
     const mediaStore = new MediaStore(f.pool, core);

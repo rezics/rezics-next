@@ -176,8 +176,9 @@ export class PublicReports {
     return row;
   }
 
-  async status(caseId: string, secret: string, after?: string) {
+  async status(caseId: string, secret: string, after?: string, limit: number = PUBLIC_REPORT_COST.page) {
     if (after && !uuidPattern.test(after)) throw new GovernanceInvalid('Invalid correspondence cursor');
+    if (!Number.isInteger(limit) || limit < 1 || limit > PUBLIC_REPORT_COST.page) throw new GovernanceInvalid('Invalid correspondence page size');
     return this.transaction(async (client) => {
       const credential = await this.credential(client, caseId, secret);
       const row = (await client.query<{ state: string; generation: string; received_at: Date;
@@ -203,12 +204,16 @@ export class PublicReports {
         statement: string | null; content_language: string | null; party: string | null;
         declarations: Record<string, unknown> | null;
         }>(`SELECT id, step, occurred_at, due_at, party, declarations,
-        statement, content_language FROM access.governance_process_step
+        statement, content_language FROM access.governance_process_step s
         WHERE case_id = $5 AND (report_id = $1 OR report_id IS NULL)
         AND (party IS NULL OR party = $4 OR step IN ('intake','counter_notice','claimant_action'))
+        AND NOT EXISTS (SELECT 1 FROM access.rights_counter_notice j WHERE j.report_id = s.report_id
+          AND s.step IN ('restoration_not_before','restoration_not_after')
+          AND (s.decision_id IS NULL OR (s.decision_id = j.restriction_id AND s.due_at IS DISTINCT FROM
+            CASE s.step WHEN 'restoration_not_before' THEN j.not_before ELSE j.not_after END)))
         AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT $3`,
-      [credential.report_id, after ?? null, PUBLIC_REPORT_COST.page + 1, credential.party, caseId])).rows;
-      const page = steps.slice(0, PUBLIC_REPORT_COST.page);
+      [credential.report_id, after ?? null, limit + 1, credential.party, caseId])).rows;
+      const page = steps.slice(0, limit);
       const effects =
         row.decision_head && row.cancelled !== null
           ? (
@@ -231,11 +236,11 @@ export class PublicReports {
         operation: effects
           ? operationOutcome(row.decision_head!, effects, row.cancelled ?? false)
           : null,
-        steps: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
+        items: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
           dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language,
           declarations: partyDeclarations(step.step, step.declarations,
             (step.party ?? (step.step === 'intake' ? 'reporter' : null)) === credential.party) })),
-        nextCursor: steps.length > PUBLIC_REPORT_COST.page ? page.at(-1)!.id : null };
+        nextCursor: steps.length > limit ? page.at(-1)!.id : null, complete: steps.length <= limit };
     });
   }
 

@@ -5,7 +5,7 @@ import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale,
   GovernanceUnavailable } from '../modules/governance/store.ts';
 import { CATEGORY_VERSION, correspondenceInput, correspondenceReceipt, publicReportInput,
-  publicReportList, publicReportReceipt, publicReportStatus } from '../modules/public-report/contract.ts';
+  publicReportList, publicReportReceipt, publicReportStatus, PUBLIC_REPORT_COST } from '../modules/public-report/contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { governanceError } from './reports.ts';
 import { problem } from './problems.ts';
@@ -19,6 +19,8 @@ export const openApiOperations = {
 } as const;
 const caseParams = t.Object({ caseId: t.String({ format: 'uuid' }) });
 const cursorQuery = t.Object({ cursor: t.Optional(t.String({ format: 'uuid' })) }, { additionalProperties: false });
+const caseQuery = t.Object({ ...cursorQuery.properties,
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: PUBLIC_REPORT_COST.page })) }, { additionalProperties: false });
 const noStore = { 'cache-control': 'no-store' };
 const credential = (request: Request) => request.headers.get('x-rezics-case-credential') ?? '';
 const key = (request: Request) => request.headers.get('idempotency-key') ?? '';
@@ -69,13 +71,13 @@ export function publicReportRoutes(work: MainWorkDependencies) {
           { headers: noStore });
       } catch (error) { return privateError(error); }
     })
-    .get('/v1/public-reports/:caseId', { params: caseParams, query: cursorQuery,
+    .get('/v1/public-reports/:caseId', { params: caseParams, query: caseQuery,
       headers: t.Object({ 'x-rezics-case-credential': t.Optional(t.String()) }),
       response: { 200: publicReportStatus, ...readProblems } }, async ({ request, params, query }) => {
       try {
         if (!work.publicReports) return unavailable();
         return Response.json({ profile: CATEGORY_VERSION,
-          ...await work.publicReports.status(params.caseId, credential(request), query.cursor) }, { headers: noStore });
+          ...await work.publicReports.status(params.caseId, credential(request), query.cursor, query.limit) }, { headers: noStore });
       } catch (error) { return privateError(error); }
     })
     .post('/v1/public-reports/:caseId/correspondence', { params: caseParams, body: correspondenceInput,

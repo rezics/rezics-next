@@ -190,7 +190,7 @@ export function CaseView({ locale, caseId, initial, credential: given, actingSub
   const t = textFor(locale);
   const [state, setState] = useState<CaseState>(initial ?? { kind: 'reading' });
   const [credential, setCredential] = useState<string | null>(null);
-  const [steps, setSteps] = useState<CaseStep[]>(initial?.kind === 'loaded' ? initial.status.steps : []);
+  const [steps, setSteps] = useState<CaseStep[]>(initial?.kind === 'loaded' ? initial.status.items : []);
   const [cursor, setCursor] = useState<string | null>(initial?.kind === 'loaded' ? initial.status.nextCursor : null);
   const [more, setMore] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -201,7 +201,7 @@ export function CaseView({ locale, caseId, initial, credential: given, actingSub
     for (let page = 0; page < (all ? MAX_PAGES : 1); page += 1) {
       const result = await readCase({ locale, caseId, credential: secret, cursor: after }, send);
       if (!result.ok) { setState({ kind: result.reason === 'denied' ? 'unavailable' : 'failed' }); return; }
-      collected.push(...result.data.steps);
+      collected.push(...result.data.items);
       setState({ kind: 'loaded', status: result.data });
       after = result.data.nextCursor;
       if (!after) break;
@@ -236,7 +236,7 @@ export function CaseView({ locale, caseId, initial, credential: given, actingSub
     const result = await readCase({ locale, caseId, credential, cursor }, send);
     setMore(false);
     if (!result.ok) { setState({ kind: 'failed' }); return; }
-    setSteps(current => [...current, ...result.data.steps]);
+    setSteps(current => [...current, ...result.data.items]);
     setCursor(result.data.nextCursor);
   };
   const copy = () => void navigator.clipboard.writeText(location.href).then(() => setCopied(true), () => setCopied(false));

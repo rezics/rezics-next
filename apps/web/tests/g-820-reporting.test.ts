@@ -175,7 +175,7 @@ test("G-820 API parity: the browser makes exactly G-564's calls and no credentia
     if (url.endsWith('/public-reports'))
       return Response.json({ caseId: CASE, credential: CREDENTIAL });
     if (url.includes('/mine')) return Response.json({ reports: [], nextCursor: null });
-    return Response.json({ caseId: CASE, steps: [], nextCursor: null });
+    return Response.json({ caseId: CASE, items: [], nextCursor: null, complete: true });
   }) as typeof fetch;
 
   await submitReport(

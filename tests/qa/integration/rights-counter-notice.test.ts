@@ -40,7 +40,7 @@ type Status = {
   notice: { statement: string; contactEmail: string | null; declarations: Record<string, unknown> };
   outcome: string | null;
   operation: { status: string } | null;
-  steps: {
+  items: {
     id: string;
     kind: string;
     dueAt: string | null;
@@ -48,9 +48,10 @@ type Status = {
     declarations: Record<string, unknown> | null;
   }[];
   nextCursor: string | null;
+  complete: boolean;
 };
 
-test('Copyright counter-notices reach the claimant once; delivered deadlines restore real content, filings and parallel restrictions keep it down', async () => {
+test('Copyright counter-notices reach the claimant once; receipt deadlines restore real content, filings and parallel restrictions keep it down', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, [
     'access',
@@ -232,21 +233,66 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
     );
     expect((await correspond(restored.receipt, restored.affected, counter)).status).toBe(409);
     expect(
-      (await status(restored.receipt)).steps.some((step) => step.kind === 'counter_notice'),
+      (await status(restored.receipt)).items.some((step) => step.kind === 'counter_notice'),
     ).toBe(true);
+    const firstPage = await json<Status>(
+      await f.call(
+        'GET',
+        `/v1/public-reports/${restored.receipt.caseId}?limit=2`,
+        undefined,
+        undefined,
+        undefined,
+        restored.receipt.credential,
+      ),
+    );
+    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.complete).toBe(false);
+    expect(firstPage.nextCursor).not.toBeNull();
+    const ids = firstPage.items.map((item) => item.id);
+    let next = firstPage.nextCursor;
+    for (let pages = 0; next && pages < 10; pages++) {
+      const page = await json<Status>(
+        await f.call(
+          'GET',
+          `/v1/public-reports/${restored.receipt.caseId}?limit=2&cursor=${next}`,
+          undefined,
+          undefined,
+          undefined,
+          restored.receipt.credential,
+        ),
+      );
+      expect(page.items.length).toBeLessThanOrEqual(2);
+      expect(page.complete).toBe(page.nextCursor === null);
+      ids.push(...page.items.map((item) => item.id));
+      next = page.nextCursor;
+    }
+    expect(next).toBeNull();
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual((await status(restored.receipt)).items.map((item) => item.id));
+    const empty = await json<Status>(
+      await f.call(
+        'GET',
+        `/v1/public-reports/${restored.receipt.caseId}?limit=2&cursor=${ids.at(-1)}`,
+        undefined,
+        undefined,
+        undefined,
+        restored.receipt.credential,
+      ),
+    );
+    expect(empty).toMatchObject({ items: [], nextCursor: null, complete: true });
     const passes = await Promise.all([notices.runPage(), notices.runPage()]);
     expect(passes.reduce((count, pass) => count + pass.processed, 0)).toBe(1);
     expect(passes.reduce((count, pass) => count + pass.deferred, 0)).toBe(1);
     expect((await accountPool.query('SELECT id FROM rezics_account_email')).rowCount).toBe(1);
     expect(
-      (await status(restored.receipt)).steps.some((step) => step.kind === 'restoration_not_before'),
-    ).toBe(false);
+      (await status(restored.receipt)).items.some((step) => step.kind === 'restoration_not_before'),
+    ).toBe(true);
     setClock('2026-10-02T14:39:12Z');
     expect(await notices.runPage()).toEqual({ processed: 1, deferred: 0 });
     expect((await accountPool.query('SELECT id FROM rezics_account_email')).rowCount).toBe(1);
     expect(
-      (await status(restored.receipt)).steps.some((step) => step.kind === 'restoration_not_before'),
-    ).toBe(false);
+      (await status(restored.receipt)).items.some((step) => step.kind === 'restoration_not_before'),
+    ).toBe(true);
     await drain();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toBe('claimant-91@example.test');
@@ -260,21 +306,21 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
       affected = await status(restored.receipt, restored.affected);
     expect(reporter.notice.declarations.claimantAddress).toBe('Claimant private address');
     expect(
-      reporter.steps.find((step) => step.kind === 'counter_notice')!.declarations!.address,
+      reporter.items.find((step) => step.kind === 'counter_notice')!.declarations!.address,
     ).toBeUndefined();
     expect(affected.notice.contactEmail).toBeNull();
     expect(affected.notice.declarations.claimantAddress).toBeUndefined();
     expect(
-      affected.steps.find((step) => step.kind === 'counter_notice')!.declarations!.address,
+      affected.items.find((step) => step.kind === 'counter_notice')!.declarations!.address,
     ).toBe(declaration.address);
-    expect(reporter.steps.find((step) => step.kind === 'restoration_not_before')!.dueAt).toBe(
-      '2026-10-16T14:41:12.000Z',
+    expect(reporter.items.find((step) => step.kind === 'restoration_not_before')!.dueAt).toBe(
+      '2026-10-16T14:37:12.000Z',
     );
-    expect(reporter.steps.find((step) => step.kind === 'restoration_not_after')!.dueAt).toBe(
-      '2026-10-22T14:41:12.000Z',
+    expect(reporter.items.find((step) => step.kind === 'restoration_not_after')!.dueAt).toBe(
+      '2026-10-22T14:37:12.000Z',
     );
     expect((await f.stack.store.readAsset(restored.image.asset))!.moderation).toBe('suppressed');
-    setClock('2026-10-16T14:41:11Z');
+    setClock('2026-10-16T14:37:11Z');
     expect((await notices.runPage()).processed).toBe(0);
     await expect(
       f.stack.accessPool.query(
@@ -283,7 +329,7 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
         [response.stepId],
       ),
     ).rejects.toThrow();
-    setClock('2026-10-16T14:41:12Z');
+    setClock('2026-10-16T14:37:12Z');
     expect(await notices.runPage()).toEqual({ processed: 1, deferred: 0 });
     expect((await f.stack.store.readAsset(restored.image.asset))!.moderation).toBe('none');
     expect(await status(restored.receipt)).toMatchObject({
@@ -329,7 +375,7 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
     expect((await notices.runPage()).deferred).toBe(0);
     expect((await f.stack.store.readAsset(stayed.image.asset))!.moderation).toBe('suppressed');
     expect(
-      (await status(stayed.receipt)).steps.some((step) => step.kind === 'claimant_action'),
+      (await status(stayed.receipt)).items.some((step) => step.kind === 'claimant_action'),
     ).toBe(true);
     expect(
       (
@@ -408,8 +454,8 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
     expect(authAffected.notice.declarations.claimantName).toBeUndefined();
     expect(authAffected.notice.declarations.claimantContact).toBeUndefined();
     expect(authAffected.notice.contactEmail).toBeNull();
-    expect(authStatus.steps.find((step) => step.kind === 'restoration_not_before')!.dueAt).toBe(
-      '2026-10-16T14:39:12.000Z',
+    expect(authStatus.items.find((step) => step.kind === 'restoration_not_before')!.dueAt).toBe(
+      '2026-10-16T14:37:12.000Z',
     );
     expect(sent.filter((mail) => mail.to === 'claimant-94@example.test')).toHaveLength(1);
 
@@ -434,20 +480,106 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
       201,
     );
     expect(
-      (await status(authenticated.receipt)).steps.some(
+      (await status(authenticated.receipt)).items.some(
         (step) => step.statement === 'Staff recorded the removal.',
       ),
     ).toBe(true);
     expect(
-      (await status(authenticated.receipt, authenticated.affected)).steps.some(
+      (await status(authenticated.receipt, authenticated.affected)).items.some(
         (step) => step.statement === 'Staff recorded the removal.',
       ),
     ).toBe(true);
+
+    // Delivery can be delayed beyond the floor. Both automatic and staff
+    // restoration stay gated, while due queue and alerts expose the incident.
+    setClock('2026-10-02T14:37:12Z');
+    const delayed = await createCase(95);
+    const delayedCounter = await json<{ stepId: string }>(
+      await correspond(delayed.receipt, delayed.affected, counter),
+    );
+    await notices.runPage();
+    setClock('2026-10-16T14:37:12Z');
+    await notices.runPage();
+    expect((await f.stack.store.readAsset(delayed.image.asset))!.moderation).toBe('suppressed');
+    expect(
+      (await status(delayed.receipt)).items.some((item) => item.kind === 'claimant_notice'),
+    ).toBe(false);
+    expect(
+      (await f.governance.safety.due(f.staff.principal, f.staff.actor)).items.some(
+        (item) => item.caseId === delayed.receipt.caseId,
+      ),
+    ).toBe(true);
+    await f.produce();
+    expect(
+      (
+        await f.stack.accessPool.query('SELECT 1 FROM access.safety_alert WHERE case_id = $1', [
+          delayed.receipt.caseId,
+        ])
+      ).rowCount,
+    ).toBeGreaterThan(0);
+    expect(
+      (
+        await f.decide(
+          await f.input(delayed.receipt, delayed.image, 'restore', null, delayedCounter.stepId),
+        )
+      ).status,
+    ).toBe(409);
+    const held = (
+      await f.stack.accessPool.query<{
+        received_at: Date;
+        not_before: Date;
+        not_after: Date;
+        delivered_at: Date | null;
+        phase: string;
+      }>(
+        'SELECT received_at,not_before,not_after,delivered_at,phase FROM access.rights_counter_notice WHERE step_id = $1',
+        [delayedCounter.stepId],
+      )
+    ).rows[0]!;
+    expect(held).toMatchObject({ phase: 'delivery', delivered_at: null });
+    expect(held.not_before.toISOString()).toBe('2026-10-16T14:37:12.000Z');
+    expect(held.not_after.toISOString()).toBe('2026-10-22T14:37:12.000Z');
+    setClock('2026-10-19T14:37:12Z');
+    await drain();
+    expect(sent.filter((mail) => mail.to === 'claimant-95@example.test')).toHaveLength(1);
+    await notices.runPage();
+    const confirmed = (
+      await f.stack.accessPool.query<{
+        received_at: Date;
+        not_before: Date;
+        not_after: Date;
+        delivered_at: Date;
+      }>(
+        'SELECT received_at,not_before,not_after,delivered_at FROM access.rights_counter_notice WHERE step_id = $1',
+        [delayedCounter.stepId],
+      )
+    ).rows[0]!;
+    expect(confirmed.received_at).toEqual(held.received_at);
+    expect(confirmed.not_before).toEqual(held.not_before);
+    expect(confirmed.not_after).toEqual(held.not_after);
+    expect(confirmed.delivered_at.toISOString()).toBe('2026-10-19T14:37:12.000Z');
+    await notices.runPage();
+    expect((await f.stack.store.readAsset(delayed.image.asset))!.moderation).toBe('none');
 
     const client = await f.stack.accessPool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SET LOCAL enable_seqscan = off');
+      await client.query("SET LOCAL TIME ZONE 'America/New_York'");
+      for (const received of [
+        '2026-10-02T14:37:12Z',
+        '2026-10-03T14:37:12Z',
+        '2026-10-04T14:37:12Z',
+      ]) {
+        const dates = (
+          await client.query<{ earliest: Date; latest: Date }>(
+            'SELECT access.counter_notice_business_day($1,10) AS earliest,access.counter_notice_business_day($1,14) AS latest',
+            [received],
+          )
+        ).rows[0]!;
+        expect(dates.earliest.toISOString()).toBe('2026-10-16T14:37:12.000Z');
+        expect(dates.latest.toISOString()).toBe('2026-10-22T14:37:12.000Z');
+      }
       const plan = await client.query(
         `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
         SELECT step_id FROM access.rights_counter_notice WHERE phase IN ('delivery','waiting','restoring')
@@ -466,7 +598,7 @@ test('Copyright counter-notices reach the claimant once; delivered deadlines res
   }
 }, 180_000);
 
-test('Upgrade forwards previously signed counter-notices once and replaces their intake-based timing basis', async () => {
+test('Upgrade forwards previously signed counter-notices once and preserves their original intake receipt clock', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, [
     'access',
@@ -501,11 +633,26 @@ test('Upgrade forwards previously signed counter-notices once and replaces their
     now = new Date();
     const legacyReceived = now;
     const oldCounter = Bun.randomUUIDv7();
+    // Recreate the preceding job schema in this isolated Access clone so the
+    // correction migration, including its real existing-row backfill, is exercised.
+    await f.stack.accessPool.query(`
+      DROP TRIGGER rights_counter_notice_receipt ON access.rights_counter_notice;
+      DROP TRIGGER rights_counter_notice_windows ON access.rights_counter_notice;
+      DROP FUNCTION access.prepare_counter_notice_receipt();
+      DROP FUNCTION access.append_counter_notice_windows();
+      DROP FUNCTION access.counter_notice_business_day(timestamptz,integer);
+      DROP INDEX access.rights_counter_notice_report;
+      ALTER TABLE access.rights_counter_notice DROP CONSTRAINT rights_counter_notice_receipt_window,
+        DROP COLUMN received_at,ALTER COLUMN not_before DROP NOT NULL,ALTER COLUMN not_after DROP NOT NULL,
+        ADD CONSTRAINT rights_counter_notice_check CHECK ((delivered_at IS NULL) = (not_before IS NULL)),
+        ADD CONSTRAINT rights_counter_notice_check1 CHECK ((delivered_at IS NULL) = (not_after IS NULL)),
+        ADD CONSTRAINT rights_counter_notice_check2 CHECK (not_before > delivered_at AND not_before <= not_after);
+    `);
     await f.stack.accessPool.query(
       `INSERT INTO access.governance_process_step
       (id,case_id,report_id,process,step,idempotency_key,request_digest,statement,occurred_at,content_language,declarations,party)
-      VALUES ($1::uuid,$2,$3,'dmca_512','counter_notice',$1::text,$4,'Legacy signed counter-notice',clock_timestamp(),'en',$5,'affected')`,
-      [oldCounter, receipt.caseId, receipt.reportId, 'a'.repeat(64), declaration],
+      VALUES ($1::uuid,$2,$3,'dmca_512','counter_notice',$1::text,$4,'Legacy signed counter-notice',$6,'en',$5,'affected')`,
+      [oldCounter, receipt.caseId, receipt.reportId, 'a'.repeat(64), declaration, legacyReceived],
     );
     const oldWindows: string[] = [];
     for (const [kind, days] of [
@@ -538,6 +685,16 @@ test('Upgrade forwards previously signed counter-notices once and replaces their
     );
     await f.stack.accessPool.query(migration);
     await f.stack.accessPool.query(migration);
+    await f.stack.accessPool.query(
+      readFileSync(
+        new URL(
+          '../../../services/main/migrations/access/1427_counter_notice_receipt_windows.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    await f.stack.accessPool.query(migration);
     expect(
       (
         await f.stack.accessPool.query(
@@ -562,14 +719,15 @@ test('Upgrade forwards previously signed counter-notices once and replaces their
       )
     ).rows[0]!;
     expect(delivered.delivered_at.toISOString()).toBe(now.toISOString());
-    expect(delivered.not_before.toISOString()).toBe(addBusinessDays(now, 10).toISOString());
+    expect(delivered.not_before.toISOString()).toBe(
+      addBusinessDays(legacyReceived, 10).toISOString(),
+    );
     expect(delivered.claimant_credential).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(
       (await f.deps.publicReports!.status(receipt.caseId, delivered.claimant_credential)).reportId,
     ).toBe(receipt.reportId);
     // Retained legacy windows belong in the case history, not the due queue or alerts.
-    const deliveryTime = now;
-    now = addBusinessDays(legacyReceived, 10);
+    now = new Date(addBusinessDays(legacyReceived, 10).getTime() - 1);
     f.setClock(now);
     expect(
       (await f.governance.safety.due(f.staff.principal, f.staff.actor)).items.some(
@@ -586,7 +744,7 @@ test('Upgrade forwards previously signed counter-notices once and replaces their
         )
       ).rowCount,
     ).toBe(0);
-    now = addBusinessDays(deliveryTime, 10);
+    now = addBusinessDays(legacyReceived, 10);
     f.setClock(now);
     expect(await notices.runPage()).toEqual({ processed: 1, deferred: 0 });
     expect((await f.stack.store.readAsset(image.asset))!.moderation).toBe('none');
@@ -599,7 +757,7 @@ test('Upgrade forwards previously signed counter-notices once and replaces their
         )
       ).rows[0]!.restoration_id,
     ).not.toBe(restriction.decisionId);
-    now = addBusinessDays(deliveryTime, 14);
+    now = addBusinessDays(legacyReceived, 14);
     f.setClock(now);
     expect(
       (await f.governance.safety.due(f.staff.principal, f.staff.actor)).items.some(

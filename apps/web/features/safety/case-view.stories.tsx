@@ -8,9 +8,9 @@ const caseId = '0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
 const credential = 'B'.repeat(43);
 const status = (overrides: Partial<CaseStatus> = {}): CaseStatus => ({ profile: 'public-report-v1', reportId: 'r', caseId,
   receivedAt: '2026-10-01T09:00:00.000Z', state: 'open', generation: '1', category: 'harassment',
-  contentLanguage: 'en', process: 'platform_rules', outcome: null, reasons: null, statementOfReasons: null, operation: null, nextCursor: null,
+  contentLanguage: 'en', process: 'platform_rules', outcome: null, reasons: null, statementOfReasons: null, operation: null, nextCursor: null, complete: true,
   notice: { statement: null, contactEmail: null, declarations: null },
-  steps: [{ id: 's1', kind: 'intake', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: null, statement: null,
+  items: [{ id: 's1', kind: 'intake', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: null, statement: null,
     contentLanguage: null, declarations: null }], ...overrides });
 
 let sent: Array<{ url: string; credential: string | null; key: string | null; body: Record<string, unknown> }> = [];
@@ -67,7 +67,7 @@ export const DecisionWithAppeal: Story = {
 
 /** The NCII removal deadline is on the page: the 48-hour notice and the time it is due. */
 export const NciiDeadline: Story = {
-  args: { initial: { kind: 'loaded', status: status({ category: 'ncii', process: 'ncii', steps: [
+  args: { initial: { kind: 'loaded', status: status({ category: 'ncii', process: 'ncii', items: [
     { id: 's1', kind: 'intake', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: null, statement: null, contentLanguage: null, declarations: null },
     { id: 's2', kind: 'removal_deadline', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: '2026-10-03T09:00:00.000Z',
       statement: null, contentLanguage: null, declarations: null }] }) } },
@@ -177,7 +177,7 @@ export const AppealWording: Story = {
 
 /** Correspondence keeps its own language. */
 export const CorrespondenceLanguage: Story = {
-  args: { initial: { kind: 'loaded', status: status({ steps: [
+  args: { initial: { kind: 'loaded', status: status({ items: [
     { id: 's1', kind: 'intake', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: null, statement: null, contentLanguage: null, declarations: null },
     { id: 's2', kind: 'message', occurredAt: '2026-10-01T10:00:00.000Z', dueAt: null, statement: 'もう一度確認してください。',
       contentLanguage: 'ja', declarations: null }] }) } },

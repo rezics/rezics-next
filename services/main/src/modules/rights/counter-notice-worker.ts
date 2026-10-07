@@ -1,5 +1,4 @@
 import type { Pool, PoolClient } from 'pg';
-import { addBusinessDays } from '../public-report/contract.ts';
 import { GovernanceUnavailable, type GovernanceStore } from '../governance/store.ts';
 import { requireAccessOpen } from '../notification/store.ts';
 import { COUNTER_NOTICE_COST, type CounterDeclaration } from './counter-notice.ts';
@@ -11,7 +10,7 @@ export interface CounterNoticeMail {
   outcome: 'counter_notice';
   contentLanguage: string;
   credential: string;
-  counterNotice: { statement: string; declaration: string };
+  counterNotice: { statement: string; declaration: string; receivedAt: string };
 }
 export type CounterNoticeDelivery =
   | 'queued'
@@ -23,7 +22,8 @@ export type CounterNoticeDelivery =
 
 /** Durable due index, one leased page per invocation, at most one Account call
  * and one existing 64-target restoration operation per job. Queue intake is
- * not delivery: only Account's sent state starts the waiting period. */
+ * not delivery: Account's sent state is a release gate independent of the
+ * intake receipt clock. Receipt windows surface undelivered cases to staff. */
 export class RightsCounterNotices {
   constructor(
     private readonly pool: Pool,
@@ -104,9 +104,10 @@ export class RightsCounterNotices {
           statement: string;
           declarations: CounterDeclaration;
           contact: string | null;
+          received_at: Date;
         }>(
           `
-        SELECT j.case_id,j.delivery_id,j.claimant_credential,s.content_language,s.statement,s.declarations,
+        SELECT j.case_id,j.delivery_id,j.claimant_credential,j.received_at,s.content_language,s.statement,s.declarations,
           COALESCE(r.contact_email,rc.claimant_contact) AS contact
         FROM access.rights_counter_notice j JOIN access.governance_process_step s ON s.id = j.step_id
         JOIN access.governance_report r ON r.id = j.report_id
@@ -133,6 +134,7 @@ export class RightsCounterNotices {
         counterNotice: {
           statement: row.statement,
           declaration: JSON.stringify(row.declarations, null, 2),
+          receivedAt: row.received_at.toISOString(),
         },
       };
     });
@@ -157,34 +159,17 @@ export class RightsCounterNotices {
       );
       if (!held.rowCount) return;
       const delivered = this.clock();
-      const earliest = addBusinessDays(delivered, 10),
-        latest = addBusinessDays(delivered, 14);
-      for (const [kind, due] of [
-        ['claimant_notice', null],
-        ['restoration_not_before', earliest],
-        ['restoration_not_after', latest],
-      ] as const) {
-        await client.query(
-          `INSERT INTO access.governance_process_step
-          (id,case_id,report_id,decision_id,process,step,idempotency_key,request_digest,occurred_at,due_at)
-          SELECT $1::uuid,$2::uuid,$3::uuid,$4::uuid,'dmca_512',$5,$1::text,request_digest,$6::timestamptz,$7::timestamptz
-          FROM access.governance_process_step WHERE id = $8`,
-          [
-            Bun.randomUUIDv7(),
-            row.case_id,
-            row.report_id,
-            row.restriction_id,
-            kind,
-            delivered,
-            due,
-            stepId,
-          ],
-        );
-      }
       await client.query(
-        `UPDATE access.rights_counter_notice SET delivered_at = $2,not_before = $3,
-        not_after = $4,next_attempt_at = $3,phase = 'waiting' WHERE step_id = $1`,
-        [stepId, delivered, earliest, latest],
+        `INSERT INTO access.governance_process_step
+          (id,case_id,report_id,decision_id,process,step,idempotency_key,request_digest,occurred_at,due_at)
+          SELECT $1::uuid,$2::uuid,$3::uuid,$4::uuid,'dmca_512','claimant_notice',$1::text,request_digest,$5::timestamptz,NULL
+          FROM access.governance_process_step WHERE id = $6`,
+        [Bun.randomUUIDv7(), row.case_id, row.report_id, row.restriction_id, delivered, stepId],
+      );
+      await client.query(
+        `UPDATE access.rights_counter_notice SET delivered_at = $2,
+        next_attempt_at = GREATEST(not_before,$2),phase = 'waiting' WHERE step_id = $1`,
+        [stepId, delivered],
       );
     });
   }

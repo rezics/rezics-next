@@ -20,7 +20,7 @@ type Correspondence = {
   outcome: Outcome;
   credential?: string;
   reasons?: { facts: string; scope: string; duration: string; automation: boolean };
-  counterNotice?: { statement: string; declaration: string };
+  counterNotice?: { statement: string; declaration: string; receivedAt: string };
 };
 /** Constant indexed intake/recipient/queue reads and one encrypted insert. */
 export const SAFETY_CORRESPONDENCE_COST = {
@@ -47,7 +47,7 @@ const copy: Record<
       'Use your case credential in the X-Rezics-Case-Credential header to read the decision or submit an appeal. Keep it private.',
     automatic: 'Automated decision',
     human: 'Decision reviewed by a person',
-    counterDeadline: 'A counter-notice was received. Restoration is scheduled after 10 business days from delivery unless you report a court filing. Submit the filing through your private case correspondence.',
+    counterDeadline: 'REZICS received this counter-notice at {receivedAt}. Restoration is scheduled after 10 business days from that receipt unless you report a court filing. Submit the filing through your private case correspondence.',
     outcomes: {
       reject: 'Decision to reject',
       restrict: 'Decision to restrict',
@@ -65,7 +65,7 @@ const copy: Record<
     appeal: '将案件凭证放入 X-Rezics-Case-Credential 请求头，以查看决定或提出申诉。请保密。',
     automatic: '自动决定',
     human: '经人工审核的决定',
-    counterDeadline: '已收到反通知。除非您报告法院诉讼，材料计划在送达后 10 个工作日恢复。请通过私人案件通信提交诉讼记录。',
+    counterDeadline: 'REZICS 于 {receivedAt} 收到此反通知。除非您报告法院诉讼，材料计划在该收件时间后 10 个工作日恢复。请通过私人案件通信提交诉讼记录。',
     outcomes: {
       reject: '决定：拒绝',
       restrict: '决定：限制',
@@ -83,7 +83,7 @@ const copy: Record<
     appeal: '將案件憑證放入 X-Rezics-Case-Credential 請求標頭，以查看決定或提出申訴。請保密。',
     automatic: '自動決定',
     human: '經人工審核的決定',
-    counterDeadline: '已收到反通知。除非您報告法院訴訟，材料預定在送達後 10 個工作日恢復。請透過私人案件通訊提交訴訟紀錄。',
+    counterDeadline: 'REZICS 於 {receivedAt} 收到此反通知。除非您報告法院訴訟，材料預定在該收件時間後 10 個工作日恢復。請透過私人案件通訊提交訴訟紀錄。',
     outcomes: {
       reject: '決定：拒絕',
       restrict: '決定：限制',
@@ -102,7 +102,7 @@ const copy: Record<
       '決定の確認や異議申立てには、X-Rezics-Case-Credential ヘッダーに案件認証情報を指定してください。他人に共有しないでください。',
     automatic: '自動による決定',
     human: '担当者が審査した決定',
-    counterDeadline: '反対通知を受領しました。裁判所への提訴の報告がなければ、送達から10営業日後に復元する予定です。提訴の記録は非公開の案件通信で提出してください。',
+    counterDeadline: 'REZICSは{receivedAt}にこの反対通知を受領しました。裁判所への提訴の報告がなければ、この受領から10営業日後に復元する予定です。提訴の記録は非公開の案件通信で提出してください。',
     outcomes: {
       reject: '拒否の決定',
       restrict: '制限の決定',
@@ -121,7 +121,7 @@ const copy: Record<
       '결정을 확인하거나 이의를 제기하려면 X-Rezics-Case-Credential 헤더에 사례 인증 정보를 넣으세요. 비공개로 보관하세요.',
     automatic: '자동 결정',
     human: '담당자가 검토한 결정',
-    counterDeadline: '반론 통지를 받았습니다. 법원 소송 제기를 신고하지 않으면 전달 후 영업일 기준 10일에 복원할 예정입니다. 비공개 사건 통신으로 소송 기록을 제출하세요.',
+    counterDeadline: 'REZICS가 {receivedAt}에 이 반론 통지를 받았습니다. 법원 소송 제기를 신고하지 않으면 해당 접수 시점부터 영업일 기준 10일 후에 복원할 예정입니다. 비공개 사건 통신으로 소송 기록을 제출하세요.',
     outcomes: {
       reject: '거부 결정',
       restrict: '제한 결정',
@@ -140,7 +140,7 @@ const copy: Record<
       'Verwenden Sie den Fallschlüssel im Header X-Rezics-Case-Credential, um die Entscheidung zu lesen oder Einspruch einzulegen. Halten Sie ihn geheim.',
     automatic: 'Automatisierte Entscheidung',
     human: 'Von einer Person geprüfte Entscheidung',
-    counterDeadline: 'Eine Gegendarstellung ist eingegangen. Die Wiederherstellung ist 10 Werktage nach Zustellung vorgesehen, sofern Sie keine Klage melden. Reichen Sie den Nachweis über die vertrauliche Fallkorrespondenz ein.',
+    counterDeadline: 'REZICS hat diese Gegendarstellung am {receivedAt} erhalten. Die Wiederherstellung ist 10 Werktage nach diesem Eingang vorgesehen, sofern Sie keine Klage melden. Reichen Sie den Nachweis über die vertrauliche Fallkorrespondenz ein.',
     outcomes: {
       reject: 'Entscheidung zur Ablehnung',
       restrict: 'Entscheidung zur Einschränkung',
@@ -159,7 +159,7 @@ const copy: Record<
       'Utilisez votre identifiant dans l’en-tête X-Rezics-Case-Credential pour consulter la décision ou faire appel. Gardez-le confidentiel.',
     automatic: 'Décision automatisée',
     human: 'Décision examinée par une personne',
-    counterDeadline: 'Une contre-notification a été reçue. Le rétablissement est prévu 10 jours ouvrés après sa remise, sauf si vous signalez une action en justice. Transmettez le justificatif par la correspondance privée du dossier.',
+    counterDeadline: 'REZICS a reçu cette contre-notification le {receivedAt}. Le rétablissement est prévu 10 jours ouvrés après cette réception, sauf si vous signalez une action en justice. Transmettez le justificatif par la correspondance privée du dossier.',
     outcomes: {
       reject: 'Décision de rejet',
       restrict: 'Décision de restriction',
@@ -178,7 +178,7 @@ const copy: Record<
       'Use la credencial en la cabecera X-Rezics-Case-Credential para consultar la decisión o presentar una apelación. Manténgala privada.',
     automatic: 'Decisión automatizada',
     human: 'Decisión revisada por una persona',
-    counterDeadline: 'Se recibió una contranotificación. La restauración está prevista 10 días hábiles después de la entrega, salvo que comunique una demanda judicial. Envíe el justificante por la correspondencia privada del caso.',
+    counterDeadline: 'REZICS recibió esta contranotificación el {receivedAt}. La restauración está prevista 10 días hábiles después de esa recepción, salvo que comunique una demanda judicial. Envíe el justificante por la correspondencia privada del caso.',
     outcomes: {
       reject: 'Decisión de rechazo',
       restrict: 'Decisión de restricción',
@@ -197,7 +197,8 @@ export function safetyDecisionMessage(locale: AccountLocale, input: Corresponden
   return [
     `${text.case}: ${input.caseId}`,
     text.outcomes[input.outcome],
-    ...(input.counterNotice ? [input.counterNotice.statement, input.counterNotice.declaration, text.counterDeadline] : []),
+    ...(input.counterNotice ? [input.counterNotice.statement, input.counterNotice.declaration,
+      text.counterDeadline.replace('{receivedAt}', input.counterNotice.receivedAt)] : []),
     ...(input.reasons
       ? [
           input.reasons.facts,
@@ -243,6 +244,7 @@ export function safetyCorrespondenceApi(
           contentLanguage: t.String({ minLength: 1, maxLength: 255 }),
           credential: t.Optional(t.String({ pattern: '^[A-Za-z0-9_-]{43}$' })),
           counterNotice: t.Optional(t.Object({ statement: t.String({ minLength: 1, maxLength: 8000 }),
+            receivedAt: t.String({ format: 'date-time' }),
             // The 3,200-character declaration can expand sixfold under JSON escaping.
             declaration: t.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false })),
           reasons: t.Optional(

@@ -44,8 +44,9 @@ FROM open_cases c CROSS JOIN LATERAL (
     AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
     AND NOT EXISTS (SELECT 1 FROM access.rights_counter_notice j WHERE j.case_id = s.case_id
       AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
-        OR (s.decision_id IS NULL AND j.report_id = s.report_id
-          AND s.step IN ('restoration_not_before','restoration_not_after'))))
+        OR (j.report_id = s.report_id AND s.step IN ('restoration_not_before','restoration_not_after')
+          AND (s.decision_id IS NULL OR (j.restriction_id = s.decision_id AND s.due_at IS DISTINCT FROM
+            CASE s.step WHEN 'restoration_not_before' THEN j.not_before ELSE j.not_after END)))))
     AND NOT EXISTS (SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id
       AND a.case_generation = c.generation AND a.responder = $2 AND a.principal_id = $1)
     AND ($2 = 'primary' OR s.due_at <= $3 OR NOT $7::boolean OR EXISTS (
@@ -168,8 +169,9 @@ export class SafetyAlerts implements NotificationSubjectReader {
         AND NOT EXISTS (SELECT 1 FROM access.governance_process_step s JOIN access.rights_counter_notice j
           ON j.case_id = s.case_id WHERE s.id = a.step_id
             AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
-              OR (s.decision_id IS NULL AND j.report_id = s.report_id
-                AND s.step IN ('restoration_not_before','restoration_not_after'))))`,
+              OR (j.report_id = s.report_id AND s.step IN ('restoration_not_before','restoration_not_after')
+                AND (s.decision_id IS NULL OR (j.restriction_id = s.decision_id AND s.due_at IS DISTINCT FROM
+                  CASE s.step WHEN 'restoration_not_before' THEN j.not_before ELSE j.not_after END)))))`,
         [
           input.ref,
           input.principalId,

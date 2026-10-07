@@ -1403,9 +1403,9 @@ export class GovernanceStore {
         actingSubject: row.acting_subject, outcome: 'restore', targets,
         rule: { ref: row.rule_ref, revision: row.rule_revision, digest: row.rule_digest },
         evidenceDigest: row.evidence_digest, reversesDecisionId: null, answersStepId: stepId,
-        rationale: 'The delivered counter-notice waiting period elapsed without a court-filing notice.',
+        rationale: 'The counter-notice receipt waiting period elapsed, claimant delivery is confirmed and no court-filing notice was received.',
         reasons: { ...row.statement_of_reasons,
-          facts: 'The delivered counter-notice waiting period elapsed without a court-filing notice.',
+          facts: 'The counter-notice receipt waiting period elapsed, claimant delivery is confirmed and no court-filing notice was received.',
           duration: 'The copyright restriction is released.', contentLanguage: 'en', automation: true },
         disclosure: row.disclosure, idempotencyKey: key };
       return { row, principal, key, prior: null, input, stayed: false };

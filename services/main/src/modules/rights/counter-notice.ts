@@ -7,7 +7,8 @@ import { GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governa
 import { mintPartyCredential } from '../public-report/store.ts';
 
 export type CounterDeclaration = Static<typeof counterDeclaration>;
-/** Indexed case/report/decision probes and three inserts; never enumerate a case's reports. */
+/** Indexed probes and five inserts including two receipt-window trigger appends;
+ * never enumerate a case's reports. Each deadline examines at most 20 UTC days. */
 export const COUNTER_NOTICE_COST = {
   statements: 8,
   page: 8,
@@ -142,7 +143,7 @@ export function partyDeclarations(
 }
 
 /** Called under the case lock at acceptance and again before each owner effect.
- * A queued or later delivered counter-notice cannot be skipped by a release. */
+ * A queued counter-notice cannot be skipped, even after its receipt window opens. */
 export async function assertCounterNoticeRestoration(
   client: PoolClient,
   caseId: string,
@@ -172,7 +173,7 @@ export async function assertCounterNoticeRestoration(
   ).rowCount;
   if (!eligible)
     throw new GovernanceStale(
-      'DMCA restoration is before confirmed delivery and its waiting period or stayed by claimant action',
+      'DMCA restoration is before the receipt waiting period, awaiting confirmed claimant delivery or stayed by claimant action',
     );
 }
 

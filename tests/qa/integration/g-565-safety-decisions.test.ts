@@ -1065,7 +1065,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       answersStepId: counter.stepId,
     };
     expect((await decide(restoration)).status).toBe(409);
-    const dmcaStatus = await json<{ steps: Array<{ kind: string; dueAt: string | null }> }>(
+    const dmcaStatus = await json<{ items: Array<{ kind: string; dueAt: string | null }> }>(
       await call(
         'GET',
         `/v1/public-reports/${copyright.caseId}`,
@@ -1077,7 +1077,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       200,
     );
     clock = new Date(
-      Date.parse(dmcaStatus.steps.find((step) => step.kind === 'restoration_not_after')!.dueAt!) +
+      Date.parse(dmcaStatus.items.find((step) => step.kind === 'restoration_not_after')!.dueAt!) +
         86_400_000,
     );
     await json(await claim(copyright), 200);

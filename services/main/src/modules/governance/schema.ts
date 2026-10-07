@@ -277,8 +277,8 @@ export const governanceCaseEvidence = access.table('governance_case_evidence', {
 export const rightsCounterNotice = access.table('rights_counter_notice', {
   stepId: uuid('step_id').primaryKey(), caseId: uuid('case_id').notNull(), reportId: uuid('report_id').notNull(),
   restrictionId: uuid('restriction_id').notNull(), deliveryId: uuid('delivery_id').notNull(),
-  claimantCredential: text('claimant_credential').notNull(), deliveredAt: at('delivered_at'),
-  notBefore: at('not_before'), notAfter: at('not_after'), nextAttemptAt: at('next_attempt_at').notNull(),
+  claimantCredential: text('claimant_credential').notNull(), receivedAt: at('received_at').notNull(), deliveredAt: at('delivered_at'),
+  notBefore: at('not_before').notNull(), notAfter: at('not_after').notNull(), nextAttemptAt: at('next_attempt_at').notNull(),
   phase: text('phase').notNull(), restorationId: uuid('restoration_id'),
 });
 
