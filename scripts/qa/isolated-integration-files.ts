@@ -16,6 +16,7 @@ export const isolatedIntegrationFileList = [
   // M6 replays reference suites that require fresh rating and catalogue inventories.
   'tests/qa/integration/g-856-wiki.test.ts',
   'tests/qa/integration/g-856-editorial.test.ts',
+  'tests/qa/integration/g-856-position.test.ts',
   'tests/qa/integration/g-856-readers.test.ts',
   'tests/qa/integration/g-856-sessions.test.ts',
   'tests/qa/integration/g-856-library.test.ts',
