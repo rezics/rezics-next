@@ -212,6 +212,7 @@ final class CommandPolicy {
         Plan plan = new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
             Set.copyOf(revisions), Set.copyOf(source), bootstrap, rebuild, !delete.isEmpty());
         if (StatementUpgradePolicy.applies(receipt)) StatementUpgradePolicy.validateTemplate(plan, receipt);
+        if (ClaimStatementFoldPolicy.applies(receipt)) ClaimStatementFoldPolicy.validateTemplate(plan, receipt);
         if (MetadataRestorePolicy.applies(receipt)) MetadataRestorePolicy.validateTemplate(plan, receipt);
         if (ErasureRestorePolicy.applies(receipt)) ErasureRestorePolicy.validateTemplate(plan, receipt);
         return plan;

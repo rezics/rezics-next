@@ -204,6 +204,8 @@ final class CommandInvariant {
             return null;
         }
         if (before == null) return "product control record was absent";
+        if (ClaimStatementFoldPolicy.applies(receipt))
+            return ClaimStatementFoldPolicy.checkControl(data, receipt, plan, before, after, epoch, sequence);
         if (StatementUpgradePolicy.applies(receipt))
             return StatementUpgradePolicy.checkControl(data, receipt, plan, before, after, epoch, sequence);
         boolean activation = receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:");
