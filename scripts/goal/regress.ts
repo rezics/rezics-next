@@ -241,8 +241,8 @@ export function classify(evidence: string, code = 1): Classification {
 function assertionFiles(batch: Batch, result: Execution): string[] {
   const assertions = result.failingTests?.filter(test => !test.endsWith(`: ${UNEXECUTED_FILE_TEST}`)) ?? [];
   // Storybook outcomes come from completed suites; unlike missing suites, their failures are assertion evidence.
-  return batch.files.filter(file => result.outcomes[file] === 'failed'
-    && (file.includes('.stories.') || assertions.some(test => test.startsWith(`${file}:`))));
+  return batch.files.filter(file => assertions.some(test => test.startsWith(`${file}:`))
+    || (file.includes('.stories.') && result.outcomes[file] === 'failed'));
 }
 
 function batchRunFailure(batch: Batch, result: Execution): boolean {
@@ -579,6 +579,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         // Logs already live at artifactPaths; keep checkpoints bounded instead of copying every stack log into them.
         batch.attempts.push({ ...result, evidence: undefined });
         const voided = result.classification === 'infrastructure';
+        // Verified recovery replaces unavailable file diagnoses; the historical inbox event remains.
+        if (!voided) manifest.diagnoses = manifest.diagnoses.filter(diagnosis => !(diagnosis.status === 'unavailable'
+          && batch.files.includes(diagnosis.file) && ['passed', 'failed'].includes(result.outcomes[diagnosis.file] ?? 'missing')));
         for (const file of manifest.files.filter(file => file.tier === batch.tier && batch.files.includes(file.file))) {
           file.outcome = voided ? 'void' : result.outcomes[file.file] ?? 'missing';
         }
@@ -631,6 +634,14 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       classification: diagnosis.classification, artifactPaths: diagnosis.artifactPaths });
       manifest.diagnoses.push(diagnosis); save();
     };
+    const retainUnavailableAssertions = async (batch: Batch, initial: Execution, artifactPaths: string[], reason: string) => {
+      for (const file of assertionFiles(batch, initial)) {
+        if (manifest.diagnoses.some(item => item.file === file)) continue;
+        await routeFileFailure(file, initial, { file, status: 'unavailable',
+          classification: initial.classification === 'infrastructure' ? 'deterministic' : initial.classification ?? 'deterministic',
+          after: pinned, probes: [], artifactPaths: [...initial.artifactPaths, ...artifactPaths], reason });
+      }
+    };
     for (const batch of manifest.batches.filter(batch => batch.attempts.length > 0)) {
       const initial = batch.attempts.at(-1)!;
       let failing = batch.files.filter(file => initial.outcomes[file] !== 'passed');
@@ -641,7 +652,15 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         // Missing execution is a batch problem. Probe only files with actual assertion evidence.
         failing = assertionFiles(batch, initial);
       }
-      if (batch.state !== 'done') continue;
+      if (batch.state !== 'done') {
+        // A later engine failure cannot erase assertions completed in an earlier attempt.
+        const evidence = { ...initial, outcomes: { ...initial.outcomes },
+          failingTests: [...new Set(batch.attempts.flatMap(result => result.failingTests ?? []))],
+          artifactPaths: batch.attempts.flatMap(result => result.artifactPaths) };
+        for (const result of batch.attempts) for (const file of assertionFiles(batch, result)) evidence.outcomes[file] = 'failed';
+        await retainUnavailableAssertions(batch, evidence, [], 'Batch execution unavailable');
+        continue;
+      }
       if (!failing.length && initial.code) {
         await routeBatchFailure(batch, initial, 'Batch runner failed despite passing file evidence');
       }
@@ -655,23 +674,21 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         diagnosis.artifactPaths.push(...repeat.artifactPaths);
         if (batchRunFailure(batch, repeat)) {
           await routeBatchFailure(batch, repeat);
+          // Retain every initial assertion before infrastructure recovery leaves this batch pending.
+          await retainUnavailableAssertions(batch, initial, repeat.artifactPaths, 'Batch confirmation unavailable');
           if (repeat.classification === 'infrastructure') {
             batch.state = 'pending';
             for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
             save(); break;
           }
-          // Retain initial assertion failures, but unavailable confirmation cannot establish flakiness or blame.
-          if (assertionFiles(batch, initial).includes(file)) {
-            diagnosis.status = 'unavailable'; diagnosis.reason = 'Batch confirmation unavailable';
-            await routeFileFailure(file, initial, diagnosis);
-          }
-          continue;
+          break;
         }
         const alone: Batch = { ...batch, files: [file], tier: file.includes('.stories.') && batch.tier === 'e2e' ? 'e2e' : batch.tier };
         const isolated = await execute(pinned, alone, `${batch.id}/alone-${batch.files.indexOf(file)}`);
         diagnosis.artifactPaths.push(...isolated.artifactPaths);
         if ([repeat, isolated].some(result => result.classification === 'infrastructure')) {
           await routeBatchFailure(batch, [repeat, isolated].find(result => result.classification === 'infrastructure')!);
+          await retainUnavailableAssertions(batch, initial, [...repeat.artifactPaths, ...isolated.artifactPaths], 'Isolated execution unavailable');
           batch.state = 'pending';
           for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;
@@ -696,6 +713,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         if (diagnosis.classification === 'infrastructure') {
           await routeBatchFailure(batch, { ...initial, classification: 'infrastructure', cause: diagnosis.reason,
             artifactPaths: diagnosis.artifactPaths });
+          await retainUnavailableAssertions(batch, initial, diagnosis.artifactPaths, 'Regression probe unavailable');
           batch.state = 'pending';
           for (const expected of manifest.files.filter(item => item.tier === batch.tier && batch.files.includes(item.file))) expected.outcome = 'void';
           save(); break;

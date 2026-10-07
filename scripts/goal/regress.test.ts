@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { parseArgs } from '../qa/core.ts';
+import { UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
@@ -218,6 +219,100 @@ describe('pinned main-wide regression', () => {
         status: 'unavailable', classification: 'deterministic', reason: 'Batch confirmation unavailable',
       });
       expect(r.calls.some(call => call.directory.includes('/alone-') || call.directory.includes('/probes/'))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
+  test('an assertion completed before its own file deadline survives missing file evidence', async () => {
+    const r = repo();
+    try {
+      r.commit({ [r.unit]: 'fail\n' });
+      const result = await r.run({ runId: 'incomplete-assertion', only: ['unit'], runner: async (...args) => {
+        const result = await r.runner(...args);
+        if (args[1].tier !== 'unit') return result;
+        const tests = ['completed assertion', UNEXECUTED_FILE_TEST].map(name => ({
+          file: r.unit, name, tier: 'unit' as const, failed: true, skipped: false,
+        }));
+        return { ...result, classification: 'deadline', outcomes: executionOutcomes(args[0], args[1], tests),
+          failingTests: tests.map(test => `${test.file}: ${test.name}`) };
+      } });
+      expect(result.files.find(file => file.file === r.unit)!.outcome).toBe('missing');
+      expect(inboxEntries(r.options.stateDir, 'program')).toEqual([
+        expect.objectContaining({ runEvent: expect.objectContaining({ batchId: 'unit-1' }) }),
+        expect.objectContaining({ failingTests: [`${r.unit}: completed assertion`], status: 'unavailable' }),
+      ]);
+      expect(r.calls.filter(call => call.batch.tier === 'unit')).toHaveLength(2);
+      expect(r.calls.some(call => call.directory.includes('/alone-') || call.directory.includes('/probes/'))).toBe(false);
+      r.calls.length = 0;
+      await r.run({ resume: 'incomplete-assertion' });
+      expect(r.calls).toHaveLength(0);
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(2);
+    } finally { r.cleanup(); }
+  });
+
+  test('infrastructure during confirmation, isolation or bisection retains every initial assertion', async () => {
+    for (const phase of ['confirm', 'alone', 'probe'] as const) {
+      const r = repo();
+      const second = 'tests/qa/unit/second.test.ts';
+      try {
+        r.files.push({ file: second, tier: 'unit', outcome: 'pending' }); r.write(second, 'pass\n');
+        const base = r.commit();
+        await r.run({ runId: 'assertion-base', only: ['unit'] });
+        const bad = r.commit({ [r.unit]: 'fail\n', [second]: 'fail\n' }); r.event(base, bad);
+        const result = await r.run({ runId: `assertion-${phase}`, only: ['unit'], runner: async (...args) => {
+          const result = await r.runner(...args);
+          if (args[1].tier !== 'unit') return result;
+          const unavailable = phase === 'confirm' ? args[2].endsWith('/confirm')
+            : phase === 'alone' ? args[2].includes('/alone-') : args[2].includes('/probes/');
+          return { ...result, failingTests: args[1].files.filter(file => result.outcomes[file] === 'failed').map(file => `${file}: completed assertion`),
+            ...(unavailable ? { code: 1, classification: 'infrastructure', outcomes: {}, evidence: 'Cannot connect to the Docker daemon' } : {}) };
+        } });
+        expect(result.batches.find(batch => batch.tier === 'unit')!.state).toBe('pending');
+        expect(result.files.filter(file => file.tier === 'unit').every(file => file.outcome === 'void')).toBe(true);
+        const entries = inboxEntries(r.options.stateDir, 'program');
+        expect(entries).toHaveLength(3);
+        expect(entries.filter(entry => entry.runEvent)).toEqual([expect.objectContaining({ classification: 'infrastructure',
+          runEvent: expect.objectContaining({ batchId: 'unit-1', fileCount: 2 }) })]);
+        expect(entries.filter(entry => !entry.runEvent)).toEqual([r.unit, second].map(file => expect.objectContaining({
+          failingTests: [`${file}: completed assertion`], status: 'unavailable', classification: 'deterministic', goal: 'program', taskIds: [],
+        })));
+        expect(result.diagnoses.filter(diagnosis => !diagnosis.file.startsWith('batch:')).every(diagnosis => !diagnosis.before)).toBe(true);
+        expect(r.calls.filter(call => call.directory.includes('/alone-') && call.batch.files.includes(second))).toHaveLength(0);
+        r.calls.length = 0;
+        const recovered = await r.run({ resume: `assertion-${phase}`, runner: async (...args) => {
+          const result = await r.runner(...args);
+          return { ...result, failingTests: args[1].files.filter(file => result.outcomes[file] === 'failed').map(file => `${file}: completed assertion`) };
+        } });
+        expect(recovered.batches.find(batch => batch.tier === 'unit')!.state).toBe('done');
+        expect(recovered.diagnoses.filter(diagnosis => !diagnosis.file.startsWith('batch:'))).toEqual([r.unit, second].map(file =>
+          expect.objectContaining({ file, status: 'attributed', goal: 'owner', before: base, after: bad })));
+        expect(r.calls.some(call => call.directory.endsWith('/confirm'))).toBe(true);
+        expect(inboxEntries(r.options.stateDir, 'owner')).toHaveLength(2);
+        expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(3);
+      } finally { r.cleanup(); }
+    }
+  });
+
+  test('pending infrastructure retains assertion evidence from earlier attempts without duplicate inbox entries', async () => {
+    const r = repo();
+    try {
+      r.commit({ [r.unit]: 'fail\n' });
+      const runner: RegressionOptions['runner'] = async (...args) => {
+        const result = await r.runner(...args);
+        return args[1].tier === 'unit' ? { ...result, code: 1, classification: 'infrastructure', outcomes: {},
+          failingTests: args[2].endsWith('/attempt-1') ? [`${r.unit}: completed assertion`] : [],
+          evidence: 'Cannot connect to the Docker daemon' } : result;
+      };
+      const result = await r.run({ runId: 'pending-assertion', only: ['unit'], runner });
+      expect(result.batches[0]!.state).toBe('pending');
+      expect(result.batches[0]!.attempts).toHaveLength(2);
+      expect(inboxEntries(r.options.stateDir, 'program')).toEqual([
+        expect.objectContaining({ runEvent: expect.objectContaining({ batchId: 'unit-1' }) }),
+        expect.objectContaining({ failingTests: [`${r.unit}: completed assertion`], status: 'unavailable', classification: 'deterministic' }),
+      ]);
+      expect(result.diagnoses.find(diagnosis => diagnosis.file === r.unit)!.artifactPaths)
+        .toContain(r.calls.find(call => call.directory.endsWith('/attempt-1') && call.batch.tier === 'unit')!.directory);
+      await r.run({ resume: 'pending-assertion', runner });
+      expect(inboxEntries(r.options.stateDir, 'program')).toHaveLength(2);
     } finally { r.cleanup(); }
   });
 
