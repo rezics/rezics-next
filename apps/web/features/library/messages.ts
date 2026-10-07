@@ -327,7 +327,7 @@ export const messages = {
   returnBody: 'Returning closes it. You can record a new loan later if you lend the copy again.',
   confirmReturn: 'Return',
   extendTitle: 'Extend the due date',
-  extendHelp: 'Pick a due date and time after the current one.',
+  extendHelp: 'Pick a due date after the current one.',
   currentDue: insert('Currently due {{date}}', { date: String }),
   newDue: 'New due date',
   ownCopy: 'I own a copy',

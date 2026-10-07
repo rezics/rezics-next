@@ -248,7 +248,7 @@ export default {
   returnBody: '返却すると閉じます。同じ本をまた貸すときは、あとから新しい貸し借りを記録できます。',
   confirmReturn: '返却する',
   extendTitle: '期限を延長',
-  extendHelp: '今の期限より後の日時を選んでください。',
+  extendHelp: '今の期限より後の日付を選んでください。',
   currentDue: insert('現在の期限は {{date}}', { date: String }),
   newDue: '新しい期限',
   ownCopy: 'この本を持っている',

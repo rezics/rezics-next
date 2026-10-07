@@ -327,7 +327,7 @@ export default {
   returnBody: '归还会结束它。如果再次借出，可以稍后记下新的借阅。',
   confirmReturn: '归还',
   extendTitle: '延长到期时间',
-  extendHelp: '选择比当前到期时间更晚的日期和时间。',
+  extendHelp: '选择比当前到期日更晚的日期。',
   currentDue: insert('当前到期 {{date}}', { date: String }),
   newDue: '新的到期时间',
   ownCopy: '我有一本',

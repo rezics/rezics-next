@@ -2,8 +2,8 @@ import { initials } from '@rezics/ui/avatar-initials';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { BookMarkedIcon, BookOpenCheckIcon, BookOpenIcon, BookXIcon, ChevronLeftIcon, ChevronRightIcon,
-  CompassIcon, HouseIcon, LayoutGridIcon, LibraryBigIcon, ListIcon, LockIcon, RefreshCwIcon, RotateCwIcon, SearchXIcon,
-  TriangleAlertIcon, UserRoundCogIcon } from 'lucide-react';
+  CompassIcon, HandshakeIcon, HouseIcon, LayoutGridIcon, LibraryBigIcon, ListIcon, LockIcon, RefreshCwIcon, RotateCwIcon,
+  SearchXIcon, TriangleAlertIcon, UserRoundCogIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -234,7 +234,8 @@ function EmptyShelf({ shelf, locale, messages }: { shelf: LibraryShelf; locale: 
 
 /**
  * A reader with nothing shelved yet: what the three shelves are for, and
- * the two places to find something, Discover and the home feed.
+ * where to go next. Loans stays on this page because the shelf list is hidden
+ * while it is empty, and a copy can still be out.
  */
 function FirstUse({ locale, messages }: { locale: UiLocale; messages: LibraryMessages }) {
   const t = materializeData(messages, { locale });
@@ -260,6 +261,8 @@ function FirstUse({ locale, messages }: { locale: UiLocale; messages: LibraryMes
     </ul>
     <div className="flex flex-wrap justify-center gap-2">
       <Link href="/discover" className={buttonVariants({ pill: true })}><CompassIcon aria-hidden="true" />{t.discover}</Link>
+      <Link href="/library/loans" className={buttonVariants({ variant: 'outline', pill: true })}>
+        <HandshakeIcon aria-hidden="true" />{t.loans}</Link>
       <Link href="/" className={buttonVariants({ variant: 'outline', pill: true })}>
         <HouseIcon aria-hidden="true" />{t.homeFeed}</Link>
     </div>

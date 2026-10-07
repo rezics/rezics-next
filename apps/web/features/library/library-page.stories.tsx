@@ -373,6 +373,7 @@ export const FirstUse: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 2, name: 'Your library starts here' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Discover works' })).toHaveAttribute('href', '/en/discover');
+    await expect(canvas.getByRole('link', { name: 'Loans' })).toHaveAttribute('href', '/en/library/loans');
     await expect(canvas.getByRole('link', { name: 'Go to your feed' })).toHaveAttribute('href', '/en');
     await expect(canvas.queryByRole('navigation', { name: 'Shelves' })).toBeNull();
   },

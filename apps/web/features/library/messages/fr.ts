@@ -266,7 +266,7 @@ export default {
   returnBody: 'Le rendre le clôt. Vous pourrez noter un nouveau prêt plus tard si vous prêtez de nouveau l’exemplaire.',
   confirmReturn: 'Rendre',
   extendTitle: 'Prolonger la date de retour',
-  extendHelp: 'Choisissez une date et une heure de retour après la date actuelle.',
+  extendHelp: 'Choisissez une date de retour après la date actuelle.',
   currentDue: insert('Actuellement dû le {{date}}', { date: String }),
   newDue: 'Nouvelle date de retour',
   ownCopy: 'J’ai un exemplaire',

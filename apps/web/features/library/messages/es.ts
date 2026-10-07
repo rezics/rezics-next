@@ -266,7 +266,7 @@ export default {
   returnBody: 'Devolverlo lo cierra. Más adelante puedes anotar un préstamo nuevo si vuelves a prestar el ejemplar.',
   confirmReturn: 'Devolver',
   extendTitle: 'Prorrogar la fecha de vencimiento',
-  extendHelp: 'Elige una fecha y hora posteriores a la actual.',
+  extendHelp: 'Elige una fecha posterior a la actual.',
   currentDue: insert('Vence ahora el {{date}}', { date: String }),
   newDue: 'Nueva fecha de vencimiento',
   ownCopy: 'Tengo un ejemplar',

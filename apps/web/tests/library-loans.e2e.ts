@@ -112,7 +112,8 @@ test('a reader owns a copy, lends it overdue, extends it and returns it', async 
   await expect(lend.getByRole('radio', { name: /Paperback/ })).toBeVisible();
   await lend.getByRole('textbox', { name: 'Name', exact: true }).fill('City Library');
   await lend.getByLabel('Started').fill(await localStamp(page, Date.now() - 3 * 86_400_000));
-  await lend.getByLabel('Due').fill(await localStamp(page, Date.now() - 36 * 3_600_000));
+  await lend.getByLabel('Due').fill(await page.evaluate(() => new Date(Date.now() - 2 * 86_400_000).toISOString()
+    .slice(0, 10)));
   await lend.getByRole('button', { name: 'Save loan' }).click();
   await expect(page).toHaveURL(/\/en\/library\/loans$/, { timeout: 30_000 });
 
@@ -120,6 +121,8 @@ test('a reader owns a copy, lends it overdue, extends it and returns it', async 
   await expect(overdue()).toBeVisible({ timeout: 30_000 });
   await expect(overdue()).toContainText('City Library');
   await expect(overdue().getByText('Overdue', { exact: true })).toBeVisible();
+  await expect(overdue()).toContainText(/Due [A-Z][a-z]+ \d{1,2}, \d{4}/);
+  await expect(overdue()).not.toContainText(/\d:\d{2}|AM|PM/);
 
   await page.setViewportSize({ width: 1280, height: 860 });
   await expect(overdue()).toBeVisible();

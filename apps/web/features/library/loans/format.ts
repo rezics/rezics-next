@@ -1,22 +1,33 @@
-import type { UiLocale } from '../../../i18n/define.ts';
+import { today } from '../format.ts';
 
 /**
- * A due instant in the viewer's language and time zone. Midnight in that zone
- * is a calendar day: the clock carries nothing, so only the date is shown.
- * `timeZone` is the viewer's when omitted.
+ * A loan is due on a calendar day, not at a clock time. The day is stored as
+ * the last instant of that UTC date: `formatDay` prints the day, and the day
+ * is overdue only once that date is over. A time on the instant does not move
+ * the day or the overdue decision.
  */
-export function formatDue(value: string, locale: UiLocale, timeZone?: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const zone = timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const clock = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => clock.find(item => item.type === type)?.value ?? '';
-  const timeless = part('hour') === '00' && part('minute') === '00' && part('second') === '00';
-  return new Intl.DateTimeFormat(locale, timeless
-    ? { dateStyle: 'medium', timeZone: zone }
-    : { dateStyle: 'medium', timeStyle: 'short', timeZone: zone }).format(date);
+export function dueDay(value: string): string | null {
+  const day = value.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+}
+
+/** The instant a due date names: the end of that UTC day. */
+export function dueInstant(day: string): string | null {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day}T23:59:59.999Z` : null;
+}
+
+/** A calendar day `days` after `day`. Both are `YYYY-MM-DD`. */
+export function laterDay(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** True once the due day is before today in the same fixed zone `formatDay` uses. */
+export function dueIsOverdue(dueAt: string, now: number): boolean {
+  const day = dueDay(dueAt);
+  if (!day) return false;
+  return day < today(now);
 }
 
 /** A `datetime-local` value for an instant, in the browser's zone. Dialogs open on the client. */

@@ -246,7 +246,7 @@ export default {
   returnBody: '반납하면 닫혀요. 같은 책을 다시 빌려 줄 때는 나중에 새 대출을 기록할 수 있어요.',
   confirmReturn: '반납',
   extendTitle: '반납일 연장',
-  extendHelp: '지금 반납일보다 나중의 날짜와 시간을 고르세요.',
+  extendHelp: '지금 반납일보다 나중의 날짜를 고르세요.',
   currentDue: insert('현재 반납일은 {{date}}', { date: String }),
   newDue: '새 반납일',
   ownCopy: '이 책을 가지고 있어요',

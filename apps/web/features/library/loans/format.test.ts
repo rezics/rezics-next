@@ -1,14 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { formatDue } from './format.ts';
+import { formatDay } from '../format.ts';
+import { dueInstant, dueIsOverdue } from './format.ts';
 
 describe('due dates', () => {
-  test('prints a real time in the viewer zone and locale, without a UTC label', () => {
-    const shown = formatDue('2026-10-05T22:41:00.000Z', 'en', 'America/Los_Angeles');
-    expect(shown).toBe('Oct 5, 2026, 3:41 PM');
-    expect(shown).not.toContain('UTC');
+  test('writes a calendar day and shows it in the shared fixed zone, with no clock', () => {
+    const written = dueInstant('2026-10-05');
+    expect(written).toBe('2026-10-05T23:59:59.999Z');
+    expect(formatDay(written!, 'en')).toBe('Oct 5, 2026');
+    expect(formatDay('2026-10-05T22:41:00.000Z', 'en')).toBe('Oct 5, 2026');
   });
 
-  test('prints only the day when the clock in that zone is midnight', () => {
-    expect(formatDue('2026-10-05T00:00:00.000Z', 'en', 'UTC')).toBe('Oct 5, 2026');
+  test('a due day is overdue only after that date, not when its clock has passed', () => {
+    const during = Date.parse('2026-10-05T22:41:00.000Z');
+    expect(dueIsOverdue('2026-10-05T00:00:00.000Z', during)).toBe(false);
+    expect(dueIsOverdue('2026-10-05T22:41:00.000Z', during)).toBe(false);
+    expect(dueIsOverdue(dueInstant('2026-10-05')!, during)).toBe(false);
+    const next = Date.parse('2026-10-06T00:00:00.000Z');
+    expect(dueIsOverdue('2026-10-05T23:59:59.999Z', next)).toBe(true);
+    expect(dueIsOverdue('2026-10-06T00:00:00.000Z', next)).toBe(false);
   });
 });

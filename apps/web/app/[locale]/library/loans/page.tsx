@@ -39,8 +39,9 @@ export default async function LibraryLoansRoute({ searchParams }: Props) {
   if (session.agent.status !== 'selected') redirect(`${localizedPath('/identity', locale)}?next=${encodeURIComponent(here)}`);
   const [reader, overview, loans, messages] = await Promise.all([
     libraryReader(), readOverview(), readLoans(cursor, locale), getMessages('library', locale)]);
-  return <LibraryPage state={parseLibraryState({})} overview={overview} view={emptyShelf} reading={[]} now={Date.now()}
+  const now = Date.now();
+  return <LibraryPage state={parseLibraryState({})} overview={overview} view={emptyShelf} reading={[]} now={now}
     avatarQuery={reader?.avatarQuery} locale={locale} messages={messages}
     loansView={<LoansView items={loans.ok ? loans.data.items : []} nextCursor={loans.ok ? loans.data.nextCursor : null}
-      failure={loans.ok ? null : 'unavailable'} cursor={cursor} locale={locale} messages={messages} />} />;
+      failure={loans.ok ? null : 'unavailable'} cursor={cursor} now={now} locale={locale} messages={messages} />} />;
 }

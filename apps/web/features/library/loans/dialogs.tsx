@@ -11,8 +11,9 @@ import { materializeData } from 'native-i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import type { LibraryMessages } from '../messages.ts';
+import { formatDay, today } from '../format.ts';
 import { useCopiesApi } from './provider.tsx';
-import { dayInstant, formatDue, instantFromLocal, localInput } from './format.ts';
+import { dayInstant, dueDay, dueInstant, instantFromLocal, laterDay, localInput } from './format.ts';
 import { handleText, partyFromInput, sameParty } from './party.ts';
 import { recordContinuation, reduceRecordPage, type RecordList } from './paging.ts';
 import type { CopyRecord, LibraryParty, LoanRecord, RecordFailure, RecordResult, ReleaseChoice } from './types.ts';
@@ -22,7 +23,6 @@ import { submitRecord, writeNewest } from './write.ts';
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 type PartyMode = 'name' | 'person';
 
-const dayLater = 14 * 86_400_000;
 const emptyList = { items: [], nextCursor: null, failed: false };
 
 function MoreRecords({ mode, busy, failedText, moreLabel, retryLabel, onMore }: {
@@ -261,7 +261,7 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
     setOwned(emptyList);
     setEditions(emptyList);
     setStarted(localInput(Date.now() - 3_600_000));
-    setDue(localInput(Date.now() + dayLater));
+    setDue(laterDay(today(Date.now()), 14));
     void Promise.all([api.copies(work), api.releases(work)]).then(async ([ownedPage, editionPage]) => {
       if (ticket !== generation.current) return;
       if (!ownedPage.ok || !editionPage.ok) { setLoading(false); setError(t.loadFailed); return; }
@@ -300,7 +300,7 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
     if (!copy && (copies.length !== 1 || owned.nextCursor)) { setError(t.copyRequired); return; }
     const chosenCopy = copy || copies[0]!.id;
     const startedAt = instantFromLocal(started);
-    const dueAt = instantFromLocal(due);
+    const dueAt = dueInstant(due);
     if (!startedAt || Date.parse(startedAt) > Date.now()) { setError(t.startInFuture); return; }
     if (!dueAt || dueAt < startedAt) { setError(t.dueBeforeStart); return; }
     setSaving(true);
@@ -364,7 +364,7 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
           </Field>
           <Field>
             <FieldLabel>{t.dueAt}</FieldLabel>
-            <Input type="datetime-local" value={due} onChange={event => setDue(event.currentTarget.value)} />
+            <Input type="date" value={due} onChange={event => setDue(event.currentTarget.value)} />
           </Field>
           {error ? <p role="alert" className="text-destructive-foreground text-sm">{error}</p> : null}
         </DialogBody>
@@ -391,12 +391,14 @@ export function ExtendDialog({ loan, open, onOpenChange, locale, messages, onSav
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setDue(localInput(Date.parse(loan.dueAt) + dayLater));
+    const day = dueDay(loan.dueAt);
+    setDue(day ? laterDay(day, 14) : '');
   }, [open, loan.dueAt]);
 
   async function save() {
-    const dueAt = instantFromLocal(due);
-    if (!dueAt || dueAt <= loan.dueAt) { setError(t.extendForward); return; }
+    const dueAt = dueInstant(due);
+    const current = dueDay(loan.dueAt);
+    if (!dueAt || !current || due <= current || dueAt <= loan.dueAt) { setError(t.extendForward); return; }
     setSaving(true);
     const written: RecordResult<LoanRecord> = await submitRecord(loan.id, dueAt, (choice, round) => writeNewest(round,
       loan.version, version => api.extendLoan(loan.id, version, choice), () => api.findLoan(loan.id),
@@ -412,10 +414,10 @@ export function ExtendDialog({ loan, open, onOpenChange, locale, messages, onSav
       <form noValidate onSubmit={event => { event.preventDefault(); void save(); }} className="contents">
         <DialogHeader title={t.extendTitle} description={t.extendHelp} />
         <DialogBody className="grid gap-4">
-          <p className="text-muted-foreground text-sm">{t.currentDue({ date: formatDue(loan.dueAt, locale) })}</p>
+          <p className="text-muted-foreground text-sm">{t.currentDue({ date: formatDay(loan.dueAt, locale) })}</p>
           <Field invalid={error !== null}>
             <FieldLabel>{t.newDue}</FieldLabel>
-            <Input type="datetime-local" value={due} onChange={event => { setDue(event.currentTarget.value); setError(null); }} />
+            <Input type="date" value={due} onChange={event => { setDue(event.currentTarget.value); setError(null); }} />
             {error ? <FieldError>{error}</FieldError> : null}
           </Field>
         </DialogBody>

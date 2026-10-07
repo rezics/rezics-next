@@ -4,14 +4,17 @@ import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { HandshakeIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
+import { localizedPath } from '../../../i18n/locale.ts';
 import { Notice } from '../../discover/notice.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import Link from '../../shell/localized-link.tsx';
+import { formatDay } from '../format.ts';
 import type { LibraryMessages } from '../messages.ts';
 import { ExtendDialog, ReturnDialog } from './dialogs.tsx';
-import { formatDue } from './format.ts';
+import { dueIsOverdue } from './format.ts';
 import { counterpartyLabel } from './party.ts';
 import type { LoanListItem, LoanRecord } from './types.ts';
 
@@ -19,26 +22,33 @@ import type { LoanListItem, LoanRecord } from './types.ts';
  * Loans beside the shelves: overdue first, then what is still due, each with
  * Return and Extend. Names typed by the reader are shown as stored.
  */
-export function LoansView({ items, nextCursor, failure, cursor, locale, messages }: {
+export function LoansView({ items, nextCursor, failure, cursor, now, locale, messages }: {
   items: readonly LoanListItem[]; nextCursor: string | null; failure: string | null; cursor: string | null;
-  locale: UiLocale; messages: LibraryMessages;
+  now: number; locale: UiLocale; messages: LibraryMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const signature = items.map(item => `${item.loan.id}:${item.loan.version}:${item.loan.state}`).join('|');
-  const [seen, setSeen] = useState(signature);
+  const router = useRouter();
+  const [source, setSource] = useState(items);
   const [rows, setRows] = useState(items);
+  const [pageCursor, setPageCursor] = useState(nextCursor);
   const [note, setNote] = useState<string | null>(null);
-  if (signature !== seen) {
-    setSeen(signature);
+  if (items !== source) {
+    setSource(items);
     setRows(items);
+    setPageCursor(nextCursor);
   }
-  const overdue = rows.filter(item => item.loan.state === 'overdue');
-  const due = rows.filter(item => item.loan.state === 'open');
+  const overdue = rows.filter(item => item.loan.state !== 'returned' && dueIsOverdue(item.loan.dueAt, now));
+  const due = rows.filter(item => item.loan.state !== 'returned' && !dueIsOverdue(item.loan.dueAt, now));
 
   function apply(loan: LoanRecord, done: string) {
     setRows(current => loan.state === 'returned' ? current.filter(item => item.loan.id !== loan.id)
       : current.map(item => item.loan.id === loan.id ? { ...item, loan } : item));
     setNote(done);
+    // A loan write moves the fence bound into this read's cursor, so the next
+    // page from here would fail. Read the first page again, one page only.
+    setPageCursor(null);
+    if (cursor) router.push(localizedPath('/library/loans', locale));
+    else router.refresh();
   }
 
   return <section aria-labelledby="library-loans" className="grid min-w-0 gap-5">
@@ -56,9 +66,9 @@ export function LoansView({ items, nextCursor, failure, cursor, locale, messages
       <LoanGroup title={t.dueSoon} items={due} locale={locale} messages={messages}
         onReturned={loan => apply(loan, t.loanReturned)} onExtended={loan => apply(loan, t.loanExtended)} />
     </div>}
-    {cursor || nextCursor ? <nav aria-label={t.pages} className="flex flex-wrap items-center justify-between gap-3">
+    {cursor || pageCursor ? <nav aria-label={t.pages} className="flex flex-wrap items-center justify-between gap-3">
       {cursor ? <Link href="/library/loans" className={buttonVariants({ variant: 'outline' })}>{t.firstPage}</Link> : <span />}
-      {nextCursor ? <Link href={`/library/loans?cursor=${encodeURIComponent(nextCursor)}`} rel="next"
+      {pageCursor ? <Link href={`/library/loans?cursor=${encodeURIComponent(pageCursor)}`} rel="next"
         className={buttonVariants({ variant: 'outline' })}>{t.nextPage}</Link> : <span />}
     </nav> : null}
   </section>;
@@ -101,7 +111,7 @@ function LoanCard({ item, overdue, locale, messages, onReturned, onExtended }: {
     <p className="text-pretty [overflow-wrap:anywhere]">{item.loan.direction === 'lent' ? t.lentTo({ name })
       : t.borrowedFrom({ name })}</p>
     {facts.length ? <p className="text-pretty text-muted-foreground text-sm [overflow-wrap:anywhere]">{facts.join(' · ')}</p> : null}
-    <p className="font-medium text-sm tabular-nums" suppressHydrationWarning>{t.dueOn({ date: formatDue(item.loan.dueAt, locale) })}</p>
+    <p className="font-medium text-sm tabular-nums">{t.dueOn({ date: formatDay(item.loan.dueAt, locale) })}</p>
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="outline" onClick={() => setReturning(true)}>{t.returnLoan}</Button>
       <Button size="sm" variant="outline" onClick={() => setExtend(true)}>{t.extendLoan}</Button>

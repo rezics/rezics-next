@@ -266,7 +266,7 @@ export default {
   returnBody: 'Zurückgeben schließt sie. Du kannst später eine neue Ausleihe festhalten, wenn du das Exemplar wieder verleihst.',
   confirmReturn: 'Zurückgeben',
   extendTitle: 'Fälligkeitsdatum verlängern',
-  extendHelp: 'Wähle ein Fälligkeitsdatum und eine Uhrzeit nach dem aktuellen Termin.',
+  extendHelp: 'Wähle ein Fälligkeitsdatum nach dem aktuellen Termin.',
   currentDue: insert('Derzeit fällig am {{date}}', { date: String }),
   newDue: 'Neues Fälligkeitsdatum',
   ownCopy: 'Ich habe ein Exemplar',

@@ -1,6 +1,7 @@
 import type { CopyDraft, CopyRecord, LoanDraft, LoanRecord, PersonCard, RecordPage, RecordResult,
   ReleaseChoice } from './types.ts';
 import type { CopiesApi } from './api.ts';
+import { dueIsOverdue } from './format.ts';
 
 export interface MemoryCopies {
   /** The Work these releases and new copies belong to. */
@@ -29,7 +30,7 @@ function slicePage<T>(items: readonly T[], cursor?: string | null): RecordPage<T
 
 function loanState(loan: Pick<LoanRecord, 'returnedAt' | 'dueAt'>, now: number): LoanRecord['state'] {
   if (loan.returnedAt) return 'returned';
-  return Date.parse(loan.dueAt) < now ? 'overdue' : 'open';
+  return dueIsOverdue(loan.dueAt, now) ? 'overdue' : 'open';
 }
 
 /** An in-memory Main for stories. It keeps the compare-and-set versions the write lane reads back. */
