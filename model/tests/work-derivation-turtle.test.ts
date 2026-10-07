@@ -299,6 +299,12 @@ test('Turtle discovery keeps profile exports only when their bytes match the aut
     );
   expect(discoverProfiles(path, modules).map((profile) => profile.id)).toEqual(ids);
 
+  expect(() => discoverProfiles(path, [
+    [modules[0][0], { ...unresolvedWorkDerivation,
+      workDerivationUnresolvedProfile: structuredClone(unresolvedWorkDerivation.workDerivationUnresolvedProfile) }],
+    ...modules.slice(1),
+  ])).toThrow('Duplicate profile ID work-derivation-unresolved-v1');
+
   const sourcePath = join(path, 'work-derivation-unresolved-v1.ttl');
   writeFileSync(sourcePath, `${readFileSync(sourcePath, 'utf8')}\n# changed bytes\n`);
   expect(() => discoverProfiles(path, modules)).toThrow('Duplicate profile ID work-derivation-unresolved-v1');

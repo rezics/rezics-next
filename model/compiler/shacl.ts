@@ -11,6 +11,9 @@ import { shapeRole, type EstablishedDeclaration } from './registry.ts';
 const { sh, rdf, xsd } = reservedNamespaces;
 const sources = new WeakMap<ProfileDefinition, string>();
 
+/** A parsed author source may be re-exported; a TS definition is still independent. */
+export const isTurtleProfile = (profile: ProfileDefinition): boolean => sources.has(profile);
+
 /** Command metadata belongs beside Turtle, never in its constraint graph. */
 export interface TurtleDeclaration extends EstablishedDeclaration {
   id: string;

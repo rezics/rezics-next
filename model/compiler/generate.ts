@@ -6,7 +6,7 @@ import { profileSnapshot, type ProfileDefinition } from './ir.ts';
 import { artifactDigests, buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, shapeRole, type RegistryOptions } from './registry.ts';
 import { renderTypeRegistry } from './type.ts';
-import { parseTurtleProfile, profileSource, type TurtleDeclaration } from './shacl.ts';
+import { isTurtleProfile, parseTurtleProfile, profileSource, type TurtleDeclaration } from './shacl.ts';
 import { typesV1 } from '../definitions/types-v1.ts';
 import { workKindV2Profile } from '../definitions/work-kind-v2.ts';
 import { workTypeV2Profile } from '../definitions/work-type-v2.ts';
@@ -56,7 +56,8 @@ export function discoverProfiles(directory: string,
     .filter(profile => {
       const source = turtleSources.get(profile.id);
       if (source === undefined) return true;
-      if (file !== `${profile.id}.ts` || profileSource(profile) !== source)
+      if (file !== `${profile.id}.ts` || !declarations.has(profile.id)
+        || !isTurtleProfile(profile) || profileSource(profile) !== source)
         throw new Error(`Duplicate profile ID ${profile.id}`);
       return false;
     }));
