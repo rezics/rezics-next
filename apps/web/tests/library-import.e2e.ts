@@ -54,6 +54,8 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
   test.setTimeout(600_000);
   await signInAtAccounts(page, '/en/library', member);
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  // The heading is server-rendered; file selection needs the Library's client handlers loaded.
+  await page.waitForLoadState('networkidle');
   // Catalogue import is closed at launch. The exposure gate answers before authentication,
   // so an ungranted caller is refused with platform_closed and is not given the importer group.
   const directSource = await page.request.post('/api/main/v1/sources/acquisitions/open-library/works', {
