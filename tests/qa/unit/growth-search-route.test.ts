@@ -34,6 +34,7 @@ function request(fuseki: FusekiClient) {
     },
     account: { verify: async () => ({ issuer: 'qa', subject: 'viewer' }) },
     access: {
+      assertRecoveryOpen: async () => undefined,
       canReadReferences: async (
         _principal: unknown,
         _actor: string,

@@ -10,7 +10,7 @@ const body = { profile: 'public-main-phrase-v1', phrase: 'exact phrase', languag
 async function request(error: Error, extra: Record<string, unknown> = {}) {
   const fuseki = { query: async () => { throw error; },
     commandHealth: async () => { throw error; } } as unknown as FusekiClient;
-  const work = { environment: { fuseki,
+  const work = { access: { assertRecoveryOpen: async () => undefined }, environment: { fuseki,
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } } as MainWorkDependencies;
   return createMainApp(fuseki, work).handle(new Request('http://main.local/v1/queries', {
     method: 'POST', headers: { 'content-type': 'application/json' },
