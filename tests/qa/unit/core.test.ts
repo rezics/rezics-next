@@ -635,7 +635,8 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
           try { return !readFileSync(`/proc/${subprocess}/stat`, 'utf8').includes(') Z '); }
           catch { return false; }
         };
-        const stoppedBy = Date.now() + 1_000;
+        // The harness escalates to SIGKILL after a 1 s grace; a loaded merge gate needs headroom past it.
+        const stoppedBy = Date.now() + 10_000;
         while (alive() && Date.now() < stoppedBy) await Bun.sleep(5);
         expect(alive()).toBe(false);
       }

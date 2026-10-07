@@ -189,7 +189,8 @@ test('test-side startup children stop before parent cancellation completes, with
         }
         expect(existsSync(ready)).toBe(true);
         const pids = ['startup.pid', 'worker.pid'].map(file => Number(readFileSync(join(dir, file), 'utf8')));
-        const stoppedBy = Date.now() + 1000;
+        // The harness escalates to SIGKILL after a 1 s grace; a loaded merge gate needs headroom past it.
+        const stoppedBy = Date.now() + 10_000;
         while (pids.some(alive) && Date.now() < stoppedBy) await Bun.sleep(5);
         expect(pids.some(alive)).toBe(false);
         expect(existsSync(late)).toBe(false);
@@ -338,7 +339,8 @@ test('all authored scripts and QA tests route dev startup children through the a
   walk('scripts');
   walk('tests/qa');
   expect(unsafe).toEqual([]);
-});
+  // A whole-tree scan: fast alone, slower under a loaded merge gate.
+}, 60_000);
 
 /** An architectural guard: admission-capable children use the shared parent boundary. */
 for (const path of ['scripts/qa/api-fuzz.ts', 'scripts/load/cli.ts', 'scripts/load/search-probe.ts',
