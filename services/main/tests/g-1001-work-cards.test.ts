@@ -33,6 +33,7 @@ function fixture(options: { credits?: unknown[]; context?: boolean; stale?: bool
         },
       },
       profiles: { async agentFences(agents: string[]) { return new Map(agents.map(agent => [agent, 'live'])); } },
+      personPreferences: { visibleNameOwners: async (agents: readonly string[]) => new Set(agents) },
     },
     async query(query: string) {
       queries.push(query);

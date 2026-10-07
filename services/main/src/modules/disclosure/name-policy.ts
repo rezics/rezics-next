@@ -38,3 +38,25 @@ export async function checkNamePolicy(
     return owners.map(() => 'withheld');
   }
 }
+
+/** One preference read for each block of at most 64 distinct owners. A page
+ * inside that bound is one read. A missing store withholds every name;
+ * callers do not keep a second copy of the decision. */
+export async function visibleNames(
+  preferences: Pick<PersonPreferencesStore, 'visibleNameOwners'> | undefined,
+  owners: readonly string[],
+  viewer: Viewer,
+  channel: DisclosureChannel = 'read',
+): Promise<Set<string>> {
+  const visible = new Set<string>();
+  if (!preferences || !owners.length) return visible;
+  const distinct = [...new Set(owners)];
+  for (let offset = 0; offset < distinct.length; offset += NAME_POLICY_COST.owners) {
+    const batch = distinct.slice(offset, offset + NAME_POLICY_COST.owners);
+    const decisions = await checkNamePolicy(preferences, batch, viewer, channel);
+    batch.forEach((owner, index) => {
+      if (decisions[index] === 'visible') visible.add(owner);
+    });
+  }
+  return visible;
+}

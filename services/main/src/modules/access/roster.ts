@@ -2,16 +2,21 @@ import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { realmActor, realmIdPattern, realmManager, realmTransaction } from './realm-management-authority.ts';
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import { PersonPreferencesStore } from '../preferences/store.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 
-// Two exact graph policy reads, one indexed page of <= 51 listing rows and
-// bounded point joins. No account/principal identifiers are public roster data.
-export const REALM_ROSTER_COST = { page: 50, graphCalls: 2, graphBytes: 8192, sqlStatements: 9 } as const;
+// Two exact graph policy reads, one indexed page of <= 51 listing rows, one
+// name-policy read and bounded point joins. No account/principal identifiers
+// are public roster data.
+export const REALM_ROSTER_COST = { page: 50, graphCalls: 2, graphBytes: 8192, sqlStatements: 10 } as const;
 export class AccessRealmRoster {
   constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment) {}
 
-  read(realm: string, options: { after?: string; limit?: number; featured?: boolean }) {
+  read(realm: string, options: { after?: string; limit?: number; featured?: boolean },
+    principal: VerifiedPrincipal | null = null) {
     const limit = options.limit ?? REALM_ROSTER_COST.page;
     if (!Number.isInteger(limit) || limit < 1 || limit > REALM_ROSTER_COST.page
       || options.after && !realmIdPattern.test(options.after)) throw new RealmAdminInvalid('Invalid roster page');
@@ -40,7 +45,13 @@ export class AccessRealmRoster {
         ORDER BY l.member LIMIT $3 FOR SHARE OF l,m,s`,[realm,candidates.slice(0,limit).map(row => row.membership_id),limit])).rows;
       const end = await readRealmPolicy(this.env,realm);
       if (end?.visibility !== 'public' || end.revision !== policy.revision) throw new RealmAdminStale('Realm visibility changed');
-      return { items: rows.slice(0,limit).map(row => ({ agent: row.member,displayName: row.display_name,featured: row.featured })),
+      const page = rows.slice(0,limit);
+      // The public route passes no principal, so a private name stays null
+      // while the member remains. A controller still sees their own name.
+      const visible = page.length ? await visibleNames(new PersonPreferencesStore(this.pool),
+        page.map(row => row.member), disclosureViewer(principal)) : new Set<string>();
+      return { items: page.map(row => ({ agent: row.member,
+        displayName: visible.has(row.member) ? row.display_name : null, featured: row.featured })),
         nextCursor: candidates.length > limit ? candidates[limit - 1]!.member : null };
     });
   }

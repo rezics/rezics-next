@@ -19,6 +19,9 @@ import { AccessTopology } from './topology.ts';
 import { ControlUnavailable } from './topology-control.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
 import { selectDisplayName, type DisplayName } from '../display-language/select.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import { PersonPreferencesStore } from '../preferences/store.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
@@ -224,7 +227,7 @@ export class AccessActingContexts {
       const principalId = await activePrincipal(client, principal);
       return principalId ? actableSubjects(client, principalId) : [];
     });
-    const labels = await this.agentLabels(subjects, languages);
+    const labels = await this.agentLabels(subjects, languages, principal);
     return { profile: 'agent-discovery-v1', complete: true,
       items: subjects.map(actingSubject => ({ actingSubject, kind: null, handle: null,
         displayName: null, ...labels.get(actingSubject) })) };
@@ -233,7 +236,8 @@ export class AccessActingContexts {
   /** One graph batch of at most 20 localized labels per Agent (50 Agents),
    * one current-handle batch, 1 MiB graph budget; malformed or excess labels
    * fail closed. Missing descriptions remain nullable for older Agents. */
-  private async agentLabels(subjects: readonly string[], languages: readonly string[]):
+  private async agentLabels(subjects: readonly string[], languages: readonly string[],
+    principal: VerifiedPrincipal):
     Promise<Map<string, Omit<AgentDiscoveryOption, 'actingSubject'>>> {
     const labels = new Map<string, Omit<AgentDiscoveryOption, 'actingSubject'>>();
     if (!subjects.length || !this.environment) return labels;
@@ -257,6 +261,7 @@ export class AccessActingContexts {
       const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
         FROM access.alias_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const handles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
+      const visible = await visibleNames(new PersonPreferencesStore(this.pool), subjects, disclosureViewer(principal));
       const kinds: Record<string, AgentDiscoveryOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
         [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
@@ -277,8 +282,8 @@ export class AccessActingContexts {
         const localized = agentLocalizedName(matched, name);
         const selected = selectDisplayName(localized ?? new Map([[first.label?.['xml:lang'] || 'und', name]]), languages);
         if (!selected) throw new Error('Agent label has no language');
-        labels.set(subject, { kind, handle, displayName: { value: selected.value,
-          language: selected.language, direction: selected.direction } });
+        labels.set(subject, { kind, handle, displayName: visible.has(subject) ? { value: selected.value,
+          language: selected.language, direction: selected.direction } : null });
       }
       return labels;
     } catch { throw new ActingContextUnavailable('Agent descriptions are unavailable'); }
@@ -286,7 +291,8 @@ export class AccessActingContexts {
 
   /** One public graph read and one bounded current-handle batch for at most 50
    * eligible Agents. Missing public descriptions remain null. */
-  private async publicLabels(subjects: readonly string[]): Promise<Map<string, Omit<ActingContextOption, 'actingSubject'>>> {
+  private async publicLabels(subjects: readonly string[], principal: VerifiedPrincipal):
+    Promise<Map<string, Omit<ActingContextOption, 'actingSubject'>>> {
     const labels = new Map<string, Omit<ActingContextOption, 'actingSubject'>>();
     if (!subjects.length || !this.environment) return labels;
     if (subjects.length > 50 || subjects.some(subject => !agentId.test(subject))) {
@@ -309,6 +315,7 @@ export class AccessActingContexts {
       const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
         FROM access.alias_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const currentHandles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
+      const visible = await visibleNames(new PersonPreferencesStore(this.pool), subjects, disclosureViewer(principal));
       const kinds: Record<string, ActingContextOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
         [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
@@ -326,7 +333,7 @@ export class AccessActingContexts {
             || /[\u0000-\u001f\u007f]/.test(handle)))) {
           throw new Error('Agent description is invalid');
         }
-        labels.set(agent, { displayName: name, handle, kind: kinds[kind]! });
+        labels.set(agent, { displayName: visible.has(agent) ? name : null, handle, kind: kinds[kind]! });
       }
       return labels;
     } catch {
@@ -444,7 +451,7 @@ export class AccessActingContexts {
     });
     const subjects = [...new Set([...discovered.contexts, ...discovered.directContexts]
       .map(option => option.actingSubject))];
-    const labels = await this.publicLabels(subjects);
+    const labels = await this.publicLabels(subjects, principal);
     return { ...discovered,
       contexts: discovered.contexts.map(option => ({ ...option, ...labels.get(option.actingSubject) })),
       directContexts: discovered.directContexts.map(option => ({ ...option, ...labels.get(option.actingSubject) })) };

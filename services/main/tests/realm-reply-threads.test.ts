@@ -98,8 +98,11 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
           head: bind(reply(900)), public: bind('true'), erased: bind('false'),
           label: { value: 'Rainy Night Bookshop', 'xml:lang': 'en' },
         }] } }) } },
-      personPreferences: { blockedActors: async (_principal: unknown, _agent: string, actors: string[]) =>
-        new Set(actors.filter((actor) => options.blocked?.some((id) => actor === agent(id)))) },
+      personPreferences: {
+        blockedActors: async (_principal: unknown, _agent: string, actors: string[]) =>
+          new Set(actors.filter((actor) => options.blocked?.some((id) => actor === agent(id)))),
+        visibleNameOwners: async (agents: readonly string[]) => new Set(agents),
+      },
       profiles: { agentFences: async (ids: string[]) => new Map(ids.map((id) => [id, 'fence'])) },
       content: { readExactBatch: async (ids: string[]) => {
         calls.bodies++;
@@ -258,7 +261,8 @@ test('a block changed while reading restarts the thread rather than exposing a s
   const { session } = world(thread, { blocked: [2] });
   let reads = 0;
   Object.assign(session.deps, { personPreferences: { blockedActors: async () =>
-    new Set([agent(++reads === 1 ? 2 : 3)]) } });
+    new Set([agent(++reads === 1 ? 2 : 3)]),
+    visibleNameOwners: async (agents: readonly string[]) => new Set(agents) } });
   await expect(readRealmThread(session, realm, reply(1))).rejects.toBeInstanceOf(WorkReadMoved);
 });
 

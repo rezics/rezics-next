@@ -43,6 +43,7 @@ function fixture(fault: 'credits' | 'rating' | 'profile' | 'missing' | 'rating-o
           ]);
         },
       },
+      personPreferences: { visibleNameOwners: async (agents: readonly string[]) => new Set(agents) },
       profiles: { async agentFences(agents: string[]) {
         fenceReads++;
         return new Map(agents.map(agent => [agent, fault === 'profile-moved' && fenceReads > 1

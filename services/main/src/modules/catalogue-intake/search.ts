@@ -1,4 +1,7 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { assertPublicTextReady, assertSameTextInstance } from '../work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
@@ -19,8 +22,11 @@ export interface CatalogueCandidate {
 /** Top-N evidence, never a uniqueness proof. Jena's bounded text:query
  * returns indexed hits in score order; literal-key probes find catalogue stubs:
  * https://jena.apache.org/documentation/query/text-query.html#query-with-sparql
- * Dates and creators refine the retrieved Works rather than scan a population. */
-export async function searchCatalogue(deps: MainWorkDependencies, input: CandidateInput) {
+ * Dates and creators refine the retrieved Works rather than scan a population.
+ * Intake calls this without a principal, so a private name never matches or
+ * appears. An explicit principal is the authorized name reader. */
+export async function searchCatalogue(deps: MainWorkDependencies, input: CandidateInput,
+  principal: VerifiedPrincipal | null = null) {
   const titles = [input.originalTitle, ...input.aliases, ...input.romanizations];
   const terms = [...new Set(titles.map((title) => title.value))];
   const request = new Request('http://main.local/internal/catalogue-public-read');
@@ -142,7 +148,7 @@ export async function searchCatalogue(deps: MainWorkDependencies, input: Candida
         }
       }
     }
-    const candidates = await hydrateCandidates(session, works, evidence);
+    const candidates = await hydrateCandidates(session, works, evidence, principal);
     const refinements = (candidate: CatalogueCandidate) =>
       candidate.attributes.reduce(
         (score, attribute) =>
@@ -176,6 +182,7 @@ async function hydrateCandidates(
   session: WorkReadSession,
   works: string[],
   releaseEvidence: Map<string, CatalogueCandidate['attributes']>,
+  principal: VerifiedPrincipal | null,
 ) {
   if (!works.length) return [];
   const rows = await session.query(
@@ -198,13 +205,18 @@ async function hydrateCandidates(
     2048,
   );
   const creators = await session.query(
-    `SELECT DISTINCT ?work ?displayName WHERE { VALUES ?work { ${works.map(iri).join(' ')} }
+    `SELECT DISTINCT ?work ?agent ?displayName WHERE { VALUES ?work { ${works.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:creditRevision ?creditHead ;
       rv:agent ?agent ; schema:roleName "author" }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit .
       FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
     ${publicAgent('?agent')} } LIMIT 512`,
     512,
+  );
+  const creatorNames = await visibleNames(
+    session.deps.personPreferences,
+    creators.flatMap((creator) => (creator.agent?.value ? [creator.agent.value] : [])),
+    principal ? disclosureViewer(principal) : session.viewer,
   );
   const output: CatalogueCandidate[] = [];
   for (const row of rows) {
@@ -231,7 +243,13 @@ async function hydrateCandidates(
           language: alias.alias!['xml:lang'] ?? null,
         })),
       ...creators
-        .filter((creator) => creator.work?.value === row.work!.value && creator.displayName)
+        .filter(
+          (creator) =>
+            creator.work?.value === row.work!.value &&
+            creator.agent?.value &&
+            creatorNames.has(creator.agent.value) &&
+            creator.displayName,
+        )
         .map((creator) => ({
           field: 'creator',
           value: creator.displayName!.value,

@@ -1,6 +1,8 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { publicAgent } from '../profiles/read.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { agentAddress } from '../agent/handle.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { sourceReportedCredits } from '../source/author-name-read.ts';
@@ -61,7 +63,9 @@ export async function primaryDiscoveryCredits(session: WorkReadSession, work: st
   return (await primaryDiscoveryCreditBatch(session, [work])).get(work)!;
 }
 
-/** At most 60 projected Agent mentions per page and one graph name read. */
+/** At most 60 projected Agent mentions on the default page, one graph name
+ * read, and one name-policy read per 64 owners. A withheld name is absent
+ * from the map. */
 export async function namedDiscoveryCredits(session: WorkReadSession,
   credits: readonly ProjectedWork['primaryCredits'][number][], maxWorks: number = DISCOVERY_COST.pageSize,
   preview = false) {
@@ -70,10 +74,13 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     throw new WorkReadUnavailable('Discovery Agent credit batch is out of bounds');
   }
   if (!agents.length) return new Map<string, { displayName: string; handle: string | null; address?: CanonicalAddress }>();
-  const rows = await session.query(`SELECT ?agent ?displayName ?handle WHERE {
+  const [rows, visible] = await Promise.all([
+    session.query(`SELECT ?agent ?displayName ?handle WHERE {
     VALUES ?agent { ${agents.map(iri).join(' ')} }
     ${publicAgent('?agent')}
-  } LIMIT ${agents.length + 1}`, agents.length + 1);
+  } LIMIT ${agents.length + 1}`, agents.length + 1),
+    visibleNames(session.deps.personPreferences, agents, session.viewer ?? ANONYMOUS_VIEWER),
+  ]);
   if (!preview && (new Set(rows.map(row => row.agent?.value)).size !== rows.length
     || rows.some(row => !row.agent || !row.displayName || !agents.includes(row.agent.value)
       || !row.displayName.value || row.displayName.value.length > 200))) {
@@ -89,6 +96,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     }
     const agent = row.agent!.value;
     seen.add(agent);
+    if (!visible.has(agent)) continue;
     // Null is a complete unnamed profile, not an unavailable preview.
     const readName = async () => ({ handle: await session.deps.agentHandles?.current(agent) ?? null });
     const name = preview ? await optionalPreview(session, readName) : await readName();

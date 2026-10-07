@@ -21,6 +21,8 @@ import { readWorkRating } from '../work/read-rating.ts';
 import { selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
+import { visibleNames } from '../disclosure/name-policy.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 
 export function profileAccess(session: WorkReadSession) {
@@ -195,9 +197,10 @@ export interface AgentCard {
 }
 
 /** readAgent's public-Agent gate for a page of cards: one Access fence batch
- * before and after, one graph batch and one handle batch. A hidden Agent is
- * absent. Preview mode also withholds invalid or changed Agents individually.
- * Cards show no library or avatar, so neither owner is read. */
+ * before and after, one graph batch, one handle batch and one name-policy
+ * read per 64 owners. A hidden Agent or a withheld name is absent. Preview
+ * mode also withholds invalid or changed Agents individually. Cards show no
+ * library or avatar, so neither owner is read. */
 export async function readAgentCards(session: WorkReadSession, agents: readonly string[],
   mode: 'required' | 'preview' = 'required',
   frame?: { fences: ReadonlyMap<string, string>; handles: ReadonlyMap<string, string> }) {
@@ -208,7 +211,7 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
   const before = frame?.fences ?? await owner.agentFences(ids);
   const active = ids.filter((id) => before.has(id));
   if (!active.length) return cards;
-  const [rows, handles] = await Promise.all([
+  const [rows, handles, visible] = await Promise.all([
     session.query(
       `SELECT ?agent ?displayName ?agentKind ?handle
     ?agentHead ?profileHead ?predecessor ?bio ?avatarSelection ?localizedName ?originalNameLanguage
@@ -232,6 +235,7 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
         throw new WorkReadUnavailable('Agent handle owner is unavailable');
       }
     })(),
+    visibleNames(session.deps.personPreferences, active, session.viewer ?? ANONYMOUS_VIEWER),
   ]);
   const kinds = new Set([`${RV}PersonAgent`, `${RV}OrganizationAgent`, `${RV}ServiceAgent`]);
   for (const agent of active) {
@@ -275,6 +279,7 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
       ) {
         throw new WorkReadUnavailable('Agent bio is invalid');
       }
+      if (!visible.has(agent)) continue;
       const handle = handles.get(agent) ?? null;
       const address = agentAddress(agent, handle);
       cards.set(agent, { id: agent, displayName, handle, address,

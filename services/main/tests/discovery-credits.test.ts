@@ -16,7 +16,8 @@ test('discovery projects native and source credits with bounded order, then reso
     }
     expect(limit).toBe(2);
     return [{ agent: field(id(2)), displayName: field('Jane Austen'), handle: field('agent-old') }];
-  }, deps: { agentHandles: { current: async () => 'jane-austen' } } } as unknown as WorkReadSession;
+  }, deps: { agentHandles: { current: async () => 'jane-austen' },
+    personPreferences: { visibleNameOwners: async (agents: readonly string[]) => new Set(agents) } } } as unknown as WorkReadSession;
   const credits = await primaryDiscoveryCredits(session, id(4));
   expect(credits).toHaveLength(2);
   expect(credits[0]).toMatchObject({ participantKind: 'agent', agent: id(2), displayName: null });
