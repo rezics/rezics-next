@@ -1,3 +1,4 @@
+// sql-relations-allow: content.online_source -- Synthetic table created inside this migration test and never applied to an owner database.
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
