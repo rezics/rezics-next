@@ -118,8 +118,8 @@ export async function backfillCatalogueNames(env: WorkActivationEnvironment): Pr
   }
 }
 
-// Re-run legacy completed inventories to seed the native dependency links.
-export const PUBLIC_NAME_BACKFILL_PROFILE = 'public-names-v3';
+// Re-run completed inventories for the bounded, complete name recipe.
+export const PUBLIC_NAME_BACKFILL_PROFILE = 'public-names-v4';
 
 /** Online migration batch. Owner heads are derived inside the writer transaction;
  * concurrent edits stay authoritative. Receipts make a lost checkpoint replayable.
@@ -186,8 +186,9 @@ export async function repairPublicNameBatch(
       await env.fuseki.query(
         `PREFIX rv: <${RV}>
     SELECT ?parent ?cursor ?generation WHERE { GRAPH ${iri(graph)} {
-      ?parent rv:repairCursor ?cursor .
-      OPTIONAL { ?parent rv:nameGeneration ?generation }
+      { ?parent rv:repairCursor ?cursor . OPTIONAL { ?parent rv:nameGeneration ?generation } }
+      UNION { ?parent rv:labelCopyPhase ?phase ; rv:labelCopyStep ?step ; rv:labelCopyGeneration ?generation .
+        BIND(CONCAT("labels:", STR(?phase), ":", STR(?step)) AS ?cursor) }
     } } LIMIT 1`,
         PUBLIC_NAME_REPAIR_COST.responseBytes,
       )

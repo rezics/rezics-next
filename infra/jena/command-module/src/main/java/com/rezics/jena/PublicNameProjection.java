@@ -19,6 +19,13 @@ final class PublicNameProjection {
     private static final Node POLICY = uri(PREFIX + "policy-state");
     static final Node REPAIR = uri("urn:rezics:projection:public-name-repair");
     static final int REPAIR_BATCH_SIZE = 64;
+    static final int NAME_BATCH_SIZE = 64;
+    private static final java.util.List<String> NAME_KINDS = java.util.List.of("concept", "realm", "site", "agent", "collection", "space", "work");
+    private static final java.util.List<Node> NAME_PREDICATES = java.util.List.of(
+        uri("http://www.w3.org/2000/01/rdf-schema#label"), uri("https://schema.org/name"),
+        uri("https://schema.org/alternateName"), p("localizedName"),
+        uri("http://www.w3.org/2004/02/skos/core#prefLabel"), uri("http://www.w3.org/2004/02/skos/core#altLabel"));
+    private static final Node REVISIONS = uri(CommandPolicy.REVISIONS);
     private static final Node IN_SCHEME = uri("http://www.w3.org/2004/02/skos/core#inScheme");
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
@@ -87,16 +94,8 @@ final class PublicNameProjection {
                 p("nameVisibility"), NodeFactory.createLiteralString("private")) ? "agent" : null;
         }
         if (type(data, resource, "https://schema.org/CreativeWork")) {
-            Node main = one(data, resource, "mainVersion");
-            boolean published = false;
-            var units = data.find(PUBLIC, Node.ANY, p("work"), resource);
-            try { while (units.hasNext()) {
-                var facts = FilteredGraphTextIndex.describeUnit(data, units.next().getSubject().getURI());
-                if (facts != null && facts.context().equals(facts.main()) && facts.main().equals(main)
-                    && has(data, main, "selectionHead", facts.selection())) published = true;
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
-            return published || has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
-                org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) ? "work" : null;
+            return has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
+                org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) || publishedWork(data, resource) ? "work" : null;
         }
         if (!listedPublic(data, resource, true)) return null;
         if (type(data, resource, RV + "Zone")) {
@@ -107,6 +106,46 @@ final class PublicNameProjection {
         if (type(data, resource, RV + "Space")) return one(data, resource, "realmCapability") == null
             && one(data, resource, "zoneCapability") == null ? "space" : null;
         return null;
+    }
+    private static Node revisionValue(DatasetGraph data, Node subject, String predicate) {
+        var rows = data.find(REVISIONS, subject, p(predicate), Node.ANY);
+        try { return rows.hasNext() ? rows.next().getObject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    /** The same owner proof used by publishedWork in Main: current Main heads,
+     * current Contribution decision and an unerased selected draft. HeadCasPolicy
+     * admits at most 64 language heads. Search units (including chapters) are
+     * derived copies and neither establish nor withdraw publication authority. */
+    private static boolean publishedWork(DatasetGraph data, Node work) {
+        Node main = one(data, work, "mainVersion");
+        if (main == null || withdrawn(data, main) || !type(data, main, RV + "MainVersion")
+            || !has(data, main, "work", work)) return false;
+        var heads = data.find(CURRENT, main, p("selectionHead"), Node.ANY);
+        try { for (int count = 0; heads.hasNext(); count++) {
+            if (count == 64) throw new IllegalArgumentException("Main language heads exceed their admitted bound");
+            Node selection = heads.next().getObject();
+            CommandWork.count("public_name_heads_visited", 1);
+            Node contribution = revisionValue(data, selection, "contribution");
+            Node decision = revisionValue(data, selection, "publicationDecision");
+            Node draft = revisionValue(data, selection, "selectedDraft");
+            if (contribution != null && decision != null && draft != null && !withdrawn(data, contribution)
+                && data.contains(REVISIONS, selection, RDF.type.asNode(), p("PublicationSelection"))
+                && data.contains(REVISIONS, selection, p("work"), work)
+                && data.contains(REVISIONS, selection, p("mainVersion"), main)
+                && data.contains(REVISIONS, selection, p("context"), main)
+                && has(data, contribution, "work", work)
+                && has(data, contribution, "publicationHead", decision)
+                && data.contains(REVISIONS, decision, RDF.type.asNode(), p("PublicationDecision"))
+                && data.contains(REVISIONS, decision, p("component"), contribution)
+                && data.contains(REVISIONS, decision, p("work"), work)
+                && data.contains(REVISIONS, decision, p("contribution"), contribution)
+                && data.contains(REVISIONS, decision, p("selectedDraft"), draft)
+                && data.contains(REVISIONS, decision, p("disclosure"), p("Public"))
+                && data.contains(REVISIONS, draft, RDF.type.asNode(), p("RevisionAnchor"))
+                && data.contains(REVISIONS, draft, p("component"), contribution)
+                && !data.contains(REVISIONS, draft, RDF.type.asNode(), p("ErasedRevision"))) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+        return false;
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes) {
         if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
@@ -150,7 +189,10 @@ final class PublicNameProjection {
             || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
         // The existing names-maintenance entry point advances one bounded batch
         // after the parent write has committed. Receipt replay cannot advance it.
-        if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) repairBatch(data, receipt);
+        if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) {
+            repairBatch(data, receipt);
+            repairNameLabels(data, receipt);
+        }
     }
     static void refresh(DatasetGraph data, Node resource) {
         invalidate(data, resource, uri(PREFIX + "generation:" + java.util.UUID.randomUUID()));
@@ -248,12 +290,10 @@ final class PublicNameProjection {
      * A fence does not require repair to run: Concept -> Realm -> Space is a
      * fixed path; retired Schemes and protected name sources also deny reads. */
     static boolean visible(DatasetGraph data, Node resource) {
-        // Work names have no parent policy dependency and are synchronously
-        // maintained by their own mutation. Do not turn this bounded candidate
-        // gate into a walk of all of a Work's publication units.
-        String kind = type(data, resource, "https://schema.org/CreativeWork")
-            ? (withdrawn(data, resource) ? null : "work") : kind(data, resource);
-        if (kind == null) return false;
+        // Work qualification now follows bounded owner heads as well, so a
+        // live publication withdrawal is denied without waiting for label repair.
+        String kind = kind(data, resource);
+        if (kind == null || state(data, resource, "labelCopyPhase") != null) return false;
         Node source = Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
         if (source == null || has(data, source, "protectionHead", Node.ANY)) return false;
         Node unit = uri(PREFIX + kind + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
@@ -273,84 +313,313 @@ final class PublicNameProjection {
         finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         return resource != null && resource.isURI() && visible(data, resource);
     }
+    private static Node nameUnit(Node resource, String kind) {
+        return uri(PREFIX + kind + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
+    }
+    private record NamePage(java.util.List<Node> values, boolean more) {}
+    /** A bounded probe used by the synchronous path and by destructive cleanup.
+     * The extra value distinguishes a complete recipe from a repair batch; it
+     * is never dropped as a product limit. Count every visited value, including
+     * nonliteral or duplicate values, rather than only retained names. */
+    private static NamePage namePage(DatasetGraph data, Node graph, Node subject, Node predicate, int limit) {
+        var rows = data.find(graph, subject, predicate, Node.ANY);
+        java.util.List<Node> values = new java.util.ArrayList<>();
+        try { while (rows.hasNext() && values.size() <= limit) {
+            values.add(rows.next().getObject());
+            CommandWork.count("public_name_labels_visited", 1);
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        boolean more = values.size() > limit;
+        if (more) values.removeLast();
+        return new NamePage(values, more);
+    }
+    /** Resume on TDB's existing GSPO B+tree. No OFFSET, sort or prefix replay.
+     * Persist the RDF term, not a NodeId, and resolve the current node table in
+     * each transaction. Reads bypass wrappers, writes always pass through them
+     * so the text monitor and command accounting observe every actual change.
+     * https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/store/tupletable/TupleIndexRecord.java */
+    private static NamePage nameRange(DatasetGraph data, Node source, Node predicate, Node after, int limit) {
+        if (after == null) return namePage(data, CURRENT, source, predicate, limit);
+        DatasetGraph base = org.apache.jena.sparql.core.DatasetGraphWrapper.unwrap(data);
+        var tdb = org.apache.jena.tdb2.sys.TDBInternal.requireStorage(base);
+        var table = tdb.getQuadTable().getNodeTupleTable();
+        var nodes = table.getNodeTable();
+        var index = (org.apache.jena.tdb2.store.tupletable.TupleIndexRecord)
+            table.getTupleTable().selectIndex("GSPO").baseTupleIndex();
+        var factory = index.getRangeIndex().getRecordFactory();
+        var low = factory.createKeyOnly();
+        var high = factory.createKeyOnly();
+        Node[] prefix = { CURRENT, source, predicate };
+        for (int i = 0; i < prefix.length; i++) {
+            var id = nodes.getNodeIdForNode(prefix[i]);
+            if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(id)) return new NamePage(java.util.List.of(), false);
+            org.apache.jena.tdb2.store.NodeIdFactory.set(id, low.getKey(), i * 8);
+            org.apache.jena.tdb2.store.NodeIdFactory.set(id, high.getKey(), i * 8);
+        }
+        org.apache.jena.tdb2.store.NodeIdFactory.setNext(nodes.getNodeIdForNode(predicate), high.getKey(), 16);
+        var cursor = nodes.getNodeIdForNode(after);
+        if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(cursor))
+            throw new IllegalStateException("name cursor term is missing from its node table");
+        org.apache.jena.tdb2.store.NodeIdFactory.setNext(cursor, low.getKey(), 24);
+        var rows = index.getRangeIndex().iterator(low, high);
+        java.util.List<Node> values = new java.util.ArrayList<>();
+        try { while (rows.hasNext() && values.size() <= limit) {
+            var record = rows.next();
+            values.add(nodes.getNodeForNodeId(org.apache.jena.tdb2.store.NodeIdFactory.get(record.getKey(), 24)));
+            CommandWork.count("public_name_labels_visited", 1);
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        boolean more = values.size() > limit;
+        if (more) values.removeLast();
+        return new NamePage(values, more);
+    }
+    /** These authored payload bounds are enforced by the existing revision
+     * shapes (65536 metadata characters; 8000 Collection-name characters).
+     * Cardinality remains unrestricted within that payload: all titles count
+     * towards a resumable page, without a second language/name limit. */
+    private static java.util.List<Node> payloadNames(DatasetGraph data, Node resource, String kind) {
+        java.util.List<Node> names = new java.util.ArrayList<>();
+        Node head = one(data, resource, kind.equals("work") ? "descriptiveMetadataHead" : "collectionNameHead");
+        if (!Set.of("work", "collection").contains(kind) || head == null
+            || data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision"))) return names;
+        Node payload = revisionValue(data, head, kind.equals("work") ? "metadataState" : "profilePayload");
+        int limit = kind.equals("work") ? 65536 : 8000;
+        if (payload == null || !payload.isLiteral() || payload.getLiteralLexicalForm().length() > limit)
+            throw new IllegalArgumentException("name owner payload exceeds its admitted bound");
+        CommandWork.count("public_name_payload_characters", payload.getLiteralLexicalForm().length());
+        var value = org.apache.jena.atlas.json.JSON.parse(payload.getLiteralLexicalForm());
+        if (kind.equals("work")) {
+            if (!value.hasKey("kind") || !"header".equals(value.get("kind").getAsString().value())) return names;
+            if (value.hasKey("originalTitle") && !value.get("originalTitle").isNull()) {
+                var title = value.get("originalTitle").getAsObject();
+                names.add(NodeFactory.createLiteralLang(title.get("value").getAsString().value(), title.get("language").getAsString().value()));
+            }
+            if (value.hasKey("localized")) for (var entry : value.get("localized").getAsArray()) {
+                var locale = entry.getAsObject();
+                if (locale.hasKey("title") && !locale.get("title").isNull()) names.add(NodeFactory.createLiteralLang(
+                    locale.get("title").getAsString().value(), locale.get("language").getAsString().value()));
+            }
+        } else {
+            var labels = value.get("labels").getAsObject();
+            for (String language : labels.keys()) names.add(NodeFactory.createLiteralLang(labels.get(language).getAsString().value(), language));
+        }
+        return names;
+    }
+    private static Node storageGeneration(DatasetGraph data) {
+        var tdb = org.apache.jena.tdb2.sys.TDBInternal.getDatasetGraphTDB(
+            org.apache.jena.sparql.core.DatasetGraphWrapper.unwrap(data));
+        if (tdb != null && tdb.getLocation().isMem()) {
+            var symbol = org.apache.jena.sparql.util.Symbol.create(PREFIX + "memory-store");
+            Node token = tdb.getContext().get(symbol);
+            if (token == null) {
+                token = uri(PREFIX + "store:" + java.util.UUID.randomUUID());
+                tdb.getContext().set(symbol, token);
+            }
+            return token;
+        }
+        String location = tdb == null ? "non-tdb" : tdb.getLocation().toString();
+        return uri(PREFIX + "store:" + java.util.UUID.nameUUIDFromBytes(location.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+    private static Node recipeGeneration(DatasetGraph data, Node resource, Node source, String kind) {
+        StringBuilder key = new StringBuilder(String.valueOf(kind));
+        var epochs = data.find(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("dataEpoch"), Node.ANY);
+        try { if (epochs.hasNext()) key.append('|').append(epochs.next().getObject()); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(epochs); }
+        for (Node owner : java.util.List.of(resource, source == null ? resource : source)) {
+            key.append('|').append(owner).append('|').append(state(data, owner, "nameGeneration"));
+            for (String predicate : java.util.List.of("descriptiveMetadataHead", "collectionNameHead")) {
+                Node head = one(data, owner, predicate);
+                key.append('|').append(head).append('|').append(head != null
+                    && data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision")));
+            }
+        }
+        return uri(PREFIX + "recipe:" + java.util.UUID.nameUUIDFromBytes(key.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+    private static Set<Quad> metadata(DatasetGraph data, Node resource) {
+        Set<Quad> prior = new LinkedHashSet<>();
+        for (String kind : NAME_KINDS) {
+            Node unit = nameUnit(resource, kind);
+            for (Node predicate : java.util.List.of(RDF.type.asNode(), p("resource"), p("disclosure"), p("nameSourceGeneration"),
+                p("createdOrder"), p("updatedOrder"))) {
+                var rows = data.find(PUBLIC, unit, predicate, Node.ANY);
+                try { if (rows.hasNext()) prior.add(rows.next()); }
+                finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            }
+        }
+        var directories = data.find(PUBLIC, Node.ANY, p("nameDirectoryResource"), resource);
+        try { for (int count = 0; directories.hasNext(); count++) {
+            if (count == 2) throw new IllegalStateException("name directory exceeds its two maintained orders");
+            Node directory = directories.next().getSubject();
+            for (String predicate : java.util.List.of("nameDirectoryResource", "nameDirectoryOrder", "publicTitle")) {
+                var rows = data.find(PUBLIC, directory, p(predicate), Node.ANY);
+                try { if (rows.hasNext()) prior.add(rows.next()); }
+                finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            }
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(directories); }
+        return prior;
+    }
+    private static Set<Quad> desiredMetadata(DatasetGraph data, Node resource, Node source, String kind, Set<Quad> prior,
+                                            boolean changed, boolean named) {
+        Set<Quad> desired = new LinkedHashSet<>();
+        if (kind == null || !named) return desired;
+        Node unit = nameUnit(resource, kind), created = null, updated = null;
+        for (Quad quad : prior) {
+            if (quad.getPredicate().equals(p("createdOrder"))) created = quad.getObject();
+            if (quad.getPredicate().equals(p("updatedOrder"))) updated = quad.getObject();
+        }
+        desired.add(new Quad(PUBLIC, unit, RDF.type.asNode(), p("PublicNameMatchUnit")));
+        desired.add(new Quad(PUBLIC, unit, p("resource"), resource));
+        desired.add(new Quad(PUBLIC, unit, p("disclosure"), p("Public")));
+        if (Set.of("realm", "site").contains(kind)) {
+            Node generation = state(data, source, "nameGeneration");
+            if (generation != null) desired.add(new Quad(PUBLIC, unit, p("nameSourceGeneration"), generation));
+        }
+        Node sequence = null;
+        var rows = data.find(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("sequence"), Node.ANY);
+        try { if (rows.hasNext()) sequence = rows.next().getObject(); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        if (sequence != null) {
+            Node rank = NodeFactory.createLiteralByValue(new java.math.BigInteger("32000000000000000000000000000000")
+                .add(new java.math.BigInteger(sequence.getLiteralLexicalForm())), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
+            Node updatedRank = !changed && updated != null ? updated : rank;
+            desired.add(new Quad(PUBLIC, unit, p("createdOrder"), created == null ? rank : created));
+            desired.add(new Quad(PUBLIC, unit, p("updatedOrder"), updatedRank));
+            directory(desired, resource, kind, "newest", created == null ? rank : created);
+            directory(desired, resource, kind, "updated", updatedRank);
+        }
+        return desired;
+    }
+    /** Per resource: <=65 authored values + <=65 prior titles, fixed metadata
+     * probes and bounded owner payloads. Large recipes are hidden until bounded
+     * clear/copy turns complete, so a 64-value turn never becomes a product cap. */
     private static void project(DatasetGraph data, Node resource, boolean changed) {
         dependencies(data, resource);
-        Set<Quad> prior = new LinkedHashSet<>(), desired = new LinkedHashSet<>();
-        String suffix = resource.getURI().substring("https://rezics.com/id/".length());
-        Node oldCreated = null, oldUpdated = null;
-        var directories = data.find(PUBLIC, Node.ANY, p("nameDirectoryResource"), resource);
-        Set<Node> oldDirectories = new LinkedHashSet<>();
-        try { while (directories.hasNext()) oldDirectories.add(directories.next().getSubject()); }
-        finally { org.apache.jena.atlas.iterator.Iter.close(directories); }
-        for (Node directory : oldDirectories) collect(data, directory, prior);
-        for (String value : Set.of("concept", "realm", "site", "agent", "collection", "space", "work"))
-        {
-            Node oldUnit = uri(PREFIX + value + ":" + suffix);
-            var created = data.find(PUBLIC, oldUnit, p("createdOrder"), Node.ANY);
-            try { if (created.hasNext()) oldCreated = created.next().getObject(); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(created); }
-            var updated = data.find(PUBLIC, oldUnit, p("updatedOrder"), Node.ANY);
-            try { if (updated.hasNext()) oldUpdated = updated.next().getObject(); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(updated); }
-            collect(data, oldUnit, prior);
-        }
         String kind = kind(data, resource);
-        if (kind == null) { apply(data, prior, desired); return; }
-        Node source = Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
-        if (source == null || has(data, source, "protectionHead", Node.ANY)) {
-            apply(data, prior, desired); return;
-        }
-        Node unit = uri(PREFIX + kind + ":" + suffix);
-        java.util.NavigableSet<Node> names = new java.util.TreeSet<>(java.util.Comparator.comparing(
-            org.apache.jena.riot.out.NodeFmtLib::strNT));
-        for (String predicate : Set.of("http://www.w3.org/2000/01/rdf-schema#label", "https://schema.org/name",
-            "https://schema.org/alternateName", RV + "localizedName", "http://www.w3.org/2004/02/skos/core#prefLabel",
-            "http://www.w3.org/2004/02/skos/core#altLabel")) {
-            var rows = data.find(CURRENT, source, uri(predicate), Node.ANY);
-            try { while (rows.hasNext()) {
-                Node name = rows.next().getObject();
-                if (name.isLiteral()) names.add(name);
-                if (names.size() > 64) names.pollLast();
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
-        }
-        if (kind.equals("work")) {
-            var units = data.find(PUBLIC, Node.ANY, p("work"), resource);
-            try { while (units.hasNext()) {
-                var titles = data.find(PUBLIC, units.next().getSubject(), p("publicTitle"), Node.ANY);
-                try { while (titles.hasNext()) {
-                    names.add(titles.next().getObject());
-                    if (names.size() > 64) names.pollLast();
-                } }
-                finally { org.apache.jena.atlas.iterator.Iter.close(titles); }
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
-        }
-        for (Node name : names) desired.add(new Quad(PUBLIC, unit, p("publicTitle"), name));
-        if (!names.isEmpty()) {
-            desired.add(new Quad(PUBLIC, unit, RDF.type.asNode(), p("PublicNameMatchUnit")));
-            desired.add(new Quad(PUBLIC, unit, p("resource"), resource));
-            if (Set.of("realm", "site").contains(kind)) {
-                Node generation = state(data, source, "nameGeneration");
-                if (generation != null) desired.add(new Quad(PUBLIC, unit, p("nameSourceGeneration"), generation));
+        Node source = kind != null && Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
+        if (source == null || withdrawn(data, source)) kind = null;
+        Node generation = recipeGeneration(data, resource, source, kind);
+        if (generation.equals(state(data, resource, "labelCopyGeneration"))
+            || state(data, resource, "labelCopyPhase") == null
+                && generation.equals(state(data, resource, "labelBuiltGeneration"))) return;
+        Set<Quad> prior = metadata(data, resource);
+        Set<Node> names = new LinkedHashSet<>();
+        int visited = 0;
+        boolean more = false;
+        if (kind != null) {
+            for (Node predicate : NAME_PREDICATES) {
+                var page = namePage(data, CURRENT, source, predicate, NAME_BATCH_SIZE - visited);
+                visited += page.values().size();
+                for (Node value : page.values()) if (value.isLiteral()) names.add(value);
+                if (page.more()) { more = true; break; }
             }
-            desired.add(new Quad(PUBLIC, unit, p("disclosure"), p("Public")));
-            var sequences = data.find(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("sequence"), Node.ANY);
-            try { if (sequences.hasNext()) {
-                String sequence = sequences.next().getObject().getLiteralLexicalForm();
-                Node rank = NodeFactory.createLiteralByValue(new java.math.BigInteger("32000000000000000000000000000000")
-                    .add(new java.math.BigInteger(sequence)), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
-                Node updatedRank = !changed && oldUpdated != null ? oldUpdated : rank;
-                desired.add(new Quad(PUBLIC, unit, p("updatedOrder"), updatedRank));
-                desired.add(new Quad(PUBLIC, unit, p("createdOrder"), oldCreated == null ? rank : oldCreated));
-                directory(desired, resource, kind, "newest", oldCreated == null ? rank : oldCreated);
-                directory(desired, resource, kind, "updated", updatedRank);
-            } } finally { org.apache.jena.atlas.iterator.Iter.close(sequences); }
+            if (!more) for (Node value : payloadNames(data, resource, kind)) {
+                CommandWork.count("public_name_labels_visited", 1);
+                if (++visited > NAME_BATCH_SIZE) { more = true; break; }
+                names.add(value);
+            }
         }
+        Set<Quad> titles = new LinkedHashSet<>();
+        for (String oldKind : NAME_KINDS) {
+            var page = namePage(data, PUBLIC, nameUnit(resource, oldKind), p("publicTitle"), NAME_BATCH_SIZE - titles.size());
+            for (Node value : page.values()) titles.add(new Quad(PUBLIC, nameUnit(resource, oldKind), p("publicTitle"), value));
+            if (page.more()) { more = true; break; }
+        }
+        if (more) {
+            state(data, resource, "labelCopyGeneration", generation);
+            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString("-7"));
+            // Retain this per-resource step after completion. A withdrawal and
+            // restoration may return to the same recipe generation; reusing a
+            // former (generation, phase, step) would replay a completed receipt.
+            Node oldStep = state(data, resource, "labelCopyStep");
+            java.math.BigInteger step = oldStep == null ? java.math.BigInteger.ZERO
+                : new java.math.BigInteger(oldStep.getLiteralLexicalForm()).add(java.math.BigInteger.ONE);
+            state(data, resource, "labelCopyStep", NodeFactory.createLiteralString(step.toString()));
+            state(data, resource, "labelCopyStore", storageGeneration(data));
+            state(data, resource, "labelCopyAfter", null);
+            // Remove admission metadata at once; stored titles can be cleaned
+            // later without disclosing stale, partial or withdrawn names.
+            Set<Quad> ranks = desiredMetadata(data, resource, source, kind, prior, changed, true).stream()
+                .filter(quad -> Set.of(p("createdOrder"), p("updatedOrder")).contains(quad.getPredicate()))
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            apply(data, prior, ranks);
+            return;
+        }
+        Set<Quad> desired = desiredMetadata(data, resource, source, kind, prior, changed, !names.isEmpty());
+        if (kind != null) for (Node name : names) desired.add(new Quad(PUBLIC, nameUnit(resource, kind), p("publicTitle"), name));
+        prior.addAll(titles);
         apply(data, prior, desired);
+        if (state(data, resource, "labelBuiltGeneration") != null)
+            state(data, resource, "labelBuiltGeneration", generation);
+        state(data, resource, "labelCopyGeneration", null);
+        state(data, resource, "labelCopyPhase", null);
+        state(data, resource, "labelCopyAfter", null);
+        state(data, resource, "labelCopyStore", null);
     }
-    private static void collect(DatasetGraph data, Node subject, Set<Quad> result) {
-        var quads = data.find(PUBLIC, subject, Node.ANY, Node.ANY);
-        try { while (quads.hasNext()) result.add(quads.next()); }
-        finally { org.apache.jena.atlas.iterator.Iter.close(quads); }
+    /** The existing names-maintenance receipt advances one resource's recipe,
+     * visiting <=64 values plus one lookahead per fixed recipe predicate. Both
+     * the indexed RDF cursor and replay marker commit with the copied titles. */
+    static int repairNameLabels(DatasetGraph data, String receipt) {
+        Node replay = uri(receipt);
+        if (state(data, replay, "labelRepairApplied") != null) return 0;
+        var pending = data.find(REPAIR, Node.ANY, p("labelCopyPhase"), Node.ANY);
+        Node resource;
+        try { resource = pending.hasNext() ? pending.next().getSubject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(pending); }
+        state(data, replay, "labelRepairApplied", replay);
+        if (resource == null) return 0;
+        String kind = kind(data, resource);
+        Node source = kind != null && Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
+        if (source == null || withdrawn(data, source)) kind = null;
+        Node generation = recipeGeneration(data, resource, source, kind);
+        if (!generation.equals(state(data, resource, "labelCopyGeneration"))) { project(data, resource, false); return 0; }
+        Node store = storageGeneration(data);
+        if (!store.equals(state(data, resource, "labelCopyStore"))) {
+            // Compaction copies quads into a new node table (CopyDSG), changing
+            // its physical order. Reset the bounded recipe instead of seeking
+            // with a cursor from the old order; reopening the same store resumes.
+            // https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/sys/CopyDSG.java
+            state(data, resource, "labelCopyStore", store);
+            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString("-7"));
+            state(data, resource, "labelCopyAfter", null);
+            java.math.BigInteger step = new java.math.BigInteger(state(data, resource, "labelCopyStep").getLiteralLexicalForm());
+            state(data, resource, "labelCopyStep", NodeFactory.createLiteralString(step.add(java.math.BigInteger.ONE).toString()));
+            return 0;
+        }
+        int phase = Integer.parseInt(state(data, resource, "labelCopyPhase").getLiteralLexicalForm());
+        int processed = 0;
+        while (processed < NAME_BATCH_SIZE && phase < 7) {
+            Node after = state(data, resource, "labelCopyAfter");
+            NamePage page;
+            if (phase < 0) page = namePage(data, PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + 7)), p("publicTitle"), NAME_BATCH_SIZE - processed);
+            else if (kind == null) { phase = 7; break; }
+            else if (phase < 6) page = nameRange(data, source, NAME_PREDICATES.get(phase), after, NAME_BATCH_SIZE - processed);
+            else {
+                var payload = payloadNames(data, resource, kind);
+                int offset = after == null ? 0 : Integer.parseInt(after.getLiteralLexicalForm());
+                int end = Math.min(payload.size(), offset + NAME_BATCH_SIZE - processed);
+                page = new NamePage(payload.subList(offset, end), end < payload.size());
+                CommandWork.count("public_name_labels_visited", page.values().size());
+                state(data, resource, "labelCopyAfter", NodeFactory.createLiteralString(Integer.toString(end)));
+            }
+            for (Node name : page.values()) {
+                if (phase < 0) data.delete(PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + 7)), p("publicTitle"), name);
+                else if (name.isLiteral()) data.add(PUBLIC, nameUnit(resource, kind), p("publicTitle"), name);
+            }
+            processed += page.values().size();
+            if (phase >= 0 && phase < 6 && !page.values().isEmpty()) state(data, resource, "labelCopyAfter", page.values().getLast());
+            if (page.more()) break;
+            phase++;
+            state(data, resource, "labelCopyAfter", null);
+        }
+        state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString(Integer.toString(phase)));
+        java.math.BigInteger step = new java.math.BigInteger(state(data, resource, "labelCopyStep").getLiteralLexicalForm());
+        state(data, resource, "labelCopyStep", NodeFactory.createLiteralString(step.add(java.math.BigInteger.ONE).toString()));
+        if (phase == 7) {
+            Set<Quad> prior = metadata(data, resource);
+            boolean named = kind != null && data.contains(PUBLIC, nameUnit(resource, kind), p("publicTitle"), Node.ANY);
+            apply(data, prior, desiredMetadata(data, resource, source, kind, prior, false, named));
+            state(data, resource, "labelBuiltGeneration", generation);
+            for (String predicate : java.util.List.of("labelCopyPhase", "labelCopyAfter", "labelCopyGeneration", "labelCopyStore")) state(data, resource, predicate, null);
+        }
+        return processed;
     }
     /** Preserve unchanged name documents and directory entries. In particular,
      * validating a Work during classification does not rewrite its names. */

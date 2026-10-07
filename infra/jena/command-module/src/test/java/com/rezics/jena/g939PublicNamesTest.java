@@ -108,16 +108,18 @@ public class g939PublicNamesTest {
             }
         } finally { data.abort(); data.end(); data.close(); }
     }
-    @Test public void moreThan64NamesAreSelectedDeterministicallyAndDeletedUnitsRefreshTheirWork() {
-        var data=DatasetGraphFactory.createTxnMem();
+    @Test public void moreThan64NamesRemainReachableAndDeletedUnitsRefreshTheirWork() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph();
         data.begin(ReadWrite.WRITE);
         try {
             Node work=id(1),unit=uri("urn:unit:one");
             name(data,work,"Space"); data.add(CURRENT,work,p("disclosure"),p("Public"));
             for (int i=99;i>=0;i--) data.add(CURRENT,work,uri("http://www.w3.org/2000/01/rdf-schema#label"),NodeFactory.createLiteralLang(String.format("Name %03d",i),"en"));
             PublicNameProjection.refresh(data,work);
-            assertEquals(64,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,nameUnit(work,"space"),p("publicTitle"),Node.ANY)));
-            assertEquals(64,CatalogueNamePolicy.expected(data,work).size());
+            assertFalse(PublicNameProjection.visible(data,work));
+            for (int batch=0;batch<3;batch++) PublicNameProjection.repairNameLabels(data,"urn:receipt:name-batch:"+batch);
+            assertEquals(101,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,nameUnit(work,"space"),p("publicTitle"),Node.ANY)));
+            assertTrue(PublicNameProjection.visible(data,work));
             data.deleteAny(CURRENT,work,RDF.type.asNode(),Node.ANY);
             data.add(CURRENT,work,RDF.type.asNode(),uri("https://schema.org/CreativeWork"));
             data.add(CURRENT,work,p("catalogueVisible"),NodeFactory.createLiteralByValue(true,org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));

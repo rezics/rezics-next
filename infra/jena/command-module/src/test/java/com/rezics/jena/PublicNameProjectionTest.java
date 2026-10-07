@@ -230,6 +230,7 @@ public class PublicNameProjectionTest {
         try {
             Node work=id(100);
             data.add(CURRENT,work,RDF.type.asNode(),uri("https://schema.org/CreativeWork"));
+            data.add(CURRENT,work,p("catalogueVisible"),NodeFactory.createLiteralByValue(true,org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
             data.add(PUBLIC,unit(work,"work"),p("resource"),work);
             var bounded=new DatasetGraphWrapper(data) {
                 @Override public Iterator<Quad> find(Node g,Node s,Node predicate,Node o) {
@@ -240,6 +241,363 @@ public class PublicNameProjectionTest {
             };
             assertTrue(PublicNameProjection.visible(bounded,work));
             assertTrue(PublicNameProjection.visibleUnit(bounded,unit(work,"work").getURI()));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    private static final Node WORK=id(800), MAIN=id(801), SELECTION=id(802), CONTRIBUTION=id(803),
+        DECISION=id(804), DRAFT=id(805), REVISION_GRAPH=uri(CommandPolicy.REVISIONS);
+    private static void publishedOwner(DatasetGraph data) {
+        data.add(CURRENT,WORK,RDF.type.asNode(),uri("https://schema.org/CreativeWork"));
+        data.add(CURRENT,WORK,LABEL,NodeFactory.createLiteralLang("Owned work name","en"));
+        data.add(CURRENT,WORK,p("mainVersion"),MAIN);
+        data.add(CURRENT,MAIN,RDF.type.asNode(),p("MainVersion"));
+        data.add(CURRENT,MAIN,p("work"),WORK);
+        data.add(CURRENT,MAIN,p("selectionHead"),SELECTION);
+        data.add(CURRENT,CONTRIBUTION,p("work"),WORK);
+        data.add(CURRENT,CONTRIBUTION,p("publicationHead"),DECISION);
+        data.add(REVISION_GRAPH,SELECTION,RDF.type.asNode(),p("PublicationSelection"));
+        data.add(REVISION_GRAPH,SELECTION,p("work"),WORK);
+        data.add(REVISION_GRAPH,SELECTION,p("mainVersion"),MAIN);
+        data.add(REVISION_GRAPH,SELECTION,p("context"),MAIN);
+        data.add(REVISION_GRAPH,SELECTION,p("contribution"),CONTRIBUTION);
+        data.add(REVISION_GRAPH,SELECTION,p("publicationDecision"),DECISION);
+        data.add(REVISION_GRAPH,SELECTION,p("selectedDraft"),DRAFT);
+        data.add(REVISION_GRAPH,DECISION,RDF.type.asNode(),p("PublicationDecision"));
+        data.add(REVISION_GRAPH,DECISION,p("component"),CONTRIBUTION);
+        data.add(REVISION_GRAPH,DECISION,p("contribution"),CONTRIBUTION);
+        data.add(REVISION_GRAPH,DECISION,p("work"),WORK);
+        data.add(REVISION_GRAPH,DECISION,p("selectedDraft"),DRAFT);
+        data.add(REVISION_GRAPH,DECISION,p("disclosure"),p("Public"));
+        data.add(REVISION_GRAPH,DRAFT,RDF.type.asNode(),p("RevisionAnchor"));
+        data.add(REVISION_GRAPH,DRAFT,p("component"),CONTRIBUTION);
+    }
+    private static long counter(CommandWork work, String name) {
+        var match=java.util.regex.Pattern.compile("(?:^|,)"+name+"=([0-9]+)").matcher(work.counters());
+        return match.find()?Long.parseLong(match.group(1)):0;
+    }
+    private static List<Long> workProjectionCost(int chapters,int unrelated) {
+        var data=DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
+        try {
+            publishedOwner(data);
+            Node metadata=id(806);
+            data.add(CURRENT,WORK,p("descriptiveMetadataHead"),metadata);
+            data.add(REVISION_GRAPH,metadata,p("metadataState"),NodeFactory.createLiteralString(
+                "{\"kind\":\"header\",\"originalTitle\":null,\"localized\":[{\"title\":\"Nom propre\",\"language\":\"fr\"}]}"));
+            for (int i=0;i<chapters+unrelated;i++) {
+                Node search=uri("urn:unit:growing:"+i);
+                data.add(PUBLIC,search,p("work"),i<chapters?WORK:id(900));
+                data.add(PUBLIC,search,p("publicTitle"),NodeFactory.createLiteralLang("Irrelevant chapter "+i,"en"));
+                data.add(PUBLIC,search,p("selection"),SELECTION);
+                data.add(PUBLIC,search,p("mainVersion"),MAIN);
+                data.add(PUBLIC,search,p("context"),id(901));
+            }
+            var counted=new Counted(data) {
+                @Override public Iterator<Quad> find(Node g,Node subject,Node predicate,Node object) {
+                    if (g.equals(PUBLIC) && subject.equals(Node.ANY) && predicate.equals(p("work")))
+                        fail("Work projection must not open the publication-unit population");
+                    if (g.equals(PUBLIC) && predicate.equals(p("publicTitle"))
+                        && subject.isURI() && subject.getURI().startsWith("urn:unit:"))
+                        fail("chapter and unrelated-unit titles are not authored Work names");
+                    return super.find(g,subject,predicate,object);
+                }
+            };
+            List<Long> result;
+            try (var work=new CommandWork()) {
+                refresh(counted,WORK,"urn:receipt:work-owner-projection");
+                result=List.of(counted.probes,counted.rows,counted.mutations,
+                    counter(work,"public_name_heads_visited"),counter(work,"public_name_labels_visited"));
+            }
+            assertTrue(PublicNameProjection.visible(data,WORK));
+            assertEquals(2,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(WORK,"work"),p("publicTitle"),Node.ANY)));
+            assertTrue(data.contains(PUBLIC,unit(WORK,"work"),p("publicTitle"),NodeFactory.createLiteralLang("Nom propre","fr")));
+            System.out.println("public-name Work cost chapters="+chapters+" unrelated="+unrelated+" probes/rows/mutations/heads/labels="+result);
+            return result;
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void workProjectionCostIsIndependentOfChaptersIrrelevantUnitsAndUnrelatedResources() {
+        var small=workProjectionCost(1,1);
+        assertEquals(small,workProjectionCost(1000,1));
+        assertEquals(small,workProjectionCost(1000,2000));
+        assertEquals(Long.valueOf(1),small.get(3));
+        assertEquals(Long.valueOf(2),small.get(4));
+    }
+    @Test public void workPublicationOwnerWithdrawalErasureAndRestorationAreImmediateWithoutUnitLinks() {
+        var data=DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
+        try {
+            publishedOwner(data); PublicNameProjection.refresh(data,WORK);
+            // The legal selection shape never required an immutable matchUnit link.
+            assertFalse(data.contains(REVISION_GRAPH,SELECTION,p("matchUnit"),Node.ANY));
+            assertTrue(PublicNameProjection.visible(data,WORK));
+            set(data,CONTRIBUTION,"publicationHead",id(899));
+            assertFalse(PublicNameProjection.visible(data,WORK));
+            refresh(data,CONTRIBUTION,"urn:receipt:owner-withdraw");
+            assertFalse(stored(data,WORK,"work"));
+            set(data,CONTRIBUTION,"publicationHead",DECISION);
+            refresh(data,CONTRIBUTION,"urn:receipt:owner-restore");
+            assertTrue(PublicNameProjection.visible(data,WORK));
+            data.add(REVISION_GRAPH,DRAFT,RDF.type.asNode(),p("ErasedRevision"));
+            assertFalse(PublicNameProjection.visible(data,WORK));
+            data.delete(REVISION_GRAPH,DRAFT,RDF.type.asNode(),p("ErasedRevision"));
+            assertTrue(PublicNameProjection.visible(data,WORK));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    private static void collection(DatasetGraph data, Node collection,int names) {
+        data.add(CURRENT,collection,RDF.type.asNode(),p("Collection"));
+        data.add(CURRENT,collection,p("collectionState"),p("Active"));
+        data.add(CURRENT,collection,p("disclosure"),p("Public"));
+        data.add(CURRENT,collection,p("curator"),id(818));
+        data.add(CURRENT,collection,p("collectionHead"),id(819));
+        data.add(CURRENT,collection,p("collectionKind"),p("StaticCollection"));
+        data.add(REVISION_GRAPH,id(819),RDF.type.asNode(),p("CollectionRevision"));
+        for (int i=0;i<names;i++) data.add(CURRENT,collection,uri("https://schema.org/name"),
+            NodeFactory.createLiteralLang("Language name "+i,"en-x-n"+String.format("%04d",i)));
+    }
+    private static int maintainedNameTurn(DatasetGraph data,String receipt) {
+        return PublicNameProjection.repairNameLabels(data,receipt);
+    }
+    private static long largeNameWriteCost(int labels,int unrelated) {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+        try {
+            Node collection=id(810); collection(data,collection,labels);
+            for (int i=0;i<unrelated;i++) data.add(CURRENT,id(10000+i),uri("https://schema.org/name"),NodeFactory.createLiteralString("Unrelated"));
+            var profiles=ProfileRegistry.load(java.nio.file.Path.of("profiles"));
+            assertNull(CommandService.validateOne(data,new CommandService.Validation("collection-curation-v1",
+                profiles.get("collection-curation-v1"),"https://rezics.com/definition/collection-curation-v1/collection-shape",
+                List.of(collection.getURI()),List.of(CommandPolicy.CURRENT,CommandPolicy.REVISIONS),java.util.Map.of())));
+            long cost;
+            try (var work=new CommandWork()) {
+                refresh(data,collection,"urn:receipt:large-collection");
+                cost=counter(work,"public_name_labels_visited");
+            }
+            assertFalse(PublicNameProjection.visible(data,collection));
+            System.out.println("public-name label write labels="+labels+" unrelated="+unrelated+" visited="+cost);
+            return cost;
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    private static long[] countRangeRecords(DatasetGraph data) {
+        var tdb=org.apache.jena.tdb2.sys.TDBInternal.requireStorage(DatasetGraphWrapper.unwrap(data));
+        var table=tdb.getQuadTable().getNodeTupleTable().getTupleTable();
+        var original=table.selectIndex("GSPO");
+        var record=(org.apache.jena.tdb2.store.tupletable.TupleIndexRecord)original.baseTupleIndex();
+        long[] visited={0};
+        var range=(org.apache.jena.dboe.index.RangeIndex)java.lang.reflect.Proxy.newProxyInstance(
+            org.apache.jena.dboe.index.RangeIndex.class.getClassLoader(),new Class<?>[]{org.apache.jena.dboe.index.RangeIndex.class},
+            (proxy,method,args)->{
+                Object result=method.invoke(record.getRangeIndex(),args);
+                if (method.getName().equals("iterator")) return org.apache.jena.atlas.iterator.Iter.map((Iterator<?>)result,
+                    value->{visited[0]++;return value;});
+                return result;
+            });
+        var counted=new org.apache.jena.tdb2.store.tupletable.TupleIndexRecord(4,original.getMapping(),"GSPO",range.getRecordFactory(),range);
+        for (int i=0;i<table.numIndexes();i++) if (table.getIndex(i)==original)
+            table.setTupleIndex(i,new org.apache.jena.tdb2.store.tupletable.TupleIndexWrapper(original) {
+                @Override public org.apache.jena.tdb2.store.tupletable.TupleIndex baseTupleIndex() { return counted; }
+            });
+        return visited;
+    }
+    @Test public void labelWriteWorkIsFixedAndEveryLegalLanguageRemainsReachableThroughTheNativeIndex() {
+        assertEquals(65,largeNameWriteCost(65,0));
+        assertEquals(65,largeNameWriteCost(1001,2000));
+        var definition=new EntityDefinition("uri","label","graph"); definition.set("publicTitle",p("publicTitle"));
+        definition.setLangField("lang"); definition.setUidField("uid");
+        var config=new TextIndexConfig(definition); config.setValueStored(true);
+        var index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config));
+        var data=new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index));
+        Node collection=id(810);
+        data.begin(ReadWrite.WRITE);
+        try { collection(data,collection,1001); refresh(data,collection,"urn:receipt:many-languages"); data.commit(); }
+        finally { data.end(); }
+        long[] records=countRangeRecords(data);
+        for (int batch=0;batch<16;batch++) {
+            data.begin(ReadWrite.WRITE);
+            try (var work=new CommandWork()) {
+                long before=records[0];
+                int copied=maintainedNameTurn(data,"urn:receipt:copy-languages:"+batch);
+                assertTrue(records[0]-before<=65);
+                if (batch>0) assertTrue(records[0]>before);
+                assertTrue(copied<=64);
+                assertTrue(counter(work,"public_name_labels_visited")<=70);
+                System.out.println("public-name label repair batch="+batch+" copied="+copied+" visited="+counter(work,"public_name_labels_visited"));
+                data.commit();
+            } finally { data.end(); }
+        }
+        data.begin(ReadWrite.READ);
+        try {
+            assertEquals(1001,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(collection,"collection"),p("publicTitle"),Node.ANY)));
+            assertTrue(PublicNameProjection.visible(data,collection));
+            for (int sample:List.of(0,64,128,1000)) {
+                var page=index.ranked(p("publicTitle"),"Language name "+sample,64,null,data,
+                    new FilteredGraphTextIndex.RankScope(null,null,null,false,"collection",null));
+                assertTrue(page.hits().stream().anyMatch(hit->hit.key()!=null));
+            }
+            assertEquals(1,index.directory("collection","identity",64,null,data).hits().size());
+        } finally { data.end(); data.close(); }
+    }
+    @Test public void labelCopyResumesAfterAbortReplaysNoOpAndRestartsWhenSourceChanges() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); Node collection=id(810);
+        data.begin(ReadWrite.WRITE);
+        try { collection(data,collection,160); refresh(data,collection,"urn:receipt:name-source"); data.commit(); }
+        finally { data.end(); }
+        data.begin(ReadWrite.WRITE);
+        try { assertEquals(64,maintainedNameTurn(data,"urn:receipt:copy-one")); data.commit(); }
+        finally { data.end(); }
+        data.begin(ReadWrite.WRITE);
+        try { assertEquals(64,maintainedNameTurn(data,"urn:receipt:copy-interrupted")); data.abort(); }
+        finally { data.end(); }
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals(64,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(collection,"collection"),p("publicTitle"),Node.ANY)));
+            assertEquals(64,maintainedNameTurn(data,"urn:receipt:copy-interrupted"));
+            var counted=new Counted(data);
+            assertEquals(0,maintainedNameTurn(counted,"urn:receipt:copy-one")); assertEquals(0,counted.mutations);
+            data.deleteAny(CURRENT,collection,uri("https://schema.org/name"),Node.ANY);
+            data.add(CURRENT,collection,uri("https://schema.org/name"),NodeFactory.createLiteralLang("Current replacement","fr"));
+            refresh(data,collection,"urn:receipt:replacement");
+            assertFalse(PublicNameProjection.visible(data,collection));
+            assertEquals(0,maintainedNameTurn(counted,"urn:receipt:copy-interrupted"));
+            for (int batch=0;batch<4;batch++) assertTrue(maintainedNameTurn(data,"urn:receipt:replacement-copy:"+batch)<=64);
+            assertTrue(PublicNameProjection.visible(data,collection));
+            assertEquals(1,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(collection,"collection"),p("publicTitle"),Node.ANY)));
+            assertTrue(data.contains(PUBLIC,unit(collection,"collection"),p("publicTitle"),NodeFactory.createLiteralLang("Current replacement","fr")));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void collectionPayloadLanguagesUseTheSameResumableMaintenanceWithoutACardinalityCap() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+        try {
+            Node collection=id(810),head=id(816); collection(data,collection,0);
+            data.add(CURRENT,collection,uri("https://schema.org/name"),NodeFactory.createLiteralLang("Original name","en"));
+            data.add(CURRENT,collection,p("collectionNameHead"),head);
+            var labels=new org.apache.jena.atlas.json.JsonObject(); labels.put("en","Original name");
+            for (int i=0;i<100;i++) labels.put("en-x-n"+String.format("%04d",i),"Localized "+i);
+            var payload=new org.apache.jena.atlas.json.JsonObject(); payload.put("original","en"); payload.put("labels",labels);
+            data.add(REVISION_GRAPH,head,RDF.type.asNode(),p("CollectionNameRevision"));
+            data.add(REVISION_GRAPH,head,RDF.type.asNode(),p("RevisionAnchor"));
+            data.add(REVISION_GRAPH,head,p("component"),collection);
+            data.add(REVISION_GRAPH,head,p("operation"),id(817));
+            data.add(REVISION_GRAPH,head,p("profilePayload"),NodeFactory.createLiteralString(payload.toString()));
+            Node profile=uri("https://rezics.com/definition/collection-public-name-v1");
+            data.add(REVISION_GRAPH,head,p("modelRevision"),profile); data.add(REVISION_GRAPH,head,p("shapeRevision"),profile);
+            data.add(REVISION_GRAPH,head,p("datasetId"),uri("urn:rezics:dataset:product"));
+            data.add(REVISION_GRAPH,head,p("dataEpoch"),NodeFactory.createLiteralString("epoch"));
+            data.add(REVISION_GRAPH,head,p("sequence"),NodeFactory.createLiteralByValue(1,org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+            var profiles=ProfileRegistry.load(java.nio.file.Path.of("profiles"));
+            assertNull(CommandService.validateOne(data,new CommandService.Validation("collection-public-name-v1",
+                profiles.get("collection-public-name-v1"),profile.getURI()+"/revision-shape",
+                List.of(head.getURI()),List.of(CommandPolicy.CURRENT,CommandPolicy.REVISIONS),java.util.Map.of())));
+            refresh(data,collection,"urn:receipt:collection-payload");
+            assertFalse(PublicNameProjection.visible(data,collection));
+            String query="PREFIX rv: <https://rezics.com/vocab/> SELECT ?cursor WHERE { GRAPH <urn:rezics:projection:public-name-repair> { "
+                +"?parent rv:labelCopyPhase ?phase ; rv:labelCopyStep ?step ; rv:labelCopyGeneration ?generation . "
+                +"BIND(CONCAT(\"labels:\",STR(?phase),\":\",STR(?step)) AS ?cursor) } } LIMIT 1";
+            String cursor;
+            try (var run=org.apache.jena.query.QueryExecutionFactory.create(query,org.apache.jena.query.DatasetFactory.wrap(data))) {
+                cursor=run.execSelect().next().getLiteral("cursor").getString();
+            }
+            for (int batch=0;batch<3;batch++) {
+                PublicNameProjection.refresh(data,new CommandPolicy.Plan(null,Set.of(),Set.of(),Set.of(),Set.of(),false,false,true),
+                    "urn:rezics:receipt:catalogue-search-index:payload-copy:"+batch,List.of(),List.of());
+                if (batch==0) try (var run=org.apache.jena.query.QueryExecutionFactory.create(query,org.apache.jena.query.DatasetFactory.wrap(data))) {
+                    assertNotEquals(cursor,run.execSelect().next().getLiteral("cursor").getString());
+                }
+            }
+            assertTrue(PublicNameProjection.visible(data,collection));
+            assertEquals(101,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(collection,"collection"),p("publicTitle"),Node.ANY)));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void copiedStoresRestartTheCursorWhenPhysicalNodeOrderChanges() {
+        var original=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph();
+        Node collection=id(810);
+        java.util.List<Quad> snapshot;
+        original.begin(ReadWrite.WRITE);
+        try {
+            collection(original,collection,160); refresh(original,collection,"urn:receipt:copy-store-source");
+            assertEquals(64,maintainedNameTurn(original,"urn:receipt:copy-store-first")); original.commit();
+        } finally { original.end(); }
+        original.begin(ReadWrite.READ);
+        try { snapshot=org.apache.jena.atlas.iterator.Iter.toList(original.find()); }
+        finally { original.end(); original.close(); }
+        var copied=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); copied.begin(ReadWrite.WRITE);
+        try {
+            for (int i=159;i>=0;i--) copied.add(CURRENT,collection,uri("https://schema.org/name"),
+                NodeFactory.createLiteralLang("Language name "+i,"en-x-n"+String.format("%04d",i)));
+            for (Quad quad:snapshot) copied.add(quad);
+            assertEquals(0,maintainedNameTurn(copied,"urn:receipt:copy-store-reset"));
+            assertFalse(PublicNameProjection.visible(copied,collection));
+            for (int batch=0;batch<6;batch++) maintainedNameTurn(copied,"urn:receipt:copy-store-resume:"+batch);
+            assertTrue(PublicNameProjection.visible(copied,collection));
+            assertEquals(160,org.apache.jena.atlas.iterator.Iter.count(copied.find(PUBLIC,unit(collection,"collection"),p("publicTitle"),Node.ANY)));
+        } finally { copied.abort(); copied.end(); copied.close(); }
+    }
+    private static String labelMaintenanceReceipt(DatasetGraph data,Node resource) {
+        java.util.List<String> state=new java.util.ArrayList<>();
+        for (String predicate:List.of("labelCopyPhase","labelCopyStep","labelCopyGeneration")) {
+            var rows=data.find(PublicNameProjection.REPAIR,resource,p(predicate),Node.ANY);
+            try {
+                Node value=rows.hasNext()?rows.next().getObject():null;
+                state.add(value==null?null:value.isLiteral()?value.getLiteralLexicalForm():value.getURI());
+            }
+            finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        }
+        if (state.get(0)==null) return null;
+        String identity="[\"epoch\",\"public-name-repair\",\""+resource.getURI()+"\",\"labels:"
+            +state.get(0)+":"+state.get(1)+"\",\""+state.get(2)+"\"]";
+        try {
+            return "urn:rezics:receipt:catalogue-search-index:"+java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException error) { throw new AssertionError(error); }
+    }
+    private static void drainDerivedLabelReceipts(DatasetGraph data,Node resource,Set<String> receipts) {
+        for (int batch=0;batch<12;batch++) {
+            String receipt=labelMaintenanceReceipt(data,resource);
+            if (receipt==null) return;
+            assertTrue("pending maintenance receipt must advance across source rebuilds",receipts.add(receipt));
+            PublicNameProjection.refresh(data,new CommandPolicy.Plan(null,Set.of(),Set.of(),Set.of(),Set.of(),false,false,true),receipt,List.of(),List.of());
+        }
+        fail("label maintenance did not finish its bounded continuation");
+    }
+    @Test public void largeWorkNamesRestoreAfterInterruptedPublicationWithdrawalWithoutChangingWorkHeads() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+        try {
+            publishedOwner(data);
+            for (int i=0;i<160;i++) data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Work alias "+i,"fr"));
+            refresh(data,WORK,"urn:receipt:large-work-source");
+            Set<String> receipts=new java.util.HashSet<>();
+            drainDerivedLabelReceipts(data,WORK,receipts);
+            assertTrue(PublicNameProjection.visible(data,WORK));
+            set(data,CONTRIBUTION,"publicationHead",id(899));
+            assertFalse(PublicNameProjection.visible(data,WORK));
+            refresh(data,CONTRIBUTION,"urn:receipt:large-work-withdraw");
+            String clear=labelMaintenanceReceipt(data,WORK);
+            assertTrue(receipts.add(clear));
+            maintainedNameTurn(data,clear);
+            set(data,CONTRIBUTION,"publicationHead",DECISION);
+            refresh(data,CONTRIBUTION,"urn:receipt:large-work-restore");
+            drainDerivedLabelReceipts(data,WORK,receipts);
+            assertTrue(PublicNameProjection.visible(data,WORK));
+            assertEquals(161,org.apache.jena.atlas.iterator.Iter.count(data.find(PUBLIC,unit(WORK,"work"),p("publicTitle"),Node.ANY)));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void priorTitleCleanupAndParentRepairStayBoundedWhenNamesAreLarge() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+        try {
+            space(data); realm(data,REALM); concept(data,id(810),p("conceptRealm"),REALM);
+            for (int i=0;i<1001;i++) data.add(CURRENT,id(810),uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Alias "+i,"en"));
+            set(data,SPACE,"listing",NodeFactory.createLiteralString("unlisted")); refresh(data,SPACE,"urn:receipt:large-parent-withdraw");
+            try (var work=new CommandWork()) {
+                assertTrue(PublicNameProjection.repairBatch(data,"urn:receipt:large-parent-repair")<=64);
+                assertTrue(counter(work,"public_name_labels_visited")<=64*130);
+            }
+            assertFalse(PublicNameProjection.visible(data,id(810)));
+            // Artificially retain a large old projection to exercise bounded erasure cleanup.
+            for (int i=0;i<1001;i++) data.add(PUBLIC,unit(id(810),"concept"),p("publicTitle"),NodeFactory.createLiteralString("Old "+i));
+            try (var work=new CommandWork()) {
+                PublicNameProjection.refresh(data,id(810));
+                assertTrue(counter(work,"public_name_labels_visited")<=65);
+            }
+            assertFalse(PublicNameProjection.visible(data,id(810)));
+            try (var work=new CommandWork()) {
+                assertEquals(64,maintainedNameTurn(data,"urn:receipt:large-clear"));
+                assertTrue(counter(work,"public_name_labels_visited")<=70);
+            }
         } finally { data.abort(); data.end(); data.close(); }
     }
     @Test public void liveParentFenceRejectsProtectionErasureMergeAndRetirementBeforeRepair() {

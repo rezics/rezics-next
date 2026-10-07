@@ -121,7 +121,7 @@ test('G939: startup writes one batch; resume and lost checkpoint replay the same
   expect(f.receipts.size).toBe(2);
   expect((await backfillPublicNameProjections(f.env, f.pool, 2)).complete).toBe(true);
   expect(f.checkpoints.get('agent-name-policy-v2')?.complete).toBe(true);
-  expect(f.checkpoints.get('public-names-v3')?.complete).toBe(true);
+  expect(f.checkpoints.get('public-names-v4')?.complete).toBe(true);
 });
 test('G939: startup failures are nonfatal, partial batches remain resumable and population size is not a request limit', async () => {
   const f = fixture(50_001);

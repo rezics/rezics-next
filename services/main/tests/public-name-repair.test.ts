@@ -17,6 +17,9 @@ function fixture() {
         queries.push(query);
         expect(query).toContain('LIMIT 1');
         expect(query).not.toContain('ORDER BY');
+        expect(query).toContain('rv:labelCopyPhase');
+        expect(query).toContain('rv:labelCopyStep');
+        expect(query).toContain('rv:labelCopyGeneration');
         expect(bytes).toBe(PUBLIC_NAME_REPAIR_COST.responseBytes);
         return {
           results: {
@@ -104,7 +107,7 @@ test('Name repair reports unavailable writer results and withholds malformed con
 test('A completed legacy name inventory is traversed again to seed bounded dependency repair', async () => {
   const checkpoints = new Map([
     ['agent-name-policy-v2', { after_resource: '', complete: true }],
-    ['public-names-v2', { after_resource: 'legacy-end', complete: true }],
+    ['public-names-v3', { after_resource: 'legacy-end', complete: true }],
   ]);
   const pool = {
     query: async (sql: string, params: unknown[]) => {
@@ -140,6 +143,6 @@ test('A completed legacy name inventory is traversed again to seed bounded depen
   expect((await backfillPublicNameProjections(env, pool, 1)).complete).toBe(true);
   expect(queries[0]).toContain('LIMIT 65');
   expect(queries[0]).not.toContain('legacy-end');
-  expect(checkpoints.get('public-names-v3')?.complete).toBe(true);
+  expect(checkpoints.get('public-names-v4')?.complete).toBe(true);
   expect(commands).toBe(1);
 });
