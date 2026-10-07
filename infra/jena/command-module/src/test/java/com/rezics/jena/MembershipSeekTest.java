@@ -97,6 +97,9 @@ public class MembershipSeekTest {
         request.put("requestId", UUID.randomUUID().toString()); request.put("deadline", System.currentTimeMillis() + 60_000);
         return request;
     }
+    private static JsonObject request(String epoch, String routing) {
+        JsonObject request = request(); request.put("dataEpoch", epoch); request.put("routingEpoch", routing); return request;
+    }
     private static Map<String,Object> prepare(DatasetGraph data, JsonObject request) {
         return TemplateIndexService.membershipPrepare(data, request, PROFILES);
     }
@@ -382,6 +385,98 @@ public class MembershipSeekTest {
         assertTrue(output, output.contains("membership restart and compaction: remaining=76"));
         System.out.print(output);
     }
+    private static DatasetGraph metadataFixture() {
+        var seed = SlimCommandTest.dataset();
+        var data = TDB2Factory.createDataset().asDatasetGraph();
+        try { Set<Quad> initial = snapshot(seed); write(data, () -> initial.forEach(data::add)); }
+        finally { seed.close(); }
+        return data;
+    }
+    private static void completedMetadataFixture(DatasetGraph data) {
+        var result = prepare(data, request("test", "0"));
+        assertEquals("committed", result.get("status")); assertTrue(Boolean.TRUE.equals(result.get("complete")));
+        assertEquals(0, result.get("examined")); assertFalse(needsPreparation(data));
+    }
+    private static String controlCommand(String receipt) {
+        return """
+            PREFIX rv: <https://rezics.com/vocab/>
+            DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n } }
+            INSERT {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
+              GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt ; rv:outcome rv:Cancelled ;
+                rv:requestDigest "%s" ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "test" ; rv:sequence ?next }
+              GRAPH <urn:rezics:graph:outbox> { <%s:batch> a rv:OutboxBatch ; rv:dataEpoch "test" ; rv:sequence ?next ; rv:eventCount 0 }
+            } WHERE {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "test" ; rv:routingEpoch "0" ; rv:sequence ?n }
+              FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <%s> ?p ?o } }
+              BIND(?n + 1 AS ?next)
+            }
+            """.formatted(receipt, SlimCommandTest.DIGEST, receipt, receipt);
+    }
+    /** A completed representation proof belongs to its owner facts, not every unrelated native transaction. */
+    @Test public void completedPreparationRemainsCurrentAfterNormalProductAndSameEpochControlCommands() {
+        var data = metadataFixture();
+        try {
+            completedMetadataFixture(data); long[] physical = countPhysicalRows(data);
+            var service = SlimCommandTest.service(PROFILES);
+            var product = service.runCommand(data, SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST,
+                SlimCommandTest.update(SlimCommandTest.RECEIPT, SlimCommandTest.OLD, SlimCommandTest.NEW, 0),
+                SlimCommandTest.validations(PROFILES, SlimCommandTest.NEW), System.nanoTime() + 30_000_000_000L);
+            assertEquals(product.toString(), "committed", product.get("status"));
+            String receipt = SlimCommandTest.RECEIPT + ":control";
+            var control = service.runCommand(data, receipt, SlimCommandTest.DIGEST, controlCommand(receipt),
+                List.of(), System.nanoTime() + 30_000_000_000L);
+            assertEquals(control.toString(), "committed", control.get("status"));
+            data.begin(ReadWrite.READ);
+            try {
+                assertTrue(data.contains(CURRENT, uri(SlimCommandTest.COMPONENT), p("metadataHead"), uri(SlimCommandTest.NEW)));
+                assertEquals("2", CommandInvariant.readControl(data).sequence().toString());
+            } finally { data.end(); }
+            System.out.println("membership completed proof: normal product=committed same-epoch control=committed");
+            Set<Quad> before = snapshot(data); long beforeSeek = physical[0];
+            boolean needs = needsPreparation(data);
+            assertEquals("readiness must not scan membership after unrelated native commands", beforeSeek, physical[0]);
+            assertEquals("readiness must not mutate the completed owner proof", before, snapshot(data));
+            assertFalse("completed owner preparation became dirty after unrelated admitted native commands", needs);
+        } finally { data.close(); }
+    }
+    @Test public void completedPreparationRemainsCurrentAfterSlimProductAndSignedCommitProofRetirement() throws Exception {
+        var data = metadataFixture();
+        try {
+            completedMetadataFixture(data); long[] physical = countPhysicalRows(data);
+            var service = SlimCommandTest.service(PROFILES);
+            var slim = SlimCommandTest.run(service, data, PROFILES, SlimCommandTest.RECEIPT, SlimCommandTest.OLD, SlimCommandTest.NEW, 0);
+            assertEquals(slim.toString(), "committed", slim.get("status"));
+            var unsigned = new CommandService.Retirement(SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST,
+                SlimCommandTest.PAYLOAD, "test", "1", "1", "");
+            var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec("3".repeat(64).getBytes(java.nio.charset.StandardCharsets.US_ASCII), "HmacSHA256"));
+            var evidence = new CommandService.Retirement(unsigned.receipt(), unsigned.digest(), unsigned.payloadSha256(),
+                unsigned.dataEpoch(), unsigned.sequence(), unsigned.streamSequence(),
+                HexFormat.of().formatHex(mac.doFinal(CommandService.retirementPayload(unsigned).getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            var retired = service.retireProof(data, evidence);
+            assertEquals(retired.toString(), "retired", retired.get("status"));
+            data.begin(ReadWrite.READ);
+            try {
+                assertNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT));
+                assertEquals("1", CommandInvariant.readControl(data).sequence().toString());
+            } finally { data.end(); }
+            System.out.println("membership completed proof: slim product=committed signed proof=retired");
+            Set<Quad> before = snapshot(data); long beforeSeek = physical[0];
+            boolean needs = needsPreparation(data);
+            assertEquals("readiness must not scan membership after proof retirement", beforeSeek, physical[0]);
+            assertEquals("readiness must be read-only after proof retirement", before, snapshot(data));
+            assertFalse("completed owner preparation became dirty after slim/proof-only native commits", needs);
+        } finally { data.close(); }
+    }
+    @Test public void completedPreparationRemainsCurrentAndReadOnlyAfterANewJvmStarts() throws Exception {
+        Files.createDirectories(Path.of(".temp"));
+        Path directory = Files.createTempDirectory(Path.of(".temp"), "membership-completed-restart-").toAbsolutePath();
+        assertTrue(probe(directory, "seed-complete").contains("membership persisted completion: complete=true"));
+        String output = probe(directory, "resume-complete");
+        assertTrue(output, output.contains("membership completed restart: current=true physicalRows=0"));
+        System.out.print(output);
+    }
     private static String probe(Path directory, String mode) throws Exception {
         String classpath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
@@ -397,6 +492,25 @@ public class MembershipSeekTest {
     public static void main(String[] args) throws Exception {
         var disk = TDB2Factory.connectDataset(args[0]).asDatasetGraph();
         try {
+            if (args[1].equals("seed-complete")) {
+                var source = fixture(1, 0, 0, 0);
+                try {
+                    Set<Quad> initial = snapshot(source); write(disk, () -> initial.forEach(disk::add));
+                    var result = prepare(disk, request());
+                    assertEquals("committed", result.get("status")); assertTrue(Boolean.TRUE.equals(result.get("complete")));
+                    assertFalse(needsPreparation(disk));
+                    System.out.println("membership persisted completion: complete=true");
+                } finally { source.close(); }
+                return;
+            }
+            if (args[1].equals("resume-complete")) {
+                long[] physical = countPhysicalRows(disk); Set<Quad> before = snapshot(disk);
+                boolean needs = needsPreparation(disk);
+                assertEquals(0, physical[0]); assertEquals(before, snapshot(disk));
+                assertFalse("a new JVM must not dirty an exhaustive durable membership proof", needs);
+                System.out.println("membership completed restart: current=true physicalRows=" + physical[0]);
+                return;
+            }
             if (args[1].equals("seed")) {
                 var source = fixture(100, 0, 0, 0);
                 try {
