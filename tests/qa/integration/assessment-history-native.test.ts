@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -150,23 +150,31 @@ test('Committed native assessment without Access acknowledgement or Content prod
       outcome: 'succeeded',
       receipt: native.receipt,
       admissionId: admission.id,
+      requestDigest: digest,
+      authorityEpoch: admission.authorityEpoch,
+      scope: admission.scope,
+      dataEpoch: native.dataEpoch,
+      sequence: native.sequence,
     });
-    expect(await readAssessment(env, native.result.assessment!)).toMatchObject({
+    const assessment = await readAssessment(env, native.result.assessment!);
+    expect(assessment).toMatchObject({
       claim,
       claimRevision,
+      evidenceSetRevision: evidence.evidence.revision,
     });
-    expect(
-      (
-        await content.query(
-          'SELECT admission_id FROM verification.assessment_producer WHERE admission_id=$1',
-          [admission.id],
-        )
-      ).rows,
-    ).toEqual([]);
+    const originalProducers = (
+      await content.query(
+        'SELECT admission_id FROM verification.assessment_producer WHERE admission_id=$1',
+        [admission.id],
+      )
+    ).rows;
+    expect(originalProducers).toEqual([]);
     const client = await access.connect();
+    let history: Awaited<ReturnType<typeof readVerificationAssessmentHistory>> | undefined;
     try {
       await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
       const page = await readVerificationAssessmentHistory(client);
+      history = page;
       expect(page.rows).toHaveLength(1);
       expect(page.rows[0]).toMatchObject({
         id: admission.id,
@@ -190,14 +198,40 @@ test('Committed native assessment without Access acknowledgement or Content prod
       await client.query('ROLLBACK');
       client.release();
     }
-    expect(
-      (
-        await content.query(
-          'SELECT admission_id FROM verification.assessment_producer WHERE admission_id=$1',
-          [admission.id],
-        )
-      ).rows,
-    ).toEqual([]);
+    const retainedProducers = (
+      await content.query(
+        'SELECT admission_id FROM verification.assessment_producer WHERE admission_id=$1',
+        [admission.id],
+      )
+    ).rows;
+    expect(retainedProducers).toEqual([]);
+    const root = resolve(import.meta.dir, '../../..');
+    const evidenceDirectory = join(root, '.temp', 'assessment-history-evidence');
+    mkdirSync(evidenceDirectory, { recursive: true });
+    const sourceDigest = (path: string) =>
+      createHash('sha256')
+        .update(readFileSync(join(root, path)))
+        .digest('hex');
+    writeFileSync(
+      join(evidenceDirectory, `${run}-native.json`),
+      JSON.stringify(
+        {
+          runId: run,
+          readerSha256: sourceDigest('services/main/src/modules/access/assessment-history.ts'),
+          testSha256: sourceDigest('tests/qa/integration/assessment-history-native.test.ts'),
+          lineage: env.lineage,
+          admission,
+          terminal,
+          assessment,
+          originalProducerCount: originalProducers.length,
+          retainedProducerCount: retainedProducers.length,
+          emittedCount: history!.rows.length,
+          history,
+        },
+        null,
+        2,
+      ),
+    );
   } finally {
     await access.end();
     await content.end();

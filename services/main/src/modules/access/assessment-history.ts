@@ -77,9 +77,11 @@ export interface AssessmentHistoryPage {
   next: AssessmentHistoryCursor | null;
   windowExhausted: boolean;
   cut:
+    /** Observed ordinary-writer fence; operator repair quiescence is external. */
     | { state: 'held'; recoveryGeneration: string }
     | { state: 'unresolved'; reason: 'access-not-quiesced' };
-  /** Admission population only; never original-input or native completeness. */
+  /** Raw UUID suffix exhausted under the observed cut and the caller's external
+   * operator repair quiescence. Never original-input or native completeness. */
   endOfHistory: boolean;
 }
 
@@ -175,7 +177,8 @@ function decode(row: QueryResultRow): AssessmentHistoryRow {
 /** Private operator/kernel boundary, with the caller's one real RC transaction.
  * No checkout, lifecycle or timeout changes. The existing global recovery fence
  * waits for ordinary Access writers and blocks their registration/claim/ack;
- * operator repair writers must remain quiesced for the traversal. A scope-only
+ * operator repair writers must remain externally quiesced for the traversal;
+ * the reader cannot observe that assumption. A scope-only
  * closure or Content closure cannot substitute for that action-wide cut.
  * Retain/recheck earlier unresolved IDs if scanning without the held cut.
  */

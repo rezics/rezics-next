@@ -1,9 +1,17 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import {
+  AccessAdmissionRegistry,
+  AdmissionUnavailable,
+  engageAccessRecoveryFence,
+} from '../../../services/main/src/modules/access/admission.ts';
 import {
   ASSESSMENT_HISTORY_SQL,
   readVerificationAssessmentHistory,
+  type AssessmentHistoryPage,
 } from '../../../services/main/src/modules/access/assessment-history.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
@@ -12,6 +20,60 @@ const scope = 'verification:assess:global';
 const id = (n: number) => `${n.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`;
 const receipt = (admission: string) =>
   `urn:rezics:receipt:${createHash('sha256').update(`${admission}\0claim-assess`).digest('hex')}`;
+const evidence: Array<Record<string, unknown>> = [];
+const root = resolve(import.meta.dir, '../../..');
+const pageEvidence = (page: AssessmentHistoryPage) => ({
+  emittedCount: page.rows.length,
+  rows: page.rows.map((row) => ({
+    id: row.id,
+    state: row.facts?.state ?? null,
+    unresolved: row.unresolved,
+    originalCustody: row.originalCustody,
+    nativeReceipt: row.nativeReceipt,
+  })),
+  next: page.next,
+  windowExhausted: page.windowExhausted,
+  cut: page.cut,
+  endOfHistory: page.endOfHistory,
+});
+const failureEvidence = async (promise: Promise<unknown>) =>
+  promise.then(
+    () => {
+      throw new Error('Expected history operation to reject');
+    },
+    (error: Error & { code?: string }) => ({
+      name: error.name,
+      message: error.message,
+      code: error.code,
+    }),
+  );
+afterAll(() => {
+  const run = Bun.env.REZICS_QA_RUN_ID;
+  if (!run) return;
+  const directory = join(root, '.temp', 'assessment-history-evidence');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const digest = (path: string) =>
+    createHash('sha256')
+      .update(readFileSync(join(root, path)))
+      .digest('hex');
+  writeFileSync(
+    join(directory, `${run}-pg.json`),
+    JSON.stringify(
+      {
+        run,
+        readerSha256: digest('services/main/src/modules/access/assessment-history.ts'),
+        admissionSha256: digest('services/main/src/modules/access/admission.ts'),
+        testSha256: digest('tests/qa/integration/assessment-history.test.ts'),
+        expectedCases: 9,
+        passedCases: evidence.length,
+        allCaseAssertionsPassed: evidence.length === 9,
+        cases: evidence,
+      },
+      null,
+      2,
+    ),
+  );
+});
 
 async function fixture() {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated QA integration');
@@ -147,6 +209,13 @@ test('Assessment history includes expired sealed admissions and claimed native i
       endOfHistory: false,
       cut: { state: 'unresolved', reason: 'access-not-quiesced' },
     });
+    evidence.push({
+      case: 'sealed-and-claimed',
+      rawIds: [...sealed, claimed],
+      rawCount: sealed.length + 1,
+      first: pageEvidence(first),
+      last: pageEvidence(last),
+    });
   } finally {
     await f.close();
   }
@@ -203,6 +272,14 @@ test('Malformed and oversized admissions consume the full raw window and unexpec
       acting_subject: null,
       scope_id: null,
     });
+    evidence.push({
+      case: 'malformed-oversized-unexpected-scope',
+      rawIds,
+      rawCount: rawIds.length,
+      page: pageEvidence(page),
+      continuation: pageEvidence(next),
+      boundedTransportRow: oversized.rows[0],
+    });
   } finally {
     await f.close();
   }
@@ -227,13 +304,25 @@ test('History waits for the first raw admission and retains SHARE locks on emitt
     await writer.query('COMMIT');
     const page = await pending;
     expect(page.rows.map((row) => row.id)).toEqual(ids.slice(0, 32));
+    const lockedRows: Array<Record<string, unknown>> = [];
     for (const locked of [ids[0], ids[32]]) {
       await probe.query('BEGIN');
-      await expect(
-        probe.query('SELECT id FROM access.admission WHERE id=$1 FOR UPDATE NOWAIT', [locked]),
-      ).rejects.toMatchObject({ code: '55P03' });
+      const rejected = probe.query(
+        'SELECT id FROM access.admission WHERE id=$1 FOR UPDATE NOWAIT',
+        [locked],
+      );
+      await expect(rejected).rejects.toMatchObject({ code: '55P03' });
+      lockedRows.push({ id: locked, failure: await failureEvidence(rejected) });
       await probe.query('ROLLBACK');
     }
+    evidence.push({
+      case: 'locked-first-and-lookahead',
+      rawIds: ids,
+      rawCount: ids.length,
+      waitingReaderPid: pid,
+      lockedRows,
+      page: pageEvidence(page),
+    });
   } finally {
     await writer.query('ROLLBACK');
     await pending?.catch(() => undefined);
@@ -289,6 +378,15 @@ test('An unfenced traversal retains uncertainty after a pending row seals and an
       originalCustody: 'unknown',
     });
     expect(rechecked.rows.some((row) => row.id === behind)).toBe(true);
+    evidence.push({
+      case: 'uncut-terminal-change-and-insertion-behind',
+      rawIds: [...ids, behind].sort(),
+      rawCount: ids.length + 1,
+      behindCursorId: behind,
+      first: pageEvidence(first),
+      last: pageEvidence(last),
+      rechecked: pageEvidence(rechecked),
+    });
   } finally {
     await f.close();
   }
@@ -311,22 +409,38 @@ test('A one-connection caller retains transaction identity and settings; autocom
       ).rows[0];
     const before = await identity();
     await client.query('SAVEPOINT caller_work');
-    await readVerificationAssessmentHistory(client);
-    expect(await identity()).toEqual(before);
+    const page = await readVerificationAssessmentHistory(client);
+    const after = await identity();
+    expect(after).toEqual(before);
     await client.query('ROLLBACK TO SAVEPOINT caller_work');
     await client.query('COMMIT');
-    await expect(readVerificationAssessmentHistory(client)).rejects.toMatchObject({
+    const autocommit = readVerificationAssessmentHistory(client);
+    await expect(autocommit).rejects.toMatchObject({
       code: '25P01',
     });
     expect((await client.query('SELECT 1 AS alive')).rows[0]).toEqual({ alive: 1 });
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    await expect(readVerificationAssessmentHistory(client)).rejects.toThrow('READ COMMITTED');
+    const repeatableRead = readVerificationAssessmentHistory(client);
+    await expect(repeatableRead).rejects.toThrow('READ COMMITTED');
     await client.query('ROLLBACK');
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY');
-    await expect(readVerificationAssessmentHistory(client)).rejects.toMatchObject({
+    const readOnly = readVerificationAssessmentHistory(client);
+    await expect(readOnly).rejects.toMatchObject({
       code: '25006',
     });
     await client.query('ROLLBACK');
+    evidence.push({
+      case: 'max-one-caller-lifecycle',
+      maximumConnections: 1,
+      before,
+      after,
+      page: pageEvidence(page),
+      rejected: {
+        autocommit: await failureEvidence(autocommit),
+        repeatableRead: await failureEvidence(repeatableRead),
+        readOnly: await failureEvidence(readOnly),
+      },
+    });
   } finally {
     await client.query('ROLLBACK');
     client.release();
@@ -395,6 +509,13 @@ test('Only the matching closed Access recovery generation establishes EOF and it
       endOfHistory: false,
       cut: { state: 'unresolved', reason: 'access-not-quiesced' },
     });
+    evidence.push({
+      case: 'closed-generation-and-reopen-lock',
+      recoveryGeneration: generation,
+      held: pageEvidence(held),
+      emptyWithoutCut: pageEvidence(empty),
+      reopeningWriterPid: pid,
+    });
   } finally {
     await reader.query('ROLLBACK');
     await changing?.catch(() => undefined);
@@ -459,6 +580,116 @@ test('Continuation retains its original cut and cannot upgrade an unfenced prefi
     await expect(
       transaction(f.pool, (client) => readVerificationAssessmentHistory(client, switched)),
     ).rejects.toThrow('Invalid assessment history position');
+    evidence.push({
+      case: 'cut-bound-continuation',
+      recoveryGeneration: generation,
+      uncut: pageEvidence(uncut),
+      suffixAfterClosure: pageEvidence(suffix),
+      held: pageEvidence(held),
+      final: pageEvidence(final),
+      refusedUpgrade: upgraded,
+      refusedGenerationSwitch: switched,
+    });
+  } finally {
+    await f.close();
+  }
+}, 30_000);
+
+test('A closed Access recovery fence denies actual registration, claim and graph acknowledgement without changing admission facts', async () => {
+  const f = await fixture();
+  try {
+    await f.insert([id(1)], 'registered');
+    await f.insert([id(2)], 'claimed');
+    const account = (
+      await f.pool.query<{ account_issuer: string; account_subject: string }>(
+        'SELECT account_issuer,account_subject FROM access.principal WHERE id=$1',
+        [f.principal],
+      )
+    ).rows[0]!;
+    const registry = new AccessAdmissionRegistry(f.pool);
+    const generation = await engageAccessRecoveryFence(f.pool);
+    const snapshot = async () => ({
+      admissions: (
+        await f.pool.query(
+          `SELECT id,principal_id,acting_subject,scope_id,action,idempotency_key,
+        request_digest,authority_epoch::text,registered_at,expires_at,claimed_at,state,
+        graph_receipt,graph_outcome,graph_data_epoch,graph_sequence,sealed_at
+        FROM access.admission WHERE principal_id=$1 ORDER BY id`,
+          [f.principal],
+        )
+      ).rows,
+      outbox: (
+        await f.pool.query(
+          'SELECT id,kind,admission_id,scope_id,authority_epoch::text FROM access.outbox WHERE scope_id=$1 ORDER BY id',
+          [scope],
+        )
+      ).rows,
+      fence: (
+        await f.pool.query(
+          'SELECT open,generation::text AS generation FROM access.recovery_fence WHERE id',
+        )
+      ).rows[0],
+    });
+    const before = await snapshot();
+    expect(before.fence).toEqual({ open: false, generation });
+    const denied: Array<Record<string, unknown>> = [];
+    const operations = [
+      {
+        name: 'register',
+        run: () =>
+          registry.register({
+            principal: { issuer: account.account_issuer, subject: account.account_subject },
+            actingSubject: f.subject,
+            scope,
+            action,
+            idempotencyKey: randomUUID(),
+            requestDigest: 'a'.repeat(64),
+          }),
+      },
+      { name: 'claim', run: () => registry.claim(id(1), 'a'.repeat(64)) },
+      {
+        name: 'recordGraphOutcome',
+        run: () =>
+          registry.recordGraphOutcome(id(2), {
+            admissionId: id(2),
+            outcome: 'succeeded' as const,
+            receipt: receipt(id(2)),
+            requestDigest: 'a'.repeat(64),
+            authorityEpoch: '0',
+            scope,
+            dataEpoch: 'committed-native',
+            sequence: '1',
+          }),
+      },
+    ];
+    for (const operation of operations) {
+      const rejected = operation.run();
+      await expect(rejected).rejects.toBeInstanceOf(AdmissionUnavailable);
+      await expect(rejected).rejects.toThrow('Access is held for recovery');
+      const after = await snapshot();
+      expect(after).toEqual(before);
+      denied.push({
+        operation: operation.name,
+        failure: await failureEvidence(rejected),
+        unchangedSnapshot: after,
+      });
+    }
+    const page = await transaction(f.pool, (client) =>
+      readVerificationAssessmentHistory(client, { recoveryGeneration: generation }),
+    );
+    expect(page.rows.map((row) => row.id)).toEqual([id(1), id(2)]);
+    expect(
+      page.rows.every(
+        (row) => row.originalCustody === 'unknown' && row.unresolved.includes('in-flight'),
+      ),
+    ).toBe(true);
+    evidence.push({
+      case: 'closed-fence-ordinary-writer-denials',
+      recoveryGeneration: generation,
+      before,
+      denied,
+      page: pageEvidence(page),
+    });
   } finally {
     await f.close();
   }
@@ -478,6 +709,7 @@ test('Generic prepared history plans seek the partial UUID index across sparse a
   const f = await fixture();
   try {
     const ids = Array.from({ length: 80 }, (_, n) => id((n + 1) * 400));
+    const plans: Array<Record<string, unknown>> = [];
     await f.insert(ids, 'claimed');
     await transaction(f.pool, async (client) => {
       await client.query('SET LOCAL plan_cache_mode=force_generic_plan');
@@ -496,6 +728,19 @@ test('Generic prepared history plans seek the partial UUID index across sparse a
           [f.principal, f.subject, scope, count],
         );
         await client.query('ANALYZE access.admission');
+        const stored = (
+          await client.query<{ id: string; action: string }>(
+            'SELECT id,action FROM access.admission WHERE principal_id=$1',
+            [f.principal],
+          )
+        ).rows;
+        const sparseIds = stored
+          .filter((row) => row.action === action)
+          .map((row) => row.id)
+          .sort();
+        const unrelatedCount = stored.filter(
+          (row) => row.action === 'assessment-history.unrelated',
+        ).length;
         for (const [name, after] of [
           ['initial', '00000000-0000-0000-0000-000000000000'],
           ['continuation', ids[39]!],
@@ -517,9 +762,25 @@ test('Generic prepared history plans seek the partial UUID index across sparse a
           expect(seek!['Actual Rows']).toBe(33);
           expect(seek!['Rows Removed by Filter'] ?? 0).toBe(0);
           expect(plan['Actual Rows']).toBe(33);
+          plans.push({
+            statement: name,
+            sql: ASSESSMENT_HISTORY_SQL[name],
+            after,
+            planCacheMode: 'force_generic_plan',
+            fixtureRange: count,
+            sparseIds,
+            sparseCount: sparseIds.length,
+            unrelatedCount,
+            plan: explained.rows[0]['QUERY PLAN'],
+            indexName: seek!['Index Name'],
+            indexCondition: seek!['Index Cond'],
+            indexRows: seek!['Actual Rows'],
+            removedByFilter: seek!['Rows Removed by Filter'] ?? 0,
+          });
         }
       }
     });
+    evidence.push({ case: 'generic-sparse-uuid-seeks', plans });
   } finally {
     await f.close();
   }
