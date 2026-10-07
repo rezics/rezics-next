@@ -14,6 +14,8 @@ import { StructureObjectCorrupt, StructureObjectUnavailable }
 import { RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
+import { AdmissionDenied } from '../modules/access/admission.ts';
+import { structureProfileFor } from '../modules/structure/profiles.ts';
 import { calculateNutrition, scaleIngredients } from '../modules/recipe/operations.ts';
 import { exactRational, InexactQuantity } from '../modules/recipe/quantity.ts';
 import { importRecipe, recipeSourceSupportCandidates } from '../modules/recipe/importer.ts';
@@ -166,13 +168,21 @@ async function allOccurrences(work: MainWorkDependencies, request: Request, stru
 const durationKinds: ReadonlySet<string> = new Set(timingKinds.map(([, kind]) => kind));
 
 /**
- * The measures stored at `head`. They only seed the measure set the admitted write then replaces,
- * so a reader without edit authority learns nothing: the write is denied before it answers.
+ * The measures stored at `head`, for an edit that keeps what it does not supply. The caller's
+ * authority over this exact Recipe is proved first, through the same Access policy the write is
+ * admitted under (`recipe.edit` on `work:edit:<owner>` as `actingSubject`), so nothing stored, and no
+ * error derived from it, reaches anyone who may not edit the Recipe. The write revalidates it.
  */
 async function storedMeasures(work: MainWorkDependencies, request: Request, structure: string,
-  head: string): Promise<RecipeMeasure[]> {
+  actingSubject: string, head: string): Promise<RecipeMeasure[]> {
   await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
-  await work.account.verify(request, ['work:edit']);
+  const principal = await work.account.verify(request, ['work:edit']);
+  const header = await readCompositionHeader(work.environment, structure);
+  if (!header || header.profile !== 'recipe-composition') throw new CompositionUnavailable('Recipe is unavailable');
+  const profile = structureProfileFor('recipe-composition');
+  if (!work.access.assertAuthority) throw new AdmissionDenied('Recipe edit authority is unavailable');
+  await work.access.assertAuthority({ principal, actingSubject, action: profile.editAction,
+    scope: `${profile.editScopePrefix}${header.owner}` });
   return (await readStructureMeasures(work.environment, { structure, revision: head })).measures;
 }
 
@@ -216,7 +226,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return problem(400, 'invalid_recipe_measure', 'Yield requires a unit or unitText');
         }
         const structure = `https://rezics.com/id/${params.id}`;
-        const stored = await storedMeasures(work, request, structure, body.expectedHead);
+        const stored = await storedMeasures(work, request, structure, body.actingSubject, body.expectedHead);
         const nutrition = body.nutrition ? calculateNutrition(body.nutrition.inputs.map(input => ({
           coverage: input.coverage, values: input.values.map(value => ({
             nutrient: value.nutrient, unit: value.unit,
@@ -271,7 +281,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return problem(400, 'invalid_recipe_measure', 'A timing edit names at least one timing');
         }
         const structure = `https://rezics.com/id/${params.id}`;
-        const stored = await storedMeasures(work, request, structure, body.expectedHead);
+        const stored = await storedMeasures(work, request, structure, body.actingSubject, body.expectedHead);
         const measures: RecipeMeasure[] = [...stored];
         for (const [name, kind] of timingKinds) {
           const edit = body[name];
