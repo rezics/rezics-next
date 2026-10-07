@@ -33,7 +33,7 @@ function graphGroups(query: string) {
   return groups;
 }
 
-test('G-974/G954: ordinal comparisons join VALUES keys before filtering graph counts', async () => {
+test('G-974/G954: ordinal comparisons join VALUES keys before filtering graph counts and remain private', async () => {
   const occurrences = [id(10), id(11), id(12)];
   const ordinals = [1, 2, 1000];
   let ordinalReads = 0;
@@ -61,7 +61,10 @@ test('G-974/G954: ordinal comparisons join VALUES keys before filtering graph co
     },
   } as unknown as WorkReadSession;
   const page = await new ReadingPositionTraversal(session, work, async resources => new Set(resources)).page({ limit: 3 });
-  expect(page.items.map(item => item.ordinal)).toEqual(ordinals);
+  // Keep the graph comparison regression guard above; its physical counts,
+  // including the 997 unreturned predecessors, never leave the public chooser.
+  expect(page.items.map(item => item.occurrence)).toEqual(occurrences);
+  expect(page.items.every(item => !Object.hasOwn(item, 'ordinal'))).toBe(true);
   expect(ordinalReads).toBe(1);
 });
 

@@ -133,6 +133,8 @@ test('G-829 class guard: every resource/composition/Collection GET has an explic
     '/v1/resources/:resource/continuities',
     '/v1/compositions/:id/stages/:stage',
     '/v1/compositions/:id/occurrences/:occurrence/progress',
+    // Trust-ops approved public on 2026-10-07 13:14 UTC: first Bangumi/progress scope, bearer, read family, signed-in reader's data only.
+    '/v1/compositions/:id/progress',
   ].sort());
 });
 

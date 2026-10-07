@@ -168,7 +168,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
   // Recipe reads use Composition; Work versions, adoptions and credits use the public query transport.
   // Approved public by trust-ops on 2026-10-07 within the first public Zone scope.
   expect(publicOperations).toContain('postV1ZonesByIdSite-publications');
-  expect(publicOperations).toHaveLength(519);
+  // Trust-ops approved public on 2026-10-07 13:14 UTC: first Bangumi/progress scope, bearer, read family, signed-in reader's data only.
+  expect(publicOperations).toContain('getV1CompositionsByIdProgress');
+  expect(matrix.find(entry => entry.path === '/v1/compositions/{id}/progress' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
+  expect(publicOperations).toHaveLength(520);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
