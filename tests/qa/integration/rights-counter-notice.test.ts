@@ -678,7 +678,7 @@ test('Upgrade forwards previously signed counter-notices once and preserves thei
     }
     const migration = readFileSync(
       new URL(
-        '../../../services/main/migrations/access/1426_pending_rights_counter_notices.sql',
+        '../../../services/main/migrations/access/1443_pending_rights_counter_notices.sql',
         import.meta.url,
       ),
       'utf8',
@@ -688,7 +688,7 @@ test('Upgrade forwards previously signed counter-notices once and preserves thei
     await f.stack.accessPool.query(
       readFileSync(
         new URL(
-          '../../../services/main/migrations/access/1427_counter_notice_receipt_windows.sql',
+          '../../../services/main/migrations/access/1444_counter_notice_receipt_windows.sql',
           import.meta.url,
         ),
         'utf8',
