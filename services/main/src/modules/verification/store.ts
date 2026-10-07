@@ -20,6 +20,14 @@ export const nativeId = (uuid: string) => `${ID}${uuid}`;
 export const uuidOf = (value: string) => value.startsWith(ID) && UUID.test(value.slice(ID.length))
   ? value.slice(ID.length) : null;
 const digestOf = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const MIN_UUID = '00000000-0000-0000-0000-000000000000';
+// Native PostgreSQL top-level transaction snapshot, not a domain fingerprint.
+const nativeSnapshot = (value: string) => {
+  const [_xmin, xmax, active] = value.split(':');
+  return { xmax: BigInt(xmax!), active: (active ? active.split(',') : []) };
+};
+const snapshotVisible = (xid: string, snapshot: ReturnType<typeof nativeSnapshot>) =>
+  BigInt(xid) < snapshot.xmax && !snapshot.active.includes(xid);
 const iso = (value: Date | string) => new Date(value).toISOString();
 
 interface PgError { code?: string; constraint?: string }
@@ -51,9 +59,15 @@ export interface WalkProgress {
   lineageProof: LineageProof;
 }
 interface WalkRow {
-  id: string; root_ordinal: number; version: number; complete: boolean; unknown: boolean; circular: boolean;
+  id: string; stream_principal: string; root_ordinal: number; version: number; complete: boolean; unknown: boolean; circular: boolean;
   origin_count: string; expansions: string; edges: string; node_count: string;
 }
+interface FreshnessRow {
+  stream_principal: string; source_epoch: string; validated_sequence: string; freshness_snapshot: string;
+  freshness_target: string | null; freshness_phase: number; freshness_xid: string;
+  freshness_id: string; freshness_hole: number;
+}
+interface SourceChange { reference: string; kind: string }
 interface WalkNode {
   observation_id: string; depth: number; phase: number; done: boolean;
   edge_cursor: string | null; input_cursor: number; has_links: boolean;
@@ -119,6 +133,13 @@ export class VerificationStore {
   constructor(private readonly pool: Pool) {}
 
   private async tx<T>(work: (client: PoolClient) => Promise<T>, snapshot = false): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try { return await this.txOnce(work, snapshot); }
+      catch (error) { if (!snapshot || pg(error).code !== '40001' || attempt >= 2) throw error; }
+    }
+  }
+
+  private async txOnce<T>(work: (client: PoolClient) => Promise<T>, snapshot = false): Promise<T> {
     const client = await this.pool.connect().catch(error => {
       throw new VerificationUnavailable(String(error));
     });
@@ -438,8 +459,9 @@ export class VerificationStore {
     const token = continuation?.match(/^([0-9a-f-]{36}):(\d+)$/);
     if (continuation && (!token || !UUID.test(token[1]!))) throw new VerificationMissing('lineage continuation is unavailable');
     return this.tx(async client => {
-      const position = (await client.query<{ revision: string }>(`SELECT revision::text
-        FROM verification.lineage_change_head WHERE singleton FOR SHARE`)).rows[0]!.revision;
+      const position = (await client.query<{ snapshot: string; epoch: string }>(`SELECT pg_current_snapshot()::text AS snapshot,
+        version::text AS epoch FROM reading_position.generation WHERE singleton`)).rows[0]!;
+      const snapshot = position.snapshot;
       let walk: WalkRow;
       if (token) {
         const row = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
@@ -452,9 +474,9 @@ export class VerificationStore {
         if (manifest.claim !== claim || manifest.purpose !== 'claim-head') {
           throw new VerificationMissing('evidence revision belongs to another claim');
         }
-        if (!readOnly) await client.query(`INSERT INTO verification.lineage_walk (id, claim, evidence_revision, authority_digest, start_key, validated_sequence)
-          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (claim, evidence_revision, authority_digest, start_key) DO NOTHING`,
-        [crypto.randomUUID(), claim, revision, authorityDigest, startKey, position]);
+        if (!readOnly) await client.query(`INSERT INTO verification.lineage_walk (id, claim, evidence_revision, authority_digest, start_key, stream_principal, freshness_snapshot, freshness_phase, source_epoch)
+          SELECT $1, $2, $3, $4, $5, e.principal_id, $6, 1, $7 FROM verification.evidence_set_revision e WHERE e.id = $3 ON CONFLICT (claim, evidence_revision, authority_digest, start_key) DO NOTHING`,
+        [crypto.randomUUID(), claim, revision, authorityDigest, startKey, snapshot, position.epoch]);
         walk = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
           WHERE claim = $1 AND evidence_revision = $2 AND authority_digest = $3 AND start_key = $4 FOR UPDATE`,
         [claim, revision, authorityDigest, startKey])).rows[0]!;
@@ -488,8 +510,11 @@ export class VerificationStore {
           lineageProof: { dependence: 'over-budget', independentOrigins: null, origins: [] } };
       } else if (!progress) {
         const pin = async (observation: string) => {
-          // Writers take this lock before publishing invalidation. It protects absent heads too.
-          await client.query('SELECT id FROM source.observation WHERE id = $1 FOR SHARE', [observation]);
+          // Admitted lineage stays in its evidence author's source stream.
+          // Snapshot reads need no source/global writer fence.
+          const owned = await client.query('SELECT id FROM source.observation WHERE id = $1 AND principal_id = $2',
+            [observation, walk.stream_principal]);
+          if (!owned.rowCount) throw new VerificationMissing('source observation is unavailable');
           const inserted = await client.query(`INSERT INTO verification.lineage_walk_observation
             (walk_id, observation_id, lineage_head, disposition_head)
             SELECT $1, o.id, h.revision::text, d.head FROM source.observation o
@@ -600,7 +625,7 @@ export class VerificationStore {
       return { revision: manifest, evidenceHead: nativeId(revision), links: [], truncated: !progress.complete,
         visited: roots, lineageHeads: new Map(), dispositionHeads: new Map(), recordOf, observedAt,
         challenge: await this.challengeStateWith(client, claim), ...progress, stepReplayed: Boolean(replay) };
-    });
+    }, true);
   }
 
   private async challengeStateWith(client: PoolClient, claim: string) {
@@ -777,40 +802,122 @@ export class VerificationStore {
           AND latest_invalidation = $3`, [input.target, input.context, input.observedDemand]);
       }
       return { status: 'activated', generation: nativeId(id), number, dispute };
-    });
+    }, true);
   }
 
-  /** Validate a bounded journal page against indexed, exact walk witnesses. */
+  /** Newly visible source commits are above the old xmax or in its xip holes.
+   * Check only this evidence author's stream; an unrelated active transaction
+   * cannot become an xmin gate. Every journal candidate consumes the step bound.
+   * PostgreSQL's native active-transaction list is bounded by DB concurrency,
+   * independent of retained sources, walks and journal population.
+   * https://www.postgresql.org/docs/18/functions-info.html#FUNCTIONS-PG-SNAPSHOT
+   */
   private async walkFreshness(client: PoolClient, id: string): Promise<'current' | 'pending' | 'stale'> {
-    const position = (await client.query<{ revision: string }>(`SELECT revision::text
-      FROM verification.lineage_change_head WHERE singleton FOR SHARE`)).rows[0]!.revision;
-    const walk = (await client.query<{ validated_sequence: string }>(`SELECT w.validated_sequence::text
-      FROM verification.lineage_walk w JOIN verification.evidence_head e ON e.claim = w.claim AND e.head = w.evidence_revision
+    const position = (await client.query<{ snapshot: string; epoch: string }>(`SELECT pg_current_snapshot()::text AS snapshot,
+      version::text AS epoch FROM reading_position.generation WHERE singleton`)).rows[0]!;
+    const current = position.snapshot;
+    const walk = (await client.query<FreshnessRow>(`SELECT w.stream_principal, w.source_epoch::text, w.validated_sequence::text,
+      w.freshness_snapshot, w.freshness_target, w.freshness_phase, w.freshness_xid::text,
+      w.freshness_id, w.freshness_hole FROM verification.lineage_walk w
+      JOIN verification.evidence_head e ON e.claim = w.claim AND e.head = w.evidence_revision
       WHERE w.id = $1 FOR UPDATE OF w`, [id])).rows[0];
-    if (!walk || (await client.query(`SELECT 1 FROM verification.lineage_walk_observation
+    if (!walk || walk.source_epoch !== position.epoch || (await client.query(`SELECT 1 FROM verification.lineage_walk_observation
       WHERE walk_id = $1 AND stale LIMIT 1`, [id])).rowCount) return 'stale';
-    if (walk.validated_sequence === position) return 'current';
-    let cursor = walk.validated_sequence;
-    // A one-event seek avoids a planner choosing to scan/sort the journal
-    // population before a larger LIMIT. Every candidate consumes the budget.
-    for (let checked = 0; checked < LINEAGE_EDGE_BUDGET && cursor !== position; checked++) {
-      const change = (await client.query<{ local_sequence: string; reference: string; kind: string }>(`
-        SELECT i.local_sequence::text, i.reference, i.kind FROM verification.invalidation i
-        WHERE i.local_sequence > $1::bigint AND i.local_sequence <= $2::bigint
-        ORDER BY i.local_sequence LIMIT 1`, [cursor, position])).rows[0];
-      if (!change) { cursor = position; break; }
-      cursor = change.local_sequence;
+    const unchanged = walk.freshness_snapshot === current && walk.freshness_phase !== 0 && !walk.freshness_target;
+    if (unchanged) return 'current';
+    const persist = () => client.query(`UPDATE verification.lineage_walk SET validated_sequence = $2,
+      freshness_snapshot = $3, freshness_target = $4, freshness_phase = $5,
+      freshness_xid = $6, freshness_id = $7, freshness_hole = $8 WHERE id = $1`,
+    [id, walk.validated_sequence, walk.freshness_snapshot, walk.freshness_target, walk.freshness_phase,
+      walk.freshness_xid, walk.freshness_id, walk.freshness_hole]);
+    const matches = async (change: SourceChange) => {
       const witness = (await client.query<{ lineage_head: string | null; disposition_head: string | null }>(`
         SELECT lineage_head, disposition_head FROM verification.lineage_walk_observation
         WHERE walk_id = $1 AND observation_id = $2`, [id, change.reference])).rows[0];
-      if (!witness) continue;
+      if (!witness) return true;
       const head = await this.localHead(client, { kind: change.kind, reference: change.reference });
       const pinned = change.kind === 'source-observation' ? witness.lineage_head
         : witness.disposition_head ? nativeId(witness.disposition_head) : null;
-      if (head !== pinned) return 'stale';
+      return head === pinned;
+    };
+    let checked = 0;
+    while (checked < LINEAGE_EDGE_BUDGET) {
+      if (walk.freshness_phase === 0) {
+        // Existing 1520 tokens retain their unchecked, commit-ordered prefix.
+        const legacy = (await client.query<SourceChange & { local_sequence: string }>(`
+          SELECT i.local_sequence::text, i.reference, i.kind FROM verification.invalidation i
+          WHERE i.stream_principal = $1 AND i.source_xid IS NULL AND i.local_sequence > $2::bigint
+          ORDER BY i.local_sequence LIMIT 1`, [walk.stream_principal, walk.validated_sequence])).rows[0];
+        if (legacy) {
+          checked++;
+          walk.validated_sequence = legacy.local_sequence;
+          if (!await matches(legacy)) return 'stale';
+          continue;
+        }
+        walk.freshness_phase = 1;
+      }
+      if (!walk.freshness_target) {
+        walk.freshness_target = current;
+        walk.freshness_xid = nativeSnapshot(walk.freshness_snapshot).xmax.toString();
+        walk.freshness_id = MIN_UUID;
+        walk.freshness_hole = 0;
+      }
+      const basis = nativeSnapshot(walk.freshness_snapshot);
+      const target = nativeSnapshot(walk.freshness_target);
+      if (walk.freshness_phase === 1) {
+        // Seek raw rows first, including commits invisible in the saved target.
+        // Filtering visibility before LIMIT could scan an arbitrary transaction.
+        const change = (await client.query<SourceChange & { source_xid: string; id: string }>(`
+          SELECT i.source_xid::text, i.id, i.reference, i.kind FROM verification.invalidation i
+          WHERE i.stream_principal = $1 AND i.source_epoch = $6::bigint
+            AND i.source_xid >= $2::xid8 AND i.source_xid < $3::xid8
+            AND (i.source_xid, i.id) > ($4::xid8, $5::uuid)
+          ORDER BY i.source_xid, i.id LIMIT 1`,
+        [walk.stream_principal, basis.xmax.toString(), target.xmax.toString(), walk.freshness_xid, walk.freshness_id, walk.source_epoch])).rows[0];
+        if (change) {
+          checked++;
+          walk.freshness_xid = change.source_xid;
+          walk.freshness_id = change.id;
+          if (snapshotVisible(change.source_xid, target) && !await matches(change)) return 'stale';
+          continue;
+        }
+        walk.freshness_phase = 2;
+        walk.freshness_id = MIN_UUID;
+      }
+      // Snapshot holes still active in the target remain in that target and
+      // are revisited on its next checkpoint. Completed holes are exact xid
+      // seeks, so a later lower-xid commit cannot fall behind the range cursor.
+      const holes = basis.active.filter(xid => snapshotVisible(xid, target));
+      const hole = holes[walk.freshness_hole];
+      if (hole !== undefined) {
+        const change = (await client.query<SourceChange & { id: string }>(`
+          SELECT i.id, i.reference, i.kind FROM verification.invalidation i
+          WHERE i.stream_principal = $1 AND i.source_epoch = $4::bigint
+            AND i.source_xid = $2::xid8 AND i.id > $3::uuid
+          ORDER BY i.id LIMIT 1`, [walk.stream_principal, hole, walk.freshness_id, walk.source_epoch])).rows[0];
+        if (change) {
+          checked++;
+          walk.freshness_id = change.id;
+          if (!await matches(change)) return 'stale';
+          continue;
+        }
+        // Empty native holes add no source candidates. Their number depends
+        // only on the native snapshot's active transactions, not source history.
+        walk.freshness_hole++;
+        walk.freshness_id = MIN_UUID;
+        continue;
+      }
+      walk.freshness_snapshot = walk.freshness_target;
+      walk.freshness_target = null;
+      walk.freshness_phase = 1;
+      walk.freshness_id = MIN_UUID;
+      walk.freshness_hole = 0;
+      if (walk.freshness_snapshot === current) { await persist(); return 'current'; }
+      // A completed older target is progress, not a currentness certificate.
+      // Use the remaining budget to catch up to this transaction's read snapshot.
     }
-    await client.query('UPDATE verification.lineage_walk SET validated_sequence = $2 WHERE id = $1', [id, cursor]);
-    return cursor === position ? 'current' : 'pending';
+    await persist();
+    return 'pending';
   }
 
   /** Current Content-owned head for one pinned dependency. */

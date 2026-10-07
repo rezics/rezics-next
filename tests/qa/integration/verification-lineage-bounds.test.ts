@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Client, Pool } from 'pg';
+import { readEnv } from '../../../scripts/dev/config.ts';
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { LINEAGE_BUDGET, LINEAGE_EDGE_BUDGET, analyzeClaimSupport,
   type Availability } from '../../../services/main/src/modules/verification/analysis.ts';
@@ -19,16 +23,51 @@ beforeAll(async () => {
 
 afterAll(async () => { await pool?.end(); });
 
-async function observations(count: number, principal = randomUUID()) {
+async function observations(count: number, principal = randomUUID(), database = pool) {
   const record = randomUUID();
   const ids = Array.from({ length: count }, () => randomUUID());
-  await pool.query(`INSERT INTO source.record (id, provider, namespace, external_id)
+  await database.query(`INSERT INTO source.record (id, provider, namespace, external_id)
     VALUES ($1, 'fixture', 'verification-walk', $2)`, [record, record]);
-  await pool.query(`INSERT INTO source.observation (id, record_id, principal_id, media_type,
+  await database.query(`INSERT INTO source.observation (id, record_id, principal_id, media_type,
     retention, coverage, rights_evidence)
     SELECT id, $2::uuid, $3::uuid, 'application/json', 'not-retained', '{}', '{}'
     FROM unnest($1::uuid[]) AS id`, [ids, record, principal]);
   return { principal, ids };
+}
+
+// Observe the owner adapter's indexed, single-candidate journal reads, including
+// empty seeks and snapshot holes, rather than deriving work from a global sequence.
+function measuredStore() {
+  const queries: string[] = [];
+  const measured = {
+    query: pool.query.bind(pool),
+    connect: async () => {
+      const client = await pool.connect();
+      return {
+        query: (sql: string, values?: unknown[]) => {
+          queries.push(sql);
+          return client.query(sql, values);
+        },
+        release: () => client.release(),
+      };
+    },
+  } as unknown as Pool;
+  return { store: new VerificationStore(measured), queries };
+}
+
+function boundedFreshness(queries: string[]) {
+  const seeks = queries.filter(sql => /FROM verification\.invalidation i/.test(sql));
+  expect(seeks.length).toBeLessThanOrEqual(LINEAGE_EDGE_BUDGET + 4);
+  for (const sql of seeks) {
+    expect(sql).toMatch(/LIMIT 1/);
+    expect(sql).toMatch(/stream_principal|local_sequence/);
+  }
+  return seeks.length;
+}
+
+function walkWithoutFreshness(walk: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(walk).filter(([key]) => !key.startsWith('freshness_')
+    && key !== 'validated_sequence' && key !== 'version'));
 }
 
 function authority(principal: string): WalkAuthority {
@@ -222,7 +261,11 @@ test('lineage fan-out counts retracted candidates, survives unrelated growth, an
   const beforeRead = await walkState(resumed.walk);
   const readOnly = await store.analysisSnapshot(manifest.claim, manifest.revision, caller, undefined, startKey, true);
   replayed(readOnly, resumed);
-  expect(await walkState(resumed.walk)).toEqual(beforeRead);
+  const afterRead = await walkState(resumed.walk);
+  expect(afterRead.nodes).toEqual(beforeRead.nodes);
+  expect(afterRead.origins).toEqual(beforeRead.origins);
+  expect(afterRead.steps).toEqual(beforeRead.steps);
+  expect(walkWithoutFreshness(afterRead.walk)).toEqual(walkWithoutFreshness(beforeRead.walk));
   bounded(resumed);
   expect(resumed.work).toEqual({ expansions: 0, links: candidateCount - LINEAGE_EDGE_BUDGET });
   expect(resumed.complete).toBe(true);
@@ -477,31 +520,24 @@ test('completed proof catches up unrelated source changes in bounded pages witho
   expect(complete.complete).toBe(true);
   expect(complete.lineageProof.dependence).toBe('established');
   const before = await walkState(complete.walk);
-  const sequence = async () => BigInt((await pool.query<{ validated_sequence: string }>(`
-    SELECT validated_sequence::text FROM verification.lineage_walk WHERE id = $1`,
-  [complete.walk])).rows[0]!.validated_sequence);
-  let validated = await sequence();
   const unrelated = await observations(LINEAGE_EDGE_BUDGET + 1, fixture.principal);
   for (const observation of unrelated.ids) {
     await edge(store, fixture.principal, observation, { origin: publication }, 'publishes-origin');
   }
   const token = `${complete.walk}:0`;
-  const partial = await new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision, caller, token);
+  const measured = measuredStore();
+  const partial = await measured.store.analysisSnapshot(manifest.claim, manifest.revision, caller, token);
   bounded(partial);
   expect(partial.complete).toBe(false);
   expect(partial.work).toEqual({ expansions: 0, links: 0 });
   expect(partial.totalWork).toEqual(complete.totalWork);
-  const advanced = await sequence();
-  expect(advanced - validated).toBe(BigInt(LINEAGE_EDGE_BUDGET));
-  validated = advanced;
+  expect(boundedFreshness(measured.queries)).toBeGreaterThan(0);
   let current = partial;
   for (let retry = 0; !current.complete && retry < 5; retry++) {
-    current = await new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
+    const resumed = measuredStore();
+    current = await resumed.store.analysisSnapshot(manifest.claim, manifest.revision,
       caller, current.continuation!);
-    const next = await sequence();
-    expect(next - validated).toBeGreaterThanOrEqual(0n);
-    expect(next - validated).toBeLessThanOrEqual(BigInt(LINEAGE_EDGE_BUDGET));
-    validated = next;
+    boundedFreshness(resumed.queries);
   }
   expect(current.complete).toBe(true);
   expect(current.work).toEqual({ expansions: 0, links: 0 });
@@ -513,11 +549,9 @@ test('completed proof catches up unrelated source changes in bounded pages witho
   expect(after.nodes).toEqual(before.nodes);
   expect(after.origins).toEqual(before.origins);
   expect(after.steps).toEqual(expect.arrayContaining(before.steps));
-  const { validated_sequence: beforeSequence, version: beforeVersion, ...beforeWalk } = before.walk;
-  const { validated_sequence: afterSequence, version: afterVersion, ...afterWalk } = after.walk;
-  expect(BigInt(afterSequence) - BigInt(beforeSequence)).toBe(BigInt(LINEAGE_EDGE_BUDGET + 1));
-  expect(afterVersion).toBeGreaterThanOrEqual(beforeVersion);
-  expect(afterWalk).toEqual(beforeWalk);
+  expect(after.walk.freshness_snapshot).not.toEqual(before.walk.freshness_snapshot);
+  expect(after.walk.version).toBeGreaterThanOrEqual(before.walk.version);
+  expect(walkWithoutFreshness(after.walk)).toEqual(walkWithoutFreshness(before.walk));
   expect((await pool.query(`SELECT 1 FROM verification.lineage_walk_observation
     WHERE walk_id = $1 AND stale`, [complete.walk])).rowCount).toBe(0);
   expect((await pool.query(`SELECT 1 FROM verification.invalidation
@@ -534,8 +568,6 @@ test('a stale proof behind a larger change backlog is refused before the walk fa
   const caller = authority(fixture.principal);
   const complete = await store.analysisSnapshot(manifest.claim, manifest.revision, caller);
   expect(complete.complete).toBe(true);
-  const before = (await pool.query<{ validated_sequence: string }>(`SELECT validated_sequence::text
-    FROM verification.lineage_walk WHERE id = $1`, [complete.walk])).rows[0]!.validated_sequence;
   const unrelated = await observations(LINEAGE_EDGE_BUDGET + 1, fixture.principal);
   for (const observation of unrelated.ids) {
     await edge(store, fixture.principal, observation, { origin: publication }, 'publishes-origin');
@@ -545,19 +577,18 @@ test('a stale proof behind a larger change backlog is refused before the walk fa
   });
   const plan = (await pool.query<{ 'QUERY PLAN': { Plan: Record<string, unknown> }[] }>(`
     EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF)
-    SELECT i.local_sequence::text, i.reference, i.kind FROM verification.invalidation i
-    WHERE i.local_sequence > $1::bigint ORDER BY i.local_sequence LIMIT 1`,
-  [before])).rows[0]!['QUERY PLAN'][0]!.Plan;
+    SELECT i.source_xid::text, i.id, i.reference, i.kind FROM verification.invalidation i
+    WHERE i.stream_principal = $1 AND i.source_xid IS NOT NULL AND i.source_xid > '0'::xid8
+    ORDER BY i.source_xid, i.id LIMIT 1`, [fixture.principal])).rows[0]!['QUERY PLAN'][0]!.Plan;
   expect(plan['Actual Rows']).toBe(1);
-  expect(JSON.stringify(plan)).toContain('invalidation_local_sequence');
-  const partial = await store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${complete.walk}:0`);
+  expect(JSON.stringify(plan)).toContain('invalidation_source_stream_order');
+  const measured = measuredStore();
+  const partial = await measured.store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${complete.walk}:0`);
   bounded(partial);
   expect(partial.complete).toBe(false);
   expect(partial.work).toEqual({ expansions: 0, links: 0 });
   expect(analyze(partial)).toMatchObject({ support: 'abstained', independentOrigins: null, coverage: 'incomplete' });
-  const after = (await pool.query<{ validated_sequence: string }>(`SELECT validated_sequence::text
-    FROM verification.lineage_walk WHERE id = $1`, [complete.walk])).rows[0]!.validated_sequence;
-  expect(BigInt(after) - BigInt(before)).toBe(BigInt(LINEAGE_EDGE_BUDGET));
+  expect(boundedFreshness(measured.queries)).toBeGreaterThan(0);
   await expect(new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
     caller, partial.continuation!)).rejects.toBeInstanceOf(VerificationStale);
   await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${complete.walk}:0`))
@@ -565,4 +596,225 @@ test('a stale proof behind a larger change backlog is refused before the walk fa
   // No asynchronous walk mark was needed to refuse both continuation and replay.
   expect((await pool.query(`SELECT 1 FROM verification.lineage_walk_observation
     WHERE walk_id = $1 AND stale`, [complete.walk])).rowCount).toBe(0);
+}, 90_000);
+
+async function within<T>(work: Promise<T>, description: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([work, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${description} waited for an unrelated transaction`)), 1_000);
+    })]);
+  } finally { if (timer) clearTimeout(timer); }
+}
+
+test('independent source commits pass an active lower xid, and its later commit cannot escape proof freshness', async () => {
+  const fixture = await observations(2);
+  const [root, unrelated] = fixture.ids as [string, string];
+  const store = new VerificationStore(pool);
+  const publication = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, root, { origin: publication }, 'publishes-origin');
+  const latePublication = await origin(store, fixture.principal);
+  const manifest = await evidence(store, fixture.principal, [root]);
+  const caller = authority(fixture.principal);
+  const delayed = await pool.connect();
+  let committed = false;
+  try {
+    await delayed.query('BEGIN');
+    const lowerXid = (await delayed.query<{ xid: string }>('SELECT pg_current_xact_id()::text AS xid')).rows[0]!.xid;
+    const lateEdge = randomUUID();
+    const receipt = randomUUID();
+    await delayed.query(`INSERT INTO verification.receipt
+      (id, principal_id, action, idempotency_key, request_digest, outcome, result_id)
+      VALUES ($1, $2, 'lineage.record', $3, $4, 'succeeded', $5)`,
+    [receipt, fixture.principal, randomUUID(), createHash('sha256').update(lateEdge).digest('hex'), lateEdge]);
+    await delayed.query(`INSERT INTO verification.lineage_edge
+      (id, observation_id, relation, target_origin_id, basis, operation_id, principal_id)
+      VALUES ($1, $2, 'publishes-origin', $3, 'declared-by-source', $4, $5)`,
+    [lateEdge, root, latePublication, receipt, fixture.principal]);
+
+    // The same principal owns both sources, so this fails any principal-wide
+    // mutable head as well as the previous site-wide singleton writer.
+    await within(edge(store, fixture.principal, unrelated, { origin: publication }, 'publishes-origin'),
+      'Independent source commit');
+    const higherXid = (await pool.query<{ xid: string }>(`SELECT source_xid::text AS xid
+      FROM verification.invalidation WHERE stream_principal = $1 AND reference = $2
+        AND source_xid IS NOT NULL ORDER BY source_xid DESC LIMIT 1`,
+    [fixture.principal, unrelated])).rows[0]!.xid;
+    expect(BigInt(higherXid)).toBeGreaterThan(BigInt(lowerXid));
+    const complete = await within(store.analysisSnapshot(manifest.claim, manifest.revision, caller),
+      'Proof while a source transaction is active');
+    bounded(complete);
+    expect(complete.complete).toBe(true);
+    expect(complete.lineageProof).toEqual({ dependence: 'established', independentOrigins: 1,
+      origins: [`origin:${publication}`] });
+    expect((await pool.query<{ active: boolean }>(`SELECT EXISTS (
+      SELECT 1 FROM verification.lineage_walk w, pg_snapshot_xip(w.freshness_snapshot::pg_snapshot) AS xid
+      WHERE w.id = $1 AND xid = $2::xid8) AS active`, [complete.walk, lowerXid])).rows[0]!.active).toBe(true);
+
+    await delayed.query('COMMIT');
+    committed = true;
+    // The late event precedes the already-observed B event in xid order. It
+    // must remain discoverable through the saved snapshot's active-xid holes.
+    await expect(new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
+      caller, `${complete.walk}:0`)).rejects.toBeInstanceOf(VerificationStale);
+    await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller))
+      .rejects.toBeInstanceOf(VerificationStale);
+    expect((await pool.query(`SELECT 1 FROM verification.lineage_walk_observation
+      WHERE walk_id = $1 AND stale`, [complete.walk])).rowCount).toBe(0);
+  } finally {
+    if (!committed) await delayed.query('ROLLBACK');
+    delayed.release();
+  }
+}, 90_000);
+
+test('active unrelated xids and other principals source churn do not gate an unchanged completed proof', async () => {
+  const fixture = await observations(1);
+  const store = new VerificationStore(pool);
+  const publication = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, fixture.ids[0]!, { origin: publication }, 'publishes-origin');
+  const manifest = await evidence(store, fixture.principal, [fixture.ids[0]!]);
+  const caller = authority(fixture.principal);
+  const active = await pool.connect();
+  try {
+    await active.query('BEGIN');
+    await active.query('SELECT pg_current_xact_id()');
+    const complete = await within(store.analysisSnapshot(manifest.claim, manifest.revision, caller),
+      'Proof with an unrelated active xid');
+    expect(complete.complete).toBe(true);
+    const unrelated = await observations(LINEAGE_EDGE_BUDGET + 41);
+    const unrelatedPublication = await origin(store, unrelated.principal);
+    for (const observation of unrelated.ids) {
+      await edge(store, unrelated.principal, observation, { origin: unrelatedPublication }, 'publishes-origin');
+    }
+    const measured = measuredStore();
+    const replay = await within(measured.store.analysisSnapshot(manifest.claim, manifest.revision,
+      caller, `${complete.walk}:0`), 'Unchanged proof replay during other-principal churn');
+    replayed(replay, complete);
+    // A fresh target snapshot may require a few empty range/hole seeks. It
+    // cannot consume a page of another principal's source events.
+    expect(boundedFreshness(measured.queries)).toBeLessThan(10);
+  } finally {
+    await active.query('ROLLBACK');
+    active.release();
+  }
+}, 90_000);
+
+test('forward migration retires the applied singleton, refuses a legacy stale proof and preserves a legacy partial frontier', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const runId = Bun.env.REZICS_QA_RUN_ID!;
+  const stack = join(root, '.temp', 'stack', `rezics-qa-${runId}`);
+  const compose = readEnv(join(stack, 'compose.env'));
+  const admin = new Client({ connectionString:
+    `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres` });
+  const name = `qa_verification_${randomBytes(6).toString('hex')}`;
+  const directory = join(root, '.temp', `verification-upgrade-${randomUUID()}`);
+  const contentDir = join(root, 'services/content/migrations');
+  const url = new URL(Bun.env.CONTENT_DATABASE_URL!);
+  url.pathname = `/${name}`;
+  const upgrade = new Pool({ connectionString: url.toString(), max: 4 });
+  await admin.connect();
+  let created = false;
+  try {
+    await admin.query(`CREATE DATABASE ${name} WITH TEMPLATE template0 OWNER content`);
+    created = true;
+    mkdirSync(directory, { recursive: true });
+    for (const file of schemaFiles(root, 'content').filter(file => migrationVersion(file) !== 1521)) {
+      symlinkSync(join(contentDir, file), join(directory, file));
+    }
+    await migrateContent(upgrade, directory);
+    expect((await upgrade.query(`SELECT to_regclass('verification.lineage_change_head') AS table_name`))
+      .rows[0]!.table_name).not.toBeNull();
+    const fixture = await observations(2, randomUUID(), upgrade);
+    const old = new VerificationStore(upgrade);
+    const publication = await origin(old, fixture.principal);
+    const manifests = await Promise.all(fixture.ids.map(observation => evidence(old, fixture.principal, [observation])));
+    for (const observation of fixture.ids) {
+      await edge(old, fixture.principal, observation, { origin: publication }, 'publishes-origin');
+    }
+    const caller = authority(fixture.principal);
+    const authorityDigest = createHash('sha256').update(JSON.stringify(caller)).digest('hex');
+    const walks = [randomUUID(), randomUUID()];
+    for (let index = 0; index < walks.length; index++) {
+      const walk = walks[index]!;
+      const observation = fixture.ids[index]!;
+      const manifest = manifests[index]!;
+      const complete = index === 0;
+      await upgrade.query(`INSERT INTO verification.lineage_walk
+        (id, claim, evidence_revision, authority_digest, start_key, root_ordinal, complete,
+         origin_count, version, expansions, edges, node_count, validated_sequence)
+        SELECT $1, $2, $3, $4, $5, $6, $7, $8, 1, 1, $8, 1, revision
+        FROM verification.lineage_change_head WHERE singleton`,
+      [walk, manifest.claim, manifest.revision, authorityDigest, caller.requestDigest,
+        Number(complete), complete, Number(complete)]);
+      await upgrade.query(`INSERT INTO verification.lineage_walk_observation
+        (walk_id, observation_id, lineage_head) SELECT $1, $2, revision::text
+        FROM verification.lineage_head WHERE observation_id = $2`, [walk, observation]);
+      await upgrade.query(`INSERT INTO verification.lineage_walk_node
+        (walk_id, root_ordinal, observation_id, depth, done, phase, has_links)
+        VALUES ($1, 0, $2, 0, $3, $4, $3)`, [walk, observation, complete, complete ? 2 : 0]);
+      if (complete) await upgrade.query(`INSERT INTO verification.lineage_walk_origin
+        (walk_id, origin_id) VALUES ($1, $2)`, [walk, publication]);
+      await upgrade.query(`INSERT INTO verification.lineage_walk_step (walk_id, version, result)
+        VALUES ($1, 0, $2)`, [walk, { walk, complete, continuation: complete ? null : `${walk}:1`, lineageNodes: 1,
+        work: { expansions: 1, links: Number(complete) }, totalWork: { expansions: 1, links: Number(complete) },
+        lineageProof: complete ? { dependence: 'established', independentOrigins: 1, origins: [`origin:${publication}`] }
+          : { dependence: 'over-budget', independentOrigins: null, origins: [] } }]);
+    }
+    const frontier = (await upgrade.query(`SELECT to_jsonb(n) AS node FROM verification.lineage_walk_node n
+      WHERE walk_id = $1`, [walks[1]])).rows[0]!.node;
+    const savedSteps = (await upgrade.query(`SELECT result FROM verification.lineage_walk_step
+      WHERE walk_id = $1 AND version = 0`, [walks[1]])).rows[0]!.result;
+    await old.recordObservationDisposition(fixture.principal, randomUUID(), fixture.ids[0]!, {
+      expectedHead: null, state: 'withdrawn', reason: 'Source changed before the forward migration',
+    });
+    expect(await migrateContent(upgrade)).toContain(1521);
+    expect((await upgrade.query(`SELECT to_regclass('verification.lineage_change_head') AS table_name`))
+      .rows[0]!.table_name).toBeNull();
+    expect((await upgrade.query(`SELECT to_jsonb(n) AS node FROM verification.lineage_walk_node n
+      WHERE walk_id = $1`, [walks[1]])).rows[0]!.node).toEqual(frontier);
+    expect((await upgrade.query(`SELECT result FROM verification.lineage_walk_step
+      WHERE walk_id = $1 AND version = 0`, [walks[1]])).rows[0]!.result).toEqual(savedSteps);
+    const store = new VerificationStore(upgrade);
+    expect((await upgrade.query(`SELECT stale FROM verification.lineage_walk_observation
+      WHERE walk_id = $1`, [walks[0]])).rows[0]!.stale).toBe(false);
+    await expect(store.analysisSnapshot(manifests[0]!.claim, manifests[0]!.revision,
+      caller, `${walks[0]}:0`)).rejects.toBeInstanceOf(VerificationStale);
+    let current = await store.analysisSnapshot(manifests[1]!.claim, manifests[1]!.revision, caller, `${walks[1]}:1`);
+    for (let attempt = 0; !current.complete && attempt < 10; attempt++) {
+      bounded(current);
+      current = await store.analysisSnapshot(manifests[1]!.claim, manifests[1]!.revision, caller, current.continuation!);
+    }
+    expect(current.complete).toBe(true);
+    expect(current.walk).toBe(walks[1]!);
+    expect(current.totalWork).toEqual({ expansions: 1, links: 1 });
+    expect(current.lineageProof).toEqual({ dependence: 'established', independentOrigins: 1,
+      origins: [`origin:${publication}`] });
+  } finally {
+    await upgrade.end();
+    if (created) await admin.query(`DROP DATABASE ${name} WITH (FORCE)`);
+    await admin.end();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 120_000);
+
+
+test('the existing restore epoch invalidates native transaction checkpoints without adding a source writer head', async () => {
+  const fixture = await observations(1);
+  const store = new VerificationStore(pool);
+  const publication = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, fixture.ids[0]!, { origin: publication }, 'publishes-origin');
+  const manifest = await evidence(store, fixture.principal, [fixture.ids[0]!]);
+  const caller = authority(fixture.principal);
+  const before = await store.analysisSnapshot(manifest.claim, manifest.revision, caller);
+  expect(before.complete).toBe(true);
+  await pool.query('SELECT reading_position.advance_restore_epoch()');
+  await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${before.walk}:0`))
+    .rejects.toBeInstanceOf(VerificationStale);
+  const fresh = await store.analysisSnapshot(manifest.claim, manifest.revision, caller, undefined, randomUUID());
+  expect(fresh.complete).toBe(true);
+  expect(fresh.lineageProof).toEqual(before.lineageProof);
+  const later = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, fixture.ids[0]!, { origin: later }, 'publishes-origin');
+  await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${fresh.walk}:0`))
+    .rejects.toBeInstanceOf(VerificationStale);
 }, 90_000);
