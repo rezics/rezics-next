@@ -105,6 +105,7 @@ export default {
   someone: '一位成員',
   aboutWork: insert('關於《{{title}}》', { title: String }),
   spoilerTag: '劇透', spoilerAnnounced: '作者已將此內容標示為劇透。', showSpoiler: '顯示劇透',
+  markSpoiler: '標記為劇透', markSpoilerHelp: '讀者在查看這則回覆前會看到提示。',
   replyIn: '討論中的回覆', replyAction: '回覆', viewThread: '在討論串中查看', replied: '回覆了',
   moreDiscussions: plural({ other: insert('關於這部作品的其他 {{count}} 則討論') }, { count: asValue(number()) }),
   backTo: insert('返回 {{realm}}', { realm: String }),

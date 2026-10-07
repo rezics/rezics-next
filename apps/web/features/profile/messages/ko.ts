@@ -69,4 +69,5 @@ export default {
   contributionsLoading: '활동을 불러오는 중…',
   contributionsFailed: '활동을 불러오지 못했습니다. 다시 시도해 주세요.',
   showSpoiler: '스포일러 표시',
+  spoilerAnnounced: '작가가 스포일러로 표시했어요.',
 } satisfies ProfileMessages;

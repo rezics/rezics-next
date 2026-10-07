@@ -13,16 +13,17 @@ export const seedReplyId = (targetId: string) => `https://rezics.com/id/${id(tar
 /** These are ordinary member calls. Realm placement remains pending review. */
 export async function seedReply(api: SeedApi, session: { token: string; actingSubject: string },
   target: { id: string; work: string; revision: string; language: string }, body: string,
-  parent?: { reply: string; revisionId: string }) {
+  parent?: { reply: string; revisionId: string }, spoiler?: boolean) {
   const reply = seedReplyId(target.id);
   const variantId = `urn:rezics:variant:${id(`${target.id}:variant`)}`;
+  const marked = spoiler === undefined ? {} : { spoiler };
   const draft = await api.post<{ revisionId: string }>('/v1/member-reply-drafts', {
     profile: 'member-reply-draft-v1', reply, variantId, rootTarget: target.work, rootRevision: target.revision,
-    language: target.language, direction: 'ltr', expectedHead: null, body, actingSubject: session.actingSubject,
+    language: target.language, direction: 'ltr', expectedHead: null, body, ...marked, actingSubject: session.actingSubject,
   }, session.token, seedKey('reply-draft', target.id));
   await api.post('/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply, variantId,
     revisionId: draft.revisionId, author: session.actingSubject, rootTarget: target.work, rootRevision: target.revision,
-    parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null,
+    parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null, ...marked,
   }, session.token, seedKey('reply', target.id));
   return { reply, revisionId: draft.revisionId };
 }

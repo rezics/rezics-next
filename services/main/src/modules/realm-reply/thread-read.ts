@@ -446,9 +446,11 @@ export async function readProfileContributions(session: WorkReadSession, author:
     const visible = disclosed[index];
     if (!visible || visible.originRealm !== node.origin || visible.author !== author) continue;
     const parts = node.parent ? { title: null, body: visible.body } : discussionParts(visible.body);
+    const spoiler = declaredSpoiler(visible as Record<string, unknown>);
     items.push({ reply: node.reply, realm: node.origin, parent: node.parent,
       time: node.createdAt.toISOString(), title: parts.title,
-      excerpt: clip(parts.body, PROFILE_CONTRIBUTION_COST.excerptChars) });
+      excerpt: clip(parts.body, PROFILE_CONTRIBUTION_COST.excerptChars),
+      ...(spoiler === undefined ? {} : { spoiler }) });
   }
   if (!(await session.deps.personPreferences?.profileVisible(author, session.principal))) {
     throw new WorkReadMissing('Agent unavailable');

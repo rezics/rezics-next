@@ -129,7 +129,7 @@ export function memoryThreads(outcome: ReplyOutcome['kind'] = 'placed'): MemoryT
   return {
     calls,
     async reply(input, progress) {
-      calls.push(`reply:${input.parent.reply.slice(-12)}:${input.body}`);
+      calls.push(`reply:${input.parent.reply.slice(-12)}:${input.spoiler === true ? 'spoiler:' : ''}${input.body}`);
       if (outcome === 'placed') return { kind: 'placed', reply: progress.reply, placement: id(700, 'eeee') };
       if (outcome === 'refused') return { kind: 'refused' };
       return { kind: 'failed', progress: { ...progress, revisionId: '00000000-0000-4000-a000-000000000700' } };

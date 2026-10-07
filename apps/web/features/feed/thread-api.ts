@@ -18,6 +18,8 @@ export interface ReplyInput {
   /** The language the writer chose for the reply; never the interface locale. */
   body: string;
   language: string;
+  /** The author's spoiler declaration, when the writer set the control. */
+  spoiler?: boolean;
   actingSubject: string;
 }
 
@@ -72,6 +74,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
         language: input.language,
         direction: direction(input.language, bodyText(body ?? input.body)),
         expectedHead,
+        ...(input.spoiler !== undefined ? { spoiler: input.spoiler } : {}),
         ...(body === null ? { body: null } : bodyInput(body)),
         actingSubject: input.actingSubject,
       },
@@ -105,6 +108,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
               parentReply: input.parent.reply,
               parentRevision: input.parent.revisionId,
               contextRevision: null,
+              ...(input.spoiler !== undefined ? { spoiler: input.spoiler } : {}),
             },
             headers(step.key, 'identity'),
           );

@@ -160,7 +160,7 @@ describe('G-395 who raised it and what they may break', () => {
   test("a reason naming a rule reads as the rule's title in the reader's language; others as their words", () => {
     const rules = publishedRules('zh-CN');
     expect(reasonLabel({ kind: 'content_report', reasonCode: 'no-spoilers' }, t, rules)).toBe(
-      '标题中不要剧透',
+      '标注剧透',
     );
     expect(reasonLabel({ kind: 'content_report', reasonCode: 'title_review' }, t, rules)).toBe(
       'Title needs review',

@@ -232,7 +232,7 @@ export const audit: AuditItem[] = [
     actingSubject: people.daniel, decidedAt: ago(30), caseSequence: '2', detail: null,
     target: { owner: 'graph', resource: iri(102), component: 'title' } },
   { id: id(1006), caseId: id(1206), kind: 'content_moderation', outcome: 'restrict',
-    reason: 'Breaks rule 1, “No spoilers in titles”. The chapter title named the killer.',
+    reason: 'Breaks rule 1, “Mark spoilers”. The chapter gives away the ending and was not marked.',
     actingSubject: people.daniel, decidedAt: ago(20), caseSequence: '1', detail: null,
     target: { owner: 'graph', resource: chapterOne, component: 'title' } },
   { id: id(1004), caseId: null, kind: 'realm_management', outcome: 'realm.members.manage',
@@ -283,9 +283,9 @@ export const outgoingInvitations: InvitationPage = { items: [{ id: id(3020), rea
   policyRevision: '1', termsRevision: 'terms-1', membershipGeneration: '2' }], nextCursor: null };
 
 export const rules: RealmRule[] = [
-  { id: 'no-spoilers', governanceRule: null, title: { original: 'en', labels: { en: 'No spoilers in titles', 'zh-Hans': '标题中不要剧透' } },
-    body: { original: 'en', labels: { en: 'Put plot details in the text behind a spoiler mark, never in a title or cover line.',
-      'zh-Hans': '情节细节请放在正文中并加上剧透标记，不要写在标题或封面语里。' } } },
+  { id: 'no-spoilers', governanceRule: null, title: { original: 'en', labels: { en: 'Mark spoilers', 'zh-Hans': '标注剧透' } },
+    body: { original: 'en', labels: { en: 'Mark a discussion or reply that gives the story away. Write the title as you otherwise would; do not put a spoiler label in front of it.',
+      'zh-Hans': '讨论或回复若会透露情节，请标记剧透。标题照常写，不要在前面加剧透字样。' } } },
   { id: 'credit-editions', governanceRule: null, title: { original: 'en', labels: { en: 'Name the edition', 'zh-Hans': '注明版本' } },
     body: { original: 'en', labels: { en: 'Say which translation or edition a text comes from, with its year when known.',
       'zh-Hans': '说明文本来自哪个译本或版本，已知时注明年份。' } } },

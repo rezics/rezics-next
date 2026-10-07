@@ -2,9 +2,8 @@ import type { DemoPerson } from './plan.ts';
 
 // A young but real REZICS next to the official Zones: four community Realms
 // that people started themselves, with their own rules, moderators, members
-// and discussions in the Realm's language. Main has no thread title or reply
-// spoiler flag, so a discussion's first line is its title and spoilers are
-// announced there, as people do on forums.
+// and discussions in the Realm's language. A discussion's first line is its
+// title. A spoiler is the author's `spoiler` mark, not a prefix on that title.
 
 /** People who came for a community rather than an official Zone. They sign up with the base plan's people. */
 export const communityPeople: readonly DemoPerson[] = [
@@ -38,9 +37,9 @@ export const communityRealms: readonly CommunityRealm[] = [
     rules: [
       { id: 'chapter', title: { en: 'Say which chapter you are on', 'zh-CN': '先说读到第几章' },
         body: { en: 'Start every post with the chapter you have read up to.', 'zh-CN': '每个帖子开头写上你读到第几章。' } },
-      { id: 'spoilers', title: { en: 'Spoilers go in the first line', 'zh-CN': '剧透写在第一行' },
-        body: { en: 'Anything past this week’s chapter gets its own thread with 【剧透】 in the first line.',
-          'zh-CN': '超出本周章节的内容请另开一帖，并在第一行写【剧透】。' } },
+      { id: 'spoilers', title: { en: 'Mark spoilers', 'zh-CN': '标注剧透' },
+        body: { en: 'Anything past this week’s chapter gets its own thread, marked as a spoiler.',
+          'zh-CN': '超出本周章节的内容请另开一帖，并标记为剧透。' } },
       { id: 'kind', title: { en: 'Discuss the story, not the reader', 'zh-CN': '讨论作品，不评判读者' },
         body: { en: 'Disagree with readings, never with people. Authors read this club too.',
           'zh-CN': '可以不同意观点，但不要针对人。作者们也在这里看帖。' } },
@@ -85,18 +84,20 @@ export const communityRealms: readonly CommunityRealm[] = [
       'zh-CN': '每月共读一部英文经典，每周十来章，周日在帖子里见。第一次读和第五次读的朋友都欢迎。' },
     rules: [
       { id: 'schedule', title: { en: 'Stay within the week’s chapters', 'zh-CN': '只谈本周章节' },
-        body: { en: 'The weekly thread covers the week’s chapters. Later chapters get a thread marked “Spoilers”.',
-          'zh-CN': '每周的帖子只讨论本周章节，之后的内容请另开标注“Spoilers”的帖子。' } },
+        body: { en: 'The weekly thread covers the week’s chapters. Later chapters get their own thread, marked as a spoiler.',
+          'zh-CN': '每周的帖子只讨论本周章节。之后的内容请另开一帖，并标记为剧透。' } },
       { id: 'edition', title: { en: 'Name your edition', 'zh-CN': '注明版本' },
         body: { en: 'Say which edition or translation you read when you quote.', 'zh-CN': '引用时说明你读的版本或译本。' } },
     ],
     adopt: ['pride', 'jane-eyre', 'frankenstein', 'little-women', 'secret-garden', 'alice', 'sherlock'] },
 ];
 
-export interface CommunityReply { author: string; body: string; language?: string; votes?: number }
+export interface CommunityReply { author: string; body: string; language?: string; votes?: number; spoiler?: boolean }
 /** A discussion: a reply rooted on a public Work and placed in the Realm. Its first line is its title. */
 export interface CommunityThread {
   id: string; realm: CommunityRealmId; author: string; work: string; language: string; body: string;
+  /** The author's declaration. Absent leaves the words visible; the title never decides this. */
+  spoiler?: boolean;
   /** How many of the Realm's other members vote it up, in member order; `down` of the rest vote it down. */
   votes: number; down?: number;
   replies: readonly CommunityReply[];
@@ -107,7 +108,7 @@ const zh = 'zh-Hans', en = 'en', ja = 'ja';
 export const communityThreads: readonly CommunityThread[] = [
   // 网文读书会
   { id: 'rainy-ch1', realm: 'web-novel-club', author: 'wei', work: 'serial', language: zh, votes: 7,
-    body: '【本周共读】《雨夜书店》第一章 雨夜\n这周我们读第一章。讨论第二章以后的内容请另开一帖，第一行写【剧透】。\n我最喜欢开头那句“雨停在书店打烊前”——一个人物还没出场，气氛已经立住了。读完第一章，你最想知道的是什么？',
+    body: '【本周共读】《雨夜书店》第一章 雨夜\n这周我们读第一章。讨论第二章以后的内容请另开一帖，并标记为剧透。\n我最喜欢开头那句“雨停在书店打烊前”——一个人物还没出场，气氛已经立住了。读完第一章，你最想知道的是什么？',
     replies: [
       { author: 'an', votes: 3, body: '我最好奇那封没有地址的信是谁放的。林梅好像一点也不意外，她是不是早就在等？' },
       { author: 'hana', language: ja, votes: 2,
@@ -115,11 +116,14 @@ export const communityThreads: readonly CommunityThread[] = [
       { author: 'daniel', body: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' },
     ] },
   { id: 'rainy-ch2-spoilers', realm: 'web-novel-club', author: 'sophie', work: 'serial', language: zh, votes: 6,
-    body: '【剧透】《雨夜书店》第二章：那张旧车票\n还没读到第二章的朋友请先别往下看。\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。日期正好是书店开张那一年，作者肯定是故意的。有人注意到车票上的终点站吗？',
+    spoiler: true,
+    body: '《雨夜书店》第二章：那张旧车票\n还没读到第二章的朋友请先别往下看。\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。日期正好是书店开张那一年，作者肯定是故意的。有人注意到车票上的终点站吗？',
     replies: [
-      { author: 'leo', votes: 3, body: '注意到了！终点站就是第三章标题里的“最后一班车”。我猜这张票从来没有被用过。' },
+      { author: 'leo', votes: 3, spoiler: true, body: '注意到了！终点站就是第三章标题里的“最后一班车”。我猜这张票从来没有被用过。' },
+      { author: 'hana', language: ja, votes: 1, spoiler: true,
+        body: '終点が「最後の一班車」だと気づきました。母が残したものだと思います。' },
       { author: 'mei', votes: 5, body: '作者路过，不剧透，只说一句：车票的背面以后还会出现。' },
-      { author: 'wei', votes: 1, body: '作者亲自下场了哈哈。已置顶。大家讨论剧情记得第一行写剧透提醒。' },
+      { author: 'wei', votes: 1, body: '作者亲自下场了哈哈。已置顶。大家讨论剧情记得标记剧透。' },
     ] },
   { id: 'quiet-mysteries', realm: 'web-novel-club', author: 'daniel', work: 'serial', language: zh, votes: 5,
     body: '求推荐：和《雨夜书店》一样安静、带点悬疑的连载\n最近喜欢节奏慢、气氛好的故事，不要太多打斗。中文英文都可以。',
@@ -233,17 +237,18 @@ export const communityThreads: readonly CommunityThread[] = [
 
   // English Classics Reading Circle
   { id: 'pride-week-one', realm: 'classics-circle', author: 'priya', work: 'pride', language: en, votes: 8,
-    body: 'October read-along: Pride and Prejudice, chapters 1–12\nWelcome, everyone! Twelve chapters a week, and we meet here on Sundays. Start with the first line: do you believe it? Anything past chapter 12 goes in its own thread marked Spoilers.',
+    body: 'October read-along: Pride and Prejudice, chapters 1–12\nWelcome, everyone! Twelve chapters a week, and we meet here on Sundays. Start with the first line: do you believe it? Anything past chapter 12 goes in its own thread, marked as a spoiler.',
     replies: [
       { author: 'daniel', votes: 3, body: 'First read for me. I thought the first line was sincere until Mrs Bennet opened her mouth.' },
       { author: 'aria', votes: 4, body: 'Fourth read. Count how often Elizabeth is wrong in the first twelve chapters; it is fun once you know.' },
       { author: 'sophie', votes: 2, body: 'Reading a bilingual edition, so I will be a little slow. Mr Bennet is my favourite so far.' },
     ] },
   { id: 'darcy-letter', realm: 'classics-circle', author: 'aria', work: 'pride', language: en, votes: 6,
-    body: 'Spoilers (chapter 35): Darcy’s letter\nOnly read on if you have finished volume two. Elizabeth rereads the letter and sees that her judgement of Wickham rested on one charming conversation. Did the letter change your mind about Darcy, or only about Elizabeth?',
+    spoiler: true,
+    body: 'Chapter 35: Darcy’s letter\nOnly read on if you have finished volume two. Elizabeth rereads the letter and sees that her judgement of Wickham rested on one charming conversation. Did the letter change your mind about Darcy, or only about Elizabeth?',
     replies: [
-      { author: 'priya', votes: 3, body: 'About Elizabeth, mostly. “Till this moment I never knew myself” is the line the whole book turns on.' },
-      { author: 'leo', votes: 2, body: 'It changed my mind about Wickham first and Darcy second. Austen makes the reader share the misjudgement.' },
+      { author: 'priya', votes: 3, spoiler: true, body: 'About Elizabeth, mostly. “Till this moment I never knew myself” is the line the whole book turns on.' },
+      { author: 'leo', votes: 2, spoiler: true, body: 'It changed my mind about Wickham first and Darcy second. Austen makes the reader share the misjudgement.' },
     ] },
   { id: 'jane-eyre-edition', realm: 'classics-circle', author: 'nora', work: 'jane-eyre', language: en, votes: 3,
     body: 'Which edition of Jane Eyre for a first read?\nIs there an annotated edition you would recommend? I keep running into references I do not understand.',

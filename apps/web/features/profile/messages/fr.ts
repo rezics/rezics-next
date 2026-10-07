@@ -74,4 +74,5 @@ export default {
   contributionsLoading: 'Chargement de l’activité…',
   contributionsFailed: 'Impossible de charger l’activité. Réessayez.',
   showSpoiler: 'Afficher le spoiler',
+  spoilerAnnounced: 'L’auteur a signalé un spoiler.',
 } satisfies ProfileMessages;

@@ -81,6 +81,26 @@ export function excludedFeedSource(source: FeedSource, exclusions: readonly Home
   return false;
 }
 
+/** A boolean on the exact revision body, or absent. Anything else is corrupt, not unmarked. */
+function declaredSpoiler(body: Record<string, unknown>): boolean | undefined {
+  if (!Object.hasOwn(body, 'spoiler') || body.spoiler == null) return undefined;
+  if (typeof body.spoiler !== 'boolean') throw new WorkReadUnavailable('Reply spoiler declaration is invalid');
+  return body.spoiler;
+}
+
+/**
+ * Home's post for a discussion or reply, from the exact revision body this
+ * read already holds. The spoiler flag is the author's declaration on that
+ * body; the title is never one.
+ */
+export function feedReplyPost(kind: string, text: string, language: string | null, revisionBody: Record<string, unknown>) {
+  const parts = kind === 'discussion' ? discussionParts(text) : { title: null, body: text.trim() };
+  const spoiler = declaredSpoiler(revisionBody);
+  return { excerpt: text.slice(0, 400), language,
+    post: { title: parts.title, excerpt: clip(parts.body, 400) || null, language,
+      ...(spoiler === undefined ? {} : { spoiler }) } };
+}
+
 async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
   if (!source.reply) return { excerpt: source.excerpt, language: source.language };
   if (!session.deps.realmReplies || !session.deps.content || !source.realm) {
@@ -99,11 +119,7 @@ async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
   if (!after || after.placement !== current.placement || after.revisionId !== current.revisionId
     || after.reviewDecisionId !== current.reviewDecisionId) throw new WorkReadMissing('Reply unavailable');
   const language = body.reference.language.kind === 'tag' ? body.reference.language.tag : null;
-  // A discussion is titled by its first line; a reply is only its words.
-  const parts = source.kind === 'discussion' ? discussionParts(body.body.body)
-    : { title: null, body: body.body.body.trim() };
-  return { excerpt: body.body.body.slice(0, 400), language,
-    post: { title: parts.title, excerpt: clip(parts.body, 400) || null, language } };
+  return feedReplyPost(source.kind, body.body.body, language, body.body);
 }
 
 async function replyExcerpts(session: WorkReadSession, sources: readonly FeedSource[]) {
@@ -125,9 +141,7 @@ async function replyExcerpts(session: WorkReadSession, sources: readonly FeedSou
     if (exact.status !== 'available' || exact.reference.resourceId !== source.reply || typeof exact.body.body !== 'string')
       throw new WorkReadUnavailable('Reply body unavailable');
     const language = exact.reference.language.kind === 'tag' ? exact.reference.language.tag : null;
-    const parts = source.kind === 'discussion' ? discussionParts(exact.body.body) : { title: null, body: exact.body.body.trim() };
-    bodies.set(source.id, { ok: true, value: { excerpt: exact.body.body.slice(0,400), language,
-      post: { title: parts.title, excerpt: clip(parts.body,400) || null, language } } });
+    bodies.set(source.id, { ok: true, value: feedReplyPost(source.kind, exact.body.body, language, exact.body) });
   }
   return { bodies, fence: async () => {
     const approved = await session.deps.realmReplies!.currentFeedApprovals(heads);

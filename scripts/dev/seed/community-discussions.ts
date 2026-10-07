@@ -59,7 +59,7 @@ async function place(api: SeedApi, realm: { realm: string; owner: Session }, aut
 }
 
 async function discuss(state: SeedState, realm: { realm: string; owner: Session }, author: Session, root: Root,
-  key: string, language: string, body: string, parent?: Placed): Promise<Placed> {
+  key: string, language: string, body: string, parent?: Placed, spoiler?: boolean): Promise<Placed> {
   // `community:` ids were Realm-origin drafts an earlier seed could not place; these are their replacements.
   const id = `community-thread:${key}`, reply = seedReplyId(id);
   const visible = await readMain<{ placement: string; revisionId: string }>(state.api,
@@ -67,7 +67,7 @@ async function discuss(state: SeedState, realm: { realm: string; owner: Session 
       encodeURIComponent(author.actingSubject)}`, author.token);
   if (visible) return { reply, revisionId: visible.revisionId, placement: visible.placement };
   const written = await seedReply(state.api, author, { id, work: root.work, revision: root.revision, language },
-    body, parent);
+    body, parent, spoiler);
   return { ...written, placement: await place(state.api, realm, author, written, root, key) };
 }
 
@@ -109,14 +109,15 @@ export async function seedCommunityDiscussions(state: SeedState) {
     if (!realm) return;
     await state.optional(`Community discussion ${thread.id}`, async () => {
       const root = await replyRoot(state, thread.work, roots);
-      const top = await discuss(state, realm, person(state, thread.author), root, thread.id, thread.language, thread.body);
+      const top = await discuss(state, realm, person(state, thread.author), root, thread.id, thread.language,
+        thread.body, undefined, thread.spoiler);
       threads++;
       for (const voter of threadVoters(thread, thread.author, thread.votes, thread.down)) {
         votes.push({ voter: voter.id, placement: top.placement, value: voter.value, key: `${voter.id}:${thread.id}` });
       }
       for (const [index, reply] of thread.replies.entries()) {
         const placed = await discuss(state, realm, person(state, reply.author), root, `${thread.id}:${index}`,
-          reply.language ?? thread.language, reply.body, top);
+          reply.language ?? thread.language, reply.body, top, reply.spoiler);
         replies++;
         for (const voter of threadVoters(thread, reply.author, reply.votes ?? 0)) {
           votes.push({ voter: voter.id, placement: placed.placement, value: voter.value,

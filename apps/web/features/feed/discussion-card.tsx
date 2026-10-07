@@ -46,11 +46,16 @@ export function SpoilerVeil({ children, className }: { children: ReactNode; clas
   const [shown, setShown] = useState(false);
   // The words take the veil's place, so the button controls nothing that stays.
   if (shown) return <div className={className}>{children}</div>;
-  return <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm', className)}>
+  // A reply's words are the row link. The reveal control sits above that hit area and keeps the click.
+  return <div className={cn('relative z-10 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm', className)}>
     <EyeOffIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
     <span className="text-muted-foreground">{t.spoilerAnnounced}</span>
-    <button type="button" onClick={() => setShown(true)}
-      className={cn(buttonVariants({ variant: 'outline', size: 'xs', pill: true }), 'relative z-10 h-6')}>
+    <button type="button" onClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setShown(true);
+    }}
+      className={cn(buttonVariants({ variant: 'outline', size: 'xs', pill: true }), 'h-6')}>
       <EyeIcon aria-hidden="true" />{t.showSpoiler}</button>
   </div>;
 }

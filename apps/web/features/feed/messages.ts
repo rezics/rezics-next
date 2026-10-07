@@ -55,6 +55,8 @@ export const messages = {
   // A discussion or reply
   someone: 'A member', blockedUser: 'Blocked user', aboutWork: insert('On {{title}}', { title: String }),
   spoilerTag: 'Spoiler', spoilerAnnounced: 'The author marked this as a spoiler.', showSpoiler: 'Show spoiler',
+  markSpoiler: 'Mark as spoiler',
+  markSpoilerHelp: 'Readers see a warning before the reply.',
   replyIn: 'A reply in a discussion', replyAction: 'Reply', viewThread: 'View in thread', replied: 'replied',
   moreDiscussions: plural({ one: insert('{{count}} more discussion about this work'),
     other: insert('{{count}} more discussions about this work') }, { count: asValue(number()) }),

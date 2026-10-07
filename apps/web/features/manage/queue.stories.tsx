@@ -380,7 +380,7 @@ export const ChapterReport: Story = {
     await expect(detail.getByRole('link', { name: 'Read this chapter' }))
       .toHaveAttribute('href', localizedPath(`${resourceHref('/w/', book)}/read/${uuid(occurrences.one)}`, 'en'));
     await expect(detail.getByText('Chapter · Ongoing · 3 chapters · by Lin Mei 林梅')).toBeVisible();
-    await expect(detail.getByRole('region', { name: 'Rule it may break' })).toHaveTextContent('No spoilers in titles');
+    await expect(detail.getByRole('region', { name: 'Rule it may break' })).toHaveTextContent('Mark spoilers');
     // The chapter's words stay hidden until asked for.
     await expect(detail.queryByText(/没有地址的信。/)).toBeNull();
     await expect(detail.getByText('May spoil 雨夜书店 · 连载小说.')).toBeVisible();

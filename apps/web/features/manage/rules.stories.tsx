@@ -50,7 +50,7 @@ async function typeText(field: () => HTMLElement, text: string) {
       await userEvent.clear(input);
       await userEvent.type(input, text);
     }
-    expect(field()).toHaveValue(text);
+    await expect(field()).toHaveValue(text);
   }, { timeout: 5000 });
 }
 
@@ -58,7 +58,7 @@ export const PublishedRules: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Revision 3')).toBeVisible();
-    await expect(firstRule(canvas)).toHaveTextContent('No spoilers in titles');
+    await expect(firstRule(canvas)).toHaveTextContent('Mark spoilers');
     await expect(firstRule(canvas)).toHaveAttribute('lang', 'en');
     await expect(canvas.queryByText(/shown in/)).toBeNull();
     await expect(canvas.getByRole('radio', { name: /Realm members/ })).toBeChecked();
@@ -73,7 +73,7 @@ export const ChineseReader: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('第 3 版')).toBeVisible();
-    await expect(firstRule(canvas)).toHaveTextContent('标题中不要剧透');
+    await expect(firstRule(canvas)).toHaveTextContent('标注剧透');
     await expect(firstRule(canvas)).toHaveAttribute('lang', 'zh-Hans');
   },
 };
@@ -118,14 +118,14 @@ export const EditOneLanguage: Story = {
     await expect(rule).toHaveTextContent('Only Simplified Chinese changed. Check that English still says the same.');
     await userEvent.click(canvas.getByRole('button', { name: 'Review changes' }));
     const dialog = within(await body().findByRole('dialog', { name: 'Review before publishing' }, { timeout: 5000 }));
-    await expect(dialog.getByText(/Changes “No spoilers in titles” in Simplified Chinese/)).toBeInTheDocument();
+    await expect(dialog.getByText(/Changes “Mark spoilers” in Simplified Chinese/)).toBeInTheDocument();
     await expect(dialog.getByText(/Publishing creates revision 4/)).toBeInTheDocument();
     await userEvent.type(dialog.getByRole('textbox', { name: 'What changed and why' }), 'Cover lines count as titles.');
     await userEvent.click(dialog.getByRole('button', { name: 'Publish' }));
     await expect(await canvas.findByText('Revision 4 is published.')).toBeVisible();
     await expect(record.settings).toEqual([expect.objectContaining({ expectedRulesRevision: '3', expectedGeneration: '12',
       reason: 'Cover lines count as titles.', settings: expect.objectContaining({ whoMaySubmit: 'members',
-        rules: [expect.objectContaining({ id: 'no-spoilers', title: { original: 'en', labels: { en: 'No spoilers in titles', 'zh-Hans': '标题和封面语中不要剧透' } } }),
+        rules: [expect.objectContaining({ id: 'no-spoilers', title: { original: 'en', labels: { en: 'Mark spoilers', 'zh-Hans': '标题和封面语中不要剧透' } } }),
           rules[1], rules[2]] }) })]);
   },
 };

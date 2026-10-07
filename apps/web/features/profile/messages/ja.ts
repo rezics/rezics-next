@@ -72,4 +72,5 @@ export default {
   contributionsLoading: 'アクティビティを読み込み中…',
   contributionsFailed: 'アクティビティを読み込めませんでした。もう一度お試しください。',
   showSpoiler: 'ネタバレを表示',
+  spoilerAnnounced: '作者がネタバレとして指定しました。',
 } satisfies ProfileMessages;

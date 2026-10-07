@@ -27,7 +27,7 @@ interface Args { read: ThreadRead; mode: ReplyMode; signedIn: boolean; locale: U
 
 const rules = [
   { id: 'schedule', title: 'Stay within the week’s chapters', lang: 'en',
-    body: 'The weekly thread covers the week’s chapters. Later chapters get a thread marked “Spoilers”.' },
+    body: 'The weekly thread covers the week’s chapters. Later chapters get their own thread, marked as a spoiler.' },
   { id: 'edition', title: 'Name your edition', lang: 'en', body: 'Say which edition or translation you read when you quote.' },
 ];
 
@@ -139,10 +139,12 @@ export const ReplyInline: Story = {
     await userEvent.click(within(daniel).getAllByRole('button', { name: 'Reply' })[0]!);
     const box = within(daniel).getByRole('textbox', { name: 'Reply to Daniel Chen 陈丹尼' });
     await userEvent.type(box, 'Mr. Bennet is funnier on a second read.');
-    await userEvent.click(within(box.closest('form')!).getByRole('button', { name: 'Reply' }));
+    const form = box.closest('form')!;
+    await userEvent.click(within(form).getByRole('checkbox', { name: 'Mark as spoiler' }));
+    await userEvent.click(within(form).getByRole('button', { name: 'Reply' }));
     // The reply travels as a document snapshot; its text is what the writer typed.
     await waitFor(() => expect(args.api!.calls).toEqual([
-      expect.stringMatching(new RegExp(`^reply:${storyReply(2).slice(-12)}:.*Mr\\. Bennet is funnier on a second read\\.`))]));
+      expect.stringMatching(new RegExp(`^reply:${storyReply(2).slice(-12)}:spoiler:.*Mr\\. Bennet is funnier on a second read\\.`))]));
     await expect(within(daniel).queryByRole('textbox')).toBeNull();
   },
 };

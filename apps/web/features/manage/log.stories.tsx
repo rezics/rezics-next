@@ -96,7 +96,7 @@ export const AuditLog: Story = {
     await expect(within(entries[2]!).getByRole('link', { name: '西游记' })).toBeVisible();
     await expect(entries[3]).toHaveTextContent('Removed content');
     await expect(entries[3]).toHaveTextContent(
-      '“Breaks rule 1, “No spoilers in titles”. The chapter title named the killer.”',
+      '“Breaks rule 1, “Mark spoilers”. The chapter gives away the ending and was not marked.”',
     );
     await expect(
       within(entries[3]!).getByRole('link', { name: /^第一章 雨夜\s*· 雨夜书店 · 连载小说$/ }),

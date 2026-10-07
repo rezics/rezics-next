@@ -20,6 +20,7 @@ export default {
   post: '帖子', comment: '评论', noPosts: '还没有公开帖子', noComments: '还没有公开评论',
   contributionsLoading: '正在加载动态…', contributionsFailed: '无法加载动态，请重试。',
   showSpoiler: '显示剧透内容',
+  spoilerAnnounced: '作者标注了剧透。',
 
   worksHeading: insert('{{name}}的作品', { name: String }),
   workCount: plural({ other: insert('{{count}} 部作品') }, { count: asValue(number()) }),

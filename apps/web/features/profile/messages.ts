@@ -22,6 +22,7 @@ export const messages = {
   post: 'Post', comment: 'Comment', noPosts: 'No public posts yet', noComments: 'No public comments yet',
   contributionsLoading: 'Loading activity…', contributionsFailed: 'Couldn’t load activity. Try again.',
   showSpoiler: 'Show spoiler',
+  spoilerAnnounced: 'The author marked this as a spoiler.',
 
   worksHeading: insert('Works by {{name}}', { name: String }),
   workCount: plural({ one: insert('{{count}} work'), other: insert('{{count}} works') },

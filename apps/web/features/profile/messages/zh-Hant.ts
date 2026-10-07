@@ -71,4 +71,5 @@ export default {
   post: '貼文', comment: '留言', noPosts: '尚無公開貼文', noComments: '尚無公開留言',
   contributionsLoading: '正在載入動態…', contributionsFailed: '無法載入動態，請重試。',
   showSpoiler: '顯示劇透',
+  spoilerAnnounced: '作者已將此內容標示為劇透。',
 } satisfies ProfileMessages;

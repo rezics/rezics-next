@@ -74,4 +74,5 @@ export default {
   contributionsLoading: 'Cargando la actividad…',
   contributionsFailed: 'No se pudo cargar la actividad. Inténtalo de nuevo.',
   showSpoiler: 'Mostrar spoiler',
+  spoilerAnnounced: 'El autor marcó esto como spoiler.',
 } satisfies ProfileMessages;

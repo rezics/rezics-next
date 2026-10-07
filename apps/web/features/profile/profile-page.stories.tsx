@@ -126,6 +126,23 @@ export const PostsAndComments: Story = {
                 title: 'A first post',
                 excerpt: 'What should I read next?',
               },
+              {
+                reply: storyId(904),
+                realm: storyId(902),
+                parent: null,
+                time: '2026-09-28T11:00:00Z',
+                title: '最終章の手紙',
+                excerpt: 'エリザベスは手紙を読み返す。',
+                spoiler: true,
+              },
+              {
+                reply: storyId(905),
+                realm: storyId(902),
+                parent: null,
+                time: '2026-09-28T08:00:00Z',
+                title: 'Spoilers: a review of spoiler culture',
+                excerpt: 'The title names the subject.',
+              },
             ]
           : [
               {
@@ -145,6 +162,11 @@ export const PostsAndComments: Story = {
     await userEvent.click(canvas.getByRole('tab', { name: 'Posts' }));
     // Hydration enhances the native anchor; query the current link on each retry.
     await waitFor(() => expect(canvas.getByRole('link', { name: 'A first post' })).toBeVisible());
+    await expect(canvas.getByRole('link', { name: '最終章の手紙' })).toBeVisible();
+    await expect(canvas.queryByText(/手紙を読み返す/)).toBeNull();
+    await expect(canvas.getByText('The title names the subject.')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show spoiler' }));
+    await expect(canvas.getByText(/手紙を読み返す/)).toBeVisible();
     await userEvent.click(canvas.getByRole('tab', { name: 'Comments' }));
     await expect(await canvas.findByText('great')).toHaveProperty('tagName', 'STRONG');
     await userEvent.click(canvas.getByRole('tab', { name: 'Overview' }));

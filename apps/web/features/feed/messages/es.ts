@@ -115,6 +115,8 @@ export default {
   spoilerTag: "Spoiler",
   spoilerAnnounced: "El autor marcó esto como spoiler.",
   showSpoiler: "Mostrar spoiler",
+  markSpoiler: "Marcar como spoiler",
+  markSpoilerHelp: "Quien lee verá un aviso antes de la respuesta.",
   replyIn: "Respuesta en un debate",
   replyAction: "Responder",
   viewThread: "Ver el hilo",

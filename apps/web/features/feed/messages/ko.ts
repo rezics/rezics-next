@@ -112,6 +112,7 @@ export default {
   becauseYouFollow: insert('{{name}}님을 팔로우하고 있어서', { name: String }),
   someone: '회원', aboutWork: insert('“{{title}}”에 대해', { title: String }),
   spoilerTag: '스포일러', spoilerAnnounced: '작가가 스포일러로 표시했어요.', showSpoiler: '스포일러 보기',
+  markSpoiler: '스포일러로 표시', markSpoilerHelp: '답글을 보여 주기 전에 독자에게 경고를 보여 줍니다.',
   replyIn: '토론의 답글', replyAction: '답글', viewThread: '토론에서 보기', replied: '답글을 남김',
   moreDiscussions: plural({ other: insert('이 작품에 관한 토론 {{count}}개 더') }, { count: asValue(number()) }),
   backTo: insert('{{realm}}로 돌아가기', { realm: String }),

@@ -1,10 +1,11 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
+import { Checkbox } from '@rezics/ui/checkbox';
 import { cn } from '@rezics/ui/utils';
 import { CircleAlertIcon, LockIcon, LogInIcon, UsersRoundIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
@@ -63,7 +64,9 @@ export function ReplyComposer({
 }) {
   const { t, locale, actingSubject, signInHref } = useFeed();
   const router = useRouter();
+  const spoilerId = useId();
   const [text, setText] = useState('');
+  const [spoiler, setSpoiler] = useState(false);
   const [open, setOpen] = useState(inline);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<'idle' | 'failed' | 'refused' | 'posted'>('idle');
@@ -86,6 +89,7 @@ export function ReplyComposer({
     progress.current = null;
     setText('');
     setChosen(null);
+    setSpoiler(false);
     if (storageKey) {
       try {
         const draft: unknown = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
@@ -97,6 +101,7 @@ export function ReplyComposer({
         ) {
           setText(draft.body);
           if ('language' in draft && typeof draft.language === 'string') setChosen(draft.language);
+          if ('spoiler' in draft && draft.spoiler === true) setSpoiler(true);
           if (
             'progress' in draft &&
             draft.progress &&
@@ -110,7 +115,7 @@ export function ReplyComposer({
               sentParent.current = { ...parent, revisionId: draft.parentRevision };
             }
           }
-          if (draft.body || progress.current) setOpen(true);
+          if (draft.body || ('spoiler' in draft && draft.spoiler === true) || progress.current) setOpen(true);
         }
       } catch {
         /* An unavailable or malformed local draft does not prevent writing. */
@@ -122,13 +127,14 @@ export function ReplyComposer({
   useEffect(() => {
     if (!storageKey || hydratedKey !== storageKey) return;
     try {
-      if (!text && !progress.current) localStorage.removeItem(storageKey);
+      if (!text && !spoiler && !progress.current) localStorage.removeItem(storageKey);
       else
         localStorage.setItem(
           storageKey,
           JSON.stringify({
             body: text,
             language: chosen,
+            spoiler,
             progress: progress.current,
             parentRevision: sentParent.current.revisionId,
           }),
@@ -136,7 +142,7 @@ export function ReplyComposer({
     } catch {
       /* Local drafts are optional when storage is unavailable. */
     }
-  }, [text, chosen, storageKey, hydratedKey, busy, state]);
+  }, [text, chosen, spoiler, storageKey, hydratedKey, busy, state]);
 
   if (target.mode !== 'open' || !actingSubject) {
     const mode = target.mode === 'open' ? 'unavailable' : target.mode;
@@ -185,6 +191,7 @@ export function ReplyComposer({
     parent: progress.current ? sentParent.current : parent,
     body,
     language,
+    spoiler,
     actingSubject: actingSubject!,
   });
   // Once Main holds the words, they stay as sent until the reply is placed or taken back.
@@ -218,6 +225,7 @@ export function ReplyComposer({
     }
     setText('');
     setChosen(null);
+    setSpoiler(false);
     setState('posted');
     if (!inline) setOpen(false);
     onDone?.();
@@ -257,7 +265,21 @@ export function ReplyComposer({
         className={cn('bg-background', !expanded && 'min-h-11 py-2.5')}
       />
       {expanded ? (
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <>
+          <div className="flex items-start gap-3 text-sm">
+            <Checkbox
+              id={spoilerId}
+              checked={spoiler}
+              disabled={busy || saved}
+              onCheckedChange={(details) => setSpoiler(details.checked === true)}
+              aria-label={t.markSpoiler}
+            />
+            <label htmlFor={spoilerId} className="grid gap-0.5">
+              <span className="font-medium">{t.markSpoiler}</span>
+              <span className="text-muted-foreground">{t.markSpoilerHelp}</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <LanguageSelect
             value={language}
             onChange={setChosen}
@@ -281,6 +303,7 @@ export function ReplyComposer({
               if (progress.current) void target.api().withdraw(input(text), progress.current);
               setText('');
               setChosen(null);
+              setSpoiler(false);
               setOpen(false);
               setState('idle');
               progress.current = null;
@@ -298,7 +321,8 @@ export function ReplyComposer({
           >
             {inline ? t.replyAction : t.comment}
           </Button>
-        </div>
+          </div>
+        </>
       ) : null}
       {state === 'failed' ? (
         <p role="alert" className="flex items-center gap-2 text-destructive-foreground text-sm">

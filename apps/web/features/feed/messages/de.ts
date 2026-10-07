@@ -114,6 +114,8 @@ export default {
   aboutWork: insert("Zu „{{title}}“", { title: String }),
   spoilerTag: "Spoiler",
   spoilerAnnounced: "Der Autor hat diesen Beitrag als Spoiler markiert.",
+  markSpoiler: "Als Spoiler markieren",
+  markSpoilerHelp: "Leserinnen und Leser sehen einen Hinweis, bevor die Antwort erscheint.",
   showSpoiler: "Spoiler anzeigen",
   replyIn: "Antwort in einer Diskussion",
   replyAction: "Antworten",

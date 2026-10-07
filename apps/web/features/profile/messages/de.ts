@@ -74,4 +74,5 @@ export default {
   contributionsLoading: 'Aktivität wird geladen…',
   contributionsFailed: 'Aktivität konnte nicht geladen werden. Versuch es noch einmal.',
   showSpoiler: 'Spoiler anzeigen',
+  spoilerAnnounced: 'Der Autor hat diesen Beitrag als Spoiler markiert.',
 } satisfies ProfileMessages;

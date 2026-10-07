@@ -108,7 +108,7 @@ export const everyKind: FeedItem[] = [
     primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(15, 'cccc')) }, group: { key: 'rainy-day', count: 3,
       actors: [people.aria, people.leo, people.mei] },
     post: { title: '《雨夜书店》第二章：那张旧车票', language: 'zh-Hans',
-      excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。', spoiler: true } as FeedItem['post'],
+      excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。', spoiler: true },
     target: { id: storyId(15, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
       excerpt: '《雨夜书店》第二章：那张旧车票\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' } }),
   // A reply reads as a quoted comment that opens its place in the thread.
@@ -117,6 +117,19 @@ export const everyKind: FeedItem[] = [
     post: { title: null, language: 'zh-Hans', excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' },
     target: { id: storyId(16, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
       excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' } }),
+  // A Japanese reply the author marked. The warning is the label, not words in the text.
+  post(17, { kind: 'reply', realm: realms.fiction, actor: people.aria, score: 2, card: { kind: 'activity' },
+    primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(17, 'cccc')) },
+    post: { title: null, language: 'ja', excerpt: 'エリザベスは手紙を読み返す。', spoiler: true },
+    target: { id: storyId(17, 'dddd'), title: name('高慢と偏見', 'ja'), language: 'ja',
+      excerpt: 'エリザベスは手紙を読み返す。' } }),
+  // A title that says "Spoilers" and is not marked. The words stay visible.
+  post(18, { kind: 'discussion', realm: realms.classics, actor: people.daniel, score: 4, card: { kind: 'activity' },
+    primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(18, 'cccc')) },
+    post: { title: 'Spoilers: a review of spoiler culture', language: 'en',
+      excerpt: 'The title names the subject. The post is not a spoiler.' },
+    target: { id: storyId(18, 'dddd'), title: name('Pride and Prejudice'),
+      excerpt: 'Spoilers: a review of spoiler culture\nThe title names the subject. The post is not a spoiler.' } }),
   // A pick and the Work's own post on one page arrive as one card; the pick is the reason it shows.
   post(8, { kind: 'adoption', realm: realms.classics, actor: people.daniel, card: { kind: 'work' },
     authors: [openLibrary(8, 'Charlotte Brontë')],

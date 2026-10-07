@@ -91,9 +91,12 @@ export type FeedQuery = Static<typeof feedQuery>;
  * a release's version), its opening words and their language. A post that is
  * the Work itself (a new Work, a pick, a prompt) has no title of its own and
  * its words are the Work's. Its type is `kind`; its author is `actor`.
+ * A discussion or reply may carry the author's `spoiler` declaration from
+ * that same body. Absent means they did not mark it; the title never does.
  */
 export const feedPost = t.Object({ title: t.Nullable(t.String({ maxLength: 301 })),
-  excerpt: t.Nullable(t.String({ maxLength: 400 })), language: t.Nullable(t.String()) });
+  excerpt: t.Nullable(t.String({ maxLength: 400 })), language: t.Nullable(t.String()),
+  spoiler: t.Optional(t.Boolean()) });
 export const feedItem = t.Object({ id: readId, kind: feedKind, post: feedPost,
   actor, authors: t.Array(discoveryCredit, { maxItems: 3 }),
   reason: feedReason, reasons: t.Array(feedActivityReason, { maxItems: 8 }),

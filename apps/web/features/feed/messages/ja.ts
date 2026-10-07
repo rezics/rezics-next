@@ -104,6 +104,7 @@ export default {
   becauseYouFollow: insert('{{name}}をフォローしているため', { name: String }),
   someone: 'メンバー', aboutWork: insert('「{{title}}」について', { title: String }),
   spoilerTag: 'ネタバレ', spoilerAnnounced: '作者がネタバレとして指定しました。', showSpoiler: 'ネタバレを表示',
+  markSpoiler: 'ネタバレとしてマーク', markSpoilerHelp: '返信を表示する前に、読者へ注意を示します。',
   replyIn: 'ディスカッションの返信', replyAction: '返信', viewThread: 'スレッドで見る', replied: '返信しました',
   moreDiscussions: plural({ other: insert('この作品についてのディスカッションがほか{{count}}件') }, { count: asValue(number()) }),
   backTo: insert('{{realm}}に戻る', { realm: String }),

@@ -309,8 +309,16 @@ export const Discussions: Story = {
       localizedPath(spaceHref(realms.fiction.id.slice(-36), 'community', ['discussions']), 'en'),
     );
 
-    const reply = article(canvas, 'A reply in a discussion');
+    const replies = canvas.getAllByRole('article', { name: 'A reply in a discussion' });
+    const reply = replies.find((item) => within(item).queryByText(/第一章很短/))!;
     await expect(reply).toHaveTextContent('第一章很短');
+    const japanese = replies.find((item) => within(item).queryByText('Spoiler'))!;
+    await expect(japanese).not.toHaveTextContent('手紙を読み返す');
+    await userEvent.click(within(japanese).getByRole('button', { name: 'Show spoiler' }));
+    await expect(japanese).toHaveTextContent('手紙を読み返す');
+    const unmarked = article(canvas, 'Spoilers: a review of spoiler culture');
+    await expect(unmarked).toHaveTextContent('The title names the subject');
+    await expect(within(unmarked).queryByRole('button', { name: 'Show spoiler' })).toBeNull();
     await expect(within(reply).getByRole('link', { name: 'View in thread' })).toHaveAttribute(
       'href',
       localizedPath(
@@ -325,7 +333,7 @@ export const Discussions: Story = {
 };
 
 const declaredSpoiler = (item: (typeof everyKind)[number]) =>
-  item.kind === 'discussion' && (item.post as { spoiler?: boolean }).spoiler === true;
+  (item.kind === 'discussion' || item.kind === 'reply') && item.post.spoiler === true;
 
 /** A declared spoiler stays veiled on Home until the reader asks. */
 export const DiscussionsVeiled: Story = {
@@ -789,7 +797,8 @@ async function expectRhythm(canvasElement: HTMLElement) {
   // The bottom padding, then the one-pixel divider.
   await expect(bennet.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom).toBe(13);
   // Chinese words in an English page keep the CJK line.
-  const words = within(article(canvas, 'A reply in a discussion')).getByText(/第一章很短/);
+  const words = within(canvas.getAllByRole('article', { name: 'A reply in a discussion' })
+    .find((item) => within(item).queryByText(/第一章很短/))!).getByText(/第一章很短/);
   await expect(style(words).lineHeight).toBe('27px');
 }
 

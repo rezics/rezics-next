@@ -1,8 +1,10 @@
 'use client';
 
-import { communityHref, threadPath } from '../feed/discussion.ts';
+import { communityHref, markedSpoiler, threadPath } from '../feed/discussion.ts';
 
-import { Button } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
+import { cn } from '@rezics/ui/utils';
+import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -13,8 +15,22 @@ import type { ProfileMessages } from './messages.ts';
 
 type Kind = 'posts' | 'comments';
 interface Item { reply: string; realm: string; parent: string | null; time: string;
-  title: string | null; excerpt: string }
+  title: string | null; excerpt: string; spoiler?: boolean }
 export type ContributionPage = { items: Item[]; nextCursor: string | null };
+
+/** The excerpt stays out of the page until the reader asks, as a feed card veils a declared spoiler. */
+function SpoilerExcerpt({ text, showSpoiler, announced }: { text: string; showSpoiler: string; announced: string }) {
+  const [shown, setShown] = useState(false);
+  if (shown) return <MarkdownBody text={text} showSpoiler={showSpoiler}
+    className="line-clamp-3 text-sm/relaxed [overflow-wrap:anywhere]" />;
+  return <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <EyeOffIcon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+    <span className="text-muted-foreground">{announced}</span>
+    <button type="button" onClick={() => setShown(true)}
+      className={cn(buttonVariants({ variant: 'outline', size: 'xs', pill: true }), 'h-6')}>
+      <EyeIcon aria-hidden="true" />{showSpoiler}</button>
+  </div>;
+}
 
 export function ProfileContributions({ agent, actingSubject, locale, messages, children, load }: {
   agent: string; actingSubject: string | null; locale: UiLocale; messages: ProfileMessages;
@@ -64,8 +80,10 @@ export function ProfileContributions({ agent, actingSubject, locale, messages, c
                 {item.title || (kind === 'comments' ? t.comment : t.post)}</Link>
               <time dateTime={item.time} className="text-muted-foreground text-xs">
                 {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(item.time))}</time>
-              {item.excerpt ? <MarkdownBody text={item.excerpt} showSpoiler={t.showSpoiler}
-                className="line-clamp-3 text-sm/relaxed [overflow-wrap:anywhere]" /> : null}
+              {item.excerpt ? markedSpoiler(item.spoiler)
+                ? <SpoilerExcerpt text={item.excerpt} showSpoiler={t.showSpoiler} announced={t.spoilerAnnounced} />
+                : <MarkdownBody text={item.excerpt} showSpoiler={t.showSpoiler}
+                  className="line-clamp-3 text-sm/relaxed [overflow-wrap:anywhere]" /> : null}
             </li>)}</ol> : <p className="text-muted-foreground">{kind === 'posts' ? t.noPosts : t.noComments}</p>}
         {page && (cursor || page.nextCursor) ? <div className="flex justify-between gap-3">
           {cursor ? <Button variant="outline" onClick={() => setCursor(undefined)}>{t.firstPage}</Button>

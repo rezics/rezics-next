@@ -35,7 +35,9 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
       response: { 200: t.Object({ profile: t.Literal('agent-realm-contributions-v1'),
         kind: t.Union([t.Literal('posts'), t.Literal('comments')]),
         items: t.Array(t.Object({ reply: t.String(), realm: t.String(), parent: t.Nullable(t.String()),
-          time: t.String(), title: t.Nullable(t.String()), excerpt: t.String() }),
+          time: t.String(), title: t.Nullable(t.String()), excerpt: t.String(),
+          /** The author's declaration. Absent when they did not mark it; the title never supplies it. */
+          spoiler: t.Optional(t.Boolean()) }),
         { maxItems: PROFILE_CONTRIBUTION_COST.pageSize }),
         nextCursor: t.Nullable(t.String()), sourcePosition: t.Object({ datasetId: t.String(),
           dataEpoch: t.String(), sequence: t.String() }) }), ...workReadProblems },

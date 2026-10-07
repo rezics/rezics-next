@@ -68,8 +68,14 @@ describe('Community Realms', () => {
     expect([...languages('prompt-craft')]).toEqual(expect.arrayContaining(['en', 'ja']));
     expect(languages('classics-circle').has('en')).toBe(true);
     const titles = communityThreads.map(thread => thread.body.split('\n')[0]!);
-    expect(titles.some(title => title.includes('【剧透】'))).toBe(true);
-    expect(titles.some(title => title.startsWith('Spoilers'))).toBe(true);
+    expect(titles.some(title => title.includes('【剧透】') || title.startsWith('Spoilers'))).toBe(false);
+    expect(communityThreads.some(thread => thread.spoiler === true && thread.language === 'zh-Hans'
+      && thread.body.startsWith('《雨夜书店》'))).toBe(true);
+    expect(communityThreads.some(thread => thread.spoiler === true && thread.language === 'en'
+      && thread.body.startsWith('Chapter 35:'))).toBe(true);
+    expect(communityThreads.some(thread => thread.replies.some(reply => reply.language === 'ja' && reply.spoiler === true
+      && !reply.body.includes('ネタバレ')))).toBe(true);
+    expect(JSON.stringify(communityRealms)).not.toContain('【剧透】');
     expect(titles.some(title => /[?？]$/.test(title))).toBe(true);
     expect(communityThreads.some(thread => thread.realm === 'mc-modding' && thread.work === 'lumen-fabric'
       && /Iris/.test(thread.body))).toBe(true);
