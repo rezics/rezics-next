@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } fr
 import { join, resolve } from 'node:path';
 import { Client, Pool, type PoolClient } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
-import { createMainApp } from '../../../services/main/src/app.ts';
+import { healthRoutes } from '../../../services/main/src/routes/health.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
   '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -36,8 +36,10 @@ import { checkedMetadataState, metadataDigest, type MetadataIntent } from
   '../../../services/main/src/modules/work/metadata-schema.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, readGraphRecoverySource,
-  RestoreLineageConflict, type RecoveryCoverage } from
+  readRestoredGraphReleaseProof, RestoreLineageConflict, type RecoveryCoverage,
+  type RestoredGraphReleaseExpectation } from
   '../../../services/main/src/modules/work/restore-lineage.ts';
+import { accessStateTables } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { assertContentRecoveryCoverage } from
   '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -220,6 +222,8 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
       }
     }
     if (!coverage) throw new Error('fixture coverage unavailable');
+    const capturedAccess = await accessStateTables(access);
+    expect(capturedAccess.state).toEqual({ count: coverage.accessStateCount, digest: coverage.accessStateDigest });
     const recoveryKey = 'c8'.repeat(32);
     const authority = { sealedCoverage: JSON.stringify(sealRecoveryPayload(coverage, recoveryKey,
       'graph-recovery-coverage')), hmacKey: recoveryKey };
@@ -272,7 +276,9 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
       const environment = { fuseki: graphClient, lineage, objectDirectory: restoredDirectory };
       const dependencies = { environment,
         account: { verify: async () => { throw new Error('held restore has no authentication server'); } }, access: registry };
-      const main = createMainApp(graphClient, dependencies);
+      // A recovery owner stays quiesced until the outer outcome is durable.
+      // Use the actual readiness routes without starting unrelated workers.
+      const main = healthRoutes(graphClient, dependencies);
       const ready = () => main.handle(new Request('http://main.local/health/ready'));
       expect((await ready()).status).toBe(503);
       await expect(workRead(dependencies, new Request('http://main.local/v1/works'), {}, async () => 'private bytes'))
@@ -282,13 +288,13 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
       return { restored, graph, restoredDirectory, generation, ready, environment, accessUrl: urls.access };
     };
     const withBorrowed = async <T>(restored: RestoredOwners,
-      work: (clients: BorrowedRestoreClients) => Promise<T>): Promise<T> => {
+      work: (clients: BorrowedRestoreClients) => Promise<T>, accessIsolation: 'read committed' | 'repeatable read' = 'read committed'): Promise<T> => {
       const relayClient = await relay.connect(), accessClient = await restored.access.connect();
       const transaction = async (client: PoolClient) => (await client.query<{ id: string }>(
         'SELECT txid_current()::text AS id')).rows[0]!.id;
       try {
         await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-        await accessClient.query('BEGIN');
+        await accessClient.query(`BEGIN ISOLATION LEVEL ${accessIsolation.toUpperCase()}`);
         await relayClient.query("SET LOCAL statement_timeout = '5s'");
         await accessClient.query("SET LOCAL statement_timeout = '5s'");
         const relayId = await transaction(relayClient), accessId = await transaction(accessClient);
@@ -375,7 +381,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     heldGraph.heldErasure.accessHoldGeneration = String(BigInt(heldCopy.generation) + 1n);
     await expect(withBorrowed(heldCopy.restored, clients => reconcileRestoredErasures(relay, heldCopy.restored,
       { operationId: randomUUID(), consumer, replay: true, authority }, clients)))
-      .rejects.toThrow('captured Access generation or held graph cut changed');
+      .rejects.toThrow('restored Access recovery generation changed');
     heldGraph.heldErasure.accessHoldGeneration = heldCopy.generation;
     const capturedSequence = cut.priorSequence;
     cut.priorSequence = String(BigInt(capturedSequence) + 1n);
@@ -667,7 +673,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
           await interrupted.restored.access.query('DROP TRIGGER IF EXISTS erasure_custody_release_interruption ON access.recovery_fence');
           await interrupted.restored.access.query('DROP FUNCTION access.erasure_custody_release_interruption()');
         }
-        // Exact released-graph owner readers are pending. Retry honestly remains denied.
+        // Without the durable caller's exact native expectation, retry stays closed.
         let retryCallbacks = 0;
         await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
           interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
@@ -680,6 +686,115 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
           FROM access.recovery_fence WHERE id = true`)).rows[0])
           .toEqual({ open: false, generation: interrupted.generation });
         expect((await interrupted.ready()).status).toBe(503);
+        await assertDurableReconciliation(relayObserver, prior.reconciliationId);
+        const main = { streamScope: coverage.relay.streamScope, dataEpoch: coverage.relay.dataEpoch,
+          sequence: coverage.relay.sequence };
+        const graphRelease: RestoredGraphReleaseExpectation = { lineage: interruptedNext,
+          restoreCutover: interruptedCut.restoreCutover,
+          saved: { dataEpoch: interruptedCut.priorDataEpoch, graphSequence: interruptedCut.priorSequence, main },
+          effective: { dataEpoch: coverage.priorDataEpoch, graphSequence: coverage.priorSequence, main } };
+        expect(await readRestoredGraphReleaseProof(interruptedGraph.fuseki, graphRelease))
+          .toMatchObject({ receipt: { dataEpoch: interruptedNext.dataEpoch, sequence: '0' } });
+        // Every denial leaves the native effect committed and Access captured/closed.
+        await withBorrowed(interrupted.restored, async clients => {
+          const options = { clients, graphRelease, beforeAccessRelease: async () => { retryCallbacks++; } };
+          await expect(releaseErasureRestoreHold(relay, interrupted.restored, randomUUID(),
+            interrupted.generation, authority, options)).rejects.toThrow('restore is not reconciled');
+          await expect(releaseErasureRestoreHold(relay, interrupted.restored, prior.reconciliationId,
+            String(BigInt(interrupted.generation) + 1n), authority, options))
+            .rejects.toThrow('captured erasure generation');
+          await expect(releaseErasureRestoreHold(relay, interrupted.restored, prior.reconciliationId,
+            interrupted.generation, authority, { ...options, graphRelease: { ...graphRelease,
+              saved: { ...graphRelease.saved, graphSequence: String(BigInt(interruptedCut.priorSequence) + 1n) } } }))
+            .rejects.toThrow('expectation differs from the captured restore');
+          for (const corruption of ['authority', 'journal', 'record', 'source'] as const) {
+            await clients.relayClient.query('SAVEPOINT released_denial');
+            try {
+              if (corruption === 'authority') await clients.relayClient.query(`UPDATE relay.current_authority_coverage
+                SET coverage_generation = coverage_generation + 1 WHERE id = true`);
+              if (corruption === 'journal' || corruption === 'record') {
+                const table = corruption === 'journal' ? 'erasure' : 'owner_reconciliation';
+                await clients.relayClient.query(`ALTER TABLE relay.${table} DISABLE TRIGGER USER`);
+                if (corruption === 'journal') await clients.relayClient.query(`UPDATE relay.erasure
+                  SET request_digest = $2 WHERE id = $1`, [erase.erasureId, 'b'.repeat(64)]);
+                else await clients.relayClient.query(`UPDATE relay.owner_reconciliation
+                  SET outcome_digest = $2 WHERE id = $1`, [prior.reconciliationId, 'b'.repeat(64)]);
+                await clients.relayClient.query(`ALTER TABLE relay.${table} ENABLE TRIGGER USER`);
+              }
+              if (corruption === 'source') await changeEvidence(clients.relayClient);
+              await expect(releaseErasureRestoreHold(relay, interrupted.restored, prior.reconciliationId,
+                interrupted.generation, authority, options)).rejects.toBeInstanceOf(ErasureRestoreHold);
+            } finally { await clients.relayClient.query('ROLLBACK TO SAVEPOINT released_denial'); }
+          }
+        });
+        expect(retryCallbacks).toBe(0);
+        expect((await interruptedObserver.query(`SELECT open, generation::text AS generation
+          FROM access.recovery_fence WHERE id = true`)).rows[0])
+          .toEqual({ open: false, generation: interrupted.generation });
+        expect((await interrupted.ready()).status).toBe(503);
+        const retainedShape = readFileSync(join(interrupted.restoredDirectory, shapeDigest));
+        unlinkSync(join(interrupted.restoredDirectory, shapeDigest));
+        try {
+          await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+            interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+            { clients, graphRelease }))).rejects.toThrow('custody is unavailable or divergent');
+        } finally { writeFileSync(join(interrupted.restoredDirectory, shapeDigest), retainedShape); }
+        await withBorrowed(interrupted.restored, async clients => {
+          await clients.accessClient.query("INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1::uuid,'https://changed-authority.test',$1::uuid::text)",
+            [randomUUID()]);
+          await expect(releaseErasureRestoreHold(relay, interrupted.restored, prior.reconciliationId,
+            interrupted.generation, authority, { clients, graphRelease })).rejects.toThrow('current retained authority');
+          await clients.accessClient.query('ROLLBACK TO SAVEPOINT caller_access');
+        });
+        expect(await accessStateTables(interrupted.restored.access)).toEqual(capturedAccess);
+        await withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+          interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+          { clients: { ...clients, graphRelease }, beforeAccessRelease: async () => { retryCallbacks++; } }));
+        const releasedGeneration = String(BigInt(interrupted.generation) + 1n);
+        expect((await interruptedObserver.query(`SELECT open, generation::text AS generation
+          FROM access.recovery_fence WHERE id = true`)).rows[0])
+          .toEqual({ open: true, generation: releasedGeneration });
+        expect((await interrupted.ready()).status).toBe(200);
+        expect(retryCallbacks).toBe(0);
+        expect(interruptedSends).toBe(1);
+        expect(interruptedOutcomes).toEqual(['committed']);
+        await assertDurableReconciliation(relayObserver, prior.reconciliationId);
+        await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+          interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+          { clients, graphRelease }), 'repeatable read')).rejects.toThrow('fresh READ COMMITTED view');
+        // The actual CAS appends derived invalidations. A caller needs durable
+        // post-CAS authority evidence before an interrupted outer outcome can
+        // complete; the original signed row digest cannot excuse these changes.
+        const completedAccess = await accessStateTables(interrupted.restored.access);
+        const invalidations = ['access.also_enjoyed_source_change', 'access.discovery_source_change'];
+        expect(completedAccess.catalogDigest).toBe(capturedAccess.catalogDigest);
+        expect(completedAccess.excluded).toEqual(capturedAccess.excluded);
+        for (const table of invalidations) expect(completedAccess.tables[table]!.count)
+          .toBe(String(BigInt(capturedAccess.tables[table]!.count) + 1n));
+        expect(Object.fromEntries(Object.entries(completedAccess.tables).filter(([table]) => !invalidations.includes(table))))
+          .toEqual(Object.fromEntries(Object.entries(capturedAccess.tables).filter(([table]) => !invalidations.includes(table))));
+        // The denial remains read-only at captured+1; this trigger rejects CAS.
+        await interrupted.restored.access.query(`CREATE FUNCTION access.erasure_custody_no_second_release()
+          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+          RAISE EXCEPTION 'already released Access must not be updated'; END $$`);
+        try {
+          await interrupted.restored.access.query(`CREATE TRIGGER erasure_custody_no_second_release
+            BEFORE UPDATE ON access.recovery_fence FOR EACH ROW
+            EXECUTE FUNCTION access.erasure_custody_no_second_release()`);
+          await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+            interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+            { clients, graphRelease, beforeAccessRelease: async () => { retryCallbacks++; } })))
+            .rejects.toThrow('current retained authority');
+        } finally {
+          await interrupted.restored.access.query('DROP TRIGGER IF EXISTS erasure_custody_no_second_release ON access.recovery_fence');
+          await interrupted.restored.access.query('DROP FUNCTION access.erasure_custody_no_second_release()');
+        }
+        expect(retryCallbacks).toBe(0);
+        expect(interruptedSends).toBe(1);
+        expect((await interruptedObserver.query(`SELECT open, generation::text AS generation
+          FROM access.recovery_fence WHERE id = true`)).rows[0])
+          .toEqual({ open: true, generation: releasedGeneration });
+        expect(await readRestoredGraphReleaseProof(interruptedGraph.fuseki, graphRelease)).not.toBeNull();
         await assertDurableReconciliation(relayObserver, prior.reconciliationId);
       } finally {
         interrupted.graph.remove();

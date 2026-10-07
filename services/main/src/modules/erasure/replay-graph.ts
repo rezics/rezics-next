@@ -1,21 +1,27 @@
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type GraphLineage } from '../work/activate.ts';
+import { readRestoredGraphReleaseProof, type RestoredGraphReleaseExpectation } from '../work/restore-lineage.ts';
 import {
   graphErasureSuppressed,
   heldGraphLineageSequence,
   probeHeldGraphErasureProof,
+  readGraphErasureProof,
   suppressGraphContentRevisions,
   suppressHeldGraphContentRevisions,
   type HeldGraphErasureCut,
   type HeldGraphErasureReplay,
+  type ReleasedGraphErasureProof,
 } from './graph.ts';
 
 /** One indexed control lookup binds replay and release to the restored dataset. */
 export async function graphLineageSequence(
   fuseki: FusekiClient,
   lineage: GraphLineage,
-  held?: HeldGraphErasureCut,
+  held?: HeldGraphErasureCut | RestoredGraphReleaseExpectation,
 ): Promise<string | null> {
+  if (held !== undefined && 'lineage' in held)
+    return lineage.dataEpoch === held.lineage.dataEpoch && lineage.routingEpoch === held.lineage.routingEpoch
+      && await readRestoredGraphReleaseProof(fuseki, held) ? '0' : null;
   if (held !== undefined)
     return lineage.dataEpoch === held.dataEpoch && lineage.routingEpoch === held.routingEpoch
       ? heldGraphLineageSequence(fuseki, held)
@@ -102,8 +108,16 @@ export async function assertGraphErasure(
   erasureId: string,
   epoch: string,
   revisionIds: readonly string[],
-  held?: HeldGraphErasureReplay,
+  held?: HeldGraphErasureReplay | ReleasedGraphErasureProof,
 ): Promise<boolean> {
+  if (held !== undefined && 'released' in held) {
+    try {
+      await readGraphErasureProof(fuseki, lineage, erasureId, epoch, revisionIds, held);
+      return true;
+    } catch {
+      return false;
+    }
+  }
   if (held !== undefined) {
     try {
       if ((await graphLineageSequence(fuseki, lineage, held.cut)) !== '0') return false;

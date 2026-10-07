@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
+import { readRestoredGraphReleaseProof, type RestoredGraphReleaseExpectation,
+  type RestoredGraphReleaseProof, type RecoveryCoverage } from '../work/restore-lineage.ts';
 import { lockAccessRecoveryFenceForRelease, releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -175,10 +178,13 @@ export interface RestoredOwners {
 export interface BorrowedRestoreClients {
   relayClient: PoolClient;
   accessClient: PoolClient;
+  /** Exact native expectation from the caller's durable qualified restore. */
+  graphRelease?: RestoredGraphReleaseExpectation;
 }
 
 async function withRestoreClients<T>(relay: Pool, restored: RestoredOwners, borrowed: BorrowedRestoreClients | undefined,
-  work: (clients: BorrowedRestoreClients) => Promise<T>): Promise<T> {
+  work: (clients: BorrowedRestoreClients, released?: RestoredGraphReleaseProof) => Promise<T>,
+  release?: { graphRelease?: RestoredGraphReleaseExpectation; fenceGeneration: string }): Promise<T> {
   return relayTransaction(relay, async relayClient => {
     const isolation = (await relayClient.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation;
     if (isolation !== 'read committed') throw new ErasureRestoreHold('retained relay needs a fresh READ COMMITTED view');
@@ -190,7 +196,7 @@ async function withRestoreClients<T>(relay: Pool, restored: RestoredOwners, borr
     const accessClient = borrowed?.accessClient ?? await restored.access.connect();
     try {
       if (!borrowed) {
-        await accessClient.query('BEGIN');
+        await accessClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
         await accessClient.query("SET LOCAL lock_timeout = '2s'");
         await accessClient.query("SET LOCAL statement_timeout = '5s'");
       }
@@ -200,13 +206,39 @@ async function withRestoreClients<T>(relay: Pool, restored: RestoredOwners, borr
       if ((await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== accessBefore) {
         throw new ErasureRestoreHold('restored Access transaction is not held');
       }
-      if (fence?.open !== false) throw new ErasureRestoreHold('restored Access recovery fence is open');
       const graph = restored.graph, held = graph?.heldErasure;
-      if (graph && held && (fence.generation !== held.accessHoldGeneration
-        || await graphLineageSequence(graph.fuseki, graph.lineage, held.cut) !== '0')) {
+      let released: RestoredGraphReleaseProof | undefined;
+      if (release?.graphRelease) {
+        if (!graph || !held || release.fenceGeneration !== held.accessHoldGeneration) {
+          throw new ErasureRestoreHold('released graph requires its captured erasure generation');
+        }
+        const expected = release.graphRelease;
+        if (expected.lineage.dataEpoch !== graph.lineage.dataEpoch
+          || expected.lineage.routingEpoch !== graph.lineage.routingEpoch
+          || expected.restoreCutover !== held.cut.restoreCutover
+          || expected.saved.dataEpoch !== held.cut.priorDataEpoch
+          || expected.saved.graphSequence !== held.cut.priorSequence) {
+          throw new ErasureRestoreHold('native release expectation differs from the captured restore');
+        }
+        released = await readRestoredGraphReleaseProof(graph.fuseki, expected) ?? undefined;
+      }
+      const generation = release?.graphRelease ? release.fenceGeneration : held?.accessHoldGeneration;
+      if (!fence || (fence.open === true
+        ? !released || fence.generation !== (BigInt(release!.fenceGeneration) + 1n).toString()
+        : fence.open !== false || generation !== undefined && fence.generation !== generation)) {
+        throw new ErasureRestoreHold('restored Access recovery generation changed');
+      }
+      // Open-owner retries must observe changes committed before this fence
+      // lock. A pre-lock repeatable-read snapshot cannot prove current authority.
+      if (fence.open && (await accessClient.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation
+        !== 'read committed') {
+        throw new ErasureRestoreHold('released Access needs a fresh READ COMMITTED view');
+      }
+      if (graph && held && (fence.generation !== held.accessHoldGeneration && !released
+        || !released && await graphLineageSequence(graph.fuseki, graph.lineage, held.cut) !== '0')) {
         throw new ErasureRestoreHold('captured Access generation or held graph cut changed');
       }
-      const result = await work({ relayClient, accessClient });
+      const result = await work({ relayClient, accessClient }, released);
       if (!borrowed) await accessClient.query('COMMIT');
       return result;
     } catch (error) {
@@ -366,7 +398,8 @@ async function requireRecordedItem(relay: PoolClient, id: string, item: Item): P
 /** Authenticate the complete existing immutable outcome, not merely its state
  * or a cached summary. The retained operation is never created by release. */
 async function authenticateRestoreReconciliation(relay: PoolClient, restored: RestoredOwners,
-  accessClient: PoolClient, id: string, fenceGeneration: string, authority: RetainedAuthorityCoverage): Promise<void> {
+  accessClient: PoolClient, id: string, fenceGeneration: string, authority: RetainedAuthorityCoverage,
+  released?: RestoredGraphReleaseProof): Promise<void> {
   const record = (await relay.query<{ operation_id: string; kind: string; scope: string; state: string;
     hold_reason: string | null; consumer: string | null; coverage_generation: string;
     erasure_epoch: string | null; request_digest: string; outcome_digest: string; completed_at: Date | null }>(
@@ -441,7 +474,7 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
     throw new ErasureRestoreHold('prior reconciliation belongs to another restored owner cut');
   }
   if (graph.sequence !== await graphLineageSequence(restored.graph!.fuseki,
-    restored.graph!.lineage, restored.graph!.heldErasure?.cut)) {
+    restored.graph!.lineage, released?.expectation ?? restored.graph!.heldErasure?.cut)) {
     throw new ErasureRestoreHold('prior reconciliation graph position changed');
   }
   await requireRecordedItem(relay, id, { owner: 'access', kind: 'authority_fence',
@@ -450,8 +483,10 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
     requestDigest: record.request_digest, consumer: record.consumer,
     coverageGeneration: record.coverage_generation, erasureEpoch: record.erasure_epoch }));
   await requireRecordedItem(relay, id, graphRestoreBinding(restored)!);
-  try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient); }
-  catch { throw new ErasureRestoreHold('restored Access differs from current retained authority'); }
+  try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient,
+    released ? { graphRelease: released.expectation, fuseki: restored.graph!.fuseki,
+      capturedGeneration: fenceGeneration } : undefined); }
+  catch (error) { throw new ErasureRestoreHold('restored Access differs from current retained authority', { cause: error }); }
 }
 
 /** Record the journal epoch a quiesced capture covered on the retained coverage head. */
@@ -694,9 +729,33 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   });
 }
 
+/** After native release, verify the existing erased Library closure without
+ * replaying cleanup against an already-open owner copy. */
+async function assertErasedLibraryImportsAbsent(content: Pool, access: PoolClient, principals: string[]): Promise<void> {
+  let after = '';
+  for (;;) {
+    const agents = (await access.query<{ agent_id: string }>(`SELECT DISTINCT a.agent_id FROM access.agent_provision a
+      JOIN access.principal p ON p.id = a.principal_id WHERE a.principal_id = ANY($1::uuid[])
+      AND a.agent_kind = 'person' AND NOT p.active
+      AND EXISTS (SELECT 1 FROM access.outbox o WHERE o.principal_id = p.id AND o.kind = 'account.deletion_fenced')
+      AND a.agent_id > $2 ORDER BY a.agent_id LIMIT 100`, [principals, after])).rows;
+    if (agents.length) {
+      const tables = ['library_import_file', 'library_import_source', 'library_import_session_effect', 'library_import_upload_command',
+        'library_import_review_command', 'library_import_step', 'library_import_row_outcome', 'library_import_batch',
+        'library_import_placement', 'library_import_daily_budget', 'library_copy', 'library_copy_loan_command'];
+      const remaining = await content.query(tables.map(table =>
+        `SELECT 1 FROM reader.${table} WHERE agent = ANY($1::text[])`).join(' UNION ALL ') + ' LIMIT 1',
+      [agents.map(agent => agent.agent_id)]);
+      if (remaining.rowCount !== 0) throw new ErasureRestoreHold('restored Library still has erased principal data');
+      after = agents[agents.length - 1]!.agent_id;
+    }
+    if (agents.length < 100) return;
+  }
+}
+
 /** Recheck the live restored copies immediately before releasing their Access fence. */
 async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners,
-  accessClient: PoolClient, reconciliationId: string): Promise<void> {
+  accessClient: PoolClient, reconciliationId: string, released?: RestoredGraphReleaseProof): Promise<void> {
   if (!restored.graph || !restored.objects) {
     throw new ErasureRestoreHold('restored graph and exact object custody are required');
   }
@@ -715,7 +774,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
     LIMIT 1`);
   if (unsupported.rowCount) throw new ErasureRestoreHold('an erasure owner is not reconciled');
   if (restored.graph && await graphLineageSequence(restored.graph.fuseki,
-    restored.graph.lineage, restored.graph.heldErasure?.cut) === null) {
+    restored.graph.lineage, released?.expectation ?? restored.graph.heldErasure?.cut) === null) {
     throw new ErasureRestoreHold('restored graph lineage is unavailable');
   }
   let after = '0';
@@ -737,12 +796,13 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
           entry.id, entry.epoch, entry.refs);
         if (held) await requireRecordedItem(relay, reconciliationId,
           originalEvidenceItem(entry.id, entry.epoch, entry.refs, held));
-        if (entry.refs.length > 64 || !await assertGraphErasure(
-          restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs, held)) {
+        const proof = released && held ? { released: released.expectation, captured: held } : held;
+        if (released && !held || entry.refs.length > 64 || !await assertGraphErasure(
+          restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs, proof)) {
           throw new ErasureRestoreHold('restored graph still exposes an erased revision');
         }
         try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
-          restored.graph.lineage, entry.id, entry.epoch, entry.refs, held); }
+          restored.graph.lineage, entry.id, entry.epoch, entry.refs, proof); }
         catch { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable'); }
       }
       if (!await publicationSupersessionsMatch(restored.content, entry.refs,
@@ -789,7 +849,12 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       const active = await accessClient.query(`SELECT 1 FROM access.principal
         WHERE id = ANY($1::uuid[]) AND active = true LIMIT 1`, [principals]);
       if (active.rowCount) throw new ErasureRestoreHold('restored Access principal is active');
-      await eraseLibraryImportsForPrincipals(restored.content,accessClient,principals);
+      if (released) {
+        await assertErasedLibraryImportsAbsent(restored.content, accessClient, principals);
+      } else {
+        await eraseLibraryImportsForPrincipals(restored.content,accessClient,principals);
+        await assertErasedLibraryImportsAbsent(restored.content, accessClient, principals);
+      }
     }
     if (entries.length < 1000) break;
     after = entries[entries.length - 1]!.epoch;
@@ -806,27 +871,71 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
   reconciliationId: string, fenceGeneration: string,
   authority: RetainedAuthorityCoverage, options?: {
     clients?: BorrowedRestoreClients; beforeAccessRelease?: () => Promise<void>;
+    graphRelease?: RestoredGraphReleaseExpectation;
   }): Promise<void> {
-  await withRestoreClients(relay, restored, options?.clients, async ({ relayClient: client, accessClient }) => {
-    await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);
+  if (!/^(0|[1-9][0-9]{0,18})$/.test(fenceGeneration)) {
+    throw new ErasureRestoreHold('captured Access recovery generation is invalid');
+  }
+  const supplied = options?.graphRelease ?? options?.clients?.graphRelease;
+  const graphRelease = supplied ? structuredClone(supplied) : undefined;
+  if (graphRelease) {
+    let coverage: RecoveryCoverage;
+    try { coverage = openRecoveryPayload<RecoveryCoverage>(authority.sealedCoverage,
+      authority.hmacKey, 'graph-recovery-coverage'); }
+    catch { throw new ErasureRestoreHold('signed release authority is unavailable'); }
+    const effective = graphRelease.effective;
+    if (effective.dataEpoch !== coverage.priorDataEpoch || effective.graphSequence !== coverage.priorSequence
+      || effective.main && (effective.main.streamScope !== coverage.relay?.streamScope
+        || effective.main.dataEpoch !== coverage.relay.dataEpoch
+        || effective.main.sequence !== coverage.relay.sequence)) {
+      throw new ErasureRestoreHold('native release cut differs from signed current authority');
+    }
+  }
+  await withRestoreClients(relay, restored, options?.clients, async ({ relayClient: client, accessClient }, released) => {
+    const fence = (await accessClient.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0]!;
+    if (fence.open === false) await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);
+    else {
+      const leases = await accessClient.query(`SELECT 1 FROM access.search_read_lease WHERE state = 'delivering'
+        UNION ALL SELECT 1 FROM access.download_read_lease WHERE state = 'delivering' LIMIT 1`);
+      if (leases.rowCount !== 0) throw new ErasureRestoreHold('Access delivery is still active');
+    }
     await authenticateRestoreReconciliation(client, restored, accessClient,
-      reconciliationId, fenceGeneration, authority);
+      reconciliationId, fenceGeneration, authority, released);
     try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, client); }
     catch (error) {
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;
     }
-    await assertRestoredErasuresCurrent(client, restored, accessClient, reconciliationId);
-    if (restored.graph?.heldErasure && !options?.beforeAccessRelease) {
+    await assertRestoredErasuresCurrent(client, restored, accessClient, reconciliationId, released);
+    if (restored.graph?.heldErasure && !released && !options?.beforeAccessRelease) {
       throw new ErasureRestoreHold('held graph release callback is required');
     }
     const relayTransactionId = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
     const accessTransactionId = (await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
-    await options?.beforeAccessRelease?.();
+    // A committed native release is only reread. It cannot authorize another
+    // held mutation, and a completed Access effect needs no callback or CAS.
+    if (!released) await options?.beforeAccessRelease?.();
     if ((await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== relayTransactionId
       || (await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== accessTransactionId) {
       throw new ErasureRestoreHold('owner release callback changed a held transaction');
     }
-    await releaseAccessRecoveryFence(accessClient, fenceGeneration);
-  });
+    const expectation = released?.expectation ?? graphRelease;
+    if (expectation) {
+      const currentRelease = await readRestoredGraphReleaseProof(restored.graph!.fuseki, expectation);
+      if (!currentRelease) throw new ErasureRestoreHold('native graph release evidence changed before Access completion');
+      if (!released) {
+        // Native and PG commit independently. Revalidate the same durable
+        // qualification and remaining closure after the first native effect.
+        await authenticateRestoreReconciliation(client, restored, accessClient,
+          reconciliationId, fenceGeneration, authority, currentRelease);
+        await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, client);
+        await assertRestoredErasuresCurrent(client, restored, accessClient, reconciliationId, currentRelease);
+      }
+    }
+    if (fence.open === false) await releaseAccessRecoveryFence(accessClient, fenceGeneration);
+    if (expectation && !(await readRestoredGraphReleaseProof(restored.graph!.fuseki, expectation))) {
+      throw new ErasureRestoreHold('native graph release evidence changed after Access completion');
+    }
+  }, { graphRelease, fenceGeneration });
 }

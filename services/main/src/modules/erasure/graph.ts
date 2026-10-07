@@ -6,6 +6,10 @@ import {
   type CommandEnvelope,
 } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, DATASET, RV, hash, iri, lit, type GraphLineage } from '../work/activate.ts';
+import {
+  readRestoredGraphReleaseProof,
+  type RestoredGraphReleaseExpectation,
+} from '../work/restore-lineage.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 
 const PUBLIC = 'urn:rezics:search:public';
@@ -276,8 +280,35 @@ export async function readGraphErasureProof(
   erasureId: string,
   epoch: string,
   revisionIds: readonly string[],
-  held?: HeldGraphErasureProof,
+  held?: HeldGraphErasureProof | ReleasedGraphErasureProof,
 ): Promise<GraphSuppressionProof> {
+  if (held !== undefined && 'released' in held) {
+    const input = checkedHeld(held.captured, erasureId, epoch, revisionIds);
+    const release = structuredClone(held.released);
+    if (
+      lineage.dataEpoch !== input.cut.dataEpoch ||
+      lineage.routingEpoch !== input.cut.routingEpoch ||
+      release.lineage.dataEpoch !== input.cut.dataEpoch ||
+      release.lineage.routingEpoch !== input.cut.routingEpoch ||
+      release.restoreCutover !== input.cut.restoreCutover ||
+      release.saved.dataEpoch !== input.cut.priorDataEpoch ||
+      release.saved.graphSequence !== input.cut.priorSequence
+    )
+      throw new GraphErasureConflict('released graph differs from the captured erasure cut');
+    const released = await readRestoredGraphReleaseProof(fuseki, release);
+    if (!released)
+      throw new GraphErasureConflict('exact native graph release proof is unavailable');
+    const proof = await probeErasureRecords(fuseki, erasureId, epoch, input, '');
+    // The maintenance command binds the saved cut and captured Access generation.
+    // A newer effective release cut cannot make its original receipt pre-cut.
+    const needsReplay = input.original.dataEpoch !== input.cut.priorDataEpoch ||
+      BigInt(input.original.sequence) > BigInt(input.cut.priorSequence);
+    if (!(await readRestoredGraphReleaseProof(fuseki, released.expectation)))
+      throw new GraphErasureConflict('native graph release evidence changed during erasure proof read');
+    if (!proof.original || (needsReplay && !proof.own))
+      throw new GraphErasureUnavailable('exact released graph suppression proof is unavailable');
+    return { ...input.original };
+  }
   if (held !== undefined) {
     if (lineage.dataEpoch !== held.cut.dataEpoch || lineage.routingEpoch !== held.cut.routingEpoch)
       throw new GraphErasureConflict('held graph lineage differs');
@@ -401,6 +432,12 @@ export interface HeldGraphErasureProof {
   accessHoldGeneration: string;
   revisionIds: readonly string[];
   original: GraphSuppressionProof;
+}
+
+/** Read-only evidence for an interrupted release; never authorizes held replay. */
+export interface ReleasedGraphErasureProof {
+  released: RestoredGraphReleaseExpectation;
+  captured: HeldGraphErasureProof;
 }
 
 export interface HeldGraphErasureReplay extends HeldGraphErasureProof {
@@ -562,9 +599,17 @@ async function heldIndexedUnits(
   targets: readonly string[],
   cut: HeldGraphErasureCut,
 ): Promise<HeldErasureUnit[]> {
+  return erasureIndexedUnits(fuseki, targets, heldGraphErasureControl(cut));
+}
+
+async function erasureIndexedUnits(
+  fuseki: FusekiClient,
+  targets: readonly string[],
+  control: string,
+): Promise<HeldErasureUnit[]> {
   const result = await fuseki.query(
     `PREFIX rv: <${RV}> SELECT DISTINCT ?graph ?unit WHERE {
-    ${heldGraphErasureControl(cut)}
+    ${control}
     VALUES ?target { ${targets.map(iri).join(' ')} }
     VALUES ?graph { ${iri(PUBLIC)} ${iri(PRIVATE)} }
     VALUES ?reference { rv:revision rv:contentRevision }
@@ -668,19 +713,48 @@ export async function probeHeldGraphErasureProof(
   capturedOriginalOnly = false,
 ): Promise<GraphSuppressionProof | null> {
   const input = checkedHeld(held, erasureId, epoch, revisionIds);
-  const expected = heldRecords(input, erasureId, epoch);
   if ((await heldGraphLineageSequence(fuseki, input.cut)) !== '0')
     throw new GraphErasureConflict('graph is not held at the captured cut');
+  const { original, own } = await probeErasureRecords(
+    fuseki, erasureId, epoch, input, heldGraphErasureControl(input.cut),
+  );
+  if ((await heldGraphLineageSequence(fuseki, input.cut)) !== '0')
+    throw new GraphErasureConflict('held graph changed during proof read');
+  if (!original) {
+    if (
+      input.original.dataEpoch === input.cut.priorDataEpoch &&
+      BigInt(input.original.sequence) <= BigInt(input.cut.priorSequence)
+    )
+      throw new GraphErasureConflict('original proof is missing from its captured source cut');
+    return null;
+  }
+  return (requireReplayReceipt && !own) || (capturedOriginalOnly && own)
+    ? null
+    : { ...input.original };
+}
+
+/** Both held and released reads inspect the same complete bounded subjects. */
+async function probeErasureRecords(
+  fuseki: FusekiClient,
+  erasureId: string,
+  epoch: string,
+  input: ReturnType<typeof checkedHeld>,
+  control: string,
+): Promise<{ original: boolean; own: boolean }> {
+  const expected = heldRecords(input, erasureId, epoch);
+  const maximum = [...expected.values()].reduce((count, record) => count + record.fields.size, 0);
   const result = await fuseki.query(
     `PREFIX rv: <${RV}> SELECT ?graph ?subject ?predicate ?object WHERE {
-    ${heldGraphErasureControl(input.cut)}
+    ${control}
     VALUES (?graph ?subject) { ${[...expected.values()].map((record) => `(${iri(record.graph)} ${iri(record.subject)})`).join(' ')} }
     GRAPH ?graph { ?subject ?predicate ?object }
-  } LIMIT ${2 * input.targets.length + 20}`,
+  } LIMIT ${maximum + 1}`,
     65_536,
   );
   const rows = result.results?.bindings;
   if (!rows) throw new GraphErasureUnavailable('held erasure proof rows are unavailable');
+  if (rows.length > maximum)
+    throw new GraphErasureConflict('erasure proof inventory exceeds its exact bound');
   const found = new Map<string, Set<string>>();
   for (const row of rows) {
     if (row.graph?.type !== 'uri' || row.subject?.type !== 'uri' || row.predicate?.type !== 'uri')
@@ -708,22 +782,10 @@ export async function probeHeldGraphErasureProof(
   const own = found.has(`${GRAPHS.receipts}\0${input.receipt}`);
   if ((original || own) && (targetCount !== input.targets.length || !original))
     throw new GraphErasureConflict('held receipt lacks complete original proof');
-  const units = await heldIndexedUnits(fuseki, input.targets, input.cut);
+  const units = await erasureIndexedUnits(fuseki, input.targets, control);
   if ((original || own) && units.length)
     throw new GraphErasureConflict('held erasure retains indexed references');
-  if ((await heldGraphLineageSequence(fuseki, input.cut)) !== '0')
-    throw new GraphErasureConflict('held graph changed during proof read');
-  if (!original) {
-    if (
-      input.original.dataEpoch === input.cut.priorDataEpoch &&
-      BigInt(input.original.sequence) <= BigInt(input.cut.priorSequence)
-    )
-      throw new GraphErasureConflict('original proof is missing from its captured source cut');
-    return null;
-  }
-  return (requireReplayReceipt && !own) || (capturedOriginalOnly && own)
-    ? null
-    : { ...input.original };
+  return { original, own };
 }
 
 /** Exact native wire bytes; callers authorize the entry before invoking this signer. */

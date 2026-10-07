@@ -1,7 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
-import type { RecoveryCoverage } from '../work/restore-lineage.ts';
+import { readRestoredGraphReleaseProof, type RecoveryCoverage,
+  type RestoredGraphReleaseExpectation } from '../work/restore-lineage.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { assertCurrentRecoveryCoverageHead } from '../outbox/recovery-coverage-head.ts';
 
 export class ErasureAuthorityCoverageConflict extends Error {}
@@ -19,7 +21,10 @@ export interface RetainedAuthorityCoverage {
  * before this operation returns or rejects.
  */
 export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, access: Pool,
-  consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient): Promise<void> {
+  consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient,
+  release?: { fuseki: FusekiClient; graphRelease: RestoredGraphReleaseExpectation;
+    capturedGeneration: string }): Promise<void> {
+  const graphRelease = release ? structuredClone(release.graphRelease) : undefined;
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence.sealedCoverage, evidence.hmacKey, 'graph-recovery-coverage'); }
@@ -45,9 +50,23 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
     || current.coverage_generation !== head.generation) {
     throw new ErasureAuthorityCoverageConflict('a newer retained authority capture supersedes this restore');
   }
-  const fence = (await (accessClient ?? access).query<{ open: boolean }>(
-    'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0];
-  if (fence?.open !== false) {
+  const fence = (await (accessClient ?? access).query<{ open: boolean; generation: string }>(
+    'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+  if (release) {
+    const effective = graphRelease!.effective;
+    if (!accessClient || !/^(0|[1-9][0-9]{0,18})$/.test(release.capturedGeneration)
+      || effective.dataEpoch !== coverage.priorDataEpoch
+      || effective.graphSequence !== coverage.priorSequence
+      || effective.main && (effective.main.dataEpoch !== coverage.relay.dataEpoch
+        || effective.main.sequence !== coverage.relay.sequence
+        || effective.main.streamScope !== coverage.relay.streamScope)
+      || !(await readRestoredGraphReleaseProof(release.fuseki, graphRelease!))) {
+      throw new ErasureAuthorityCoverageConflict('native release differs from signed retained authority');
+    }
+  }
+  if (!fence || (fence.open === true
+    ? !release || fence.generation !== (BigInt(release.capturedGeneration) + 1n).toString()
+    : fence.open !== false || release && fence.generation !== release.capturedGeneration)) {
     throw new ErasureAuthorityCoverageConflict('restored Access recovery fence is open');
   }
   const [outbox, state] = accessClient
@@ -56,5 +75,8 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
   if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest
     || state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
     throw new ErasureAuthorityCoverageConflict('restored Access authority differs from retained coverage');
+  }
+  if (release && !(await readRestoredGraphReleaseProof(release.fuseki, graphRelease!))) {
+    throw new ErasureAuthorityCoverageConflict('native release changed during authority comparison');
   }
 }
