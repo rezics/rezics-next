@@ -44,14 +44,15 @@ test('Initial policy facts preserve creation settings and bind the command recei
         const creation = { ...input, settings: { ...input.settings, visibility, reviewMode,
           reviewRequired: reviewMode === 'mandatory', selfJoin } };
         const facts = initialRealmPolicyFacts(creation, input.actingSubject, receipt);
-        expect(facts.revision).toBe(`urn:rezics:realm-policy:${input.policyReceipt}`);
-        expect(facts.current).toContain(`rv:realmPolicyHead <${facts.revision}>`);
+        expect(facts.revision).toBe(receipt);
+        expect(facts.current).toContain(`rv:realmPolicyHead <${receipt}>`);
         expect(facts.current).toContain(`rv:reviewPolicy <${reviewPolicy(reviewMode)}>`);
         expect(facts.current).toContain(`rv:visibility "${visibility}" ; rv:reviewMode "${reviewMode}"`);
         expect(facts.current).toContain(`rv:disclosure rv:${visibility === 'private' ? 'Private' : 'Public'}`);
         expect(facts.current).toContain('rv:listing "listed"');
         expect(facts.current).toContain(`rv:historyVisibility "everything" ; rv:admissionMode "${selfJoin ? 'open' : 'invitation'}"`);
-        expect(facts.current).toContain(`<${facts.revision}> rv:receipt <${receipt}> .`);
+        expect(facts.current).not.toContain('urn:rezics:realm-policy:');
+        expect(facts.current).not.toContain('rv:receipt');
         expect(Object.keys(facts).sort()).toEqual(['current', 'revision']);
         expect(facts.current).not.toContain('rv:OperationReceipt');
         expect(facts.current).not.toContain('rv:outcome');
@@ -62,6 +63,8 @@ test('Initial policy facts preserve creation settings and bind the command recei
   expect(initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewRequired: false } }, input.actingSubject, receipt)
     .current).toContain('rv:reviewMode "open"');
   expect(() => initialRealmPolicyFacts({ ...input, policyReceipt: '' }, input.actingSubject, receipt)).toThrow(RealmAdminInvalid);
+  expect(() => initialRealmPolicyFacts(input, input.actingSubject, 'urn:rezics:realm-policy:00000000-0000-8000-8000-000000000003'))
+    .toThrow(RealmAdminInvalid);
   expect(() => initialRealmPolicyFacts({ ...input, settings: { ...input.settings, reviewMode: 'open' } }, input.actingSubject, receipt))
     .toThrow('Review mode and reviewRequired disagree');
 });

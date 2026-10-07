@@ -18,6 +18,8 @@ import { readRealmAccessSettings } from '../src/modules/access/realm-management-
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale, RealmAdminUnavailable } from '../src/modules/realm-admin/contract.ts';
 import { realmRulesRef } from '../src/modules/governance/rules.ts';
 import { spaceCreationReceiptIri } from '../src/modules/space/create.ts';
+import { policyHead } from '../src/modules/space/policy.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -126,7 +128,7 @@ test('Created open self-join Realms accept eligible member submissions immediate
       if (sql.includes('SELECT ?draft WHERE')) return bindings({ draft: candidate.selectedDraft });
       if (sql.includes('SELECT ?space ?realmRevision')) return bindings({ space: h.space,
         disclosure: `${RV}Public`, visibility: 'public', mode,
-        head: sameRevision ? facts.revision : `urn:rezics:realm-policy:${randomUUID()}`,
+        head: sameRevision ? facts.revision : `urn:rezics:receipt:${'c'.repeat(64)}`,
         listing: 'listed', history: 'everything', admission: 'open' });
       if (sql.includes('SELECT ?head WHERE')) return { results: { bindings: [] } };
       if (sql.includes('?outcome') && sql.includes('?digest')) {
@@ -159,6 +161,106 @@ test('Created open self-join Realms accept eligible member submissions immediate
       [memberId, key])).rows[0]).toEqual({ state: 'sealed', graph_outcome: 'succeeded' });
     expect(await submissions.submit(memberPrincipal, h.realm, candidate, key)).toEqual({ ...result, replayed: true });
   }
+}, 60_000);
+
+test('An ordinary policy publication after creation admits submissions at its new head', async () => {
+  const h = await fixture();
+  h.input.settings = { visibility: 'public', reviewRequired: false, reviewMode: 'open',
+    whoMaySubmit: 'members', selfJoin: true };
+  await h.management.initializeCreated(h.principal, h.input, h.env);
+  const created = initialRealmPolicyFacts(h.input, h.space, spaceCreationReceiptIri(h.admissionId));
+  const memberPrincipal = { issuer: 'https://accounts.test', subject: randomUUID() };
+  const memberId = randomUUID(), member = id(), scope = `submission:submit:${h.realm}`;
+  await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+    [memberId, memberPrincipal.issuer, memberPrincipal.subject]);
+  await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [member]);
+  await pool.query(`INSERT INTO access.membership
+    (id,kind,owner_subject,member_subject,state,generation,policy_revision,terms_revision,consent_reference)
+    SELECT gen_random_uuid(),'realm',$1,$2,'joined',1,revision,terms_revision,'member-consent'
+    FROM access.membership_policy WHERE kind='realm' AND owner_subject=$1`, [h.realm, member]);
+  await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
+  await pool.query(`INSERT INTO access.permission_grant
+    (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+    VALUES (gen_random_uuid(),$1,$1,$2,'submission.submit',clock_timestamp()+interval '1 hour')`, [member, scope]);
+  await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+    VALUES (gen_random_uuid(),$1,$2,'submission.submit',clock_timestamp()+interval '1 hour')`, [memberId, member]);
+  expect(await withRealmPermit(pool, memberPrincipal, member, h.realm, 'submission', async permit => permit))
+    .toMatchObject({ revision: created.revision, reviewMode: 'open', member: true });
+
+  let published = created.revision;
+  let mode = 'open';
+  const candidate = { actingSubject: member, kind: 'contribution' as const, work: id(), mainVersion: id(),
+    contribution: id(), publicationDecision: id(), selectedDraft: id(), correctionOf: null };
+  const bindings = (values: Record<string, string>) => ({ results: { bindings: [Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [name, { type: value.startsWith('http') ? 'uri' : 'literal', value }]))] } });
+  const submit = async (key: string) => {
+    let adoptionReads = 0;
+    const selection = id();
+    const env = { ...h.env, fuseki: { query: async (sql: string) => {
+      if (sql.includes('ASK') && sql.includes('rv:restoreHold')) return { boolean: true };
+      if (sql.includes('SELECT ?draft WHERE')) return bindings({ draft: candidate.selectedDraft });
+      if (sql.includes('SELECT ?space ?realmRevision')) return bindings({ space: h.space,
+        disclosure: `${RV}Public`, visibility: 'public', mode, head: published,
+        listing: 'listed', history: 'everything', admission: 'open' });
+      if (sql.includes('SELECT ?head WHERE')) return { results: { bindings: [] } };
+      if (sql.includes('?outcome') && sql.includes('?digest')) {
+        const ticket = (await pool.query(`SELECT id,request_digest,authority_epoch::text FROM access.admission
+          WHERE principal_id=$1 AND action='submission.submit' AND idempotency_key=$2`, [memberId, key])).rows[0]!;
+        const receipt = `urn:rezics:receipt:${hash(`${ticket.id}\0${receiptFamilyFor('submission.submit')}`)}`;
+        const terminal = { outcome: `${RV}Succeeded`, digest: ticket.request_digest, id: ticket.id,
+          epoch: ticket.authority_epoch, scope, dataEpoch: h.env.lineage.dataEpoch, sequence: '2' };
+        if (sql.includes('?reason')) {
+          adoptionReads++;
+          const operation = (await pool.query('SELECT adoption FROM access.realm_submission_operation WHERE admission_id=$1',
+            [ticket.id])).rows[0]!;
+          expect(operation.adoption.input.policy).toEqual({ revision: published, mode });
+          return bindings({ ...terminal, work: candidate.work, main: candidate.mainVersion, realm: h.realm,
+            slot: realmSelectionSlotIri(h.realm, candidate.mainVersion), contribution: candidate.contribution,
+            decision: candidate.publicationDecision, draft: candidate.selectedDraft, selection, unit: id(), language: 'en' });
+        }
+        return bindings(terminal);
+      }
+      throw new Error(`Unexpected graph boundary read: ${sql}`);
+    } } } as unknown as WorkActivationEnvironment;
+    const result = await new RealmSubmissionStore(pool, new AccessAdmissionRegistry(pool), env)
+      .submit(memberPrincipal, h.realm, candidate, key);
+    expect(adoptionReads).toBe(1);
+    expect(result.submission).toMatchObject({ state: 'accepted', selection });
+    return result;
+  };
+  await submit(randomUUID());
+
+  let committed = false;
+  const updates: string[] = [];
+  const publisher = { lineage: h.env.lineage, objectDirectory: '', fuseki: {
+    query: async (sql: string) => {
+      if (sql.includes('ASK')) return { boolean: committed };
+      if (sql.includes('SELECT ?space ?spaceProfile ?realmProfile')) return { results: { bindings: [{
+        space: { type: 'uri', value: h.space } }] } };
+      throw new Error(`Unexpected policy publication read: ${sql}`);
+    },
+    commandHealth: async () => ({ moduleVersion: '', instanceId: '', publicSearchWriteEpoch: '',
+      publicSearchWriteActive: false,
+      profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) }),
+    commandWithReceipt: async (envelope: { update: string }) => {
+      updates.push(envelope.update);
+      committed = true;
+    },
+  } } as unknown as WorkActivationEnvironment;
+  const changed = await h.management.changeSettings(h.principal, h.realm, {
+    actingSubject: h.actor, expectedGeneration: '1', expectedRulesRevision: '1', reason: 'Trust members',
+    settings: { ...h.input.settings, reviewMode: 'trusted-members', rules: [rule] },
+  }, randomUUID(), publisher);
+  published = policyHead(changed.receiptId);
+  mode = 'trusted-members';
+  expect(updates).toHaveLength(1);
+  expect(updates[0]).toContain(`rv:realmPolicyHead <${published}>`);
+  expect(updates[0]).toContain(`<${published}> a rv:OperationReceipt`);
+  expect(published).toMatch(/^urn:rezics:realm-policy:[0-9a-f-]{36}$/);
+  expect(published).not.toBe(created.revision);
+  expect(await withRealmPermit(pool, memberPrincipal, member, h.realm, 'submission', async permit => permit))
+    .toMatchObject({ revision: published, reviewMode: 'trusted-members', member: true });
+  await submit(randomUUID());
 }, 60_000);
 
 afterAll(async () => {
@@ -215,10 +317,12 @@ async function fixture(sealed = true) {
         expect(sql).toContain(`rv:requestDigest "${digest}"`);
         expect(sql).toContain(`rv:admissionId "${admissionId}"`);
         const facts = initialRealmPolicyFacts(input, space, receipt);
+        expect(facts.revision).toBe(receipt);
         expect(sql).toContain(facts.current.replaceAll(`<${space}>`, '?space'));
-        expect(sql).toContain(`<${facts.revision}> rv:receipt <${receipt}> .`);
+        expect(sql).not.toContain('rv:receipt');
+        expect(sql).not.toContain('urn:rezics:realm-policy:');
         expect(sql.match(/a rv:OperationReceipt/g)).toHaveLength(1);
-        expect(sql).not.toContain(`<${facts.revision}> a rv:OperationReceipt`);
+        expect(sql).toContain(`<${receipt}> a rv:OperationReceipt`);
       }
       expect(sql).toContain('rv:restoreHold true');
       expect(sql).toContain('LIMIT 2');

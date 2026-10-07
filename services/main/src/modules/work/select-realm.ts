@@ -65,6 +65,10 @@ export function realmSelectionSlotIri(realm: string, mainVersion: string): strin
   return `urn:rezics:realm-selection:${hash(`${realm}\0${mainVersion}`)}`;
 }
 
+/** Creation addresses the head as urn:rezics:receipt:<sha256>. A later publication
+ * still addresses it as urn:rezics:realm-policy:<uuid>, that command's graph receipt. */
+const publishedPolicyRevision = /^(?:urn:rezics:realm-policy:[0-9a-f-]{36}|urn:rezics:receipt:[0-9a-f]{64})$/;
+
 export function realmSelectionDigest(input: SelectRealmLocalInput): string {
   if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
     || !nativeId.test(input.work) || !nativeId.test(input.mainVersion)
@@ -74,7 +78,7 @@ export function realmSelectionDigest(input: SelectRealmLocalInput): string {
     || !nativeId.test(input.actingSubject)
     || (input.expectedSelectionHead !== null && !nativeId.test(input.expectedSelectionHead))
     || (input.selectionBasis !== 'realm-manager-review' && (input.selectionBasis !== 'realm-policy'
-      || !input.policy || !/^urn:rezics:realm-policy:[0-9a-f-]{36}$/.test(input.policy.revision)
+      || !input.policy || !publishedPolicyRevision.test(input.policy.revision)
       || !['trusted-members','open'].includes(input.policy.mode)))) {
     throw new InvalidRealmSelectionInput('invalid Realm selection');
   }

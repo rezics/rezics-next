@@ -12,6 +12,10 @@ import { unerased } from '../work/public-patterns.ts';
 const PROFILE = 'https://rezics.com/definition/realm-reply-placement-v1';
 const NONE = 'urn:rezics:none';
 const CONTENT_REVISION = 'urn:rezics:content:revision:';
+/** A public profile revision is https://rezics.com/id/<uuid>. A Realm policy
+ * head is the creation receipt or a later urn:rezics:realm-policy receipt. */
+const realmPolicyHead = (revision: string) =>
+  revision.startsWith('urn:rezics:realm-policy:') || /^urn:rezics:receipt:[0-9a-f]{64}$/.test(revision);
 
 export function replySlotIri(realm: string, reply: string): string {
   return `urn:rezics:realm-reply-slot:${hash(`${realm}\0${reply}`)}`;
@@ -328,7 +332,7 @@ export async function placeReply(env: WorkActivationEnvironment,
           || EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
             ${iri(preparation.rootTarget)} ?rootPredicate ?rootValue } })
         ${preparation.directPolicyRevision ? `GRAPH ${iri(GRAPHS.current)} {
-          ${iri(preparation.realm)} ${preparation.directPolicyRevision.startsWith('urn:rezics:realm-policy:')
+          ${iri(preparation.realm)} ${realmPolicyHead(preparation.directPolicyRevision)
             ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} }` : ''}
         ${parentGuard}
         FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(expectedHead ?? NONE)})
@@ -344,7 +348,7 @@ export async function placeReply(env: WorkActivationEnvironment,
   if (!terminal && preparation.directPolicyRevision) {
     const currentPolicy = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.current)} { ${iri(preparation.realm)}
-        ${preparation.directPolicyRevision.startsWith('urn:rezics:realm-policy:')
+        ${realmPolicyHead(preparation.directPolicyRevision)
           ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} } }`);
     if (currentPolicy.boolean !== true) throw new RealmReplyStale('Realm reply policy changed');
   }

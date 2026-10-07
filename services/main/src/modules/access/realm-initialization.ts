@@ -8,15 +8,15 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
 import { saveRealmAccessSettings, saveRealmSettings } from './realm-management-settings.ts';
 import { spaceCreationReceiptIri } from '../space/create.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { policyHead, reviewPolicy } from '../space/policy.ts';
+import { reviewPolicy } from '../space/policy.ts';
 
 export interface RealmInitializationInput {
   realm: string;
   actingSubject: string;
   creationKey: string;
   creationDigest: string;
-  /** Stable creation-bound UUID for Access delivery and the policy head.
-   * The graph command's receipt IRI is supplied separately to the facts helper. */
+  /** Access receipt UUID (migration 1296, `realm_admin_receipt.id`).
+   * The graph policy head is the creation command receipt IRI, not this UUID. */
   policyReceipt: string;
   settings: Omit<RealmSettings, 'rules'>;
   rules?: RealmSettings['rules'];
@@ -27,14 +27,15 @@ export const REALM_INITIALIZATION_COST = { graphReads: 1, graphBytes: 8192,
   statementTimeoutMs: REALM_ADMIN_COST.statementTimeoutMs, lockTimeoutMs: REALM_ADMIN_COST.lockTimeoutMs } as const;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const creationReceipt = /^urn:rezics:receipt:[0-9a-f]{64}$/;
 const scope = (realm: string) => `governance:realm:${realm}`;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)).digest('hex');
 
-/** Embed current in the creation's current graph, with the rv prefix. The
- * policy head refers to the creation command's own receipt; these facts never
- * write a second receipt. The UUID keeps the ordinary policy revision shape. */
+/** Realm policy facts for the creation graph. `revision` is the creation
+ * command receipt (`urn:rezics:receipt:<sha256>`); the Realm points
+ * `rv:realmPolicyHead` at that IRI and these facts add no other node. */
 export function initialRealmPolicyFacts(input: RealmInitializationInput, space: string,
   creationReceiptIri: string): { revision: string; current: string } {
   return initialPolicyFacts(input, iri(space), creationReceiptIri);
@@ -42,15 +43,14 @@ export function initialRealmPolicyFacts(input: RealmInitializationInput, space: 
 
 function initialPolicyFacts(input: RealmInitializationInput, spaceTerm: string, creationReceiptIri: string) {
   if (!uuid.test(input.policyReceipt)) throw new RealmAdminInvalid('Invalid Realm policy receipt');
+  if (!creationReceipt.test(creationReceiptIri)) throw new RealmAdminInvalid('Invalid Realm creation receipt');
   const mode = input.settings.reviewMode ?? (input.settings.reviewRequired ? 'mandatory' : 'open');
   if (input.settings.reviewRequired !== (mode === 'mandatory')) throw new RealmAdminInvalid('Review mode and reviewRequired disagree');
-  const revision = policyHead(input.policyReceipt);
   const current = `${spaceTerm} rv:disclosure rv:${input.settings.visibility === 'private' ? 'Private' : 'Public'} ; rv:listing "listed" .
     ${iri(input.realm)} rv:visibility ${lit(input.settings.visibility)} ; rv:reviewMode ${lit(mode)} ;
       rv:historyVisibility "everything" ; rv:admissionMode ${lit(input.settings.selfJoin ? 'open' : 'invitation')} ;
-      rv:realmPolicyHead ${iri(revision)} ; rv:reviewPolicy ${iri(reviewPolicy(mode))} .
-    ${iri(revision)} rv:receipt ${iri(creationReceiptIri)} .`;
-  return { revision, current };
+      rv:realmPolicyHead ${iri(creationReceiptIri)} ; rv:reviewPolicy ${iri(reviewPolicy(mode))} .`;
+  return { revision: creationReceiptIri, current };
 }
 
 /** Shared with the legacy initializer: enrollment never happens on a replay. */
@@ -179,8 +179,9 @@ export async function initializeCreatedRealm(pool: Pool, principal: VerifiedPrin
         CASE WHEN s.self_join THEN 'open' ELSE p.admission END,true
       FROM access.realm_admin_settings s JOIN access.membership_policy p
         ON p.kind = 'realm' AND p.owner_subject = s.realm WHERE s.realm = $1`, [input.realm, receiptId]);
-    // policy_receipt retains its migration name: it binds the Access delivery
-    // UUID whose graph policy head points to the creation command's receipt.
+    // policy_receipt stays migration 1296's Access receipt UUID. The graph
+    // head is spaceCreationReceiptIri(admission_id), which is not a UUID, so
+    // this column does not store it.
     await client.query(`INSERT INTO access.realm_creation_initialization
       (admission_id,realm,creation_digest,access_revision,policy_receipt) VALUES ($1,$2,$3,1,$4)`,
     [admission.id, input.realm, input.creationDigest, receiptId]);
