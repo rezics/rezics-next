@@ -1,7 +1,6 @@
 -- Disposable physical candidates. RDF remains admission and field authority.
 CREATE TABLE access.template_seek_checkpoint (
-    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-    epoch text NOT NULL, instance text NOT NULL, cursor jsonb, complete boolean NOT NULL DEFAULT false
+    epoch text PRIMARY KEY, instance text NOT NULL, cursor jsonb, complete boolean NOT NULL DEFAULT false
 );
 CREATE TABLE access.template_seek_entity (
     epoch text NOT NULL, graph text NOT NULL, id text COLLATE "C" NOT NULL,

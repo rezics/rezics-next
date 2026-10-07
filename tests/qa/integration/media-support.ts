@@ -312,6 +312,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   };
 
   const stop = async () => {
+    await templateSeek.stopRecovery();
     await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };

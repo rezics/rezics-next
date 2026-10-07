@@ -584,6 +584,7 @@ const app = createMainApp(fuseki, {
 });
 const templatePreparation = templateSeek.backfill(environment.lineage.dataEpoch)
   .catch(error=>{ console.error('Template directory is unavailable',error); });
+void templatePreparation.then(()=>templateSeek.startRecovery(environment.lineage.dataEpoch));
 libraryImport.setDispatch(request => app.handle(request));
 const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
   judgments: new AccessJudgments(pool),
@@ -658,6 +659,7 @@ async function stop(): Promise<void> {
   stopping = true;
   try {
   await templatePreparation;
+  await templateSeek.stopRecovery();
   await occurrenceLabelWorker.stop();
   await statementSeekWorker.stop();
   await realmPolicyRecovery.stop();

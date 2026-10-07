@@ -28,6 +28,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     const header=await stack.call('GET',`/v1/works/${work.work.slice(-36)}`);
     const head=(await header.json() as {revision:string}).revision;
     const ids:string[]=[];
+    const population=300;
     const add=async(index:number)=> {
       const credit=native();ids.push(credit);
       await adoptAuthorCredit(stack.env,{verify:async()=>a.principal},stack.access,
@@ -35,7 +36,15 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
         {work:work.work,credit,revision:native(),expectedHead:head,sourceKey:`/authors/OL${1000+index}A`,sourceRoleKey:null,nativeOrdinal:index%128,actingSubject:a.actor},native(),`credit-${index}`);
     };
     // These are admitted owner writes, not synthetic rows or raw graph updates.
-    for(let index=0;index<170;index++) await add(index);
+    for(let index=0;index<population;index++) await add(index);
+    // Qualify a populated cold directory, including a >256-row native type
+    // continuation. This measured fixture is not a corpus-capacity claim.
+    const rebuild=await stack.templateSeek.backfill(stack.env.lineage.dataEpoch,true);
+    expect(rebuild.entities).toBeGreaterThanOrEqual(population);
+    expect(rebuild.batches).toBeGreaterThan(4);
+    expect(rebuild.elapsedMs).toBeLessThan(600_000);
+    expect((await stack.accessPool.query('SELECT id FROM access.template_seek_entry WHERE epoch=$1 AND anchor=$2 AND type=$3',
+      [stack.env.lineage.dataEpoch,work.work,`${RV}AuthorCredit`])).rowCount).toBe(population);
     const shadow=native(),reported=native();
     let references=[{id:shadow,key:'/authors/OL1000A',ordinal:0},{id:reported,key:'/authors/OL900000A',ordinal:1}];
     let race=false;
@@ -59,7 +68,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     expect(first.items.length).toBe(64);expect(first.nextCursor).toBeString();
     const all=[...first.items];let cursor=first.nextCursor,steps=0;
     while(cursor && steps++<20) {const result=await page(await query('credits',work.work,cursor));all.push(...result.items);cursor=result.nextCursor;}
-    expect(cursor).toBeNull();expect(new Set(all.map(item=>item.id)).size).toBe(171);
+    expect(cursor).toBeNull();expect(new Set(all.map(item=>item.id)).size).toBe(population+1);
     expect(all.map(item=>item.id)).not.toContain(shadow);expect(all.map(item=>item.id)).toContain(reported);
     expect(all.map(item=>item.ordinal)).toEqual([...all.map(item=>item.ordinal)].sort((a,b)=>a!-b!));
     expect((await query('credits',work.work,undefined,{etag})).status).toBe(304);
@@ -80,7 +89,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     await stack.contribution(other.work,a.actor,'ja','Unrelated insertion');
     expect((await query('credits',work.work,first.nextCursor!)).status).toBe(200);
     const before=await page(await query('credits'));
-    await add(170);
+    await add(population);
     expect((await query('credits',work.work,before.nextCursor!)).status).toBe(409);
     race=true;
     const refreshed=await page(await query('credits',work.work,undefined,{size:64}));
@@ -108,7 +117,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     expect((await query('credits',work.work,savedCursor!)).status).toBe(200);
     const delayed:TemplateIndexDelta[]=[];
     stack.fuseki.attachTemplateIndexWriter(async delta=>{delayed.push(delta);});
-    await add(171);await add(172);
+    await add(population+1);await add(population+2);
     expect(delayed).toHaveLength(2);
     await stack.templateSeek.apply(delayed[1]!);
     expect((await query('credits')).status).toBe(503);
@@ -118,7 +127,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     expect((await query('credits')).status).toBe(200);
     stack.fuseki.attachTemplateIndexWriter(delta=>stack.templateSeek.apply(delta));
     const artifact=Bun.env.REZICS_QA_ARTIFACT_DIR;
-    if(artifact) writeFileSync(join(artifact,'template-seek-plans.json'),JSON.stringify({degree:171,unrelated:20000,small,large},null,2));
+    if(artifact) writeFileSync(join(artifact,'template-seek-plans.json'),JSON.stringify({degree:population+1,unrelated:20000,small,large,rebuild},null,2));
     await stack.fuseki.update(`INSERT DATA {GRAPH ${iri(GRAPHS.revisions)} {${iri(head)} a <${RV}ErasedRevision>}}`);
     expect((await query('credits',work.work,undefined,{etag})).status).toBe(404);
   } finally {await stack.stop();}
