@@ -217,6 +217,21 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
         200,
       ),
     ).toMatchObject({ ...decision, replayed: true });
+    await home.json(
+      await call(
+        `/v1/concepts/${short(child.concept)}/spoiler-hints`,
+        {
+          profile: 'concept-spoiler-hint-v1',
+          context: { kind: 'global' },
+          hint: 'not-spoiler',
+          expectedGeneration: '0',
+          actingSubject: author.actor,
+        },
+        'vocabulary-concept-hint',
+        author.token,
+      ),
+      201,
+    );
     const chipsPath = `/v1/works/${short(work.work)}/classifications?language=zh-Hans`;
     const chipsResponse = await call(chipsPath);
     if (chipsResponse.status !== 200) {
