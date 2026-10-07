@@ -22,7 +22,8 @@ test('G-580: public PKCE registration retains Main audience, declared ceiling, c
   expect(client.scope.split(' ').sort()).toEqual(agentRegistrationScopes());
   // Optional private summary contexts can be consented later without allowing writes.
   expect(client.scope.split(' ')).toContain('context:read');
-  expect(client.scope.split(' ')).toContain('wiki:propose');
+  // Closed-group scopes stay registered for first-party clients and are refused here.
+  expect(client.scope.split(' ')).not.toContain('wiki:propose');
   const persisted = await f.pool.query<{ requirePkce: boolean; skipConsent: boolean }>(
     'SELECT "requirePKCE" AS "requirePkce", "skipConsent" FROM "oauthClient" WHERE "clientId" = $1', [client.client_id]);
   // Public clients always require PKCE; the provider stores null for its default.
@@ -48,6 +49,7 @@ test('G-580: registration cannot obtain confidential, workload, trusted, excess 
     { grant_types: ['client_credentials'] },
     { skip_consent: true },
     { scope: 'access:manage' },
+    { scope: 'wiki:propose' },
     { resources: ['https://elsewhere.test'] },
     { subject_type: 'pairwise' },
     ...['logo_uri', 'client_uri', 'policy_uri', 'tos_uri'].map(field => ({ [field]: 'https://unverified.test/value' })),

@@ -4,8 +4,22 @@ import { Elysia, t } from 'elysia';
 import type { Pool } from 'pg';
 import { currentInstallationIn } from './installations.ts';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
+import { consentScopes } from './oauth-scopes.ts';
 import { describeScope } from './scope-descriptions.ts';
 import { accountResponses, consentDecisionView, consentView } from './views.ts';
+
+type ConsentDecisionBody = { oauth_query?: unknown; accept?: unknown; scope?: unknown };
+
+/** A third party that accepts without naming scopes grants only the scopes
+ * the screen offered. An empty offer is a refusal: the provider treats ""
+ * as a scope token and rejects it. First-party decisions stay unchanged. */
+export function thirdPartyConsentDecision(
+  body: ConsentDecisionBody, offered: readonly string[], thirdParty: boolean,
+): ConsentDecisionBody {
+  if (!thirdParty || body.accept !== true || body.scope !== undefined) return body;
+  if (offered.length === 0) return { ...body, accept: false };
+  return { ...body, scope: offered.join(' ') };
+}
 
 const canonicalQuery = (query: URLSearchParams) => new URLSearchParams([...query.entries()]
   .sort(([ak, av], [bk, bv]) => ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0)).toString();
@@ -47,6 +61,7 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
     if (!client || client.disabled || !client.redirectUris.includes(query.get('redirect_uri')!)) {
       throw new AccountProblem('stale_request', 409);
     }
+    const offered = consentScopes(scopes, client.firstParty);
     const id = createHash('sha256').update(canonicalQuery(query)).digest('hex');
     const expiry = new Date(Number(query.get('exp')) * 1000);
     await pool.query(`INSERT INTO rezics_account_pending_consent
@@ -59,7 +74,7 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
     const redirect = new URL(query.get('redirect_uri')!);
     return { id, session, installation, view: { client: { id: clientId, name: client.name || clientId,
       uri: client.uri, icon: client.icon, unverified: !client.firstParty,
-      redirectHost: redirect.host || redirect.protocol }, scopes: scopes.map(describeScope),
+      redirectHost: redirect.host || redirect.protocol }, scopes: offered.map(describeScope),
     resources: query.getAll('resource'), expiresAt: expiry.toISOString() } };
   };
   const decide = async (request: Request, parsed?: unknown): Promise<Response> => {
@@ -80,8 +95,10 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
         WHERE id = $1 AND session_id = $2 AND decided_at IS NULL AND expires_at > now() RETURNING id`,
       [current.id, current.session.session.id]);
       if (!claimed.rowCount) throw new AccountProblem('stale_request', 409);
+      const decision = thirdPartyConsentDecision(body,
+        current.view.scopes.map(item => item.scope), current.view.client.unverified);
       return auth.handler(new Request(new URL('/api/auth/oauth2/consent', request.url), {
-        method: 'POST', headers: request.headers, body: JSON.stringify(body),
+        method: 'POST', headers: request.headers, body: JSON.stringify(decision),
       }));
     } catch (error) { return accountFailure(error); }
   };

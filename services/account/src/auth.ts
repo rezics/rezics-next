@@ -11,7 +11,7 @@ import { AUTH_MODE_CLAIM, CONSENT_CLAIM, CONSENT_GENERATION_CLAIM,
   currentAuthorizationCodeBasis } from './consent-fence.ts';
 import { currentInstallationIn, INSTALLATION_CLAIM } from './installations.ts';
 import { signingKeyOptions } from './signing-keys.ts';
-import { providerScopes, resourceScopes } from './oauth-scopes.ts';
+import { dynamicRegistrationScopes, providerScopes, resourceScopes } from './oauth-scopes.ts';
 import { currentRecoveryGeneration, RECOVERY_GENERATION_CLAIM } from './recovery-claim.ts';
 import type { AccountEmail } from './email.ts';
 import { afterPasskeyAssertion, languageForSignupEmail, localeField, markEmailChangeStep,
@@ -65,7 +65,9 @@ export function agentRegistrationScopes(): string[] {
     }
   }
   if ([...scopes].some(scope => !providerScopes.includes(scope))) throw new Error('Unknown declared agent OAuth scope');
-  return [...scopes].sort();
+  // Closed-group scopes stay registered for first-party clients.
+  // Dynamic registration cannot take them.
+  return dynamicRegistrationScopes([...scopes].sort());
 }
 
 export function accountAuthOptions(config: AccountConfig) {

@@ -59,7 +59,10 @@ test('G-580: official remote MCP client registers, consents with PKCE, reads/sea
     const tools = await client.listTools();
     expect(tools.tools.some(tool => tool.name === 'search_catalogue')).toBe(true);
     expect(tools.tools.some(tool => tool.name === 'read_resource')).toBe(true);
-    expect(tools.tools.map(tool => tool.name).sort()).toEqual(declaredTools.map(tool => tool.name).sort());
+    // A closed platform group stays out of the list until this viewer holds it.
+    expect(tools.tools.map(tool => tool.name).sort()).toEqual(declaredTools
+      .filter(tool => tool.operation['x-rezics-exposure'] === 'public')
+      .map(tool => tool.name).sort());
     const compare = async (tool: string, arguments_: Record<string, unknown>, path: string) => {
       const direct = await fetch(new URL(path, origin), { headers });
       const viaMcp = await client.callTool({ name: tool, arguments: arguments_ });
@@ -119,7 +122,7 @@ test('G-580: native loopback registration completes signed consent and PKCE at i
     const registration = await account.request('/api/auth/oauth2/register', {
       client_name: 'REZICS', application_type: 'native', token_endpoint_auth_method: 'none',
       redirect_uris: [redirect], grant_types: ['authorization_code', 'refresh_token'],
-      scope: 'openid work:read wiki:propose offline_access',
+      scope: 'openid work:read offline_access',
     });
     expect(registration.status, await registration.clone().text()).toBe(201);
     const registered = await registration.json() as { client_id: string; redirect_uris: string[]; application_type: string };
@@ -127,7 +130,7 @@ test('G-580: native loopback registration completes signed consent and PKCE at i
     expect(registered.application_type).toBe('native');
     const verifier = randomBytes(32).toString('base64url'), state = randomUUID();
     const authorize = new URLSearchParams({ client_id: registered.client_id, response_type: 'code',
-      redirect_uri: redirect, scope: 'openid work:read wiki:propose offline_access', state,
+      redirect_uri: redirect, scope: 'openid work:read offline_access', state,
       resource: account.config.resource, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256' });
     const authorized = await account.request(`/api/auth/oauth2/authorize?${authorize}`, undefined, person.cookie);
@@ -153,7 +156,7 @@ test('G-580: native loopback registration completes signed consent and PKCE at i
     const token = await oauth.token(exchange);
     expect(token.status, await token.clone().text()).toBe(200);
     const tokens = await token.json() as { access_token: string; scope: string };
-    expect(tokens.scope.split(' ')).toContain('wiki:propose');
+    expect(tokens.scope.split(' ')).not.toContain('wiki:propose');
     expect(await oauth.introspect(tokens.access_token)).toMatchObject({ active: true });
   } finally { await account.close(); await callback.stop(true); }
 }, 120_000);
