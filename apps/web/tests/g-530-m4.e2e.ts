@@ -225,9 +225,16 @@ for (const [name, viewport, index] of [
 
       // A card's status menu: Read → Currently reading. The dates were never in the request, so Main keeps them.
       await choose(page, /^Read — Shelve/, 'Currently reading');
-      await expect(page.getByRole('heading', { level: 3, name: book.title })).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      const reading = page.getByRole('button', { name: /^Currently reading — Shelve/ });
+      await expect(reading).toBeVisible();
+      await expect(reading).not.toHaveAttribute('aria-busy', 'true', { timeout: 30_000 });
+      // The read shelf is its own read. Reload it until the card that just left is gone.
+      await expect(async () => {
+        await page.goto('/en/library?shelf=read');
+        await expect(page.getByRole('heading', { level: 3, name: book.title })).toHaveCount(0, {
+          timeout: 5_000,
+        });
+      }).toPass({ timeout: 60_000 });
       await recorded(page, book.work, { status: 'reading', ...dates });
 
       // The Work page's status button: Currently reading → Want to read → Read.
