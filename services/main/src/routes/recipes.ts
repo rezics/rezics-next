@@ -61,20 +61,33 @@ const storedNutritionBody = t.Object({
     coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
     provenance: t.Union([t.Literal('declared'), t.Literal('source-stated')]),
     evidence: t.Optional(t.String({ format: 'uri', maxLength: 2048 })) }, { additionalProperties: false })),
-  nutrition: t.Object({ basis: t.Union([t.Literal('per-serving'), t.Literal('whole-recipe')]),
+  /** Omitted keeps the nutrient measures stored at `expectedHead`; supplied replaces them. */
+  nutrition: t.Optional(t.Object({ basis: t.Union([t.Literal('per-serving'), t.Literal('whole-recipe')]),
     inputs: t.Array(t.Object({
       coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
       values: t.Array(t.Object({ nutrient: t.String({ format: 'uri', maxLength: 2048 }),
         unit: t.String({ format: 'uri', maxLength: 2048 }), amount: rational },
       { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }),
-    { maxItems: 512 }) }, { additionalProperties: false }),
+    { maxItems: 512 }) }, { additionalProperties: false })),
 }, { additionalProperties: false });
+const timing = t.Object({ value: rational, unit: t.Optional(t.String({ format: 'uri', maxLength: 2048 })),
+  unitText: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+  coverage: t.Optional(t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')])),
+  provenance: t.Optional(t.Union([t.Literal('declared'), t.Literal('source-stated')])),
+  evidence: t.Optional(t.String({ format: 'uri', maxLength: 2048 })) }, { additionalProperties: false });
+/** Each key omitted keeps the stored timing; `null` clears it; an object replaces it. */
+const timingsBody = t.Object({ expectedHead: ref, actingSubject: ref,
+  preparation: t.Optional(t.Nullable(timing)), cooking: t.Optional(t.Nullable(timing)),
+  total: t.Optional(t.Nullable(timing)) }, { additionalProperties: false });
+const timingKinds = [['preparation', 'preparation-duration'], ['cooking', 'cooking-duration'],
+  ['total', 'total-duration']] as const;
 const importBody = t.Object({ sourceObservation: ref, expectedHead: ref, actingSubject: ref },
   { additionalProperties: false });
 
 export const openApiOperations = {
   '/v1/recipes/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/recipes/{id}/measures': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true }, get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/recipes/{id}/timings': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/scalings': { post: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/{id}/imports': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/exports/schema-org': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
@@ -150,6 +163,19 @@ async function allOccurrences(work: MainWorkDependencies, request: Request, stru
   return { records, pages, pagesRead };
 }
 
+const durationKinds: ReadonlySet<string> = new Set(timingKinds.map(([, kind]) => kind));
+
+/**
+ * The measures stored at `head`. They only seed the measure set the admitted write then replaces,
+ * so a reader without edit authority learns nothing: the write is denied before it answers.
+ */
+async function storedMeasures(work: MainWorkDependencies, request: Request, structure: string,
+  head: string): Promise<RecipeMeasure[]> {
+  await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
+  await work.account.verify(request, ['work:edit']);
+  return (await readStructureMeasures(work.environment, { structure, revision: head })).measures;
+}
+
 export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   if (work.structureObjects) (work.environment as typeof work.environment
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
@@ -189,16 +215,17 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (!body.yield.unit && !body.yield.unitText) {
           return problem(400, 'invalid_recipe_measure', 'Yield requires a unit or unitText');
         }
-        const nutrition = calculateNutrition(body.nutrition.inputs.map(input => ({
+        const structure = `https://rezics.com/id/${params.id}`;
+        const stored = await storedMeasures(work, request, structure, body.expectedHead);
+        const nutrition = body.nutrition ? calculateNutrition(body.nutrition.inputs.map(input => ({
           coverage: input.coverage, values: input.values.map(value => ({
             nutrient: value.nutrient, unit: value.unit,
             amount: { numerator: BigInt(value.amount.numerator),
               denominator: BigInt(value.amount.denominator) },
           })),
-        })), body.nutrition.basis);
-        if (nutrition.nutrients.length + 1 + Number(Boolean(body.servings)) > STRUCTURE_LIMITS.measures) {
-          return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
-        }
+        })), body.nutrition.basis) : null;
+        const kept = stored.filter(item => durationKinds.has(item.kind)
+          || !nutrition && item.kind === 'nutrient');
         const reduced = (value: { numerator: number; denominator: number }) => {
           const result = exactRational(BigInt(value.numerator), BigInt(value.denominator));
           return { numerator: Number(result.numerator), denominator: Number(result.denominator) };
@@ -213,14 +240,59 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             unitText: 'servings', basis: 'whole-recipe' as const, coverage: body.servings.coverage,
             provenance: body.servings.provenance,
             ...(body.servings.evidence ? { evidence: body.servings.evidence } : {}) }] : []),
-          ...nutrition.nutrients.map(item => ({ kind: 'nutrient' as const,
+          ...(nutrition?.nutrients.map(item => ({ kind: 'nutrient' as const,
             nutrient: item.nutrient, unit: item.unit,
             value: { numerator: Number(item.amount.numerator), denominator: Number(item.amount.denominator) },
             basis: nutrition.basis, coverage: nutrition.coverage,
-            provenance: 'computed' as const })),
+            provenance: 'computed' as const })) ?? []),
+          ...kept,
         ];
+        if (measures.length > STRUCTURE_LIMITS.measures) {
+          return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
+        }
         const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
-          request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
+          request, { structure, expectedHead: body.expectedHead,
+            actingSubject: body.actingSubject, idempotencyKey, measures });
+        return Response.json({ structure: result.structure, revision: result.revision,
+          receipt: result.receipt, replayed: result.replayed,
+          ...(result.cost ? { cost: result.cost } : {}),
+          sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch, sequence: result.sequence } },
+        { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/recipes/:id/timings', { params: t.Object({ id: groupUuid }),
+      body: timingsBody, response: { 200: write, 202: problemResult(202), ...problems } },
+    async ({ request, params, body }: { request: Request; params: { id: string };
+      body: Static<typeof timingsBody> }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        if (timingKinds.every(([name]) => body[name] === undefined)) {
+          return problem(400, 'invalid_recipe_measure', 'A timing edit names at least one timing');
+        }
+        const structure = `https://rezics.com/id/${params.id}`;
+        const stored = await storedMeasures(work, request, structure, body.expectedHead);
+        const measures: RecipeMeasure[] = [...stored];
+        for (const [name, kind] of timingKinds) {
+          const edit = body[name];
+          if (edit === undefined) continue;
+          const at = measures.findIndex(item => item.kind === kind);
+          if (at >= 0) measures.splice(at, 1);
+          if (edit === null) continue;
+          if (!edit.unit && !edit.unitText) {
+            return problem(400, 'invalid_recipe_measure', 'A timing requires a unit or unitText');
+          }
+          const value = exactRational(BigInt(edit.value.numerator), BigInt(edit.value.denominator));
+          measures.push({ kind, value: { numerator: Number(value.numerator), denominator: Number(value.denominator) },
+            basis: 'whole-recipe', coverage: edit.coverage ?? 'complete', provenance: edit.provenance ?? 'declared',
+            ...(edit.unit ? { unit: edit.unit } : {}), ...(edit.unitText ? { unitText: edit.unitText } : {}),
+            ...(edit.evidence ? { evidence: edit.evidence } : {}) });
+        }
+        if (measures.length > STRUCTURE_LIMITS.measures) {
+          return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
+        }
+        const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
+          request, { structure, expectedHead: body.expectedHead,
             actingSubject: body.actingSubject, idempotencyKey, measures });
         return Response.json({ structure: result.structure, revision: result.revision,
           receipt: result.receipt, replayed: result.replayed,
