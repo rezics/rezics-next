@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { parseLine, qualifierOf } from './ingredient-line.ts';
 import type { RecipeState } from './model.ts';
 import { createRecipeStore } from './store.ts';
+import { actingSubject, fakeMain as createFixture, id as id2, mainVersion, startRecipe as fixtureStart, work } from './fixtures.ts';
 import type { MainClient } from '../studio/types.ts';
 
 const S = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
@@ -94,4 +95,21 @@ test('one write at a time: an add waits for the person, an edit of the record be
   // The edit in flight was written, then only the newest of the two that waited.
   expect(fake.calls.map(call => (call.operations[0] as { qualifier: { originalText: { value: string } } }).qualifier.originalText.value))
     .toEqual(['2 cups milk', '4 cups milk']);
+});
+
+test('edits of different records made while one is written are each written, the newest per record', async () => {
+  let release: () => void = () => {};
+  const fake = createFixture({ recipe: { ...fixtureStart, nodes: [...fixtureStart.nodes] } });
+  fake.interference.gate = new Promise<void>(resolve => { release = resolve; });
+  const store = createRecipeStore({ work, mainVersion, actingSubject, initial: fixtureStart, main: fake.main });
+  const rename = store.submit({ kind: 'renameSection', occurrence: id2(11), label: 'Batter', language: 'en' });
+  const prep = store.submit({ kind: 'timings', times: { preparation: 15 } });
+  const cook = store.submit({ kind: 'timings', times: { cooking: 25 } });
+  const lost = store.submit({ kind: 'timings', times: { cooking: 30 } });
+  release();
+  expect(await Promise.all([rename, prep, cook, lost])).toEqual([{ kind: 'saved' }, { kind: 'saved' }, { kind: 'saved' }, { kind: 'saved' }]);
+  expect(fake.calls.map(call => call.name)).toEqual(['changes', 'timings', 'timings']);
+  const cooked = store.snapshot().state.measures.find(item => item.kind === 'cooking-duration');
+  expect(cooked?.value.numerator).toBe(30);
+  expect(store.snapshot().state.nodes.find(node => node.occurrence === id2(11))).toMatchObject({ label: { value: 'Batter' } });
 });

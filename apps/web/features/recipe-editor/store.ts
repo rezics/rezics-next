@@ -36,11 +36,16 @@ export interface RecipeStore {
   dispose(): void;
 }
 
-/** The record an edit writes: a second edit of it while the first is in flight replaces the waiting one. */
+/**
+ * The record an edit writes. Edits of different records commute, so each record keeps its newest
+ * waiting edit (a second edit of a record replaces the first); adds, removals and moves have no
+ * key and are never held back.
+ */
 function keyOf(intent: Intent): string | null {
   switch (intent.kind) {
     case 'editLine': case 'editStep': case 'renameSection': return `${intent.kind}:${intent.occurrence}`;
-    case 'yield': case 'timings': return 'measures';
+    case 'yield': return 'yield';
+    case 'timings': return `timings:${Object.keys(intent.times).sort().join(',')}`;
     default: return null;
   }
 }
@@ -64,8 +69,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   let failure: { intent: Intent; refusal: Refusal; id: string } | null = null;
   let snapshot: Snapshot = { state, busy: false, failure: null };
   let disposed = false;
-  let waiting: { intent: Intent; id: string; key: string; resolvers: ((outcome: Outcome) => void)[] } | null = null;
-  let running: string | null = null;
+  type Waiting = { intent: Intent; id: string; key: string; resolvers: ((outcome: Outcome) => void)[] };
+  const waiting = new Map<string, Waiting>();
   const listeners = new Set<() => void>();
   const notify = () => {
     snapshot = { state, busy: writing, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
@@ -106,25 +111,23 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   }
 
   async function drain(first: { intent: Intent; id: string; resolvers: ((outcome: Outcome) => void)[] }) {
-    let current: typeof first | null = first;
+    let current: { intent: Intent; id: string; resolvers: ((outcome: Outcome) => void)[] } | null = first;
     writing = true;
     notify();
     while (current && !disposed) {
-      running = keyOf(current.intent);
       let outcome: Outcome;
       try { outcome = await write(current.intent, current.id); }
       catch { outcome = { kind: 'refused', refusal: { kind: 'unavailable' } }; }
-      // A newer edit of the same record is waiting: this one's callers wait for it instead.
-      const next: typeof waiting = waiting;
-      waiting = null;
-      if (next && !disposed) { next.resolvers.unshift(...current.resolvers); notify(); current = next; continue; }
-      failure = outcome.kind === 'refused' ? { intent: current.intent, refusal: outcome.refusal, id: current.id } : null;
+      failure = outcome.kind === 'refused' ? { intent: current.intent, refusal: outcome.refusal, id: current.id } : failure;
+      if (outcome.kind !== 'refused') failure = null;
       notify();
       for (const resolve of current.resolvers) resolve(outcome);
-      current = null;
+      const [key, next] = waiting.entries().next().value ?? [];
+      if (key !== undefined) waiting.delete(key);
+      current = next ?? null;
     }
-    running = null;
     writing = false;
+    waiting.clear();
     notify();
   }
 
@@ -133,9 +136,9 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     const key = keyOf(intent);
     return new Promise<Outcome>(resolve => {
       if (!writing) { failure = null; void drain({ intent, id, resolvers: [resolve] }); return; }
-      // Only another edit of the record being written may wait; anything else waits for the person, not a queue.
-      if (key && (key === running || key === waiting?.key)) {
-        waiting = { intent, id, key, resolvers: [...(waiting?.resolvers ?? []), resolve] };
+      // An edit of a record waits for the write in flight, the newest per record; anything else waits for the person.
+      if (key) {
+        waiting.set(key, { intent, id, key, resolvers: [...(waiting.get(key)?.resolvers ?? []), resolve] });
         return;
       }
       resolve({ kind: 'busy' });

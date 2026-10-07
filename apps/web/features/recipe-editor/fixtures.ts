@@ -53,7 +53,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   let metadata = { head: start.metadataHead ?? id(700), values: start.details ?? detailsValues };
   let notes = { ...(start.notes ?? noNotes), text: start.notes?.text ?? null };
   const calls: Call[] = [];
-  const interference: { before?: (call: Call) => void } = {};
+  const interference: { before?: (call: Call) => void; /** Holds every write until it settles, to put several edits in flight together. */ gate?: Promise<void> } = {};
   const answer = (data: unknown) => ({ data, error: null });
   const refuse = (status: number, code: string) => ({ data: null, error: { status, value: { code } } });
   const record = (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
@@ -68,6 +68,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
 
   const compositionChanges = { post: async (body: { expectedHead: string; operations: Operation[] }, options?: never) => {
     record('changes', body, options);
+    await interference.gate;
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     const created = body.operations.filter(operation => operation.op === 'insert').map(() => next());
@@ -76,6 +77,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   } };
   const measurePost = (kind: 'measures' | 'timings') => async (body: Record<string, unknown> & { expectedHead: string }, options?: never) => {
     record(kind, body, options);
+    await interference.gate;
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     let measures = recipe.measures;
