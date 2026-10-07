@@ -197,12 +197,12 @@ test('Structure group custody: restored Content mappings and exact S3 roots gate
         (manifest_digest, structure, records, ordering, total, cursor, scanned, groups, version, complete)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [saved.manifest_digest, saved.structure, saved.records,
         saved.ordering, saved.total, saved.cursor, saved.scanned, saved.groups, saved.version, saved.complete]);
-      await restoredContent.query('UPDATE structure.group_root SET structure = $2 WHERE manifest_digest = $1',
-        [completeSource.digest, ID + randomUUID()]);
+      await restoredContent.query('UPDATE structure.group_root SET groups = $2 WHERE manifest_digest = $1',
+        [completeSource.digest, { ...saved.groups, page: `sha256:${'f'.repeat(64)}` }]);
       await expect(release()).rejects.toThrow('Content owner or graph references differ');
       await assertHeld();
-      await restoredContent.query('UPDATE structure.group_root SET structure = $2 WHERE manifest_digest = $1',
-        [completeSource.digest, saved.structure]);
+      await restoredContent.query('UPDATE structure.group_root SET groups = $2 WHERE manifest_digest = $1',
+        [completeSource.digest, saved.groups]);
     } finally { await restoredContent.query('ALTER TABLE structure.group_root ENABLE TRIGGER group_root_guard'); }
     // A missing supplemental page must fail at object verification even when
     // all restored Content rows match. The S3 source remains available elsewhere.
