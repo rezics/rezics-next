@@ -63,6 +63,19 @@ export interface AuthenticatedRecoveryCoverage {
   deletions?: DeletionReleaseEvidence;
   contentPool?: Pool;
   objectStore?: ObjectRecoveryStore;
+  /**
+   * Reconcile retained erasures after verifying the captured cut, then release
+   * graph and Access under the same journal lock and borrowed owner clients.
+   * The callback owns neither transaction nor client lifecycle.
+   */
+  releaseErasures?: (clients: RestoredReleaseClients,
+    releaseGraph: () => Promise<void>) => Promise<void>;
+}
+
+export interface RestoredReleaseClients {
+  accessClient: PoolClient;
+  relayClient: PoolClient;
+  fenceGeneration: string;
 }
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
@@ -366,17 +379,28 @@ export async function releaseRestoredGraphHold(
     evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
   catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
   assertRecoveryCoverage(coverage);
+  if (!evidence.releaseErasures) {
+    throw new RestoreLineageConflict('retained erasure restore release is unavailable');
+  }
   const client = await accessPool.connect();
   let relayHeadClient: PoolClient | undefined;
   const borrowedRelay = relayClient !== undefined;
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     await client.query("SET LOCAL TIME ZONE 'UTC'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== false) {
+    const fence = await client.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE');
+    const fenceGeneration = fence.rows[0]?.generation;
+    if (fence.rows[0]?.open !== false || typeof fenceGeneration !== 'string'
+      || !/^[0-9]+$/.test(fenceGeneration)) {
       throw new RestoreLineageConflict('Access recovery fence is not held');
     }
+    relayHeadClient = relayClient ?? await relayPool.connect();
+    await relayHeadClient.query('BEGIN');
+    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
+    // Match the journal allocator's lock order and retain its frontier through
+    // captured-cut validation, replay, graph release and the Access commit.
+    await relayHeadClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
     const outbox = await scanAccessOutbox(client);
     if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
@@ -391,31 +415,44 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
     catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
-    try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool, relayClient); }
+    try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool, relayHeadClient); }
     catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
-    await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayClient);
+    await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayHeadClient);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
     let retainedRelay: RelayCoverage;
-    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer, relayClient); }
+    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer, relayHeadClient); }
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
     assertRetainedRecoveryRelayCut(coverage, retainedRelay);
-    relayHeadClient = relayClient ?? await relayPool.connect();
-    await relayHeadClient.query('BEGIN');
-    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
     try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
     catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
-    if (coverage.objects) {
-      if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
-      try { await assertObjectRecoveryCoverage(fuseki, evidence.objectStore, coverage.objects); }
-      catch (error) { throw new RestoreLineageConflict(
-        `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
-          ? error.kind : 'unavailable'})`); }
-    }
+    if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');
+    if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
+    try { await assertObjectRecoveryCoverage(fuseki, evidence.objectStore, coverage.objects); }
+    catch (error) { throw new RestoreLineageConflict(
+      `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
+        ? error.kind : 'unavailable'})`); }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
+    const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
+    const releaseDigest = hash(JSON.stringify({ family: 'restore-release-v1', lineage,
+      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
+    const releasedQuery = `PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
+        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ; rv:priorSequence ?savedSequence .
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
+        FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(releaseDigest)} ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 .
+      }
+    }`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
         rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
@@ -424,16 +461,26 @@ export async function releaseRestoredGraphHold(
       OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
       FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
     } }`);
-    let updateError: unknown;
-    if (held.boolean === true) {
-      const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
-      const digest = hash(JSON.stringify({ family: 'restore-release-v1', lineage,
-        priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
-      try { await fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+    // A replay may alter Content/object copies. Verify the signed base before
+    // it starts; an interrupted release additionally requires its exact receipt.
+    if (held.boolean !== true && (await fuseki.query(releasedQuery)).boolean !== true) {
+      throw new RestoreLineageConflict('restored graph cut is not held for erasure reconciliation');
+    }
+    let graphReleased = false;
+    const releaseGraph = async () => {
+      if (graphReleased) throw new RestoreLineageConflict('restored graph release already completed');
+      const beforeRelease = (await client.query<{ open: boolean; generation: string }>(
+        'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+      if (beforeRelease?.open !== false || beforeRelease.generation !== fenceGeneration) {
+        throw new RestoreLineageConflict('captured Access fence changed before graph release');
+      }
+      let updateError: unknown;
+      if (held.boolean === true) {
+        try { await fuseki.commandWithReceipt({ receipt, digest: releaseDigest, validations: [], deadlineMs: 10_000,
         update: `PREFIX rv: <${RV}>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
         INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
-          rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:requestDigest ${lit(releaseDigest)} ; rv:datasetId ${iri(DATASET)} ;
           rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 . } }
         WHERE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
@@ -445,25 +492,32 @@ export async function releaseRestoredGraphHold(
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         }` }); }
-      catch (error) { updateError = error; }
-    } else {
-      const released = await fuseki.query(`PREFIX rv: <${RV}> ASK {
-        GRAPH ${iri(GRAPHS.control)} {
-          ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-            rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
-          ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ;
-            rv:priorSequence ?savedSequence .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
-          FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
-          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
-        }
-      }`);
-      if (released.boolean !== true) throw new RestoreLineageConflict('graph cut differs from recovery coverage');
+        catch (error) { updateError = error; }
+      }
+      // Recovery cannot use a cached ordinary search position as release proof.
+      const released = await fuseki.query(releasedQuery);
+      if (released.boolean !== true) {
+        throw new RestoreLineageConflict(updateError
+          ? 'recovery release outcome is unknown' : 'recovery hold was not released');
+      }
+      graphReleased = true;
+    };
+    try {
+      await evidence.releaseErasures({ accessClient: client, relayClient: relayHeadClient,
+        fenceGeneration }, releaseGraph);
+    } catch (error) {
+      if (error instanceof RestoreLineageConflict) throw error;
+      throw new RestoreLineageConflict(`retained erasure reconciliation failed: ${
+        error instanceof Error ? error.message : 'owner replay outcome is unavailable'}`, { cause: error });
     }
-    try { await assertGraphAdmissionOpen(fuseki, lineage); }
-    catch {
-      throw new RestoreLineageConflict(updateError
-        ? 'recovery release outcome is unknown' : 'recovery hold was not released');
+    if (!graphReleased) throw new RestoreLineageConflict('retained erasure reconciliation did not release the graph');
+    const releasedFence = (await client.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+    if (releasedFence?.open !== true || releasedFence.generation !== (BigInt(fenceGeneration) + 1n).toString()) {
+      throw new RestoreLineageConflict('retained erasure reconciliation did not release the captured Access fence');
+    }
+    if ((await fuseki.query(releasedQuery)).boolean !== true) {
+      throw new RestoreLineageConflict('restored graph release evidence changed before Access commit');
     }
     await client.query('COMMIT');
     await relayHeadClient.query('COMMIT');

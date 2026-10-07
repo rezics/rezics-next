@@ -8,7 +8,6 @@ import {
   assertDeletionRecoverySet,
   type DeletionRecoverySet,
 } from '../../services/account/src/deletion-recovery-set.ts';
-import { releaseAccessRecoveryFence } from '../../services/main/src/modules/access/admission.ts';
 import { assertContentRecoveryCoverage } from '../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { assertObjectRecoveryCoverage } from '../../services/main/src/modules/owner/object-coverage.ts';
 import { assertPgRecoveryFrontier } from '../../services/main/src/modules/work/pg-recovery-frontier.ts';
@@ -16,6 +15,7 @@ import {
   cutoverRestoredGraphLineage,
   type RecoveryCoverage,
 } from '../../services/main/src/modules/work/restore-lineage.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, replacePrivate, savePrivate, stackDirectory } from '../dev/config.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { currentEngines, freshPorts, root } from '../fixture/stack.ts';
@@ -62,7 +62,9 @@ export interface RestoreChecks {
    * representative search and Account/library takeout; any failure keeps held. */
   verify(context: RestoredContext): Promise<void>;
   /** Adapter to POST /v1/owners/reconciliations on this isolated Main instance.
-   * Account owns authentication; a local recovery command must not forge it. */
+   * Account owns authentication; a local recovery command must not forge it.
+   * A matched operation owns retained-erasure reconciliation and both graph
+   * and Access release; this command only observes the released generation. */
   reconcile(
     context: RestoredContext,
     body: {
@@ -93,11 +95,78 @@ export interface RestoreEvidence {
   failure?: string;
 }
 
+function requireRestoreChecks(checks?: RestoreChecks): RestoreChecks {
+  if (typeof checks?.verify !== 'function' || typeof checks.reconcile !== 'function')
+    throw new Error(
+      'Restore is held: configure exact read/search/takeout checks and authenticated owner reconciliation',
+    );
+  return checks;
+}
+
+/** The authenticated owner operation releases admission only after its current
+ * retained journal check. Observe both releases before enabling owner logins;
+ * a matched response alone cannot reopen a still-held or different generation. */
+export async function finishOperatorRestore(
+  context: RestoredContext,
+  checks: RestoreChecks,
+  idempotencyKey: string,
+  beforeReconcile: () => void,
+): Promise<void> {
+  await context.budget.phase('owner-reconciliation-api', async () => {
+    beforeReconcile();
+    const response = await checks.reconcile(
+      context,
+      {
+        profile: 'owner-reconciliation-v1',
+        kind: 'restore',
+        sealedCoverage: context.manifest.sealedCoverage,
+        sealedDeletionSets: context.manifest.sealedDeletionSets,
+      },
+      idempotencyKey,
+    );
+    const body = (await response.json()) as { state?: string; disposition?: string } | null;
+    if (!response.ok || body?.state !== 'reconciled' || body.disposition !== 'matched')
+      throw new Error(
+        `Owner reconciliation did not verify the restore (${response.status}, ${body?.state ?? 'unknown'}, ${body?.disposition ?? 'unknown'})`,
+      );
+  });
+  await context.budget.phase('release-observation-and-logins', async () => {
+    const { MAIN_DATA_EPOCH: dataEpoch, MAIN_ROUTING_EPOCH: routingEpoch } = context.apps;
+    if (!dataEpoch || !routingEpoch || !/^[0-9]+$/.test(context.manifest.fenceGeneration))
+      throw new Error('Restored release lineage or Access generation is unavailable');
+    const graph = await context.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(dataEpoch)} ; rv:routingEpoch ${lit(routingEpoch)} .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+      }
+    }`);
+    if (graph.boolean !== true)
+      throw new Error('Owner reconciliation did not release the restored graph');
+    const fence = (
+      await context.pools.access.query<{ open: boolean; generation: string }>(
+        'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true',
+      )
+    ).rows[0];
+    const releasedGeneration = (BigInt(context.manifest.fenceGeneration) + 1n).toString();
+    if (fence?.open !== true || fence.generation !== releasedGeneration)
+      throw new Error(
+        'Owner reconciliation did not release the captured Access recovery generation',
+      );
+    await context.pools.content.query(
+      'SELECT reading_position.advance_restore_epoch(),source.advance_author_name_restore_epoch()',
+    );
+    await context.pools.account.query(
+      'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
+    );
+  });
+}
+
 /** Always new volumes, never the original. O(encrypted bytes + restored owner rows
  * + referenced object bytes + indexed RDF); per-table pages and native commands
  * have bounded memory/time. Verification precedes the only hold-release API.
  * A failed pass stops all target services but preserves fenced volumes/evidence. */
 export async function restoreRecoverySet(options: RestoreOptions): Promise<RestoreEvidence> {
+  const checks = requireRestoreChecks(options.checks);
   const budget = new RecoveryBudget();
   const environment = { ...process.env, ...options.environment };
   const directory = resolve(options.set);
@@ -277,9 +346,11 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
         budget,
       );
     });
-    await budget.phase('start-held', () => context!.startup(() => {
-      context!.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
-    }));
+    await budget.phase('start-held', () =>
+      context!.startup(() => {
+        context!.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
+      }),
+    );
     pools = Object.fromEntries(
       ['account', 'access', 'content', 'relay'].map((database) => [
         database,
@@ -377,10 +448,6 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       )
         throw new Error('Rebuilt text remains uncertain');
     });
-    if (!options.checks)
-      throw new Error(
-        'Restore is held: configure exact read/search/takeout checks and authenticated owner reconciliation',
-      );
     const restored: RestoredContext = {
       budget,
       manifest,
@@ -389,35 +456,16 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       pools: restoredPools,
       fuseki,
     };
-    await budget.phase('samples-reads-search-takeout', () => options.checks!.verify(restored));
-    await budget.phase('owner-reconciliation-api', async () => {
-      assertCurrentFrontier(index, readFileSync(options.frontier, 'utf8'), options.key);
-      sourceStopped();
-      const response = await options.checks!.reconcile(
-        restored,
-        {
-          profile: 'owner-reconciliation-v1',
-          kind: 'restore',
-          sealedCoverage: manifest.sealedCoverage,
-          sealedDeletionSets: manifest.sealedDeletionSets,
-        },
-        `recovery-${manifest.id}-${options.project}`,
-      );
-      const body = (await response.json()) as { state?: string; disposition?: string };
-      if (!response.ok || body.state !== 'reconciled' || body.disposition !== 'matched')
-        throw new Error(
-          `Owner reconciliation did not verify the restore (${response.status}, ${body.state ?? 'unknown'}, ${body.disposition ?? 'unknown'})`,
-        );
-    });
-    await budget.phase('release-access', async () => {
-      await restoredPools.content.query(
-        'SELECT reading_position.advance_restore_epoch(),source.advance_author_name_restore_epoch()',
-      );
-      await releaseAccessRecoveryFence(restoredPools.access, manifest.fenceGeneration);
-      await restoredPools.account.query(
-        'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
-      );
-    });
+    await budget.phase('samples-reads-search-takeout', () => checks.verify(restored));
+    await finishOperatorRestore(
+      restored,
+      checks,
+      `recovery-${manifest.id}-${options.project}`,
+      () => {
+        assertCurrentFrontier(index, readFileSync(options.frontier, 'utf8'), options.key);
+        sourceStopped();
+      },
+    );
     evidence.state = 'verified';
     return evidence;
   } catch (error) {

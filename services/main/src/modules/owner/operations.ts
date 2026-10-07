@@ -148,8 +148,9 @@ export class OwnerOperations {
   }
 
   /**
-   * One full signed owner-cut comparison per pass. A crash after release and
-   * before the relay outcome is safe to retry: release has a graph receipt.
+   * One full signed owner-cut comparison per pass. The release helper requires
+   * retained erasure reconciliation on its held clients; unavailable owner
+   * replay support settles this operation as held rather than opening admission.
    * The scans are O(owner rows + graph quads + referenced object bytes), with
    * bounded owner-table pages and the graph query deadline enforced below.
    */
@@ -215,7 +216,7 @@ export class OwnerOperations {
             const owner = /Account/.test(conflict.message) ? 'account'
               : /Access/.test(conflict.message) ? 'access'
               : /Content/.test(conflict.message) ? 'content'
-              : /relay|handoff|coverage head/i.test(conflict.message) ? 'relay'
+              : /relay|handoff|coverage head|erasure/i.test(conflict.message) ? 'relay'
               : /object/i.test(conflict.message) ? 'object' : 'graph';
             await client.query(`INSERT INTO relay.owner_reconciliation_item
               (reconciliation_id, ordinal, owner, item_kind, item_ref, disposition)
