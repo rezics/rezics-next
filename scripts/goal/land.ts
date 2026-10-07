@@ -13,9 +13,10 @@ export interface LandOptions extends Omit<LandReview, 'directory'> {
   close: () => Promise<void>;
 }
 
-/** A missing or contradictory result never authorizes a merge. */
+/** A missing or contradictory result never authorizes a merge. Cursor and Grok join message segments with no
+ * separator, so the handoff can start right after a sentence ("...in place.RESULT: done"). */
 export function handoffResult(text: string): string | undefined {
-  const results = [...text.matchAll(/^RESULT:[^\r\n]*/gm)];
+  const results = [...text.matchAll(/(?:^|(?<=[.!?)\]`'"’”]))RESULT:[^\r\n]*/gm)];
   return results.length === 1 ? /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(results[0]![0])?.[1] : undefined;
 }
 

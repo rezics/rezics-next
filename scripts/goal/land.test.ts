@@ -108,6 +108,13 @@ describe('Goal landing', () => {
     expect(handoffResult('no handoff')).toBeUndefined();
   });
 
+  test('finds a result glued to the previous message segment', () => {
+    expect(handoffResult("I'll restore the fixed file if that check left the old one in place.RESULT: done\nCASES: x")).toBe('done');
+    expect(handoffResult('so it does not open the edition menu in a loop.RESULT: done\n\nCASES: x')).toBe('done');
+    expect(handoffResult('Checked.RESULT: done\nRESULT: partial')).toBeUndefined();
+    expect(handoffResult('the RESULT: done line comes later')).toBeUndefined();
+  });
+
   test('reviews, merges, verifies and archives a done task', () => {
     const r = repo();
     try {
