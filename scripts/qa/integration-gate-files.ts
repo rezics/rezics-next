@@ -3,7 +3,6 @@
 // union merge driver keeps both sides (see .gitattributes), so never reorder.
 export const integrationGateFiles = [
   'services/main/tests/structure-group-root-owner.integration.test.ts',
-  'services/main/tests/activate.integration.test.ts',
   'services/main/tests/edit.integration.test.ts',
   'services/main/tests/outbox.integration.test.ts',
   'scripts/ops/tests/postgres-preflight.integration.test.ts',

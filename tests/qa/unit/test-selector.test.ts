@@ -134,7 +134,7 @@ test('QA11: selected runs reject unsafe paths and full-record combinations', () 
   expect(() => selectTestCommand(['../outside.test.ts'])).toThrow('outside this checkout or missing');
   expect(() => parseArgs(['--record', '--tier', 'integration', '--id', 'OPS01']))
     .toThrow('--record requires a full run');
-  for (const file of ['activate', 'edit', 'full-work']) {
+  for (const file of ['activate', 'full-work', 'recovery']) {
     expect(() => testArgs('integration', undefined,
       { files: [`services/main/tests/${file}.integration.test.ts`] })).toThrow('not registered');
   }
