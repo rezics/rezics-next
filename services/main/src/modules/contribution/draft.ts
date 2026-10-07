@@ -1,4 +1,5 @@
-import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, fusekiReadBudget, FusekiReadBudgetExceeded,
+  type CommandValidation, type SparqlResult } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
@@ -10,6 +11,61 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const CONTRIBUTION_PROFILE = 'https://rezics.com/definition/text-contribution-v1';
+
+/** One create-source read shares this response cap and wall deadline across its awaits. */
+export const CONTRIBUTION_CREATE_READ_COST = {
+  responseBytes: 16_384,
+  objectBytes: 8_388_608,
+  deadlineMs: 10_000,
+} as const;
+
+export class ContributionReadExpired extends Error {}
+
+export function assertContributionReadOpen(signal: AbortSignal): void {
+  if (signal.aborted) throw new ContributionReadExpired('contribution read expired');
+}
+
+/** Caller cancellation and one deadline cover every query in the read. */
+export async function withContributionGraphRead<T>(
+  calls: number, caller: AbortSignal | undefined, run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  if (!Number.isInteger(calls) || calls < 1) throw new Error('invalid contribution read call bound');
+  const parent = fusekiReadBudget.getStore();
+  const deadline = AbortSignal.timeout(CONTRIBUTION_CREATE_READ_COST.deadlineMs);
+  const signal = AbortSignal.any([deadline, ...(caller ? [caller] : []), ...(parent ? [parent.signal] : [])]);
+  assertContributionReadOpen(signal);
+  const ceiling = CONTRIBUTION_CREATE_READ_COST.responseBytes * calls;
+  const nested = { signal, callsLeft: calls, bytesLeft: ceiling };
+  if (parent) {
+    if (parent.callsLeft < 1 || parent.bytesLeft < 1) {
+      throw new FusekiReadBudgetExceeded('contribution read exceeds its shared budget');
+    }
+    nested.callsLeft = Math.min(calls, parent.callsLeft);
+    nested.bytesLeft = Math.min(ceiling, parent.bytesLeft);
+    parent.callsLeft -= nested.callsLeft;
+    parent.bytesLeft -= nested.bytesLeft;
+  }
+  try {
+    return await fusekiReadBudget.run(nested, () => run(signal));
+  } finally {
+    if (parent) {
+      parent.callsLeft += nested.callsLeft;
+      parent.bytesLeft += nested.bytesLeft;
+    }
+  }
+}
+
+export async function queryContributionGraph(
+  env: Pick<WorkActivationEnvironment, 'fuseki'>, sparql: string, signal: AbortSignal,
+): Promise<SparqlResult> {
+  assertContributionReadOpen(signal);
+  try {
+    return await env.fuseki.query(sparql, CONTRIBUTION_CREATE_READ_COST.responseBytes);
+  } catch (error) {
+    if (signal.aborted) throw new ContributionReadExpired('contribution read expired');
+    throw error;
+  }
+}
 
 export interface CreateTextContributionInput extends AuthoredBodyInput {
   work: string;
@@ -55,39 +111,43 @@ export function textContributionReceiptIri(admissionId: string): string {
 }
 
 export async function readTextContributionReceipt(
-  env: WorkActivationEnvironment, admissionId: string,
+  env: WorkActivationEnvironment, admissionId: string, options?: { signal?: AbortSignal },
 ): Promise<TextContributionReceipt | null> {
-  const receipt = textContributionReceiptIri(admissionId);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?outcome ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?work ?contribution
-    ?draftRevision ?language ?author WHERE { GRAPH ${iri(GRAPHS.receipts)} {
-    ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
-      rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
-      rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
-    OPTIONAL { ${iri(receipt)} rv:work ?work ; rv:contribution ?contribution ;
-      rv:draftRevision ?draftRevision ; rv:language ?language ; rv:author ?author }
-  } }`);
-  const rows = result.results?.bindings ?? [];
-  if (rows.length === 0) return null;
-  if (rows.length !== 1) throw new Error('Contribution receipt cardinality violation');
-  const row = rows[0]!;
-  const value = (key: string) => row[key]?.value;
-  const outcome = value('outcome') === `${RV}Succeeded` ? 'succeeded'
-    : value('outcome') === `${RV}Cancelled` ? 'cancelled' : null;
-  if (!outcome || !value('digest') || !value('id') || !value('epoch') || !value('scope')
-    || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
-    || (outcome === 'succeeded' && (!value('work') || !value('contribution')
-      || !value('draftRevision') || !value('language') || !value('author')))
-    || (outcome === 'cancelled' && (value('work') || value('contribution')
-      || value('draftRevision') || value('language') || value('author')))) {
-    throw new Error('Contribution receipt is incomplete');
-  }
-  return { outcome, receipt, admissionId: value('id')!, requestDigest: value('digest')!,
-    authorityEpoch: value('epoch')!, scope: value('scope')!,
-    dataEpoch: value('dataEpoch')!, sequence: value('sequence')!,
-    ...(outcome === 'succeeded' ? { work: value('work'), contribution: value('contribution'),
-      draftRevision: value('draftRevision'), language: value('language'),
-      author: value('author') } : {}) };
+  return withContributionGraphRead(1, options?.signal, async signal => {
+    const receipt = textContributionReceiptIri(admissionId);
+    const result = await queryContributionGraph(env, `PREFIX rv: <${RV}> SELECT
+      ?outcome ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?work ?contribution
+      ?draftRevision ?language ?author WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+      ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
+        rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
+        rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
+      OPTIONAL { ${iri(receipt)} rv:work ?work ; rv:contribution ?contribution ;
+        rv:draftRevision ?draftRevision ; rv:language ?language ; rv:author ?author }
+    } } LIMIT 2`, signal);
+    assertContributionReadOpen(signal);
+    const rows = result.results?.bindings ?? [];
+    if (rows.length === 0) return null;
+    if (rows.length !== 1) throw new Error('Contribution receipt cardinality violation');
+    const row = rows[0]!;
+    const value = (key: string) => row[key]?.value;
+    const outcome = value('outcome') === `${RV}Succeeded` ? 'succeeded'
+      : value('outcome') === `${RV}Cancelled` ? 'cancelled' : null;
+    if (!outcome || !value('digest') || !value('id') || !value('epoch') || !value('scope')
+      || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
+      || (outcome === 'succeeded' && (!value('work') || !value('contribution')
+        || !value('draftRevision') || !value('language') || !value('author')))
+      || (outcome === 'cancelled' && (value('work') || value('contribution')
+        || value('draftRevision') || value('language') || value('author')))) {
+      throw new Error('Contribution receipt is incomplete');
+    }
+    assertContributionReadOpen(signal);
+    return { outcome, receipt, admissionId: value('id')!, requestDigest: value('digest')!,
+      authorityEpoch: value('epoch')!, scope: value('scope')!,
+      dataEpoch: value('dataEpoch')!, sequence: value('sequence')!,
+      ...(outcome === 'succeeded' ? { work: value('work'), contribution: value('contribution'),
+        draftRevision: value('draftRevision'), language: value('language'),
+        author: value('author') } : {}) };
+  });
 }
 
 export async function assertCurrentContributionWork(
