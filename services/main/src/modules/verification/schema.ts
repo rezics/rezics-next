@@ -131,6 +131,7 @@ interface InvalidationRow {
   producer_sequence: string | null; state: 'pending' | 'complete'; cursor_target: string | null;
   cursor_context: string | null; marked: string; pages: number; lease_owner: string | null;
   lease_until: Date | null; created_at: Date; completed_at: Date | null;
+  local_sequence: string | null; cursor_walk: string | null; walks_complete: boolean;
 }
 interface InvalidationEffectRow {
   invalidation_id: string; target: string; context: string; created_at: Date;
@@ -149,9 +150,10 @@ interface CorrectionNoticeRow {
 
 /** Row types keyed by table, as pg returns them (snake_case, bigint as string). */
 export interface VerificationRows {
+  lineage_change_head: { singleton: boolean; revision: string };
   lineage_walk: { id: string; claim: string; evidence_revision: string; authority_digest: string; start_key: string;
     root_ordinal: number; complete: boolean; unknown: boolean; circular: boolean; origin_count: string;
-    version: number; expansions: string; edges: string; node_count: string };
+    version: number; expansions: string; edges: string; node_count: string; validated_sequence: string };
   lineage_walk_observation: { walk_id: string; observation_id: string; lineage_head: string | null;
     disposition_head: string | null; stale: boolean };
   lineage_walk_node: { walk_id: string; root_ordinal: number; observation_id: string; depth: number;
@@ -175,8 +177,9 @@ export interface VerificationRows {
 
 /** Physical column order per table; `satisfies` ties each list to its row type. */
 export const verificationColumns = {
+  lineage_change_head: ['singleton', 'revision'],
   lineage_walk: ['id', 'claim', 'evidence_revision', 'authority_digest', 'start_key', 'root_ordinal', 'complete',
-    'unknown', 'circular', 'origin_count', 'version', 'expansions', 'edges', 'node_count'],
+    'unknown', 'circular', 'origin_count', 'version', 'expansions', 'edges', 'node_count', 'validated_sequence'],
   lineage_walk_observation: ['walk_id', 'observation_id', 'lineage_head', 'disposition_head', 'stale'],
   lineage_walk_node: ['walk_id', 'root_ordinal', 'observation_id', 'depth', 'done', 'phase', 'edge_cursor', 'input_cursor', 'has_links'],
   lineage_walk_origin: ['walk_id', 'origin_id'],
@@ -227,7 +230,7 @@ export const verificationColumns = {
     'expected_head'] satisfies (keyof ActiveDependencyRow)[],
   invalidation: ['id', 'producer', 'event_key', 'kind', 'reference', 'changed_head', 'producer_epoch',
     'producer_sequence', 'state', 'cursor_target', 'cursor_context', 'marked', 'pages', 'lease_owner',
-    'lease_until', 'created_at', 'completed_at'] satisfies (keyof InvalidationRow)[],
+    'lease_until', 'created_at', 'completed_at', 'local_sequence', 'cursor_walk', 'walks_complete'] satisfies (keyof InvalidationRow)[],
   invalidation_effect: ['invalidation_id', 'target', 'context', 'created_at'] satisfies
     (keyof InvalidationEffectRow)[],
   reassessment_request: ['target', 'context', 'first_invalidation', 'latest_invalidation', 'marks',

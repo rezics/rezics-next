@@ -438,6 +438,8 @@ export class VerificationStore {
     const token = continuation?.match(/^([0-9a-f-]{36}):(\d+)$/);
     if (continuation && (!token || !UUID.test(token[1]!))) throw new VerificationMissing('lineage continuation is unavailable');
     return this.tx(async client => {
+      const position = (await client.query<{ revision: string }>(`SELECT revision::text
+        FROM verification.lineage_change_head WHERE singleton FOR SHARE`)).rows[0]!.revision;
       let walk: WalkRow;
       if (token) {
         const row = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
@@ -450,9 +452,9 @@ export class VerificationStore {
         if (manifest.claim !== claim || manifest.purpose !== 'claim-head') {
           throw new VerificationMissing('evidence revision belongs to another claim');
         }
-        if (!readOnly) await client.query(`INSERT INTO verification.lineage_walk (id, claim, evidence_revision, authority_digest, start_key)
-          VALUES ($1, $2, $3, $4, $5) ON CONFLICT (claim, evidence_revision, authority_digest, start_key) DO NOTHING`,
-        [crypto.randomUUID(), claim, revision, authorityDigest, startKey]);
+        if (!readOnly) await client.query(`INSERT INTO verification.lineage_walk (id, claim, evidence_revision, authority_digest, start_key, validated_sequence)
+          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (claim, evidence_revision, authority_digest, start_key) DO NOTHING`,
+        [crypto.randomUUID(), claim, revision, authorityDigest, startKey, position]);
         walk = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
           WHERE claim = $1 AND evidence_revision = $2 AND authority_digest = $3 AND start_key = $4 FOR UPDATE`,
         [claim, revision, authorityDigest, startKey])).rows[0]!;
@@ -461,7 +463,8 @@ export class VerificationStore {
         throw new VerificationStale('completed lineage proof is unavailable');
       }
       // A read never relies on asynchronous invalidation delivery.
-      if (await this.localHead(client, { kind: 'lineage-walk', reference: walk.id }) === null) {
+      const freshness = await this.walkFreshness(client, walk.id);
+      if (freshness === 'stale') {
         throw new VerificationStale('lineage continuation basis changed');
       }
       const manifest = await this.readEvidenceWith(client, revision);
@@ -469,8 +472,7 @@ export class VerificationStore {
       const supporting = new Set(manifest.items.filter(item => item.stance === 'supports'
         && item.currentAvailability === 'available').map(item => item.observation));
       const version = readOnly ? walk.version - 1 : token ? Number(token[2]) : 0;
-      if (!Number.isSafeInteger(version) || version < 0 || version > walk.version
-        || (walk.complete && version === walk.version)) {
+      if (!Number.isSafeInteger(version) || version < 0 || version > walk.version) {
         throw new VerificationStale('lineage continuation step is unavailable');
       }
       const replay = (await client.query<{ result: WalkProgress }>(`SELECT result FROM verification.lineage_walk_step
@@ -478,7 +480,13 @@ export class VerificationStore {
       if (!replay && (readOnly || version !== walk.version)) throw new VerificationStale('lineage continuation step is unavailable');
       const work = { expansions: 0, links: 0 };
       let progress = replay;
-      if (!progress) {
+      if (freshness === 'pending') {
+        // The journal cursor commits even while the original DFS/token is
+        // suspended. Unrelated changes never invalidate or restart its frontier.
+        progress = { walk: walk.id, continuation: `${walk.id}:${walk.version}`, complete: false,
+          lineageNodes: Number(walk.node_count), work, totalWork: { expansions: Number(walk.expansions), links: Number(walk.edges) },
+          lineageProof: { dependence: 'over-budget', independentOrigins: null, origins: [] } };
+      } else if (!progress) {
         const pin = async (observation: string) => {
           // Writers take this lock before publishing invalidation. It protects absent heads too.
           await client.query('SELECT id FROM source.observation WHERE id = $1 FOR SHARE', [observation]);
@@ -772,6 +780,39 @@ export class VerificationStore {
     });
   }
 
+  /** Validate a bounded journal page against indexed, exact walk witnesses. */
+  private async walkFreshness(client: PoolClient, id: string): Promise<'current' | 'pending' | 'stale'> {
+    const position = (await client.query<{ revision: string }>(`SELECT revision::text
+      FROM verification.lineage_change_head WHERE singleton FOR SHARE`)).rows[0]!.revision;
+    const walk = (await client.query<{ validated_sequence: string }>(`SELECT w.validated_sequence::text
+      FROM verification.lineage_walk w JOIN verification.evidence_head e ON e.claim = w.claim AND e.head = w.evidence_revision
+      WHERE w.id = $1 FOR UPDATE OF w`, [id])).rows[0];
+    if (!walk || (await client.query(`SELECT 1 FROM verification.lineage_walk_observation
+      WHERE walk_id = $1 AND stale LIMIT 1`, [id])).rowCount) return 'stale';
+    if (walk.validated_sequence === position) return 'current';
+    let cursor = walk.validated_sequence;
+    // A one-event seek avoids a planner choosing to scan/sort the journal
+    // population before a larger LIMIT. Every candidate consumes the budget.
+    for (let checked = 0; checked < LINEAGE_EDGE_BUDGET && cursor !== position; checked++) {
+      const change = (await client.query<{ local_sequence: string; reference: string; kind: string }>(`
+        SELECT i.local_sequence::text, i.reference, i.kind FROM verification.invalidation i
+        WHERE i.local_sequence > $1::bigint AND i.local_sequence <= $2::bigint
+        ORDER BY i.local_sequence LIMIT 1`, [cursor, position])).rows[0];
+      if (!change) { cursor = position; break; }
+      cursor = change.local_sequence;
+      const witness = (await client.query<{ lineage_head: string | null; disposition_head: string | null }>(`
+        SELECT lineage_head, disposition_head FROM verification.lineage_walk_observation
+        WHERE walk_id = $1 AND observation_id = $2`, [id, change.reference])).rows[0];
+      if (!witness) continue;
+      const head = await this.localHead(client, { kind: change.kind, reference: change.reference });
+      const pinned = change.kind === 'source-observation' ? witness.lineage_head
+        : witness.disposition_head ? nativeId(witness.disposition_head) : null;
+      if (head !== pinned) return 'stale';
+    }
+    await client.query('UPDATE verification.lineage_walk SET validated_sequence = $2 WHERE id = $1', [id, cursor]);
+    return cursor === position ? 'current' : 'pending';
+  }
+
   /** Current Content-owned head for one pinned dependency. */
   private async localHead(client: PoolClient, dependency: Pick<Dependency, 'kind' | 'reference'>,
     lock = false): Promise<string | null> {
@@ -787,11 +828,7 @@ export class VerificationStore {
         .rows[0]?.revision ?? null;
     }
     if (dependency.kind === 'lineage-walk') {
-      const row = (await client.query<{ id: string }>(`SELECT w.id FROM verification.lineage_walk w
-        JOIN verification.evidence_head e ON e.claim = w.claim AND e.head = w.evidence_revision
-        WHERE w.id = $1 AND NOT EXISTS (SELECT 1 FROM verification.lineage_walk_observation o
-          WHERE o.walk_id = w.id AND o.stale)${lock ? ' FOR SHARE OF w' : ''}`, [dependency.reference])).rows[0];
-      return row?.id ?? null;
+      return await this.walkFreshness(client, dependency.reference) === 'current' ? dependency.reference : null;
     }
     if (dependency.kind === 'source-observation') {
       return (await client.query<{ revision: string }>(
@@ -831,7 +868,7 @@ export class VerificationStore {
         assessment: row.assessment, policyRevision: row.policy_revision, support: row.support, review: row.review,
         dispute: row.dispute, coverage: row.coverage, dependence: row.dependence, reasonCodes: row.reason_codes,
         ownerPositions: row.owner_positions, createdAt: iso(row.created_at), dependencies: resolved,
-        pendingWork: Boolean(pending.rowCount) };
+        pendingWork: Boolean(pending.rowCount) || resolved.some(item => item.owner === 'content' && item.currentHead !== item.expectedHead) };
     }, true);
   }
 
@@ -993,11 +1030,42 @@ export class VerificationStore {
     const counters = { pages: 0, rowsRead: 0, marked: 0, completed: 0 };
     while (counters.pages < maxPages) {
       const page = await this.tx(async client => {
-        const work = (await client.query(`SELECT id, kind, reference, cursor_target, cursor_context
+        const work = (await client.query(`SELECT id, producer, kind, reference, cursor_target, cursor_context, cursor_walk, walks_complete
           FROM verification.invalidation WHERE state = 'pending' AND (lease_until IS NULL OR lease_until < clock_timestamp()
             OR lease_owner = $1)
           ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`, [owner])).rows[0];
         if (!work) return null;
+        if (work.producer === 'content' && (work.kind === 'source-observation' || work.kind === 'source-disposition')
+          && !work.walks_complete) {
+          // Seek raw candidates before filtering: fresh or already stale walks
+          // consume the page budget too. Old events cannot invalidate new proof.
+          const candidates: { walk_id: string; lineage_head: string | null;
+            disposition_head: string | null; stale: boolean }[] = [];
+          let cursor = work.cursor_walk ?? '00000000-0000-0000-0000-000000000000';
+          for (let checked = 0; checked < pageSize; checked++) {
+            const candidate = (await client.query<typeof candidates[number]>(`SELECT walk_id, lineage_head, disposition_head, stale
+              FROM verification.lineage_walk_observation WHERE observation_id = $1
+                AND walk_id > $2::uuid ORDER BY walk_id LIMIT 1`, [work.reference, cursor])).rows[0];
+            if (!candidate) break;
+            candidates.push(candidate);
+            cursor = candidate.walk_id;
+          }
+          const head = await this.localHead(client, { kind: work.kind, reference: work.reference });
+          for (const candidate of candidates) {
+            const pinned = work.kind === 'source-observation' ? candidate.lineage_head
+              : candidate.disposition_head ? nativeId(candidate.disposition_head) : null;
+            if (head === pinned || candidate.stale) continue;
+            await client.query(`UPDATE verification.lineage_walk_observation SET stale = true
+              WHERE walk_id = $1 AND observation_id = $2`, [candidate.walk_id, work.reference]);
+            await client.query("SELECT verification.record_invalidation('lineage-walk', $1, NULL, $2)",
+              [candidate.walk_id, `lineage-walk-stale:${candidate.walk_id}`]);
+          }
+          await client.query(`UPDATE verification.invalidation SET cursor_walk = COALESCE($2, cursor_walk),
+            walks_complete = $3, pages = pages + 1, lease_owner = $4,
+            lease_until = clock_timestamp() + interval '30 seconds' WHERE id = $1`,
+          [work.id, candidates.at(-1)?.walk_id ?? null, candidates.length < pageSize, owner]);
+          return { rows: candidates.length, marked: 0, done: false };
+        }
         const rows = (await client.query<{ target: string; context: string }>(`SELECT target, context
           FROM verification.active_dependency WHERE kind = $1 AND reference = $2
             AND ($3::text IS NULL OR (target, context) > ($3::text, $4::text))

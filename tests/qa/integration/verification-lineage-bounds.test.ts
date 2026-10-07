@@ -374,3 +374,195 @@ test('continuations bind exact evidence and all caller authority fields', async 
   bounded(next);
   expect(next.totalWork.expansions).toBeGreaterThan(first.totalWork.expansions);
 }, 90_000);
+
+for (const change of ['lineage', 'disposition'] as const) {
+  test(`${change} source edits defer walk fan-out to bounded durable pages and reject stale replay immediately`, async () => {
+    const fixture = await observations(1);
+    const root = fixture.ids[0]!;
+    const store = new VerificationStore(pool);
+    const manifest = await evidence(store, fixture.principal, [root]);
+    const caller = authority(fixture.principal);
+    const walks: string[] = [];
+    // More than the drain's maximum page size must still be a valid population.
+    for (let index = 0; index < 205; index++) {
+      const complete = await store.analysisSnapshot(manifest.claim, manifest.revision, caller,
+        undefined, randomUUID());
+      expect(complete.complete).toBe(true);
+      walks.push(complete.walk);
+    }
+    const owner = `walk-fanout:${randomUUID()}`;
+    for (let batch = 0; batch < 100; batch++) {
+      const settled = await store.processInvalidations(owner, { pageSize: 200, maxPages: 20 });
+      if (settled.pages === 0) break;
+      if (batch === 99) throw new Error('prior invalidations did not settle within the fixture budget');
+    }
+    const publication = change === 'lineage' ? await origin(store, fixture.principal) : null;
+    if (change === 'lineage') {
+      await edge(store, fixture.principal, root, { origin: publication! }, 'publishes-origin');
+    } else {
+      await store.recordObservationDisposition(fixture.principal, randomUUID(), root, {
+        expectedHead: null, state: 'withdrawn', reason: 'Source withdrawn after proof completion',
+      });
+    }
+    const state = async () => (await pool.query<{ stale: number; walk_events: number; source_events: number }>(`
+      SELECT (SELECT count(*)::int FROM verification.lineage_walk_observation
+        WHERE walk_id = ANY($1::uuid[]) AND stale) AS stale,
+        (SELECT count(*)::int FROM verification.invalidation
+          WHERE kind = 'lineage-walk' AND reference = ANY($1::text[])) AS walk_events,
+        (SELECT count(*)::int FROM verification.invalidation
+          WHERE kind = $2 AND reference = $3) AS source_events`,
+    [walks, change === 'lineage' ? 'source-observation' : 'source-disposition', root])).rows[0]!;
+    // The source transaction touches no dependent witnesses and emits one local event.
+    expect(await state()).toEqual({ stale: 0, walk_events: 0, source_events: 1 });
+    for (const walk of [walks[0]!, walks.at(-1)!]) {
+      await expect(new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
+        caller, `${walk}:0`)).rejects.toBeInstanceOf(VerificationStale);
+    }
+    // A walk pinned after the edit is a fresh proof even while its source event is queued.
+    const fresh = await store.analysisSnapshot(manifest.claim, manifest.revision, caller,
+      undefined, randomUUID());
+    expect(fresh.complete).toBe(true);
+    const plan = (await pool.query<{ 'QUERY PLAN': { Plan: Record<string, unknown> }[] }>(`
+      EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF)
+      SELECT walk_id, lineage_head, disposition_head, stale FROM verification.lineage_walk_observation
+      WHERE observation_id = $1 AND walk_id > '00000000-0000-0000-0000-000000000000'::uuid
+      ORDER BY walk_id LIMIT 1`, [root])).rows[0]!['QUERY PLAN'][0]!.Plan;
+    expect(plan['Actual Rows']).toBe(1);
+    expect(JSON.stringify(plan)).toContain('lineage_walk_observation_reverse');
+    const first = await store.processInvalidations(owner, { pageSize: 50, maxPages: 1 });
+    expect(first).toMatchObject({ pages: 1, rowsRead: 50, completed: 0 });
+    const firstState = await state();
+    expect(firstState.stale).toBeGreaterThanOrEqual(49);
+    expect(firstState.stale).toBeLessThanOrEqual(50);
+    expect(firstState.walk_events).toBe(firstState.stale);
+    expect(firstState.stale).toBeLessThan(walks.length);
+    let settled = false;
+    for (let batch = 0; batch < 30; batch++) {
+      const page = await new VerificationStore(pool).processInvalidations(owner, { pageSize: 50, maxPages: 20 });
+      expect(page.rowsRead).toBeLessThanOrEqual(page.pages * 50);
+      if (page.pages === 0) { settled = true; break; }
+    }
+    expect(settled).toBe(true);
+    expect(await state()).toEqual({ stale: 205, walk_events: 205, source_events: 1 });
+    const event = (await pool.query<{ state: string; walks_complete: boolean; cursor_walk: string }>(`
+      SELECT state, walks_complete, cursor_walk FROM verification.invalidation
+      WHERE kind = $1 AND reference = $2`,
+    [change === 'lineage' ? 'source-observation' : 'source-disposition', root])).rows[0]!;
+    expect(event).toMatchObject({ state: 'complete', walks_complete: true });
+    expect(event.cursor_walk).not.toBeNull();
+    for (const walk of [walks[0]!, walks.at(-1)!]) {
+      await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${walk}:0`))
+        .rejects.toBeInstanceOf(VerificationStale);
+    }
+    const freshReplay = await new VerificationStore(pool).analysisSnapshot(manifest.claim,
+      manifest.revision, caller, `${fresh.walk}:0`);
+    replayed(freshReplay, fresh);
+    expect((await pool.query<{ stale: boolean }>(`SELECT stale FROM verification.lineage_walk_observation
+      WHERE walk_id = $1 AND observation_id = $2`, [fresh.walk, root])).rows[0]?.stale).toBe(false);
+    expect((await pool.query(`SELECT 1 FROM verification.invalidation
+      WHERE kind = 'lineage-walk' AND reference = $1`, [fresh.walk])).rowCount).toBe(0);
+    expect(await store.processInvalidations(owner, { pageSize: 50, maxPages: 1 }))
+      .toMatchObject({ pages: 0, rowsRead: 0, marked: 0 });
+  }, 90_000);
+}
+
+test('completed proof catches up unrelated source changes in bounded pages without replacing its frontier', async () => {
+  const fixture = await observations(1);
+  const store = new VerificationStore(pool);
+  const publication = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, fixture.ids[0]!, { origin: publication }, 'publishes-origin');
+  const manifest = await evidence(store, fixture.principal, [fixture.ids[0]!]);
+  const caller = authority(fixture.principal);
+  const complete = await store.analysisSnapshot(manifest.claim, manifest.revision, caller);
+  expect(complete.complete).toBe(true);
+  expect(complete.lineageProof.dependence).toBe('established');
+  const before = await walkState(complete.walk);
+  const sequence = async () => BigInt((await pool.query<{ validated_sequence: string }>(`
+    SELECT validated_sequence::text FROM verification.lineage_walk WHERE id = $1`,
+  [complete.walk])).rows[0]!.validated_sequence);
+  let validated = await sequence();
+  const unrelated = await observations(LINEAGE_EDGE_BUDGET + 1, fixture.principal);
+  for (const observation of unrelated.ids) {
+    await edge(store, fixture.principal, observation, { origin: publication }, 'publishes-origin');
+  }
+  const token = `${complete.walk}:0`;
+  const partial = await new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision, caller, token);
+  bounded(partial);
+  expect(partial.complete).toBe(false);
+  expect(partial.work).toEqual({ expansions: 0, links: 0 });
+  expect(partial.totalWork).toEqual(complete.totalWork);
+  const advanced = await sequence();
+  expect(advanced - validated).toBe(BigInt(LINEAGE_EDGE_BUDGET));
+  validated = advanced;
+  let current = partial;
+  for (let retry = 0; !current.complete && retry < 5; retry++) {
+    current = await new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
+      caller, current.continuation!);
+    const next = await sequence();
+    expect(next - validated).toBeGreaterThanOrEqual(0n);
+    expect(next - validated).toBeLessThanOrEqual(BigInt(LINEAGE_EDGE_BUDGET));
+    validated = next;
+  }
+  expect(current.complete).toBe(true);
+  expect(current.work).toEqual({ expansions: 0, links: 0 });
+  expect(current.totalWork).toEqual(complete.totalWork);
+  expect(current.lineageProof).toEqual(complete.lineageProof);
+  const originalReplay = await store.analysisSnapshot(manifest.claim, manifest.revision, caller, token);
+  replayed(originalReplay, complete);
+  const after = await walkState(complete.walk);
+  expect(after.nodes).toEqual(before.nodes);
+  expect(after.origins).toEqual(before.origins);
+  expect(after.steps).toEqual(expect.arrayContaining(before.steps));
+  const { validated_sequence: beforeSequence, version: beforeVersion, ...beforeWalk } = before.walk;
+  const { validated_sequence: afterSequence, version: afterVersion, ...afterWalk } = after.walk;
+  expect(BigInt(afterSequence) - BigInt(beforeSequence)).toBe(BigInt(LINEAGE_EDGE_BUDGET + 1));
+  expect(afterVersion).toBeGreaterThanOrEqual(beforeVersion);
+  expect(afterWalk).toEqual(beforeWalk);
+  expect((await pool.query(`SELECT 1 FROM verification.lineage_walk_observation
+    WHERE walk_id = $1 AND stale`, [complete.walk])).rowCount).toBe(0);
+  expect((await pool.query(`SELECT 1 FROM verification.invalidation
+    WHERE kind = 'lineage-walk' AND reference = $1`, [complete.walk])).rowCount).toBe(0);
+}, 90_000);
+
+test('a stale proof behind a larger change backlog is refused before the walk fan-out drains', async () => {
+  const fixture = await observations(1);
+  const store = new VerificationStore(pool);
+  const root = fixture.ids[0]!;
+  const publication = await origin(store, fixture.principal);
+  await edge(store, fixture.principal, root, { origin: publication }, 'publishes-origin');
+  const manifest = await evidence(store, fixture.principal, [root]);
+  const caller = authority(fixture.principal);
+  const complete = await store.analysisSnapshot(manifest.claim, manifest.revision, caller);
+  expect(complete.complete).toBe(true);
+  const before = (await pool.query<{ validated_sequence: string }>(`SELECT validated_sequence::text
+    FROM verification.lineage_walk WHERE id = $1`, [complete.walk])).rows[0]!.validated_sequence;
+  const unrelated = await observations(LINEAGE_EDGE_BUDGET + 1, fixture.principal);
+  for (const observation of unrelated.ids) {
+    await edge(store, fixture.principal, observation, { origin: publication }, 'publishes-origin');
+  }
+  await store.recordObservationDisposition(fixture.principal, randomUUID(), root, {
+    expectedHead: null, state: 'withdrawn', reason: 'Source changed behind queued unrelated edits',
+  });
+  const plan = (await pool.query<{ 'QUERY PLAN': { Plan: Record<string, unknown> }[] }>(`
+    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF)
+    SELECT i.local_sequence::text, i.reference, i.kind FROM verification.invalidation i
+    WHERE i.local_sequence > $1::bigint ORDER BY i.local_sequence LIMIT 1`,
+  [before])).rows[0]!['QUERY PLAN'][0]!.Plan;
+  expect(plan['Actual Rows']).toBe(1);
+  expect(JSON.stringify(plan)).toContain('invalidation_local_sequence');
+  const partial = await store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${complete.walk}:0`);
+  bounded(partial);
+  expect(partial.complete).toBe(false);
+  expect(partial.work).toEqual({ expansions: 0, links: 0 });
+  expect(analyze(partial)).toMatchObject({ support: 'abstained', independentOrigins: null, coverage: 'incomplete' });
+  const after = (await pool.query<{ validated_sequence: string }>(`SELECT validated_sequence::text
+    FROM verification.lineage_walk WHERE id = $1`, [complete.walk])).rows[0]!.validated_sequence;
+  expect(BigInt(after) - BigInt(before)).toBe(BigInt(LINEAGE_EDGE_BUDGET));
+  await expect(new VerificationStore(pool).analysisSnapshot(manifest.claim, manifest.revision,
+    caller, partial.continuation!)).rejects.toBeInstanceOf(VerificationStale);
+  await expect(store.analysisSnapshot(manifest.claim, manifest.revision, caller, `${complete.walk}:0`))
+    .rejects.toBeInstanceOf(VerificationStale);
+  // No asynchronous walk mark was needed to refuse both continuation and replay.
+  expect((await pool.query(`SELECT 1 FROM verification.lineage_walk_observation
+    WHERE walk_id = $1 AND stale`, [complete.walk])).rowCount).toBe(0);
+}, 90_000);

@@ -6,6 +6,19 @@ CREATE INDEX lineage_dependency_seek ON verification.lineage_edge (observation_i
 CREATE INDEX lineage_publication_seek ON verification.lineage_edge (observation_id, id)
   WHERE relation = 'publishes-origin';
 
+-- The existing invalidation journal also provides a committed, local source
+-- change position. Its one-row lock fixes event order without walk fan-out.
+CREATE TABLE verification.lineage_change_head (
+  singleton boolean PRIMARY KEY CHECK (singleton),
+  revision bigint NOT NULL CHECK (revision >= 0)
+);
+INSERT INTO verification.lineage_change_head VALUES (true, 0);
+ALTER TABLE verification.invalidation ADD COLUMN local_sequence bigint CHECK (local_sequence > 0);
+ALTER TABLE verification.invalidation ADD COLUMN cursor_walk uuid;
+ALTER TABLE verification.invalidation ADD COLUMN walks_complete boolean NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX invalidation_local_sequence ON verification.invalidation (local_sequence)
+  WHERE local_sequence IS NOT NULL;
+
 CREATE TABLE verification.lineage_walk (
   id uuid PRIMARY KEY,
   claim verification.rezics_id NOT NULL,
@@ -21,6 +34,7 @@ CREATE TABLE verification.lineage_walk (
   expansions bigint NOT NULL DEFAULT 0 CHECK (expansions >= 0),
   edges bigint NOT NULL DEFAULT 0 CHECK (edges >= 0),
   node_count bigint NOT NULL DEFAULT 0 CHECK (node_count >= 0),
+  validated_sequence bigint NOT NULL DEFAULT 0 CHECK (validated_sequence >= 0),
   UNIQUE (claim, evidence_revision, authority_digest, start_key)
 );
 CREATE TABLE verification.lineage_walk_observation (
@@ -67,25 +81,45 @@ ALTER TABLE verification.invalidation ADD CONSTRAINT invalidation_kind_check CHE
   ('claim', 'evidence-set', 'source-assessment', 'source-observation', 'source-disposition',
    'challenge', 'policy', 'rule', 'acceptance', 'adopted-revision', 'lineage-walk'));
 
--- Lock the immutable observation as the serialization point even when its
--- lineage/disposition head was absent when the walk first visited it.
-CREATE FUNCTION verification.stale_lineage_walk(changed_observation uuid) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE affected uuid;
-BEGIN
-  PERFORM 1 FROM source.observation WHERE id = changed_observation FOR UPDATE;
-  FOR affected IN UPDATE verification.lineage_walk_observation SET stale = true
-    WHERE observation_id = changed_observation AND NOT stale RETURNING walk_id
-  LOOP
-    PERFORM verification.record_invalidation('lineage-walk', affected::text, NULL,
-      'lineage-walk-stale:' || affected);
-  END LOOP;
-END $$;
+-- A source edit publishes exactly one existing source invalidation. Dependent
+-- walks are sought by the bounded drain, never touched by this trigger.
 CREATE FUNCTION verification.lineage_walk_head_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE next_sequence bigint; change_kind text; change_head text; change_event text;
 BEGIN
-  PERFORM verification.stale_lineage_walk(NEW.observation_id);
+  IF TG_TABLE_NAME = 'lineage_head' THEN
+    IF TG_OP = 'UPDATE' AND NEW.revision = OLD.revision THEN RETURN NULL; END IF;
+  ELSE
+    IF TG_OP = 'UPDATE' AND NEW.head = OLD.head THEN RETURN NULL; END IF;
+  END IF;
+  UPDATE verification.lineage_change_head SET revision = revision + 1 WHERE singleton
+    RETURNING revision INTO next_sequence;
+  -- Readers lock the change head before observations, keeping the same order.
+  PERFORM 1 FROM source.observation WHERE id = NEW.observation_id FOR UPDATE;
+  IF TG_TABLE_NAME = 'lineage_head' THEN
+    change_kind := 'source-observation'; change_head := NEW.revision::text;
+    change_event := 'lineage:' || NEW.observation_id || ':' || NEW.revision;
+  ELSE
+    change_kind := 'source-disposition'; change_head := NEW.head::text;
+    change_event := 'source-disposition:' || NEW.head;
+  END IF;
+  PERFORM verification.record_invalidation(change_kind, NEW.observation_id::text, change_head, change_event);
+  UPDATE verification.invalidation SET local_sequence = next_sequence
+    WHERE producer = 'content' AND event_key = change_event;
   RETURN NULL;
 END $$;
 CREATE TRIGGER lineage_walk_lineage_stale AFTER INSERT OR UPDATE ON verification.lineage_head
   FOR EACH ROW EXECUTE FUNCTION verification.lineage_walk_head_changed();
 CREATE TRIGGER lineage_walk_disposition_stale AFTER INSERT OR UPDATE ON verification.observation_disposition_head
   FOR EACH ROW EXECUTE FUNCTION verification.lineage_walk_head_changed();
+
+CREATE FUNCTION verification.guard_walk_invalidation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF (OLD.local_sequence IS NOT NULL AND NEW.local_sequence IS DISTINCT FROM OLD.local_sequence)
+    OR (OLD.walks_complete AND NOT NEW.walks_complete)
+    OR (OLD.cursor_walk IS NOT NULL AND (NEW.cursor_walk IS NULL OR NEW.cursor_walk < OLD.cursor_walk)) THEN
+    RAISE EXCEPTION 'walk invalidation work may only advance' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER invalidation_walk_monotone BEFORE UPDATE ON verification.invalidation
+  FOR EACH ROW EXECUTE FUNCTION verification.guard_walk_invalidation();
