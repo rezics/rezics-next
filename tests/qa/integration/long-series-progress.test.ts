@@ -11,6 +11,7 @@ import { startMediaStack } from './media-support.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { readProgressOrder } from '../../../services/main/src/modules/progress/order.ts';
 import { ProgressOrderProjection } from '../../../services/main/src/modules/progress/order-projection.ts';
+import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 
 const short = (resource: string) => resource.slice(-36);
@@ -125,7 +126,7 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     ]);
     const specials = groups.occurrences[0]!, main = groups.occurrences[1]!;
     const special = (await change([{ op: 'insert', role: 'part', parent: specials,
-      position: 'last', target: specialTarget, displayLabel: 'Special', inclusion: 'extra' }])).occurrences[0]!;
+      position: 'last', target: specialTarget, displayLabel: 'Episode 1 special', inclusion: 'extra' }])).occurrences[0]!;
     for (let offset = 0; offset < 1000; offset += 16) {
       const page = await change(Array.from({ length: Math.min(16, 1000 - offset) }, (_, index) => ({
         op: 'insert', role: 'part', parent: main, position: 'last',
@@ -345,6 +346,39 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     } while (resumeCursor);
     expect(pendingResume).toBeGreaterThan(1);
     expect(visibleResume?.resolved).toBe(episodes[0]!);
+
+    // Title search shares the same bounded Mine windows. Once resolved, each
+    // search continuation retains that checkpoint rather than revisiting the
+    // 999 withheld completions or replaying already-delivered title matches.
+    await backfillOccurrenceLabels(stack.env, { generation: header.generation });
+    let searchCursor: string | null = null, searchPages = 0, pendingSearch = 0, resolvedSearch = false;
+    const searched: string[] = [];
+    do {
+      const before = { rows: graphRows, reads: objectReads, calls: stack.fuseki.queries };
+      const page: Chooser = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&q=Episode%201&limit=1`
+        + (searchCursor ? `&cursor=${encodeURIComponent(searchCursor)}` : '')));
+      expect(page.scope).toBe('positions');
+      expect(graphRows - before.rows).toBeLessThan(160);
+      expect(objectReads - before.reads).toBeLessThan(40);
+      expect(stack.fuseki.queries - before.calls).toBeLessThan(40);
+      expect(page.items.every(item => !Object.hasOwn(item, 'ordinal'))).toBe(true);
+      if (page.resolved === 'pending') {
+        expect(resolvedSearch).toBe(false);
+        expect(page).toMatchObject({ visibility: 'pending', items: [], complete: false });
+        expect(page.nextCursor).not.toBeNull();
+        pendingSearch++;
+      } else {
+        expect(page.resolved).toBe(episodes[0]!);
+        resolvedSearch = true;
+        searched.push(...page.items.map(item => item.occurrence));
+        expect(new Set(searched).size).toBe(searched.length);
+      }
+      searchCursor = page.nextCursor;
+      if (searchCursor) opaque(searchCursor);
+      expect(++searchPages).toBeLessThan(110);
+    } while (searchCursor);
+    expect(pendingSearch).toBeGreaterThan(1);
+    expect(searched).toEqual([special, episodes[0]!]);
     await targetRead(repeated, true);
     await targetRead(thousand, true);
 

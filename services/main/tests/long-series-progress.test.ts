@@ -15,6 +15,7 @@ import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeContinua
 import { disclosedCompletedProgress } from '../src/modules/progress/disclosure.ts';
 import { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
 import { ProgressOrderProjection } from '../src/modules/progress/order-projection.ts';
+import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ value,
@@ -217,6 +218,36 @@ test('hidden furthest completion falls back within 16 candidates and continues b
   expect(await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose, next!.after))
     .toBe(f.episodes[0]!.occurrence);
   expect(await chooserPosition(f.session, f.traversal(), 'mine', false, f.disclose)).toBe('start');
+});
+
+test('search plus Mine resumes its pending window before advancing search pages', async () => {
+  const f = await fixture();
+  const key = { occurrence: f.episodes[983]!.occurrence, selectedRevision: null };
+  const windows: Array<typeof key | undefined> = [];
+  f.session.deps.progress!.resumeCandidates = async (_principal, _structure, _revision, after) => {
+    windows.push(after as typeof key | undefined);
+    if (!after) throw new ReadingResumeContinuation(key);
+    return { items: [], more: false, next: null };
+  };
+  Object.assign(f.session.deps, { access: { canReadAsBaselineMember: async () => true } });
+  const boundary = new ReadingBoundary(f.session, 'mine'), traversal = f.traversal();
+  boundary.traversalFor = () => traversal;
+  const browse = traversal.page.bind(traversal);
+  const searches: Array<string | undefined> = [];
+  // These fixture rows all match "Episode"; the native test exercises the
+  // real title index. Here the existing range verifies checkpoint advancement.
+  traversal.page = input => { searches.push(input.q); return browse({ ...input, q: undefined }); };
+  const pending = await boundary.chooser(f.work, 1, undefined, 'Episode');
+  expect(pending).toMatchObject({ resolved: 'pending', items: [], complete: false,
+    scope: 'positions', visibility: 'pending' });
+  expect(pending.next).toBeString(); expect(searches).toEqual([]);
+  const first = await boundary.chooser(f.work, 1, pending.next!, 'Episode');
+  expect(first.items.map(row => row.occurrence)).toEqual([f.episodes[0]!.occurrence]);
+  expect(first.next).toBeString();
+  const second = await boundary.chooser(f.work, 1, first.next!, 'Episode');
+  expect(second.items.map(row => row.occurrence)).toEqual([f.episodes[1]!.occurrence]);
+  expect(searches).toEqual(['Episode', 'Episode']);
+  expect(windows).toEqual([undefined, key, key]);
 });
 
 test('a visible last sibling never returns a physical ordinal over 999 hidden items', async () => {
