@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
-import { releaseAccessRecoveryFence } from '../access/admission.ts';
+import { lockAccessRecoveryFenceForRelease, releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
 import type { OwnerReconciliationItemRow, OwnerReconciliationCutRow } from '../owner/schema.ts';
@@ -12,7 +12,7 @@ import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from 
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, probeContentErasure } from './content.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
-import { readGraphErasureProof, type GraphSuppressionProof } from './graph.ts';
+import { readGraphErasureProof, type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
 import { objectErasureAbsent, replayObjectErasure } from './replay-objects.ts';
 import { publicationSupersessionsMatch } from './replay-supersessions.ts';
@@ -94,7 +94,7 @@ export interface ReconciliationSummary {
   counts: Record<string, number>;
 }
 
-async function summary(relay: Pool, operationId: string): Promise<ReconciliationSummary | null> {
+async function summary(relay: Pool | PoolClient, operationId: string): Promise<ReconciliationSummary | null> {
   const row = (await relay.query<{ id: string; state: 'held' | 'reconciled'; hold_reason: string | null;
     erasure_epoch: string | null; coverage_generation: string | null }>(`SELECT id, state, hold_reason,
       erasure_epoch::text AS erasure_epoch, coverage_generation::text AS coverage_generation
@@ -171,15 +171,111 @@ export interface RestoredOwners {
   objects?: ObjectRecoveryStore;
 }
 
+export interface BorrowedRestoreClients {
+  relayClient: PoolClient;
+  accessClient: PoolClient;
+}
+
+async function withRestoreClients<T>(relay: Pool, restored: RestoredOwners, borrowed: BorrowedRestoreClients | undefined,
+  work: (clients: BorrowedRestoreClients) => Promise<T>): Promise<T> {
+  return relayTransaction(relay, async relayClient => {
+    const isolation = (await relayClient.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation;
+    if (isolation !== 'read committed') throw new ErasureRestoreHold('retained relay needs a fresh READ COMMITTED view');
+    const before = (await relayClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
+    await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+    if ((await relayClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== before) {
+      throw new ErasureRestoreHold('retained relay transaction is not held');
+    }
+    const accessClient = borrowed?.accessClient ?? await restored.access.connect();
+    try {
+      if (!borrowed) {
+        await accessClient.query('BEGIN');
+        await accessClient.query("SET LOCAL lock_timeout = '2s'");
+        await accessClient.query("SET LOCAL statement_timeout = '5s'");
+      }
+      const accessBefore = (await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
+      const fence = (await accessClient.query<{ open: boolean; generation: string }>(
+        'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0];
+      if ((await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== accessBefore) {
+        throw new ErasureRestoreHold('restored Access transaction is not held');
+      }
+      if (fence?.open !== false) throw new ErasureRestoreHold('restored Access recovery fence is open');
+      const graph = restored.graph, held = graph?.heldErasure;
+      if (graph && held && (fence.generation !== held.accessHoldGeneration
+        || await graphLineageSequence(graph.fuseki, graph.lineage, held.cut) !== '0')) {
+        throw new ErasureRestoreHold('captured Access generation or held graph cut changed');
+      }
+      const result = await work({ relayClient, accessClient });
+      if (!borrowed) await accessClient.query('COMMIT');
+      return result;
+    } catch (error) {
+      if (!borrowed) await accessClient.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { if (!borrowed) accessClient.release(); }
+  }, borrowed?.relayClient);
+}
+
+async function heldErasureReplay(restored: RestoredOwners, clients: BorrowedRestoreClients,
+  erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<HeldGraphErasureReplay | undefined> {
+  const graph = restored.graph, config = graph?.heldErasure;
+  if (!graph || !config) return undefined;
+  if (config.cut.dataEpoch !== graph.lineage.dataEpoch || config.cut.routingEpoch !== graph.lineage.routingEpoch
+    || config.originalGraph.fuseki === graph.fuseki
+    || config.originalGraph.lineage.dataEpoch === graph.lineage.dataEpoch) {
+    throw new ErasureRestoreHold('independent original graph and exact held cut are required');
+  }
+  const original = await readGraphErasureProof(config.originalGraph.fuseki,
+    config.originalGraph.lineage, erasureId, epoch, revisionIds);
+  const held: HeldGraphErasureReplay = { cut: config.cut, accessHoldGeneration: config.accessHoldGeneration,
+    signingKey: config.signingKey, maintenance: config.maintenance, revisionIds, original,
+    assertCurrent: async request => {
+      if (request.erasureId !== erasureId || request.epoch !== epoch
+        || request.cut.dataEpoch !== held.cut.dataEpoch || request.cut.routingEpoch !== held.cut.routingEpoch
+        || request.cut.restoreCutover !== held.cut.restoreCutover
+        || request.cut.priorDataEpoch !== held.cut.priorDataEpoch || request.cut.priorSequence !== held.cut.priorSequence
+        || request.accessHoldGeneration !== held.accessHoldGeneration
+        || !sameTargets(request.revisionIds, revisionIds)
+        || !sameProof(request.original, original)) {
+        throw new ErasureRestoreHold('held erasure authorization differs from its current entry');
+      }
+      const report = await readErasure(clients.relayClient, erasureId);
+      if (report.kind === 'account' || report.erasureEpoch !== epoch || report.suppression !== 'suppressed'
+        || !sameTargets(report.targets.filter(target => target.owner === 'content'
+          && target.kind === 'content_revision').map(target => target.ref), revisionIds)) {
+        throw new ErasureRestoreHold('held erasure differs from the retained current journal');
+      }
+      const current = await readGraphErasureProof(config.originalGraph.fuseki,
+        config.originalGraph.lineage, erasureId, epoch, revisionIds);
+      if (!sameProof(current, original)) throw new ErasureRestoreHold('original graph suppression proof changed');
+      const fence = (await clients.accessClient.query<{ open: boolean; generation: string }>(
+        'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0];
+      if (fence?.open !== false || fence.generation !== held.accessHoldGeneration
+        || await graphLineageSequence(graph.fuseki, graph.lineage, held.cut) !== '0') {
+        throw new ErasureRestoreHold('held erasure owner generation or graph cut changed');
+      }
+    } };
+  return held;
+}
+
+function sameTargets(left: readonly string[], right: readonly string[]): boolean {
+  const sorted = [...right].sort();
+  return left.length === right.length && new Set(left).size === left.length
+    && [...left].sort().every((value, index) => value === sorted[index]);
+}
+
+function sameProof(left: GraphSuppressionProof, right: GraphSuppressionProof): boolean {
+  return left.receipt === right.receipt && left.dataEpoch === right.dataEpoch && left.sequence === right.sequence;
+}
+
 function restoreRequestDigest(consumer: string, replay: boolean,
   authority: RetainedAuthorityCoverage): string {
   return sha256(`${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`);
 }
 
-async function journalFrontier(relay: Pool, consumer: string) {
+async function journalFrontier(relay: Pool | PoolClient, consumer: string) {
   const head = (await relay.query<{ generation: string; erasure_epoch: string | null }>(
     `SELECT generation::text AS generation, erasure_epoch::text AS erasure_epoch
-     FROM relay.recovery_coverage_head WHERE consumer = $1`, [consumer])).rows[0] ?? null;
+     FROM relay.recovery_coverage_head WHERE consumer = $1 FOR SHARE`, [consumer])).rows[0] ?? null;
   const journal = (await relay.query<{ epoch: string | null }>(
     'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]!.epoch;
   return { head, journal };
@@ -207,19 +303,22 @@ export async function retainErasureCoverage(relay: Pool, consumer: string): Prom
  */
 export async function reconcileRestoredErasures(relay: Pool, restored: RestoredOwners, input: {
   operationId: string; consumer: string; replay: boolean;
-  authority: RetainedAuthorityCoverage }): Promise<ReconciliationSummary> {
-  const prior = await summary(relay, input.operationId);
+  authority: RetainedAuthorityCoverage }, clients?: BorrowedRestoreClients): Promise<ReconciliationSummary> {
+  return withRestoreClients(relay, restored, clients, async ({ relayClient, accessClient }) => {
+  const operationId = input.operationId.endsWith(':erasures') ? input.operationId : `${input.operationId}:erasures`;
+  if (!input.operationId || operationId.length > 200) throw new ErasureRestoreHold('erasure reconciliation identity is invalid');
+  const prior = await summary(relayClient, operationId);
   const requestDigest = restoreRequestDigest(input.consumer, input.replay, input.authority);
   if (prior) {
-    const recorded = (await relay.query<{ request_digest: string }>(
+    const recorded = (await relayClient.query<{ request_digest: string }>(
       'SELECT request_digest FROM relay.owner_reconciliation WHERE operation_id = $1',
-      [input.operationId])).rows[0];
+      [operationId])).rows[0];
     if (recorded?.request_digest !== requestDigest) {
       throw new ErasureRestoreHold('restore operation binds another authority capture');
     }
     return prior;
   }
-  const { head, journal } = await journalFrontier(relay, input.consumer);
+  const { head, journal } = await journalFrontier(relayClient, input.consumer);
   const content: Item[] = [];
   const graph: Item[] = [];
   const objects: Item[] = [];
@@ -228,14 +327,19 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     ref: 'retained-command-model-custody', disposition: 'conflict' };
   if (restored.graph && restored.objects) {
     try {
-      protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects);
+      protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects, accessClient);
       custody.disposition = 'matched';
     } catch { /* missing or divergent originals keep the whole restored owner held */ }
   }
   objects.push(custody);
+  let currentAuthority: Item = { owner: 'access', kind: 'authority_fence',
+    ref: 'current-retained-authority-coverage', disposition: 'matched' };
+  try { await assertRetainedAuthorityCoverage(relayClient, restored.access, input.consumer, input.authority, accessClient); }
+  catch { currentAuthority = { ...currentAuthority, disposition: 'conflict' }; }
+  const replayAllowed = input.replay && custody.disposition === 'matched' && currentAuthority.disposition === 'matched';
   let after = '0';
   while (true) {
-    const entries = (await relay.query<{ id: string; epoch: string;
+    const entries = (await relayClient.query<{ id: string; epoch: string;
       suppression_status: string; refs: string[] }>(`SELECT e.id, e.erasure_epoch::text AS epoch,
         e.suppression_status, array_agg(t.target_ref ORDER BY t.ordinal) AS refs
       FROM relay.erasure e JOIN relay.erasure_target t ON t.erasure_id = e.id
@@ -249,7 +353,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       const available = entry.refs.filter(ref => probes.get(ref) === 'available');
-      if (available.length && await postponeHeldMaterial(restored.access,
+      if (available.length && await postponeHeldMaterial(accessClient,
         await contentErasureResource(restored.content, available), entry.id)) {
         for (const ref of entry.refs) content.push({ owner: 'content', kind: 'revision', ref,
           disposition: ['erased', 'absent'].includes(probes.get(ref) ?? '') ? 'erased' : 'conflict' });
@@ -258,22 +362,27 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       let graphProof: GraphSuppressionProof | null = null;
       if (restored.graph) {
-        let disposition: Item['disposition'] = entry.refs.length > 64 ? 'conflict'
-          : await replayGraphErasure(restored.graph.fuseki, restored.graph.lineage,
-            entry.id, entry.epoch, entry.refs, input.replay);
-        if (disposition === 'erased' || disposition === 'replayed') {
-          try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
-            restored.graph.lineage, entry.id, entry.epoch, entry.refs); }
-          catch { disposition = 'conflict'; }
-        }
+        let disposition: Item['disposition'] = 'conflict';
+        try {
+          if (entry.refs.length <= 64) {
+            const held = await heldErasureReplay(restored, { relayClient, accessClient },
+              entry.id, entry.epoch, entry.refs);
+            disposition = await replayGraphErasure(restored.graph.fuseki, restored.graph.lineage,
+              entry.id, entry.epoch, entry.refs, replayAllowed, held);
+            if (disposition === 'erased' || disposition === 'replayed') {
+              graphProof = await readGraphErasureProof(restored.graph.fuseki,
+                restored.graph.lineage, entry.id, entry.epoch, entry.refs, held);
+            }
+          }
+        } catch { disposition = 'conflict'; }
         graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition });
       }
       let replayed = false;
-      if (available.length && input.replay) {
+      if (available.length && replayAllowed) {
         try {
           await applyContentErasure(restored.content, { erasureId: entry.id, erasureEpoch: entry.epoch,
             resourceId: await contentErasureResource(restored.content, available),
-            revisionIds: available, preservationAccess: restored.access, ...(graphProof ? { graphProof } : {}) });
+            revisionIds: available, preservationAccess: accessClient, ...(graphProof ? { graphProof } : {}) });
           replayed = true;
         } catch (error) {
           if (!(error instanceof ContentErasureGraphRequired || error instanceof ContentErasureStale)) throw error;
@@ -298,7 +407,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   // remain held until their own owner supplies a replay and release proof.
   after = '0';
   while (true) {
-    const entries = (await relay.query<{ id: string; epoch: string }>(
+    const entries = (await relayClient.query<{ id: string; epoch: string }>(
       `SELECT e.id, e.erasure_epoch::text AS epoch FROM relay.erasure e
        WHERE e.kind <> 'account' AND e.erasure_epoch > $1::bigint
          AND (NOT EXISTS (SELECT 1 FROM relay.erasure_target t
@@ -309,7 +418,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
                 AND t.target_kind = 'content_revision')))
        ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
     for (const entry of entries) {
-      const report = await readErasure(relay, entry.id);
+      const report = await readErasure(relayClient, entry.id);
       const foreign = report.targets.filter(target => !(target.owner === 'content'
         && target.kind === 'content_revision') && !(target.owner === 'object' && target.kind === 'object'));
       if (!report.targets.some(target => target.owner === 'content' && target.kind === 'content_revision')
@@ -327,7 +436,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
         if (report.suppression === 'suppressed' && restored.objects && restored.graph
           && protectedDigests) {
           try { disposition = await replayObjectErasure(restored.objects, target.ref,
-            protectedDigests, input.replay); }
+            protectedDigests, replayAllowed); }
           catch { /* malformed or unavailable target keeps the restore held */ }
         }
         objects.push({ owner: 'object', kind: 'erasure', ref: target.ref, disposition });
@@ -339,7 +448,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   const account: Item[] = [];
   after = '0';
   while (true) {
-    const entries = (await relay.query<{ epoch: string; account_subject: string;
+    const entries = (await relayClient.query<{ epoch: string; account_subject: string;
       suppression_status: string }>(
       `SELECT erasure_epoch::text AS epoch, account_subject, suppression_status FROM relay.erasure
        WHERE kind = 'account' AND erasure_epoch > $1::bigint ORDER BY erasure_epoch LIMIT 1000`,
@@ -356,18 +465,15 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   }
   let authority: Item = { owner: 'access', kind: 'deletion_intent', ref: 'account-deletion-journal',
     disposition: 'matched' };
-  try { await assertAccountDeletionJournalCoverage(restored.access, relay); }
+  try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, relayClient); }
   catch (error) {
     if (!(error instanceof AccountDeletionJournalConflict)) throw error;
     authority = { ...authority, disposition: 'conflict' };
   }
-  let currentAuthority: Item = { owner: 'access', kind: 'authority_fence',
-    ref: 'current-retained-authority-coverage', disposition: 'matched' };
-  try { await assertRetainedAuthorityCoverage(relay, restored.access, input.consumer, input.authority); }
-  catch { currentAuthority = { ...currentAuthority, disposition: 'conflict' }; }
   let graphSequence: string | null = null;
   if (restored.graph) {
-    try { graphSequence = await graphLineageSequence(restored.graph.fuseki, restored.graph.lineage); }
+    try { graphSequence = await graphLineageSequence(restored.graph.fuseki, restored.graph.lineage,
+      restored.graph.heldErasure?.cut); }
     catch { /* an unavailable graph cannot be released */ }
     if (graphSequence === null) graph.push({ owner: 'graph', kind: 'authority_fence',
       ref: 'restored-graph-lineage', disposition: 'conflict' });
@@ -395,21 +501,23 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     { owner: 'relay', dataEpoch: null, sequence: null, status: head ? 'matched' : 'missing',
       digest: sha256(`${journal ?? '0'}\0${head?.generation ?? 'none'}`) },
   ];
-  await relayTransaction(relay, client => recordReconciliation(client, {
-    operationId: input.operationId, requestDigest,
+  await recordReconciliation(relayClient, {
+    operationId, requestDigest,
     kind: 'restore', scope: `restore:${input.consumer}`, consumer: input.consumer,
     coverageGeneration: head?.generation ?? null, erasureEpoch: journal, erasureId: null, holdReason },
-  cuts, items));
-  return (await summary(relay, input.operationId))!;
+  cuts, items);
+  return (await summary(relayClient, operationId))!;
+  });
 }
 
 /** Recheck the live restored copies immediately before releasing their Access fence. */
-async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners): Promise<void> {
+async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners,
+  accessClient: PoolClient): Promise<void> {
   if (!restored.graph || !restored.objects) {
     throw new ErasureRestoreHold('restored graph and exact object custody are required');
   }
   let protectedDigests: Set<string>;
-  try { protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects); }
+  try { protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects, accessClient); }
   catch { throw new ErasureRestoreHold('restored command or model custody is unavailable or divergent'); }
   const unresolved = await relay.query(`SELECT 1 FROM relay.erasure
     WHERE suppression_status <> 'suppressed' LIMIT 1`);
@@ -422,7 +530,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
     LIMIT 1`);
   if (unsupported.rowCount) throw new ErasureRestoreHold('an erasure owner is not reconciled');
   if (restored.graph && await graphLineageSequence(restored.graph.fuseki,
-    restored.graph.lineage) === null) {
+    restored.graph.lineage, restored.graph.heldErasure?.cut) === null) {
     throw new ErasureRestoreHold('restored graph lineage is unavailable');
   }
   let after = '0';
@@ -440,12 +548,14 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       }
       let graphProof: GraphSuppressionProof | null = null;
       if (restored.graph) {
+        const held = await heldErasureReplay(restored, { relayClient: relay, accessClient },
+          entry.id, entry.epoch, entry.refs);
         if (entry.refs.length > 64 || !await assertGraphErasure(
-          restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs)) {
+          restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs, held)) {
           throw new ErasureRestoreHold('restored graph still exposes an erased revision');
         }
         try { graphProof = await readGraphErasureProof(restored.graph.fuseki,
-          restored.graph.lineage, entry.id, entry.epoch, entry.refs); }
+          restored.graph.lineage, entry.id, entry.epoch, entry.refs, held); }
         catch { throw new ErasureRestoreHold('restored graph erasure receipt is unavailable'); }
       }
       if (!await publicationSupersessionsMatch(restored.content, entry.refs,
@@ -489,10 +599,10 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
     }
     const principals = entries.map(entry => entry.deleted_principal_id).filter((id): id is string => !!id);
     if (principals.length) {
-      const active = await restored.access.query(`SELECT 1 FROM access.principal
+      const active = await accessClient.query(`SELECT 1 FROM access.principal
         WHERE id = ANY($1::uuid[]) AND active = true LIMIT 1`, [principals]);
       if (active.rowCount) throw new ErasureRestoreHold('restored Access principal is active');
-      await eraseLibraryImportsForPrincipals(restored.content,restored.access,principals);
+      await eraseLibraryImportsForPrincipals(restored.content,accessClient,principals);
     }
     if (entries.length < 1000) break;
     after = entries[entries.length - 1]!.epoch;
@@ -507,9 +617,10 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
  */
 export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredOwners,
   reconciliationId: string, fenceGeneration: string,
-  authority: RetainedAuthorityCoverage): Promise<void> {
-  await relayTransaction(relay, async client => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+  authority: RetainedAuthorityCoverage, options?: {
+    clients?: BorrowedRestoreClients; beforeAccessRelease?: () => Promise<void>;
+  }): Promise<void> {
+  await withRestoreClients(relay, restored, options?.clients, async ({ relayClient: client, accessClient }) => {
     const row = (await client.query<{ kind: string; state: string; consumer: string | null;
       request_digest: string;
       erasure_epoch: string | null; coverage_generation: string | null }>(`SELECT kind, state, consumer,
@@ -530,14 +641,25 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
     if (head?.generation !== row.coverage_generation || journal !== row.erasure_epoch) {
       throw new ErasureRestoreHold('a newer retained frontier needs reconciliation');
     }
-    try { await assertAccountDeletionJournalCoverage(restored.access, relay, undefined, client); }
+    try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, client); }
     catch (error) {
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;
     }
-    try { await assertRetainedAuthorityCoverage(client, restored.access, row.consumer, authority); }
+    try { await assertRetainedAuthorityCoverage(client, restored.access, row.consumer, authority, accessClient); }
     catch { throw new ErasureRestoreHold('restored Access differs from current retained authority'); }
-    await assertRestoredErasuresCurrent(client, restored);
-    await releaseAccessRecoveryFence(restored.access, fenceGeneration);
+    await assertRestoredErasuresCurrent(client, restored, accessClient);
+    await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);
+    if (restored.graph?.heldErasure && !options?.beforeAccessRelease) {
+      throw new ErasureRestoreHold('held graph release callback is required');
+    }
+    const relayTransactionId = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
+    const accessTransactionId = (await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id;
+    await options?.beforeAccessRelease?.();
+    if ((await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== relayTransactionId
+      || (await accessClient.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]!.id !== accessTransactionId) {
+      throw new ErasureRestoreHold('owner release callback changed a held transaction');
+    }
+    await releaseAccessRecoveryFence(accessClient, fenceGeneration);
   });
 }

@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Client, Pool } from 'pg';
+import { Client, Pool, type PoolClient } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -12,12 +12,12 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
 import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
-import { graphErasureSuppressed, readGraphErasureProof, suppressGraphContentRevisions } from
+import { graphErasureSuppressed, heldErasureMaintenanceClient, readGraphErasureProof, suppressGraphContentRevisions } from
   '../../../services/main/src/modules/erasure/graph.ts';
 import { ensureRetentionDomain, journalErasure, markErasureSuppressed, readErasure,
   recordErasureInventory } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
-  retainErasureCoverage, type RestoredOwners } from '../../../services/main/src/modules/erasure/reconcile.ts';
+  retainErasureCoverage, type BorrowedRestoreClients, type RestoredOwners } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from
   '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { assertObjectRecoveryCoverage } from '../../../services/main/src/modules/owner/object-coverage.ts';
@@ -26,13 +26,13 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { ACTIVE_GENERATION, ensureModelGeneration, MODEL_MANIFEST_SHA256 } from
   '../../../services/main/src/modules/semantic/command.ts';
-import { hash, initializeFreshGraph, type WorkActivationEnvironment } from
+import { DATASET, GRAPHS, RV, hash, initializeFreshGraph, iri, lit, type WorkActivationEnvironment } from
   '../../../services/main/src/modules/work/activate.ts';
 import { commitMetadata, readMetadataReceipt } from '../../../services/main/src/modules/work/metadata-command.ts';
 import { checkedMetadataState, metadataDigest, type MetadataIntent } from
   '../../../services/main/src/modules/work/metadata-schema.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
-import { captureGraphRecoveryCoverage, RestoreLineageConflict, type RecoveryCoverage } from
+import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, RestoreLineageConflict, type RecoveryCoverage } from
   '../../../services/main/src/modules/work/restore-lineage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -143,6 +143,13 @@ test('OPS12: a consistent pre-erasure cut replays Content suppression and proves
     const retainedCommand = (await access.query<{ payload_sha256: string; retired: boolean }>(
       'SELECT payload_sha256, retired_at IS NOT NULL AS retired FROM access.command_custody WHERE receipt = $1',
     [command.receipt])).rows[0]!;
+    const historicalClient = await access.connect();
+    const historical = await custody.readHistorical({ dataEpoch: command.dataEpoch,
+      streamSequence: command.streamSequence }, historicalClient).finally(() => historicalClient.release());
+    if (!historical) throw new Error('retired fixture command lacks exact historical custody');
+    const originalRoots = [...historical.objectDigests];
+    expect(originalRoots).toContain(retainedCommand.payload_sha256);
+    expect(originalRoots.length).toBeGreaterThanOrEqual(4);
     expect(retainedCommand.retired).toBe(true);
     expect((await native.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
       GRAPH <urn:rezics:graph:receipts> { <${command.receipt}> a rv:CommitProof } }`)).boolean).toBe(false);
@@ -159,6 +166,12 @@ test('OPS12: a consistent pre-erasure cut replays Content suppression and proves
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
       provenance: { fixture: 'custody-restore' }, serializedJson: JSON.stringify({ body: 'later erasure secret' }) });
     if (laterSaved.outcome !== 'succeeded' || !laterSaved.revisionId) throw new Error('later Content fixture save failed');
+    const originalSaved = await core.saveDraft({ operationId: randomUUID(), variant: {
+      id: `urn:rezics:variant:${randomUUID()}`, resourceId: created.work,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
+      provenance: { fixture: 'custody-restore' }, serializedJson: JSON.stringify({ body: 'retained original secret' }) });
+    if (originalSaved.outcome !== 'succeeded' || !originalSaved.revisionId) throw new Error('original Content fixture save failed');
     const revision = `urn:rezics:content:revision:${saved.revisionId}`;
     const unit = `urn:rezics:content:match-unit:${randomUUID()}`;
     // Seed the pre-erasure indexed reference in the stopped fixture, as the existing restore drill does.
@@ -171,6 +184,17 @@ NQ
 java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader --loader=phased --loc=/fuseki/databases/rezics/tdb2 /fuseki/databases/custody-seed.nq`);
     await live.runner.start();
     await offlineTextIndex(live.runner);
+    // The one cut includes an exact original suppression receipt. Its Content copy
+    // still needs replay, so held proof reads exercise the historical tuple without
+    // relying on a new native maintenance dispatch hook.
+    const originalErasure = await journalErasure(relay, { operationId: randomUUID(), requestDigest: 'd3'.repeat(32),
+      kind: 'revision', principalId: registered.principalId, admissionId: randomUUID(), authorityEpoch: '0',
+      targets: [{ kind: 'content_revision', ref: originalSaved.revisionId }] });
+    await suppressGraphContentRevisions(native, lineage, originalErasure.erasureId,
+      originalErasure.erasureEpoch, [originalSaved.revisionId]);
+    const originalProof = await readGraphErasureProof(native, lineage, originalErasure.erasureId,
+      originalErasure.erasureEpoch, [originalSaved.revisionId]);
+    await markErasureSuppressed(relay, originalErasure.erasureId);
     const consumer = `custody-restore:${randomUUID()}`;
     await initializeRelayCheckpoint(relay, consumer, lineage.dataEpoch);
     for (let batch = 0; batch < 32; batch++) {
@@ -203,20 +227,6 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     cpSync(objects.directory, backupObjects, { recursive: true });
     live.runner.stop(); copyGraph(liveVolume, cutVolume); await live.runner.start();
     access = pool(databases.urls.access); content = pool(databases.urls.content);
-    const erase = await journalErasure(relay, { operationId: randomUUID(), requestDigest: 'e4'.repeat(32),
-      kind: 'revision', principalId: registered.principalId, admissionId: randomUUID(), authorityEpoch: fence,
-      targets: [{ kind: 'content_revision', ref: saved.revisionId }] });
-    await suppressGraphContentRevisions(native, lineage, erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
-    const proof = await readGraphErasureProof(native, lineage, erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
-    await applyContentErasure(content, { erasureId: erase.erasureId, erasureEpoch: erase.erasureEpoch,
-      resourceId: created.work, revisionIds: [saved.revisionId], graphProof: proof, preservationAccess: access });
-    await markErasureSuppressed(relay, erase.erasureId);
-    const backupLabel = `content:backup:custody:${suffix}`;
-    await ensureRetentionDomain(relay, { label: backupLabel, owner: 'content', store: 'postgresql',
-      custody: 'backup', expiresAt: new Date(Date.now() + 30 * 86_400_000) });
-    await recordErasureInventory(relay, erase.erasureId, { owners: ['content'],
-      liveRetentionReason: 'PostgreSQL prior rows and retained backup require separate retirement' });
-    expect(await readErasure(relay, erase.erasureId)).toMatchObject({ suppression: 'suppressed', destruction: 'retained' });
     const manifest = JSON.parse(readFileSync(join(backupObjects, MODEL_MANIFEST_SHA256), 'utf8')) as {
       profiles: { sha256: string }[] };
     const shapeDigest = manifest.profiles[0]!.sha256;
@@ -263,6 +273,120 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
         ?.status).toBe('available');
       return { restored, graph, restoredDirectory, generation, ready };
     };
+    const withBorrowed = async <T>(restored: RestoredOwners,
+      work: (clients: BorrowedRestoreClients) => Promise<T>): Promise<T> => {
+      const relayClient = await relay.connect(), accessClient = await restored.access.connect();
+      const transaction = async (client: PoolClient) => (await client.query<{ id: string }>(
+        'SELECT txid_current()::text AS id')).rows[0]!.id;
+      try {
+        await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await accessClient.query('BEGIN');
+        await relayClient.query("SET LOCAL statement_timeout = '5s'");
+        await accessClient.query("SET LOCAL statement_timeout = '5s'");
+        const relayId = await transaction(relayClient), accessId = await transaction(accessClient);
+        await relayClient.query('SAVEPOINT caller_relay');
+        await accessClient.query('SAVEPOINT caller_access');
+        const result = await work({ relayClient, accessClient });
+        expect(await transaction(relayClient)).toBe(relayId);
+        expect(await transaction(accessClient)).toBe(accessId);
+        await relayClient.query('RELEASE SAVEPOINT caller_relay');
+        await accessClient.query('RELEASE SAVEPOINT caller_access');
+        await accessClient.query('COMMIT');
+        await relayClient.query('COMMIT');
+        return result;
+      } catch (error) {
+        await Promise.all([relayClient.query('ROLLBACK'), accessClient.query('ROLLBACK')]);
+        throw error;
+      } finally { accessClient.release(); relayClient.release(); }
+    };
+    const heldCopy = await restore();
+    const next = { dataEpoch: randomUUID(), routingEpoch: /^(0|[1-9][0-9]*)$/.test(lineage.routingEpoch)
+      ? String(BigInt(lineage.routingEpoch) + 1n) : randomUUID() };
+    await cutoverRestoredGraphLineage(heldCopy.restored.graph!.fuseki,
+      { prior: { ...lineage, sequence: coverage.priorSequence }, next });
+    const heldGraph = heldCopy.restored.graph!;
+    const cut = { ...next, restoreCutover: `urn:rezics:restore:${next.dataEpoch}`,
+      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence };
+    heldGraph.lineage = next;
+    heldGraph.heldErasure = { cut, accessHoldGeneration: heldCopy.generation,
+      signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
+      maintenance: heldErasureMaintenanceClient(heldCopy.graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!),
+      originalGraph: { fuseki: native, lineage } };
+    heldGraph.heldErasure.accessHoldGeneration = String(BigInt(heldCopy.generation) + 1n);
+    await expect(withBorrowed(heldCopy.restored, clients => reconcileRestoredErasures(relay, heldCopy.restored,
+      { operationId: randomUUID(), consumer, replay: true, authority }, clients)))
+      .rejects.toThrow('captured Access generation or held graph cut changed');
+    heldGraph.heldErasure.accessHoldGeneration = heldCopy.generation;
+    const capturedSequence = cut.priorSequence;
+    cut.priorSequence = String(BigInt(capturedSequence) + 1n);
+    await expect(withBorrowed(heldCopy.restored, clients => reconcileRestoredErasures(relay, heldCopy.restored,
+      { operationId: randomUUID(), consumer, replay: true, authority }, clients)))
+      .rejects.toThrow('captured Access generation or held graph cut changed');
+    cut.priorSequence = capturedSequence;
+    expect((await new ContentCore(heldCopy.restored.content).readExactBatch([originalSaved.revisionId],
+      async ids => new Set(ids)))[0]?.status).toBe('available');
+    await withBorrowed(heldCopy.restored, async clients => {
+      const input = { operationId: randomUUID(), consumer, replay: true, authority };
+      const result = await reconcileRestoredErasures(relay, heldCopy.restored, input, clients);
+      expect(result.state).toBe('reconciled');
+      expect(result.counts.replayed).toBe(1);
+      expect(await readGraphErasureProof(heldGraph.fuseki, next, originalErasure.erasureId,
+        originalErasure.erasureEpoch, [originalSaved.revisionId], { ...heldGraph.heldErasure!,
+          revisionIds: [originalSaved.revisionId], original: originalProof })).toEqual(originalProof);
+      expect(BigInt(originalProof.sequence)).toBeGreaterThan(0n);
+      expect(originalProof.dataEpoch).toBe(lineage.dataEpoch);
+      expect((await heldGraph.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 ; rv:restoreHold true . } }`)).boolean).toBe(true);
+      let callbacks = 0;
+      await releaseErasureRestoreHold(relay, heldCopy.restored, result.reconciliationId,
+        heldCopy.generation, authority, { clients, beforeAccessRelease: async () => {
+          callbacks++;
+          expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open)
+            .toBe(false);
+          // Exact existing restore-release family; the production outer owner supplies this callback.
+          const receipt = `urn:rezics:receipt:restore-release:${hash(next.dataEpoch)}`;
+          const digest = hash(JSON.stringify({ family: 'restore-release-v1', lineage: next,
+            priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
+          expect((await heldGraph.fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+            update: `PREFIX rv: <${RV}>
+            DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+            INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+              rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
+              rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }
+            WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ;
+              rv:routingEpoch ${lit(next.routingEpoch)} ; rv:sequence 0 ;
+              rv:restoreCutover ${iri(cut.restoreCutover)} ; rv:restoreHold true .
+              ${iri(cut.restoreCutover)} rv:priorDataEpoch ${lit(cut.priorDataEpoch)} ;
+                rv:priorSequence ${cut.priorSequence} . }
+              FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }` })).status).toBe('committed');
+          expect((await heldGraph.fuseki.query(`PREFIX rv: <${RV}> ASK {
+            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 .
+              FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+            GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ;
+              rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }`)).boolean).toBe(true);
+        } });
+      expect(callbacks).toBe(1);
+      expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(true);
+    });
+    expect((await new ContentCore(heldCopy.restored.content).readExactBatch([originalSaved.revisionId],
+      async ids => new Set(ids)))[0]?.status).toBe('erased');
+    heldCopy.graph.remove();
+    await Promise.all([close(heldCopy.restored.account), close(heldCopy.restored.access), close(heldCopy.restored.content)]);
+
+    const erase = await journalErasure(relay, { operationId: randomUUID(), requestDigest: 'e4'.repeat(32),
+      kind: 'revision', principalId: registered.principalId, admissionId: randomUUID(), authorityEpoch: fence,
+      targets: [{ kind: 'content_revision', ref: saved.revisionId }] });
+    await suppressGraphContentRevisions(native, lineage, erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+    const proof = await readGraphErasureProof(native, lineage, erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+    await applyContentErasure(content, { erasureId: erase.erasureId, erasureEpoch: erase.erasureEpoch,
+      resourceId: created.work, revisionIds: [saved.revisionId], graphProof: proof, preservationAccess: access });
+    await markErasureSuppressed(relay, erase.erasureId);
+    const backupLabel = `content:backup:custody:${suffix}`;
+    await ensureRetentionDomain(relay, { label: backupLabel, owner: 'content', store: 'postgresql',
+      custody: 'backup', expiresAt: new Date(Date.now() + 30 * 86_400_000) });
+    await recordErasureInventory(relay, erase.erasureId, { owners: ['content'],
+      liveRetentionReason: 'PostgreSQL prior rows and retained backup require separate retirement' });
+    expect(await readErasure(relay, erase.erasureId)).toMatchObject({ suppression: 'suppressed', destruction: 'retained' });
     // Every negative is an isolated copy of the same held, consistent pre-erasure cut.
     for (const missing of [MODEL_MANIFEST_SHA256, shapeDigest, retainedCommand.payload_sha256]) {
       const copy = await restore();
@@ -287,12 +411,17 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     const unreplayed = await reconcileRestoredErasures(relay, good.restored, { operationId: randomUUID(),
       consumer, replay: false, authority });
     expect(unreplayed.state).toBe('held');
+    const borrowed = <T>(work: (clients: BorrowedRestoreClients) => Promise<T>) => withBorrowed(good.restored, work);
     const operationId = randomUUID();
-    const reconciled = await reconcileRestoredErasures(relay, good.restored, { operationId,
-      consumer, replay: true, authority });
-    expect(reconciled).toMatchObject({ state: 'reconciled', counts: { replayed: 2, matched: 3 } });
-    expect(await reconcileRestoredErasures(relay, good.restored, { operationId, consumer, replay: true, authority }))
+    const reconciled = await borrowed(clients => reconcileRestoredErasures(relay, good.restored, { operationId,
+      consumer, replay: true, authority }, clients));
+    expect(reconciled).toMatchObject({ state: 'reconciled', counts: { replayed: 3, matched: 3 } });
+    expect(await borrowed(clients => reconcileRestoredErasures(relay, good.restored,
+      { operationId, consumer, replay: true, authority }, clients)))
       .toEqual(reconciled);
+    expect((await relay.query<{ operation_id: string }>(
+      'SELECT operation_id FROM relay.owner_reconciliation WHERE id = $1', [reconciled.reconciliationId]))
+      .rows[0]?.operation_id).toBe(`${operationId}:erasures`);
     expect(await graphErasureSuppressed(good.restored.graph!.fuseki, erase.erasureId, erase.erasureEpoch,
       [saved.revisionId])).toBe(true);
     expect((await new ContentCore(good.restored.content).readExactBatch([saved.revisionId], async ids => new Set(ids)))[0]
@@ -306,19 +435,59 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     await applyContentErasure(content, { erasureId: later.erasureId, erasureEpoch: later.erasureEpoch,
       resourceId: created.work, revisionIds: [laterSaved.revisionId], preservationAccess: access });
     await markErasureSuppressed(relay, later.erasureId);
-    await expect(releaseErasureRestoreHold(relay, good.restored, reconciled.reconciliationId,
-      good.generation, authority)).rejects.toThrow('a newer retained frontier needs reconciliation');
-    const current = await reconcileRestoredErasures(relay, good.restored, { operationId: randomUUID(),
-      consumer, replay: true, authority });
+    await expect(borrowed(clients => releaseErasureRestoreHold(relay, good.restored, reconciled.reconciliationId,
+      good.generation, authority, { clients, beforeAccessRelease: async () => {
+        throw new Error('a stale journal must veto graph release');
+      } }))).rejects.toThrow('a newer retained frontier needs reconciliation');
+    const current = await borrowed(clients => reconcileRestoredErasures(relay, good.restored,
+      { operationId: randomUUID(), consumer, replay: true, authority }, clients));
     expect(current.state).toBe('reconciled');
     // Cached reconciliation cannot excuse loss of exact command/model custody at release.
-    for (const digest of [shapeDigest, retainedCommand.payload_sha256]) {
+    for (const digest of originalRoots) {
       unlinkSync(join(good.restoredDirectory, digest));
-      await expect(releaseErasureRestoreHold(relay, good.restored, current.reconciliationId,
-        good.generation, authority)).rejects.toBeInstanceOf(ErasureRestoreHold);
+      await expect(borrowed(clients => releaseErasureRestoreHold(relay, good.restored, current.reconciliationId,
+        good.generation, authority, { clients, beforeAccessRelease: async () => {
+          throw new Error('missing original custody must veto graph release');
+        } }))).rejects.toBeInstanceOf(ErasureRestoreHold);
+      writeFileSync(join(good.restoredDirectory, digest), readFileSync(join(backupObjects, digest)));
+      writeFileSync(join(good.restoredDirectory, digest), 'corrupt retained original');
+      await expect(borrowed(clients => releaseErasureRestoreHold(relay, good.restored, current.reconciliationId,
+        good.generation, authority, { clients, beforeAccessRelease: async () => {
+          throw new Error('corrupt original custody must veto graph release');
+        } }))).rejects.toBeInstanceOf(ErasureRestoreHold);
       writeFileSync(join(good.restoredDirectory, digest), readFileSync(join(backupObjects, digest)));
     }
-    await releaseErasureRestoreHold(relay, good.restored, current.reconciliationId, good.generation, authority);
+    // Object erasures cannot delete verified retired command, manifest, payload or selected shape roots.
+    await borrowed(async clients => {
+      for (const digest of originalRoots) {
+        await clients.relayClient.query('SAVEPOINT protected_original');
+        const aliasId = randomUUID();
+        await clients.relayClient.query(`INSERT INTO relay.erasure (id, erasure_epoch, operation_id, request_digest,
+          kind, authority, principal_id, admission_id, authority_epoch, suppression_status, suppressed_at)
+          VALUES ($1::uuid, relay.next_erasure_epoch(), $1::text, $2, 'revision', 'access_admission',
+            $3, $4, $5, 'suppressed', clock_timestamp())`,
+        [aliasId, 'a3'.repeat(32), registered.principalId, randomUUID(), fence]);
+        await clients.relayClient.query(`INSERT INTO relay.erasure_target
+          (erasure_id, ordinal, owner, target_kind, target_ref) VALUES ($1, 1, 'object', 'object', $2)`,
+        [aliasId, `sha256:${digest}`]);
+        const alias = await reconcileRestoredErasures(relay, good.restored,
+          { operationId: randomUUID(), consumer, replay: true, authority }, clients);
+        expect(alias.state).toBe('held');
+        expect(alias.counts.conflict).toBeGreaterThan(0);
+        expect(readFileSync(join(good.restoredDirectory, digest)))
+          .toEqual(readFileSync(join(backupObjects, digest)));
+        await clients.relayClient.query('ROLLBACK TO SAVEPOINT protected_original');
+        await clients.relayClient.query('RELEASE SAVEPOINT protected_original');
+      }
+    });
+    let releaseCalls = 0;
+    await borrowed(clients => releaseErasureRestoreHold(relay, good.restored, current.reconciliationId,
+      good.generation, authority, { clients, beforeAccessRelease: async () => {
+        releaseCalls++;
+        expect((await clients.accessClient.query<{ open: boolean }>(
+          'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(false);
+      } }));
+    expect(releaseCalls).toBe(1);
     expect((await good.ready()).status).toBe(200);
     expect((await good.restored.access.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open).toBe(true);

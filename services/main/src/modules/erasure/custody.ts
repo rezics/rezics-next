@@ -1,21 +1,33 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
 import type { ReceiptCustody } from '../outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { readExactModelGeneration } from '../semantic/model-custody.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, hash, iri } from '../work/activate.ts';
+import type { HeldGraphErasureReplay } from './graph.ts';
 import { protectedObjectDigests } from './replay-objects.ts';
 
 export interface RestoredGraphCustody {
   fuseki: FusekiClient;
   lineage: { dataEpoch: string; routingEpoch: string };
-  receiptCustody?: Pick<ReceiptCustody, 'read'>;
+  receiptCustody?: Pick<ReceiptCustody, 'readHistorical'>;
+  /** The outer owner qualifies the saved cut; originals come from its independent current source. */
+  heldErasure?: Omit<HeldGraphErasureReplay, 'revisionIds' | 'original' | 'assertCurrent'> & {
+    originalGraph: Pick<RestoredGraphCustody, 'fuseki' | 'lineage'>;
+  };
 }
 
 /** Offline owner checks reuse C6's exact readers; current build bytes cannot repair a legacy gap. */
 export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphCustody,
-  objects: ObjectRecoveryStore): Promise<Set<string>> {
+  objects: ObjectRecoveryStore, accessClient?: PoolClient): Promise<Set<string>> {
+  if (!accessClient) {
+    const owned = await access.connect();
+    try { return await restoredCustodyDigests(access, graph, objects, owned); }
+    finally { owned.release(); }
+  }
   const retained = await protectedObjectDigests(graph.fuseki, objects);
   const env = { fuseki: graph.fuseki, lineage: graph.lineage, objectDirectory: objects.directory,
     ...(objects.workObjects ? { workObjects: objects.workObjects } : {}) };
@@ -69,7 +81,7 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
   // The owner position reader rechecks durable terminal/outbox AND exact objects.
   after = '';
   for (;;) {
-    const rows = (await access.query<{ receipt: string; payload_sha256: string; data_epoch: string | null;
+    const rows = (await accessClient.query<{ receipt: string; payload_sha256: string; data_epoch: string | null;
       stream_sequence: string | null; graph_sequence: string | null }>(`SELECT receipt, data_epoch,
         payload_sha256, stream_sequence::text AS stream_sequence, terminal->>'sequence' AS graph_sequence
       FROM access.command_custody WHERE receipt > $1 ORDER BY receipt LIMIT 100`, [after])).rows;
@@ -77,15 +89,26 @@ export async function restoredCustodyDigests(access: Pool, graph: RestoredGraphC
       if (!row.data_epoch || !row.stream_sequence || !row.graph_sequence || !graph.receiptCustody) {
         throw new Error('retained command custody is unavailable');
       }
-      const exact = await graph.receiptCustody.read(row.data_epoch, row.stream_sequence);
-      if (!exact || exact.batch.custodiedReceipt !== row.receipt
-        || exact.batch.streamScope !== MAIN_RELAY_STREAM_SCOPE
-        || exact.batch.dataEpoch !== row.data_epoch || exact.batch.sequence !== row.stream_sequence
-        || exact.batch.graphSequence !== row.graph_sequence) {
+      const exact = await graph.receiptCustody.readHistorical({ dataEpoch: row.data_epoch,
+        streamSequence: row.stream_sequence }, accessClient);
+      if (!exact || exact.outbox.batch.custodiedReceipt !== row.receipt
+        || exact.outbox.batch.streamScope !== MAIN_RELAY_STREAM_SCOPE
+        || exact.outbox.batch.dataEpoch !== row.data_epoch || exact.outbox.batch.sequence !== row.stream_sequence
+        || exact.outbox.batch.graphSequence !== row.graph_sequence
+        || !exact.objectDigests.has(row.payload_sha256)) {
         throw new Error('retained command custody differs from its owner position');
       }
-      // Object erasure must also preserve commands whose native proof was retired.
-      retained.add(row.payload_sha256);
+      // Verify the selected restored copy even if the reader was bound to a live store.
+      // Retired/superseded originals can be absent from every graph reference scan.
+      for (const digest of exact.objectDigests) {
+        if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('retained command custody digest is invalid');
+        const bytes = objects.workObjects ? await objects.workObjects.get(digest)
+          : await readFile(join(objects.directory, digest));
+        if (hash(bytes) !== digest) {
+          throw new Error('retained command custody object differs from its exact digest');
+        }
+        retained.add(digest);
+      }
     }
     if (rows.length < 100) break;
     after = rows.at(-1)!.receipt;

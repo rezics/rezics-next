@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Pool } from 'pg';
+import { Client, Pool, type PoolClient } from 'pg';
 import type { ExactReadResult } from '../../content/src/core.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
@@ -95,7 +95,15 @@ function fixture() {
   const fuseki = new CustodyGraph();
   const objects = new MemoryObjects();
   const commandRows: CommandRow[] = [];
-  const access = { query: async () => ({ rows: commandRows }) } as unknown as Pool;
+  const access = new Pool({ max: 1 });
+  // Unit queries use a supplied client; the integration suite proves its real PG lifecycle.
+  const accessClient: PoolClient = Object.assign(new Client(), { release: () => {
+    throw new Error('custody must not release a borrowed Access client');
+  } });
+  accessClient.query = (async (sql: string) => {
+    if (!sql.includes('FROM access.command_custody')) throw new Error('unexpected borrowed custody query');
+    return { rows: commandRows, rowCount: commandRows.length, command: 'SELECT', oid: 0, fields: [] };
+  }) as typeof accessClient.query;
   const graph: RestoredGraphCustody = { fuseki, lineage: { dataEpoch: 'restored-epoch', routingEpoch: '2' } };
   const store = { directory, workObjects: objects };
   const addModel = async (commandModule: string) => {
@@ -112,8 +120,8 @@ function fixture() {
     fuseki.generations.set(generation, { manifest: `urn:rezics:sha256:${anchor}`, commandModule });
     return { generation, manifestDigest: hash(manifestBytes), shapeDigest: hash(shape) };
   };
-  return { access, graph, fuseki, objects, store, commandRows, addModel,
-    read: () => restoredCustodyDigests(access, graph, store) };
+  return { access, accessClient, graph, fuseki, objects, store, commandRows, addModel,
+    read: () => restoredCustodyDigests(access, graph, store, accessClient) };
 }
 
 test('restored custody verifies a revision’s older pinned generation and retains every exact artifact', async () => {
@@ -181,54 +189,87 @@ for (const inventory of ['models', 'revisions'] as const) {
   });
 }
 
-function command(f: ReturnType<typeof fixture>): { row: CommandRow; result: CustodiedOutbox } {
-  const row = { receipt: `urn:rezics:receipt:${hash('retired command')}`, payload_sha256: hash('retired command bytes'),
+async function command(f: ReturnType<typeof fixture>) {
+  const roots = {
+    command: await f.objects.put(Buffer.from('retired command bytes')),
+    manifest: await f.objects.put(Buffer.from('retired component manifest bytes')),
+    payload: await f.objects.put(Buffer.from('retired component payload bytes')),
+    selectedShape: await f.objects.put(Buffer.from('original selected validation shape bytes')),
+  };
+  const row: CommandRow = { receipt: `urn:rezics:receipt:${hash('retired command')}`, payload_sha256: hash('retired command bytes'),
     data_epoch: 'command-epoch', stream_sequence: '4', graph_sequence: '900' };
   f.commandRows.push(row);
   const result: CustodiedOutbox = { batch: { batchId: `urn:rezics:outbox:${hash(row.receipt)}`,
-    custodiedReceipt: row.receipt, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: row.data_epoch,
-    sequence: row.stream_sequence, graphSequence: row.graph_sequence, routingEpoch: '1', eventIds: [] }, events: [] };
-  return { row, result };
+    custodiedReceipt: row.receipt, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: row.data_epoch!,
+    sequence: row.stream_sequence!, graphSequence: row.graph_sequence!, routingEpoch: '1', eventIds: [] }, events: [] };
+  return { row, result, roots };
 }
 
-test('retired command bytes remain protected through the exact C6 owner stream reader', async () => {
-  const f = fixture();
-  const c = command(f);
-  expect(await f.objects.put(Buffer.from('retired command bytes'))).toBe(c.row.payload_sha256);
-  const positions: string[][] = [];
-  f.graph.receiptCustody = { read: async (epoch, sequence) => {
-    positions.push([epoch, sequence]);
-    await f.objects.get(c.row.payload_sha256);
-    return c.result;
+function historicalReader(f: ReturnType<typeof fixture>, c: Awaited<ReturnType<typeof command>>,
+  positions: { dataEpoch: string; streamSequence: string }[] = [], originals = f.objects) {
+  return { readHistorical: async (position: { dataEpoch: string; streamSequence: string }, client: PoolClient) => {
+    expect(client).toBe(f.accessClient);
+    positions.push(position);
+    for (const digest of Object.values(c.roots)) await originals.get(digest);
+    return { outbox: c.result, objectDigests: new Set(Object.values(c.roots)) };
   } };
+}
+
+test('historical custody uses owner stream 4 and independently verifies graph position 900', async () => {
+  const f = fixture();
+  const c = await command(f);
+  const positions: { dataEpoch: string; streamSequence: string }[] = [];
+  f.graph.receiptCustody = historicalReader(f, c, positions);
   const retained = await f.read();
-  expect(positions).toEqual([['command-epoch', '4']]);
+  expect(positions).toEqual([{ dataEpoch: 'command-epoch', streamSequence: '4' }]);
   expect(retained.has(c.row.payload_sha256)).toBe(true);
-  expect(await replayObjectErasure(f.store, `sha256:${c.row.payload_sha256}`, retained, true)).toBe('conflict');
-  f.objects.data.delete(c.row.payload_sha256);
-  await expect(f.read()).rejects.toBeInstanceOf(ObjectUnavailable);
 });
+
+for (const root of ['command', 'manifest', 'payload', 'selectedShape'] as const) {
+  test(`retired original ${root} absent from graph references remains protected before object replay`, async () => {
+    const f = fixture();
+    const c = await command(f);
+    f.graph.receiptCustody = historicalReader(f, c);
+    expect(f.fuseki.generations.size).toBe(0);
+    const retained = await f.read();
+    expect(retained.has(c.roots[root])).toBe(true);
+    expect(await replayObjectErasure(f.store, `sha256:${c.roots[root]}`, retained, true)).toBe('conflict');
+    expect(await f.objects.get(c.roots[root])).toBeInstanceOf(Uint8Array);
+  });
+  for (const state of ['missing', 'corrupt'] as const) {
+    test(`a ${state} restored historical ${root} denies even when the reader has valid independent originals`, async () => {
+      const f = fixture();
+      const c = await command(f);
+      const originals = new MemoryObjects();
+      for (const digest of Object.values(c.roots)) originals.data.set(digest, await f.objects.get(digest));
+      f.graph.receiptCustody = historicalReader(f, c, [], originals);
+      if (state === 'missing') f.objects.data.delete(c.roots[root]);
+      else f.objects.data.set(c.roots[root], Buffer.from('divergent original bytes'));
+      await expect(f.read()).rejects.toBeInstanceOf(state === 'missing' ? ObjectUnavailable : ObjectIntegrityError);
+    });
+  }
+}
 
 for (const field of ['custodiedReceipt', 'streamScope', 'dataEpoch', 'sequence', 'graphSequence'] as const) {
   test(`command custody refuses a mismatched ${field} in the C6 owner batch`, async () => {
     const f = fixture();
-    const c = command(f);
-    f.graph.receiptCustody = { read: async () => ({ ...c.result,
-      batch: { ...c.result.batch, [field]: 'different' } }) };
+    const c = await command(f);
+    f.graph.receiptCustody = { readHistorical: async () => ({ outbox: { ...c.result,
+      batch: { ...c.result.batch, [field]: 'different' } }, objectDigests: new Set(Object.values(c.roots)) }) };
     await expect(f.read()).rejects.toThrow('retained command custody differs');
   });
 }
 
 test('missing command adapter, terminal position, owner result or exact bytes cannot release custody', async () => {
   const f = fixture();
-  const c = command(f);
+  const c = await command(f);
   await expect(f.read()).rejects.toThrow('retained command custody is unavailable');
-  f.graph.receiptCustody = { read: async () => null };
+  f.graph.receiptCustody = { readHistorical: async () => null };
   await expect(f.read()).rejects.toThrow('retained command custody differs');
-  f.graph.receiptCustody = { read: async () => { throw new ObjectUnavailable('command bytes unavailable'); } };
+  f.graph.receiptCustody = { readHistorical: async () => { throw new ObjectUnavailable('command bytes unavailable'); } };
   await expect(f.read()).rejects.toBeInstanceOf(ObjectUnavailable);
   for (const field of ['data_epoch', 'stream_sequence', 'graph_sequence'] as const) {
-    f.graph.receiptCustody = { read: async () => c.result };
+    f.graph.receiptCustody = historicalReader(f, c);
     const before = c.row[field];
     c.row[field] = null;
     await expect(f.read()).rejects.toThrow('retained command custody is unavailable');

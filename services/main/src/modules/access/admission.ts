@@ -300,6 +300,19 @@ export async function engageAccessRecoveryFence(pool: Pool): Promise<string> {
 }
 
 /** Release follows successful graph/authority reconciliation. */
+export async function lockAccessRecoveryFenceForRelease(client: PoolClient, generation: string): Promise<void> {
+  if (!/^[0-9]+$/.test(generation)) throw new AdmissionUnavailable('invalid Access recovery generation');
+  const fence = (await client.query<{ open: boolean; generation: string }>(
+    'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0];
+  if (fence?.open !== false || fence.generation !== generation) {
+    throw new AdmissionUnavailable('Access recovery fence changed');
+  }
+  const delivering = (await client.query<{ delivering: boolean }>(`SELECT
+    EXISTS (SELECT 1 FROM access.search_read_lease WHERE state = 'delivering')
+    OR EXISTS (SELECT 1 FROM access.download_read_lease WHERE state = 'delivering') AS delivering`)).rows[0];
+  if (delivering?.delivering !== false) throw new AdmissionUnavailable('Access delivery is still active');
+}
+
 export async function releaseAccessRecoveryFence(pool: Pool | PoolClient, generation: string): Promise<void> {
   if (!/^[0-9]+$/.test(generation)) throw new AdmissionUnavailable('invalid Access recovery generation');
   const result = await pool.query(
