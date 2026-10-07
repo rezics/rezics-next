@@ -13,6 +13,15 @@ export const ZONE_CAMPAIGN_ART_COST = { maxSlides: 6, maxCampaignUses: RENDITION
 type CampaignMediaStore = Pick<MediaStore, 'itemDeliveryBatch'>
   & { renditions: Pick<MediaStore['renditions'], 'candidatesBatch'> };
 
+/** A public variant selects the source; the delivery guard still proves authority. */
+function campaignVariantUrl(url: string, zone?: string, variantId?: string): string {
+  if (variantId === undefined) return url;
+  const selected = new URL(url, 'http://main.local');
+  if (zone !== undefined) selected.searchParams.set('zone', zone);
+  selected.searchParams.set('zoneVariant', variantId);
+  return url.startsWith('/') ? `${selected.pathname}${selected.search}${selected.hash}` : selected.href;
+}
+
 /** One exact, live publication-item/campaign-art batch for all slide Uses. */
 export async function readZoneCampaignItems(store: Pick<MediaStore, 'itemDeliveryBatch'> | undefined,
   realm: string | null, slides: readonly ZoneSlide[]) {
@@ -51,7 +60,7 @@ export async function requestNewZoneCampaignRenditions(media: Pick<MediaDependen
  * memberships and history. Text and target survive every missing art role. */
 export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
   realm: string | null, slides: readonly ZoneSlide[], disclosure?: {
-    environment: WorkActivationEnvironment; zone: string;
+    environment: WorkActivationEnvironment; zone: string; variantId?: string;
   }) {
   const items = await readZoneCampaignItems(store, realm, slides);
   if (disclosure && items.size) {
@@ -77,9 +86,11 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
     return { ...image, ...(item.focalArea && !image.focalArea ? { focalArea: item.focalArea } : {}),
       crop: item.crop ?? null, cropWidth: region.width, cropHeight: region.height,
       // The exact representation and Use, as Work art and candidates are named, so readers' image policy applies.
-      url: `/v1/media/representations/${item.representation}/bytes?use=${use}`,
+      url: campaignVariantUrl(`/v1/media/representations/${item.representation}/bytes?use=${use}`,
+        disclosure?.zone, disclosure?.variantId),
       width: item.width, height: item.height, mediaType: item.mediaType,
-      srcset: candidates.get(use) ?? [] };
+      srcset: (candidates.get(use) ?? []).map(candidate => ({ ...candidate,
+        url: campaignVariantUrl(candidate.url, disclosure?.zone, disclosure?.variantId) })) };
   };
   return slides.map(slide => ({ id: slide.id, art: {
     landscape: resolve(slide.art?.landscape, 'background-landscape'), portrait: resolve(slide.art?.portrait, 'background-portrait'),
@@ -88,5 +99,17 @@ export async function readZoneCampaignArt(store: CampaignMediaStore | undefined,
       const image = resolve(logo, `logo:${canonicalLanguage(logo.language)}:${logo.tone}`);
       return image ? [{ ...image, language: logo.language, tone: logo.tone, anchor: logo.anchor }] : [];
     }),
+  } }));
+}
+
+/** Bind the selected unconverted home without rereading or mutating media storage. */
+export function bindZoneCampaignArtVariant(media: Awaited<ReturnType<typeof readZoneCampaignArt>>, zone: string, variantId: string) {
+  const bind = <T extends { url: string; srcset: RenditionCandidate[] }>(image: T): T => ({ ...image,
+    url: campaignVariantUrl(image.url, zone, variantId), srcset: image.srcset.map(candidate => ({ ...candidate,
+      url: campaignVariantUrl(candidate.url, zone, variantId) })) });
+  return media.map(slide => ({ ...slide, art: {
+    landscape: slide.art.landscape && bind(slide.art.landscape),
+    portrait: slide.art.portrait && bind(slide.art.portrait),
+    cutout: slide.art.cutout && bind(slide.art.cutout), logos: slide.art.logos.map(bind),
   } }));
 }

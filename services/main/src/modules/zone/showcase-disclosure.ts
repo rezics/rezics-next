@@ -24,12 +24,19 @@ export function configureZoneShowcaseDisclosure(work: MainWorkDependencies): voi
 }
 
 const displayLanguages = Symbol('zoneCampaignLanguages');
-type CampaignReader = SummaryReader & { [displayLanguages]?: readonly string[] };
+type CampaignReader = SummaryReader & { [displayLanguages]?: {
+  languages: readonly string[]; variantId?: string; zone?: string;
+} };
 
-/** Keep media's selection identical to the home renderer, including translations. */
+/** Carry the public URL selection independently of the browser's language. */
 export function bindZoneCampaignReader<T extends SummaryReader>(reader: T, request: Request): T {
-  (reader as CampaignReader)[displayLanguages] = readerLanguages(
-    request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language'));
+  const params = new URL(request.url).searchParams;
+  const variantId = params.get('zoneVariant'), zone = params.get('zone');
+  (reader as CampaignReader)[displayLanguages] = {
+    languages: readerLanguages(request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language')),
+    ...(variantId !== null ? { variantId } : {}),
+    ...(zone !== null ? { zone } : {}),
+  };
   return reader;
 }
 
@@ -43,6 +50,8 @@ export function slideIsCurrent(slide: ZoneSlide, now = Date.now()): boolean {
 export async function currentZoneCampaignUses(env: WorkActivationEnvironment,
   zone: string | null | undefined, reader: SummaryReader, realm: string): Promise<ReadonlySet<string>> {
   if (!zone || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(zone)) return new Set();
+  const selection = (reader as CampaignReader)[displayLanguages];
+  if (selection?.zone !== undefined && selection.zone !== zone) return new Set();
   let state;
   try { state = await readZonePublication(env, zone); }
   catch (error) { if (error instanceof ZoneUnavailable) return new Set(); throw error; }
@@ -51,7 +60,7 @@ export async function currentZoneCampaignUses(env: WorkActivationEnvironment,
   if (state.bundle && !owner?.content) return new Set();
   const work = { environment: env, ...owner };
   let home;
-  try { home = await readZonePublishedHomeContent(work, state, (reader as CampaignReader)[displayLanguages]); }
+  try { home = await readZonePublishedHomeContent(work, state, selection?.languages, selection?.variantId); }
   catch (error) { if (error instanceof ZoneUnavailable) return new Set(); throw error; }
   const local = home && zoneDocumentShowcase(home.document);
   const slides = (local ? local.payload['rv:slides'] : state.presentation.slides)

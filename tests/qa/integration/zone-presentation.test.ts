@@ -10,6 +10,7 @@ import { ZONE_PROFILE } from '../../../services/main/src/modules/zone/config-for
 import { GRAPHS, iri, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';
 import { MediaRenditionWorker } from '../../../services/main/src/modules/media-rendition/worker.ts';
 import { LocalImageTransformer } from '../../../services/main/src/modules/media-rendition/transform.ts';
+import { requestUseRenditions } from '../../../services/main/src/modules/media-rendition/request.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
@@ -78,24 +79,34 @@ test('campaign bytes follow the exact published local Showcase instead of config
   [resourceGrant, f.moderator.actor, `zone:edit:${f.zone}`, f.moderator.principalId,
     `urn:rezics:access-receipt:${createHash('sha256').update(resourceGrant).digest('hex')}`]);
 
-  const campaign = async (red: number) => {
+  const campaign = async (red: number, legacy = false) => {
     const source = await f.moderator.upload(await sharp({ create: { width: 32, height: 32, channels: 4,
       background: { r: red, g: 40, b: 60, alpha: 0.5 } } }).png().toBuffer());
-    const created = await json<{ id: string }>(await f.moderator.send('POST', `${f.path}/campaign-art`, {
-      profile: 'zone-campaign-art-v1', realm: f.realm, asset: source.asset, role: 'cutout',
-      actingSubject: f.moderator.actor,
-    }), 201);
-    expect(await f.store.itemDelivery(created.id)).toMatchObject({ role: 'campaign-cutout', campaignZone: f.zone });
+    let use: string;
+    if (legacy) {
+      const basis = await f.store.publicationBasis([source.asset], f.moderator.actor);
+      use = randomUUID();
+      await f.store.createPublicationUses(randomUUID(), f.moderator.actor, f.realm, [{ ...basis[0]!, use }]);
+      await requestUseRenditions(f.store.renditions, f.objects, use);
+      expect(await f.store.itemDelivery(use)).toMatchObject({ role: 'publication-item' });
+    } else {
+      const created = await json<{ id: string }>(await f.moderator.send('POST', `${f.path}/campaign-art`, {
+        profile: 'zone-campaign-art-v1', realm: f.realm, asset: source.asset, role: 'cutout',
+        actingSubject: f.moderator.actor,
+      }), 201);
+      use = created.id;
+      expect(await f.store.itemDelivery(use)).toMatchObject({ role: 'campaign-cutout', campaignZone: f.zone });
+    }
     const worker = new MediaRenditionWorker(f.store.renditions, new LocalImageTransformer(), f.objects);
     for (let i = 0; i < 32; i++) {
-      const candidates = (await f.store.renditions.candidatesBatch([created.id])).get(created.id) ?? [];
-      if (candidates.length === 2) return { ...source, use: created.id, candidates,
-        art: { cutout: { use: `https://rezics.com/id/${created.id}` } } };
+      const candidates = (await f.store.renditions.candidatesBatch([use])).get(use) ?? [];
+      if (candidates.length === 2) return { ...source, use, candidates,
+        art: { cutout: { use: `https://rezics.com/id/${use}` } } };
       await worker.tick();
     }
     throw new Error('Campaign cutout renditions did not finish');
   };
-  const configArt = await campaign(10);
+  const configArt = await campaign(10, true);
   const firstArt = await campaign(20);
   const nextArt = await campaign(30);
   const configSlide: ZonePresentation['slides'][number] = { id: 'config', href: '/config', art: configArt.art };
@@ -103,12 +114,19 @@ test('campaign bytes follow the exact published local Showcase instead of config
   const nextSlide: ZonePresentation['slides'][number] = { id: 'next', href: '/next', art: nextArt.art };
   const publicRead = (path: string, headers: Record<string, string> = {}) =>
     f.main.handle(new Request(`http://main.local${path}`, { headers }));
+  const browserHeaders = { 'accept-language': 'en' };
+  const withVariant = (path: string, variant: string) => {
+    const url = new URL(path, 'http://main.local');
+    url.searchParams.set('zoneVariant', variant);
+    url.searchParams.set('zone', f.zone);
+    return `${url.pathname}${url.search}`;
+  };
   const delivery = async (art: Awaited<ReturnType<typeof campaign>>, expected: number,
-    headers: Record<string, string> = {}) => {
+    headers: Record<string, string> = {}, variant?: string) => {
     for (const path of [`/v1/media/uses/${art.use}`,
       `/v1/media/representations/${art.representation}/bytes?use=${art.use}`,
       ...art.candidates.map(candidate => candidate.url)]) {
-      const response = await publicRead(path, headers);
+      const response = await publicRead(variant ? withVariant(path, variant) : path, headers);
       expect(response.status, path).toBe(expected);
       if (response.ok) expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
     }
@@ -118,14 +136,18 @@ test('campaign bytes follow the exact published local Showcase instead of config
       cutout: { url: string; srcset: Array<{ url: string }> } | null } }> }>(await publicRead(`${f.path}/presentation`, headers));
     expect(body.presentation.slides).toEqual(slides);
     expect(body.slideMedia.map(slide => slide.id)).toEqual(slides.map(slide => slide.id));
+    const urls: string[] = [];
     for (const slide of body.slideMedia) {
       expect(slide.art.cutout).not.toBeNull();
       for (const path of [slide.art.cutout!.url, ...slide.art.cutout!.srcset.map(candidate => candidate.url)]) {
-        const response = await publicRead(path, headers);
+        urls.push(path);
+        // An image request does not inherit the page's display-language headers.
+        const response = await publicRead(path, browserHeaders);
         expect(response.status, path).toBe(200);
         expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
       }
     }
+    return urls;
   };
   const document = (slides: ZonePresentation['slides']) => {
     const body = structuredClone(fromPlainText('Published campaign', 'blocks'));
@@ -161,7 +183,7 @@ test('campaign bytes follow the exact published local Showcase instead of config
   await publish(selected);
   await rendered([firstSlide]);
   await delivery(firstArt, 200);
-  await delivery(configArt, 404);
+  await delivery(configArt, 404, browserHeaders, selected.variantId);
 
   selected = await save(document([nextSlide]), selected.revisionId);
   await rendered([firstSlide]);
@@ -171,18 +193,18 @@ test('campaign bytes follow the exact published local Showcase instead of config
   await rendered([nextSlide]);
   await delivery(firstArt, 404);
   await delivery(nextArt, 200);
-  await delivery(configArt, 404);
+  await delivery(configArt, 404, browserHeaders, selected.variantId);
 
   selected = await save(document([{ ...nextSlide, endsAt: new Date(Date.now() - 60_000).toISOString() }]), selected.revisionId);
   await delivery(nextArt, 200);
   await publish(selected);
   await rendered([]);
   await delivery(nextArt, 404);
-  await delivery(configArt, 404);
+  await delivery(configArt, 404, browserHeaders, selected.variantId);
   selected = await save(document([]), selected.revisionId);
   await publish(selected);
   await rendered([]);
-  await delivery(configArt, 404);
+  await delivery(configArt, 404, browserHeaders, selected.variantId);
 
   selected = await save(fromPlainText('Unconverted home', 'blocks'), selected.revisionId);
   await publish(selected);
@@ -192,14 +214,55 @@ test('campaign bytes follow the exact published local Showcase instead of config
 
   const french = await save(document([nextSlide]), null, `urn:rezics:variant:${randomUUID()}`, 'fr');
   await publish([selected, french]);
-  const languageHeaders: Record<string, string>[] = [{ 'accept-language': 'en' }, { 'accept-language': 'fr' },
-    { 'accept-language': 'en', 'x-rezics-display-languages': 'fr' }];
-  for (const headers of languageHeaders) {
-    const local = headers['accept-language'] === 'fr' || headers['x-rezics-display-languages'] === 'fr';
-    await rendered(local ? [nextSlide] : [configSlide], headers);
-    await delivery(configArt, local ? 404 : 200, headers);
-    await delivery(nextArt, local ? 200 : 404, headers);
-    await delivery(firstArt, 404, headers);
+  await rendered([configSlide], browserHeaders);
+  const pageHeaders = { ...browserHeaders, 'x-rezics-display-languages': 'fr' };
+  const frenchUrls = await rendered([nextSlide], pageHeaders);
+  expect(frenchUrls).toHaveLength(3);
+  for (const path of frenchUrls) {
+    expect(new URL(path, 'http://main.local').searchParams.get('zoneVariant')).toBe(french.variantId);
+  }
+  const home = await json<{ page: { reference: { variantId: string }; showcases: Array<{
+    slides?: ZonePresentation['slides'];
+    slideMedia?: Array<{ art: { cutout: { url: string; srcset: Array<{ url: string }> } } }> }> } }>(
+    await publicRead(`${f.path}/routes?path=%2F`, pageHeaders));
+  expect(home.page.reference.variantId).toBe(french.variantId);
+  const homeArt = home.page.showcases.find(showcase => showcase.slides !== undefined)!.slideMedia![0]!.art.cutout;
+  expect([homeArt.url, ...homeArt.srcset.map(candidate => candidate.url)]).toEqual(frenchUrls);
+  for (const path of [homeArt.url, ...homeArt.srcset.map(candidate => candidate.url),
+    withVariant(`/v1/media/uses/${nextArt.use}`, french.variantId)]) {
+    const response = await publicRead(path, browserHeaders);
+    expect(response.status, path).toBe(200);
+    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+  }
+  const configSelected = await publicRead(withVariant(`/v1/media/uses/${configArt.use}`, french.variantId), browserHeaders);
+  expect(configSelected.status).toBe(404);
+
+  const draftVariant = await save(document([nextSlide]), null, `urn:rezics:variant:${randomUUID()}`, 'ja');
+  const missing = await publicRead(`/v1/media/uses/${randomUUID()}`, browserHeaders);
+  const missingBody = await missing.text();
+  expect(missing.status).toBe(404);
+  for (const variant of [`urn:rezics:variant:${randomUUID()}`, draftVariant.variantId]) {
+    for (const path of [withVariant(`/v1/media/uses/${nextArt.use}`, variant),
+      withVariant(`/v1/media/uses/${configArt.use}`, variant),
+      ...frenchUrls.map(path => withVariant(path, variant))]) {
+      const response = await publicRead(path, browserHeaders);
+      expect(response.status, path).toBe(missing.status);
+      expect(await response.text(), path).toBe(missingBody);
+    }
+  }
+
+  const emptiedFrench = await save(document([]), french.revisionId, french.variantId, 'fr');
+  await publish([selected, emptiedFrench]);
+  for (const path of [...frenchUrls, withVariant(`/v1/media/uses/${nextArt.use}`, french.variantId)]) {
+    expect((await publicRead(path, browserHeaders)).status, path).toBe(404);
+  }
+  await publish([selected, french]);
+  expect(await rendered([nextSlide], pageHeaders)).toEqual(frenchUrls);
+  await publish(selected);
+  for (const path of [...frenchUrls, withVariant(`/v1/media/uses/${nextArt.use}`, french.variantId)]) {
+    const response = await publicRead(path, browserHeaders);
+    expect(response.status, path).toBe(missing.status);
+    expect(await response.text(), path).toBe(missingBody);
   }
 }, 120_000);
 

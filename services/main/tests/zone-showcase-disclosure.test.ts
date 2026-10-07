@@ -2,12 +2,14 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { slideIsCurrent, ZONE_SHOWCASE_DISCLOSURE_COST } from '../src/modules/zone/showcase-disclosure.ts';
-import { readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
+import { bindZoneCampaignArtVariant, readZoneCampaignArt, requestNewZoneCampaignRenditions } from '../src/modules/zone/campaign-art.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MediaStore } from '../src/modules/media/store.ts';
 import type { MediaDependencies } from '../src/modules/media/commands.ts';
 import { MediaPresentationStore } from '../src/modules/media/presentation.ts';
+import { withDisclosureViewer } from '../src/modules/disclosure/viewer.ts';
+import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
 const ref = () => `https://rezics.com/id/${randomUUID()}`;
 
@@ -46,6 +48,60 @@ test('campaign disclosure hides a held Asset or Use before advertising source UR
   }
   expect(candidateReads).toBe(0);
   expect(slides[0]!.title).toBe('Launch');
+});
+
+test('selected campaign art binds every original and rendition URL without mutating owner candidates', async () => {
+  const realm = ref(), zone = ref(), asset = randomUUID(), use = randomUUID(), representation = randomUUID();
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const environment = { fuseki: { query: async () => ({ results: { bindings: [] } }) } } as unknown as WorkActivationEnvironment;
+  configureDisclosure(environment, { read: async targets => targets.map(() => 'visible') });
+  const item = { asset, target: realm, representation, availability: 'available', disclosure: 'public',
+    moderation: 'none', lifecycle: 'active', width: 1280, height: 720, mediaType: 'image/png' };
+  const candidates = [
+    { url: `/v1/media/representations/${randomUUID()}/bytes?use=${use}`, width: 320, height: 180, type: 'image/avif' as const },
+    { url: `/v1/media/representations/${randomUUID()}/bytes?use=${use}`, width: 640, height: 360, type: 'image/webp' as const },
+  ];
+  const stored = JSON.stringify({ item, candidates });
+  let itemReads = 0, candidateReads = 0;
+  const store = { itemDeliveryBatch: async (uses: string[]) => {
+    itemReads++;
+    expect(uses).toEqual([use]);
+    return new Map([[use, item]]);
+  }, renditions: { candidatesBatch: async (uses: string[]) => {
+    candidateReads++;
+    expect(uses).toEqual([use]);
+    return new Map([[use, candidates]]);
+  } } } as unknown as MediaStore;
+  const image = { use: `https://rezics.com/id/${use}` };
+  const slides = [{ id: 'selected', href: '/selected', art: {
+    landscape: image, portrait: image, cutout: image,
+    logos: [{ ...image, language: 'fr', tone: 'light' as const, anchor: 'center-middle' as const }],
+  } }];
+  const originalSlides = JSON.stringify(slides);
+  const legacy = await readZoneCampaignArt(store, realm, slides, { environment, zone });
+  const selected = await readZoneCampaignArt(store, realm, slides, { environment, zone, variantId });
+  const differentViewer = await withDisclosureViewer({ ...ANONYMOUS_VIEWER, signedIn: true },
+    () => readZoneCampaignArt(store, realm, slides, { environment, zone, variantId }));
+  expect(selected).toEqual(differentViewer);
+  expect(bindZoneCampaignArtVariant(legacy, zone, variantId)).toEqual(selected);
+  const art = selected[0]!.art;
+  const images = [art.landscape!, art.portrait!, art.cutout!, ...art.logos];
+  expect(images).toHaveLength(4);
+  for (const resolved of images) {
+    expect(resolved.url).toBe(`/v1/media/representations/${representation}/bytes?use=${use}&zone=${encodeURIComponent(zone)}&zoneVariant=${encodeURIComponent(variantId)}`);
+    expect(resolved.srcset).toHaveLength(candidates.length);
+    for (const [index, rendition] of resolved.srcset.entries()) {
+      expect(rendition).toEqual({ ...candidates[index]!,
+        url: `${candidates[index]!.url}&zone=${encodeURIComponent(zone)}&zoneVariant=${encodeURIComponent(variantId)}` });
+    }
+  }
+  expect(legacy[0]!.art.landscape!.url)
+    .toBe(`/v1/media/representations/${representation}/bytes?use=${use}`);
+  expect(legacy[0]!.art.landscape!.srcset).toEqual(candidates);
+  expect(JSON.stringify({ item, candidates })).toBe(stored);
+  expect(JSON.stringify(slides)).toBe(originalSlides);
+  expect(itemReads).toBe(3);
+  expect(candidateReads).toBe(3);
 });
 
 test('post-commit rendition requests skip existing and dedicated campaign Uses and survive each storage failure', async () => {

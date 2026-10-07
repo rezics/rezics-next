@@ -355,15 +355,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch(error) {return mediaError(error);}
     })
     .get('/v1/media/representations/:representation/bytes',{params:t.Object({representation:uuid}),
-      query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid)},{additionalProperties:false}),
+      query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid),
+        zoneVariant:t.Optional(t.String({maxLength:80})),zone:t.Optional(t.String({maxLength:80}))},{additionalProperties:false}),
       response:{200:t.Any(),...authorizedReadProblems}},async ({request,params,query}: {request:Request;
-        params:{representation:string};query:{actingSubject?:string;use?:string}})=>publicFirst(request,query.actingSubject,async request=>{
+        params:{representation:string};query:{actingSubject?:string;use?:string;zoneVariant?:string;zone?:string}})=>publicFirst(request,query.actingSubject,async request=>{
       let lease: DownloadReadLease|undefined;
       try {
         const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
         if (!basis || !work.media) return unavailable();
-        if (basis.campaign && (!basis.metadata.use || !basis.target || !(await currentZoneCampaignUses(
-          work.environment, basis.campaignZone, await readerFor(request, query.actingSubject), basis.target
+        if ((basis.campaign || query.zoneVariant !== undefined) && (!basis.metadata.use || !basis.target || !(await currentZoneCampaignUses(
+          work.environment, basis.campaign ? basis.campaignZone : query.zone,
+          await readerFor(request, query.actingSubject), basis.target
         )).has(basis.metadata.use))) return unavailable();
         if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
           sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},basis.publicTarget);
@@ -563,7 +565,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     }))
     .get('/v1/media/uses/:use', {
       params: t.Object({ use: uuid }),
-      query: t.Object({ actingSubject: t.Optional(nativeId) }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(nativeId),
+        zoneVariant: t.Optional(t.String({ maxLength: 80 })), zone: t.Optional(t.String({ maxLength: 80 })) }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => publicFirst(request, query.actingSubject, async request => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
@@ -574,8 +577,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           () => work.media!.store.itemDelivery(params.use));
         if (!item || item.availability !== 'available' || item.disclosure !== 'public'
           || item.moderation !== 'none' || item.lifecycle !== 'active' || item.clearance !== 'cleared') return unavailable();
-        if (item.role.startsWith('campaign-') && !(await currentZoneCampaignUses(
-          work.environment, item.campaignZone, reader, item.target)).has(params.use)) return unavailable();
+        if ((item.role.startsWith('campaign-') || query.zoneVariant !== undefined) && !(await currentZoneCampaignUses(
+          work.environment, item.role.startsWith('campaign-') ? item.campaignZone : query.zone,
+          reader, item.target)).has(params.use)) return unavailable();
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [item.target], context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();

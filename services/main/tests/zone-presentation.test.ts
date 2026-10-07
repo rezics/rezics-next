@@ -149,6 +149,8 @@ function publishedHomeFixture() {
   const admissionId = randomUUID(), receipt = compositionReceiptIri(admissionId, 'zone.edit');
   const pages = ['en', 'ja'].map(language => ({ page: zone,
     variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), language }));
+  const draft = { page: zone, variantId: `urn:rezics:variant:${randomUUID()}`,
+    revisionId: randomUUID(), language: 'ja' };
   const document = parseDocument({ version: documentVersion, profile: 'blocks', doc: { type: 'doc',
     content: [{ type: 'extensionBlock', attrs: { id: 'curated',
       definition: ZONE_LOCAL_SHOWCASE_BLOCK.definition, version: ZONE_LOCAL_SHOWCASE_BLOCK.version,
@@ -194,7 +196,7 @@ function publishedHomeFixture() {
   const content = { readExactBatch: async (ids: string[], authorize: Parameters<ContentCore['readExactBatch']>[1]) => {
     reads.push([...ids]);
     expect(await authorize(ids)).toEqual(new Set(ids));
-    const page = pages.find(candidate => candidate.revisionId === ids[0])!;
+    const page = [...pages, draft].find(candidate => candidate.revisionId === ids[0])!;
     if (mutable.contentStatus !== 'available') return [{ revisionId: page.revisionId, status: 'erased' }];
     return [{ status: 'available', revisionId: page.revisionId, body, serializedJson,
       reference: { owner: 'content', resourceId: mutable.returnedResource || zone,
@@ -207,7 +209,7 @@ function publishedHomeFixture() {
   const work = { environment, content, contentAuthoring: { readExactMetadataBatch: async (ids: string[]) =>
     new Map(ids.map(revisionId => [revisionId, { availability: mutable.metadataAvailable ? 'available' : 'erased',
       byteDigest: mutable.metadataDigest }])) } } as unknown as MainWorkDependencies;
-  return { work, pages, mutable, reads, membershipQueries, serializedJson, zone, realm,
+  return { work, pages, draft, mutable, reads, membershipQueries, serializedJson, zone, realm,
     close: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
@@ -226,6 +228,59 @@ test('published home selects one exact language revision and preserves Content-l
     expect(f.membershipQueries).toHaveLength(2);
     for (const query of f.membershipQueries) expect(query)
       .toContain(`rv:contentRevision <urn:rezics:content:revision:${f.pages[1]!.revisionId}>`);
+  } finally { f.close(); }
+});
+
+test('explicit published home variant selects the exact revision despite a different browser language', async () => {
+  const f = publishedHomeFixture();
+  try {
+    const state = await readZonePublication(f.work.environment, f.zone);
+    const selected = f.pages[1]!;
+    const home = await readZonePublishedHomeContent(f.work, state, ['en'], selected.variantId);
+    expect(home!.page).toEqual(selected);
+    expect(home!.reference.variantId).toBe(selected.variantId);
+    expect(f.reads).toEqual([[selected.revisionId]]);
+    expect(JSON.stringify({ document: home!.document })).toBe(f.serializedJson);
+    expect(f.membershipQueries).toHaveLength(2);
+    for (const query of f.membershipQueries) expect(query)
+      .toContain(`rv:contentRevision <urn:rezics:content:revision:${selected.revisionId}>`);
+  } finally { f.close(); }
+});
+
+for (const selection of ['unknown', 'draft-only', 'other-page', 'removed-variant'] as const) {
+  test(`explicit ${selection} variant denies without reading a fallback Content revision`, async () => {
+    const f = publishedHomeFixture();
+    try {
+      const state = await readZonePublication(f.work.environment, f.zone);
+      let variantId = `urn:rezics:variant:${randomUUID()}`;
+      if (selection === 'draft-only') {
+        // An owner draft identifier is not membership in the immutable public bundle.
+        variantId = f.draft.variantId;
+      }
+      if (selection === 'other-page') {
+        state.bundle!.pages.push({ ...f.pages[1]!, page: f.realm, variantId });
+      }
+      if (selection === 'removed-variant') {
+        variantId = f.pages[1]!.variantId;
+        state.bundle!.pages = state.bundle!.pages.filter(page => page.variantId !== variantId);
+      }
+      await expect(readZonePublishedHomeContent(f.work, state, ['en'], variantId))
+        .rejects.toBeInstanceOf(ZoneUnavailable);
+      expect(f.reads).toEqual([]);
+      expect(f.membershipQueries).toEqual([]);
+    } finally { f.close(); }
+  });
+}
+
+test('explicit variant cannot turn a configuration-only publication into a Content selection', async () => {
+  const f = publishedHomeFixture();
+  try {
+    const state = { ...await readZonePublication(f.work.environment, f.zone), bundle: null };
+    expect(await readZonePublishedHomeContent(f.work, state, ['en'])).toBeNull();
+    await expect(readZonePublishedHomeContent(f.work, state, ['en'], f.pages[1]!.variantId))
+      .rejects.toBeInstanceOf(ZoneUnavailable);
+    expect(f.reads).toEqual([]);
+    expect(f.membershipQueries).toEqual([]);
   } finally { f.close(); }
 });
 
@@ -252,6 +307,35 @@ test('campaign exact Content selection keeps the renderer language preference th
     expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
     expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
     expect(f.membershipQueries).toHaveLength(1);
+  } finally { f.close(); }
+});
+
+test('campaign URL variant survives reader composition and overrides browser English', async () => {
+  const f = publishedHomeFixture();
+  try {
+    configureZoneShowcaseDisclosure(f.work);
+    const reader = { ...bindZoneCampaignReader({}, new Request(
+      `https://main.test/media?zone=${encodeURIComponent(f.zone)}&zoneVariant=${encodeURIComponent(f.pages[1]!.variantId)}`, {
+        headers: { 'accept-language': 'en' },
+      })) };
+    f.mutable.contentStatus = 'erased';
+    expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
+    expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
+    expect(f.membershipQueries).toHaveLength(1);
+  } finally { f.close(); }
+});
+
+test('unknown campaign URL variant denies before reading either language or configuration art', async () => {
+  const f = publishedHomeFixture();
+  try {
+    configureZoneShowcaseDisclosure(f.work);
+    const reader = { ...bindZoneCampaignReader({}, new Request(
+      `https://main.test/media?zone=${encodeURIComponent(f.zone)}&zoneVariant=${encodeURIComponent(`urn:rezics:variant:${randomUUID()}`)}`, {
+        headers: { 'accept-language': 'en' },
+      })) };
+    expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
+    expect(f.reads).toEqual([]);
+    expect(f.membershipQueries).toEqual([]);
   } finally { f.close(); }
 });
 

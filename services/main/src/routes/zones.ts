@@ -319,7 +319,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             moduleData = [{ id: local.module.id, sources: local.sources },
               ...moduleData.filter(module => module.id !== local.module!.id)];
             slideMedia = local.slideMedia ?? [];
-          }
+          } else if (home) slideMedia = home.showcaseData.slideMedia;
           const theme = state.presentation.official?.theme;
           const forced = query.safeTheme || query['safe-theme']
             ? { state: 'fallback' as const, reason: 'safe_mode' as const }

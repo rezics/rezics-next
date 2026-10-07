@@ -11,7 +11,7 @@ import { InvalidZoneConfiguration, ZONE_SITE_PUBLICATION_COST, ZonePublishedPage
 import { Value } from 'typebox/value';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import { ZONE_CAMPAIGN_ART_COST, readZoneCampaignArt } from './campaign-art.ts';
+import { ZONE_CAMPAIGN_ART_COST, readZoneCampaignArt, bindZoneCampaignArtVariant } from './campaign-art.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import { identityCanonical } from '../address/canonical.ts';
@@ -128,12 +128,15 @@ export { readZoneCampaignArt } from './campaign-art.ts';
  * publication metadata, so selecting one never enumerates or loads draft bodies. */
 export async function readZonePublishedHomeContent(
   work: Pick<MainWorkDependencies, 'environment' | 'content' | 'contentAuthoring'>,
-  state: Awaited<ReturnType<typeof readZonePublication>>, languages: readonly string[] = []) {
+  state: Awaited<ReturnType<typeof readZonePublication>>, languages: readonly string[] = [], variantId?: string) {
+  if (variantId !== undefined && (!Value.Check(ZonePublishedPage.properties.variantId, variantId)
+    || !state.bundle)) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!state.bundle || state.disclosure !== 'public') return null;
   const pages = state.bundle.pages.filter(page => page.page === state.zone);
   const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
     languages);
-  const page = pages.find(page => page.revisionId === selected?.value) ?? pages[0];
+  const page = variantId !== undefined ? pages.find(page => page.variantId === variantId)
+    : pages.find(page => page.revisionId === selected?.value) ?? pages[0];
   if (!page) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!work.content) throw new ZonePublicationUnavailable('Content owner is unavailable');
   if (!await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
@@ -187,14 +190,15 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
     const [modules, media] = await Promise.all([
       readZoneModuleData(work.environment, { ...state.configuration, presentation }),
       readZoneCampaignArt(work.media?.store, state.realm, presentation.slides,
-        { environment: work.environment, zone: state.zone }),
+        { environment: work.environment, zone: state.zone, variantId: page.variantId }),
     ]);
     localData = { sources: modules[0]?.sources ?? [], slideMedia: media, slides };
   }
   const resolved = resolveZonePageDocument(document, state.presentation,
     moduleData ?? await readZoneModuleData(work.environment, state.configuration),
-    slideMedia ?? await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
-      { environment: work.environment, zone: state.zone }), localData);
+    slideMedia ? bindZoneCampaignArtVariant(slideMedia, state.zone, page.variantId)
+      : await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
+        { environment: work.environment, zone: state.zone, variantId: page.variantId }), localData);
   await assertZoneHomeContentCurrent(work, state, page, reference.byteDigest);
   return { ...resolved, reference };
 }
