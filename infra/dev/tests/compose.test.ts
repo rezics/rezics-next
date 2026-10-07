@@ -49,7 +49,10 @@ describe('P0.1 local stack contract', () => {
     expect(ttl).toContain('text:index <#text_index>');
     expect(ttl).toContain('tdb2:location "databases/rezics/tdb2"');
     expect(ttl).toContain('text:directory "databases/rezics/lucene"');
-    expect(ttl.match(/org\.apache\.lucene\.analysis\.cjk\.CJKAnalyzer/g)).toHaveLength(2);
+    // Product assembler pins cjk-bigram-v2. The stock CJKAnalyzer stays on the
+    // standalone quickstart, which does not load the REZICS analyzer jar.
+    expect(ttl.match(/com\.rezics\.jena\.FilteredGraphTextAssembler\$CjkBigramV2/g)).toHaveLength(1);
+    expect(ttl).not.toContain('org.apache.lucene.analysis.cjk.CJKAnalyzer');
   });
 
   test('OPS01 QA services use disposable state without losing database initialization', () => {
