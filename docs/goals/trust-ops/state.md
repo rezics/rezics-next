@@ -453,3 +453,10 @@ phases, preserving actual startup work in600ACTIVE local setup while reporting
 and excluding only admission waits. No unmeasured external startup, budget raise,
 cardinality drop or new framework is accepted. Actual100k campaign remains open.
 All four current Trust workers now run on Sonnet; no new Codex worker started.
+
+Corrected released-reader export landed8a7329dd814e with163affected/19guards
+passing. Main helper SHAa7ea828402cee0ef... matches the reviewed composed file;
+frozen additive export is unchanged. Serving revisioncb2446d055e5 does not carry
+that commit (ancestry checked), so source acceptance is distinct from activation.
+No duplicate refresh is queued. Four Sonnet worker processes were confirmed live
+at21:29UTC; current actual caller/helper/lock/campaign slices continue.
