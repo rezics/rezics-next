@@ -174,7 +174,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
       main + writer,
       // The upgrade seeds scan frontiers from the already-completed coverage.
       ...(relation === 'access.read_ranking_checkpoint'
-        ? [access + '1310_read_rankings.sql'] : []),
+        ? [access + '1399_read_rankings.sql'] : []),
       ...(relation === 'access.realm_directory_position'
         ? [
             access + '1161_realm_directory_refresh.sql',

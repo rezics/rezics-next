@@ -171,7 +171,7 @@ test('Read ranking upgrades populated coverage and retains each failed Structure
     await pool.query(`INSERT INTO access.read_ranking_checkpoint
       (generation,content_epoch,content_sequence,graph_epoch,review_position) VALUES ($1,$2,7,$3,5)`,
     [crypto.randomUUID(), owner.dataEpoch, graphEpoch]);
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/1310_read_rankings.sql'), 'utf8'));
+    await pool.query(readFileSync(join(root, 'services/main/migrations/access/1399_read_rankings.sql'), 'utf8'));
     expect((await pool.query('SELECT content_scan_sequence::text,review_scan_position::text FROM access.read_ranking_checkpoint')).rows[0])
       .toEqual({ content_scan_sequence: '7', review_scan_position: '5' });
     await pool.query('DELETE FROM access.read_ranking_checkpoint');
