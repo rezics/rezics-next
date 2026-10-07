@@ -162,6 +162,46 @@ export const German: Story = {
 
 export const GermanPhone: Story = { ...German, globals: { ...german, ...phone } };
 
+export const LibraryWrite: Story = {
+  args: {
+    scopes: ['openid', 'work:read', 'library:write'],
+    oauthQuery: 'client_id=reader&scope=openid+work%3Aread+library%3Awrite&sig=abc',
+    descriptions: {
+      'library:write':
+        'Change your library and reading records: shelves and statuses, private reviews and goals, copies and loans, imports, reading sessions and reading settings.',
+    },
+  },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(args.descriptions!['library:write']!)).toBeVisible();
+    await expect(canvas.queryByText('library:write')).toBeNull();
+  },
+};
+
+export const LibraryWriteGermanPhone: Story = {
+  ...LibraryWrite,
+  globals: { ...german, ...phone },
+  args: {
+    ...LibraryWrite.args,
+    descriptions: {
+      'library:write':
+        'Ihre Bibliothek und Leseaufzeichnungen ändern: Regale und Lesestatus, private Rezensionen und Leseziele, Exemplare und Ausleihen, Importe, Lesesitzungen und Leseeinstellungen.',
+    },
+  },
+};
+
+export const LibraryWriteJapanesePhone: Story = {
+  ...LibraryWrite,
+  globals: { ...japanese, ...phone },
+  args: {
+    ...LibraryWrite.args,
+    descriptions: {
+      'library:write':
+        'あなたのライブラリと読書記録を変更する：本棚と読書状況、非公開のレビューと読書目標、コピーと貸し借り、インポート、読書セッション、読書設定。',
+    },
+  },
+};
+
 export const Chinese: Story = {
   globals: chinese,
   async play({ canvasElement }) {

@@ -92,6 +92,18 @@ const actions: Record<string, Phrase> = {
 };
 
 const fixed: Record<string, Description> = {
+  'library:write': {
+    en: 'Change your library and reading records: shelves and statuses, private reviews and goals, copies and loans, imports, reading sessions and reading settings.',
+    'zh-Hans':
+      '更改你的书库和阅读记录：书架与阅读状态、私人书评与阅读目标、副本与借阅、导入、阅读会话及阅读设置。',
+    'zh-Hant':
+      '變更你的書庫和閱讀紀錄：書架與閱讀狀態、私人書評與閱讀目標、副本與借閱、匯入、閱讀工作階段及閱讀設定。',
+    ja: 'あなたのライブラリと読書記録を変更する：本棚と読書状況、非公開のレビューと読書目標、コピーと貸し借り、インポート、読書セッション、読書設定。',
+    ko: '내 라이브러리와 독서 기록 변경: 책장과 독서 상태, 비공개 리뷰와 독서 목표, 사본과 대출, 가져오기, 독서 세션과 독서 설정.',
+    de: 'Ihre Bibliothek und Leseaufzeichnungen ändern: Regale und Lesestatus, private Rezensionen und Leseziele, Exemplare und Ausleihen, Importe, Lesesitzungen und Leseeinstellungen.',
+    fr: 'Modifier votre bibliothèque et vos données de lecture : étagères et statuts de lecture, critiques privées et objectifs de lecture, exemplaires et prêts, imports, sessions et paramètres de lecture.',
+    es: 'Modificar tu biblioteca y tus registros de lectura: estantes y estados de lectura, reseñas privadas y objetivos de lectura, ejemplares y préstamos, importaciones, sesiones de lectura y ajustes de lectura.',
+  },
   'wiki:propose': { en: 'Match wiki names and validate proposed facts with short source quotations',
     'zh-Hans': '匹配百科名称，并用简短来源引文验证拟议事实', 'zh-Hant': '比對百科名稱，並以簡短來源引文驗證擬議事實',
     ja: 'ウィキの名称を照合し、短い出典引用を添えた事実の提案を検証する',
