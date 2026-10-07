@@ -38,10 +38,11 @@ bounds; it does not qualify the current medium100k workload, all historical root
 media/backups destruction or the final populated600second restore. The run used
 current scheduling and the committed measurement repair with older runtime pins.
 G-1344 current-pin HTTP proof passed54.7s/138assertions; fixture correction landed
-`2e394b95f48c` with all160 unit/guard files green. Medium preparation failed
-readiness at557.467s and published no backup: its Realm slot is noncanonical and
-lacks the Work link. Attempt8 repairs that existing producer, versions it and
-qualifies a fresh small fixture before retrying medium. Manager-exclusive100k
+`2e394b95f48c` with all160 unit/guard files green. Canonical fixture producer repair a810feb63 is reviewed and awaits the kernel
+code-hold checkpoint before its gate. Fresh small preparation passed93.440s;
+medium native readiness qualified10,000units, but the build failed the600s wall
+ceiling with152.283s admission. No medium backup or copies were published.
+Program has the coordinated host-window request for one strict-budget retry. Manager-exclusive100k
 qualification remains required.
 
 Program has enrolled the manager in the supervised coordinator for native session
